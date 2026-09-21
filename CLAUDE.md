@@ -13,20 +13,22 @@ The decisions behind the design, and what is deliberately absent, are in
 default, and it holds for the boring, well-solved things: a DataFrame, a file format, a compression scheme,
 a test runner, a maths primitive. Writing one of those here buys nothing and costs forever.
 
-It has exactly one boundary, and it is the reason this library exists at all: **do not take a dependency
-that changes what the library promises.** DeepSharp promises a model that ships inside an ordinary
-application with nothing native to install. A package that breaks that promise is not a shortcut, whatever
-it saves — and one that keeps it is free help, whoever wrote it.
+libtorch is on that list as much as anything else. TorchSharp is maintained by people who are not us, and
+rewriting what it already does well would be the most expensive way to learn nothing. What gets built here
+is the part nobody else provides: the C# shape of a model, the path data takes into it, the loop that trains
+it, and the picture at the end.
 
-So: `System.Numerics.Tensors` and `Microsoft.Data.Analysis` are exactly the kind of thing to lean on.
-A native engine is not, in the core — it goes behind the seam, in a package nobody is forced to reference.
+The one rule about a dependency is **where it lands**. Anything heavy gets its own package, so a project
+that does not want it never carries it. The core stays light enough to travel inside an application, and a
+model is written against the seam and cannot tell which engine is underneath.
 
 ## What this repository is not
 
-- **Not a binding.** TorchSharp and TensorFlow.NET hand you the Python API in C# syntax with a native engine
-  underneath. This is a library written for C#, with no native dependency in the core.
-- **Not a home for GPU code.** The fleet's GPU training host is a separate repository and stays that way.
-  The backend seam is how heavy work reaches a native engine; it never becomes required here.
+- **Not a binding.** TorchSharp and TensorFlow.NET hand you the Python API in C# syntax. This is a library
+  written for C# that sits on top of such an engine and provides what an engine does not: the model's shape,
+  the data path, the training loop and the charts.
+- **Not a home for hand-written GPU code.** Reaching a GPU means using an engine that already does, through
+  the seam. No CUDA is written here, and the fleet's GPU training host stays a separate repository.
 - **Nothing is carried over from that host.** Its tuning, its shortcuts and the tricks it earned for its own
   workload stay where they were measured — they were written for one machine, one model family and one kind
   of data, and moved here they would be cargo. A published binding such as TorchSharp is a different matter

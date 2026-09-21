@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>DeepSharp</PackageId>
-    <Description>Deep learning in C#: build a network by stacking layers, compile it and fit it, or write the forward pass yourself — both reach the same model. Tensors and automatic differentiation run on .NET's own SIMD primitives, with no native dependency, and every run can draw its own training curves.</Description>
+    <Description>Deep learning in C#: the layer over the engines that already exist. Describe, train and use a network in C# while the arithmetic runs on .NET's own vector maths out of the box, or on libtorch through TorchSharp when the work gets bigger — swapping between them does not change a line of your model. DeepSharp provides what an engine does not: the model's shape, the path your data takes into it, the training loop, the checkpoints and the charts.</Description>
     <PackageTags>deep-learning;machine-learning;neural-network;tensor;autograd;tensorflow;pytorch;torchsharp;keras;dotnet</PackageTags>
     <InternalsVisibleTo>DeepSharp.Tests</InternalsVisibleTo>
   </PropertyGroup>

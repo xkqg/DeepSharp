@@ -43,11 +43,19 @@ The axis count is accumulated as a `long` and refused above `int.MaxValue`. An `
 silently, and a wrapped count buys a buffer far too small for what is about to be written into it — which
 surfaces as memory corruption thousands of operations later, nowhere near the shape that caused it.
 
-### The CPU backend uses .NET's own primitives
+### The engine is a choice, and this library is what sits above it
 
-`System.Numerics.Tensors` gives vectorised element-wise arithmetic with no native dependency. That is the
-promise this library makes: a model that travels inside an ordinary application. A native engine can be
-added behind the same seam later, for work that outgrows a CPU; it will never become required.
+An engine gives you fast arithmetic. It does not give you a way to describe a network in C#, pour real data
+into it, drive a training loop, keep checkpoints or show what happened. That is what DeepSharp is, and it is
+why an engine sits behind `ITensorBackend` rather than being the thing you program against.
+
+`CpuBackend` is the one that needs no installing: `System.Numerics.Tensors`, the processor's own vector
+instructions, nothing native. A TorchSharp backend belongs beside it as an equal — libtorch is a library
+like any other, and rewriting what it already does well would be the most expensive way to learn nothing.
+
+What differs between them is what a project has to ship, not what a model has to say. The light one travels
+inside an application; libtorch is 76 MB per platform. Both are legitimate, the choice is the caller's, and
+it is one line.
 
 ### Charts come from the training loop, not from the caller
 
@@ -61,10 +69,12 @@ Anything available from outside is something nobody here has to write or maintai
 answer for every well-solved problem: DataFrames, file formats, compression, the test runner, the vector
 maths. A hand-rolled version of any of those costs forever and buys nothing.
 
-The boundary is the promise, not the effort. This library promises a model that ships inside an ordinary
-application with nothing native to install, so a dependency that breaks that promise is not a shortcut no
-matter what it saves. `System.Numerics.Tensors` keeps it. A native engine does not — which is why it lives
-behind the seam, in a package nobody is forced to reference.
+libtorch is on that list too. What this repository builds is the part nobody else provides: the C# shape of
+a model, the path data takes into it, the loop that trains it, and the picture at the end.
+
+The one rule about a dependency is where it lands. Anything heavy gets its own package, so a project that
+does not want it never carries it, and the core stays light enough to travel inside an application. A model
+is written against the seam and cannot tell which engine is underneath.
 
 ## What is not borrowed
 
@@ -82,4 +92,5 @@ borrowing a result.
 - **A graph that is not a model.** The declarative front door will produce the same object the imperative
   one does. Two representations of one network means two engines to keep in step, and they diverge on the
   first unusual model.
-- **A native dependency in the core package.** It stays optional, behind the seam, forever.
+- **A required engine.** No backend is mandatory. The core carries the light one; anything heavier is its
+  own package, and a model cannot tell which is underneath it.
