@@ -52,7 +52,7 @@ jobs:
         run: dotnet pack Src/DeepSharp/DeepSharp.csproj --no-build --configuration Release --output nupkgs
 
       - name: Keep the package for inspection
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nupkg
           path: nupkgs/*.nupkg
