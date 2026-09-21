@@ -55,6 +55,16 @@ When the training loop exists, the metrics it already keeps are what the charts 
 never assembles arrays to plot. The drawing itself lives in a separate, optional package, so a trainer on a
 headless machine does not carry a renderer.
 
+## What is not borrowed
+
+The fleet's GPU training host has optimisations it earned against its own workload. None of them come here.
+They were measured on one machine, one family of models and one kind of data, and a speed-up that cannot be
+re-measured in this repository is a guess with a good reputation.
+
+A published binding is the opposite case. TorchSharp is a dependency: versioned, readable, replaceable, and
+tested by people who are not us. If a backend is ever written against it, that is borrowing a library, not
+borrowing a result.
+
 ## What is deliberately absent
 
 - **A global backend, context or session.** Nothing reaches for a shared instance.
