@@ -101,4 +101,19 @@ public class ReleaseContractTests
         // attached to is read as the truth, because nobody opens the changelog to check the README.
         Assert.Contains(DeclaredVersion(), Read("README.md"), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ThePublishWorkflow_ProvesWhoItIsRatherThanCarryingAKey()
+    {
+        // nuget.org trusts this repository and this workflow file by name, and hands the run a key that lives
+        // for an hour. Swapping back to a stored key would still publish, so nothing would go red — it would
+        // just quietly reintroduce a long-lived credential that can leak and has to be rotated, and it would
+        // bypass the policy that says only this workflow may publish these packages.
+        string workflow = Read(".github", "workflows", "publish.yml");
+
+        Assert.Contains("id-token: write", workflow, StringComparison.Ordinal);
+        Assert.Contains("NuGet/login@", workflow, StringComparison.Ordinal);
+        Assert.Contains("steps.login.outputs.NUGET_API_KEY", workflow, StringComparison.Ordinal);
+        Assert.DoesNotContain("secrets.NUGET_API_KEY", workflow, StringComparison.Ordinal);
+    }
 }

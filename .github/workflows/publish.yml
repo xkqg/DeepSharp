@@ -22,6 +22,14 @@ jobs:
   publish:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read
+      # Lets this job ask GitHub for a signed token saying which repository and which workflow file is
+      # running. nuget.org checks that against the trusted-publishing policy and hands back a key that lives
+      # for an hour. No long-lived secret exists in this repository, so there is none to leak and none to
+      # rotate -- and a fork cannot publish, because the token names the repository it came from.
+      id-token: write
+
     steps:
       - uses: actions/checkout@v7
         with:
@@ -47,6 +55,15 @@ jobs:
       - name: Pack
         run: dotnet pack Src/DeepSharp/DeepSharp.csproj --no-build --configuration Release --output nupkgs
 
+      # The key this returns is valid for one hour, so it is asked for here rather than at the top of the job.
+      # `user` is the nuget.org profile name that owns the trusted-publishing policy — not an email address,
+      # and not a secret.
+      - name: Ask nuget.org for a short-lived key
+        id: login
+        uses: NuGet/login@v1
+        with:
+          user: RikkieG
+
       # Count first, then push, and check each push where it happens. A loop that pushes nothing exits just
       # as happily as one that pushed everything -- measured on the sister repository, where a green publish
       # step and a missing package looked identical from the outside.
@@ -57,7 +74,7 @@ jobs:
           test "$count" -gt 0 || { echo "Pack reported success and produced no package"; exit 1; }
           for pkg in nupkgs/*.nupkg; do
             dotnet nuget push "$pkg" \
-              --api-key "${{ secrets.NUGET_API_KEY }}" \
+              --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \
               --source https://api.nuget.org/v3/index.json \
               --skip-duplicate
           done
