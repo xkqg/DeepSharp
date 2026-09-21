@@ -1,5 +1,7 @@
 # DeepSharp — deep learning in C#
 
+**The best of both worlds: TensorFlow's way of describing a network, PyTorch's way of running it.**
+
 DeepSharp is the C# layer over the engines that already exist. You describe, train and use a network in C#,
 and the arithmetic runs on whichever engine suits the job — .NET's own vector maths out of the box, libtorch
 through TorchSharp when the work gets bigger. Swapping between them does not change a line of your model.
