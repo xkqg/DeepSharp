@@ -1,0 +1,63 @@
+name: Publish to NuGet
+
+on:
+  release:
+    types: [published]
+  # Measured on the sister repository: a release created by the bot token does not always start this on its
+  # own, and a release whose packages never went out is a quiet failure. This is the way back in.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The tag to publish from (for example v0.1.0).'
+        required: true
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Restore
+        run: dotnet restore DeepSharp.slnx
+
+      - name: Build
+        run: dotnet build DeepSharp.slnx --no-restore --configuration Release
+
+      # The suite runs on the exact commit being published. A release is the one moment where "it was green
+      # yesterday" is not an answer.
+      - name: Test
+        run: dotnet run --project Tst/DeepSharp/DeepSharp.Tests.csproj --configuration Release --no-build
+
+      - name: Pack
+        run: dotnet pack Src/DeepSharp/DeepSharp.csproj --no-build --configuration Release --output nupkgs
+
+      # Count first, then push, and check each push where it happens. A loop that pushes nothing exits just
+      # as happily as one that pushed everything -- measured on the sister repository, where a green publish
+      # step and a missing package looked identical from the outside.
+      - name: Push to NuGet
+        run: |
+          count=$(ls nupkgs/*.nupkg 2>/dev/null | wc -l)
+          echo "Pushing $count package(s)"
+          test "$count" -gt 0 || { echo "Pack reported success and produced no package"; exit 1; }
+          for pkg in nupkgs/*.nupkg; do
+            dotnet nuget push "$pkg" \
+              --api-key "${{ secrets.NUGET_API_KEY }}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate
+          done

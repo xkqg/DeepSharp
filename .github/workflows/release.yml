@@ -1,0 +1,47 @@
+name: Create Release
+
+# A tag is the whole trigger. Both spellings are accepted because both get typed: v0.1.0 and 0.1.0.
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # The notes are the changelog section for this version, not a list of commit subjects: the changelog is
+      # written for a reader and the commit log is written for the next maintainer.
+      - name: Take the notes from the changelog
+        id: notes
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#v}"
+          awk -v v="## [$VERSION]" '
+            $0 == v { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          test -s notes.md || { echo "CHANGELOG.md has no section for $VERSION"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh release view "$TAG" >/dev/null 2>&1 \
+            && echo "The release already exists; leaving it alone." \
+            || gh release create "$TAG" \
+                 --title "DeepSharp ${{ steps.notes.outputs.version }}" \
+                 --notes-file notes.md

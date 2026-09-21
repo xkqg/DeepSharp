@@ -1,61 +1,64 @@
 # DeepSharp — deep learning in C#
 
-DeepSharp is a neural-network library for C#, .NET 10 and .NET 8. You build a network the way you prefer:
-stack layers and fit them, or write the forward pass yourself. Both reach the same model, train with the
-same loop, and save the same checkpoint.
+DeepSharp lets you build and train neural networks in C#, on .NET 10.
 
-It has no native dependency. Tensors and their arithmetic run on .NET's own SIMD primitives, so a model
-built here travels inside an ordinary application — a console tool, a service, a desktop app — without a
-hundred megabytes of platform-specific binaries alongside it and without a Python installation anywhere.
+You build a network the way you prefer. Stack the layers and let the library train them, or write the
+forward pass yourself. Both give you the same model, trained by the same loop and saved to the same file.
 
-And it can draw. A training run produces a loss curve, a confusion matrix and a learning-rate schedule as
-pictures, from the metrics the loop already has, with no separate viewer to start and no browser needed.
+**Nothing native to install.** The maths runs on .NET's own vector instructions, so your model travels
+inside your application — a console tool, a service, a desktop app. No extra binaries per platform, and no
+Python anywhere.
+
+**It shows you what it is doing.** A training run draws its own loss curve, confusion matrix and
+learning-rate schedule from the numbers it already has. No separate viewer to start, no browser needed.
 
 ```csharp
 using DeepSharp.Tensors;
 
-var backend = new CpuBackend();
+var maths = new CpuBackend();
 
 var a = Tensor.From(new Shape(2, 2), [1f, 2f, 3f, 4f]);
 var b = Tensor.From(new Shape(2, 2), [10f, 20f, 30f, 40f]);
 
-var sum = backend.Add(a, b);   // Tensor 2x2 — 11, 22, 33, 44
+var sum = maths.Add(a, b);   // 11, 22, 33, 44
 ```
 
-## Where this is
+## Version 0.1.0 — what is here today
 
-**This repository is at its beginning.** What is here works, is tested and is the foundation everything else
-stands on — shapes that refuse a mismatch where it is written, immutable tensors, and the backend seam that
-lets the arithmetic move elsewhere later without a model noticing. What is described above as the shape of
-the library is the direction, not a claim about today. The [changelog](CHANGELOG.md) says what each release
-actually added, and nothing is released until it is true.
+This is the first release, and it is the foundation rather than the finished library. What it contains
+works and is tested; everything above describes where it is going.
 
-Built so far:
-
-| | |
+| | What it does |
 |---|---|
-| `Shape` | The axes of a tensor, as a value. Refuses a negative axis and a count that would overflow. |
-| `Tensor` | A shape and the values that fill it, row-major and immutable. |
-| `ITensorBackend` | Where the arithmetic happens — the seam that keeps a model independent of it. |
-| `CpuBackend` | The one that ships: .NET's vector registers, no native library. |
+| `Shape` | Says how big a tensor is — `2x3` is two rows of three. Tells you off straight away if the sizes do not match. |
+| `Tensor` | The numbers themselves, laid out in that shape. Once made, it never changes, so it is safe to reuse. |
+| `CpuBackend` | Does the arithmetic, using your processor's vector instructions. |
+| `ITensorBackend` | The plug the arithmetic goes through, so it can be done elsewhere later without your model changing. |
 
-Next, in order: automatic differentiation, the layer types, the optimizers, and the training loop that
-drives them.
+Next: learning from mistakes (gradients), then the layers, the optimizers and the training loop. The
+[changelog](CHANGELOG.md) records what each release actually added, and nothing is claimed before it is true.
 
-## Why not TorchSharp or TensorFlow.NET
+## Why not TorchSharp or TensorFlow.NET?
 
-Both are bindings: they hand you the Python library's API, in C# syntax, with the native engine underneath.
-That is the right answer when you want everything PyTorch can do and you can carry its binaries. DeepSharp
-answers a different question — a model that ships with your application, reads like C# rather than like
-transliterated Python, and shows you what it is doing without a second tool.
+Those hand you PyTorch's or TensorFlow's own interface, written in C#, with the original engine underneath.
+That is the right choice when you need everything PyTorch can do and you do not mind shipping it: the
+smallest build of that engine is 76 MB for each platform you support.
 
-For the heavy work, that is not a rivalry. The backend seam is there so the same model can hand its
-arithmetic to a native engine when the work outgrows a CPU.
+DeepSharp is for the other case. A model that ships inside your application, reads like C# instead of like
+translated Python, and shows you its progress without a second tool. If the work later outgrows a processor,
+the same model can hand its arithmetic to one of those engines — but it will never have to.
 
-## Contributing
+## Getting started
 
-Read [CONTRIBUTING.md](CONTRIBUTING.md) first — it carries the rules this repository is actually held to:
-a failing test before the code, zero warnings, and a coverage gate that fails rather than reports.
+```
+git clone https://github.com/xkqg/DeepSharp.git
+cd DeepSharp
+dotnet build DeepSharp.slnx -c Release
+```
+
+The [wiki](https://github.com/xkqg/DeepSharp/wiki) has the walkthrough, the design decisions, and what is
+planned. [CONTRIBUTING.md](CONTRIBUTING.md) has the rules for changing anything here: a failing test first,
+no warnings, and a coverage check that fails rather than reports.
 
 ## Licence
 

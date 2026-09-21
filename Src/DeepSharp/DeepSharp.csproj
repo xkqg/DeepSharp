@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>net10.0;net8.0</TargetFrameworks>
+    <TargetFramework>net10.0</TargetFramework>
     <PackageId>DeepSharp</PackageId>
     <Description>Deep learning in C#: build a network by stacking layers, compile it and fit it, or write the forward pass yourself — both reach the same model. Tensors and automatic differentiation run on .NET's own SIMD primitives, with no native dependency, and every run can draw its own training curves.</Description>
     <PackageTags>deep-learning;machine-learning;neural-network;tensor;autograd;tensorflow;pytorch;torchsharp;keras;dotnet</PackageTags>
