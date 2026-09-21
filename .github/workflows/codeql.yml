@@ -39,6 +39,13 @@ jobs:
           # security-and-quality adds the maintainability rules on top of the security ones: an unused
           # parameter, a comparison that is always true, a disposable that escapes.
           queries: security-and-quality
+          # Build output is not code anyone wrote. Without this, the entry point xunit generates into obj/
+          # is reported as a style finding on every single run, and a list that always has something in it
+          # is a list nobody reads.
+          config: |
+            paths-ignore:
+              - '**/obj/**'
+              - '**/bin/**'
 
       - name: Build
         run: dotnet build DeepSharp.slnx --configuration Release

@@ -18,7 +18,7 @@ public class ReleaseContractTests
     private static string RepoRoot()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "CHANGELOG.md")))
+        while (dir is not null && !File.Exists(Path.Join(dir.FullName, "CHANGELOG.md")))
         {
             dir = dir.Parent;
         }
@@ -27,11 +27,11 @@ public class ReleaseContractTests
         return dir!.FullName;
     }
 
-    private static string Read(params string[] parts) => File.ReadAllText(Path.Combine([Root, .. parts]));
+    private static string Read(params string[] parts) => File.ReadAllText(Path.Join([Root, .. parts]));
 
     /// <summary>The one version number, from the file that hands it to every packable project.</summary>
     private static string DeclaredVersion() =>
-        XDocument.Load(Path.Combine(Root, "Directory.Build.props"))
+        XDocument.Load(Path.Join(Root, "Directory.Build.props"))
             .Descendants("Version").Single().Value.Trim();
 
     [Fact]

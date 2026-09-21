@@ -56,7 +56,7 @@ public class CpuBackendTests
         // number of registers is exactly where an off-by-one hides — and it hides quietly, because the first
         // few thousand values are right.
         float[] left = [.. Enumerable.Range(0, length).Select(i => (float)i)];
-        float[] right = [.. Enumerable.Range(0, length).Select(i => (float)(i * 2))];
+        float[] right = [.. Enumerable.Range(0, length).Select(i => i * 2f)];
 
         var sum = _backend.Add(Tensor.From(new Shape(length), left), Tensor.From(new Shape(length), right));
 
