@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Opt JS actions into Node 24 ahead of GitHub's forced migration, so an incompatibility surfaces on a day we
+# can fix it rather than on the day the runner switches by itself.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+          dotnet-quality: 'preview'
+
+      - name: Restore
+        run: dotnet restore DeepSharp.slnx
+
+      # The build treats every warning as the failure it has not become yet, so this step is the whole
+      # zero-warning rule: there is nothing to read afterwards and nothing to forget to read.
+      - name: Build
+        run: dotnet build DeepSharp.slnx --no-restore --configuration Release
+
+      # The test project is an executable: xunit v3 runs its suite from its own entry point, and `dotnet test`
+      # starts a runner that finds nothing to do and exits cleanly having run zero tests. Measured on the first
+      # commit here: 0% coverage over 0 executed tests. So the executable is run and the collector is wrapped
+      # around it.
+      #
+      # 90% of lines and 90% of branches, over the library only. Below either number this fails the build: a
+      # gate that reports and carries on is a report.
+      - name: Test with coverage
+        shell: pwsh
+        run: ./tools/coverage/run.ps1 -Check
+
+      - name: Pack
+        run: dotnet pack Src/DeepSharp/DeepSharp.csproj --no-build --configuration Release --output nupkgs
+
+      - name: Keep the package for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: nupkgs/*.nupkg
+          if-no-files-found: error

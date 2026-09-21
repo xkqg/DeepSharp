@@ -1,0 +1,32 @@
+## Build output
+[Bb]in/
+[Oo]bj/
+out/
+artifacts/
+*.user
+*.suo
+
+## IDE
+.vs/
+.vscode/
+.idea/
+
+## Test + coverage output
+TestResults/
+*.trx
+*.coverage
+*.cobertura.xml
+!tools/coverage/baseline.cobertura.xml
+
+## NuGet
+*.nupkg
+*.snupkg
+packages/
+
+## The council's and the row-walk's own notes: they are how the work was reasoned about, not the work.
+## Everything in here stays on the machine it was written on.
+.path-manifests/
+
+## Local scratch
+*.tmp
+*.log

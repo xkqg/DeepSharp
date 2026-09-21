@@ -1,0 +1,20 @@
+version: 2
+
+# A dependency that was safe when it was pinned does not stay safe, and nobody notices a CVE in a transitive
+# package by reading the build log. These two ecosystems are everything this repository pulls in.
+updates:
+  - package-ecosystem: nuget
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "deps"
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: "deps(ci)"

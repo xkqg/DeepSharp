@@ -1,0 +1,47 @@
+name: CodeQL
+
+# Security scanning, committed as a workflow rather than switched on in the repository settings: this way the
+# configuration is reviewable, travels with a fork, and cannot be silently turned off in a settings page
+# nobody looks at. It runs on every change and once a week, because a dependency can turn a line that was
+# safe on Monday into a finding on Friday without anyone touching it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '17 4 * * 1'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+          dotnet-quality: 'preview'
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          # security-and-quality adds the maintainability rules on top of the security ones: an unused
+          # parameter, a comparison that is always true, a disposable that escapes.
+          queries: security-and-quality
+
+      - name: Build
+        run: dotnet build DeepSharp.slnx --configuration Release
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3

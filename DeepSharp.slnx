@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/Src/">
+    <Project Path="Src/DeepSharp/DeepSharp.csproj" />
+  </Folder>
+  <Folder Name="/Tst/" />
+  <Folder Name="/Tst/DeepSharp/">
+    <Project Path="Tst/DeepSharp/DeepSharp.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- The documentation file is generated but not demanded: the analyser that finds unused usings only
+         runs when it exists, while a test's name is its documentation and a <summary> repeating it would be
+         the prose this project refuses to write. So the file is on and CS1591 is off, here only. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <!-- xunit.v3 writes its own entry point, and the testing platform writes a second one that can never be
+         used. The compiler says so (CS8892) and this build treats a warning as the failure it is, so the
+         unused one is not generated at all. -->
+    <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="3.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DeepSharp\DeepSharp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

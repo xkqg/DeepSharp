@@ -1,0 +1,41 @@
+<Project>
+
+  <PropertyGroup>
+    <Authors>H.P. Gansevoort</Authors>
+    <Copyright>Copyright (c) 2026 H.P. Gansevoort</Copyright>
+    <PackageProjectUrl>https://github.com/xkqg/DeepSharp</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/xkqg/DeepSharp</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+
+    <!-- No <Version> here on purpose. The version is handed out by the owner when work starts, and it then
+         stands in every packable project at once. Until it is named, nothing here is packed. -->
+
+    <!-- Which frameworks a project targets is the project's own business: the library ships for two, the
+         test runner is an executable for one. Setting it here made the test project inherit both and then
+         refuse to run, having two entry points to choose between. -->
+    <LangVersion>12</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <!-- A warning is a failure that has not happened yet. The build ends at zero of both, everywhere. -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+
+    <!-- Deterministic and reproducible: the same source produces the same assembly. -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Source Link: a stack trace from a released package steps straight into the commit it was built from. -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.303" PrivateAssets="All" />
+  </ItemGroup>
+
+</Project>
