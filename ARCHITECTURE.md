@@ -55,6 +55,17 @@ When the training loop exists, the metrics it already keeps are what the charts 
 never assembles arrays to plot. The drawing itself lives in a separate, optional package, so a trainer on a
 headless machine does not carry a renderer.
 
+## What is borrowed on purpose
+
+Anything available from outside is something nobody here has to write or maintain, and that is the default
+answer for every well-solved problem: DataFrames, file formats, compression, the test runner, the vector
+maths. A hand-rolled version of any of those costs forever and buys nothing.
+
+The boundary is the promise, not the effort. This library promises a model that ships inside an ordinary
+application with nothing native to install, so a dependency that breaks that promise is not a shortcut no
+matter what it saves. `System.Numerics.Tensors` keeps it. A native engine does not — which is why it lives
+behind the seam, in a package nobody is forced to reference.
+
 ## What is not borrowed
 
 The fleet's GPU training host has optimisations it earned against its own workload. None of them come here.

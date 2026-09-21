@@ -7,6 +7,20 @@ invented, the documentation sweep, and the commit style. Read it before any comm
 The decisions behind the design, and what is deliberately absent, are in
 [**ARCHITECTURE.md**](ARCHITECTURE.md). Read it before changing a shape of the code rather than a line of it.
 
+## The rule that decides what gets built here
+
+**Anything you can take from outside is something you do not have to write or maintain.** That is the
+default, and it holds for the boring, well-solved things: a DataFrame, a file format, a compression scheme,
+a test runner, a maths primitive. Writing one of those here buys nothing and costs forever.
+
+It has exactly one boundary, and it is the reason this library exists at all: **do not take a dependency
+that changes what the library promises.** DeepSharp promises a model that ships inside an ordinary
+application with nothing native to install. A package that breaks that promise is not a shortcut, whatever
+it saves — and one that keeps it is free help, whoever wrote it.
+
+So: `System.Numerics.Tensors` and `Microsoft.Data.Analysis` are exactly the kind of thing to lean on.
+A native engine is not, in the core — it goes behind the seam, in a package nobody is forced to reference.
+
 ## What this repository is not
 
 - **Not a binding.** TorchSharp and TensorFlow.NET hand you the Python API in C# syntax with a native engine
