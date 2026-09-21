@@ -57,6 +57,22 @@ What differs between them is what a project has to ship, not what a model has to
 inside an application; libtorch is 76 MB per platform. Both are legitimate, the choice is the caller's, and
 it is one line.
 
+### One model, two vocabularies
+
+There are two ways people already know how to describe a network, and neither is going to convince the other
+to change. TensorFlow and Keras speak in stacks: add the layers, compile the model, fit it to the data.
+PyTorch speaks in code: write a module, write its forward pass, call it.
+
+DeepSharp offers both, and they are not two libraries. The declarative vocabulary is a **builder that lowers
+onto the same model object** the imperative one produces — a `Sequential` is read once and turned into the
+layers and the forward pass it describes, and from that point on nothing downstream knows which door it came
+through. The training loop, the checkpoints and the charts see one thing.
+
+That is what keeps this honest. A separate graph for the declarative side would mean two engines to keep in
+step, and they diverge on the first unusual model — the one somebody builds declaratively and then wants to
+reach into. Lowering means there is nothing to keep in step: the builder is a translator that runs once, not
+a runtime that runs alongside.
+
 ### Charts come from the training loop, not from the caller
 
 When the training loop exists, the metrics it already keeps are what the charts are drawn from — the caller
