@@ -40,6 +40,23 @@ So fitting on the whole set is not a mistake a caller can make and be warned abo
 that does not exist yet at that point in the chain. A rule in a document is advice; a rule expressed as
 which methods are in scope is the only kind that cannot be skipped in a hurry.
 
+### A reader is an extension method, shipped by the package that owns the format
+
+`Pdd.Create().ReadCsv(path)`, `.ReadParquet(path)`, `.ReadExcel(path)`, `.ReadDb(connection, sql)`,
+`.ReadBinance(symbol, interval, from, to)` — one verb per source, and every one of them an **extension
+method defined in the package that brings the dependency**.
+
+The obvious alternative is a method per format on the pipeline type itself. It reads the same and costs
+the whole architecture: the core would have to reference Parquet.Net, ExcelDataReader and an HTTP client,
+every project would carry all of them, and adding a format would mean editing the core.
+
+As extensions, a verb exists exactly when its package is referenced. Reference `DeepSharp.Data.Parquet`
+and `.ReadParquet` appears; do not, and it is not in the list. Nothing is carried that is not asked for,
+and a new format is a new package rather than a change here.
+
+The escape hatch is one method wide: `.Read(IRowSource)` takes rows and a declared schema, so a format
+nobody shipped is still a few lines away rather than a fork.
+
 ### Five readers ship, and a funnel carries the rest
 
 Reading data is a solved problem with a long tail, and reproducing that tail is a library in itself —
