@@ -24,6 +24,16 @@ at each stage by whoever happens to be writing that stage.
 That is the difference between a pipeline and a script. A script does the steps; a pipeline is a thing you
 can hand to somebody, save beside a model, and run again a year later on data that did not exist yet.
 
+### The evidence is part of the declaration
+
+A run also declares what it must produce as proof: which measures are computed — root-mean-square error,
+mean absolute error, R², accuracy, a confusion matrix — on which splits, and whether they are shown as a
+grid of numbers or drawn. Naming them before the numbers exist is the point: every run then produces the
+same evidence, two runs are comparable without anyone remembering what was shown last time, and the report
+cannot quietly shrink to whatever happened to look good.
+
+The drawing lives in a separate, optional package; the pipeline holds only the declaration.
+
 ### The rule that gives it meaning
 
 **Anything that learns from the data is fitted on the training split alone, and then replayed unchanged.**
