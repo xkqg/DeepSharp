@@ -13,14 +13,23 @@ Tst/DeepSharp/            the tests, mirroring the library's folders
 
 ## The design language: PDD, pipeline-driven design
 
-This fleet already names a design by what drives it: MDD, where a model description declared once is what
-other behaviour reads, and BDD, where the bus is. Machine learning has a third driver, and it is the same
-shape: **the pipeline**.
+This fleet already names a design by what drives it, and both existing forms share one move: the whole
+description is laid down first, and everything afterwards reads it.
 
-Every piece of work here follows one sequence — collect the data, add the features, normalise, deal with the
-missing values, split into train, validation and test, build the model, and check it against data it has
-never seen. The sequence is not the interesting part. What matters is that it is **one declared thing that
-is replayed**, rather than steps somebody writes again at each stage.
+**MDD, model-driven design**, comes out of domain-driven design. Most object-relational mappers let you
+declare a model only where it is used — attributes on an entity, configuration hanging off a context — so
+the shape of the data exists nowhere as a whole and only ever as fragments beside the code that touches it.
+MDD writes the entire entity-relationship model down as one artefact, before any context is opened, and the
+mapper is then made to follow it rather than to define it.
+
+**BDD, bus-driven design**, does the same for how processes reach each other: the lanes are declared, not
+discovered from whoever happened to connect.
+
+Machine learning has a third driver of exactly that shape, and it is **the pipeline**. Every piece of work
+follows one sequence — collect the data, add the features, normalise, deal with the missing values, split
+into train, validation and test, build the model, and check it against data it has never seen. The sequence
+is not the interesting part. What matters is the same move the other two make: it is **declared as a whole,
+in advance, and then replayed** — not assembled again at each stage by whoever is writing that stage.
 
 ### The rule that gives it meaning
 
