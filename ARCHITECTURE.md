@@ -120,6 +120,84 @@ The intermediate datasets are deliberately *not* the carrier. Naming and storing
 multiplies the things that can drift apart and answers a question nobody asks; a replayable pipeline
 produces any of those states on demand, and it produces them the same way every time.
 
+### A gap is filled by a named strategy, never by a flag
+
+Two things get thrown onto one heap elsewhere and are kept apart here. A value is **missing** when it was
+never there — an empty field, a NULL from a database — and that is data. A value is **not a number** when
+arithmetic produced no number, almost always a division by zero in a derived column, and that is a fault
+further upstream. They deserve different verbs and different defaults:
+
+```csharp
+.FillMissing("trades", With.Mean)      // fitted on train; With.Median, With.Zero,
+.FillMissing("volume", With.Previous)  // With.Constant(0), With.Previous, With.DropRow, With.Refuse
+.FillNaN("range", With.Refuse)         // the default: a NaN stops the run, because it should not be there
+```
+
+The strategy is a named value rather than a flag. A boolean parameter says nothing at the place it is
+written — `Fill("trades", true, false)` has to be read with the signature open beside it — whereas the
+name is the sentence.
+
+Marking where a gap was is not a parameter either: a `trades_was_missing` column is emitted alongside, and
+always. Filling destroys the distinction between "absent" and "the value happened to be that", and it
+destroys it irreversibly; a caller who does not want the column drops it like any other column, which is a
+verb they already have.
+
+### The declaration is a file, and the chain can write it
+
+The pipeline is saved as one file with two blocks, because they have different authors. The
+**declaration** — the steps in order with their arguments — is written by a person. The **fitted** part —
+the means, the fill values, the category lists, the boundary the split landed on — is written by the fit.
+Keeping them apart is what allows the same declaration to be re-fitted on fresh data, two runs to be
+compared by diffing the declaration alone, and a serving process to load the file without ever knowing the
+builder existed.
+
+The format is deliberately not the pipeline. One internal declaration model is the truth, and every format
+is a front end that produces it: JSON for machines, because it diffs and travels; YAML for people, because
+it carries comments and loses the punctuation; a spreadsheet or a generated form later, for the same reason
+and at the same cost, which is a parser rather than a redesign. The same seam as the readers.
+
+One thing does not survive being written down, and it decides the shape of the rest: an inline lambda. A
+custom step is therefore registered under a name and looked up while parsing, and a file naming a step that
+nobody registered **refuses to load** instead of quietly skipping it. That pushes features towards a named
+vocabulary, which is exactly what makes the file portable.
+
+### One validator, and a template that falls out of the same model
+
+The template and the validator are both generated from the declaration model rather than written beside
+it. Anything hand-maintained drifts from the code it describes, and a validator that drifts is worse than
+none: a file can then be legal in a way the fluent chain is not.
+
+Validation has two halves and they run at different moments. **Shape** — does the step exist, are its
+parameters the right kind, do the three split fractions add to one — needs no data at all. **Binding** —
+does that column exist in the source, is it numeric — needs the source open. Both finish before anything
+runs, and both report every fault at once with its position in the file. Someone who is handed one error at
+a time, five times over, stops using the thing.
+
+```
+btceur.pdd.yaml(7,3): column 'trades' is not in btceur-1d.csv — there is a 'numberOfTrades'
+btceur.pdd.yaml(4,10): train+validation+test = 0.95, must be 1.0
+btceur.pdd.yaml(2,8): step 'parquet' exists, but the package DeepSharp.Data.Parquet is not referenced
+```
+
+That last message is deliberately not the same as the first kind. "I do not know this step" and "I know it,
+but you have not installed it" are two different problems for the reader, and collapsing them costs an
+afternoon.
+
+The file also names the declaration version it was written against, so a pipeline from a year ago either
+loads or says precisely which step changed underneath it.
+
+### One description drives both doors
+
+A pipeline can be written in C# or written as a file, and both have to reach exactly as far. That is only
+true if neither is the description: the step types are, and everything else is derived from them. The
+fluent chain is one projection of those types, the JSON schema and the starter template are another, the
+validator reads the same metadata, and the reference page in the documentation is generated rather than
+typed. Add a step, and every one of those gains it without anyone remembering to go and edit it.
+
+The property that keeps it honest is round-tripping. Build a pipeline in code, write it out, read it back,
+and the two declarations must be equal — a test that fails the moment one door learns something the other
+cannot express. Without it, "both work" is a claim that decays silently, one step at a time.
+
 ## Decisions
 
 ### A tensor knows nothing about arithmetic
