@@ -25,6 +25,23 @@ var b = Tensor.From(new Shape(2, 2), [10f, 20f, 30f, 40f]);
 var sum = maths.Add(a, b);   // 11, 22, 33, 44
 ```
 
+## Pipeline-driven design
+
+The sequence is always the same — collect the data, add the features, normalise, deal with the gaps, split
+into training, validation and test, build the model, check it against data it has never seen. DeepSharp asks
+you to **declare that course in advance as one artefact** rather than perform it, and then replays it.
+
+The rule that makes it worth doing: **anything that learns from the data is fitted on the training split
+alone and replayed unchanged.** A mean, the value that fills a gap, the categories an encoder knows — fit
+those on everything and the validation set has quietly taught the model about itself, which produces a model
+that scores beautifully and disappoints on the day it meets real data, with nothing anywhere going red.
+
+The pipeline is saved beside the model, because a model without it is not usable: the numbers reaching it
+would not be the numbers it was trained on. It is also what the live service runs, so a feature cannot be
+computed one way in training and another way in production.
+
+The [wiki](https://github.com/xkqg/DeepSharp/wiki/PDD) explains it in full.
+
 ## Version 0.1.0 — what is here today
 
 The first release is the foundation rather than the finished library. What it contains works and is tested;
