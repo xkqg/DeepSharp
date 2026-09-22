@@ -30,6 +30,12 @@ Everything is reached through a factory and built with a fluent chain, and the s
 different types. A pipeline under construction offers `Normalise` and `FillMissing` **only after** it has
 been told how to split, because those are the operations that learn from the data.
 
+Which split is a separate question, and the library does not answer it: random for independent rows, by
+time when you predict forward, stratified when a class is rare, by group when several rows belong to one
+entity, explicit when the data already carries the answer. Each is offered at the same point and none is
+the default, because a default there is a guess about somebody else's data. What is fixed is the ordering
+alone.
+
 So fitting on the whole set is not a mistake a caller can make and be warned about later: it is a method
 that does not exist yet at that point in the chain. A rule in a document is advice; a rule expressed as
 which methods are in scope is the only kind that cannot be skipped in a hurry.
