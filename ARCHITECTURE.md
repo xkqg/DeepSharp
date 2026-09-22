@@ -40,6 +40,21 @@ So fitting on the whole set is not a mistake a caller can make and be warned abo
 that does not exist yet at that point in the chain. A rule in a document is advice; a rule expressed as
 which methods are in scope is the only kind that cannot be skipped in a hurry.
 
+### A live source is fetched once, then read as a file
+
+Reading straight from an API is the obvious convenience and it quietly removes the one property a pipeline
+exists to have. An endpoint answers differently every time it is called, so a pipeline that fetched during
+training would train on different numbers tomorrow while claiming to be the same pipeline.
+
+Fetching and reading are therefore separate. A fetch pages the endpoint and lands the result as a file,
+recording what it asked for and when; the pipeline then reads that file like any other, by fingerprint. A
+convenience method may do both on first use and read the landing thereafter — the declaration names the
+window, the landing names the bytes.
+
+Two consequences, neither optional: the window is closed (a `from` and a `to`, never "the most recent
+thousand", which is a moving target dressed as a source), and each live source lives in its own package,
+since it brings HTTP, retries and a rate limiter that a project serving a trained model has no use for.
+
 ### The evidence is part of the declaration
 
 A run also declares what it must produce as proof: which measures are computed — root-mean-square error,
