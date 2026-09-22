@@ -13,23 +13,16 @@ Tst/DeepSharp/            the tests, mirroring the library's folders
 
 ## The design language: PDD, pipeline-driven design
 
-This fleet already names a design by what drives it, and both existing forms share one move: the whole
-description is laid down first, and everything afterwards reads it.
+A design is named after whatever drives it, and here that is **the pipeline**.
 
-**MDD, model-driven design**, comes out of domain-driven design. Most object-relational mappers let you
-declare a model only where it is used — attributes on an entity, configuration hanging off a context — so
-the shape of the data exists nowhere as a whole and only ever as fragments beside the code that touches it.
-MDD writes the entire entity-relationship model down as one artefact, before any context is opened, and the
-mapper is then made to follow it rather than to define it.
+Every piece of work follows one sequence: collect the data, add the features, normalise, deal with the
+missing values, split into train, validation and test, build the model, and check it against data it has
+never seen. The sequence is not the interesting part — everyone does those steps. What matters is that the
+whole of it is **declared in advance as one artefact and then replayed**, instead of being assembled again
+at each stage by whoever happens to be writing that stage.
 
-**BDD, bus-driven design**, does the same for how processes reach each other: the lanes are declared, not
-discovered from whoever happened to connect.
-
-Machine learning has a third driver of exactly that shape, and it is **the pipeline**. Every piece of work
-follows one sequence — collect the data, add the features, normalise, deal with the missing values, split
-into train, validation and test, build the model, and check it against data it has never seen. The sequence
-is not the interesting part. What matters is the same move the other two make: it is **declared as a whole,
-in advance, and then replayed** — not assembled again at each stage by whoever is writing that stage.
+That is the difference between a pipeline and a script. A script does the steps; a pipeline is a thing you
+can hand to somebody, save beside a model, and run again a year later on data that did not exist yet.
 
 ### The rule that gives it meaning
 
@@ -62,7 +55,7 @@ produces any of those states on demand, and it produces them the same way every 
 The alternative — methods on the tensor itself, `a.Add(b)` — reads better for one line and then decides the
 architecture: the tensor has to know where its arithmetic happens, so it has to hold a backend, so either
 every tensor carries one or there is a shared one somewhere. The second is a global that any code in the
-process can reach and replace, which is exactly what this fleet does not build.
+process can reach and replace, and that is not built here.
 
 So the backend is handed to what needs it, and the model stays independent of where its work runs. That seam
 exists from the first line rather than being retrofitted, because retrofitting it means touching every
@@ -136,9 +129,9 @@ is written against the seam and cannot tell which engine is underneath.
 
 ## What is not borrowed
 
-The fleet's GPU training host has optimisations it earned against its own workload. None of them come here.
-They were measured on one machine, one family of models and one kind of data, and a speed-up that cannot be
-re-measured in this repository is a guess with a good reputation.
+Tuning earned elsewhere does not come here. A speed-up measured on one machine, one family of models and
+one kind of data is a guess with a good reputation until it is measured again in this repository, on this
+code — and by then it is cheaper to find it than to have carried it.
 
 A published binding is the opposite case. TorchSharp is a dependency: versioned, readable, replaceable, and
 tested by people who are not us. If a backend is ever written against it, that is borrowing a library, not

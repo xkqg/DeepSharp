@@ -9,9 +9,9 @@ The decisions behind the design, and what is deliberately absent, are in
 
 ## PDD — the design language here
 
-This repository follows **pipeline-driven design**: the sequence from raw data to a validated model is one
-declared, replayable artefact, and **anything that learns from the data is fitted on the training split
-alone and replayed unchanged** on validation, on test and on live data. `ARCHITECTURE.md` carries the
+This repository follows **pipeline-driven design**: the sequence from raw data to a validated model is
+declared in advance as one replayable artefact, and **anything that learns from the data is fitted on the
+training split alone and replayed unchanged** on validation, on test and on live data. `ARCHITECTURE.md` carries the
 reasoning and the failure it prevents. A step that recomputes a learned parameter outside the pipeline is
 a defect even when every test passes.
 
@@ -36,7 +36,7 @@ model is written against the seam and cannot tell which engine is underneath.
   written for C# that sits on top of such an engine and provides what an engine does not: the model's shape,
   the data path, the training loop and the charts.
 - **Not a home for hand-written GPU code.** Reaching a GPU means using an engine that already does, through
-  the seam. No CUDA is written here, and the fleet's GPU training host stays a separate repository.
+  the seam. No CUDA is written here, and the GPU training host it would reach stays a separate repository.
 - **Nothing is carried over from that host.** Its tuning, its shortcuts and the tricks it earned for its own
   workload stay where they were measured — they were written for one machine, one model family and one kind
   of data, and moved here they would be cargo. A published binding such as TorchSharp is a different matter
