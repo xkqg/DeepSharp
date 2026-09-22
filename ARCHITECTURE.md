@@ -24,6 +24,16 @@ at each stage by whoever happens to be writing that stage.
 That is the difference between a pipeline and a script. A script does the steps; a pipeline is a thing you
 can hand to somebody, save beside a model, and run again a year later on data that did not exist yet.
 
+### The chain is the enforcement, not the decoration
+
+Everything is reached through a factory and built with a fluent chain, and the stages of that chain are
+different types. A pipeline under construction offers `Normalise` and `FillMissing` **only after** it has
+been told how to split, because those are the operations that learn from the data.
+
+So fitting on the whole set is not a mistake a caller can make and be warned about later: it is a method
+that does not exist yet at that point in the chain. A rule in a document is advice; a rule expressed as
+which methods are in scope is the only kind that cannot be skipped in a hurry.
+
 ### The evidence is part of the declaration
 
 A run also declares what it must produce as proof: which measures are computed — root-mean-square error,
