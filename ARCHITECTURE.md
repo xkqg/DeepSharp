@@ -40,6 +40,22 @@ So fitting on the whole set is not a mistake a caller can make and be warned abo
 that does not exist yet at that point in the chain. A rule in a document is advice; a rule expressed as
 which methods are in scope is the only kind that cannot be skipped in a hurry.
 
+### Five readers ship, and a funnel carries the rest
+
+Reading data is a solved problem with a long tail, and reproducing that tail is a library in itself —
+pandas exposes nineteen readers. What ships here is the short head, chosen by where data actually arrives
+and by costing a thin adapter rather than an implementation:
+
+- **CSV** and **SQL** cost nothing at all: the DataFrame already loads both, the second through whichever
+  ADO.NET provider the caller brings.
+- **Parquet** is where data of any size lives, **Excel** is how data arrives from people rather than
+  systems, and **JSON** is what an API hands back. Each is an existing .NET library plus a few lines.
+- **Live sources** are their own family, fetched and landed rather than read during training.
+
+Everything else stays one `IRowSource` implementation away — rows plus a declared schema, which is the one
+door the DataFrame opens for anything enumerable. Not shipping a reader is not the same as refusing a
+format, and that distinction is what keeps the list short.
+
 ### A live source is fetched once, then read as a file
 
 Reading straight from an API is the obvious convenience and it quietly removes the one property a pipeline
