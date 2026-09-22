@@ -7,6 +7,14 @@ invented, the documentation sweep, and the commit style. Read it before any comm
 The decisions behind the design, and what is deliberately absent, are in
 [**ARCHITECTURE.md**](ARCHITECTURE.md). Read it before changing a shape of the code rather than a line of it.
 
+## PDD — the design language here
+
+This repository follows **pipeline-driven design**: the sequence from raw data to a validated model is one
+declared, replayable artefact, and **anything that learns from the data is fitted on the training split
+alone and replayed unchanged** on validation, on test and on live data. `ARCHITECTURE.md` carries the
+reasoning and the failure it prevents. A step that recomputes a learned parameter outside the pipeline is
+a defect even when every test passes.
+
 ## The rule that decides what gets built here
 
 **Anything you can take from outside is something you do not have to write or maintain.** That is the

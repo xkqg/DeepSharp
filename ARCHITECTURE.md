@@ -11,6 +11,39 @@ Src/DeepSharp/            the library
 Tst/DeepSharp/            the tests, mirroring the library's folders
 ```
 
+## The design language: PDD, pipeline-driven design
+
+This fleet already names a design by what drives it: MDD, where a model description declared once is what
+other behaviour reads, and BDD, where the bus is. Machine learning has a third driver, and it is the same
+shape: **the pipeline**.
+
+Every piece of work here follows one sequence — collect the data, add the features, normalise, deal with the
+missing values, split into train, validation and test, build the model, and check it against data it has
+never seen. The sequence is not the interesting part. What matters is that it is **one declared thing that
+is replayed**, rather than steps somebody writes again at each stage.
+
+### The rule that gives it meaning
+
+**Anything that learns from the data is fitted on the training split alone, and then replayed unchanged.**
+A mean and a standard deviation, the value that fills a gap, the categories an encoder knows, the bounds of
+a clip — each is a parameter, each is learned once, and each is applied identically to validation, to test,
+and to data arriving in production long afterwards.
+
+Break it and nothing goes red. A mean computed over the whole set gives a model that scores beautifully in
+validation and disappoints the day it meets real data, because the validation rows had already been allowed
+to influence what the model saw. The same failure wears a second costume at serving time: a feature computed
+one way while training and another way live, which is the same leak running backwards.
+
+### What that makes the carrier
+
+The pipeline is the artefact: the ordered steps plus what they learned while being fitted. It is saved
+beside the model, because a model without it cannot be used — the numbers reaching it would not be the
+numbers it was trained on.
+
+The intermediate datasets are deliberately *not* the carrier. Naming and storing every state between steps
+multiplies the things that can drift apart and answers a question nobody asks; a replayable pipeline
+produces any of those states on demand, and it produces them the same way every time.
+
 ## Decisions
 
 ### A tensor knows nothing about arithmetic
