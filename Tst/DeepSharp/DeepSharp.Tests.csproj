@@ -19,11 +19,14 @@
     <PackageReference Include="xunit.v3" Version="4.*" />
     <!-- A real container, so the registration tests prove what a hosted application would actually get. -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.*" />
+    <!-- A real database for the one test that asks whether a provider's reader arrives as rows. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.*" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\Src\DeepSharp\DeepSharp.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.DataFrame\DeepSharp.Pipelines.DataFrame.csproj" />
   </ItemGroup>
 
   <ItemGroup>

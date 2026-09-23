@@ -16,6 +16,7 @@ public sealed class PipelineBuilder
 {
     private readonly List<IPipelineStep> _steps = [];
     private bool _split;
+    private IRowSource? _rows;
 
     internal PipelineBuilder()
     {
@@ -44,6 +45,24 @@ public sealed class PipelineBuilder
         _steps.Add(step);
 
         return this;
+    }
+
+    /// <summary>Declares that the rows are handed in rather than opened by the pipeline.</summary>
+    /// <param name="rows">The rows, for this run.</param>
+    /// <param name="description">What they are, for whoever reads the saved file later.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// The escape hatch that keeps the list of readers short: anything a package can turn into rows and a
+    /// declared schema comes in here, and the file records what it was rather than pretending it can open
+    /// it again by itself.
+    /// </remarks>
+    public PipelineBuilder Read(IRowSource rows, string description)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        _rows = rows;
+
+        return Add(new ReadRowsStep(description));
     }
 
     /// <summary>Declares which columns take part, what they hold, and what becomes of the rest.</summary>
@@ -116,7 +135,7 @@ public sealed class PipelineBuilder
 
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
-    public Pipeline Build() => new(Declaration);
+    public Pipeline Build() => new(Declaration, _rows);
 
     private FittingBuilder Split(ISplitStep step)
     {
@@ -125,7 +144,7 @@ public sealed class PipelineBuilder
         _steps.Add(step);
         _split = true;
 
-        return new FittingBuilder(_steps);
+        return new FittingBuilder(_steps, _rows);
     }
 
     private void ThrowIfSplit()
@@ -153,8 +172,13 @@ public sealed class PipelineBuilder
 public sealed class FittingBuilder
 {
     private readonly List<IPipelineStep> _steps;
+    private readonly IRowSource? _rows;
 
-    internal FittingBuilder(List<IPipelineStep> steps) => _steps = steps;
+    internal FittingBuilder(List<IPipelineStep> steps, IRowSource? rows)
+    {
+        _steps = steps;
+        _rows = rows;
+    }
 
     /// <summary>What has been declared so far.</summary>
     public PipelineDeclaration Declaration => new(_steps);
@@ -233,5 +257,5 @@ public sealed class FittingBuilder
 
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
-    public Pipeline Build() => new(Declaration);
+    public Pipeline Build() => new(Declaration, _rows);
 }

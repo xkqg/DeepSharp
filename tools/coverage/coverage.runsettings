@@ -9,6 +9,7 @@
                      somebody else's code, and the number would move without a line of ours changing. -->
                 <ModulePath>.*DeepSharp[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Pipelines[.]DataFrame[.]dll$</ModulePath>
             </Include>
             <Exclude>
                 <ModulePath>.*\.Tests\.dll$</ModulePath>

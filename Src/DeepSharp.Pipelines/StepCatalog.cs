@@ -28,6 +28,7 @@ public sealed class StepCatalog
         var catalog = new StepCatalog();
 
         catalog.Register<ReadCsvStep>();
+        catalog.Register<ReadRowsStep>();
         catalog.Register<DeclareStep>();
         catalog.Register<SplitByTimeStep>();
         catalog.Register<SplitAtRandomStep>();

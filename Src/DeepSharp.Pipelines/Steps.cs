@@ -59,6 +59,59 @@ public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows
 }
 
 /// <summary>
+/// The rows are handed in rather than opened.
+/// </summary>
+/// <remarks>
+/// A source that lives outside the file: a table already in memory, a reader over a query, anything a
+/// package turns into rows. The declaration says so and says what it was, and the rows themselves are
+/// handed to the pipeline when it runs — which is also exactly how serving works, so the same declaration
+/// covers both without a second shape.
+/// </remarks>
+public sealed record ReadRowsStep : IPipelineStep<ReadRowsStep>, IOpensRows
+{
+    /// <summary>Declares that the rows are handed in.</summary>
+    /// <param name="description">What the rows are, for whoever reads the file later.</param>
+    /// <exception cref="ArgumentException">The description is empty.</exception>
+    public ReadRowsStep(string description)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(description);
+
+        Description = description;
+    }
+
+    /// <summary>What the rows are, for whoever reads the file later.</summary>
+    public string Description { get; }
+
+    /// <inheritdoc />
+    public static string Name => "read.rows";
+
+    /// <inheritdoc />
+    public string Verb => Name;
+
+    /// <inheritdoc />
+    public IRowSource Open() =>
+        throw new InvalidOperationException(
+            $"This pipeline reads rows that are handed in ({Description}). "
+            + "Hand them to Run or Prepare, or to Replay when the pipeline is already fitted.");
+
+    /// <inheritdoc />
+    public void WriteTo(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteStartObject();
+        writer.WriteString("step", Verb);
+        writer.WriteString("description", Description);
+        writer.WriteEndObject();
+    }
+
+    /// <summary>Reads this step back out of a file.</summary>
+    /// <param name="element">The JSON object the step was written as.</param>
+    /// <returns>The step the file describes.</returns>
+    public static ReadRowsStep ReadFrom(JsonElement element) => new(element.RequiredString("description"));
+}
+
+/// <summary>
 /// Split the rows into training, validation and test by where they sit in time.
 /// </summary>
 /// <remarks>

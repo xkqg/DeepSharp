@@ -83,6 +83,12 @@ where the arithmetic happens.
   the whole shape of the training distribution, and a reshaping towards a bell curve for a column that
   leans heavily one way.
 
+- **`DeepSharp.Pipelines.DataFrame` — one reader for the long tail.** A third package, reading a pipeline's
+  rows out of a `Microsoft.Data.Analysis` data frame, and so out of anything that can fill one: a file, a
+  database query, rows you already had. `ReadDataFrame`, `ReadCsvFrame` and `ReadDbAsync` all arrive through
+  the same door the pipeline already had for rows handed in, which is why the pipeline itself still needs no
+  reader beyond its own. An absent value stays absent rather than becoming a not-a-number.
+
 - **It fits an application that has a host.** `services.AddDeepSharpPipelines()` registers the pipeline
   factory and the catalog of verbs, so a pipeline is resolved the way everything else in a .NET application
   is. A package that brings verbs of its own registers them as a contribution, and every contribution is
