@@ -198,6 +198,57 @@ The property that keeps it honest is round-tripping. Build a pipeline in code, w
 and the two declarations must be equal — a test that fails the moment one door learns something the other
 cannot express. Without it, "both work" is a claim that decays silently, one step at a time.
 
+### A form is how a signed value is written down
+
+Three ways to write the same signed number, offered wherever a step produces one: `Form.Signed` keeps it as
+it is, `Form.Unit` shifts it to 0..1, and `Form.SplitSign` writes it as two non-negative columns,
+`max(x,0)` and `max(-x,0)`.
+
+The first two are the same feature up to a shift, so any layer with a bias absorbs the difference; the
+choice between them is about having one range across the whole feature block, not about the model. The
+third is the only one that adds anything: each half carries its own weight, so a rise and a fall can be
+answered differently instead of being forced into mirror images. It costs a column and stays exactly
+reversible, `x = pos - neg`.
+
+Two consequences worth writing down. `Form.Unit` moves zero to 0.5, so any later step that treats zero as
+special now means "the middle". And `Form.SplitSign` has to be the last form applied — a per-column
+normalisation after it would scale the two halves by their own extremes and give one quantity two different
+slopes, so a step that would do that is refused rather than run.
+
+### An indicator is a feature with a memory
+
+A moving average, a relative strength index, an average true range: arithmetic over the rows that came
+before, learning nothing from the set as a whole, and therefore a feature, above the split.
+
+Two properties are not negotiable. The window looks only backwards — a centred or forward-reaching window
+is a leak in mathematical dress, because the row would carry what had not happened yet. And the warm-up is
+a gap with a known cause: an indicator of period N has no value for the first N rows, so those rows are
+marked missing rather than filled with a zero that reads like a measurement, and what happens to them is a
+written step.
+
+The implementations are borrowed, not written. Where a list of them already exists it is adapted rather
+than reproduced — with one wrapping requirement measured on a real one: an indicator that returns a shorter
+array than it was given has dropped its warm-up rows, so the adapter re-aligns the result by the known
+offset. Silently accepting the short array shifts every value onto the wrong row, which changes nothing
+visible and corrupts everything afterwards. Indicators live in their own package, since a project that is
+not looking at market data has no use for the list.
+
+### Normalising is a family, and two of its choices are declared
+
+Standard, min-max, max-abs, robust, quantile and power each learn something different — a mean and a
+spread, two extremes, a magnitude, a median and its quartiles, a whole distribution, a shaping parameter —
+which is why the kind is named in the declaration and what it learned is stored apart from it. Standard and
+min-max are both moved by a single extreme value, so on prices and volumes the robust and quantile forms
+are the ones that describe the data rather than the spike.
+
+Row-wise normalisation is a different verb, not a member of this family: it works across a row, learns
+nothing, and is fitted nowhere.
+
+Two decisions are made here rather than discovered later. What happens outside the learned range while the
+model is running — clip, pass through, or refuse — because a price meets a new high and min-max has no
+answer of its own. And whether the target is normalised, because if it is, the way back is part of the
+saved pipeline; without it every error is reported in normalised units and every model looks excellent.
+
 ## Decisions
 
 ### A tensor knows nothing about arithmetic
