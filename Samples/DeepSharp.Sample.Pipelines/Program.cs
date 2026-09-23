@@ -36,6 +36,7 @@ var passengers = pipelines.Create()
     .Encode("sex")
     .Encode("embarked")
     .Normalise("age", "fare", "family")
+    .Target("survived")
     .Build()
     .Run();
 
@@ -62,6 +63,29 @@ var prices = pipelines.Create()
     .Run();
 
 Report("Apple", prices);
+
+// What a learner is handed: rows of numbers, their names in a fixed order, and the answers apart from them.
+var train = passengers.Batch(Split.Train);
+var test = passengers.Batch(Split.Test);
+
+Console.WriteLine("=== handover ===");
+Console.WriteLine($"  train     {train.RowCount} rows x {train.Width} numbers, {train.Labels!.Count} answers");
+Console.WriteLine($"  test      {test.RowCount} rows x {test.Width} numbers");
+Console.WriteLine($"  in order  {string.Join(", ", train.FeatureNames)}");
+Console.WriteLine($"  first row {string.Join(", ", train.Features[0].Select(number => number.ToString("0.##")))}");
+Console.WriteLine();
+
+// Serving: one passenger nobody has seen, prepared with the numbers the training rows produced.
+var arriving = new InMemoryRowSource(
+    ["survived", "pclass", "sibsp", "parch", "sex", "embarked", "fare", "age"],
+    [["0", "3", "0", "0", "female", "S", "7.75", null]]);
+
+var served = passengers.Replay(arriving);
+
+Console.WriteLine("=== one row arriving later ===");
+Console.WriteLine($"  age was missing  {((Column<double>)served["age_was_missing"])[0]}");
+Console.WriteLine($"  age now          {((Column<double>)served["age"])[0]:0.####} (scaled by what training learned)");
+Console.WriteLine();
 
 // The whole pipeline, both halves, as it would be saved beside a model.
 Console.WriteLine("The Titanic pipeline, as a file:");

@@ -19,6 +19,13 @@ public enum Scale
 
     /// <summary>Middle at the median, spread of the middle half. Unmoved by a few extremes.</summary>
     Robust,
+
+    /// <summary>By rank: the smallest training value becomes nothing, the largest one, the rest their place
+    /// in between. Unmoved by extremes, and it flattens the shape of the distribution along with them.</summary>
+    Quantile,
+
+    /// <summary>Reshaped towards a bell curve, then centred. For a column that leans heavily one way.</summary>
+    Power,
 }
 
 /// <summary>What happens to a value outside the range the fit learned.</summary>
@@ -146,9 +153,24 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IPipelineStep
                 learned.Learned("spread", Spread(training.Max(Math.Abs)));
                 break;
 
-            default:
+            case Scale.Robust:
                 learned.Learned("centre", Quantile(training, 0.5));
                 learned.Learned("spread", Spread(Quantile(training, 0.75) - Quantile(training, 0.25)));
+                break;
+
+            case Scale.Quantile:
+                // The shape of the training distribution, as a hundred and one steps. A rank transform
+                // needs the whole shape, not two numbers, so the whole shape is what gets stored.
+                learned.Learned("knots", [.. Enumerable.Range(0, 101).Select(at => Quantile(training, at / 100.0))]);
+                break;
+
+            default:
+                var lambda = YeoJohnson.Lambda(training);
+                learned.Learned("lambda", lambda);
+                var shaped = training.Select(value => YeoJohnson.Of(value, lambda)).ToArray();
+                var middle = shaped.Average();
+                learned.Learned("centre", middle);
+                learned.Learned("spread", Spread(Math.Sqrt(shaped.Average(value => (value - middle) * (value - middle)))));
                 break;
         }
 
@@ -161,10 +183,26 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IPipelineStep
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(fitted);
 
-        var centre = fitted.Number("centre");
-        var spread = fitted.Number("spread");
         var values = Numbers.Of(table, Column);
         var scaled = new double?[values.Length];
+
+        if (Scale == Scale.Quantile)
+        {
+            var knots = fitted.Curve("knots");
+
+            for (var row = 0; row < values.Length; row++)
+            {
+                scaled[row] = values[row] is { } value ? Rank(knots, value) : null;
+            }
+
+            table.Put(new Column<double>(Column, ColumnKind.Number, scaled));
+
+            return;
+        }
+
+        var centre = fitted.Number("centre");
+        var spread = fitted.Number("spread");
+        var lambda = Scale == Scale.Power ? fitted.Number("lambda") : 0;
 
         for (var row = 0; row < values.Length; row++)
         {
@@ -173,7 +211,7 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IPipelineStep
                 continue;
             }
 
-            var next = (value - centre) / spread;
+            var next = ((Scale == Scale.Power ? YeoJohnson.Of(value, lambda) : value) - centre) / spread;
 
             // Min-max on a price meets this the first time there is a new high, so what happens then is
             // part of the declaration rather than something the library decides on everybody's behalf.
@@ -214,6 +252,32 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IPipelineStep
             element.RequiredEnum<OutOfRange>("outOfRange"));
 
     private static double Spread(double spread) => spread == 0 ? 1 : spread;
+
+    private static double Rank(IReadOnlyList<double> knots, double value)
+    {
+        // Where this value sits among the training values, between nothing and one. Outside the range the
+        // fit saw, it holds at the edge -- which is what a rank transform can honestly say about a value
+        // it has never seen anything like.
+        if (value <= knots[0])
+        {
+            return 0;
+        }
+
+        for (var at = 1; at < knots.Count; at++)
+        {
+            if (value > knots[at])
+            {
+                continue;
+            }
+
+            var width = knots[at] - knots[at - 1];
+            var within = width == 0 ? 0 : (value - knots[at - 1]) / width;
+
+            return (at - 1 + within) / (knots.Count - 1);
+        }
+
+        return 1;
+    }
 
     private static double Quantile(double[] sorted, double at)
     {
@@ -391,6 +455,9 @@ public sealed record EncodeStep : IFittedStep, ILearnsFromData, IPipelineStep<En
     /// <summary>What happens to a category the training rows never held.</summary>
     public Unseen Unseen { get; }
 
+    /// <summary>The column written beside an encoded one, saying where the cell was empty.</summary>
+    public string MarkerColumn => $"{Column}_was_missing";
+
     /// <inheritdoc />
     public static string Name => "encode";
 
@@ -453,9 +520,16 @@ public sealed record EncodeStep : IFittedStep, ILearnsFromData, IPipelineStep<En
 
         table.Remove(Column);
 
+        // An empty cell is not a category and not an unfamiliar one either, so it becomes no category at
+        // all -- every slot nothing -- and the marking column remembers that it was empty. Leaving a gap
+        // in the encoded columns instead would only move the problem to whoever hands the rows over.
+        var marker = new Column<double>(
+            MarkerColumn, ColumnKind.Number, places.Select(place => (double?)(place is null ? 1 : 0)));
+
         if (How == As.Ordinal)
         {
-            table.Put(new Column<double>(Column, ColumnKind.Number, places));
+            table.Put(new Column<double>(Column, ColumnKind.Number, places.Select(place => (double?)(place ?? 0))));
+            table.Put(marker);
 
             return;
         }
@@ -469,8 +543,10 @@ public sealed record EncodeStep : IFittedStep, ILearnsFromData, IPipelineStep<En
 
             table.Put(new Column<double>(
                 $"{Column}_{label}", ColumnKind.Number,
-                places.Select(place => place is null ? null : (double?)(place == here ? 1 : 0))));
+                places.Select(place => (double?)(place == here ? 1 : 0))));
         }
+
+        table.Put(marker);
     }
 
     /// <inheritdoc />
@@ -493,4 +569,59 @@ public sealed record EncodeStep : IFittedStep, ILearnsFromData, IPipelineStep<En
         new(element.RequiredString("column"),
             element.RequiredEnum<As>("as"),
             element.RequiredEnum<Unseen>("unseen"));
+}
+
+/// <summary>
+/// The Yeo-Johnson reshaping, which pulls a lopsided column towards a bell curve.
+/// </summary>
+/// <remarks>
+/// Unlike the older Box-Cox it takes negative values as well, which matters for a column of differences.
+/// The one parameter is found by trying a grid of values and keeping the one under which the reshaped
+/// column looks most like a bell curve; a finer search buys precision nobody downstream can use.
+/// </remarks>
+internal static class YeoJohnson
+{
+    internal static double Of(double value, double lambda) => value >= 0
+        ? lambda == 0 ? Math.Log(value + 1) : (Math.Pow(value + 1, lambda) - 1) / lambda
+        : lambda == 2 ? -Math.Log(1 - value) : -((Math.Pow(1 - value, 2 - lambda) - 1) / (2 - lambda));
+
+    internal static double Lambda(double[] training)
+    {
+        var best = 1.0;
+        var most = double.NegativeInfinity;
+
+        for (var lambda = -2.0; lambda <= 2.0001; lambda += 0.05)
+        {
+            var likelihood = Likelihood(training, lambda);
+
+            if (likelihood > most)
+            {
+                most = likelihood;
+                best = lambda;
+            }
+        }
+
+        return Math.Round(best, 4);
+    }
+
+    private static double Likelihood(double[] training, double lambda)
+    {
+        var shaped = training.Select(value => Of(value, lambda)).ToArray();
+
+        if (shaped.Any(double.IsNaN) || shaped.Any(double.IsInfinity))
+        {
+            return double.NegativeInfinity;
+        }
+
+        var mean = shaped.Average();
+        var variance = shaped.Average(value => (value - mean) * (value - mean));
+
+        if (variance <= 0)
+        {
+            return double.NegativeInfinity;
+        }
+
+        return (-0.5 * training.Length * Math.Log(variance))
+               + ((lambda - 1) * training.Sum(value => Math.Sign(value) * Math.Log(Math.Abs(value) + 1)));
+    }
 }

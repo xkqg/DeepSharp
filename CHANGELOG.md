@@ -70,6 +70,19 @@ where the arithmetic happens.
   beside the declaration. What happens to a value outside the learned range is your choice, said out loud —
   a price meets a new high the first week it is in production.
 
+- **A handover, and a way back in.** `Target` names the column being predicted and it is handed over apart
+  from the numbers, never among them. `Batch(split)` gives rows of numbers with their names in a fixed
+  order, and refuses a column that still holds words, a gap nobody filled, or a target that no longer
+  exists. `Replay` runs the same declaration over rows nobody had seen, with the numbers the training rows
+  produced and nothing fitted again — which is what serving is — and a saved pipeline can be loaded back
+  from its own file to do exactly that.
+
+- **A value that is not a number gets its own verb.** `FillNaN` stops the run by default, because a
+  not-a-number is somebody's broken division and carrying it into a model as if it were a measurement is
+  the one thing a pipeline should not do quietly. Two more scales complete the set: by rank, which keeps
+  the whole shape of the training distribution, and a reshaping towards a bell curve for a column that
+  leans heavily one way.
+
 - **It fits an application that has a host.** `services.AddDeepSharpPipelines()` registers the pipeline
   factory and the catalog of verbs, so a pipeline is resolved the way everything else in a .NET application
   is. A package that brings verbs of its own registers them as a contribution, and every contribution is

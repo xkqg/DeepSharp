@@ -218,6 +218,19 @@ public sealed class FittingBuilder
     public FittingBuilder NormaliseRow(Norm norm, params string[] columns) =>
         Add(new NormaliseRowStep(columns, norm));
 
+    /// <summary>Says what happens to a value in a column that is not a number.</summary>
+    /// <param name="column">The column to watch.</param>
+    /// <param name="strategy">What to do; refusing is the default and usually the right answer.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public FittingBuilder FillNaN(string column, FillStrategy strategy = default) =>
+        Add(new FillNaNStep(column, strategy));
+
+    /// <summary>Names the column a model is being asked to predict.</summary>
+    /// <param name="column">The column holding the answer.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>The answer is handed over separately, never among the numbers a model is shown.</remarks>
+    public FittingBuilder Target(string column) => Add(new TargetStep(column));
+
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
     public Pipeline Build() => new(Declaration);

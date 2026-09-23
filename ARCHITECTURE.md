@@ -407,6 +407,23 @@ time because there is no time in the file. Landed rather than downloaded at run 
 a live source is fetched and landed: a sample that reaches the network is a sample that behaves
 differently on the day the network does.
 
+### The pipeline ends at a handover, and the same one serves
+
+`Batch(split)` is where the pipeline stops: rows of numbers, their column names in a fixed order, and the
+answer handed over separately when a target was named. A network built here, a trainer from an established
+.NET library and a caller's own learner all take that same handover, which is the only reason two of them
+can honestly be compared.
+
+Three things are refused there rather than passed on. A column still holding words, because turning one
+into a number quietly is how a category becomes an order nobody meant. A gap, because a model cannot be
+handed an absence. And a target that no longer exists, which is what encoding the answer column does to a
+pipeline that also predicts it.
+
+`Replay` is the same declaration over rows nobody had seen, with the numbers the training rows produced and
+nothing fitted again. That is what serving is, and `PreparedData.FromJson` loads both halves back from the
+saved file so a host with no data at all can do it. It is also why a model without its pipeline cannot be
+used: the numbers reaching it would not be the numbers it was trained on.
+
 ### A step says what it can do, and the run asks
 
 `IPipelineStep` stays two members wide — a verb and how to write itself down — because most of what a step

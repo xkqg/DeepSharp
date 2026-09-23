@@ -65,6 +65,9 @@ public static class With
     /// <summary>The last value before the gap, for data that arrives in order.</summary>
     public static FillStrategy Previous => new("previous");
 
+    /// <summary>Stop. For a column that is not supposed to have anything wrong with it.</summary>
+    public static FillStrategy Refuse => new("refuse");
+
     /// <summary>A number you choose, for a column where absence has a meaning you already know.</summary>
     /// <param name="value">The number to put in every gap.</param>
     /// <returns>The strategy, carrying its number.</returns>
@@ -74,7 +77,7 @@ public static class With
     /// <param name="name">The name read from a file, or written at a call site.</param>
     /// <returns><see langword="true"/> when the name is known here.</returns>
     public static bool Knows(string name) =>
-        name is "mean" or "median" or "zero" or "previous" or "constant";
+        name is "mean" or "median" or "zero" or "previous" or "constant" or "refuse";
 
     /// <summary>Whether a strategy needs a number, and therefore whether one must be there.</summary>
     /// <param name="name">The name of the strategy.</param>

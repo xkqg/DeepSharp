@@ -292,6 +292,10 @@ public sealed record FillMissingStep : IFittedStep, ILearnsFromData, IPipelineSt
                 learned.Learned("value", Strategy.Value!.Value);
                 break;
 
+            case "refuse" when learned.Number("gaps") > 0:
+                throw new InvalidOperationException(
+                    $"'{Column}' has {learned.Number("gaps"):0} gaps, and this pipeline says there should be none.");
+
             default:
                 // Carrying the previous value forward learns nothing, and the value it uses depends on the
                 // row above rather than on the training set.
