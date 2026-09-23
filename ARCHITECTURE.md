@@ -249,6 +249,44 @@ model is running — clip, pass through, or refuse — because a price meets a n
 answer of its own. And whether the target is normalised, because if it is, the way back is part of the
 saved pipeline; without it every error is reported in normalised units and every model looks excellent.
 
+### The pipeline ends at the data, and the learner is a plug
+
+Everything up to and including normalising is the same whatever is going to learn from the result, so that
+is where the pipeline stops: a prepared, split dataset plus the declaration of what the run has to prove.
+What learns from it is chosen at that seam — a network built here, a trainer from an established .NET
+machine-learning library, or something a caller wrote — and each plugs in at the same point.
+
+That is worth more than the convenience. Two learners compared on the same prepared data and the same
+declared measures can honestly be compared; two learners each fed by their own preparation cannot, and that
+is the usual way a comparison between models is quietly meaningless. For tabular data a gradient-boosted
+tree regularly beats a small network, so this is a real branch rather than a courtesy.
+
+One thing keeps it honest. The same prepared data is not the same *representation* for every learner: a
+network needs everything numeric, expanded and on one scale, while a tree is indifferent to scale and is
+actively harmed by a wide one-hot expansion of a high-cardinality column. So a learner states what it needs
+— numbers only, categories handled natively, scale-insensitive — and the steps it does not need are skipped
+**by declaration and recorded as skipped**, never dropped in silence. The artefact then still says exactly
+what each run saw, which is the only reason the comparison means anything.
+
+And the preparation happens once, here. A learner that brings its own normalisers does not get to use them:
+running them again would leave the saved pipeline describing something other than what the model was
+actually fed.
+
+### That seam is the first package boundary
+
+The pipeline and the things that learn are separate packages, and the reference only runs one way: a
+learner package knows the pipeline, the pipeline knows no learner. It is the first cut in the library
+because it is the one that decides what a project has to carry — a service that prepares data and hands it
+to an established .NET trainer should never drag a tensor engine along, and a network that trains on data
+somebody else prepared should not drag a CSV reader.
+
+The contract between them lives on the pipeline side: prepared splits, the declared evidence, and what a
+learner says it needs. Everything else about a learner is its own package's business.
+
+A cut like this is not kept by intention, so it is pinned: a test reads the assembly references and fails
+the moment the pipeline acquires one it is not allowed to have. Direction is easy to state and easy to
+break, and by the time it is broken the fix is no longer a line.
+
 ## Decisions
 
 ### A tensor knows nothing about arithmetic
