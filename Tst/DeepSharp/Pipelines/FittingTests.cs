@@ -12,20 +12,7 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class FittingTests
 {
-    private static string Titanic => Path.Join(RepoRoot(), "Samples", "data", "titanic.csv");
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
-    }
+    private static string Titanic => Repository.Data("titanic.csv");
 
     private static PreparedData Prepared(FillStrategy strategy) =>
         Pdd.Create()
@@ -60,8 +47,10 @@ public class FittingTests
         var marker = (Column<double>)prepared.Table["age_was_missing"];
 
         Assert.DoesNotContain(Enumerable.Range(0, prepared.Table.RowCount), age.IsMissing);
+        // Every gap in the file is marked, 177 of them; what the fit writes down is what it saw, the 133 among
+        // the training rows.
         Assert.Equal(177, Enumerable.Range(0, prepared.Table.RowCount).Count(row => marker[row] == 1));
-        Assert.Equal(177, prepared.Fitted[3].Number("gaps"));
+        Assert.Equal(133, prepared.Fitted[3].Number("gaps"));
         Assert.Equal(0, marker[0]);
     }
 
@@ -90,7 +79,7 @@ public class FittingTests
         var strategy = name == "median" ? With.Median : With.Zero;
         var prepared = Prepared(strategy);
 
-        Assert.Equal(name == "zero" ? 0 : 28, prepared.Fitted[3].Number("value"), 0);
+        Assert.Equal(name == "zero" ? 0 : 29, prepared.Fitted[3].Number("value"), 0);
     }
 
     [Fact]
@@ -105,11 +94,46 @@ public class FittingTests
     [Fact]
     public void CarryingTheLastValueForward_LearnsNothingAndSaysSo()
     {
-        var prepared = Prepared(With.Previous);
+        var prepared = Pdd.Create()
+            .ReadCsv(Repository.Data("apple.csv"))
+            .Declare(schema => schema.Timestamp("Date").Optional("AAPL.Close", ColumnKind.Number))
+            .OrderBy("Date")
+            .SplitByTime("Date", 0.70, 0.15)
+            .FillMissing("AAPL.Close", With.Previous)
+            .Build()
+            .Run();
 
-        Assert.False(prepared.Fitted[3].Numbers.ContainsKey("value"));
+        Assert.False(prepared.Fitted[4].Numbers.ContainsKey("value"));
+        Assert.IsType<FillMissingByPreviousStep>(prepared.Declaration.Steps[4]);
         Assert.DoesNotContain(
-            Enumerable.Range(0, prepared.Table.RowCount), ((Column<double>)prepared.Table["age"]).IsMissing);
+            Enumerable.Range(0, prepared.Table.RowCount), ((Column<double>)prepared.Table["AAPL.Close"]).IsMissing);
+    }
+
+    [Fact]
+    public void AColumnSaidToHaveNoGaps_RefusesTheGapThatArrivesLater()
+    {
+        // The training rows were whole, so there was nothing to refuse while fitting; a row served a year later
+        // with a gap in it is refused by the same declaration, rather than filled with a value nobody learned.
+        var trained = Pdd.Create()
+            .Read(CsvRowSource.FromText("a,b\n1,1\n2,2\n3,3\n4,4\n5,5\n6,6\n7,7\n8,8\n9,9\n10,10\n"), "ten rows")
+            .Declare(schema => schema.Number("a", "b"))
+            .SplitAtRandom(0.70, 0.15)
+            .FillMissing("a", With.Refuse)
+            .Build()
+            .Run();
+
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => trained.Replay(CsvRowSource.FromText("a,b\n,1\n")));
+
+        Assert.Contains("should be none", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheFormThatFillsWithOneValue_IsNotTheOneThatCarriesAValueForward()
+    {
+        Assert.Throws<ArgumentException>(() => new FillMissingByValueStep("a", With.Previous));
+        Assert.IsType<FillMissingByPreviousStep>(FillMissingStep.Of("a", With.Previous));
+        Assert.IsType<FillMissingByValueStep>(FillMissingStep.Of("a", With.Mean));
     }
 
     [Fact]
@@ -139,7 +163,7 @@ public class FittingTests
     public void ASplitInTime_PutsTheEarliestRowsInTraining()
     {
         var prepared = Pdd.Create()
-            .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "apple.csv"))
+            .ReadCsv(Repository.Data("apple.csv"))
             .Declare(schema => schema.Timestamp("Date").Number("AAPL.Close"))
             .SplitByTime("Date", 0.70, 0.15)
             .Build()
@@ -211,7 +235,8 @@ public class FittingTests
 
         Assert.Contains("\"declaration\"", written, StringComparison.Ordinal);
         Assert.Contains("\"fitted\"", written, StringComparison.Ordinal);
-        Assert.Contains("\"3\"", written, StringComparison.Ordinal);
+        Assert.Contains("\"prefix\"", written, StringComparison.Ordinal);
+        Assert.Contains("\"learned\"", written, StringComparison.Ordinal);
         Assert.Contains("\"value\"", written, StringComparison.Ordinal);
     }
 }

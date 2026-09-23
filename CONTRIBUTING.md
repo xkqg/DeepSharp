@@ -45,9 +45,10 @@ reach for a test that pretends to cover it.
 
 ## The version is handed out, never invented
 
-There is no `<Version>` in the build files. The owner names the number when the work starts, and that same
-number then stands in every packable project and in the changelog heading at once. Nothing is packed or
-published before it is named.
+The owner names the number when the work starts. It is written once, as the single `<Version>` in
+`Directory.Build.props`, which every packable project takes, and that same number heads the changelog and
+stands in the README at once — a test holds the three together, and another refuses a second `<Version>`
+anywhere. Nothing is packed or published before it is named.
 
 ## Every change ends with the documents
 

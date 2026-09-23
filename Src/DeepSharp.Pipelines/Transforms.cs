@@ -83,8 +83,17 @@ public enum Norm
 /// and min-max are both moved by a single extreme value, so on prices and volumes the robust form is
 /// usually the one describing the data rather than the spike.
 /// </remarks>
-public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IUndoesItself, IPipelineStep<NormaliseStep>
+public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<NormaliseStep>, IDescribesColumns
 {
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column to bring onto a comparable scale.", "column", ColumnKinds.Numbers);
+
+    private static readonly OneOfParameter<Scale> ScaleKey = new(
+        "scale", "Which kind of scaling: what the fit learns from the training rows.", Scale.Standard);
+
+    private static readonly OneOfParameter<OutOfRange> OutOfRangeKey = new(
+        "outOfRange", "What happens to a value outside the range the fit learned: let it through, hold it at the edge, or refuse.", OutOfRange.Pass);
+
     /// <summary>Declares that a column is brought onto a comparable scale.</summary>
     /// <param name="column">The column to scale.</param>
     /// <param name="scale">Which kind of scaling.</param>
@@ -92,12 +101,16 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IUndoesItself
     /// <exception cref="ArgumentException">The column has no name.</exception>
     public NormaliseStep(string column, Scale scale = Scale.Standard, OutOfRange outOfRange = OutOfRange.Pass)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(column);
-
-        Column = column;
-        Scale = scale;
-        OutOfRange = outOfRange;
+        Column = ColumnKey.Require(column);
+        Scale = ScaleKey.Require(scale);
+        OutOfRange = OutOfRangeKey.Require(outOfRange);
     }
+
+    /// <inheritdoc />
+    public static StepParameters<NormaliseStep> Parameters { get; } = new StepParameters<NormaliseStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(ScaleKey, step => step.Scale)
+        .With(OutOfRangeKey, step => step.OutOfRange);
 
     /// <summary>The column being scaled.</summary>
     public string Column { get; }
@@ -135,7 +148,34 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IUndoesItself
     }
 
     /// <inheritdoc />
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return before.With(Column, ColumnKind.Number);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A half of a value split by its sign is refused: a scale learned for one half would stretch it by its own
+    /// extremes and the other half by its own, and one quantity would come out with two different slopes. The
+    /// split sign is the last form a value takes.
+    /// </remarks>
+    public string? Refusal(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return before.Find(Column) is { HalfOf: { } whole }
+            ? $"'{Column}' is one half of '{whole}' split by its sign, and a scale learned for one half alone would "
+              + "give the two halves two different slopes. The split sign is the last form a value takes."
+            : null;
+    }
+
+    /// <inheritdoc />
     public static string Name => "normalise";
+
+    /// <inheritdoc />
+    public static string Purpose => "Brings a column onto a comparable scale, by numbers learned from the training rows.";
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -146,54 +186,41 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IUndoesItself
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(parts);
 
-        var values = Numbers.Of(table, Column);
-        var training = Enumerable.Range(0, values.Length)
-            .Where(row => parts[row] == Part.Train && values[row] is not null)
-            .Select(row => values[row]!.Value)
-            .Order()
-            .ToArray();
-
-        if (training.Length == 0)
-        {
-            throw new InvalidOperationException(
-                $"Every training row of '{Column}' is a gap, so there is no scale to learn.");
-        }
-
+        var training = table.TrainingValues(Column, parts).Learnable("a scale");
         var learned = new FittedStepValues();
 
         switch (Scale)
         {
             case Scale.Standard:
-                var mean = training.Average();
-                learned.Learned("centre", mean);
-                learned.Learned("spread", Spread(Math.Sqrt(training.Average(value => (value - mean) * (value - mean)))));
+                learned.Learned("centre", training.Mean);
+                learned.Learned("spread", Spread(training.StandardDeviation));
                 break;
 
             case Scale.MinMax:
-                learned.Learned("centre", training[0]);
-                learned.Learned("spread", Spread(training[^1] - training[0]));
+                learned.Learned("centre", training.Finite[0]);
+                learned.Learned("spread", Spread(training.Finite[^1] - training.Finite[0]));
                 break;
 
             case Scale.MaxAbs:
                 learned.Learned("centre", 0);
-                learned.Learned("spread", Spread(training.Max(Math.Abs)));
+                learned.Learned("spread", Spread(training.Finite.Max(Math.Abs)));
                 break;
 
             case Scale.Robust:
-                learned.Learned("centre", Quantile(training, 0.5));
-                learned.Learned("spread", Spread(Quantile(training, 0.75) - Quantile(training, 0.25)));
+                learned.Learned("centre", training.Median);
+                learned.Learned("spread", Spread(training.Quantile(0.75) - training.Quantile(0.25)));
                 break;
 
             case Scale.Quantile:
                 // The shape of the training distribution, as a hundred and one steps. A rank transform
                 // needs the whole shape, not two numbers, so the whole shape is what gets stored.
-                learned.Learned("knots", [.. Enumerable.Range(0, 101).Select(at => Quantile(training, at / 100.0))]);
+                learned.Learned("knots", [.. Enumerable.Range(0, 101).Select(at => training.Quantile(at / 100.0))]);
                 break;
 
             default:
-                var lambda = YeoJohnson.Lambda(training);
+                var lambda = YeoJohnson.Lambda([.. training.Finite]);
                 learned.Learned("lambda", lambda);
-                var shaped = training.Select(value => YeoJohnson.Of(value, lambda)).ToArray();
+                var shaped = training.Finite.Select(value => YeoJohnson.Of(value, lambda)).ToArray();
                 var middle = shaped.Average();
                 learned.Learned("centre", middle);
                 learned.Learned("spread", Spread(Math.Sqrt(shaped.Average(value => (value - middle) * (value - middle)))));
@@ -209,7 +236,7 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IUndoesItself
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(fitted);
 
-        var values = Numbers.Of(table, Column);
+        var values = table.NumbersOf(Column);
         var scaled = new double?[values.Length];
 
         if (Scale == Scale.Quantile)
@@ -256,26 +283,11 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IUndoesItself
         table.Put(new Column<double>(Column, ColumnKind.Number, scaled));
     }
 
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-        writer.WriteString("scale", Scale.ToString().ToLowerInvariant());
-        writer.WriteString("outOfRange", OutOfRange.ToString().ToLowerInvariant());
-        writer.WriteEndObject();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     public static NormaliseStep ReadFrom(JsonElement element) =>
-        new(element.RequiredString("column"),
-            element.RequiredEnum<Scale>("scale"),
-            element.RequiredEnum<OutOfRange>("outOfRange"));
+        new(ColumnKey.Read(element), ScaleKey.Read(element), OutOfRangeKey.Read(element));
 
     private static double Spread(double spread) => spread == 0 ? 1 : spread;
 
@@ -304,15 +316,6 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IUndoesItself
 
         return 1;
     }
-
-    private static double Quantile(double[] sorted, double at)
-    {
-        var place = at * (sorted.Length - 1);
-        var below = (int)Math.Floor(place);
-        var above = Math.Min(below + 1, sorted.Length - 1);
-
-        return sorted[below] + ((sorted[above] - sorted[below]) * (place - below));
-    }
 }
 
 /// <summary>
@@ -322,25 +325,30 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IUndoesItself
 /// A different animal from the rest: it works across a row rather than down a column, so there is nothing
 /// to fit and nothing to replay. What you want when the direction of a row matters and its size does not.
 /// </remarks>
-public sealed record NormaliseRowStep : IPipelineStep<NormaliseRowStep>, IAddsColumns
+public sealed record NormaliseRowStep : IPipelineStep<NormaliseRowStep>, IAddsColumns, IDescribesColumns
 {
+    private static readonly OneOfParameter<Norm> NormKey = new(
+        "norm", "How the row's size is measured: the sum of the magnitudes, the length, or the largest.", Norm.L2);
+
+    private static readonly ColumnsParameter ColumnsKey = new(
+        "columns", "The columns that make up the row, scaled together.", ["left", "right"], ColumnKinds.Numbers);
+
     /// <summary>Declares that these columns are scaled together, row by row.</summary>
     /// <param name="columns">The columns that make up the row.</param>
     /// <param name="norm">How the row's size is measured.</param>
-    /// <exception cref="ArgumentException">There are no columns.</exception>
+    /// <exception cref="ArgumentException">There are no columns, one has no name, or one is named twice.</exception>
     public NormaliseRowStep(IEnumerable<string> columns, Norm norm = Norm.L2)
     {
         ArgumentNullException.ThrowIfNull(columns);
 
-        Columns = [.. columns];
-
-        if (Columns.Count == 0)
-        {
-            throw new ArgumentException("Scaling a row needs the columns it is made of.", nameof(columns));
-        }
-
-        Norm = norm;
+        Columns = ColumnsKey.Require([.. columns]);
+        Norm = NormKey.Require(norm);
     }
+
+    /// <inheritdoc />
+    public static StepParameters<NormaliseRowStep> Parameters { get; } = new StepParameters<NormaliseRowStep>()
+        .With(NormKey, step => step.Norm)
+        .With(ColumnsKey, step => step.Columns);
 
     /// <summary>The columns that make up the row.</summary>
     public IReadOnlyList<string> Columns { get; }
@@ -349,7 +357,18 @@ public sealed record NormaliseRowStep : IPipelineStep<NormaliseRowStep>, IAddsCo
     public Norm Norm { get; }
 
     /// <inheritdoc />
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return Columns.Aggregate(before, (state, column) => state.With(column, ColumnKind.Number));
+    }
+
+    /// <inheritdoc />
     public static string Name => "normalise.row";
+
+    /// <inheritdoc />
+    public static string Purpose => "Brings each row onto a comparable scale across the columns that make it up, learning nothing.";
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -378,7 +397,7 @@ public sealed record NormaliseRowStep : IPipelineStep<NormaliseRowStep>, IAddsCo
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        var values = Columns.Select(column => Numbers.Of(table, column)).ToArray();
+        var values = Columns.Select(column => table.NumbersOf(column)).ToArray();
 
         for (var row = 0; row < table.RowCount; row++)
         {
@@ -413,39 +432,11 @@ public sealed record NormaliseRowStep : IPipelineStep<NormaliseRowStep>, IAddsCo
         }
     }
 
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("norm", Norm.ToString().ToLowerInvariant());
-        writer.WriteStartArray("columns");
-
-        foreach (var column in Columns)
-        {
-            writer.WriteStringValue(column);
-        }
-
-        writer.WriteEndArray();
-        writer.WriteEndObject();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
-    public static NormaliseRowStep ReadFrom(JsonElement element)
-    {
-        if (!element.TryGetProperty("columns", out var columns) || columns.ValueKind != JsonValueKind.Array)
-        {
-            throw new FormatException("Scaling a row holds a 'columns' list.");
-        }
-
-        return new NormaliseRowStep(
-            columns.EnumerateArray().Select(column => column.GetString() ?? string.Empty),
-            element.RequiredEnum<Norm>("norm"));
-    }
+    public static NormaliseRowStep ReadFrom(JsonElement element) =>
+        new(ColumnsKey.Read(element), NormKey.Read(element));
 }
 
 /// <summary>
@@ -456,8 +447,17 @@ public sealed record NormaliseRowStep : IPipelineStep<NormaliseRowStep>, IAddsCo
 /// unfamiliar value will turn up in production sooner or later, so what happens then is declared: a place
 /// kept for it, or a refusal saying the data holds something this model has never seen.
 /// </remarks>
-public sealed record EncodeStep : IFittedStep, ILearnsFromData, IPipelineStep<EncodeStep>
+public sealed record EncodeStep : IFittedStep, IPipelineStep<EncodeStep>, IDescribesColumns
 {
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column of words to write down as numbers.", "column", ColumnKinds.Any);
+
+    private static readonly OneOfParameter<As> AsKey = new(
+        "as", "How the categories are written down: one column per category, or one column of places.", As.OneHot);
+
+    private static readonly OneOfParameter<Unseen> UnseenKey = new(
+        "unseen", "What happens to a category the training rows never held: a place kept for it, or a refusal.", Unseen.Reserve);
+
     /// <summary>Declares that a column of words is written down as numbers.</summary>
     /// <param name="column">The column of words.</param>
     /// <param name="how">One column per category, or one column of places.</param>
@@ -465,12 +465,16 @@ public sealed record EncodeStep : IFittedStep, ILearnsFromData, IPipelineStep<En
     /// <exception cref="ArgumentException">The column has no name.</exception>
     public EncodeStep(string column, As how = As.OneHot, Unseen unseen = Unseen.Reserve)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(column);
-
-        Column = column;
-        How = how;
-        Unseen = unseen;
+        Column = ColumnKey.Require(column);
+        How = AsKey.Require(how);
+        Unseen = UnseenKey.Require(unseen);
     }
+
+    /// <inheritdoc />
+    public static StepParameters<EncodeStep> Parameters { get; } = new StepParameters<EncodeStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(AsKey, step => step.How)
+        .With(UnseenKey, step => step.Unseen);
 
     /// <summary>The column of words.</summary>
     public string Column { get; }
@@ -485,7 +489,25 @@ public sealed record EncodeStep : IFittedStep, ILearnsFromData, IPipelineStep<En
     public string MarkerColumn => $"{Column}_was_missing";
 
     /// <inheritdoc />
+    /// <remarks>
+    /// One column per category is a family: which categories there are is known once the training rows have
+    /// been seen, so its members are known by the start of their names. One column of places keeps the name.
+    /// </remarks>
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        var without = before.Without(Column);
+        var encoded = How == As.Ordinal ? without.With(Column, ColumnKind.Number) : without.WithFamily($"{Column}_");
+
+        return encoded.With(MarkerColumn, ColumnKind.Number);
+    }
+
+    /// <inheritdoc />
     public static string Name => "encode";
+
+    /// <inheritdoc />
+    public static string Purpose => "Writes a column of words down as numbers, using the categories the training rows held.";
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -575,26 +597,138 @@ public sealed record EncodeStep : IFittedStep, ILearnsFromData, IPipelineStep<En
         table.Put(marker);
     }
 
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
+    /// <summary>Reads this step back out of a file.</summary>
+    /// <param name="element">The JSON object the step was written as.</param>
+    /// <returns>The step the file describes.</returns>
+    public static EncodeStep ReadFrom(JsonElement element) =>
+        new(ColumnKey.Read(element), AsKey.Read(element), UnseenKey.Read(element));
+}
 
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-        writer.WriteString("as", How.ToString().ToLowerInvariant());
-        writer.WriteString("unseen", Unseen.ToString().ToLowerInvariant());
-        writer.WriteEndObject();
+/// <summary>
+/// Writes every column that stands for a group down as numbers, each by the categories the training rows held.
+/// </summary>
+/// <remarks>
+/// Which columns are categories is said once, where it is a fact: in the schema, or by the step that made the
+/// column. This takes every column that is a category where it stands, so marking one more column a category
+/// is the whole of the change — nothing further down has to be told. It was a word in the chain that became
+/// one encoding step per category at the moment it was written, so a file could not say it and a column
+/// marked a category afterwards was never encoded at all.
+/// </remarks>
+public sealed record EncodeCategoriesStep : IFittedStep, IPipelineStep<EncodeCategoriesStep>, IDescribesColumns
+{
+    private static readonly OneOfParameter<As> AsKey = new(
+        "as", "How each category is written down: one column per category, or one column of places.", As.OneHot);
+
+    private static readonly OneOfParameter<Unseen> UnseenKey = new(
+        "unseen", "What happens to a category the training rows never held: a place kept for it, or a refusal.", Unseen.Reserve);
+
+    /// <summary>Declares that every category column is written down as numbers.</summary>
+    /// <param name="how">One column per category, or one column of places.</param>
+    /// <param name="unseen">What happens to a category the training rows never held.</param>
+    public EncodeCategoriesStep(As how = As.OneHot, Unseen unseen = Unseen.Reserve)
+    {
+        How = AsKey.Require(how);
+        Unseen = UnseenKey.Require(unseen);
+    }
+
+    /// <summary>How the categories are written down.</summary>
+    public As How { get; }
+
+    /// <summary>What happens to a category the training rows never held.</summary>
+    public Unseen Unseen { get; }
+
+    /// <inheritdoc />
+    /// <remarks>Each category where it stands, encoded exactly as a step for that one column would be.</remarks>
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return before.Columns
+            .Where(column => column.Kind == ColumnKind.Category)
+            .Aggregate(before, (state, column) => new EncodeStep(column.Name, How, Unseen).After(state));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Refused where provably no column is a category: none is known, and nothing unnamed may be there. The run
+    /// still refuses when none is, for the columns a step from elsewhere may have made.
+    /// </remarks>
+    public string? Refusal(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return before.Open || before.Columns.Any(column => column.Kind == ColumnKind.Category)
+            ? null
+            : "nothing before it declares a category, so this pipeline has no categories to write down as numbers.";
+    }
+
+    /// <inheritdoc />
+    public static string Name => "encode.categories";
+
+    /// <inheritdoc />
+    public static string Purpose => "Writes every column that stands for a group down as numbers, each by the categories the training rows held.";
+
+    /// <inheritdoc />
+    public static int Since => 2;
+
+    /// <inheritdoc />
+    public static StepParameters<EncodeCategoriesStep> Parameters { get; } = new StepParameters<EncodeCategoriesStep>()
+        .With(AsKey, step => step.How)
+        .With(UnseenKey, step => step.Unseen);
+
+    /// <inheritdoc />
+    public string Verb => Name;
+
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">No column is a category where this step stands.</exception>
+    public FittedStepValues Fit(Table table, IReadOnlyList<Part> parts)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(parts);
+
+        var categories = table.Columns.Where(column => column.Kind == ColumnKind.Category).ToArray();
+
+        if (categories.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "This pipeline has no categories where the encoder stands, so there is nothing to write down as numbers.");
+        }
+
+        var learned = new FittedStepValues();
+
+        // One list per column, under the column's name, each learned exactly as a step for that one column
+        // would learn it: from the training rows alone.
+        foreach (var column in categories)
+        {
+            learned.Learned(column.Name, new EncodeStep(column.Name, How, Unseen).Fit(table, parts).List("categories"));
+        }
+
+        return learned;
+    }
+
+    /// <inheritdoc />
+    public void ApplyTo(Table table, FittedStepValues fitted)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(fitted);
+
+        // In the order the columns stand on the table, which a run and a replay reach the same way, so both
+        // hand the encoded columns over in one order.
+        var encoded = table.Columns.Select(column => column.Name).Where(fitted.Lists.ContainsKey).ToArray();
+
+        foreach (var column in encoded)
+        {
+            var one = new FittedStepValues();
+            one.Learned("categories", fitted.List(column));
+
+            new EncodeStep(column, How, Unseen).ApplyTo(table, one);
+        }
     }
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
-    public static EncodeStep ReadFrom(JsonElement element) =>
-        new(element.RequiredString("column"),
-            element.RequiredEnum<As>("as"),
-            element.RequiredEnum<Unseen>("unseen"));
+    public static EncodeCategoriesStep ReadFrom(JsonElement element) => new(AsKey.Read(element), UnseenKey.Read(element));
 }
 
 /// <summary>

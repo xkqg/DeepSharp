@@ -55,6 +55,10 @@ var prices = pipelines.Create()
         .Timestamp("Date")
         .Number("AAPL.Open", "AAPL.High", "AAPL.Low", "AAPL.Close", "AAPL.Volume")
         .Category("direction"))
+    // The rows before a row are whichever the file happened to put there, unless an order is declared: the
+    // same prices, reversed, gave a five-day average of 98.352 where the right one is 99.74. So every step
+    // that looks at earlier rows stands below the one that says which rows are earlier.
+    .OrderBy("Date")
     .AddFeature("range", "AAPL.High", Arithmetic.Minus, "AAPL.Low")
     // Indicators are borrowed from MatPlotLibNet rather than written again, and they stand above the line
     // because they learn nothing: arithmetic over the rows that came before, looking only backwards.
@@ -123,7 +127,7 @@ Console.WriteLine("The Titanic pipeline, as a file:");
 Console.WriteLine(passengers.ToJson());
 
 // And the same declaration, read back from that file and run again with no builder in sight.
-var again = new Pipeline(PipelineDeclaration.FromJson(passengers.ToJson())).Run();
+var again = new Pipeline(PipelineDeclaration.FromJson(passengers.ToJson(), StepCatalog.BuiltIn())).Run();
 
 Console.WriteLine($"Read back and run again: {again.Table.Columns.Count} columns, "
                   + $"{again.CountIn(Part.Train)} training rows — identical: "

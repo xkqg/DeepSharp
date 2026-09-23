@@ -13,14 +13,15 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class WarmUpTests
 {
-    private static string Apple => Path.Join(RepoRoot(), "Samples", "data", "apple.csv");
+    private static string Apple => Repository.Data("apple.csv");
 
     private static PipelineBuilder Prices() =>
         Pdd.Create()
             .ReadCsv(Apple)
             .Declare(schema => schema
                 .Timestamp("Date")
-                .Number("AAPL.High", "AAPL.Low", "AAPL.Close"));
+                .Number("AAPL.High", "AAPL.Low", "AAPL.Close"))
+            .OrderBy("Date");
 
     [Fact]
     public void FiveHundredAndSixRowsWithATwentyPeriodAverage_AreFourHundredAndEightySeven()
@@ -95,6 +96,23 @@ public class WarmUpTests
     }
 
     [Fact]
+    public void AWarmUpThatWouldTakeEveryRow_StopsTheRunRatherThanLeavingNothing()
+    {
+        // Five rows served to a twenty-period average are five rows of not-yet. The guard on how many rows
+        // may go was a number, a thousand by default, and five is well under it — so the table came back
+        // with no rows at all and nothing said why.
+        var table = new Table([
+            new Column<double>("close", ColumnKind.Number, [1.0, 2.0, 3.0, 4.0, 5.0]),
+            new Column<double>("sma20", ColumnKind.Number, [null, null, null, null, null]),
+        ]);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => new DropWarmUpStep().RowsToKeep(table));
+
+        Assert.Contains("sma20", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("every one of its 5 rows", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void WithoutIndicatorsThereIsNothingToDrop()
     {
         var prepared = Prices().DropWarmUp().Build().Run();
@@ -105,19 +123,22 @@ public class WarmUpTests
     [Fact]
     public void ATableOfNothingDropsNothing()
     {
-        Assert.Equal(0, new DropWarmUpStep().FirstUsableRow(new Table([])));
-        Assert.Throws<ArgumentNullException>(() => new DropWarmUpStep().FirstUsableRow(null!));
+        Assert.Empty(new DropWarmUpStep().RowsToKeep(new Table([])));
+        Assert.Throws<ArgumentNullException>(() => new DropWarmUpStep().RowsToKeep(null!));
         Assert.Throws<ArgumentOutOfRangeException>(() => new DropWarmUpStep(-1));
     }
 
     [Fact]
-    public void KeepingFromARowThatIsNotThere_IsRefused()
+    public void DropWarmUp_KeepsItsLeadingRun_UnderTheMask()
     {
-        var table = new Table([new Column<double>("a", ColumnKind.Number, [1.0, 2.0])]);
+        // Dropping rows is a mask now, so a drop can take any rows it names; this one names the leading run
+        // and nothing else. A gap further down is a gap in the data, for the steps that deal with gaps.
+        var table = new Table([
+            new Column<double>("close", ColumnKind.Number, [1.0, 2.0, 3.0, 4.0, 5.0]),
+            new Column<double>("sma2", ColumnKind.Number, [null, 1.5, null, 3.5, 4.5]),
+        ]);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => table.From(-1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => table.From(3));
-        Assert.Equal(0, table.From(2).RowCount);
+        Assert.Equal([false, true, true, true, true], new DropWarmUpStep().RowsToKeep(table));
     }
 
     [Fact]
@@ -127,7 +148,7 @@ public class WarmUpTests
 
         Assert.Equal(1, table["a"].LeadingGaps());
 
-        var kept = table.From(1);
+        var kept = table.Keep(new DropWarmUpStep().RowsToKeep(table));
 
         Assert.Equal(2, kept.RowCount);
         Assert.Equal(ColumnKind.Category, kept["a"].Kind);
@@ -140,25 +161,13 @@ public class WarmUpTests
         var declaration = Pdd.Create()
             .ReadCsv("x.csv")
             .Declare(schema => schema.Number("a"))
+            .OrderBy("a")
             .DropWarmUp(atMost: 25)
             .Declaration;
 
-        var returned = PipelineDeclaration.FromJson(declaration.ToJson());
+        var returned = PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn());
 
         Assert.Equal(declaration, returned);
-        Assert.Equal(25, ((DropWarmUpStep)returned.Steps[2]).AtMost);
-    }
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
+        Assert.Equal(25, ((DropWarmUpStep)returned.Steps[3]).AtMost);
     }
 }

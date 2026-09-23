@@ -12,25 +12,10 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class TransformTests
 {
-    private static string Data(string file) => Path.Join(RepoRoot(), "Samples", "data", file);
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
-    }
-
     private static PreparedData Apple(Action<PipelineBuilder> before, Action<FittingBuilder>? after = null)
     {
         var builder = Pdd.Create()
-            .ReadCsv(Data("apple.csv"))
+            .ReadCsv(Repository.Data("apple.csv"))
             .Declare(schema => schema
                 .Timestamp("Date")
                 .Number("AAPL.Open", "AAPL.High", "AAPL.Low", "AAPL.Close", "AAPL.Volume")
@@ -164,7 +149,7 @@ public class TransformTests
     public void EveryScaleLearnsFromTheTrainingRowsAlone(Scale scale)
     {
         var prepared = Apple(_ => { }, fitting => fitting.Normalise("AAPL.Close", scale));
-        var learned = prepared.Fitted.Values.Single();
+        var learned = prepared.Fitted.Single(each => prepared.Declaration.Steps[each.Key] is IFittedStep).Value;
 
         var closes = Enumerable.Range(0, prepared.Table.RowCount)
             .Where(row => prepared.Parts[row] == Part.Train)
@@ -213,7 +198,9 @@ public class TransformTests
 
         Assert.Equal(1, increasing[0]);
         Assert.Equal(0, decreasing[0]);
-        Assert.Equal(["Decreasing", "Increasing"], prepared.Fitted.Values.Single().List("categories"));
+        Assert.Equal(
+            ["Decreasing", "Increasing"],
+            prepared.Fitted.Single(each => prepared.Declaration.Steps[each.Key] is IFittedStep).Value.List("categories"));
     }
 
     [Fact]
@@ -281,7 +268,7 @@ public class TransformTests
             .NormaliseRow(Norm.L1, "high", "low")
             .Declaration;
 
-        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson()));
+        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()));
         Assert.Equal(9, declaration.Steps.Count);
     }
 

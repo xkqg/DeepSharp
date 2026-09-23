@@ -1,6 +1,8 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
+
 namespace DeepSharp.Pipelines;
 
 /// <summary>
@@ -10,22 +12,29 @@ namespace DeepSharp.Pipelines;
 /// Declaring a source and opening one are two different moments, which is the whole reason a pipeline can
 /// be written on a machine that holds no data. This is the second moment.
 /// </remarks>
-public interface IOpensRows : IPipelineStep
+public interface IOpensRows : IActsInAWalk
 {
     /// <summary>Opens the source and hands back its rows.</summary>
+    /// <param name="folder">Where a relative path the step holds is read from: the pipeline's folder.</param>
     /// <returns>The rows, as text, with their column names.</returns>
-    IRowSource Open();
+    IRowSource Open(SourceFolder folder);
+
+    /// <inheritdoc />
+    void IActsInAWalk.ActOn(Walk walk) => walk.Open(Open);
 }
 
 /// <summary>
 /// A step that turns rows of text into named, typed columns.
 /// </summary>
-public interface IBindsColumns : IPipelineStep
+public interface IBindsColumns : IActsInAWalk
 {
     /// <summary>Reads a source into the columns this step declares.</summary>
     /// <param name="source">The rows to read.</param>
     /// <returns>The table the pipeline carries from here on.</returns>
     Table Bind(IRowSource source);
+
+    /// <inheritdoc />
+    void IActsInAWalk.ActOn(Walk walk) => walk.Bind(Bind);
 }
 
 /// <summary>
@@ -42,7 +51,7 @@ public sealed class Pipeline
     /// <param name="declaration">The steps, in the order they were written.</param>
     /// <remarks>
     /// Public because a declaration read back from a file is exactly as runnable as one written in C#,
-    /// which is the whole promise: <c>new Pipeline(PipelineDeclaration.FromJson(text)).Run()</c>.
+    /// which is the whole promise: <c>new Pipeline(PipelineDeclaration.FromJson(text, catalog)).Run()</c>.
     /// </remarks>
     public Pipeline(PipelineDeclaration declaration)
         : this(declaration, rows: null)
@@ -53,15 +62,29 @@ public sealed class Pipeline
     /// <param name="declaration">The steps, in the order they were written.</param>
     /// <param name="rows">The rows, when the declaration says they are handed in.</param>
     public Pipeline(PipelineDeclaration declaration, IRowSource? rows)
+        : this(declaration, rows, SourceFolder.WorkingDirectory)
+    {
+    }
+
+    /// <summary>A pipeline that carries out this declaration, reading a relative path from a given folder.</summary>
+    /// <param name="declaration">The steps, in the order they were written.</param>
+    /// <param name="rows">The rows, when the declaration says they are handed in.</param>
+    /// <param name="folder">The folder the pipeline sits in: that of the file it was read from, or of its notebook.</param>
+    public Pipeline(PipelineDeclaration declaration, IRowSource? rows, SourceFolder folder)
     {
         ArgumentNullException.ThrowIfNull(declaration);
+        ArgumentNullException.ThrowIfNull(folder);
 
         Declaration = declaration;
         Rows = rows;
+        Folder = folder;
     }
 
     /// <summary>The rows handed in with this pipeline, when there are any.</summary>
     public IRowSource? Rows { get; }
+
+    /// <summary>Where a relative path in the declaration is read from.</summary>
+    public SourceFolder Folder { get; }
 
     /// <summary>The steps, exactly as they were declared.</summary>
     public PipelineDeclaration Declaration { get; }
@@ -80,22 +103,40 @@ public sealed class Pipeline
     /// <exception cref="InvalidOperationException">
     /// The declaration names no source, or names no columns, or a declared column is not in the source.
     /// </exception>
-    public Table Prepare(IRowSource? rows)
-    {
-        var schema = Declaration.Steps.OfType<IBindsColumns>().FirstOrDefault()
-            ?? throw new InvalidOperationException(
-                "This pipeline never says which columns take part. Declare them, and the rest is dropped.");
+    public Table Prepare(IRowSource? rows) => new Walk(Declaration, new FitOnTheTrainingRows(), Folder).Bound(rows);
 
-        if (rows is not null)
+    /// <summary>The data as it stands after the first so many steps, with where each row stands.</summary>
+    /// <param name="steps">How many steps from the start: at least one, at most all of them.</param>
+    /// <returns>The rows there, and where each stands: in the part the split puts it in, dropped before it, or undivided.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">There are not that many steps.</exception>
+    /// <remarks>
+    /// What the grid under a block of a notebook shows. Above the split, the rows are followed on down to it, so a
+    /// range or a profile drawn here is drawn over the rows it trains on. Before the columns are declared, the rows
+    /// are what the source says, every column as words.
+    /// </remarks>
+    public PipelineView ViewAt(int steps) => ViewAt(steps, Rows);
+
+    /// <summary>The data as it stands after the first so many steps, over the given rows.</summary>
+    /// <param name="steps">How many steps from the start: at least one, at most all of them.</param>
+    /// <param name="rows">The rows to read, or nothing to use the source the declaration names.</param>
+    /// <returns>The rows there, and where each stands.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">There are not that many steps.</exception>
+    public PipelineView ViewAt(int steps, IRowSource? rows)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(steps, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(steps, Declaration.Steps.Count);
+
+        if (steps > Declaration.ColumnsAt && Declaration.ColumnsAt >= 0)
         {
-            return schema.Bind(rows);
+            return new Walk(Declaration, new FitOnTheTrainingRows(), Folder).Viewed(rows, steps);
         }
 
-        var source = Declaration.Steps.OfType<IOpensRows>().FirstOrDefault()
-            ?? throw new InvalidOperationException(
-                "This pipeline never says where its rows come from, so there is nothing to prepare.");
+        // Before the schema: the rows as the source holds them, every column as words.
+        var source = rows ?? ((IOpensRows)Declaration.Steps[0]).Open(Folder);
+        var asText = new DeclareStep(
+            [.. source.ColumnNames.Select(name => new ColumnDeclaration(name, ColumnKind.Text, Optional: false))]);
 
-        return schema.Bind(source.Open());
+        return new Walk(Declaration, new FitOnTheTrainingRows(), Folder).Placed(source, SchemaBinding.Bind(asText, source), steps);
     }
 
     /// <summary>Runs the whole declaration: reads, divides the rows, fits on training, replays everywhere.</summary>
@@ -114,91 +155,45 @@ public sealed class Pipeline
     /// <param name="rows">The rows to read, or nothing to use the source the declaration names.</param>
     /// <returns>The data, where every row landed, and what each step learned.</returns>
     /// <exception cref="InvalidOperationException">The declaration is not one that can be run.</exception>
+    /// <remarks>
+    /// Every step acts where it was written: rows are dropped where the drop stands, divided where the split
+    /// stands, and each step that learns is fitted on the training rows as they stand at its place. The run
+    /// up to any one step — the grid under a notebook block — is this same walk over the steps up to it.
+    /// </remarks>
     public PreparedData Run(IRowSource? rows)
     {
-        var table = Prepare(rows);
-        var steps = Declaration.Steps;
+        var fitting = new FitOnTheTrainingRows();
+        var walked = new Walk(Declaration, fitting, Folder).Through(rows);
+        var prepared = new PreparedData(Declaration, walked.Table, walked.Parts, fitting.Fitted, walked.Evidence);
 
-        // The target as it was read, kept for one check at the end. Scale what a model predicts and the
-        // predictions come back scaled; the way back has to be real, and the only way to know that is to
-        // try it on values whose answer is already known.
-        var target = steps.OfType<TargetStep>().LastOrDefault()?.Column;
-        // Only for a target that is a number to begin with. A target of words is predicted as a category
-        // and there is no arithmetic to come back through, which the check would otherwise report as a
-        // fault in the pipeline rather than as the ordinary thing it is.
-        var before = target is not null && table.Has(target)
-                     && table[target].Kind is not (ColumnKind.Text or ColumnKind.Category)
-            ? Numbers.Of(table, target)
-            : null;
-        var line = steps.Count;
-
-        for (var at = 0; at < steps.Count; at++)
+        // Scale what a model predicts and the predictions come back scaled; the way back has to be real, and
+        // the only way to know that is to try it on values whose answer is already known.
+        if (fitting.AnswerAsRead is { } asRead)
         {
-            if (steps[at] is ISplitStep)
-            {
-                line = at;
-                break;
-            }
-        }
-
-        // Everything before the split is arithmetic on a row, and it has to happen before the rows are
-        // divided: a feature is what the split then divides, not something added to one part of it.
-        for (var at = 0; at < line; at++)
-        {
-            if (steps[at] is IAddsColumns adds)
-            {
-                adds.AddTo(table);
-            }
-        }
-
-        // Dropping rows happens after the features and before the split, because it is the features that
-        // say which rows nobody can speak for, and the split may only divide rows that are usable.
-        foreach (var step in steps.Take(line).OfType<IDropsRows>())
-        {
-            table = table.From(step.FirstUsableRow(table));
-        }
-
-        var parts = Assign(table);
-        var fitted = new Dictionary<int, FittedStepValues>();
-
-        for (var at = line; at < steps.Count; at++)
-        {
-            switch (steps[at])
-            {
-                case ILearnsFromData learns:
-                    var learned = learns.Fit(table, parts);
-                    learns.ApplyTo(table, learned);
-                    fitted[at] = learned;
-                    break;
-
-                case IAddsColumns adds:
-                    adds.AddTo(table);
-                    break;
-            }
-        }
-
-        var prepared = new PreparedData(Declaration, table, parts, fitted);
-
-        if (before is not null)
-        {
-            ThrowIfTheWayBackIsNotReal(prepared, target!, before);
+            ThrowIfTheWayBackIsNotReal(prepared, asRead);
         }
 
         return prepared;
     }
 
-    private static void ThrowIfTheWayBackIsNotReal(PreparedData prepared, string target, double?[] before)
+    private static void ThrowIfTheWayBackIsNotReal(PreparedData prepared, double?[] asRead)
     {
+        var target = prepared.Declaration.Steps.OfType<TargetStep>().Single().Column;
+
         if (!prepared.Declaration.Steps.OfType<IUndoesItself>().Any(step => step.Produces == target))
         {
             return;
         }
 
-        var now = Numbers.Of(prepared.Table, target);
+        var now = prepared.Table.NumbersOf(target);
 
-        for (var row = 0; row < Math.Min(before.Length, now.Length); row++)
+        // Each row against the row it was read as, not against whatever row now sits at its place: rows
+        // dropped at the start used to shift every comparison onto a different row.
+        for (var row = 0; row < now.Length; row++)
         {
-            if (before[row] is not { } was || now[row] is not { } is_)
+            var readAt = prepared.Table.Identities[row].ReadAt;
+
+            if (asRead[readAt] is not { } was || now[row] is not { } is_)
             {
                 continue;
             }
@@ -210,24 +205,9 @@ public sealed class Pipeline
                 continue;
             }
 
-            throw new InvalidOperationException(
-                $"The way back for '{target}' does not lead back: row {row + 1} was {was}, became {is_}, "
-                + $"and comes back as {back}. A prediction from this pipeline would be in units nobody can name.");
+            throw new InvalidOperationException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"The way back for '{target}' does not lead back: row {readAt + 1} was {was}, became {is_}, and comes back as {back}. A prediction from this pipeline would be in units nobody can name."));
         }
-    }
-
-    private Part[] Assign(Table table)
-    {
-        var split = Declaration.Steps.OfType<IAssignsParts>().FirstOrDefault();
-
-        if (split is not null)
-        {
-            return split.Assign(table);
-        }
-
-        // Nothing here needs to refuse a pipeline that learns without splitting: a declaration carrying a
-        // step that learns and no split is refused when it is built, whichever door it came through.
-        // A pipeline that learns nothing needs no split, and every row is simply itself.
-        return [.. Enumerable.Repeat(Part.Train, table.RowCount)];
     }
 }

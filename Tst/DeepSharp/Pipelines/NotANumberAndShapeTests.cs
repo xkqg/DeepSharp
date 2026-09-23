@@ -90,6 +90,32 @@ public class NotANumberAndShapeTests
     }
 
     [Fact]
+    public void AnInfinityIsNoMoreANumberAModelCanUse_AndIsCaughtTheSameWay()
+    {
+        // Arithmetic produces infinities as readily as it produces not-a-numbers — a product that overflows,
+        // a square of something enormous — and the check used to look for the second kind only.
+        var table = new Table([new Column<double>(
+            "a", ColumnKind.Number, [1.0, double.PositiveInfinity, double.NegativeInfinity, 2.0])]);
+
+        var refusing = new FillNaNStep("a");
+        var learned = refusing.Fit(table, AllTraining(table));
+        var refused = Assert.Throws<InvalidOperationException>(() => refusing.ApplyTo(table, learned));
+
+        Assert.Equal(2, learned.Number("notNumbers"));
+        Assert.Contains("Row 2", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Infinity", refused.Message, StringComparison.Ordinal);
+
+        var filling = new FillNaNStep("a", With.Mean);
+        filling.ApplyTo(table, filling.Fit(table, AllTraining(table)));
+
+        var filled = (Column<double>)table["a"];
+
+        // Filled with the mean of the two values that are numbers, which an infinity would have swallowed.
+        Assert.Equal(1.5, filled[1]);
+        Assert.Equal(1.5, filled[2]);
+    }
+
+    [Fact]
     public void CarryingTheLastValueForwardIsNotAnAnswerHere()
     {
         // A not-a-number is a fault upstream, and the row above it says nothing about what it should have
@@ -132,7 +158,7 @@ public class NotANumberAndShapeTests
             .Target("a")
             .Declaration;
 
-        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson()));
+        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()));
     }
 
     [Theory]
@@ -140,7 +166,7 @@ public class NotANumberAndShapeTests
     [InlineData("""{"declaration":[{"step":"fill.nan","column":"a","with":7}]}""")]
     public void AFileMissingTheStrategy_IsRefused(string json)
     {
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -151,7 +177,7 @@ public class NotANumberAndShapeTests
             CsvRowSource.FromText("a\n1\n\n"));
 
         var refused = Assert.Throws<InvalidOperationException>(
-            () => new FillMissingStep("a", With.Refuse).Fit(table, AllTraining(table)));
+            () => FillMissingStep.Of("a", With.Refuse).Fit(table, AllTraining(table)));
 
         Assert.Contains("should be none", refused.Message);
     }
@@ -160,7 +186,7 @@ public class NotANumberAndShapeTests
     public void AndSaysNothingWhenThereAreNone()
     {
         var table = Read("a\n1\n2\n");
-        var step = new FillMissingStep("a", With.Refuse);
+        var step = FillMissingStep.Of("a", With.Refuse);
 
         step.ApplyTo(table, step.Fit(table, AllTraining(table)));
 
@@ -205,18 +231,18 @@ public class NotANumberAndShapeTests
     [Fact]
     public void TheShapeIsKeptWholeThroughTheFile()
     {
-        var table = Read("a\n1\n2\n3\n");
-        var step = new NormaliseStep("a", Scale.Quantile);
-        var prepared = new PreparedData(
-            new PipelineDeclaration([new SplitAtRandomStep(new SplitShares(0.7, 0.15, 0.15), 1), step]),
-            table,
-            AllTraining(table),
-            new Dictionary<int, FittedStepValues> { [1] = step.Fit(table, AllTraining(table)) });
+        var prepared = Pdd.Create()
+            .Read(CsvRowSource.FromText("a\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"), "ten rows")
+            .Declare(schema => schema.Number("a"))
+            .SplitAtRandom(0.70, 0.15, seed: 1)
+            .Normalise("a", Scale.Quantile)
+            .Build()
+            .Run();
 
-        var loaded = PreparedData.FromJson(prepared.ToJson());
+        var loaded = PreparedData.FromJson(prepared.ToJson(), StepCatalog.BuiltIn());
 
-        Assert.Equal(prepared.Fitted[1].Curve("knots"), loaded.Fitted[1].Curve("knots"));
-        Assert.Single(prepared.Fitted[1].Curves);
+        Assert.Equal(prepared.Fitted[3].Curve("knots"), loaded.Fitted[3].Curve("knots"));
+        Assert.Single(prepared.Fitted[3].Curves);
     }
 
     [Fact]
@@ -269,11 +295,12 @@ public class NotANumberAndShapeTests
         foreach (var scale in new[] { Scale.Quantile, Scale.Power })
         {
             var declaration = new PipelineDeclaration([
+                new DeclareStep([new ColumnDeclaration("a", ColumnKind.Number, false)]),
                 new SplitAtRandomStep(new SplitShares(0.7, 0.15, 0.15), 1),
                 new NormaliseStep("a", scale),
             ]);
 
-            Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson()));
+            Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()));
         }
     }
 

@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A suite of its own rather than a folder in the library's: Verso's engine pins Roslyn 4.12 exactly, and the
+       library's suite takes a JSON Schema validator built on Roslyn 5, so the two cannot share one set of
+       packages without one of them running on a compiler it was not built for (measured: NU1608). -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DeepSharp.Tests.Notebooks</RootNamespace>
+    <!-- As in the library's suite: the documentation file switches the unused-using analyser on, and a
+         test's name is its documentation. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.*" />
+    <!-- Verso's own engine, here only: the package is tested inside a real notebook — its cell type, kernel and
+         interactions loaded into Verso's extension host and run by Verso's scaffold — rather than against a
+         description of one. The package itself compiles against the abstractions alone. -->
+    <PackageReference Include="Verso" Version="1.2.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DeepSharp.Notebooks.Verso\DeepSharp.Notebooks.Verso.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One way to find the repository and the data the samples read, shared with the library's suite. -->
+    <Compile Include="..\DeepSharp\Repository.cs" Link="Repository.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

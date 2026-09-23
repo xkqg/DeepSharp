@@ -13,19 +13,7 @@ namespace DeepSharp.Tests.Packaging;
 /// </summary>
 public class ReleaseContractTests
 {
-    private static readonly string Root = RepoRoot();
-
-    private static string RepoRoot()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Join(dir.FullName, "CHANGELOG.md")))
-        {
-            dir = dir.Parent;
-        }
-
-        Assert.NotNull(dir);
-        return dir!.FullName;
-    }
+    private static readonly string Root = Repository.Root;
 
     private static string Read(params string[] parts) => File.ReadAllText(Path.Join([Root, .. parts]));
 
@@ -87,12 +75,36 @@ public class ReleaseContractTests
     }
 
     [Fact]
-    public void ThePublishWorkflow_RunsTheTestsOnTheCommitItIsPublishing()
+    public void ThePublishWorkflow_RunsEverySuiteOnTheCommitItIsPublishing()
     {
+        // The suites are found by their name, never listed: a workflow naming the first suite by hand keeps
+        // passing when a second one lands beside it, and the release goes out with a suite nobody ran.
         string workflow = Read(".github", "workflows", "publish.yml");
 
-        Assert.Contains("DeepSharp.Tests.csproj", workflow, StringComparison.Ordinal);
+        Assert.Contains("for suite in Tst/*/*.Tests.csproj", workflow, StringComparison.Ordinal);
+        Assert.Contains("dotnet run --project \"$suite\"", workflow, StringComparison.Ordinal);
+        Assert.Contains("|| exit 1", workflow, StringComparison.Ordinal);
+        Assert.True(TestSuites().Length > 1);
     }
+
+    [Fact]
+    public void TheCoverageGate_MeasuresEverySuite_FoundByItsName()
+    {
+        // A suite the gate never ran leaves its package measured by nothing, while the total still says PASS.
+        // So the gate finds the suites the way the workflow does, measures each, and judges them together.
+        string gate = Read("tools", "coverage", "run.ps1");
+
+        Assert.Contains("*.Tests.csproj", gate, StringComparison.Ordinal);
+        Assert.Contains("dotnet-coverage merge", gate, StringComparison.Ordinal);
+        Assert.All(TestSuites(), suite => Assert.DoesNotContain(Path.GetFileName(suite), gate, StringComparison.Ordinal));
+    }
+
+    /// <summary>Every suite in the repository, by the name every suite has.</summary>
+    private static string[] TestSuites() =>
+        [.. Directory.EnumerateFiles(Path.Join(Root, "Tst"), "*.Tests.csproj", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                                          StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(Root, file).Replace(Path.DirectorySeparatorChar, '/'))];
 
     [Fact]
     public void TheCoverageSettings_CanBeReadAtAllAndNameEveryLibrary()
@@ -114,6 +126,30 @@ public class ReleaseContractTests
         {
             Assert.Contains(included, pattern => Regex.IsMatch(library, pattern));
         }
+    }
+
+    [Fact]
+    public void ADependencyTwoPackagesShare_IsTakenAtOneVersion()
+    {
+        // Two packages naming the same dependency at two versions ship an application a conflict to
+        // resolve, and which version wins then depends on which package the application happened to
+        // reference first. Measured before this test: one pinned 1.17.1 and the other floated on 1.17.*.
+        var versions = Directory.EnumerateFiles(Path.Join(Root, "Src"), "*.csproj", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                                          StringComparison.Ordinal))
+            .SelectMany(file => XDocument.Load(file).Descendants("PackageReference"))
+            .Where(reference => reference.Attribute("Version") is not null)
+            .GroupBy(reference => reference.Attribute("Include")!.Value, StringComparer.OrdinalIgnoreCase)
+            .Select(group => new
+            {
+                Package = group.Key,
+                Versions = group.Select(reference => reference.Attribute("Version")!.Value).Distinct().ToArray(),
+            })
+            .Where(each => each.Versions.Length > 1)
+            .Select(each => $"{each.Package} at {string.Join(" and ", each.Versions)}")
+            .ToArray();
+
+        Assert.True(versions.Length == 0, $"Taken at more than one version: {string.Join("; ", versions)}");
     }
 
     [Theory]

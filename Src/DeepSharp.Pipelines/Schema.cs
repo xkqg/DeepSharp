@@ -156,8 +156,15 @@ public sealed class SchemaBuilder
 /// carries everything it finds hands a model its own answer. Nothing splits its way out of that, so the
 /// defence is that a column nobody declared does not come along.
 /// </remarks>
-public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, IDeclaresCategories
+public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, IDeclaresCategories, IDescribesColumns
 {
+    private static readonly OneOfParameter<Remainder> RemainderKey = new(
+        "remainder", "What becomes of the columns the schema does not name: dropped, kept as text, or refused.", Remainder.Drop);
+
+    private static readonly ColumnDeclarationsParameter ColumnsKey = new(
+        "columns", "The columns that take part, what each holds, and whether the source may lack it.",
+        [new ColumnDeclaration("column", ColumnKind.Number, false)]);
+
     /// <summary>Declares the columns and the policy for everything else.</summary>
     /// <param name="columns">The columns that take part, in the order they were written.</param>
     /// <param name="remainder">What becomes of the columns not named here.</param>
@@ -166,22 +173,14 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
     {
         ArgumentNullException.ThrowIfNull(columns);
 
-        Columns = [.. columns];
-
-        if (Columns.Count == 0)
-        {
-            throw new ArgumentException("A schema names at least one column.", nameof(columns));
-        }
-
-        var duplicate = Columns.GroupBy(column => column.Name).FirstOrDefault(group => group.Count() > 1);
-
-        if (duplicate is not null)
-        {
-            throw new ArgumentException($"The column '{duplicate.Key}' is declared twice.", nameof(columns));
-        }
-
-        Remainder = remainder;
+        Columns = ColumnsKey.Require([.. columns]);
+        Remainder = RemainderKey.Require(remainder);
     }
+
+    /// <inheritdoc />
+    public static StepParameters<DeclareStep> Parameters { get; } = new StepParameters<DeclareStep>()
+        .With(RemainderKey, step => step.Remainder)
+        .With(ColumnsKey, step => step.Columns);
 
     /// <summary>The columns that take part, in the order they were written.</summary>
     public IReadOnlyList<ColumnDeclaration> Columns { get; }
@@ -197,10 +196,17 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
     public static string Name => "declare";
 
     /// <inheritdoc />
+    public static string Purpose => "Names the columns that take part, says what each holds, and decides what becomes of the rest.";
+
+    /// <inheritdoc />
     public string Verb => Name;
 
     /// <inheritdoc />
     public Table Bind(IRowSource source) => SchemaBinding.Bind(this, source);
+
+    /// <inheritdoc />
+    /// <remarks>The declared columns, whatever there was before; a schema that keeps the rest leaves any other possible.</remarks>
+    public ColumnState After(ColumnState before) => ColumnState.Declared(Columns, Remainder);
 
     /// <inheritdoc />
     public bool Equals(DeclareStep? other) =>
@@ -221,47 +227,10 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
         return hash.ToHashCode();
     }
 
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("remainder", Remainder.ToString().ToLowerInvariant());
-        writer.WriteStartArray("columns");
-
-        foreach (var column in Columns)
-        {
-            writer.WriteStartObject();
-            writer.WriteString("name", column.Name);
-            writer.WriteString("kind", column.Kind.ToString().ToLowerInvariant());
-            writer.WriteBoolean("optional", column.Optional);
-            writer.WriteEndObject();
-        }
-
-        writer.WriteEndArray();
-        writer.WriteEndObject();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     /// <exception cref="FormatException">A parameter is missing, or names a kind or a policy nobody defined.</exception>
-    public static DeclareStep ReadFrom(JsonElement element)
-    {
-        var remainder = element.RequiredEnum<Remainder>("remainder");
-
-        if (!element.TryGetProperty("columns", out var columns) || columns.ValueKind != JsonValueKind.Array)
-        {
-            throw new FormatException("A declare step holds a 'columns' list.");
-        }
-
-        return new DeclareStep(
-            columns.EnumerateArray().Select(column => new ColumnDeclaration(
-                column.RequiredString("name"),
-                column.RequiredEnum<ColumnKind>("kind"),
-                column.RequiredBoolean("optional"))),
-            remainder);
-    }
+    public static DeclareStep ReadFrom(JsonElement element) =>
+        new(ColumnsKey.Read(element), RemainderKey.Read(element));
 }

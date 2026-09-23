@@ -1,9 +1,9 @@
 # Measures how much of the library the tests actually reach, and fails below 90% of lines or branches.
 #
-# Why not `dotnet test`: the test project is an executable. xunit v3 runs its suite in-process from its own
-# entry point, and `dotnet test` starts a runner that finds nothing to do -- it exits cleanly having executed
-# zero tests. Coverage then reports 0%, which reads like a failing gate but is really a dead signal, and the
-# same arrangement in the other direction would read like a passing one. So the executable is run, and the
+# Why not `dotnet test`: every suite is an executable. xunit v3 runs a suite in-process from its own entry
+# point, and `dotnet test` starts a runner that finds nothing to do -- it exits cleanly having executed zero
+# tests. Coverage then reports 0%, which reads like a failing gate but is really a dead signal, and the same
+# arrangement in the other direction would read like a passing one. So each executable is run, and the
 # collector is wrapped around it.
 #
 #   ./tools/coverage/run.ps1            collect and print the numbers
@@ -31,17 +31,35 @@ if (-not (Get-Command dotnet-coverage -ErrorAction SilentlyContinue)) {
 
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 
-$testProject = Join-Path $root 'Tst\DeepSharp\DeepSharp.Tests.csproj'
-Write-Host '==> Building'
-dotnet build $testProject --configuration Release
-if ($LASTEXITCODE -ne 0) { throw 'Build failed' }
+# Every suite, found by the name every suite has rather than listed: a suite the gate never ran would leave its
+# package measured by nothing while the total still said PASS. Each is collected on its own and the results are
+# merged, so a class two suites both reach is judged on everything that reached it.
+$suites = @(Get-ChildItem (Join-Path $root 'Tst') -Recurse -Filter '*.Tests.csproj' |
+    Where-Object { $_.FullName -notmatch '[\\/]obj[\\/]' })
+if ($suites.Count -eq 0) { throw 'There is no suite under Tst to measure' }
 
-$dll = Join-Path $root 'Tst\DeepSharp\bin\Release\net10.0\DeepSharp.Tests.dll'
-if (-not (Test-Path $dll)) { throw "The test assembly is not where it was expected: $dll" }
+$parts = @()
+foreach ($suite in $suites) {
+    $name = [IO.Path]::GetFileNameWithoutExtension($suite.Name)
 
-Write-Host '==> Collecting coverage'
-& dotnet-coverage collect "dotnet exec $dll" --settings $settings --output $report --output-format cobertura
-if ($LASTEXITCODE -ne 0) { throw 'Coverage collection failed' }
+    Write-Host "==> Building $name"
+    dotnet build $suite.FullName --configuration Release
+    if ($LASTEXITCODE -ne 0) { throw "Build failed: $name" }
+
+    $dll = Join-Path $suite.DirectoryName "bin/Release/net10.0/$name.dll"
+    if (-not (Test-Path $dll)) { throw "The test assembly is not where it was expected: $dll" }
+
+    Write-Host "==> Collecting coverage: $name"
+    $part = Join-Path $outputDir "$name.cobertura.xml"
+    & dotnet-coverage collect "dotnet exec $dll" --settings $settings --output $part --output-format cobertura
+    if ($LASTEXITCODE -ne 0) { throw "Coverage collection failed: $name" }
+
+    $parts += $part
+}
+
+Write-Host '==> Merging'
+& dotnet-coverage merge @parts --output $report --output-format cobertura
+if ($LASTEXITCODE -ne 0) { throw 'Merging the coverage failed' }
 
 [xml]$cobertura = Get-Content $report
 $lineRate = [double]$cobertura.coverage.'line-rate' * 100

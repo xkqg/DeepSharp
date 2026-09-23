@@ -38,12 +38,14 @@ public class PipelineBuilderTests
     {
         var builder = Pdd.Create()
             .ReadCsv("first.csv")
+            .Declare(schema => schema.Timestamp("timestamp").Number("trades"))
             .SplitByTime("timestamp", train: 0.70, validation: 0.15)
             .FillMissing("trades", With.Mean);
 
         Assert.Collection(
             builder.Declaration.Steps,
             step => Assert.Equal("read.csv", step.Verb),
+            step => Assert.Equal("declare", step.Verb),
             step => Assert.Equal("split.byTime", step.Verb),
             step => Assert.Equal("fill.missing", step.Verb));
     }
@@ -53,9 +55,10 @@ public class PipelineBuilderTests
     {
         var builder = Pdd.Create()
             .ReadCsv("btceur-1d.csv")
+            .Declare(schema => schema.Timestamp("timestamp"))
             .SplitByTime("timestamp", train: 0.70, validation: 0.15);
 
-        var split = Assert.IsType<SplitByTimeStep>(builder.Declaration.Steps[1]);
+        var split = Assert.IsType<SplitByTimeStep>(builder.Declaration.Steps[2]);
 
         Assert.Equal("timestamp", split.Column);
         Assert.Equal(0.70, split.Shares.Train);
@@ -111,10 +114,11 @@ public class PipelineBuilderTests
     {
         var builder = Pdd.Create()
             .ReadCsv("btceur-1d.csv")
+            .Declare(schema => schema.Timestamp("timestamp").Number("trades"))
             .SplitByTime("timestamp", 0.70, 0.15)
             .FillMissing("trades", With.Median);
 
-        var fill = Assert.IsType<FillMissingStep>(builder.Declaration.Steps[2]);
+        var fill = Assert.IsType<FillMissingByValueStep>(builder.Declaration.Steps[3]);
 
         Assert.Equal("trades", fill.Column);
         Assert.Equal(With.Median, fill.Strategy);
@@ -136,11 +140,12 @@ public class PipelineBuilderTests
     {
         var builder = Pdd.Create()
             .ReadCsv("btceur-1d.csv")
+            .Declare(schema => schema.Timestamp("timestamp").Number("trades"))
             .SplitByTime("timestamp", 0.70, 0.15)
             .FillMissing("trades", With.Mean);
 
         Assert.Equal(
-            "read.csv -> split.byTime -> fill.missing",
+            "read.csv -> declare -> split.byTime -> fill.missing",
             builder.Declaration.ToString());
     }
 }

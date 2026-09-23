@@ -12,7 +12,7 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class CategoryTests
 {
-    private static string Titanic => Path.Join(RepoRoot(), "Samples", "data", "titanic.csv");
+    private static string Titanic => Repository.Data("titanic.csv");
 
     private static PipelineBuilder Passengers() =>
         Pdd.Create()
@@ -55,8 +55,9 @@ public class CategoryTests
         Assert.True(prepared.Table.Has("sex_female"));
         Assert.True(prepared.Table.Has("embarked_S"));
 
-        // Two steps written from one word, in the order the schema declared them.
-        Assert.Equal(["encode", "encode"], prepared.Declaration.Steps.TakeLast(2).Select(step => step.Verb));
+        // One step, written as itself: which columns it encodes is decided where it stands, from what the
+        // schema declared, so a file can say it and a column marked a category later is encoded too.
+        Assert.Equal("encode.categories", prepared.Declaration.Steps[^1].Verb);
     }
 
     [Fact]
@@ -91,7 +92,7 @@ public class CategoryTests
     [Fact]
     public void ASchemaWithoutCategories_SaysSoRatherThanQuietlyDoingNothing()
     {
-        var refused = Assert.Throws<InvalidOperationException>(
+        var refused = Assert.Throws<DeclarationException>(
             () => Pdd.Create()
                 .ReadCsv(Titanic)
                 .Declare(schema => schema.Integer("survived"))
@@ -106,7 +107,7 @@ public class CategoryTests
     {
         var declaration = Passengers().Declaration;
 
-        var returned = PipelineDeclaration.FromJson(declaration.ToJson());
+        var returned = PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn());
 
         Assert.Equal(declaration, returned);
         Assert.Equal(["sex", "embarked"], ((DeclareStep)returned.Steps[1]).Categories);
@@ -117,18 +118,5 @@ public class CategoryTests
     {
         Assert.Throws<ArgumentException>(() => new TextColumn("a", ColumnKind.Number, ["x"]));
         Assert.Equal(ColumnKind.Text, new TextColumn("a", ["x"]).Kind);
-    }
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
     }
 }

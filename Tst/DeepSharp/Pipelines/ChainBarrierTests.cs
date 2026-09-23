@@ -63,9 +63,9 @@ public class ChainBarrierTests
         // `Add` is the door every verb from every other package comes through, so it is also the door a
         // learning verb would come through. It takes the narrower kind, and a step that learns is refused
         // where it is written rather than in a number three weeks later.
-        var before = Pdd.Create().ReadCsv("x.csv");
+        var before = Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Number("age"));
 
-        Assert.Throws<InvalidOperationException>(() => before.Add(new FillMissingStep("age", With.Mean)));
+        Assert.Throws<DeclarationException>(() => before.Add(FillMissingStep.Of("age", With.Mean)));
     }
 
     [Fact]
@@ -74,12 +74,13 @@ public class ChainBarrierTests
         // The same rule, from the other door. A hand-edited file that moves the fill above the split is
         // the most ordinary way this leak arrives, and it is the one the type system cannot see.
         const string json = """
-            {"declaration":[{"step":"read.csv","path":"x.csv"},
+            {"version":2,"declaration":[{"step":"read.csv","path":"x.csv"},
+                            {"step":"declare","remainder":"drop","columns":[{"name":"t","kind":"timestamp","optional":false},{"name":"age","kind":"number","optional":false}]},
                             {"step":"fill.missing","column":"age","with":"mean"},
                             {"step":"split.byTime","column":"t","train":0.7,"validation":0.15,"test":0.15}]}
             """;
 
-        var refused = Assert.Throws<InvalidOperationException>(() => PipelineDeclaration.FromJson(json));
+        var refused = Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
 
         Assert.Contains("fill.missing", refused.Message);
         Assert.Contains("split", refused.Message);
@@ -88,9 +89,12 @@ public class ChainBarrierTests
     [Fact]
     public void AFileThatFitsWithoutSplittingAtAll_RefusesToLoad()
     {
-        const string json = """{"declaration":[{"step":"fill.missing","column":"age","with":"mean"}]}""";
+        const string json = """
+            {"declaration":[{"step":"declare","remainder":"drop","columns":[{"name":"age","kind":"number","optional":false}]},
+                            {"step":"fill.missing","column":"age","with":"mean"}]}
+            """;
 
-        Assert.Throws<InvalidOperationException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -100,11 +104,12 @@ public class ChainBarrierTests
         // all pass through, which is why the rule lives there and not in three places that must agree.
         var wrongOrder = new IPipelineStep[]
         {
-            new FillMissingStep("age", With.Mean),
+            new DeclareStep([new ColumnDeclaration("t", ColumnKind.Timestamp, false), new ColumnDeclaration("age", ColumnKind.Number, false)]),
+            FillMissingStep.Of("age", With.Mean),
             new SplitByTimeStep("t", new SplitShares(0.70, 0.15, 0.15)),
         };
 
-        Assert.Throws<InvalidOperationException>(() => new PipelineDeclaration(wrongOrder));
+        Assert.Throws<DeclarationException>(() => new PipelineDeclaration(wrongOrder));
     }
 
     [Fact]
@@ -112,7 +117,7 @@ public class ChainBarrierTests
     {
         // Holding on to the pre-split builder used to let a feature be declared after the split, into the
         // same list, which is the leak arriving from the side. The builder says so instead.
-        var before = Pdd.Create().ReadCsv("a.csv");
+        var before = Pdd.Create().ReadCsv("a.csv").Declare(schema => schema.Timestamp("t", "t2"));
         before.SplitByTime("t", 0.70, 0.15);
 
         Assert.Throws<InvalidOperationException>(() => before.Add(new ReadCsvStep("b.csv")));
@@ -124,14 +129,14 @@ public class ChainBarrierTests
     {
         // A parameter sweep that reuses a common prefix used to produce one declaration containing every
         // arm, with each arm reporting the other's steps as its own.
-        var first = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.70, 0.15);
-        var second = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.50, 0.25);
+        var first = Pdd.Create().ReadCsv("a.csv").Declare(schema => schema.Timestamp("t").Number("age")).SplitByTime("t", 0.70, 0.15);
+        var second = Pdd.Create().ReadCsv("a.csv").Declare(schema => schema.Timestamp("t").Number("age")).SplitByTime("t", 0.50, 0.25);
 
         first.FillMissing("age", With.Mean);
         second.FillMissing("age", With.Median);
 
         Assert.NotEqual(first.Declaration, second.Declaration);
-        Assert.Equal(3, first.Declaration.Steps.Count);
-        Assert.Equal(3, second.Declaration.Steps.Count);
+        Assert.Equal(4, first.Declaration.Steps.Count);
+        Assert.Equal(4, second.Declaration.Steps.Count);
     }
 }

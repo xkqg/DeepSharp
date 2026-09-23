@@ -12,19 +12,22 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class ReadingTests
 {
-    private static string Titanic => Path.Join(RepoRoot(), "Samples", "data", "titanic.csv");
+    private static string Titanic => Repository.Data("titanic.csv");
 
-    private static string RepoRoot()
+    [Fact]
+    public void TextAlreadyInHand_IsReadAsItsFileWouldBe_AndARefusalNamesWhereItCameFrom()
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        // Bytes read once — to be fingerprinted, say — are parsed from memory rather than read a second time, and
+        // a fault in them still names the file rather than "the text".
+        var text = File.ReadAllText(Titanic);
+        var fromTheFile = new CsvRowSource(Titanic);
+        var inHand = CsvRowSource.FromText(text, Titanic);
 
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
+        Assert.Equal(fromTheFile.ColumnNames, inHand.ColumnNames);
+        Assert.Equal(fromTheFile.Rows, inHand.Rows);
+        Assert.StartsWith("rows.csv line 2", Assert.Throws<FormatException>(() => CsvRowSource.FromText("a,b\n1\n", "rows.csv")).Message, StringComparison.Ordinal);
+        Assert.StartsWith("The text line 2", Assert.Throws<FormatException>(() => CsvRowSource.FromText("a,b\n1\n")).Message, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => CsvRowSource.FromText("a\n1\n", " "));
     }
 
     [Fact]
@@ -201,7 +204,7 @@ public class ReadingTests
     public void ATimeSeries_ReadsItsDatesTheSameOnEveryMachine()
     {
         var table = Pdd.Create()
-            .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "apple.csv"))
+            .ReadCsv(Repository.Data("apple.csv"))
             .Declare(schema => schema.Timestamp("Date").Number("AAPL.Close").Text("direction"))
             .Build()
             .Prepare();

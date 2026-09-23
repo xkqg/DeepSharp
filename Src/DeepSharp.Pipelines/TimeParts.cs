@@ -62,8 +62,17 @@ public interface IDeclaresCategories : IPipelineStep
 /// says that better than either: eleven at night and midnight are neighbours, which no category knows.
 /// </para>
 /// </remarks>
-public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns, IDeclaresCategories
+public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns, IDeclaresCategories, IDescribesColumns
 {
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column holding the moment in time.", "when", ColumnKinds.Moments);
+
+    private static readonly TrueOrFalseParameter AsCategoriesKey = new(
+        "asCategories", "Whether the pieces stand for a group, which they do unless the order is the point.", true);
+
+    private static readonly SeveralOfParameter<TimePart> PartsKey = new(
+        "parts", "Which pieces of the moment become columns of their own.", [TimePart.Month]);
+
     /// <summary>Declares that a moment in time is taken apart.</summary>
     /// <param name="column">The column holding the moment.</param>
     /// <param name="parts">Which pieces to take out of it.</param>
@@ -71,18 +80,18 @@ public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns,
     /// <exception cref="ArgumentException">The column has no name, or no parts were asked for.</exception>
     public TimePartsStep(string column, IEnumerable<TimePart> parts, bool asCategories = true)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(column);
         ArgumentNullException.ThrowIfNull(parts);
 
-        Column = column;
-        Parts = [.. parts];
+        Column = ColumnKey.Require(column);
+        Parts = PartsKey.Require([.. parts]);
         AsCategories = asCategories;
-
-        if (Parts.Count == 0)
-        {
-            throw new ArgumentException("Taking a moment apart needs at least one piece of it.", nameof(parts));
-        }
     }
+
+    /// <inheritdoc />
+    public static StepParameters<TimePartsStep> Parameters { get; } = new StepParameters<TimePartsStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(AsCategoriesKey, step => step.AsCategories)
+        .With(PartsKey, step => step.Parts);
 
     /// <summary>The column holding the moment.</summary>
     public string Column { get; }
@@ -98,7 +107,18 @@ public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns,
         AsCategories ? Parts.Select(NameOf) : [];
 
     /// <inheritdoc />
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return Parts.Aggregate(before, (state, part) => state.With(NameOf(part), AsCategories ? ColumnKind.Category : ColumnKind.Number));
+    }
+
+    /// <inheritdoc />
     public static string Name => "feature.timeParts";
+
+    /// <inheritdoc />
+    public static string Purpose => "Takes a moment in time apart into the pieces people reason with: an hour, a weekday, a month.";
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -154,49 +174,12 @@ public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns,
         }
     }
 
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-        writer.WriteBoolean("asCategories", AsCategories);
-        writer.WriteStartArray("parts");
-
-        foreach (var part in Parts)
-        {
-            writer.WriteStringValue(part.ToString().ToLowerInvariant());
-        }
-
-        writer.WriteEndArray();
-        writer.WriteEndObject();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     /// <exception cref="FormatException">A parameter is missing, or names a piece nobody defined.</exception>
-    public static TimePartsStep ReadFrom(JsonElement element)
-    {
-        if (!element.TryGetProperty("parts", out var parts) || parts.ValueKind != JsonValueKind.Array)
-        {
-            throw new FormatException("Taking a moment apart holds a 'parts' list.");
-        }
-
-        return new TimePartsStep(
-            element.RequiredString("column"),
-            parts.EnumerateArray().Select(part => Read(part.GetString())),
-            element.RequiredBoolean("asCategories"));
-    }
-
-    private static TimePart Read(string? written) =>
-        Enum.TryParse<TimePart>(written, ignoreCase: true, out var part) && Enum.IsDefined(part)
-            ? part
-            : throw new FormatException(
-                $"'{written}' is not a piece of a moment in time: "
-                + string.Join(", ", Enum.GetNames<TimePart>().Select(each => each.ToLowerInvariant())) + ".");
+    public static TimePartsStep ReadFrom(JsonElement element) =>
+        new(ColumnKey.Read(element), PartsKey.Read(element), AsCategoriesKey.Read(element));
 
     private string NameOf(TimePart part) => $"{Column}_{part.ToString().ToLowerInvariant()}";
 

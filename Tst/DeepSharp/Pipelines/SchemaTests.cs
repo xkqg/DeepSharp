@@ -71,7 +71,7 @@ public class SchemaTests
                 .Optional("age", ColumnKind.Number), Remainder.Keep)
             .Declaration;
 
-        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson()));
+        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -111,7 +111,7 @@ public class SchemaTests
                              "columns":[{"name":"age","kind":"colour","optional":false}]}]}
             """;
 
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -122,7 +122,7 @@ public class SchemaTests
                              "columns":[{"name":"age","kind":"number","optional":false}]}]}
             """;
 
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]

@@ -1,0 +1,1591 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/xkqg/DeepSharp/main/pipeline.schema.json",
+  "title": "A DeepSharp pipeline",
+  "description": "The steps of a pipeline in the order they were written, and what the fit learned from the training rows.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "description": "The version of the pipeline file this was written against; the first, when it is left out.",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2
+    },
+    "declaration": {
+      "description": "The steps, in the order they run.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "fitted": {
+      "$ref": "#/$defs/fitted"
+    }
+  },
+  "required": [
+    "declaration"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "step": {
+      "description": "One step of the pipeline, named by its verb.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "enum": [
+            "declare",
+            "drop.columns",
+            "drop.gaps",
+            "drop.warmup",
+            "encode",
+            "encode.categories",
+            "evidence.correlation",
+            "evidence.profile",
+            "feature.add",
+            "feature.cyclical",
+            "feature.indicator",
+            "feature.timeParts",
+            "fill.missing",
+            "fill.nan",
+            "maths",
+            "normalise",
+            "normalise.row",
+            "order.by",
+            "outliers.clip",
+            "read.csv",
+            "read.rows",
+            "split.atRandom",
+            "split.byTime",
+            "split.stratified",
+            "target"
+          ]
+        }
+      },
+      "required": [
+        "step"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "declare"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/declare"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "drop.columns"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/drop.columns"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "drop.gaps"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/drop.gaps"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "drop.warmup"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/drop.warmup"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "encode"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/encode"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "encode.categories"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/encode.categories"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "evidence.correlation"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/evidence.correlation"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "evidence.profile"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/evidence.profile"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "feature.add"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/feature.add"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "feature.cyclical"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/feature.cyclical"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "feature.indicator"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/feature.indicator"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "feature.timeParts"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/feature.timeParts"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "fill.missing"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/fill.missing"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "fill.nan"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/fill.nan"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "maths"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/maths"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "normalise"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/normalise"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "normalise.row"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/normalise.row"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "order.by"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/order.by"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "outliers.clip"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/outliers.clip"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "read.csv"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/read.csv"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "read.rows"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/read.rows"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "split.atRandom"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/split.atRandom"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "split.byTime"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/split.byTime"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "split.stratified"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/split.stratified"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "target"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/target"
+          }
+        }
+      ]
+    },
+    "fitted": {
+      "description": "What each step learned from the training rows, written by the fit rather than by a person: an entry for each step that learned something, filed under the key of the steps it learned behind.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "prefix": {
+            "description": "The key of the steps up to the one that learned this: a SHA-256 digest, in hexadecimal.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "learned": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "step",
+          "prefix",
+          "learned"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "declare": {
+      "description": "Names the columns that take part, says what each holds, and decides what becomes of the rest.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "declare"
+        },
+        "remainder": {
+          "anyOf": [
+            {
+              "enum": [
+                "drop",
+                "keep",
+                "refuse"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Dd][Rr][Oo][Pp]|[Kk][Ee][Ee][Pp]|[Rr][Ee][Ff][Uu][Ss][Ee])$"
+            }
+          ],
+          "description": "What becomes of the columns the schema does not name: dropped, kept as text, or refused."
+        },
+        "columns": {
+          "description": "The columns that take part, what each holds, and whether the source may lack it.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "The column's name in the source."
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "text",
+                      "number",
+                      "integer",
+                      "boolean",
+                      "timestamp",
+                      "category"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[Tt][Ee][Xx][Tt]|[Nn][Uu][Mm][Bb][Ee][Rr]|[Ii][Nn][Tt][Ee][Gg][Ee][Rr]|[Bb][Oo][Oo][Ll][Ee][Aa][Nn]|[Tt][Ii][Mm][Ee][Ss][Tt][Aa][Mm][Pp]|[Cc][Aa][Tt][Ee][Gg][Oo][Rr][Yy])$"
+                  }
+                ],
+                "description": "What the column holds."
+              },
+              "optional": {
+                "description": "Whether the source is allowed not to have the column at all.",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "optional"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "step",
+        "remainder",
+        "columns"
+      ],
+      "additionalProperties": false
+    },
+    "drop.columns": {
+      "description": "Leaves columns out from here on.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "drop.columns"
+        },
+        "columns": {
+          "description": "The columns to leave out from here on.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      },
+      "required": [
+        "step",
+        "columns"
+      ],
+      "additionalProperties": false
+    },
+    "drop.gaps": {
+      "description": "Drops every row that has a gap in any of the named columns, before the rows are divided.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "drop.gaps"
+        },
+        "columns": {
+          "description": "The columns a row may not have a gap in.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      },
+      "required": [
+        "step",
+        "columns"
+      ],
+      "additionalProperties": false
+    },
+    "drop.warmup": {
+      "description": "Drops the rows at the start that an indicator cannot yet speak for.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "drop.warmup"
+        },
+        "atMost": {
+          "description": "The most rows this may drop from the start; beyond it the run stops rather than shrink the data to nothing.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "atMost"
+      ],
+      "additionalProperties": false
+    },
+    "encode": {
+      "description": "Writes a column of words down as numbers, using the categories the training rows held.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "encode"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column of words to write down as numbers."
+        },
+        "as": {
+          "anyOf": [
+            {
+              "enum": [
+                "onehot",
+                "ordinal"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Oo][Nn][Ee][Hh][Oo][Tt]|[Oo][Rr][Dd][Ii][Nn][Aa][Ll])$"
+            }
+          ],
+          "description": "How the categories are written down: one column per category, or one column of places."
+        },
+        "unseen": {
+          "anyOf": [
+            {
+              "enum": [
+                "reserve",
+                "refuse"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Rr][Ee][Ss][Ee][Rr][Vv][Ee]|[Rr][Ee][Ff][Uu][Ss][Ee])$"
+            }
+          ],
+          "description": "What happens to a category the training rows never held: a place kept for it, or a refusal."
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "as",
+        "unseen"
+      ],
+      "additionalProperties": false
+    },
+    "encode.categories": {
+      "description": "Writes every column that stands for a group down as numbers, each by the categories the training rows held.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "encode.categories"
+        },
+        "as": {
+          "anyOf": [
+            {
+              "enum": [
+                "onehot",
+                "ordinal"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Oo][Nn][Ee][Hh][Oo][Tt]|[Oo][Rr][Dd][Ii][Nn][Aa][Ll])$"
+            }
+          ],
+          "description": "How each category is written down: one column per category, or one column of places."
+        },
+        "unseen": {
+          "anyOf": [
+            {
+              "enum": [
+                "reserve",
+                "refuse"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Rr][Ee][Ss][Ee][Rr][Vv][Ee]|[Rr][Ee][Ff][Uu][Ss][Ee])$"
+            }
+          ],
+          "description": "What happens to a category the training rows never held: a place kept for it, or a refusal."
+        }
+      },
+      "required": [
+        "step",
+        "as",
+        "unseen"
+      ],
+      "additionalProperties": false
+    },
+    "evidence.correlation": {
+      "description": "Sets out the rows a correlation between columns is drawn from, on the rows the split trains on, and how many it kept.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "evidence.correlation"
+        },
+        "columns": {
+          "description": "The columns to correlate with one another: two or more, each holding numbers.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        },
+        "shown": {
+          "anyOf": [
+            {
+              "enum": [
+                "drawn",
+                "numbers"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Dd][Rr][Aa][Ww][Nn]|[Nn][Uu][Mm][Bb][Ee][Rr][Ss])$"
+            }
+          ],
+          "description": "How it is shown: drawn as a coloured grid, or as the numbers themselves."
+        }
+      },
+      "required": [
+        "step",
+        "columns",
+        "shown"
+      ],
+      "additionalProperties": false
+    },
+    "evidence.profile": {
+      "description": "Profiles the columns where it stands, on the rows the split trains on, and names the step that answers each thing it finds.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "evidence.profile"
+        },
+        "columns": {
+          "description": "The columns to profile; left out, every column where the step stands.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      },
+      "required": [
+        "step"
+      ],
+      "additionalProperties": false
+    },
+    "feature.add": {
+      "description": "Adds a column worked out from two others by plain arithmetic.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "feature.add"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "What the new column is called."
+        },
+        "left": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column on the left of the arithmetic."
+        },
+        "arithmetic": {
+          "anyOf": [
+            {
+              "enum": [
+                "plus",
+                "minus",
+                "times",
+                "dividedby"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Pp][Ll][Uu][Ss]|[Mm][Ii][Nn][Uu][Ss]|[Tt][Ii][Mm][Ee][Ss]|[Dd][Ii][Vv][Ii][Dd][Ee][Dd][Bb][Yy])$"
+            }
+          ],
+          "description": "What is done with the two columns: added, subtracted, multiplied or divided."
+        },
+        "right": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column on the right of the arithmetic."
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "left",
+        "arithmetic",
+        "right"
+      ],
+      "additionalProperties": false
+    },
+    "feature.cyclical": {
+      "description": "Writes a moment in time as a place on a circle, so that the ends of a cycle meet.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "feature.cyclical"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column holding the moment in time."
+        },
+        "period": {
+          "anyOf": [
+            {
+              "enum": [
+                "hourofday",
+                "dayofweek",
+                "dayofmonth",
+                "monthofyear"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Hh][Oo][Uu][Rr][Oo][Ff][Dd][Aa][Yy]|[Dd][Aa][Yy][Oo][Ff][Ww][Ee][Ee][Kk]|[Dd][Aa][Yy][Oo][Ff][Mm][Oo][Nn][Tt][Hh]|[Mm][Oo][Nn][Tt][Hh][Oo][Ff][Yy][Ee][Aa][Rr])$"
+            }
+          ],
+          "description": "Which cycle the moment is placed on: the hour of the day, the day of the week or of the month, the month of the year."
+        },
+        "form": {
+          "anyOf": [
+            {
+              "enum": [
+                "signed",
+                "unit",
+                "splitsign"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Ss][Ii][Gg][Nn][Ee][Dd]|[Uu][Nn][Ii][Tt]|[Ss][Pp][Ll][Ii][Tt][Ss][Ii][Gg][Nn])$"
+            }
+          ],
+          "description": "How the two values are written down: as they are, shifted between nothing and one, or split into how far up and how far down."
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "period",
+        "form"
+      ],
+      "additionalProperties": false
+    },
+    "feature.indicator": {
+      "description": "Adds a market indicator worked out from the rows that came before: an average, a strength index, a band.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "feature.indicator"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "What the new column is called; an indicator with several parts adds a suffix for each."
+        },
+        "indicator": {
+          "anyOf": [
+            {
+              "enum": [
+                "sma",
+                "ema",
+                "rsi",
+                "atr",
+                "adx",
+                "cci",
+                "williamsr",
+                "obv",
+                "macd",
+                "bollingerbands",
+                "stochastic",
+                "vwap"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Ss][Mm][Aa]|[Ee][Mm][Aa]|[Rr][Ss][Ii]|[Aa][Tt][Rr]|[Aa][Dd][Xx]|[Cc][Cc][Ii]|[Ww][Ii][Ll][Ll][Ii][Aa][Mm][Ss][Rr]|[Oo][Bb][Vv]|[Mm][Aa][Cc][Dd]|[Bb][Oo][Ll][Ll][Ii][Nn][Gg][Ee][Rr][Bb][Aa][Nn][Dd][Ss]|[Ss][Tt][Oo][Cc][Hh][Aa][Ss][Tt][Ii][Cc]|[Vv][Ww][Aa][Pp])$"
+            }
+          ],
+          "description": "Which indicator, worked out from the rows that came before."
+        },
+        "period": {
+          "description": "The look-back in rows, for an indicator that takes one.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "columns": {
+          "description": "The columns it reads, in the order the indicator expects them.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "indicator",
+        "period",
+        "columns"
+      ],
+      "additionalProperties": false
+    },
+    "feature.timeParts": {
+      "description": "Takes a moment in time apart into the pieces people reason with: an hour, a weekday, a month.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "feature.timeParts"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column holding the moment in time."
+        },
+        "asCategories": {
+          "description": "Whether the pieces stand for a group, which they do unless the order is the point.",
+          "type": "boolean"
+        },
+        "parts": {
+          "description": "Which pieces of the moment become columns of their own.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "minute",
+                  "hour",
+                  "dayofweek",
+                  "dayofmonth",
+                  "month",
+                  "quarter",
+                  "season",
+                  "year"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^(?:[Mm][Ii][Nn][Uu][Tt][Ee]|[Hh][Oo][Uu][Rr]|[Dd][Aa][Yy][Oo][Ff][Ww][Ee][Ee][Kk]|[Dd][Aa][Yy][Oo][Ff][Mm][Oo][Nn][Tt][Hh]|[Mm][Oo][Nn][Tt][Hh]|[Qq][Uu][Aa][Rr][Tt][Ee][Rr]|[Ss][Ee][Aa][Ss][Oo][Nn]|[Yy][Ee][Aa][Rr])$"
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "asCategories",
+        "parts"
+      ],
+      "additionalProperties": false
+    },
+    "fill.missing": {
+      "description": "Fills the gaps in a column the named way, with a value learned from the training rows, and marks where they were.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "fill.missing"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column with gaps in it."
+        },
+        "with": {
+          "description": "What goes in the gaps, learned from the training rows: mean, median, zero, previous, constant, or refuse.",
+          "anyOf": [
+            {
+              "enum": [
+                "mean",
+                "median",
+                "zero",
+                "previous",
+                "refuse"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "constant"
+                  ]
+                },
+                "value": {
+                  "type": "number",
+                  "minimum": -1.7976931348623157E+308,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "refuseAbove": {
+          "description": "The share of the training rows that may be gaps and still be filled. Above it the column is not filled, and the column that says where the gaps were speaks for it. Left out, every share is filled.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "with"
+      ],
+      "additionalProperties": false
+    },
+    "fill.nan": {
+      "description": "Deals with a value that is not a number a model can use; refusing it is the default.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "fill.nan"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column to watch for values that are not numbers a model can use."
+        },
+        "with": {
+          "description": "What happens to a value that is not a number: refuse, which is the default and usually the right answer, or mean, median, zero or constant.",
+          "anyOf": [
+            {
+              "enum": [
+                "refuse",
+                "mean",
+                "median",
+                "zero"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "constant"
+                  ]
+                },
+                "value": {
+                  "type": "number",
+                  "minimum": -1.7976931348623157E+308,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "with"
+      ],
+      "additionalProperties": false
+    },
+    "maths": {
+      "description": "Pulls a column into another shape by arithmetic that learns nothing: a logarithm, a root, a reciprocal.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "maths"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column to pull into another shape."
+        },
+        "maths": {
+          "anyOf": [
+            {
+              "enum": [
+                "log",
+                "log1p",
+                "reciprocal",
+                "sqrt",
+                "square",
+                "arcsin",
+                "abs",
+                "sign"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Ll][Oo][Gg]|[Ll][Oo][Gg]1[Pp]|[Rr][Ee][Cc][Ii][Pp][Rr][Oo][Cc][Aa][Ll]|[Ss][Qq][Rr][Tt]|[Ss][Qq][Uu][Aa][Rr][Ee]|[Aa][Rr][Cc][Ss][Ii][Nn]|[Aa][Bb][Ss]|[Ss][Ii][Gg][Nn])$"
+            }
+          ],
+          "description": "Which shape: a logarithm, a root, a reciprocal, a square, an arcsine, the magnitude or the sign."
+        },
+        "into": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "What the result is called; the same column, unless a file says otherwise."
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "maths"
+      ],
+      "additionalProperties": false
+    },
+    "normalise": {
+      "description": "Brings a column onto a comparable scale, by numbers learned from the training rows.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "normalise"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column to bring onto a comparable scale."
+        },
+        "scale": {
+          "anyOf": [
+            {
+              "enum": [
+                "standard",
+                "minmax",
+                "maxabs",
+                "robust",
+                "quantile",
+                "power"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Ss][Tt][Aa][Nn][Dd][Aa][Rr][Dd]|[Mm][Ii][Nn][Mm][Aa][Xx]|[Mm][Aa][Xx][Aa][Bb][Ss]|[Rr][Oo][Bb][Uu][Ss][Tt]|[Qq][Uu][Aa][Nn][Tt][Ii][Ll][Ee]|[Pp][Oo][Ww][Ee][Rr])$"
+            }
+          ],
+          "description": "Which kind of scaling: what the fit learns from the training rows."
+        },
+        "outOfRange": {
+          "anyOf": [
+            {
+              "enum": [
+                "pass",
+                "clip",
+                "refuse"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Pp][Aa][Ss][Ss]|[Cc][Ll][Ii][Pp]|[Rr][Ee][Ff][Uu][Ss][Ee])$"
+            }
+          ],
+          "description": "What happens to a value outside the range the fit learned: let it through, hold it at the edge, or refuse."
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "scale",
+        "outOfRange"
+      ],
+      "additionalProperties": false
+    },
+    "normalise.row": {
+      "description": "Brings each row onto a comparable scale across the columns that make it up, learning nothing.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "normalise.row"
+        },
+        "norm": {
+          "anyOf": [
+            {
+              "enum": [
+                "l1",
+                "l2",
+                "max"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Ll]1|[Ll]2|[Mm][Aa][Xx])$"
+            }
+          ],
+          "description": "How the row's size is measured: the sum of the magnitudes, the length, or the largest."
+        },
+        "columns": {
+          "description": "The columns that make up the row, scaled together.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      },
+      "required": [
+        "step",
+        "norm",
+        "columns"
+      ],
+      "additionalProperties": false
+    },
+    "order.by": {
+      "description": "Puts the rows in order by one or more columns, smallest first, for the steps that read the rows before a row.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "order.by"
+        },
+        "columns": {
+          "description": "The columns the rows are put in order by: the first decides, each next one decides between rows the ones before call equal.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      },
+      "required": [
+        "step",
+        "columns"
+      ],
+      "additionalProperties": false
+    },
+    "outliers.clip": {
+      "description": "Holds the extreme values of a column to bounds learned from the training rows.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "outliers.clip"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column whose extremes are held."
+        },
+        "bounds": {
+          "anyOf": [
+            {
+              "enum": [
+                "quantile",
+                "sigma",
+                "iqr"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Qq][Uu][Aa][Nn][Tt][Ii][Ll][Ee]|[Ss][Ii][Gg][Mm][Aa]|[Ii][Qq][Rr])$"
+            }
+          ],
+          "description": "How the bounds are worked out: by quantile, by spread, or by the middle half."
+        },
+        "at": {
+          "description": "How far out the bounds sit: a share for a quantile, a multiple of the spread or the middle half otherwise.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1.7976931348623157E+308
+        },
+        "outlier": {
+          "anyOf": [
+            {
+              "enum": [
+                "clip",
+                "blank",
+                "refuse"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Cc][Ll][Ii][Pp]|[Bb][Ll][Aa][Nn][Kk]|[Rr][Ee][Ff][Uu][Ss][Ee])$"
+            }
+          ],
+          "description": "What happens to a value outside the bounds: held at the edge, made a gap, or refused."
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "bounds",
+        "at",
+        "outlier"
+      ],
+      "additionalProperties": false
+    },
+    "read.csv": {
+      "description": "Reads the rows from a comma-separated file.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "read.csv"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Where the comma-separated file will be, when the pipeline runs."
+        }
+      },
+      "required": [
+        "step",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "read.rows": {
+      "description": "Takes rows that are handed in rather than opened: a table already in memory, a reader over a query.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "read.rows"
+        },
+        "description": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "What the rows are, for whoever reads the file later."
+        }
+      },
+      "required": [
+        "step",
+        "description"
+      ],
+      "additionalProperties": false
+    },
+    "split.atRandom": {
+      "description": "Divides the rows at random, the same way every time for the same seed.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "split.atRandom"
+        },
+        "train": {
+          "description": "How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "validation": {
+          "description": "The share used while choosing between models.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "test": {
+          "description": "The share kept back until the end.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "predict": {
+          "description": "The share held back to predict on; none when it is left out.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "seed": {
+          "description": "The number that makes the shuffle repeatable: the same seed deals the same rows the same way.",
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "train",
+        "validation",
+        "test",
+        "seed"
+      ],
+      "additionalProperties": false
+    },
+    "split.byTime": {
+      "description": "Divides the rows by when they happened: the earliest to learn from, the latest to be measured on.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "split.byTime"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column that says when a row happened."
+        },
+        "train": {
+          "description": "How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "validation": {
+          "description": "The share used while choosing between models.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "test": {
+          "description": "The share kept back until the end.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "predict": {
+          "description": "The share held back to predict on; none when it is left out.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "train",
+        "validation",
+        "test"
+      ],
+      "additionalProperties": false
+    },
+    "split.stratified": {
+      "description": "Divides the rows at random while keeping the mixture of one column the same in every part.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "split.stratified"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column whose mixture of values is kept the same in every part."
+        },
+        "train": {
+          "description": "How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "validation": {
+          "description": "The share used while choosing between models.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "test": {
+          "description": "The share kept back until the end.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "predict": {
+          "description": "The share held back to predict on; none when it is left out.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "seed": {
+          "description": "The number that makes the shuffle repeatable: the same seed deals the same rows the same way.",
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "train",
+        "validation",
+        "test",
+        "seed"
+      ],
+      "additionalProperties": false
+    },
+    "target": {
+      "description": "Names the column a model is asked to predict, which is handed over apart from the numbers it is shown.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "target"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column a model is asked to predict, handed over apart from the numbers it is shown."
+        }
+      },
+      "required": [
+        "step",
+        "column"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 2
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "declaration": {
+            "items": {
+              "properties": {
+                "step": {
+                  "not": {
+                    "enum": [
+                      "drop.columns",
+                      "drop.gaps",
+                      "drop.warmup",
+                      "encode.categories",
+                      "evidence.correlation",
+                      "evidence.profile",
+                      "order.by",
+                      "split.atRandom",
+                      "split.byTime",
+                      "split.stratified"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

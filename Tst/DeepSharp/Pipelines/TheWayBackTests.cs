@@ -13,7 +13,7 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class TheWayBackTests
 {
-    private static string Titanic => Path.Join(RepoRoot(), "Samples", "data", "titanic.csv");
+    private static string Titanic => Repository.Data("titanic.csv");
 
     private static PreparedData Fares(Action<FittingBuilder> how)
     {
@@ -161,6 +161,41 @@ public class TheWayBackTests
     }
 
     [Fact]
+    public void AWayBackThatLeadsSomewhereElse_IsRefusedWithTheRowItWasFoundOn()
+    {
+        // A step that doubles the target and claims to undo itself by doing nothing: every row comes back
+        // as twice what it was read as, and the run says so before anything is handed over.
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => Pdd.Create()
+                .ReadCsv(Titanic)
+                .Declare(schema => schema.Number("fare"))
+                .Add(new Doubled("fare"))
+                .SplitAtRandom(0.70, 0.15)
+                .Target("fare")
+                .Build()
+                .Run());
+
+        Assert.Contains("does not lead back", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("row 1 was 7.25", refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A step whose way back is wrong on purpose.</summary>
+    private sealed class Doubled(string column) : IAddsColumns, IUndoesItself
+    {
+        public string Verb => "test.doubled";
+
+        public string Produces => column;
+
+        public void AddTo(Table table) =>
+            table.Put(new Column<double>(column, ColumnKind.Number, table.NumbersOf(column).Select(value => value * 2)));
+
+        public double Undo(double value, FittedStepValues? fitted) => value;
+
+        public void WriteTo(System.Text.Json.Utf8JsonWriter writer) =>
+            throw new NotSupportedException("A test step is never written down.");
+    }
+
+    [Fact]
     public void ASquareRootOfANegativePrediction_IsRefusedRatherThanImagined()
     {
         var step = new MathsStep("fare", Maths.Square);
@@ -184,18 +219,5 @@ public class TheWayBackTests
             .Run();
 
         Assert.Equal(891, prepared.Table.RowCount);
-    }
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
     }
 }

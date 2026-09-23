@@ -2,7 +2,6 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Reflection;
-using System.Text.Json;
 using DeepSharp.Pipelines;
 
 namespace DeepSharp.Tests.Pipelines;
@@ -15,32 +14,16 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class DeclarationContractTests
 {
-    /// <summary>A step written the way a package author would write one, not the way the core does.</summary>
-    private sealed record ScaleStep(string Column, double By) : IPipelineStep
-    {
-        public string Verb => "scale.by";
-
-        public void WriteTo(Utf8JsonWriter writer)
-        {
-            writer.WriteStartObject();
-            writer.WriteString("step", Verb);
-            writer.WriteString("column", Column);
-            writer.WriteNumber("by", By);
-            writer.WriteEndObject();
-        }
-
-        public static ScaleStep ReadFrom(JsonElement element) =>
-            new(element.GetProperty("column").GetString()!, element.GetProperty("by").GetDouble());
-    }
-
     [Fact]
     public void AStepFromAnotherPackage_SurvivesTheRoundTripAndComparesEqual()
     {
-        // This test is also the shape a package author copies, which is why it uses nothing internal.
+        // This test is also the shape a package author copies, which is why the step it registers uses nothing
+        // internal: it is built from the parameter kinds, and registering it is one token.
         var catalog = StepCatalog.BuiltIn();
-        catalog.Register("scale.by", ScaleStep.ReadFrom);
+        catalog.Register<ScaleByStep>();
 
-        var original = new PipelineDeclaration([new ReadCsvStep("x.csv"), new ScaleStep("fare", 0.5)]);
+        var original = new PipelineDeclaration(
+            [new ReadCsvStep("x.csv"), new DeclareStep([new ColumnDeclaration("fare", ColumnKind.Number, false)]), new ScaleByStep("fare", 0.5)]);
 
         var returned = PipelineDeclaration.FromJson(original.ToJson(), catalog);
 
@@ -53,8 +36,8 @@ public class DeclarationContractTests
         // The contractual direction, and the one a dictionary depends on. The opposite — two unequal
         // declarations having unequal hashes — is not promised by anything and was asserted here by
         // mistake, passing only because these two happened not to collide.
-        var one = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.70, 0.15).Declaration;
-        var other = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.70, 0.15).Declaration;
+        var one = Pdd.Create().ReadCsv("a.csv").Declare(schema => schema.Timestamp("t")).SplitByTime("t", 0.70, 0.15).Declaration;
+        var other = Pdd.Create().ReadCsv("a.csv").Declare(schema => schema.Timestamp("t")).SplitByTime("t", 0.70, 0.15).Declaration;
 
         Assert.Equal(one, other);
         Assert.Equal(one.GetHashCode(), other.GetHashCode());
@@ -86,7 +69,7 @@ public class DeclarationContractTests
             .Where(type => type.GetInterfaces().Any(
                 face => face.IsGenericType && face.GetGenericTypeDefinition() == typeof(IPipelineStep<>)))
             .Select(type => (Verb: (string)type.GetProperty(
-                "Name", BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!, Type: type))
+                "Name", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)!.GetValue(null)!, Type: type))
             .ToArray();
 
         var catalog = StepCatalog.BuiltIn();
@@ -103,13 +86,13 @@ public class DeclarationContractTests
         // The three shares adding to 0.95 is the flagship message of the validator, and it used to arrive
         // as an ArgumentException naming a C# parameter — which a file-loading boundary does not catch.
         const string json = """
-            {"declaration":[{"step":"split.byTime","column":"t","train":0.7,"validation":0.15,"test":0.10}]}
+            {"version":2,"declaration":[{"step":"split.byTime","column":"t","train":0.7,"validation":0.15,"test":0.10}]}
             """;
 
-        var refused = Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        var refused = Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
 
         Assert.Contains("split.byTime", refused.Message);
-        Assert.Contains("0.95", refused.InnerException!.Message);
+        Assert.Contains("0.95", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -118,19 +101,19 @@ public class DeclarationContractTests
         // An unknown verb refuses loudly; an unknown strategy used to load and mean whatever the eventual
         // executor's default branch means.
         const string json = """
-            {"declaration":[{"step":"split.byTime","column":"t","train":0.7,"validation":0.15,"test":0.15},
+            {"version":2,"declaration":[{"step":"split.byTime","column":"t","train":0.7,"validation":0.15,"test":0.15},
                             {"step":"fill.missing","column":"age","with":"next"}]}
             """;
 
-        var refused = Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        var refused = Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
 
-        Assert.Contains("next", refused.InnerException!.Message);
+        Assert.Contains("next", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void AStrategyThatWasNeverGivenAName_IsRefusedWhereItIsWritten()
     {
-        var after = Pdd.Create().ReadCsv("x.csv").SplitByTime("t", 0.70, 0.15);
+        var after = Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Timestamp("t").Number("age")).SplitByTime("t", 0.70, 0.15);
 
         Assert.Throws<ArgumentException>(() => after.FillMissing("age", default));
     }
@@ -143,7 +126,7 @@ public class DeclarationContractTests
     [InlineData("mean", 3.0)]
     public void AStrategyWrittenWithTheWrongNumberOfNumbers_IsRefused(string name, double? value)
     {
-        var after = Pdd.Create().ReadCsv("x.csv").SplitByTime("t", 0.70, 0.15);
+        var after = Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Timestamp("t").Number("age")).SplitByTime("t", 0.70, 0.15);
 
         var refused = Assert.Throws<ArgumentException>(
             () => after.FillMissing("age", new FillStrategy(name, value)));
@@ -157,11 +140,11 @@ public class DeclarationContractTests
     public void AFillWhoseStrategyIsMissingOrIsNotEvenAName_IsRefused(string step)
     {
         var json = $$"""
-            {"declaration":[{"step":"split.byTime","column":"t","train":0.7,"validation":0.15,"test":0.15},
+            {"version":2,"declaration":[{"step":"split.byTime","column":"t","train":0.7,"validation":0.15,"test":0.15},
                             {{step}}]}
             """;
 
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -181,13 +164,14 @@ public class DeclarationContractTests
         // written form has room for it now, while nothing has shipped.
         var declaration = Pdd.Create()
             .ReadCsv("x.csv")
+            .Declare(schema => schema.Timestamp("t").Number("age"))
             .SplitByTime("t", 0.70, 0.15)
             .FillMissing("age", With.Constant(-1))
             .Declaration;
 
-        var returned = PipelineDeclaration.FromJson(declaration.ToJson());
+        var returned = PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn());
 
         Assert.Equal(declaration, returned);
-        Assert.Equal(-1, ((FillMissingStep)returned.Steps[2]).Strategy.Value);
+        Assert.Equal(-1, ((FillMissingStep)returned.Steps[3]).Strategy.Value);
     }
 }

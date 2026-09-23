@@ -13,14 +13,15 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class IndicatorTests
 {
-    private static string Apple => Path.Join(RepoRoot(), "Samples", "data", "apple.csv");
+    private static string Apple => Repository.Data("apple.csv");
 
     private static PipelineBuilder Prices() =>
         Pdd.Create()
             .ReadCsv(Apple)
             .Declare(schema => schema
                 .Timestamp("Date")
-                .Number("AAPL.Open", "AAPL.High", "AAPL.Low", "AAPL.Close", "AAPL.Volume"));
+                .Number("AAPL.Open", "AAPL.High", "AAPL.Low", "AAPL.Close", "AAPL.Volume"))
+            .OrderBy("Date");
 
     public static TheoryData<Indicator, string[], int> EveryIndicator => new()
     {
@@ -83,7 +84,7 @@ public class IndicatorTests
 
             // Whatever the warm-up is, it is absent and not a not-a-number: the value was never computed
             // rather than computed wrongly, and the library keeps those apart everywhere.
-            var values = Numbers.Of(table, column.Name);
+            var values = table.NumbersOf(column.Name);
 
             Assert.DoesNotContain(values, value => value is { } number && double.IsNaN(number));
             Assert.Contains(values, value => value is not null);
@@ -134,10 +135,10 @@ public class IndicatorTests
             .Normalise("rsi")
             .Declaration;
 
-        Assert.Equal("feature.indicator", declaration.Steps[2].Verb);
+        Assert.Equal("feature.indicator", declaration.Steps[3].Verb);
 
         // It learns nothing, so nothing about it is fitted and it may stand above the line.
-        Assert.IsNotType<IFittedStep>(declaration.Steps[2], exactMatch: false);
+        Assert.IsNotType<IFittedStep>(declaration.Steps[3], exactMatch: false);
     }
 
     [Fact]
@@ -149,12 +150,12 @@ public class IndicatorTests
 
         // The verb comes from a package, so a catalog that has not been told about it refuses the file
         // rather than guessing — and says which package is missing in the same breath.
-        Assert.Throws<NotSupportedException>(() => PipelineDeclaration.FromJson(declaration.ToJson()));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()));
 
         var returned = PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn().WithIndicators());
 
         Assert.Equal(declaration, returned);
-        Assert.Equal(21, ((AddIndicatorStep)returned.Steps[2]).Period);
+        Assert.Equal(21, ((AddIndicatorStep)returned.Steps[3]).Period);
     }
 
     [Fact]
@@ -180,7 +181,7 @@ public class IndicatorTests
                              "period":14,"columns":["a"]}]}
             """;
 
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn().WithIndicators()));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn().WithIndicators()));
     }
 
     [Fact]
@@ -190,7 +191,7 @@ public class IndicatorTests
             {"declaration":[{"step":"feature.indicator","column":"x","indicator":"sma","period":14}]}
             """;
 
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn().WithIndicators()));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn().WithIndicators()));
     }
 
     [Fact]
@@ -234,19 +235,6 @@ public class IndicatorTests
 
         return table.Columns
             .Where(column => column.Name.StartsWith("made", StringComparison.Ordinal))
-            .ToDictionary(column => column.Name, column => Numbers.Of(table, column.Name));
-    }
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
+            .ToDictionary(column => column.Name, column => table.NumbersOf(column.Name));
     }
 }

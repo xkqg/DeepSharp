@@ -143,7 +143,7 @@ public class OutlierAndMathsTests
             .ClipOutliers("a", Bounds.Sigma, 2.5, Outlier.Blank)
             .Declaration;
 
-        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson()));
+        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()));
         Assert.IsType<IFittedStep>(declaration.Steps[3], exactMatch: false);
     }
 
@@ -226,7 +226,7 @@ public class OutlierAndMathsTests
             .SplitAtRandom(0.70, 0.15)
             .Declaration;
 
-        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson()));
+        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()));
         Assert.IsNotType<IFittedStep>(declaration.Steps[2], exactMatch: false);
         Assert.Throws<ArgumentException>(() => new MathsStep(" ", Maths.Log));
         Assert.Throws<ArgumentNullException>(() => new MathsStep("a", Maths.Log).AddTo(null!));

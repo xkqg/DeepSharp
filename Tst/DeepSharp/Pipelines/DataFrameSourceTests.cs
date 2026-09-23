@@ -71,7 +71,7 @@ public class DataFrameSourceTests
             .Declare(schema => schema.Number("fare"))
             .Declaration;
 
-        var returned = PipelineDeclaration.FromJson(declaration.ToJson());
+        var returned = PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn());
 
         Assert.Equal(declaration, returned);
         Assert.Equal("read.rows", returned.Steps[0].Verb);
@@ -92,7 +92,7 @@ public class DataFrameSourceTests
             .Declare(schema => schema.Number("fare"))
             .Declaration;
 
-        var prepared = new Pipeline(PipelineDeclaration.FromJson(declaration.ToJson()))
+        var prepared = new Pipeline(PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()))
             .Run(new DataFrameRowSource(Frame()));
 
         Assert.Equal(3, prepared.Table.RowCount);
@@ -101,7 +101,7 @@ public class DataFrameSourceTests
     [Fact]
     public void AFrameReadFromAFile_IsTheSameDataAsTheReaderOfOurOwn()
     {
-        var path = Path.Join(RepoRoot(), "Samples", "data", "titanic.csv");
+        var path = Repository.Data("titanic.csv");
 
         var ours = Pdd.Create()
             .ReadCsv(path)
@@ -180,19 +180,6 @@ public class DataFrameSourceTests
         await Assert.ThrowsAsync<ArgumentNullException>(() => Pdd.Create().ReadDbAsync(null!));
         await Assert.ThrowsAsync<ArgumentNullException>(
             () => DataFrameSourceExtensions.ReadDbAsync(null!, reader));
-    }
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
     }
 
     [Fact]

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
@@ -46,8 +47,17 @@ public enum Maths
 /// nought or less, a division by nought, a root of a negative. A gap stays a gap.
 /// </para>
 /// </remarks>
-public sealed record MathsStep : IPipelineStep<MathsStep>, IAddsColumns, IUndoesItself
+public sealed record MathsStep : IPipelineStep<MathsStep>, IAddsColumns, IUndoesItself, IDescribesColumns
 {
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column to pull into another shape.", "column", ColumnKinds.Numbers);
+
+    private static readonly OneOfParameter<Maths> MathsKey = new(
+        "maths", "Which shape: a logarithm, a root, a reciprocal, a square, an arcsine, the magnitude or the sign.", Maths.Log1P);
+
+    private static readonly NewColumnParameter IntoKey = new(
+        "into", "What the result is called; the same column, unless a file says otherwise.", "column", optional: true);
+
     /// <summary>Declares that a column is pulled into another shape.</summary>
     /// <param name="column">The column to reshape.</param>
     /// <param name="maths">Which shape.</param>
@@ -55,12 +65,16 @@ public sealed record MathsStep : IPipelineStep<MathsStep>, IAddsColumns, IUndoes
     /// <exception cref="ArgumentException">The column has no name.</exception>
     public MathsStep(string column, Maths maths, string? into = null)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(column);
-
-        Column = column;
-        Maths = maths;
-        Into = string.IsNullOrWhiteSpace(into) ? column : into;
+        Column = ColumnKey.Require(column);
+        Maths = MathsKey.Require(maths);
+        Into = IntoKey.Require(into) ?? Column;
     }
+
+    /// <inheritdoc />
+    public static StepParameters<MathsStep> Parameters { get; } = new StepParameters<MathsStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(MathsKey, step => step.Maths)
+        .With(IntoKey, step => step.Into);
 
     /// <summary>The column being reshaped.</summary>
     public string Column { get; }
@@ -97,7 +111,18 @@ public sealed record MathsStep : IPipelineStep<MathsStep>, IAddsColumns, IUndoes
     };
 
     /// <inheritdoc />
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return before.With(Into, ColumnKind.Number);
+    }
+
+    /// <inheritdoc />
     public static string Name => "maths";
+
+    /// <inheritdoc />
+    public static string Purpose => "Pulls a column into another shape by arithmetic that learns nothing: a logarithm, a root, a reciprocal.";
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -107,7 +132,7 @@ public sealed record MathsStep : IPipelineStep<MathsStep>, IAddsColumns, IUndoes
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        var values = Numbers.Of(table, Column);
+        var values = table.NumbersOf(Column);
         var shaped = new double?[values.Length];
 
         for (var row = 0; row < values.Length; row++)
@@ -123,26 +148,11 @@ public sealed record MathsStep : IPipelineStep<MathsStep>, IAddsColumns, IUndoes
         table.Put(new Column<double>(Into, ColumnKind.Number, shaped));
     }
 
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-        writer.WriteString("maths", Maths.ToString().ToLowerInvariant());
-        writer.WriteString("into", Into);
-        writer.WriteEndObject();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     public static MathsStep ReadFrom(JsonElement element) =>
-        new(element.RequiredString("column"),
-            element.RequiredEnum<Maths>("maths"),
-            element.RequiredString("into"));
+        new(ColumnKey.Read(element), MathsKey.Read(element), IntoKey.Read(element));
 
     private double Shape(double value, int row) => Maths switch
     {
@@ -166,6 +176,6 @@ public sealed record MathsStep : IPipelineStep<MathsStep>, IAddsColumns, IUndoes
             + "Predict something this pipeline can undo, or undo it yourself.");
 
     private InvalidOperationException Impossible(double value, int row, string what) =>
-        new($"Row {row + 1} of '{Column}' is {value}, and {Maths.ToString().ToLowerInvariant()} would be {what}. "
-            + "Shift the column first, or leave this one out.");
+        new($"Row {row + 1} of '{Column}' is {value.ToString(CultureInfo.InvariantCulture)}, and "
+            + $"{Maths.ToString().ToLowerInvariant()} would be {what}. Shift the column first, or leave this one out.");
 }

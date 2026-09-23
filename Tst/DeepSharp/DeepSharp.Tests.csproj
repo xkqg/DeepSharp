@@ -21,6 +21,11 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.*" />
     <!-- A real database for the one test that asks whether a provider's reader arrives as rows. -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.*" />
+    <!-- An outside JSON Schema validator, here only, to prove that the schema the steps describe accepts
+         what the library writes and refuses what its reader refuses. The core has no business carrying one. -->
+    <PackageReference Include="Corvus.Json.Validator" Version="5.*" />
+    <!-- The README's example is compiled and run as it stands on the page, so the page cannot drift from the code. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.*" />
   </ItemGroup>
 
   <ItemGroup>

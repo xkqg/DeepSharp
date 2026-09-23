@@ -47,7 +47,7 @@ public class PackageBoundaryTests
                      (Path.Join("Src", "DeepSharp", "DeepSharp.csproj"), "DeepSharp.Pipelines.csproj"),
                  })
         {
-            var references = XDocument.Load(Path.Join(RepoRoot(), project))
+            var references = XDocument.Load(Path.Join(Repository.Root, project))
                 .Descendants("ProjectReference")
                 .Select(reference => reference.Attribute("Include")?.Value ?? string.Empty)
                 .ToArray();
@@ -56,17 +56,35 @@ public class PackageBoundaryTests
         }
     }
 
-    private static string RepoRoot()
+    /// <summary>The one package the pipeline core may take beside the runtime: the container abstractions.</summary>
+    private static readonly string[] CorePackages = ["Microsoft.Extensions.DependencyInjection.Abstractions"];
+
+    /// <summary>The references of an assembly that are neither the runtime itself nor on a given list.</summary>
+    private static string[] Outside(System.Reflection.Assembly assembly, IEnumerable<string> allowed)
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+        // The runtime's own assemblies sit in one folder, so "part of .NET" is a fact that can be looked up
+        // rather than a prefix that a package called System.Something would also match.
+        var runtime = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
 
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
+        return [.. assembly.GetReferencedAssemblies()
+            .Select(reference => reference.Name!)
+            .Where(name => !File.Exists(Path.Join(runtime, $"{name}.dll")))
+            .Except(allowed)];
+    }
 
-        Assert.NotNull(directory);
-        return directory!.FullName;
+    [Fact]
+    public void ThePipelineCoreReferencesTheRuntimeAndAClosedListOfPackages()
+    {
+        // Naming the one forbidden reference catches the one mistake somebody already made. A closed list
+        // catches the next one too: a drawing library, a data frame, a notebook host — each of them is a
+        // package of its own, and the core that travels inside an application carries none of them.
+        var outside = Outside(typeof(Pdd).Assembly, CorePackages);
+
+        Assert.True(outside.Length == 0, $"The pipeline core references {string.Join(", ", outside)}.");
+
+        // And the check is a real filter rather than one nothing could fail: a satellite that carries a
+        // dependency of its own is caught by it.
+        Assert.NotEmpty(Outside(typeof(AddIndicatorStep).Assembly, [.. CorePackages, "DeepSharp.Pipelines"]));
     }
 
     [Fact]

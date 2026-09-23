@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <!-- The published package, not the source: the arithmetic is borrowed and stays borrowed. -->
-    <PackageReference Include="MatPlotLibNet.DataFrame" Version="1.17.*" />
+    <PackageReference Include="MatPlotLibNet.DataFrame" Version="1.18.0" />
   </ItemGroup>
 
   <ItemGroup>

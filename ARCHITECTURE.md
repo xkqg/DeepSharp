@@ -6,21 +6,42 @@ written down here is not a decision, it is a habit.
 ## The layout
 
 ```
-Src/DeepSharp/            the engine side: Shape, Tensor, ITensorBackend, CpuBackend
-Src/DeepSharp.Pipelines/  the data side
-    IPipelineStep.cs        what a step is, and the two markers that place it in the chain
-    Steps.cs Schema.cs      reading, declaring, splitting in time, filling a gap
-    Splits.cs               the shares, and splitting at random or stratified
-    Features.cs             a derived column, a cycle, and the three forms
-    Transforms.cs           the scales, the row norms, the encodings
-    RowSource.cs Table.cs   where rows come from, and what they become
-    Binding.cs Execution.cs text into typed columns, and the run itself
-Samples/                  runnable programs and the published data they read
-Tst/DeepSharp/            the tests, mirroring both libraries' folders
+Src/DeepSharp/Tensors/            the engine side: Shape, Tensor, ITensorBackend, CpuBackend
+Src/DeepSharp.Pipelines/          the data side
+    IPipelineStep.cs                what a step is: a verb, how it writes itself, what it reads, what it does
+    StepParameters.cs ParameterKinds.cs
+                                    a step's parameters, said once; the closed set of kinds they hold
+    StepCatalog.cs                  the verbs a file may hold, and the one door a step is read through
+    PipelineDeclaration.cs DeclarationRules.cs
+                                    the steps in order, the rules every declaration keeps, the keys of its prefixes
+    PipelineDocument.cs PipelineFileException.cs PipelineFileSchema.cs VerbReference.cs
+                                    the file: its envelope, every fault at its line and column, the schema, the reference
+    ColumnState.cs                  which columns there are at each step, followed from the schema down
+    Steps.cs Schema.cs Splits.cs RowOrder.cs
+                                    reading, declaring, putting in order, dividing
+    Features.cs TimeParts.cs Maths.cs
+                                    what is worked out from a single row
+    FillStrategy.cs FillNaN.cs Transforms.cs Outliers.cs DropColumns.cs DropWarmUp.cs
+                                    what learns, and what takes rows or columns away
+    Evidence.cs                     the profile and the correlation a run is declared to produce
+    RowSource.cs SourceFolder.cs Binding.cs Table.cs RowIdentity.cs TrainingValues.cs
+                                    rows, where a path is read from, typed columns, who a row is, what a fit sees
+    Walk.cs Execution.cs Views.cs Fitting.cs Handover.cs
+                                    the one walk every run is, the data after any step, what a fit learned, the handover
+Src/DeepSharp.Pipelines.DataFrame/   a reader through MatPlotLibNet.DataFrame
+Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
+Src/DeepSharp.Notebooks.Verso/       a pipeline written as a notebook in Verso
+Samples/                          runnable programs and the published data they read
+Tst/DeepSharp/                    the tests of the libraries
+Tst/DeepSharp.Notebooks.Verso/    the notebook's tests, run inside Verso's own engine
 ```
 
-The two libraries do not reference each other, and a test reads their assembly references to keep it that
-way.
+The tensor library and the pipeline library do not reference each other, and a test reads their assembly
+references to keep it that way.
+
+The notebook's tests are a suite of their own because Verso's engine and the validator the core's tests hold
+the pipeline schema to each need a different version of the C# compiler, and one test program can load only
+one. The coverage check and the release both run every suite they find, by the name every suite has.
 
 ## The design language: PDD, pipeline-driven design
 
@@ -43,19 +64,40 @@ been told how to split, because those are the operations that learn from the dat
 
 That is where this started, and it was not enough. A council found the rule held for the *verbs* and not
 for the *steps*: the extension point every other package uses took a step that learns, and a hand-edited
-file could put one anywhere at all. Both were executed, not argued. So the rule moved to the one place all
-three doors pass through — the declaration's own constructor — and the type system now carries the concept
+file could put one anywhere at all. Both were executed, not argued. So the rule moved to the one place every
+door passes through — the declaration's own constructor — and the type system now carries the concept
 rather than the arrangement of methods: a step that learns from the data says so, by implementing
 `IFittedStep`, and a step that divides the rows says so with `ISplitStep`.
 
+Saying so is doing so. `IFittedStep` carries the fit and the apply, and `ISplitStep` the division itself, so
+a step cannot claim to learn and learn nothing, or divide the rows by some other means than the one the
+declaration can see. There used to be a marker for each and a second interface for the work, and a split
+that implemented one without the other left every row in training.
+
 A package adding a verb inherits the rule by saying which kind its step is. It cannot forget to, because
-the two markers are the only way to be either kind.
+these are the only way to be either kind.
+
+The constructor keeps the other rules a declaration has to keep, whichever door it came through — the chain,
+the extension point, a hand-written file, a notebook. One source, one schema, one split, one order and one
+target: a second one used to be ignored, so a file said one thing and the numbers came from another. The
+schema comes directly after the source, since everything else works on columns. Rows are dropped and put in
+order before the split, never after it, because the split divides the rows it is given once. A step that reads
+the rows in their order stands below the step that says what that order is. Every step does something the run
+acts on. Each rule is a small type of its own, the constructor refuses with every fault at once, each with the
+step it is at, and `PipelineDeclaration.FaultsIn` gives the same faults without refusing — so something that
+writes a declaration a piece at a time, as a notebook does, can put each one where it belongs.
 
 Which split is a separate question, and the library does not answer it: random for independent rows, by
 time when you predict forward, stratified when a class is rare, by group when several rows belong to one
 entity, explicit when the data already carries the answer. Each is offered at the same point and none is
 the default, because a default there is a guess about somebody else's data. What is fixed is the ordering
 alone.
+
+What every split shares is that it divides rows by what they say, not by where they stand. Each row is ranked
+by a digest of its own contents and the seed, so the same rows are dealt the same way whatever order a file
+lists them in, and every copy of a repeated row lands where its first copy does. Split by position, 31 groups
+of repeated rows in the Titanic data had copies on both sides of the line. A split in time never divides a
+moment: every row of one moment lands on the side of the line its first row does.
 
 So fitting on the whole set is not a mistake a caller can make and be warned about later: it is a method
 that does not exist yet at that point in the chain. A rule in a document is advice; a rule expressed as
@@ -117,8 +159,16 @@ grid of numbers or drawn. Naming them before the numbers exist is the point: eve
 same evidence, two runs are comparable without anyone remembering what was shown last time, and the report
 cannot quietly shrink to whatever happened to look good.
 
-The drawing lives in a separate, optional package that draws with **MatPlotLibNet**; the pipeline holds
-only the declaration.
+Two kinds are built, both about the data before anything learns from it: a profile of the columns, which
+names for every problem it finds the step that answers it, and the rows a correlation is drawn from. Each is
+measured on the rows the split trains on — the split below it as much as one above — because a profile over
+every row lets the rows a model will be measured on shape what it is shown. What they produce is output: it
+is kept with the run, in `PreparedData.Evidence`, and never written into the pipeline's file, since the file
+is what is replayed and a replay learns nothing. The measures of a trained model join them when there is a
+model to measure.
+
+The drawing lives in an optional package that draws with **MatPlotLibNet** — today the notebook's, which draws
+the correlation as a heatmap; the pipeline holds only the declaration and the numbers.
 
 ### The rule that gives it meaning
 
@@ -151,9 +201,14 @@ further upstream. They deserve different verbs and different defaults:
 
 ```csharp
 .FillMissing("trades", With.Mean)      // fitted on train; With.Median, With.Zero,
-.FillMissing("volume", With.Previous)  // With.Constant(0), With.Previous, With.DropRow, With.Refuse
+.FillMissing("volume", With.Previous)  // With.Constant(0), With.Previous, With.Refuse
 .FillNaN("range", With.Refuse)         // the default: a NaN stops the run, because it should not be there
 ```
+
+Dropping the row is not among the strategies, though it was once meant to be. A strategy stands below the split,
+and dropping rows there would quietly change how many each part holds — the shares the split promised. So it is
+a verb of its own, `DropGaps`, that stands above the split beside `DropWarmUp`: the rows are settled first and
+divided afterwards. Leaving a column out is a verb too, `Drop`, anywhere below the schema.
 
 The strategy is a named value rather than a flag. A boolean parameter says nothing at the place it is
 written — `Fill("trades", true, false)` has to be read with the signature open beside it — whereas the
@@ -164,6 +219,10 @@ always. Filling destroys the distinction between "absent" and "the value happene
 destroys it irreversibly; a caller who does not want the column drops it like any other column, which is a
 verb they already have.
 
+A value that is not a finite number is refused by every fit, not only by `FillNaN`: one not-a-number among the
+training values became the centre a scale was built around. The fit names `fill.nan` as the step that deals
+with it, and the handover refuses one as well.
+
 ### The declaration is a file, and the chain can write it
 
 The pipeline is saved as one file with two blocks, because they have different authors. The
@@ -173,10 +232,31 @@ Keeping them apart is what allows the same declaration to be re-fitted on fresh 
 compared by diffing the declaration alone, and a serving process to load the file without ever knowing the
 builder existed.
 
+```
+{
+  "version": 2,
+  "declaration": [ { "step": "read.csv", "path": "titanic.csv" }, … ],
+  "fitted": [
+    { "step": "split.stratified", "prefix": "9e27e6…",
+      "learned": { "rows.train": 623, "rows.validation": 133, "rows.test": 135, "rows.predict": 0, "digest": "b457b5…" } },
+    { "step": "fill.missing", "prefix": "c1a1de…", "learned": { "gaps": 133, "value": 29 } }
+  ]
+}
+```
+
+Every fitted entry is tied to the steps it was fitted behind. Its `prefix` is a key made from its own step
+and every step above it — a chain of SHA-256 digests, each over the key before it and the step as the step
+writes itself, so the spacing, the order of the keys and the spelling of a number in the file make no
+difference. A fit is never used under steps that changed after it was learned: read back by position, a fit
+spliced under another declaration served a price of 135.7 where 0.9048 was meant. The split writes an entry of
+its own, how many rows went to each part and a digest of the rows it divided, which does not depend on the
+order they came in: what the fit saw travels with what it learned.
+
 The format is deliberately not the pipeline. One internal declaration model is the truth, and every format
 is a front end that produces it: JSON for machines, because it diffs and travels; YAML for people, because
-it carries comments and loses the punctuation; a spreadsheet or a generated form later, for the same reason
-and at the same cost, which is a parser rather than a redesign. The same seam as the readers.
+it carries comments and loses the punctuation; a spreadsheet or a generated form, for the same reason and at
+the same cost, which is a parser rather than a redesign. The same seam as the readers. JSON is written today,
+and a notebook — block by block, or field by field in a generated form — is the second front end.
 
 One thing does not survive being written down, and it decides the shape of the rest: an inline lambda. A
 custom step is therefore registered under a name and looked up while parsing, and a file naming a step that
@@ -190,23 +270,30 @@ it. Anything hand-maintained drifts from the code it describes, and a validator 
 none: a file can then be legal in a way the fluent chain is not.
 
 Validation has two halves and they run at different moments. **Shape** — does the step exist, are its
-parameters the right kind, do the shares fit inside a whole — needs no data at all. **Binding** —
-does that column exist in the source, is it numeric — needs the source open. Both finish before anything
-runs, and both report every fault at once with its position in the file. Someone who is handed one error at
-a time, five times over, stops using the thing.
+parameters the right kind, do the shares fit inside a whole, is every column read where a column of that name
+and kind exists — needs no data at all. The columns are followed from the schema down, each step saying what
+it leaves behind, so a column the schema left out or a step above took away is refused at the step that reads
+it, not a whole run later as a column nobody could find. **Binding** — are the declared columns in the source,
+and do the steps still find theirs among the columns it actually bound — needs the source open, and runs
+before the first step does. Both report every fault at once with its position in the file. Someone who is
+handed one error at a time, five times over, stops using the thing.
 
 ```
-btceur.pdd.yaml(7,3): column 'trades' is not in btceur-1d.csv — there is a 'numberOfTrades'
-btceur.pdd.yaml(4,10): 0.7 and 0.45 ask for 1.15 of 1, and a split cannot use more rows than there are
-btceur.pdd.yaml(2,8): step 'parquet' exists, but the package DeepSharp.Pipelines.Parquet is not referenced
+btceur.pipeline.json(9,5): Step 4: 'feature.indicator' is a step from DeepSharp.Pipelines.Indicators, which is not registered here. Reference the package and register its steps with the catalog that reads this file.
+btceur.pipeline.json(10,5): Step 5: The step 'split.byTime' cannot be read: The shares add up to 1.3 and a split has to use every row.
+btceur.pipeline.json(11,5): Step 6: 'normalize' is not a step anything here knows. The nearest one it knows is 'normalise'.
 ```
 
-That last message is deliberately not the same as the first kind. "I do not know this step" and "I know it,
-but you have not installed it" are two different problems for the reader, and collapsing them costs an
-afternoon.
+The first message is deliberately not the same as the last. "I do not know this step" and "I know it, but you
+have not installed it" are two different problems for the reader, and collapsing them costs an afternoon. A
+refusal a step raises in the language of a C# argument is reported in the file's words, without the name of a
+parameter the file never had.
 
-The file also names the declaration version it was written against, so a pipeline from a year ago either
-loads or says precisely which step changed underneath it.
+The file also names the version it was written against, and each verb the version from which it means what it
+says now. A pipeline from a year ago either loads, or says precisely which step changed underneath it: when the
+splits began to divide rows by what they hold, a file from before names a split that no longer does what it was
+written to do, and it is refused by name rather than run the new way. A file newer than the library is refused
+whole, since it may hold words this one does not know.
 
 ### The share you never write down
 
@@ -226,10 +313,13 @@ built, because that share would otherwise simply disappear.
 ### One description drives both doors
 
 A pipeline can be written in C# or written as a file, and both have to reach exactly as far. That is only
-true if neither is the description: the step types are, and everything else is derived from them. The
-fluent chain is one projection of those types, the JSON schema and the starter template are another, the
-validator reads the same metadata, and the reference page in the documentation is generated rather than
-typed. Add a step, and every one of those gains it without anyone remembering to go and edit it.
+true if neither is the description: the step types are, and everything else is derived from them. Each step
+lists its parameters once, each of one kind from a closed set — a column, a list of columns, a number, a share,
+a word from a set — and from that list the step is written and read, a key nobody defined is refused, the JSON
+schema of the file and the template a new step starts from are generated, the reference of every verb is
+written, and the notebook builds a step's form. Add a step, and every one of those gains it without anyone
+remembering to go and edit it; the schema and the reference are committed files a test compares with what the
+steps say, so neither can fall behind in silence.
 
 The property that keeps it honest is round-tripping. Build a pipeline in code, write it out, read it back,
 and the two declarations must be equal — a test that fails the moment one door learns something the other
@@ -262,6 +352,13 @@ is a leak in mathematical dress, because the row would carry what had not happen
 a gap with a known cause: an indicator of period N has no value for the first N rows, so those rows are
 marked missing rather than filled with a zero that reads like a measurement, and what happens to them is a
 written step.
+
+"Backwards" presumes an order, and a file does not promise one: an export or a query without an ordering hands
+rows over in whatever order it happened to hold them, and the same prices listed newest first gave a five-day
+average of 98.352 where the right one is 99.74. So the order is declared, with `order.by`, above every step
+that reads the rows in their order — an indicator, the warm-up drop, a fill that carries the previous value
+forward — and such a step without one is refused. The order is taken from values compared in their own kind,
+and two rows whose keys are equal are refused, because nothing then says which came first.
 
 The implementations are borrowed, not written. Where a list of them already exists it is adapted rather
 than reproduced — with one wrapping requirement measured on a real one: an indicator that returns a shorter
@@ -338,6 +435,7 @@ DeepSharp.Learners.<Name>   something that learns from prepared data, behind the
 DeepSharp.Backends.<Name>   an engine behind ITensorBackend
 DeepSharp.Import.<Name>     reading weights or a model trained somewhere else
 DeepSharp.Charts            drawing, from the metrics the loop already keeps
+DeepSharp.Notebooks.<Host>  a front end: a pipeline written and looked at in a notebook host
 ```
 
 Naming by role rather than by vendor is not tidiness. A package called after a framework implies that the
@@ -351,6 +449,9 @@ The same test applies to the other two. An engine belongs under `Backends` becau
 which one is underneath; a trainer from an established .NET library belongs under `Learners` because it
 sits beside the model rather than below it. Both distinctions disappear the moment a package is named
 after the logo instead.
+
+A notebook front end is named the same way: its role first, the host it runs in second. The host names what
+it carries, the way a reader's format does; the package is not Verso's, it is DeepSharp's way into it.
 
 A project is created when there is code to put in it. Six empty assemblies laid out in advance are a
 diagram that has to be maintained; the layout above is the decision, and each package appears the day its
@@ -369,7 +470,9 @@ to implement **one** interface, and the four are not interchangeable:
 | an importer | what does a model trained elsewhere look like here | a saved-model or weight-file reader |
 
 A package that implements two of them is doing two jobs and should be two packages; a package that
-implements none is a convenience and belongs in whatever it is convenient for.
+implements none is a convenience and belongs in whatever it is convenient for. A front end is the one
+deliberate exception: the notebook implements none of the four, because it is not a part of the pipeline but a
+way of writing one and looking at it, and it sits beside the seams the way the charts do.
 
 A seam is only real when two implementations of it differ in kind, so each one is held to that: the backend
 has a pure-managed engine beside a native one, rows arrive from a file and from a database reader, a
@@ -400,7 +503,13 @@ carries every scrap of information the original had.
 
 The design knew two answers — fill it, or drop the row — and needed a third. A declared threshold above
 which filling is refused, leaving the marking column to speak for itself, so that a decision this large is
-made once, in the open, rather than by a mean quietly copied into three quarters of a column.
+made once, in the open, rather than by a mean quietly copied into three quarters of a column. It is
+`refuseAbove` on the fill, a share of the training rows, and it has no default: published practice puts the
+line anywhere between two fifths and four fifths, and a number nobody chose would be the same quiet decision
+in another place.
+
+What a fill counts, it counts on the training rows, like everything else it learns: the Titanic ages have 177
+gaps in the file and 133 among the rows a stratified split trains on.
 
 ### Reading a value is reading a dialect
 
@@ -436,26 +545,117 @@ pipeline that also predicts it.
 
 `Replay` is the same declaration over rows nobody had seen, with the numbers the training rows produced and
 nothing fitted again. That is what serving is, and `PreparedData.FromJson` loads both halves back from the
-saved file so a host with no data at all can do it. It is also why a model without its pipeline cannot be
-used: the numbers reaching it would not be the numbers it was trained on.
+saved file so a host with no data at all can do it — with the catalog of the verbs it may hold, because a
+reader that knew only this package's own could not read a file that holds anybody else's. It is also why a
+model without its pipeline cannot be used: the numbers reaching it would not be the numbers it was trained on.
 
-### A step says what it can do, and the run asks
+A replay walks the steps exactly as the run did, so it puts the rows in the declared order and drops the
+warm-up rows too; the same sixty rows used to come out as fifty-six from a run and sixty from a replay.
+`Served` hands the result over the way `Batch` does, without an answer — a served row is the question — and
+with which of the handed-in rows each served row is, since the replay may have dropped some and reordered the
+rest, and a prediction has to find its way back to the row it was made for.
 
-`IPipelineStep` stays two members wide — a verb and how to write itself down — because most of what a step
-might do applies to only some steps. What a step can *do* is said by the capability it implements, and the
-run asks with a type test: `IOpensRows` for a source, `IBindsColumns` for a schema, `IAddsColumns` for
-arithmetic on a row, `IAssignsParts` for dividing the rows, `ILearnsFromData` for the pair of fitting and
-replaying.
+### A step says what it does by what it implements
+
+`IPipelineStep` stays narrow — a verb, how to write itself down, and which columns it reads, which it says
+through its parameters — because most of what a step might do applies to only some steps. What a step can
+*do* is said by the one capability it implements: `IOpensRows` for a source, `IBindsColumns` for a schema,
+`IOrdersRows` for an order, `IAddsColumns` for arithmetic on a row, `IDropsRows` and `IDropsColumns` for taking
+something away, `ISplitStep` for dividing the rows, `IFittedStep` for learning and replaying, and
+`IProducesEvidence` for proof. The target alone acts on nothing, because it names the answer rather than
+changing the data. What every step has belongs to its type — its name, its purpose, its parameters — and a step
+without one of those does not compile.
+
+The run does not ask each step what it can do. Every capability says what doing it means, in terms of what
+the walk holds — the rows, the table, the parts, what was learned — and the walk hands each step to itself.
+A walk that asked was a list every new capability had to be added to, and a list that had to agree with the
+rules about which steps act. A step with two capabilities would be one step the run could not place, and
+outside this library it does not compile; a step with none is refused as a step that does nothing.
 
 Widening the step interface instead would force a split step to answer for column effects and a report step
 to answer for fitting, which is the interface-segregation complaint in its usual disguise. As capabilities,
 a package adds a verb that does something new by implementing one more interface, and nothing existing
 changes.
 
-The order the run uses falls out of the same idea. Everything before the split that adds columns runs
-first, because a feature is what the split then divides rather than something added to one part of it;
-then the rows are divided; then each remaining step is fitted on the training rows and replayed over all
-of them.
+The order the run uses is the order the steps were written in. Everything before the split runs before the
+rows are divided, so a feature is what the split divides rather than something added to one part of it; then
+the rows are divided; then each step below is fitted on the training rows and replayed over all of them. A run,
+a replay and the data shown under one block of a notebook are the same walk, and differ only in whether the
+steps that learn are fitted there or replay what was fitted before. The run used to lift every feature above
+every dropped row; a pipeline that dropped its warm-up rows between two indicators then gave fifty-one rows
+where the steps as written give fifty-six.
+
+### A row is known by what it says
+
+Every row carries who it is: where it stood among the rows as they were read, and a key made from what it says
+— every cell with the name of its column, whatever order the columns came in, digested with SHA-256 so the key
+is the same on every machine. The place is how one run finds a row again: the way back for a target, which
+handed-in row a served one is. The key is how the same row is known across runs, when the same file arrives in
+another order, and it is what a split ranks rows by. It identifies a row and nothing more; no value reaches a fit
+or a model through it, so the rule that an undeclared column is not carried still holds.
+
+The same key finds the rows that are there more than once. A repeated row in training and in test is one a
+model meets again after learning it, which reads as skill and is not, so a profile counts them, and a split
+keeps every copy of one in the same part.
+
+### The data after any step, standing where the split puts it
+
+`ViewAt` gives the data as it stands after any number of steps, and it is what the grid under a notebook's
+block shows and what evidence at that place measures. Every row in it says where it stands: in the part the
+split puts it in, dropped before the split reaches it, or undivided when nothing divides it. The split is found
+wherever it is declared, below the view as much as above it, because a range or a profile drawn above the split
+over every row would let the rows a model is measured on shape what it is shown — a view with no split read all
+891 Titanic rows as training rows.
+
+So a view above the split walks on down to the split, and it checks what it walks. A step below it that reads a
+column the rows lack is refused at its own view and at the run, and never at a view above it: the rows there do
+not depend on it. A view is therefore identified by the steps it walks and the place it stands —
+`ViewKeyAt` — together with the bytes it was read from, and two views with the same key over the same bytes are
+the same view.
+
+### A notebook is one more front end of the declaration
+
+`DeepSharp.Notebooks.Verso` writes a pipeline as a Verso notebook: one block per step, each block the step's
+own JSON, and the blocks, in the order they stand, are the steps in the order they run. The notebook is the
+declaration; saving it saves the steps, and what a block shows is never saved, because it is worked out from
+somebody's own data each time it is asked for. The steps are read through a catalog as a file's are, and
+assembled through the same constructor, afresh at every gesture from the blocks as they are, so a block
+inserted, moved, deleted or edited is always seen. The longest run of blocks from the top that makes a
+declaration is the pipeline, and a block below it says which block stops it.
+
+A gesture on the grid changes the declaration, never the data. Excluding a column takes it out of the schema
+when nothing reads it and the rest is dropped anyway, and otherwise writes a `drop.columns` block after the last
+step that reads it; marking one a category changes its kind in the schema. Every gesture carries the whole state
+it asks for, so the same gesture twice does the same thing once, and a change that would break a rule is
+refused at the block with the rule it breaks, above data that is as it was. A block the notebook rewrites is
+written as a new block in the old one's place, and run, because Verso tells a front end nothing about a block
+whose text a part changed, and the next keystroke there would put the old text back; under a layout that
+cannot add a block the change is refused rather than half made.
+
+What lives between gestures is a session per notebook: which block shows which view, what a gesture asked a
+block for, one view kept under its key and the bytes it was read from, and the rows the source opened last,
+keyed by the read step, the path and a SHA-256 of the bytes, which are read and hashed on every use. Keeping
+the parsed rows took close to half off every show on files of five and eleven megabytes, measured inside
+Verso's own engine. The session is held by the block type Verso loaded, the one object every part of the
+notebook reaches — the block type's own kernel directly, every other part through the host that loaded it —
+and one gesture on it runs at a time. It is never static and never shared with another notebook. A grid whose
+view or whose offers the blocks no longer match is cleared, not worked out again: work runs when somebody asks
+for it.
+
+C# cells in the same notebook are handed the pipeline as text — the declaration, with what the whole pipeline's
+run learned while it is the run of the steps declared now over the bytes there now — because the notebook's
+types and a cell's are loaded apart and are not the same types even when their names are. The key is one no C#
+variable can have, so a cell reads it afresh every time rather than the value it saw first. It is taken back
+whenever the blocks may no longer make what it holds, and only a gesture or the toolbar's run hands it over
+again, which is as far as the notebook can see: an edit that was never run, or a block deleted or moved, tells
+no part of it anything.
+
+A notebook of blocks is saved as a `.verso` file. Saving one as Jupyter is refused, because a Jupyter file has
+no place for a block type and would keep the steps as code cells; opening a Jupyter file whose code cells read
+as steps is refused too. Two ways around that are written down rather than trusted: `verso convert` writes
+Jupyter without asking any extension, and a package installed from Verso's Extensions panel is loaded only after
+a Jupyter file has been opened, so the refusal on the way in holds only for an install at the top of Verso's
+extensions folder. A test pins the order Verso opens things in, so a Verso that changes it is noticed.
 
 ## Decisions
 
@@ -550,7 +750,9 @@ borrowing a result.
 
 ## What is deliberately absent
 
-- **A global backend, context or session.** Nothing reaches for a shared instance.
+- **A global backend, context or session.** Nothing reaches for a shared instance. The notebook keeps a
+  session, and it is the notebook's own: held by the block type Verso loaded for that notebook, handed to
+  every part through the host that loaded it, never static and never shared.
 - **A graph that is not a model.** The declarative front door will produce the same object the imperative
   one does. Two representations of one network means two engines to keep in step, and they diverge on the
   first unusual model.

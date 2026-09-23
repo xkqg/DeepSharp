@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>DeepSharp.Notebooks.Verso</PackageId>
+    <Description>A DeepSharp pipeline written as a notebook in Verso, one block per step. Each block is the step's own JSON, edited as text or in Verso's properties panel, and shows the data at that point on request: a grid coloured per column over the training rows, a profile that names the step answering each alert, and a heatmap of the complete training rows. The notebook is the declaration — exported as the same pipeline file, and handed to C# cells as text.</Description>
+    <PackageTags>deepsharp;pipeline;pdd;machine-learning;data-preparation;verso;notebook;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The oldest abstractions carrying every member this package calls: a cell type that keeps no outputs,
+         an interaction that says it changed the notebook and sees the notebook's cells. Verso refuses an
+         extension compiled against a newer minor than the one it runs, so the floor stays low and a test pins
+         the version compiled against. A range rather than an exact pin: an exact pin beside Verso's own engine
+         in one test project is NU1608, an error here (measured). -->
+    <PackageReference Include="Verso.Abstractions" Version="[1.1.0, 2.0.0)" />
+    <!-- The colour maps, the correlation and the heatmap are borrowed, as the indicators are. -->
+    <PackageReference Include="MatPlotLibNet" Version="1.18.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+    <ProjectReference Include="..\DeepSharp.Pipelines.Indicators\DeepSharp.Pipelines.Indicators.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The session's parts are internal, and the suite measures what only they can say: how many times a source
+         was parsed, which is the whole point of keeping one. -->
+    <InternalsVisibleTo Include="DeepSharp.Notebooks.Verso.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

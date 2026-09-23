@@ -125,7 +125,7 @@ public class TimePartTests
     public void TheEncoderTakesThemFromTheStepJustAsItTakesTheSchemasOwn()
     {
         var prepared = Pdd.Create()
-            .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "apple.csv"))
+            .ReadCsv(Repository.Data("apple.csv"))
             .Declare(schema => schema.Timestamp("Date").Number("AAPL.Close").Category("direction"))
             .TimeParts("Date", TimePart.Season, TimePart.DayOfWeek)
             .SplitByTime("Date", 0.70, 0.15)
@@ -172,7 +172,7 @@ public class TimePartTests
             .TimePartsAsNumbers("when", TimePart.Year)
             .Declaration;
 
-        var returned = PipelineDeclaration.FromJson(declaration.ToJson());
+        var returned = PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn());
 
         Assert.Equal(declaration, returned);
         Assert.True(((TimePartsStep)returned.Steps[2]).AsCategories);
@@ -184,7 +184,7 @@ public class TimePartTests
     [InlineData("""{"declaration":[{"step":"feature.timeParts","column":"w","asCategories":true}]}""")]
     public void AFileNamingAPieceNobodyDefined_IsRefused(string json)
     {
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -197,18 +197,5 @@ public class TimePartTests
         Assert.NotEqual(one, new TimePartsStep("when", [TimePart.Month]));
         Assert.NotEqual(one, new TimePartsStep("other", [TimePart.Year]));
         Assert.NotEqual(one, new TimePartsStep("when", [TimePart.Year], asCategories: false));
-    }
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
     }
 }

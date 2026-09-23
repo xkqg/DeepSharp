@@ -17,6 +17,7 @@ public class DeclarationRoundTripTests
     private static PipelineDeclaration ADeclaration() =>
         Pdd.Create()
             .ReadCsv("btceur-1d.csv")
+            .Declare(schema => schema.Timestamp("timestamp").Number("trades"))
             .SplitByTime("timestamp", train: 0.70, validation: 0.15)
             .FillMissing("trades", With.Mean)
             .Declaration;
@@ -26,7 +27,7 @@ public class DeclarationRoundTripTests
     {
         var original = ADeclaration();
 
-        var returned = PipelineDeclaration.FromJson(original.ToJson());
+        var returned = PipelineDeclaration.FromJson(original.ToJson(), StepCatalog.BuiltIn());
 
         Assert.Equal(original, returned);
     }
@@ -36,7 +37,7 @@ public class DeclarationRoundTripTests
     {
         var empty = Pdd.Create().Declaration;
 
-        Assert.Equal(empty, PipelineDeclaration.FromJson(empty.ToJson()));
+        Assert.Equal(empty, PipelineDeclaration.FromJson(empty.ToJson(), StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -49,13 +50,14 @@ public class DeclarationRoundTripTests
 
         var steps = document.RootElement.GetProperty("declaration");
 
-        Assert.Equal(3, steps.GetArrayLength());
+        Assert.Equal(4, steps.GetArrayLength());
         Assert.Equal("read.csv", steps[0].GetProperty("step").GetString());
         Assert.Equal("btceur-1d.csv", steps[0].GetProperty("path").GetString());
-        Assert.Equal("split.byTime", steps[1].GetProperty("step").GetString());
-        Assert.Equal(0.70, steps[1].GetProperty("train").GetDouble());
-        Assert.Equal("fill.missing", steps[2].GetProperty("step").GetString());
-        Assert.Equal("mean", steps[2].GetProperty("with").GetString());
+        Assert.Equal("declare", steps[1].GetProperty("step").GetString());
+        Assert.Equal("split.byTime", steps[2].GetProperty("step").GetString());
+        Assert.Equal(0.70, steps[2].GetProperty("train").GetDouble());
+        Assert.Equal("fill.missing", steps[3].GetProperty("step").GetString());
+        Assert.Equal("mean", steps[3].GetProperty("with").GetString());
     }
 
     [Fact]
@@ -65,9 +67,55 @@ public class DeclarationRoundTripTests
         // pipeline in the file.
         const string json = """{"declaration":[{"step":"read.avro","path":"x.avro"}]}""";
 
-        var refused = Assert.Throws<NotSupportedException>(() => PipelineDeclaration.FromJson(json));
+        var refused = Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
 
         Assert.Contains("read.avro", refused.Message);
+    }
+
+    [Fact]
+    public void AMisspelledStepAndAStepFromAPackageNotRegistered_AreTwoDifferentFaults()
+    {
+        // "I do not know this step" and "I know it, but its package is not here" are two different problems
+        // for whoever reads them, and the one message that said "either" left them to guess which.
+        var misspelled = Assert.Throws<PipelineFileException>(
+            () => PipelineDeclaration.FromJson("""{"declaration":[{"step":"read.cvs","path":"x.csv"}]}""", StepCatalog.BuiltIn()));
+
+        var elsewhere = Assert.Throws<PipelineFileException>(
+            () => PipelineDeclaration.FromJson(
+                """{"declaration":[{"step":"feature.indicator","column":"x","indicator":"sma","period":5,"columns":["a"]}]}""", StepCatalog.BuiltIn()));
+
+        Assert.Contains("'read.cvs'", misspelled.Message, StringComparison.Ordinal);
+        Assert.Contains("'read.csv'", misspelled.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("package", misspelled.Message, StringComparison.Ordinal);
+
+        Assert.Contains("DeepSharp.Pipelines.Indicators", elsewhere.Message, StringComparison.Ordinal);
+        Assert.Equal("DeepSharp.Pipelines.Indicators", StepCatalog.PackageThatBrings("feature.indicator"));
+        Assert.Null(StepCatalog.PackageThatBrings("read.cvs"));
+
+        // A catalog that knows nothing has nothing to suggest.
+        using var document = System.Text.Json.JsonDocument.Parse("""{"step":"read.cvs","path":"x.csv"}""");
+        var empty = Assert.Throws<NotSupportedException>(() => new StepCatalog().Read(document.RootElement));
+
+        Assert.DoesNotContain("nearest", empty.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryVerbAnotherPackageBrings_IsKnownToComeFromThatPackage()
+    {
+        // Both ways round: a satellite's verb that the core does not know comes from it would be reported as
+        // a misspelling, and a verb the core says comes from a package that no longer brings it would send
+        // somebody to install the wrong thing.
+        var core = StepCatalog.BuiltIn();
+        var everything = StepCatalog.BuiltIn();
+        new IndicatorSteps().AddTo(everything);
+
+        var brought = everything.Descriptions.Select(description => description.Verb)
+            .Where(verb => !core.Knows(verb))
+            .ToArray();
+
+        Assert.NotEmpty(brought);
+        Assert.All(brought, verb => Assert.Equal(typeof(IndicatorSteps).Assembly.GetName().Name, StepCatalog.PackageThatBrings(verb)));
+        Assert.Equal(brought.Order(StringComparer.Ordinal), StepCatalog.VerbsOtherPackagesBring.Keys.Order(StringComparer.Ordinal));
     }
 
     [Fact]
@@ -75,21 +123,21 @@ public class DeclarationRoundTripTests
     {
         const string json = """{"declaration":[{"path":"x.csv"}]}""";
 
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]
     public void AFileWithoutADeclaration_IsRefused()
     {
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson("""{"fitted":{}}"""));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson("""{"fitted":{}}""", StepCatalog.BuiltIn()));
     }
 
     [Fact]
     public void AStepMissingOneOfItsParameters_IsRefusedByTheStepThatNeedsIt()
     {
-        const string json = """{"declaration":[{"step":"split.byTime","column":"t","train":0.7}]}""";
+        const string json = """{"version":2,"declaration":[{"step":"split.byTime","column":"t","train":0.7}]}""";
 
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -117,25 +165,24 @@ public class DeclarationRoundTripTests
         // things depending on which packages happened to be present.
         var catalog = StepCatalog.BuiltIn();
 
-        var refused = Assert.Throws<InvalidOperationException>(
-            () => catalog.Register("read.csv", element => ReadCsvStep.ReadFrom(element)));
+        var refused = Assert.Throws<InvalidOperationException>(() => catalog.Register<ReadCsvStep>());
 
         Assert.Contains("read.csv", refused.Message);
     }
 
     [Fact]
-    public void AReaderRegisteredUnderOneVerbMayNotHandBackAnother()
+    public void AStepTypeWhoseStepsAnswerToAnotherVerb_IsRefusedWhenItIsRead()
     {
-        // The verb is written by the step and read by the catalog, so the two can disagree. When they do,
-        // a file loads under one name and writes itself back under a different one, and the round trip
-        // still reports the declarations equal because it compares declarations, never documents.
-        const string json = """{"declaration":[{"step":"read.avro","path":"x.avro"}]}""";
+        // The verb is named by the type and answered by the step, so the two can disagree. When they do, a
+        // file loads under one name and writes itself back under a different one, and the round trip still
+        // reports the declarations equal because it compares declarations, never documents.
+        const string json = """{"declaration":[{"step":"read.parquet"}]}""";
         var catalog = StepCatalog.BuiltIn();
-        catalog.Register("read.avro", element => new ReadCsvStep(element.GetProperty("path").GetString()!));
+        catalog.Register<MisnamedStep>();
 
-        var refused = Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json, catalog));
+        var refused = Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, catalog));
 
-        Assert.Contains("read.avro", refused.Message);
+        Assert.Contains("read.parquet", refused.Message);
         Assert.Contains("read.csv", refused.Message);
     }
 }

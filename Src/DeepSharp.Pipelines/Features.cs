@@ -53,23 +53,35 @@ public enum Period
 /// <summary>
 /// Writing a signed value down in the shape a model is going to read it.
 /// </summary>
-internal static class Forms
+internal static class FormExtensions
 {
+    /// <summary>The names of the columns one signed value becomes, in this form.</summary>
+    /// <param name="form">How it is written down.</param>
+    /// <param name="name">What the value is called.</param>
+    /// <returns>One name, or two.</returns>
+    internal static IEnumerable<string> Names(this Form form, string name) =>
+        form == Form.SplitSign ? [$"{name}_pos", $"{name}_neg"] : [name];
+
     /// <summary>The columns one signed value becomes, in this form.</summary>
     /// <param name="form">How to write it down.</param>
     /// <param name="name">What the value is called.</param>
     /// <param name="values">The value for each row, between minus one and one.</param>
-    /// <returns>One column, or two.</returns>
-    internal static IEnumerable<IColumn> Write(Form form, string name, double?[] values) => form switch
+    /// <returns>One column, or two, named as <see cref="Names"/> says.</returns>
+    internal static IEnumerable<IColumn> Written(this Form form, string name, double?[] values)
     {
-        Form.Signed => [new Column<double>(name, ColumnKind.Number, values)],
-        Form.Unit => [new Column<double>(name, ColumnKind.Number, values.Select(Shifted))],
-        _ =>
-        [
-            new Column<double>($"{name}_pos", ColumnKind.Number, values.Select(value => Half(value, up: true))),
-            new Column<double>($"{name}_neg", ColumnKind.Number, values.Select(value => Half(value, up: false))),
-        ],
-    };
+        var names = form.Names(name).ToArray();
+
+        return form switch
+        {
+            Form.Signed => [new Column<double>(names[0], ColumnKind.Number, values)],
+            Form.Unit => [new Column<double>(names[0], ColumnKind.Number, values.Select(Shifted))],
+            _ =>
+            [
+                new Column<double>(names[0], ColumnKind.Number, values.Select(value => Half(value, up: true))),
+                new Column<double>(names[1], ColumnKind.Number, values.Select(value => Half(value, up: false))),
+            ],
+        };
+    }
 
     private static double? Shifted(double? value) => value is { } number ? (number + 1) / 2 : null;
 
@@ -86,8 +98,20 @@ internal static class Forms
 /// smaller, and everything in it survives being written down. Nothing here learns from the data — it is
 /// arithmetic on one row — so a feature belongs before the split.
 /// </remarks>
-public sealed record AddFeatureStep : IPipelineStep<AddFeatureStep>, IAddsColumns
+public sealed record AddFeatureStep : IPipelineStep<AddFeatureStep>, IAddsColumns, IDescribesColumns
 {
+    private static readonly NewColumnParameter ColumnKey = new(
+        "column", "What the new column is called.", "feature");
+
+    private static readonly ColumnParameter LeftKey = new(
+        "left", "The column on the left of the arithmetic.", "left", ColumnKinds.Numbers);
+
+    private static readonly OneOfParameter<Arithmetic> ArithmeticKey = new(
+        "arithmetic", "What is done with the two columns: added, subtracted, multiplied or divided.", Arithmetic.Minus);
+
+    private static readonly ColumnParameter RightKey = new(
+        "right", "The column on the right of the arithmetic.", "right", ColumnKinds.Numbers);
+
     /// <summary>Declares a column worked out from two others.</summary>
     /// <param name="name">What the new column is called.</param>
     /// <param name="left">The column on the left.</param>
@@ -96,15 +120,18 @@ public sealed record AddFeatureStep : IPipelineStep<AddFeatureStep>, IAddsColumn
     /// <exception cref="ArgumentException">A name is empty.</exception>
     public AddFeatureStep(string name, string left, Arithmetic arithmetic, string right)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-        ArgumentException.ThrowIfNullOrWhiteSpace(left);
-        ArgumentException.ThrowIfNullOrWhiteSpace(right);
-
-        Column = name;
-        Left = left;
-        Arithmetic = arithmetic;
-        Right = right;
+        Column = ColumnKey.Require(name)!;
+        Left = LeftKey.Require(left);
+        Arithmetic = ArithmeticKey.Require(arithmetic);
+        Right = RightKey.Require(right);
     }
+
+    /// <inheritdoc />
+    public static StepParameters<AddFeatureStep> Parameters { get; } = new StepParameters<AddFeatureStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(LeftKey, step => step.Left)
+        .With(ArithmeticKey, step => step.Arithmetic)
+        .With(RightKey, step => step.Right);
 
     /// <summary>What the new column is called.</summary>
     public string Column { get; }
@@ -119,7 +146,18 @@ public sealed record AddFeatureStep : IPipelineStep<AddFeatureStep>, IAddsColumn
     public string Right { get; }
 
     /// <inheritdoc />
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return before.With(Column, ColumnKind.Number);
+    }
+
+    /// <inheritdoc />
     public static string Name => "feature.add";
+
+    /// <inheritdoc />
+    public static string Purpose => "Adds a column worked out from two others by plain arithmetic.";
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -129,8 +167,8 @@ public sealed record AddFeatureStep : IPipelineStep<AddFeatureStep>, IAddsColumn
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        var left = Numbers.Of(table, Left);
-        var right = Numbers.Of(table, Right);
+        var left = table.NumbersOf(Left);
+        var right = table.NumbersOf(Right);
 
         var values = new double?[table.RowCount];
 
@@ -155,28 +193,11 @@ public sealed record AddFeatureStep : IPipelineStep<AddFeatureStep>, IAddsColumn
         table.Put(new Column<double>(Column, ColumnKind.Number, values));
     }
 
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-        writer.WriteString("left", Left);
-        writer.WriteString("arithmetic", Arithmetic.ToString().ToLowerInvariant());
-        writer.WriteString("right", Right);
-        writer.WriteEndObject();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     public static AddFeatureStep ReadFrom(JsonElement element) =>
-        new(element.RequiredString("column"),
-            element.RequiredString("left"),
-            element.RequiredEnum<Arithmetic>("arithmetic"),
-            element.RequiredString("right"));
+        new(ColumnKey.Read(element)!, LeftKey.Read(element), ArithmeticKey.Read(element), RightKey.Read(element));
 }
 
 /// <summary>
@@ -187,8 +208,17 @@ public sealed record AddFeatureStep : IPipelineStep<AddFeatureStep>, IAddsColumn
 /// neighbours, and a model handed the plain number is told they are as far apart as two values can be.
 /// A sine and a cosine put the wrap where it belongs, and nothing about it is learned from the data.
 /// </remarks>
-public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IAddsColumns
+public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IAddsColumns, IDescribesColumns
 {
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column holding the moment in time.", "when", ColumnKinds.Moments);
+
+    private static readonly OneOfParameter<Period> PeriodKey = new(
+        "period", "Which cycle the moment is placed on: the hour of the day, the day of the week or of the month, the month of the year.", Period.MonthOfYear);
+
+    private static readonly OneOfParameter<Form> FormKey = new(
+        "form", "How the two values are written down: as they are, shifted between nothing and one, or split into how far up and how far down.", Form.Signed);
+
     /// <summary>Declares a moment in time written as a place on a circle.</summary>
     /// <param name="column">The column holding the moment.</param>
     /// <param name="period">Which cycle to place it on.</param>
@@ -196,12 +226,16 @@ public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IAddsColumns
     /// <exception cref="ArgumentException">The column has no name.</exception>
     public CyclicalStep(string column, Period period, Form form = Form.Signed)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(column);
-
-        Column = column;
-        Period = period;
-        Form = form;
+        Column = ColumnKey.Require(column);
+        Period = PeriodKey.Require(period);
+        Form = FormKey.Require(form);
     }
+
+    /// <inheritdoc />
+    public static StepParameters<CyclicalStep> Parameters { get; } = new StepParameters<CyclicalStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(PeriodKey, step => step.Period)
+        .With(FormKey, step => step.Form);
 
     /// <summary>The column holding the moment.</summary>
     public string Column { get; }
@@ -213,7 +247,24 @@ public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IAddsColumns
     public Form Form { get; }
 
     /// <inheritdoc />
+    /// <remarks>Written split by its sign, each value becomes two halves, and each is known to be one.</remarks>
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return Stems.Aggregate(before, (state, stem) => Form == Form.SplitSign
+            ? Form.Names(stem).Aggregate(state, (halves, half) => halves.WithHalf(half, stem))
+            : state.With(stem, ColumnKind.Number));
+    }
+
+    // The two values a moment becomes, before a form writes each of them down.
+    private IEnumerable<string> Stems => [$"{Column}_{Period.ToString().ToLowerInvariant()}_sin", $"{Column}_{Period.ToString().ToLowerInvariant()}_cos"];
+
+    /// <inheritdoc />
     public static string Name => "feature.cyclical";
+
+    /// <inheritdoc />
+    public static string Purpose => "Writes a moment in time as a place on a circle, so that the ends of a cycle meet.";
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -245,34 +296,19 @@ public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IAddsColumns
             cosines[row] = Math.Cos(turn);
         }
 
-        var stem = $"{Column}_{Period.ToString().ToLowerInvariant()}";
+        var stems = Stems.ToArray();
 
-        foreach (var column in Forms.Write(Form, $"{stem}_sin", sines).Concat(Forms.Write(Form, $"{stem}_cos", cosines)))
+        foreach (var column in Form.Written(stems[0], sines).Concat(Form.Written(stems[1], cosines)))
         {
             table.Put(column);
         }
-    }
-
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-        writer.WriteString("period", Period.ToString().ToLowerInvariant());
-        writer.WriteString("form", Form.ToString().ToLowerInvariant());
-        writer.WriteEndObject();
     }
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     public static CyclicalStep ReadFrom(JsonElement element) =>
-        new(element.RequiredString("column"),
-            element.RequiredEnum<Period>("period"),
-            element.RequiredEnum<Form>("form"));
+        new(ColumnKey.Read(element), PeriodKey.Read(element), FormKey.Read(element));
 
     private double Length => Period switch
     {
@@ -294,35 +330,12 @@ public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IAddsColumns
 /// <summary>
 /// A step that puts columns onto the table without learning anything from the data.
 /// </summary>
-public interface IAddsColumns : IPipelineStep
+public interface IAddsColumns : IActsInAWalk
 {
     /// <summary>Works the new columns out and puts them on the table.</summary>
     /// <param name="table">The data, changed in place.</param>
     void AddTo(Table table);
-}
 
-/// <summary>
-/// Reading a column as numbers, whatever kind of number it holds.
-/// </summary>
-/// <remarks>
-/// Public because a package that adds a verb needs exactly this and would otherwise write its own, and two
-/// readings of "what is a number here" is one too many: a boolean counts as one and nought, a gap stays a
-/// gap, and words are refused by name.
-/// </remarks>
-public static class Numbers
-{
-    /// <summary>The column's values as numbers, with a gap where a cell is a gap.</summary>
-    /// <param name="table">The table to look in.</param>
-    /// <param name="name">The column's name.</param>
-    /// <returns>One value per row.</returns>
-    /// <exception cref="InvalidOperationException">The column holds something that is not a number.</exception>
-    public static double?[] Of(Table table, string name) => table[name] switch
-    {
-        Column<double> numbers => [.. Enumerable.Range(0, numbers.Count).Select(row => numbers[row])],
-        Column<long> whole => [.. Enumerable.Range(0, whole.Count).Select(row => (double?)whole[row])],
-        Column<bool> flags =>
-            [.. Enumerable.Range(0, flags.Count).Select(row => flags[row] is { } flag ? flag ? 1 : 0 : (double?)null)],
-        var other => throw new InvalidOperationException(
-            $"'{name}' holds {other.Kind.ToString().ToLowerInvariant()}, and this step works on numbers."),
-    };
+    /// <inheritdoc />
+    void IActsInAWalk.ActOn(Walk walk) => AddTo(walk.Table);
 }

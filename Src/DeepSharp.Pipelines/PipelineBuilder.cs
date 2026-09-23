@@ -37,11 +37,10 @@ public sealed class PipelineBuilder
         ArgumentNullException.ThrowIfNull(step);
         ThrowIfSplit();
 
-        if (step is IFittedStep)
-        {
-            throw new InvalidOperationException(
-                $"'{step.Verb}' learns from the data, so it belongs after the split, not before it.");
-        }
+        // Refused where it is written, by the same rules the declaration keeps — a step that learns, above a
+        // split not written yet, among them — rather than at the moment somebody asks for the declaration and
+        // has to work out which line made it wrong.
+        PipelineDeclaration.ThrowIfFaulty([.. _steps, step]);
 
         _steps.Add(step);
 
@@ -80,6 +79,15 @@ public sealed class PipelineBuilder
 
         return Add(new DeclareStep(builder.Columns, remainder));
     }
+
+    /// <summary>Puts the rows in order by one or more columns, smallest first.</summary>
+    /// <param name="columns">The columns to order by, the one that decides first first.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// What a moving average, a warm-up drop and a gap filled with the value before it need above them: the
+    /// order they read is then the one declared here, whichever order the file or the query handed over.
+    /// </remarks>
+    public PipelineBuilder OrderBy(params string[] columns) => Add(new OrderByStep(columns));
 
     /// <summary>Adds a column worked out from two others.</summary>
     /// <param name="name">What the new column is called.</param>
@@ -143,6 +151,37 @@ public sealed class PipelineBuilder
     /// indicators, 506 rows are 487 rows of data and nineteen rows of not-yet.
     /// </remarks>
     public PipelineBuilder DropWarmUp(int atMost = 1000) => Add(new DropWarmUpStep(atMost));
+
+    /// <summary>Leaves columns out from here on.</summary>
+    /// <param name="columns">The columns to leave out.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// For a column the schema has to name — because a step reads it first, or made it — and nobody wants
+    /// handed to a model. A column nobody needs at all is simply left out of the schema.
+    /// </remarks>
+    public PipelineBuilder Drop(params string[] columns) => Add(new DropColumnsStep(columns));
+
+    /// <summary>Profiles the columns where it stands, on the rows the split trains on.</summary>
+    /// <param name="columns">The columns to profile; none, for every column here.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>Evidence, declared before the numbers exist; the run keeps it, the file does not.</remarks>
+    public PipelineBuilder Profile(params string[] columns) => Add(new ProfileStep(columns));
+
+    /// <summary>Sets out the rows a correlation between columns is drawn from, on the rows the split trains on.</summary>
+    /// <param name="columns">Two or more columns holding numbers.</param>
+    /// <param name="shown">Drawn, or as the numbers themselves.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public PipelineBuilder Correlation(IEnumerable<string> columns, Shown shown = Shown.Drawn) =>
+        Add(new CorrelationStep(columns, shown));
+
+    /// <summary>Drops every row that has a gap in any of these columns.</summary>
+    /// <param name="columns">The columns a row may not have a gap in.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// Here, above the split, where every part loses the row alike. Below it the parts would shrink without
+    /// knowing, which is why the split is only offered after this.
+    /// </remarks>
+    public PipelineBuilder DropGaps(params string[] columns) => Add(new DropGapsStep(columns));
 
     /// <summary>Holds a share of the rows back, to predict on once a model has been trained.</summary>
     /// <param name="share">How much to hold back, as a fraction or as a percentage.</param>
@@ -237,6 +276,7 @@ public sealed class PipelineBuilder
     private FittingBuilder Split(ISplitStep step)
     {
         ThrowIfSplit();
+        PipelineDeclaration.ThrowIfFaulty([.. _steps, step]);
 
         _steps.Add(step);
         _split = true;
@@ -286,6 +326,7 @@ public sealed class FittingBuilder
     public FittingBuilder Add(IPipelineStep step)
     {
         ArgumentNullException.ThrowIfNull(step);
+        PipelineDeclaration.ThrowIfFaulty([.. _steps, step]);
 
         _steps.Add(step);
 
@@ -295,10 +336,15 @@ public sealed class FittingBuilder
     /// <summary>Fills the gaps in a column, the named way.</summary>
     /// <param name="column">The column with gaps in it.</param>
     /// <param name="strategy">What to put in them — <see cref="With"/> has the names.</param>
+    /// <param name="refuseAbove">
+    /// The share of the training rows that may be gaps and still be filled; above it the column is left out and
+    /// the column saying where the gaps were speaks for it. Nothing, for no limit.
+    /// </param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
     /// <exception cref="ArgumentException">The column has no name, or the strategy is not one of the names.</exception>
-    public FittingBuilder FillMissing(string column, FillStrategy strategy) =>
-        Add(new FillMissingStep(column, strategy));
+    /// <exception cref="ArgumentOutOfRangeException">The share is not one.</exception>
+    public FittingBuilder FillMissing(string column, FillStrategy strategy, double? refuseAbove = null) =>
+        Add(FillMissingStep.Of(column, strategy, refuseAbove));
 
     /// <summary>Brings a column onto a comparable scale, by numbers learned from the training rows.</summary>
     /// <param name="column">The column to scale.</param>
@@ -349,36 +395,36 @@ public sealed class FittingBuilder
         string column, Bounds bounds = Bounds.Iqr, double at = 1.5, Outlier outlier = Outlier.Clip) =>
         Add(new ClipOutliersStep(column, bounds, at, outlier));
 
-    /// <summary>Writes every column the schema declared a category down as numbers.</summary>
+    /// <summary>Writes every column that stands for a group down as numbers.</summary>
     /// <param name="how">One column per category, or one column of places.</param>
     /// <param name="unseen">What happens to a category the training rows never held.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
-    /// <exception cref="InvalidOperationException">The schema declares no categories, or there is no schema.</exception>
+    /// <exception cref="InvalidOperationException">Nothing before it declares a category.</exception>
     /// <remarks>
-    /// Which columns are categories was said once, at the top, where the data was declared. This takes them
-    /// by name rather than asking again, so adding a category to the schema does not mean remembering to
-    /// add a line down here as well.
+    /// Which columns are categories was said once, where the data was declared or by the step that made the
+    /// column. This is one step that takes every category where it stands, so marking one more column a
+    /// category does not mean remembering to add a line down here as well.
     /// </remarks>
-    public FittingBuilder EncodeCategories(As how = As.OneHot, Unseen unseen = Unseen.Reserve)
-    {
-        // From everything that has said so far which of its columns stand for a group: the schema, for the
-        // columns that came out of the file, and any step that made one -- taking a moment in time apart,
-        // say. Said once each, collected here, rather than named a second time.
-        var categories = _steps.OfType<IDeclaresCategories>().SelectMany(step => step.Categories).ToArray();
+    public FittingBuilder EncodeCategories(As how = As.OneHot, Unseen unseen = Unseen.Reserve) =>
+        Add(new EncodeCategoriesStep(how, unseen));
 
-        if (categories.Length == 0)
-        {
-            throw new InvalidOperationException(
-                "This pipeline declares no categories, so there is nothing to write down as numbers.");
-        }
+    /// <summary>Leaves columns out from here on.</summary>
+    /// <param name="columns">The columns to leave out.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>The column that says where a gap was is written always, and this is how it is left out.</remarks>
+    public FittingBuilder Drop(params string[] columns) => Add(new DropColumnsStep(columns));
 
-        foreach (var column in categories)
-        {
-            Add(new EncodeStep(column, how, unseen));
-        }
+    /// <summary>Profiles the columns where it stands, on the training rows.</summary>
+    /// <param name="columns">The columns to profile; none, for every column here.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public FittingBuilder Profile(params string[] columns) => Add(new ProfileStep(columns));
 
-        return this;
-    }
+    /// <summary>Sets out the rows a correlation between columns is drawn from, on the training rows.</summary>
+    /// <param name="columns">Two or more columns holding numbers.</param>
+    /// <param name="shown">Drawn, or as the numbers themselves.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public FittingBuilder Correlation(IEnumerable<string> columns, Shown shown = Shown.Drawn) =>
+        Add(new CorrelationStep(columns, shown));
 
     /// <summary>Says what happens to a value in a column that is not a number.</summary>
     /// <param name="column">The column to watch.</param>

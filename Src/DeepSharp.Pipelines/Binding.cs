@@ -54,7 +54,17 @@ public static class SchemaBinding
             }
         }
 
-        return new Table(columns);
+        // Each row is keyed by the record it was read from, every column of it, so leaving a column out of the
+        // schema moves no row to another part of a split.
+        var digest = new RecordDigest(source.ColumnNames);
+        var identities = new RowIdentity[rows.Length];
+
+        for (var at = 0; at < rows.Length; at++)
+        {
+            identities[at] = new RowIdentity(at, digest.Of(rows[at]));
+        }
+
+        return Table.Owning(columns, identities);
     }
 
     private static Dictionary<string, int> Positions(DeclareStep schema, IRowSource source)
@@ -117,9 +127,19 @@ public static class SchemaBinding
             return null;
         }
 
-        return double.TryParse(cell, NumberStyles.Float, CultureInfo.InvariantCulture, out var value)
+        if (!double.TryParse(cell, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        {
+            throw Unreadable(declared, cell, row, "a number");
+        }
+
+        // A finite number, or one of the invariant spellings of a value that is not one: those are read as
+        // what they say, for fill.nan to deal with. Digits that make an infinity are a number too large to
+        // hold, and any other spelling of the words is not a number at all.
+        return double.IsFinite(value) || cell!.Trim() is "NaN" or "Infinity" or "-Infinity"
             ? value
-            : throw Unreadable(declared, cell, row, "a number");
+            : throw (cell!.Any(char.IsDigit)
+                ? new FormatException($"Row {row + 1}, column '{declared.Name}': '{cell}' is a number too large to hold.")
+                : Unreadable(declared, cell, row, "a number"));
     }
 
     private static long? AsInteger(ColumnDeclaration declared, string? cell, int row)

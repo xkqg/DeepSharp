@@ -98,6 +98,23 @@ public sealed class CsvRowSource : IRowSource
     /// <exception cref="FormatException">The text has no header, or a row has the wrong number of cells.</exception>
     public static CsvRowSource FromText(string text) => new(text, "The text");
 
+    /// <summary>Reads comma-separated text that is already in hand, naming where it came from.</summary>
+    /// <param name="text">The text, header row first.</param>
+    /// <param name="source">Where the text came from, as a refusal names it: the path of the file it was read from, say.</param>
+    /// <returns>A source of the rows it holds.</returns>
+    /// <exception cref="ArgumentException">The source is not named.</exception>
+    /// <exception cref="FormatException">The text has no header, or a row has the wrong number of cells.</exception>
+    /// <remarks>
+    /// For bytes that were read once to be fingerprinted: they are parsed as they are, so the rows are exactly the
+    /// ones the fingerprint names, and a second read cannot find the file changed in between.
+    /// </remarks>
+    public static CsvRowSource FromText(string text, string source)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+
+        return new(text, source);
+    }
+
     /// <inheritdoc />
     public IReadOnlyList<string> ColumnNames { get; }
 

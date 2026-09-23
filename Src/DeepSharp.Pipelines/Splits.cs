@@ -20,6 +20,13 @@ public enum Part
 
     /// <summary>The rows held back further still, to predict on once the model is trained.</summary>
     Predict,
+
+    /// <summary>Rows nothing has divided: a pipeline that never splits them.</summary>
+    /// <remarks>
+    /// Never training. Rows no split has divided are not the rows a model learns from, and calling them that
+    /// is how a statistic over every row comes to look like one over the training rows alone.
+    /// </remarks>
+    Undivided,
 }
 
 /// <summary>
@@ -177,17 +184,6 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
 }
 
 /// <summary>
-/// A step that says which rows belong to which part of the data.
-/// </summary>
-public interface IAssignsParts : ISplitStep
-{
-    /// <summary>Works out which part every row belongs to.</summary>
-    /// <param name="table">The rows to divide.</param>
-    /// <returns>One part per row, in row order.</returns>
-    Part[] Assign(Table table);
-}
-
-/// <summary>
 /// Split the rows at random, with a seed so it happens the same way every time.
 /// </summary>
 /// <remarks>
@@ -195,18 +191,26 @@ public interface IAssignsParts : ISplitStep
 /// than something the fit discovers, because a split you cannot reproduce makes every number after it
 /// unreproducible too.
 /// </remarks>
-public sealed record SplitAtRandomStep : ISplitStep, IAssignsParts, IPipelineStep<SplitAtRandomStep>
+public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandomStep>, IDescribesColumns
 {
+    private static readonly SplitSharesParameter SharesKey = new();
+
+    private static readonly WholeNumberParameter SeedKey = new(
+        "seed", "The number that makes the shuffle repeatable: the same seed deals the same rows the same way.", 20260923);
+
     /// <summary>Declares a split at random.</summary>
     /// <param name="shares">How much goes to training, validation and test.</param>
     /// <param name="seed">The number that makes the shuffle repeatable.</param>
     public SplitAtRandomStep(SplitShares shares, int seed)
     {
-        shares.Validate();
-
-        Shares = shares;
-        Seed = seed;
+        Shares = SharesKey.Require(shares);
+        Seed = SeedKey.Require(seed);
     }
+
+    /// <inheritdoc />
+    public static StepParameters<SplitAtRandomStep> Parameters { get; } = new StepParameters<SplitAtRandomStep>()
+        .With(SharesKey, step => step.Shares)
+        .With(SeedKey, step => step.Seed);
 
     /// <summary>How much goes to training, validation and test.</summary>
     public SplitShares Shares { get; }
@@ -218,50 +222,40 @@ public sealed record SplitAtRandomStep : ISplitStep, IAssignsParts, IPipelineSte
     public static string Name => "split.atRandom";
 
     /// <inheritdoc />
+    /// <remarks>The second version places rows by what they say, not where they stand.</remarks>
+    public static int Since => 2;
+
+    /// <inheritdoc />
+    public static string Purpose => "Divides the rows at random, the same way every time for the same seed.";
+
+    /// <inheritdoc />
     public string Verb => Name;
 
     /// <inheritdoc />
+    public ColumnState After(ColumnState before) => before;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Each row is ranked by a digest of the seed and what the row says, so the same rows are dealt the same
+    /// way whatever order they arrive in, and every copy of a repeated row lands where its first copy does.
+    /// </remarks>
     public Part[] Assign(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        var order = Enumerable.Range(0, table.RowCount).ToArray();
-        var random = new Random(Seed);
+        var ranked = table.Ranked(Enumerable.Range(0, table.RowCount), Seed);
+        var parts = Shares.Over(table.RowCount).Placed(ranked);
 
-        for (var at = order.Length - 1; at > 0; at--)
-        {
-            var other = random.Next(at + 1);
-            (order[at], order[other]) = (order[other], order[at]);
-        }
+        parts.KeptTogether(ranked, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
 
-        return Shares.Over(table.RowCount).Placed(order);
-    }
-
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteNumber("train", Shares.Train);
-        writer.WriteNumber("validation", Shares.Validation);
-        writer.WriteNumber("test", Shares.Test);
-        writer.WriteNumber("predict", Shares.Predict);
-        writer.WriteNumber("seed", Seed);
-        writer.WriteEndObject();
+        return parts;
     }
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     public static SplitAtRandomStep ReadFrom(JsonElement element) =>
-        new(new SplitShares(
-                element.RequiredNumber("train"),
-                element.RequiredNumber("validation"),
-                element.RequiredNumber("test"),
-                element.OptionalNumber("predict")),
-            (int)element.RequiredNumber("seed"));
+        new(SharesKey.Read(element), SeedKey.Read(element));
 }
 
 /// <summary>
@@ -272,8 +266,16 @@ public sealed record SplitAtRandomStep : ISplitStep, IAssignsParts, IPipelineSte
 /// and a model measured there is measured on nothing much; this deals each group out separately so every
 /// part looks like the whole.
 /// </remarks>
-public sealed record SplitStratifiedStep : ISplitStep, IAssignsParts, IPipelineStep<SplitStratifiedStep>
+public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStratifiedStep>, IDescribesColumns
 {
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column whose mixture of values is kept the same in every part.", "class", ColumnKinds.Any);
+
+    private static readonly SplitSharesParameter SharesKey = new();
+
+    private static readonly WholeNumberParameter SeedKey = new(
+        "seed", "The number that makes the shuffle repeatable: the same seed deals the same rows the same way.", 20260923);
+
     /// <summary>Declares a split that keeps the mixture of a column.</summary>
     /// <param name="column">The column whose mixture is kept.</param>
     /// <param name="shares">How much goes to training, validation and test.</param>
@@ -281,13 +283,16 @@ public sealed record SplitStratifiedStep : ISplitStep, IAssignsParts, IPipelineS
     /// <exception cref="ArgumentException">The column has no name.</exception>
     public SplitStratifiedStep(string column, SplitShares shares, int seed)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(column);
-        shares.Validate();
-
-        Column = column;
-        Shares = shares;
-        Seed = seed;
+        Column = ColumnKey.Require(column);
+        Shares = SharesKey.Require(shares);
+        Seed = SeedKey.Require(seed);
     }
+
+    /// <inheritdoc />
+    public static StepParameters<SplitStratifiedStep> Parameters { get; } = new StepParameters<SplitStratifiedStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(SharesKey, step => step.Shares)
+        .With(SeedKey, step => step.Seed);
 
     /// <summary>The column whose mixture is kept the same in every part.</summary>
     public string Column { get; }
@@ -302,16 +307,30 @@ public sealed record SplitStratifiedStep : ISplitStep, IAssignsParts, IPipelineS
     public static string Name => "split.stratified";
 
     /// <inheritdoc />
+    /// <remarks>The second version places rows by what they say, not where they stand.</remarks>
+    public static int Since => 2;
+
+    /// <inheritdoc />
+    public static string Purpose => "Divides the rows at random while keeping the mixture of one column the same in every part.";
+
+    /// <inheritdoc />
     public string Verb => Name;
 
     /// <inheritdoc />
+    public ColumnState After(ColumnState before) => before;
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Within each group, each row is ranked by a digest of the seed and what the row says, so the same rows
+    /// are dealt the same way whatever order they arrive in, and every copy of a repeated row — which is in the
+    /// same group, holding the same value — lands where its first copy does.
+    /// </remarks>
     public Part[] Assign(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);
 
         var column = table[Column];
         var parts = new Part[table.RowCount];
-        var random = new Random(Seed);
 
         var groups = Enumerable.Range(0, table.RowCount)
             .GroupBy(row => column.TextAt(row) ?? "\u0000missing")
@@ -319,52 +338,25 @@ public sealed record SplitStratifiedStep : ISplitStep, IAssignsParts, IPipelineS
 
         foreach (var group in groups)
         {
-            var rows = group.ToArray();
+            var ranked = table.Ranked(group, Seed);
+            var share = Shares.Over(ranked.Length);
 
-            for (var at = rows.Length - 1; at > 0; at--)
+            for (var at = 0; at < ranked.Length; at++)
             {
-                var other = random.Next(at + 1);
-                (rows[at], rows[other]) = (rows[other], rows[at]);
+                parts[ranked[at]] = share[at];
             }
 
-            var share = Shares.Over(rows.Length);
-
-            for (var at = 0; at < rows.Length; at++)
-            {
-                parts[rows[at]] = share[at];
-            }
+            parts.KeptTogether(ranked, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
         }
 
         return parts;
-    }
-
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-        writer.WriteNumber("train", Shares.Train);
-        writer.WriteNumber("validation", Shares.Validation);
-        writer.WriteNumber("test", Shares.Test);
-        writer.WriteNumber("predict", Shares.Predict);
-        writer.WriteNumber("seed", Seed);
-        writer.WriteEndObject();
     }
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     public static SplitStratifiedStep ReadFrom(JsonElement element) =>
-        new(element.RequiredString("column"),
-            new SplitShares(
-                element.RequiredNumber("train"),
-                element.RequiredNumber("validation"),
-                element.RequiredNumber("test"),
-                element.OptionalNumber("predict")),
-            (int)element.RequiredNumber("seed"));
+        new(ColumnKey.Read(element), SharesKey.Read(element), SeedKey.Read(element));
 }
 
 /// <summary>
@@ -372,6 +364,41 @@ public sealed record SplitStratifiedStep : ISplitStep, IAssignsParts, IPipelineS
 /// </summary>
 internal static class SplitPlacement
 {
+    /// <summary>Rows in the order of a digest of the seed and what each row says.</summary>
+    /// <param name="table">The rows' table, which knows each row's key.</param>
+    /// <param name="rows">The rows to rank.</param>
+    /// <param name="seed">The number that makes the ranking one of many possible ones, and the same one each time.</param>
+    /// <returns>The rows, ranked; rows that say the same thing stand side by side.</returns>
+    /// <remarks>
+    /// SHA-256 rather than a generator of random numbers: a generator shuffles places, so the same rows in
+    /// another order were dealt differently, while a digest of what a row says ranks it the same wherever it
+    /// stands, on every machine.
+    /// </remarks>
+    internal static int[] Ranked(this Table table, IEnumerable<int> rows, int seed)
+    {
+        var ranked = rows.ToArray();
+        var ranks = ranked.Select(row => table.Identities[row].Key.Ranked(seed)).ToArray();
+
+        Array.Sort(ranks, ranked);
+
+        return ranked;
+    }
+
+    /// <summary>Gives every row the part of the row before it, when the two belong together.</summary>
+    /// <param name="parts">The part of each row, by row; changed in place.</param>
+    /// <param name="ordered">The rows in the order the parts were handed out.</param>
+    /// <param name="together">Whether a row belongs with the one before it: the same row twice, the same moment.</param>
+    internal static void KeptTogether(this Part[] parts, int[] ordered, Func<int, int, bool> together)
+    {
+        for (var at = 1; at < ordered.Length; at++)
+        {
+            if (together(ordered[at - 1], ordered[at]))
+            {
+                parts[ordered[at]] = parts[ordered[at - 1]];
+            }
+        }
+    }
+
     /// <summary>Lays a run of parts out over the rows in a given order.</summary>
     /// <param name="inOrder">The parts, training first.</param>
     /// <param name="rows">The rows, in the order the parts should be handed out.</param>

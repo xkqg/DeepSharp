@@ -3,6 +3,161 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0]
+
+A pipeline you can look at: every step written as a block of a notebook, and the data at any block shown on
+request. Underneath it, the pipeline became strict where it was only polite. Every way of writing one keeps
+the same rules, a row is known by what it says rather than where it stands, and a file says everything that is
+wrong with it at once, each at its line and column.
+
+### Upgrading from 0.2
+
+- **A file is read with a catalog.** `PipelineDeclaration.FromJson(json)` and `PreparedData.FromJson(json)`
+  are gone; write `FromJson(json, StepCatalog.BuiltIn())`, and add `.WithIndicators()` when the file holds
+  indicators. Without a catalog a file could only ever hold this package's own verbs, and it was read as if
+  nothing else existed.
+
+- **The file names its version, and what was fitted names the steps it was fitted behind.** A pipeline is
+  written as `{"version": 2, "declaration": [...], "fitted": [...]}`. Every fitted entry carries a key made
+  from its own step and every step above it, so a fit is never used under steps that changed after it was
+  learned: a fit spliced under another declaration used to serve a price of 135.7 where 0.9048 was meant. A
+  file from 0.2 names no version and is read as the first one. Its declaration still loads, except where a
+  verb's meaning has changed since — the three splits and `drop.warmup` — and those are refused by name
+  rather than run the new way. Write them again. The fitted half of a 0.2 file is refused: fit again. A verb
+  that is new in this release needs `"version": 2` in the file that names it.
+
+- **The columns are declared directly after the source.** `Declare` comes straight after `ReadCsv` or `Read`,
+  and every other step stands below it. A step written above the schema used to fail a whole run later, as a
+  column nobody could find.
+
+- **The rules hold wherever a step comes from.** A pipeline has one source, one schema, one split, one order
+  and one target. Every step does something the run acts on. Rows are dropped and put in order before the
+  split, never after it. A column is read only where it exists, and only by a step that can work on its kind.
+  The chain, the extension point, a hand-written file and a notebook all meet these rules in the same place,
+  and a refusal names every fault at once: `DeclarationException.Faults`, each with its step.
+
+- **A split divides the rows by what they say.** Each row is ranked by a digest of its own contents and the
+  seed rather than by its place in the file. So the same rows land in the same parts whatever order they
+  arrive in, and every copy of a repeated row lands where its first copy does. The parts hold as many rows as
+  before, but not the same ones, so what is learned from the training rows moves a little: on the Titanic
+  data the median age a fill learns goes from 28 to 29. A split in time keeps every row of one moment on the
+  same side of the line.
+
+- **The order of the rows is declared before anything reads it.** An indicator, `DropWarmUp` and a fill that
+  carries the previous value forward all read the rows in their order, and nothing said that order was time.
+  `OrderBy("Date")` above them says it; without it they are refused. The same prices listed newest first
+  gave a five-day average of 98.352 where the right one is 99.74.
+
+- **A list of columns names each column once.** `NormaliseRow` refuses a column written twice, in C# and in
+  a file, a 0.2 file included; 0.2 accepted it and counted the column twice in the row's size. The same holds
+  for every new verb that takes a list. An indicator is the exception: its roles may name one price in more
+  than one place.
+
+- **A step reads what it is given and nothing else.** A key a step does not take is refused, naming the keys
+  it does take; it used to be read past and then vanish when the step was written back. A whole number has
+  to be whole: a seed of 3.5 was truncated, and is now refused.
+
+- **What learns refuses what is not a number.** A fit that meets a not-a-number or an infinity among the
+  training values refuses it and names `fill.nan`, instead of learning a centre from it. `fill.nan` now
+  catches infinities as well, and `Batch` refuses both. A cell that overflows, such as `1e999`, is refused
+  where it is read.
+
+- **`EncodeCategories()` is one step**, `encode.categories`, with one list of categories per column, rather
+  than one `encode` step per column.
+
+- **What a fill counts is counted on the training rows.** The number of gaps a fill records is taken from
+  the rows it learns from, like everything else it learns: 133 in the Titanic ages, not the 177 in the file.
+
+- **For somebody writing a step of their own.** `IAssignsParts` and `ILearnsFromData` are merged into
+  `ISplitStep` and `IFittedStep`: saying a step splits or learns is now the same as doing it. A step
+  implements exactly one of the capabilities the run acts on — opening rows, declaring columns, ordering,
+  adding, dropping rows or columns, splitting, learning, producing evidence. `IPipelineStep<TSelf>` asks for
+  a `Purpose` and its `Parameters`, and the step is written, checked and described from those, so a key is
+  typed in one place. The `StepCatalog.Register` that took a name and a function is gone: a verb arrives with
+  its description or not at all. `IOpensRows.Open` is handed the `SourceFolder` a relative path is read from.
+
+### Added
+
+- **`DeepSharp.Notebooks.Verso` — a pipeline written as a notebook.** An extension for
+  [Verso](https://www.versonotebooks.com/) in which every block is one step, written as the step's own
+  JSON, and the blocks in the order they stand are the pipeline. A block is edited as text, with the verbs,
+  keys and columns offered as you type, or field by field in Verso's properties panel; both write the same
+  text. Each block shows what its step is and does, or every fault at its line. "Show the data here" runs the
+  pipeline down to that block and shows the rows there: fifty at a time, each column coloured over the
+  training rows, with every row knowing the part the split below will put it in. From the grid a column is
+  excluded or marked a category, and the notebook writes the step that does it. A profile block names, for
+  every problem it finds, the step that answers it, and a correlation block is drawn as a heatmap over the
+  complete training rows. The toolbar runs the whole pipeline, fitting every step on the training rows, and
+  exports it as the same pipeline file the chain writes. C# cells in the same notebook are handed the
+  pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. It
+  runs in Verso's VS Code extension and in `verso serve`, and is installed from Verso's Extensions panel.
+
+- **`OrderBy`, `order.by`** — the rows in the order of one or more columns, smallest first, so a time column
+  puts the oldest row first. It refuses a gap in a key, and two rows whose keys are equal: nothing says which
+  of them came first.
+
+- **`Drop`, `drop.columns`** — a column taken away, above the split or below it.
+
+- **`DropGaps`, `drop.gaps`** — the rows with a gap in the named columns, dropped before the split. It
+  replaces the `With.DropRow` that was once planned as a fill strategy: dropping rows after the split would
+  quietly change the shares the split promised.
+
+- **`FillMissing(column, strategy, refuseAbove: 0.5)`** — a point beyond which filling is invention. Above
+  that share of gaps in the training rows the column is not filled, and the column that marks where the gaps
+  were speaks for it.
+
+- **`Profile` and `Correlation`, `evidence.profile` and `evidence.correlation`** — proof declared with the
+  pipeline and produced by every run, measured on the rows the split trains on. A profile gives, per column,
+  the rows, gaps and values that are not numbers, the distinct values and, for numbers, the smallest, largest,
+  mean and median, and names the step that answers each thing it finds. A correlation says which training
+  rows it is drawn from and how many were left out. The results are in `PreparedData.Evidence`, and never in
+  the pipeline file: evidence is output, not the pipeline.
+
+- **`Pipeline.ViewAt(steps)`** — the data after any number of steps, with where every row stands: the part
+  the split puts it in, dropped before the split reaches it, or undivided when nothing divides it. A range or
+  a profile drawn above the split is drawn over the rows the split below will train on, not over all of them.
+
+- **Faults at their line and column.** A file that cannot be read throws `PipelineFileException`, whose
+  `Faults` hold every problem at once, each with its line and column. A verb nobody has heard of is told the
+  nearest one there is; a verb another DeepSharp package brings is told which package to reference. A value
+  a step refuses is said in the file's words, without the name of a C# parameter the file never had.
+
+- **A description every door is derived from.** The JSON Schema of the pipeline file
+  ([`pipeline.schema.json`](https://github.com/xkqg/DeepSharp/blob/main/pipeline.schema.json)), the
+  reference of every verb ([`VERBS.md`](https://github.com/xkqg/DeepSharp/blob/main/VERBS.md)), the
+  template a new step starts from and the notebook's form are all generated from the steps' own parameters,
+  and tests fail the moment one of them falls behind.
+
+- **`PreparedData.Served(rows)`** — rows that arrived after training, replayed and handed over without an
+  answer, each saying which of the handed-in rows it is, since a replay can drop rows and put them in order.
+
+- **`SourceFolder`** — one rule for where a relative path is read from: the folder of the file or notebook
+  the pipeline came from, or the working directory for one written in code.
+
+- **`Table.Duplicates(parts)`** — the rows that are there more than once, and how many of them landed in
+  different parts.
+
+### Fixed
+
+- **A run and a replay walk the same steps in the same order.** The run lifted every feature above every
+  dropped row and the replay dropped nothing, so the same sixty rows came out as fifty-six from one and sixty
+  from the other. There is one walk now, in the order the steps were written, and a replay drops and orders
+  rows exactly as the run did.
+
+- **The way back is checked on the right rows.** With `DropWarmUp` in the pipeline, the check that a
+  prediction leads back to the value that was read compared each row with the one four places further on,
+  and refused a pipeline that was fine: 127.83 came back as 133.
+
+- **A row can be served without the answer.** Serving refused a row that lacked the column being predicted,
+  so a host had to invent an answer to ask the question.
+
+- **Two things 0.2.0 said now hold.** A file naming a verb that is not registered is told whether the verb is
+  unknown or belongs to a package that is not installed; 0.2.0 gave one message for both. And a declaration
+  holds one split: the builder refused a second one, but the extension point and a file could still carry
+  it.
+
+- **`DropWarmUp` refuses a warm-up that covers every row**, instead of leaving none.
+
 ## [0.2.1]
 
 ### Changed

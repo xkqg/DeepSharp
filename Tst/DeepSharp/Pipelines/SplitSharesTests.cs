@@ -12,7 +12,7 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class SplitSharesTests
 {
-    private static string Titanic => Path.Join(RepoRoot(), "Samples", "data", "titanic.csv");
+    private static string Titanic => Repository.Data("titanic.csv");
 
     // ---- what the numbers mean -----------------------------------------------------------------------
 
@@ -142,27 +142,28 @@ public class SplitSharesTests
     {
         var declaration = Pdd.Create()
             .ReadCsv("x.csv")
+            .Declare(schema => schema.Timestamp("t"))
             .Predict(10)
             .SplitByTime("t", 70, 10)
             .Declaration;
 
-        var split = Assert.IsType<SplitByTimeStep>(declaration.Steps[1]);
+        var split = Assert.IsType<SplitByTimeStep>(declaration.Steps[2]);
 
         Assert.Equal(0.10, split.Shares.Predict, 9);
         Assert.Equal(0.10, split.Shares.Test, 9);
-        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson()));
+        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()));
     }
 
     [Fact]
     public void EveryKindOfSplitTakesOne()
     {
-        var atRandom = Pdd.Create().ReadCsv("x.csv").Predict(10).SplitAtRandom(70, 10).Declaration;
-        var stratified = Pdd.Create().ReadCsv("x.csv").Predict(10).SplitStratified("g", 70, 10).Declaration;
+        var atRandom = Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Text("g")).Predict(10).SplitAtRandom(70, 10).Declaration;
+        var stratified = Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Text("g")).Predict(10).SplitStratified("g", 70, 10).Declaration;
 
-        Assert.Equal(0.10, Assert.IsType<SplitAtRandomStep>(atRandom.Steps[1]).Shares.Predict, 9);
-        Assert.Equal(0.10, Assert.IsType<SplitStratifiedStep>(stratified.Steps[1]).Shares.Predict, 9);
-        Assert.Equal(atRandom, PipelineDeclaration.FromJson(atRandom.ToJson()));
-        Assert.Equal(stratified, PipelineDeclaration.FromJson(stratified.ToJson()));
+        Assert.Equal(0.10, Assert.IsType<SplitAtRandomStep>(atRandom.Steps[2]).Shares.Predict, 9);
+        Assert.Equal(0.10, Assert.IsType<SplitStratifiedStep>(stratified.Steps[2]).Shares.Predict, 9);
+        Assert.Equal(atRandom, PipelineDeclaration.FromJson(atRandom.ToJson(), StepCatalog.BuiltIn()));
+        Assert.Equal(stratified, PipelineDeclaration.FromJson(stratified.ToJson(), StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -171,10 +172,11 @@ public class SplitSharesTests
         // The share is the one thing in a split that may be absent from a file, because a pipeline without
         // a slice to predict on is the ordinary case.
         const string json = """
-            {"declaration":[{"step":"split.byTime","column":"t","train":0.8,"validation":0.1,"test":0.1}]}
+            {"version":2,"declaration":[{"step":"declare","remainder":"drop","columns":[{"name":"t","kind":"timestamp","optional":false}]},
+                            {"step":"split.byTime","column":"t","train":0.8,"validation":0.1,"test":0.1}]}
             """;
 
-        var split = Assert.IsType<SplitByTimeStep>(PipelineDeclaration.FromJson(json).Steps[0]);
+        var split = Assert.IsType<SplitByTimeStep>(PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()).Steps[1]);
 
         Assert.Equal(0, split.Shares.Predict);
     }
@@ -228,18 +230,5 @@ public class SplitSharesTests
                         + prepared.CountIn(Part.Validation)
                         + prepared.CountIn(Part.Test)
                         + prepared.CountIn(Part.Predict));
-    }
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
     }
 }

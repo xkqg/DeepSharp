@@ -12,24 +12,9 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class HandoverTests
 {
-    private static string Data(string file) => Path.Join(RepoRoot(), "Samples", "data", file);
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
-    }
-
     private static PreparedData Passengers() =>
         Pdd.Create()
-            .ReadCsv(Data("titanic.csv"))
+            .ReadCsv(Repository.Data("titanic.csv"))
             .Declare(schema => schema
                 .Integer("survived", "pclass", "sibsp")
                 .Text("sex")
@@ -81,7 +66,7 @@ public class HandoverTests
     public void APipelineWithNoTargetHandsOverNoAnswers()
     {
         var prepared = Pdd.Create()
-            .ReadCsv(Data("titanic.csv"))
+            .ReadCsv(Repository.Data("titanic.csv"))
             .Declare(schema => schema.Integer("pclass"))
             .SplitAtRandom(0.70, 0.15)
             .Build()
@@ -94,7 +79,7 @@ public class HandoverTests
     public void AColumnStillHoldingWords_IsRefusedAtTheHandover()
     {
         var prepared = Pdd.Create()
-            .ReadCsv(Data("titanic.csv"))
+            .ReadCsv(Repository.Data("titanic.csv"))
             .Declare(schema => schema.Text("sex").Integer("pclass"))
             .SplitAtRandom(0.70, 0.15)
             .Build()
@@ -109,7 +94,7 @@ public class HandoverTests
     public void AGapThatWasNeverFilled_IsRefusedAtTheHandover()
     {
         var prepared = Pdd.Create()
-            .ReadCsv(Data("titanic.csv"))
+            .ReadCsv(Repository.Data("titanic.csv"))
             .Declare(schema => schema.Optional("age", ColumnKind.Number))
             .SplitAtRandom(0.70, 0.15)
             .Build()
@@ -121,21 +106,80 @@ public class HandoverTests
         Assert.Contains("still a gap", refused.Message);
     }
 
+    [Theory]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("NaN")]
+    public void ANumberThatIsNotFinite_IsRefusedAtTheHandover(string written)
+    {
+        // A gap was refused here and a not-a-number or an infinity walked straight through: the check was
+        // for an absent value only. A model handed an infinity learns nothing and says nothing about it.
+        var prepared = Pdd.Create()
+            .Read(CsvRowSource.FromText($"fare,survived\n7.25,0\n{written},1\n8.05,0\n"), "three passengers")
+            .Declare(schema => schema.Number("fare").Integer("survived"))
+            .SplitAtRandom(0.34, seed: 1)
+            .Target("survived")
+            .Build()
+            .Run();
+
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => new[] { Part.Train, Part.Test }.Select(part => prepared.Batch(part)).ToArray());
+
+        Assert.Contains("Row 2 of 'fare'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("not a finite number", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnAnswerThatIsNotFinite_IsRefusedToo()
+    {
+        var prepared = Pdd.Create()
+            .Read(CsvRowSource.FromText("fare,price\n7.25,1\n8.05,Infinity\n"), "two rows")
+            .Declare(schema => schema.Number("fare", "price"))
+            .SplitAtRandom(0.50, seed: 1)
+            .Target("price")
+            .Build()
+            .Run();
+
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => new[] { Part.Train, Part.Test }.Select(part => prepared.Batch(part)).ToArray());
+
+        Assert.Contains("'price'", refused.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ATargetThatNeverReachedTheEnd_IsRefused()
     {
         // Encoding the target takes the column away and puts columns per category in its place, so the
-        // pipeline is asked to predict something that is no longer there.
+        // pipeline is asked to predict something that is no longer there — refused where the target is
+        // written, since the columns there are known.
+        var refused = Assert.Throws<DeclarationException>(
+            () => Pdd.Create()
+                .ReadCsv(Repository.Data("titanic.csv"))
+                .Declare(schema => schema.Text("sex").Integer("pclass"))
+                .SplitAtRandom(0.70, 0.15)
+                .Encode("sex")
+                .Target("sex"));
+
+        Assert.Equal("target", Assert.Single(refused.Faults).Verb);
+    }
+
+    [Fact]
+    public void ATargetThatNeverReachedTheEnd_IsRefusedAtTheHandover_WhenNoDeclarationCouldTell()
+    {
+        // A step from elsewhere that takes the answer away without saying so leaves nothing any declaration
+        // could follow; the handover still says what is missing.
         var prepared = Pdd.Create()
-            .ReadCsv(Data("titanic.csv"))
-            .Declare(schema => schema.Text("sex").Integer("pclass"))
+            .ReadCsv(Repository.Data("titanic.csv"))
+            .Declare(schema => schema.Integer("survived", "pclass"))
             .SplitAtRandom(0.70, 0.15)
-            .Encode("sex")
-            .Target("sex")
+            .Target("survived")
+            .Add(new ForgetStep("survived"))
             .Build()
             .Run();
 
-        Assert.Throws<InvalidOperationException>(() => prepared.Batch(Part.Train));
+        var refused = Assert.Throws<InvalidOperationException>(() => prepared.Batch(Part.Train));
+
+        Assert.Contains("predicts 'survived'", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -189,7 +233,7 @@ public class HandoverTests
         // The whole promise of saving both halves: a host that has the file and no data at all can take a
         // row it has never seen and hand a model exactly the numbers that model was trained on.
         var trained = Passengers();
-        var loaded = PreparedData.FromJson(trained.ToJson());
+        var loaded = PreparedData.FromJson(trained.ToJson(), StepCatalog.BuiltIn());
 
         var arriving = new InMemoryRowSource(
             ["survived", "pclass", "sibsp", "sex", "fare", "age"],
@@ -208,23 +252,30 @@ public class HandoverTests
     }
 
     [Fact]
-    public void AFittedHalfWrittenUnderSomethingOtherThanAPosition_IsRefused()
+    public void AFittedPipelineWithAStepFromAnotherPackage_SurvivesTheRoundTrip()
     {
-        const string json = """
-            {"declaration":[{"step":"read.csv","path":"x.csv"}],"fitted":{"fill":{"value":1}}}
-            """;
+        // A declaration could be read with a catalog that knows another package's verbs; the fitted
+        // pipeline could not, so a pipeline with an indicator in it could be saved and never served.
+        var trained = Pdd.Create()
+            .ReadCsv(Repository.Data("apple.csv"))
+            .Declare(schema => schema.Timestamp("Date").Number("AAPL.Close"))
+            .OrderBy("Date")
+            .AddIndicator("sma5", Indicator.Sma, ["AAPL.Close"], 5)
+            .DropWarmUp()
+            .SplitByTime("Date", 0.70, 0.15)
+            .Normalise("sma5")
+            .Build()
+            .Run();
 
-        Assert.Throws<FormatException>(() => PreparedData.FromJson(json));
-    }
+        var refused = Assert.Throws<PipelineFileException>(() => PreparedData.FromJson(trained.ToJson(), StepCatalog.BuiltIn()));
 
-    [Fact]
-    public void AFitThatClaimsToHaveLearnedAWord_IsRefused()
-    {
-        const string json = """
-            {"declaration":[{"step":"read.csv","path":"x.csv"}],"fitted":{"0":{"value":"a lot"}}}
-            """;
+        Assert.Contains("DeepSharp.Pipelines.Indicators", refused.Message, StringComparison.Ordinal);
 
-        Assert.Throws<FormatException>(() => PreparedData.FromJson(json));
+        var loaded = PreparedData.FromJson(trained.ToJson(), StepCatalog.BuiltIn().WithIndicators());
+
+        Assert.Equal(trained.Declaration, loaded.Declaration);
+        Assert.Equal(trained.Fitted.Keys, loaded.Fitted.Keys);
+        Assert.Throws<ArgumentNullException>(() => PreparedData.FromJson(trained.ToJson(), null!));
     }
 
     [Fact]
@@ -232,7 +283,7 @@ public class HandoverTests
     {
         var declaration = Pdd.Create().ReadCsv("x.csv").Declaration;
 
-        Assert.Empty(PreparedData.FromJson(declaration.ToJson()).Fitted);
+        Assert.Empty(PreparedData.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()).Fitted);
     }
 
     [Fact]

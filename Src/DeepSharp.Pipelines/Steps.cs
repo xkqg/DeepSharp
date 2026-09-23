@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
@@ -12,20 +13,15 @@ namespace DeepSharp.Pipelines;
 /// Declaring where the data comes from is not the same act as going to get it: nothing is opened until the
 /// pipeline runs, so a declaration can be written, saved and checked on a machine that has no data on it.
 /// </remarks>
-public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows
+public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows, IDescribesColumns
 {
+    private static readonly FilePathParameter PathKey = new(
+        "path", "Where the comma-separated file will be, when the pipeline runs.", "data.csv");
+
     /// <summary>Declares that the rows come from the file at this path.</summary>
     /// <param name="path">Where the file will be, when the pipeline runs.</param>
     /// <exception cref="ArgumentException">The path is empty or nothing but spaces.</exception>
-    public ReadCsvStep(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            throw new ArgumentException("A CSV step needs a path to read from.", nameof(path));
-        }
-
-        Path = path;
-    }
+    public ReadCsvStep(string path) => Path = PathKey.Require(path);
 
     /// <summary>Where the file will be, when the pipeline runs.</summary>
     public string Path { get; }
@@ -34,27 +30,32 @@ public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows
     public static string Name => "read.csv";
 
     /// <inheritdoc />
+    public static string Purpose => "Reads the rows from a comma-separated file.";
+
+    /// <inheritdoc />
+    public static StepParameters<ReadCsvStep> Parameters { get; } =
+        new StepParameters<ReadCsvStep>().With(PathKey, step => step.Path);
+
+    /// <inheritdoc />
     public string Verb => Name;
 
     /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
+    /// <remarks>A relative path is read from the pipeline's folder; the path stays as it was written.</remarks>
+    public IRowSource Open(SourceFolder folder)
     {
-        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(folder);
 
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("path", Path);
-        writer.WriteEndObject();
+        return new CsvRowSource(folder.Resolve(Path));
     }
 
     /// <inheritdoc />
-    public IRowSource Open() => new CsvRowSource(Path);
+    public ColumnState After(ColumnState before) => before;
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     /// <exception cref="FormatException">A parameter is missing or is not text.</exception>
-    public static ReadCsvStep ReadFrom(JsonElement element) => new(element.RequiredString("path"));
+    public static ReadCsvStep ReadFrom(JsonElement element) => new(PathKey.Read(element));
 }
 
 /// <summary>
@@ -66,17 +67,15 @@ public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows
 /// handed to the pipeline when it runs — which is also exactly how serving works, so the same declaration
 /// covers both without a second shape.
 /// </remarks>
-public sealed record ReadRowsStep : IPipelineStep<ReadRowsStep>, IOpensRows
+public sealed record ReadRowsStep : IPipelineStep<ReadRowsStep>, IOpensRows, IDescribesColumns
 {
+    private static readonly TextParameter DescriptionKey = new(
+        "description", "What the rows are, for whoever reads the file later.", "rows handed in");
+
     /// <summary>Declares that the rows are handed in.</summary>
     /// <param name="description">What the rows are, for whoever reads the file later.</param>
     /// <exception cref="ArgumentException">The description is empty.</exception>
-    public ReadRowsStep(string description)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(description);
-
-        Description = description;
-    }
+    public ReadRowsStep(string description) => Description = DescriptionKey.Require(description);
 
     /// <summary>What the rows are, for whoever reads the file later.</summary>
     public string Description { get; }
@@ -85,29 +84,28 @@ public sealed record ReadRowsStep : IPipelineStep<ReadRowsStep>, IOpensRows
     public static string Name => "read.rows";
 
     /// <inheritdoc />
+    public static string Purpose => "Takes rows that are handed in rather than opened: a table already in memory, a reader over a query.";
+
+    /// <inheritdoc />
+    public static StepParameters<ReadRowsStep> Parameters { get; } =
+        new StepParameters<ReadRowsStep>().With(DescriptionKey, step => step.Description);
+
+    /// <inheritdoc />
     public string Verb => Name;
 
     /// <inheritdoc />
-    public IRowSource Open() =>
+    public ColumnState After(ColumnState before) => before;
+
+    /// <inheritdoc />
+    public IRowSource Open(SourceFolder folder) =>
         throw new InvalidOperationException(
             $"This pipeline reads rows that are handed in ({Description}). "
             + "Hand them to Run or Prepare, or to Replay when the pipeline is already fitted.");
 
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("description", Description);
-        writer.WriteEndObject();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
-    public static ReadRowsStep ReadFrom(JsonElement element) => new(element.RequiredString("description"));
+    public static ReadRowsStep ReadFrom(JsonElement element) => new(DescriptionKey.Read(element));
 }
 
 /// <summary>
@@ -116,9 +114,19 @@ public sealed record ReadRowsStep : IPipelineStep<ReadRowsStep>, IOpensRows
 /// <remarks>
 /// This is the line in the chain. Above it nothing may learn from the data; below it the operations that do
 /// become available, and each of them is fitted on the training rows alone.
+/// <para>
+/// A moment is never divided: every row of one moment lands in the part its first row does, so what happened
+/// at one time is on one side of the line or the other. Rows are placed in the order of their time and then
+/// of their keys, so the same rows are divided the same way whatever order they arrive in.
+/// </para>
 /// </remarks>
-public sealed record SplitByTimeStep : ISplitStep, IAssignsParts, IPipelineStep<SplitByTimeStep>
+public sealed record SplitByTimeStep : ISplitStep, IPipelineStep<SplitByTimeStep>, IDescribesColumns
 {
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column that says when a row happened.", "when", ColumnKinds.Ordered);
+
+    private static readonly SplitSharesParameter SharesKey = new();
+
     /// <summary>Declares a split in time, by shares that together make a whole.</summary>
     /// <param name="column">The column that says when a row happened.</param>
     /// <param name="shares">How much goes to training, validation, test and predicting.</param>
@@ -126,16 +134,14 @@ public sealed record SplitByTimeStep : ISplitStep, IAssignsParts, IPipelineStep<
     /// <exception cref="ArgumentOutOfRangeException">A share is not a share: nothing, or more than everything.</exception>
     public SplitByTimeStep(string column, SplitShares shares)
     {
-        if (string.IsNullOrWhiteSpace(column))
-        {
-            throw new ArgumentException("A split in time needs the column that says when.", nameof(column));
-        }
-
-        shares.Validate();
-
-        Column = column;
-        Shares = shares;
+        Column = ColumnKey.Require(column);
+        Shares = SharesKey.Require(shares);
     }
+
+    /// <inheritdoc />
+    public static StepParameters<SplitByTimeStep> Parameters { get; } = new StepParameters<SplitByTimeStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(SharesKey, step => step.Shares);
 
     /// <summary>The column that says when a row happened.</summary>
     public string Column { get; }
@@ -144,74 +150,83 @@ public sealed record SplitByTimeStep : ISplitStep, IAssignsParts, IPipelineStep<
     public SplitShares Shares { get; }
 
     /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">A row has no time, or its time is not a number.</exception>
     public Part[] Assign(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        var column = table[Column];
-        var order = new (int Row, double When)[table.RowCount];
+        // A row with no time cannot be placed in a split by time, and guessing where it belongs is how a row
+        // from next year ends up in the training data.
+        var when = table.RowOrderBy(Column);
+        var order = Enumerable.Range(0, table.RowCount).ToArray();
 
-        for (var row = 0; row < table.RowCount; row++)
+        Array.Sort(order, (one, other) =>
         {
-            if (column.IsMissing(row))
-            {
-                // A row with no time cannot be placed in a split by time, and guessing where it belongs is
-                // how a row from next year ends up in the training data.
-                throw new InvalidOperationException(
-                    $"Row {row + 1} has no '{Column}', so a split in time has nowhere to put it.");
-            }
+            var compared = when(one, other);
 
-            order[row] = (row, When(column, row));
-        }
+            return compared != 0 ? compared : table.Identities[one].Key.CompareTo(table.Identities[other].Key);
+        });
 
-        Array.Sort(order, (left, right) => left.When.CompareTo(right.When));
+        var parts = Shares.Over(table.RowCount).Placed(order);
 
-        return Shares
-            .Over(table.RowCount)
-            .Placed([.. order.Select(each => each.Row)]);
+        parts.KeptTogether(order, (one, other) => when(one, other) == 0);
+
+        return parts;
     }
 
-    private static double When(IColumn column, int row) => column switch
+    /// <inheritdoc />
+    /// <remarks>
+    /// Where each part starts and ends, in the column it was divided by: a model trained on one stretch of
+    /// time and measured on the next can say which stretches they were.
+    /// </remarks>
+    public void Describe(Table table, IReadOnlyList<Part> parts, FittedStepValues seen)
     {
-        Column<DateTime> timestamps => timestamps[row]!.Value.Ticks,
-        Column<long> numbers => numbers[row]!.Value,
-        Column<double> numbers => numbers[row]!.Value,
-        _ => throw new InvalidOperationException(
-            $"'{column.Name}' holds {column.Kind.ToString().ToLowerInvariant()}, which has no order in time."),
-    };
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(parts);
+        ArgumentNullException.ThrowIfNull(seen);
+
+        var column = table[Column];
+        var when = Comparer<int>.Create(table.RowOrderBy(Column));
+
+        foreach (var part in new[] { Part.Train, Part.Validation, Part.Test, Part.Predict })
+        {
+            var rows = Enumerable.Range(0, table.RowCount).Where(row => parts[row] == part).Order(when).ToArray();
+
+            if (rows.Length > 0)
+            {
+                seen.Learned($"moments.{part.ToString().ToLowerInvariant()}", [Moment(column, rows[0]), Moment(column, rows[^1])]);
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    public ColumnState After(ColumnState before) => before;
+
+    // A moment is written the one way that reads the same everywhere; a number as its shortest exact form.
+    private static string Moment(IColumn column, int row) =>
+        column is Column<DateTime> moments
+            ? moments[row]!.Value.ToString("o", CultureInfo.InvariantCulture)
+            : column.TextAt(row)!;
 
     /// <inheritdoc />
     public static string Name => "split.byTime";
 
     /// <inheritdoc />
-    public string Verb => Name;
+    public static string Purpose => "Divides the rows by when they happened: the earliest to learn from, the latest to be measured on.";
 
     /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
+    /// <remarks>The second version keeps a moment whole and places rows by what they say, not where they stand.</remarks>
+    public static int Since => 2;
 
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-        writer.WriteNumber("train", Shares.Train);
-        writer.WriteNumber("validation", Shares.Validation);
-        writer.WriteNumber("test", Shares.Test);
-        writer.WriteNumber("predict", Shares.Predict);
-        writer.WriteEndObject();
-    }
+    /// <inheritdoc />
+    public string Verb => Name;
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     /// <exception cref="FormatException">A parameter is missing or is of the wrong kind.</exception>
     public static SplitByTimeStep ReadFrom(JsonElement element) =>
-        new(element.RequiredString("column"),
-            new SplitShares(
-                element.RequiredNumber("train"),
-                element.RequiredNumber("validation"),
-                element.RequiredNumber("test"),
-                element.OptionalNumber("predict")));
+        new(ColumnKey.Read(element), SharesKey.Read(element));
 }
 
 /// <summary>
@@ -221,49 +236,68 @@ public sealed record SplitByTimeStep : ISplitStep, IAssignsParts, IPipelineStep<
 /// Missing is not the same as not-a-number: a value is missing when it was never there, which is data,
 /// while a not-a-number is arithmetic that produced no number, which is a fault further upstream. They get
 /// different verbs because they deserve different answers.
+/// <para>
+/// One verb in two forms, because the two ways of filling are different things: one puts a value learned from
+/// the training rows into every gap, the other carries the value before a gap forward and so reads the rows in
+/// their order. <see cref="Of"/> picks the form from the strategy, and a file does the same.
+/// </para>
 /// </remarks>
-public sealed record FillMissingStep : IFittedStep, ILearnsFromData, IPipelineStep<FillMissingStep>
+public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingStep>, IDescribesColumns
 {
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column with gaps in it.", "column", ColumnKinds.Fillable);
+
+    private static readonly FillStrategyParameter WithKey = new(
+        "with",
+        "What goes in the gaps, learned from the training rows: mean, median, zero, previous, constant, or refuse.",
+        With.Median,
+        ["mean", "median", "zero", "previous", "constant", "refuse"],
+        "filling a gap");
+
+    private static readonly ShareParameter RefuseAboveKey = new(
+        "refuseAbove",
+        "The share of the training rows that may be gaps and still be filled. Above it the column is not filled, "
+        + "and the column that says where the gaps were speaks for it. Left out, every share is filled.");
+
+    private protected FillMissingStep(string column, FillStrategy strategy, double? refuseAbove)
+    {
+        Column = ColumnKey.Require(column);
+        Strategy = WithKey.Require(strategy);
+        RefuseAbove = RefuseAboveKey.Require(refuseAbove);
+    }
+
     /// <summary>Declares that the gaps in a column are filled the named way.</summary>
     /// <param name="column">The column with gaps in it.</param>
-    /// <param name="strategy">What to put in them, learned from the training rows.</param>
-    /// <exception cref="ArgumentException">The column has no name.</exception>
-    public FillMissingStep(string column, FillStrategy strategy)
-    {
-        if (string.IsNullOrWhiteSpace(column))
-        {
-            throw new ArgumentException("Filling gaps needs the column they are in.", nameof(column));
-        }
+    /// <param name="strategy">What to put in them — <see cref="With"/> has the names.</param>
+    /// <param name="refuseAbove">The share of the training rows that may be gaps and still be filled; nothing for no limit.</param>
+    /// <returns>The step, in the form the strategy takes.</returns>
+    /// <exception cref="ArgumentException">The column has no name, or the strategy is not one of the names.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The share is not one.</exception>
+    public static FillMissingStep Of(string column, FillStrategy strategy, double? refuseAbove = null) =>
+        strategy.Name == With.Previous.Name
+            ? new FillMissingByPreviousStep(column, refuseAbove)
+            : new FillMissingByValueStep(column, strategy, refuseAbove);
 
-        // A strategy is a name, so a default one carries no name at all and a hand-written file can carry
-        // any word. Both are caught here, at the one point a strategy enters a declaration.
-        if (string.IsNullOrWhiteSpace(strategy.Name))
-        {
-            throw new ArgumentException("Filling gaps needs a strategy; With has the names.", nameof(strategy));
-        }
-
-        if (!With.Knows(strategy.Name))
-        {
-            throw new ArgumentException(
-                $"'{strategy.Name}' is not a way of filling a gap. With has the names.", nameof(strategy));
-        }
-
-        if (With.TakesAValue(strategy.Name) != strategy.Value.HasValue)
-        {
-            throw new ArgumentException(
-                $"The strategy '{strategy.Name}' is written {(strategy.Value.HasValue ? "without" : "with")} a number.",
-                nameof(strategy));
-        }
-
-        Column = column;
-        Strategy = strategy;
-    }
+    /// <inheritdoc />
+    public static StepParameters<FillMissingStep> Parameters { get; } = new StepParameters<FillMissingStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(WithKey, step => step.Strategy)
+        .With(RefuseAboveKey, step => step.RefuseAbove);
 
     /// <summary>The column with gaps in it.</summary>
     public string Column { get; }
 
-    /// <summary>What goes in them, learned from the training rows.</summary>
+    /// <summary>What goes in them.</summary>
     public FillStrategy Strategy { get; }
+
+    /// <summary>The share of the training rows that may be gaps and still be filled, or nothing for no limit.</summary>
+    /// <remarks>
+    /// Past some point a filled column is invention: a value made up for three quarters of the rows, after
+    /// which the column saying where the gaps were carries everything the original had. So the decision is
+    /// made once, in the open, when the pipeline is fitted — measured on the training rows alone, written down,
+    /// and replayed unchanged.
+    /// </remarks>
+    public double? RefuseAbove { get; }
 
     /// <summary>The column written beside a filled one, saying where the gaps were.</summary>
     /// <remarks>
@@ -273,53 +307,60 @@ public sealed record FillMissingStep : IFittedStep, ILearnsFromData, IPipelineSt
     public string MarkerColumn => $"{Column}_was_missing";
 
     /// <inheritdoc />
+    /// <remarks>
+    /// With a share it will not fill above, whether the column is still there is decided when the pipeline is
+    /// fitted, so it is known but not sure from here on.
+    /// </remarks>
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        var marked = before.With(MarkerColumn, ColumnKind.Number);
+
+        return RefuseAbove is { } share
+            ? marked.MaybeGone(
+                Column,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"fill.missing replaced it by '{MarkerColumn}', because more than {share} of its training rows were gaps"))
+            : marked;
+    }
+
+    /// <inheritdoc />
+    public static string Name => "fill.missing";
+
+    /// <inheritdoc />
+    public static string Purpose => "Fills the gaps in a column the named way, with a value learned from the training rows, and marks where they were.";
+
+    /// <inheritdoc />
+    public string Verb => Name;
+
+    /// <inheritdoc />
     public FittedStepValues Fit(Table table, IReadOnlyList<Part> parts)
     {
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(parts);
 
-        var column = table[Column];
         var learned = new FittedStepValues();
+        var training = table.TrainingValues(Column, parts);
 
-        // Every number here comes from the training rows and from nowhere else. Fit on all of them and the
-        // validation rows have quietly taught the model about themselves, and nothing goes red.
-        var training = Enumerable.Range(0, table.RowCount)
-            .Where(row => parts[row] == Part.Train && !column.IsMissing(row))
-            .Select(row => NumberAt(column, row))
-            .ToArray();
+        // The gaps among the training rows: what the fit saw, like every number in its half of the file.
+        learned.Learned("gaps", training.Gaps);
 
-        learned.Learned("gaps", Enumerable.Range(0, table.RowCount).Count(column.IsMissing));
-
-        switch (Strategy.Name)
+        if (RefuseAbove is { } ceiling)
         {
-            case "mean":
-                learned.Learned("value", Refuse.IfEmpty(training, Column).Average());
-                break;
+            var share = training.Rows == 0 ? 0 : training.Gaps / (double)training.Rows;
 
-            case "median":
-                var sorted = Refuse.IfEmpty(training, Column).Order().ToArray();
-                learned.Learned("value", sorted.Length % 2 == 1
-                    ? sorted[sorted.Length / 2]
-                    : (sorted[(sorted.Length / 2) - 1] + sorted[sorted.Length / 2]) / 2);
-                break;
+            learned.Learned("share", share);
+            learned.Learned("filled", share <= ceiling ? 1 : 0);
 
-            case "zero":
-                learned.Learned("value", 0);
-                break;
-
-            case "constant":
-                learned.Learned("value", Strategy.Value!.Value);
-                break;
-
-            case "refuse" when learned.Number("gaps") > 0:
-                throw new InvalidOperationException(
-                    $"'{Column}' has {learned.Number("gaps"):0} gaps, and this pipeline says there should be none.");
-
-            default:
-                // Carrying the previous value forward learns nothing, and the value it uses depends on the
-                // row above rather than on the training set.
-                break;
+            if (share > ceiling)
+            {
+                return learned;
+            }
         }
+
+        Learn(table, parts, learned);
 
         return learned;
     }
@@ -334,6 +375,16 @@ public sealed record FillMissingStep : IFittedStep, ILearnsFromData, IPipelineSt
         var marker = new Column<double>(
             MarkerColumn, ColumnKind.Number,
             Enumerable.Range(0, table.RowCount).Select(row => (double?)(column.IsMissing(row) ? 1 : 0)));
+
+        // Decided when the pipeline was fitted: too many of the training rows were gaps, so the column is not
+        // filled at all, and the marker speaks for it.
+        if (fitted.Numbers.TryGetValue("filled", out var filled) && filled == 0)
+        {
+            table.Remove(Column);
+            table.Put(marker);
+
+            return;
+        }
 
         switch (column)
         {
@@ -353,8 +404,136 @@ public sealed record FillMissingStep : IFittedStep, ILearnsFromData, IPipelineSt
         table.Put(marker);
     }
 
-    private void Fill<T>(Column<T> column, FittedStepValues fitted, Func<double, T> asValue)
-        where T : struct
+    /// <summary>Reads this step back out of a file, in the form its strategy takes.</summary>
+    /// <param name="element">The JSON object the step was written as.</param>
+    /// <returns>The step the file describes.</returns>
+    /// <exception cref="FormatException">A parameter is missing or is not text.</exception>
+    public static FillMissingStep ReadFrom(JsonElement element) =>
+        Of(ColumnKey.Read(element), WithKey.Read(element), RefuseAboveKey.Read(element));
+
+    /// <summary>What this form learns from the training rows, beside the count of gaps every form writes down.</summary>
+    /// <param name="table">The data.</param>
+    /// <param name="parts">Which part each row belongs to.</param>
+    /// <param name="learned">Where it writes what it learned.</param>
+    private protected abstract void Learn(Table table, IReadOnlyList<Part> parts, FittedStepValues learned);
+
+    /// <summary>Fills every gap in the column, the way this form does.</summary>
+    /// <typeparam name="T">What the column holds.</typeparam>
+    /// <param name="column">The column, changed in place.</param>
+    /// <param name="fitted">What the fit learned.</param>
+    /// <param name="asValue">How a learned number becomes a value of the column.</param>
+    private protected abstract void Fill<T>(Column<T> column, FittedStepValues fitted, Func<double, T> asValue)
+        where T : struct;
+}
+
+/// <summary>
+/// Fills every gap in a column with one value: learned from the training rows, or said outright.
+/// </summary>
+/// <remarks>
+/// The mean or the median of the training rows, nought, a constant, or a refusal for a column that is not
+/// supposed to have gaps at all. Every number here comes from the training rows and from nowhere else: fit on
+/// all of them and the validation rows have quietly taught the model about themselves, and nothing goes red.
+/// </remarks>
+public sealed record FillMissingByValueStep : FillMissingStep
+{
+    /// <summary>Declares that the gaps in a column are filled with one value.</summary>
+    /// <param name="column">The column with gaps in it.</param>
+    /// <param name="strategy">Which value: mean, median, zero, a constant, or refuse.</param>
+    /// <exception cref="ArgumentException">
+    /// The column has no name, or the strategy is not one of the names — or it is the one that carries the
+    /// value before a gap forward, which is the other form of this verb.
+    /// </exception>
+    /// <param name="refuseAbove">The share of the training rows that may be gaps and still be filled; nothing for no limit.</param>
+    public FillMissingByValueStep(string column, FillStrategy strategy, double? refuseAbove = null)
+        : base(column, strategy, refuseAbove)
+    {
+        if (strategy.Name == With.Previous.Name)
+        {
+            throw new ArgumentException(
+                "Carrying the value before a gap forward reads the rows in their order; that is FillMissingByPreviousStep.",
+                nameof(strategy));
+        }
+    }
+
+    /// <inheritdoc />
+    private protected override void Learn(Table table, IReadOnlyList<Part> parts, FittedStepValues learned)
+    {
+        var training = table.TrainingValues(Column, parts);
+
+        switch (Strategy.Name)
+        {
+            case "mean":
+                learned.Learned("value", training.Learnable("a fill value").Mean);
+                break;
+
+            case "median":
+                learned.Learned("value", training.Learnable("a fill value").Median);
+                break;
+
+            case "zero":
+                learned.Learned("value", 0);
+                break;
+
+            case "constant":
+                learned.Learned("value", Strategy.Value!.Value);
+                break;
+
+            default:
+                if (learned.Number("gaps") > 0)
+                {
+                    throw new InvalidOperationException(
+                        $"'{Column}' has {learned.Number("gaps"):0} gaps in its training rows, and this pipeline says there should be none.");
+                }
+
+                break;
+        }
+    }
+
+    /// <inheritdoc />
+    private protected override void Fill<T>(Column<T> column, FittedStepValues fitted, Func<double, T> asValue)
+    {
+        for (var row = 0; row < column.Count; row++)
+        {
+            if (!column.IsMissing(row))
+            {
+                continue;
+            }
+
+            // A row served a year from now can hold the gap the training rows never did; the refusal holds then too.
+            column[row] = Strategy.Name == With.Refuse.Name
+                ? throw new InvalidOperationException(
+                    $"Row {row + 1} of '{Column}' is a gap, and this pipeline says there should be none.")
+                : asValue(fitted.Number("value"));
+        }
+    }
+}
+
+/// <summary>
+/// Fills every gap in a column with the value before it.
+/// </summary>
+/// <remarks>
+/// It learns nothing, and the value it uses depends on the row above rather than on the training set — which
+/// is why it reads the rows in their order and needs that order declared above it. A gap with nothing before
+/// it to carry forward is refused rather than guessed.
+/// </remarks>
+public sealed record FillMissingByPreviousStep : FillMissingStep, IReadsRowOrder
+{
+    /// <summary>Declares that the gaps in a column are filled with the value before them.</summary>
+    /// <param name="column">The column with gaps in it.</param>
+    /// <exception cref="ArgumentException">The column has no name.</exception>
+    /// <param name="refuseAbove">The share of the training rows that may be gaps and still be filled; nothing for no limit.</param>
+    public FillMissingByPreviousStep(string column, double? refuseAbove = null)
+        : base(column, With.Previous, refuseAbove)
+    {
+    }
+
+    /// <inheritdoc />
+    private protected override void Learn(Table table, IReadOnlyList<Part> parts, FittedStepValues learned)
+    {
+    }
+
+    /// <inheritdoc />
+    private protected override void Fill<T>(Column<T> column, FittedStepValues fitted, Func<double, T> asValue)
     {
         T? previous = null;
 
@@ -366,72 +545,8 @@ public sealed record FillMissingStep : IFittedStep, ILearnsFromData, IPipelineSt
                 continue;
             }
 
-            column[row] = Strategy.Name == "previous"
-                ? previous ?? throw new InvalidOperationException(
-                    $"Row {row + 1} of '{Column}' is a gap with nothing before it to carry forward.")
-                : asValue(fitted.Number("value"));
+            column[row] = previous ?? throw new InvalidOperationException(
+                $"Row {row + 1} of '{Column}' is a gap with nothing before it to carry forward.");
         }
-    }
-
-    private static double NumberAt(IColumn column, int row) => column switch
-    {
-        Column<double> numbers => numbers[row]!.Value,
-        Column<long> whole => whole[row]!.Value,
-        _ => throw new InvalidOperationException(
-            $"'{column.Name}' holds {column.Kind.ToString().ToLowerInvariant()}, and a gap in it is not filled with a number."),
-    };
-
-    /// <inheritdoc />
-    public static string Name => "fill.missing";
-
-    /// <inheritdoc />
-    public string Verb => Name;
-
-    /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-
-        // A strategy with no number is written as the word alone, which is what a person reads best. One
-        // that carries a number becomes an object, so the number has somewhere to live.
-        if (Strategy.Value is { } value)
-        {
-            writer.WriteStartObject("with");
-            writer.WriteString("kind", Strategy.Name);
-            writer.WriteNumber("value", value);
-            writer.WriteEndObject();
-        }
-        else
-        {
-            writer.WriteString("with", Strategy.Name);
-        }
-
-        writer.WriteEndObject();
-    }
-
-    /// <summary>Reads this step back out of a file.</summary>
-    /// <param name="element">The JSON object the step was written as.</param>
-    /// <returns>The step the file describes.</returns>
-    /// <exception cref="FormatException">A parameter is missing or is not text.</exception>
-    public static FillMissingStep ReadFrom(JsonElement element)
-    {
-        var column = element.RequiredString("column");
-
-        if (!element.TryGetProperty("with", out var with))
-        {
-            throw new FormatException("The step is missing a text value for 'with'.");
-        }
-
-        return with.ValueKind switch
-        {
-            JsonValueKind.String => new FillMissingStep(column, new FillStrategy(with.GetString()!)),
-            JsonValueKind.Object => new FillMissingStep(
-                column, new FillStrategy(with.RequiredString("kind"), with.RequiredNumber("value"))),
-            _ => throw new FormatException("The step is missing a text value for 'with'."),
-        };
     }
 }

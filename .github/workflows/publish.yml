@@ -47,10 +47,14 @@ jobs:
       - name: Build
         run: dotnet build DeepSharp.slnx --no-restore --configuration Release
 
-      # The suite runs on the exact commit being published. A release is the one moment where "it was green
-      # yesterday" is not an answer.
+      # Every suite runs on the exact commit being published. A release is the one moment where "it was green
+      # yesterday" is not an answer. The suites are found by the name every suite has, so one added later is
+      # never left out.
       - name: Test
-        run: dotnet run --project Tst/DeepSharp/DeepSharp.Tests.csproj --configuration Release --no-build
+        run: |
+          for suite in Tst/*/*.Tests.csproj; do
+            dotnet run --project "$suite" --configuration Release --no-build || exit 1
+          done
 
       - name: Pack
         run: dotnet pack DeepSharp.slnx --no-build --configuration Release --output nupkgs

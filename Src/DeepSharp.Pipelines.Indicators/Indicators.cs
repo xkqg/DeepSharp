@@ -3,6 +3,7 @@
 
 using System.Text.Json;
 using MatPlotLibNet;
+using MatPlotLibNet.Indicators;
 using Microsoft.Data.Analysis;
 
 namespace DeepSharp.Pipelines;
@@ -71,8 +72,21 @@ public enum Indicator
 /// alone, so the step that refuses those can still see it.
 /// </para>
 /// </remarks>
-public sealed record AddIndicatorStep : IPipelineStep<AddIndicatorStep>, IAddsColumns
+public sealed record AddIndicatorStep : IPipelineStep<AddIndicatorStep>, IAddsColumns, IReadsRowOrder, IDescribesColumns
 {
+    private static readonly NewColumnParameter ColumnKey = new(
+        "column", "What the new column is called; an indicator with several parts adds a suffix for each.", "indicator");
+
+    private static readonly OneOfParameter<Indicator> IndicatorKey = new(
+        "indicator", "Which indicator, worked out from the rows that came before.", Indicator.Sma);
+
+    private static readonly WholeNumberParameter PeriodKey = new(
+        "period", "The look-back in rows, for an indicator that takes one.", 14, atLeast: 1);
+
+    // Each place is a role — high, low, close — so rows with one price may name it in every place.
+    private static readonly ColumnsParameter ColumnsKey = new(
+        "columns", "The columns it reads, in the order the indicator expects them.", ["close"], ColumnKinds.Numbers, repeatable: true);
+
     /// <summary>Declares an indicator over the named columns.</summary>
     /// <param name="name">What the new column is called; a many-valued indicator adds a suffix per part.</param>
     /// <param name="indicator">Which indicator.</param>
@@ -81,29 +95,32 @@ public sealed record AddIndicatorStep : IPipelineStep<AddIndicatorStep>, IAddsCo
     /// <exception cref="ArgumentException">A name is empty, or the columns are not what the indicator needs.</exception>
     public AddIndicatorStep(string name, Indicator indicator, IEnumerable<string> columns, int period = 14)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(columns);
-        ArgumentOutOfRangeException.ThrowIfLessThan(period, 1);
 
-        Column = name;
-        Kind = indicator;
-        Columns = [.. columns];
-        Period = period;
+        Column = ColumnKey.Require(name)!;
+        Kind = IndicatorKey.Require(indicator);
+        Period = PeriodKey.Require(period);
 
-        var wanted = Needs(indicator);
+        IReadOnlyList<string> given = [.. columns];
+        var wanted = Needs(Kind);
 
-        if (Columns.Count != wanted)
+        // A rule between two parameters, so it lives with the step that has both.
+        if (given.Count != wanted)
         {
             throw new ArgumentException(
-                $"{indicator} reads {wanted} column{(wanted == 1 ? string.Empty : "s")} and was given {Columns.Count}.",
+                $"{indicator} reads {wanted} column{(wanted == 1 ? string.Empty : "s")} and was given {given.Count}.",
                 nameof(columns));
         }
 
-        if (Columns.Any(string.IsNullOrWhiteSpace))
-        {
-            throw new ArgumentException("A column needs a name.", nameof(columns));
-        }
+        Columns = ColumnsKey.Require(given);
     }
+
+    /// <inheritdoc />
+    public static StepParameters<AddIndicatorStep> Parameters { get; } = new StepParameters<AddIndicatorStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(IndicatorKey, step => step.Kind)
+        .With(PeriodKey, step => step.Period)
+        .With(ColumnsKey, step => step.Columns);
 
     /// <summary>What the new column is called.</summary>
     public string Column { get; }
@@ -119,6 +136,9 @@ public sealed record AddIndicatorStep : IPipelineStep<AddIndicatorStep>, IAddsCo
 
     /// <inheritdoc />
     public static string Name => "feature.indicator";
+
+    /// <inheritdoc />
+    public static string Purpose => "Adds a market indicator worked out from the rows that came before: an average, a strength index, a band.";
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -155,55 +175,31 @@ public sealed record AddIndicatorStep : IPipelineStep<AddIndicatorStep>, IAddsCo
 
         var frame = new DataFrame(
             Columns.Select(name => (DataFrameColumn)new PrimitiveDataFrameColumn<double>(
-                name, Numbers.Of(table, name).Select(value => value ?? double.NaN))));
+                name, table.NumbersOf(name).Select(value => value ?? double.NaN))));
 
-        foreach (var (suffix, values) in Compute(frame))
+        foreach (var output in Compute(frame))
         {
-            table.Put(new Column<double>(
-                suffix.Length == 0 ? Column : $"{Column}_{suffix}",
-                ColumnKind.Number,
-                WarmUpIsAGap(values, table.RowCount)));
+            table.Put(new Column<double>(output.Column, ColumnKind.Number, WarmUpIsAGap(output.Values, table.RowCount)));
         }
     }
 
     /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
+    public ColumnState After(ColumnState before)
     {
-        ArgumentNullException.ThrowIfNull(writer);
+        ArgumentNullException.ThrowIfNull(before);
 
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-        writer.WriteString("indicator", Kind.ToString().ToLowerInvariant());
-        writer.WriteNumber("period", Period);
-        writer.WriteStartArray("columns");
-
-        foreach (var column in Columns)
-        {
-            writer.WriteStringValue(column);
-        }
-
-        writer.WriteEndArray();
-        writer.WriteEndObject();
+        return Made.Aggregate(before, (state, column) => state.With(column, ColumnKind.Number));
     }
+
+    /// <summary>The columns this indicator makes: its name, or its name and a suffix for each of its parts.</summary>
+    public IReadOnlyList<string> Made => [.. Parts(Kind).Select(Named)];
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     /// <exception cref="FormatException">A parameter is missing, or names an indicator nobody defined.</exception>
-    public static AddIndicatorStep ReadFrom(JsonElement element)
-    {
-        if (!element.TryGetProperty("columns", out var columns) || columns.ValueKind != JsonValueKind.Array)
-        {
-            throw new FormatException("An indicator step holds a 'columns' list.");
-        }
-
-        return new AddIndicatorStep(
-            element.RequiredString("column"),
-            element.RequiredEnum<Indicator>("indicator"),
-            columns.EnumerateArray().Select(column => column.GetString() ?? string.Empty),
-            (int)element.RequiredNumber("period"));
-    }
+    public static AddIndicatorStep ReadFrom(JsonElement element) =>
+        new(ColumnKey.Read(element)!, IndicatorKey.Read(element), ColumnsKey.Read(element), PeriodKey.Read(element));
 
     /// <summary>How many columns an indicator reads.</summary>
     /// <param name="indicator">The indicator.</param>
@@ -216,69 +212,46 @@ public sealed record AddIndicatorStep : IPipelineStep<AddIndicatorStep>, IAddsCo
         _ => 3,
     };
 
-    private IEnumerable<(string Suffix, double[] Values)> Compute(DataFrame frame)
+    // The parts an indicator has, by the suffix each is written under; one part, unnamed, for most of them.
+    // The act and the description both read this, so the columns an indicator makes are said in one place.
+    private static IReadOnlyList<string> Parts(Indicator indicator) => indicator switch
+    {
+        Indicator.Macd => ["line", "signal", "histogram"],
+        Indicator.BollingerBands => ["upper", "middle", "lower"],
+        Indicator.Stochastic => ["k", "d"],
+        _ => [string.Empty],
+    };
+
+    private string Named(string part) => part.Length == 0 ? Column : $"{Column}_{part}";
+
+    private IEnumerable<IndicatorOutput> Compute(DataFrame frame)
     {
         var one = Columns[0];
 
-        switch (Kind)
+        IEnumerable<double[]> values = Kind switch
         {
-            case Indicator.Sma:
-                yield return (string.Empty, frame.Sma(one, Period));
-                break;
+            Indicator.Sma => [frame.Sma(one, Period)],
+            Indicator.Ema => [frame.Ema(one, Period)],
+            Indicator.Rsi => [frame.Rsi(one, Period)],
+            Indicator.Atr => [frame.Atr(Columns[0], Columns[1], Columns[2], Period)],
+            Indicator.Adx => [frame.Adx(Columns[0], Columns[1], Columns[2], Period)],
+            Indicator.Cci => [frame.Cci(Columns[0], Columns[1], Columns[2], Period)],
+            Indicator.WilliamsR => [frame.WilliamsR(Columns[0], Columns[1], Columns[2], Period)],
+            Indicator.Obv => [frame.Obv(Columns[0], Columns[1])],
+            Indicator.Macd => Macd(frame.Macd(one)),
+            Indicator.BollingerBands => Bands(frame.BollingerBands(one, Period)),
+            Indicator.Stochastic => Stochastic(frame.Stochastic(Columns[0], Columns[1], Columns[2], Period)),
+            _ => [frame.Vwap(Columns[0], Columns[1], Columns[2], Columns[3])],
+        };
 
-            case Indicator.Ema:
-                yield return (string.Empty, frame.Ema(one, Period));
-                break;
-
-            case Indicator.Rsi:
-                yield return (string.Empty, frame.Rsi(one, Period));
-                break;
-
-            case Indicator.Atr:
-                yield return (string.Empty, frame.Atr(Columns[0], Columns[1], Columns[2], Period));
-                break;
-
-            case Indicator.Adx:
-                yield return (string.Empty, frame.Adx(Columns[0], Columns[1], Columns[2], Period));
-                break;
-
-            case Indicator.Cci:
-                yield return (string.Empty, frame.Cci(Columns[0], Columns[1], Columns[2], Period));
-                break;
-
-            case Indicator.WilliamsR:
-                yield return (string.Empty, frame.WilliamsR(Columns[0], Columns[1], Columns[2], Period));
-                break;
-
-            case Indicator.Obv:
-                yield return (string.Empty, frame.Obv(Columns[0], Columns[1]));
-                break;
-
-            case Indicator.Macd:
-                var macd = frame.Macd(one);
-                yield return ("line", macd.MacdLine);
-                yield return ("signal", macd.SignalLine);
-                yield return ("histogram", macd.Histogram);
-                break;
-
-            case Indicator.BollingerBands:
-                var bands = frame.BollingerBands(one, Period);
-                yield return ("upper", bands.Upper);
-                yield return ("middle", bands.Middle);
-                yield return ("lower", bands.Lower);
-                break;
-
-            case Indicator.Stochastic:
-                var stochastic = frame.Stochastic(Columns[0], Columns[1], Columns[2], Period);
-                yield return ("k", stochastic.K);
-                yield return ("d", stochastic.D);
-                break;
-
-            default:
-                yield return (string.Empty, frame.Vwap(Columns[0], Columns[1], Columns[2], Columns[3]));
-                break;
-        }
+        return values.Zip(Made, (series, column) => new IndicatorOutput(column, series));
     }
+
+    private static IEnumerable<double[]> Macd(MacdResult macd) => [macd.MacdLine, macd.SignalLine, macd.Histogram];
+
+    private static IEnumerable<double[]> Bands(BandsResult bands) => [bands.Upper, bands.Middle, bands.Lower];
+
+    private static IEnumerable<double[]> Stochastic(StochasticResult stochastic) => [stochastic.K, stochastic.D];
 
     private static IEnumerable<double?> WarmUpIsAGap(double[] values, int rows)
     {
@@ -317,6 +290,13 @@ public sealed record AddIndicatorStep : IPipelineStep<AddIndicatorStep>, IAddsCo
         }
     }
 }
+
+/// <summary>
+/// One column an indicator makes, and its values as the arithmetic handed them back.
+/// </summary>
+/// <param name="Column">The column's name.</param>
+/// <param name="Values">The values, perhaps fewer than there are rows.</param>
+internal readonly record struct IndicatorOutput(string Column, double[] Values);
 
 /// <summary>
 /// Adding an indicator to a pipeline.

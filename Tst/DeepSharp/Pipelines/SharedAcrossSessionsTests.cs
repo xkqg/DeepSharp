@@ -36,7 +36,7 @@ public class SharedAcrossSessionsTests
         {
             try
             {
-                catalog.Register("read.avro", ReadCsvStep.ReadFrom);
+                catalog.Register<ReadAvroStep>();
             }
             catch (InvalidOperationException)
             {
@@ -49,15 +49,27 @@ public class SharedAcrossSessionsTests
     }
 
     [Fact]
-    public void ACatalogTaughtAVerbWhileBeingRead_StaysReadable()
+    public void ACatalogTaughtVerbsWhileBeingRead_StaysReadable()
     {
-        var catalog = StepCatalog.BuiltIn();
+        var catalog = new StepCatalog();
+        catalog.Register<DeclareStep>();
+
+        Action[] teach =
+        [
+            catalog.Register<ReadCsvStep>, catalog.Register<ReadRowsStep>, catalog.Register<SplitByTimeStep>,
+            catalog.Register<SplitAtRandomStep>, catalog.Register<SplitStratifiedStep>, catalog.Register<FillMissingStep>,
+            catalog.Register<AddFeatureStep>, catalog.Register<CyclicalStep>, catalog.Register<NormaliseStep>,
+            catalog.Register<NormaliseRowStep>, catalog.Register<EncodeStep>, catalog.Register<TargetStep>,
+            catalog.Register<FillNaNStep>, catalog.Register<DropWarmUpStep>, catalog.Register<TimePartsStep>,
+            catalog.Register<MathsStep>, catalog.Register<ClipOutliersStep>, catalog.Register<DropColumnsStep>,
+            catalog.Register<EncodeCategoriesStep>, catalog.Register<ReadAvroStep>, catalog.Register<ScaleByStep>,
+        ];
 
         Parallel.Invoke(
-            () => Parallel.For(0, 100, at => catalog.Register($"read.{at}", ReadCsvStep.ReadFrom)),
+            () => Parallel.ForEach(teach, each => each()),
             () => Parallel.For(0, 500, _ => Assert.True(catalog.Knows("declare"))));
 
-        Assert.True(catalog.Knows("read.99"));
+        Assert.Equal(22, catalog.Descriptions.Count);
     }
 
     [Fact]
@@ -66,7 +78,7 @@ public class SharedAcrossSessionsTests
         // This is the shape a service has: one pipeline loaded from its file, many requests. Nothing is
         // fitted again, so nothing is written to -- each call builds its own table out of its own rows.
         var trained = Pdd.Create()
-            .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "titanic.csv"))
+            .ReadCsv(Repository.Data("titanic.csv"))
             .Declare(schema => schema.Integer("pclass").Text("sex").Optional("age", ColumnKind.Number))
             .SplitStratified("pclass", 0.70, 0.15)
             .FillMissing("age", With.Median)
@@ -75,7 +87,7 @@ public class SharedAcrossSessionsTests
             .Build()
             .Run();
 
-        var served = PreparedData.FromJson(trained.ToJson());
+        var served = PreparedData.FromJson(trained.ToJson(), StepCatalog.BuiltIn());
         var answers = new double[100];
 
         Parallel.For(0, answers.Length, at =>
@@ -95,7 +107,7 @@ public class SharedAcrossSessionsTests
     public void ATableBelongsToOneRun_AndAReplayNeverTouchesIt()
     {
         var trained = Pdd.Create()
-            .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "titanic.csv"))
+            .ReadCsv(Repository.Data("titanic.csv"))
             .Declare(schema => schema.Integer("pclass"))
             .SplitAtRandom(0.70, 0.15)
             .Normalise("pclass")
@@ -107,18 +119,5 @@ public class SharedAcrossSessionsTests
         trained.Replay(new InMemoryRowSource(["pclass"], [["1"]]));
 
         Assert.Equal(before, ((Column<double>)trained.Table["pclass"])[0]);
-    }
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
     }
 }

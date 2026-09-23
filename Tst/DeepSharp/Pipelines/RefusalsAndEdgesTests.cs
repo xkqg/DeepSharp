@@ -238,7 +238,7 @@ public class RefusalsAndEdgesTests
         var refused = Assert.Throws<InvalidOperationException>(
             () => new SplitByTimeStep("t", new SplitShares(0.34, 0.33, 0.33)).Assign(table));
 
-        Assert.Contains("no order in time", refused.Message);
+        Assert.Contains("no order to put rows in", refused.Message);
     }
 
     [Fact]
@@ -264,7 +264,7 @@ public class RefusalsAndEdgesTests
 
         var parts = new[] { Part.Train, Part.Train };
 
-        Assert.Throws<InvalidOperationException>(() => new FillMissingStep("a", With.Mean).Fit(table, parts));
+        Assert.Throws<InvalidOperationException>(() => FillMissingStep.Of("a", With.Mean).Fit(table, parts));
         Assert.Throws<InvalidOperationException>(() => new NormaliseStep("a").Fit(table, parts));
         Assert.Throws<InvalidOperationException>(() => new EncodeStep("a").Fit(table, parts));
     }
@@ -276,7 +276,7 @@ public class RefusalsAndEdgesTests
             new DeclareStep([new ColumnDeclaration("a", ColumnKind.Number, true)]),
             CsvRowSource.FromText("a\n\n2\n"));
 
-        var step = new FillMissingStep("a", With.Previous);
+        var step = FillMissingStep.Of("a", With.Previous);
         var learned = step.Fit(table, [Part.Train, Part.Train]);
 
         Assert.Throws<InvalidOperationException>(() => step.ApplyTo(table, learned));
@@ -289,7 +289,7 @@ public class RefusalsAndEdgesTests
             new DeclareStep([new ColumnDeclaration("a", ColumnKind.Text, true)]),
             CsvRowSource.FromText("a\nx\n\n"));
 
-        var step = new FillMissingStep("a", With.Mean);
+        var step = FillMissingStep.Of("a", With.Mean);
 
         Assert.Throws<InvalidOperationException>(() => step.Fit(table, [Part.Train, Part.Train]));
     }
@@ -301,7 +301,7 @@ public class RefusalsAndEdgesTests
             new DeclareStep([new ColumnDeclaration("a", ColumnKind.Integer, true)]),
             CsvRowSource.FromText("a\n1\n2\n\n"));
 
-        var step = new FillMissingStep("a", With.Mean);
+        var step = FillMissingStep.Of("a", With.Mean);
         step.ApplyTo(table, step.Fit(table, [Part.Train, Part.Train, Part.Test]));
 
         Assert.Equal(2, ((Column<long>)table["a"])[2]);
@@ -439,14 +439,14 @@ public class RefusalsAndEdgesTests
     public void ManyColumnsScaledInOneBreath()
     {
         var prepared = Pdd.Create()
-            .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "titanic.csv"))
+            .ReadCsv(Repository.Data("titanic.csv"))
             .Declare(schema => schema.Number("fare").Integer("pclass", "sibsp"))
             .SplitAtRandom(0.70, 0.15)
             .Normalise("fare", "pclass", "sibsp")
             .Build()
             .Run();
 
-        Assert.Equal(3, prepared.Fitted.Count);
+        Assert.Equal(3, prepared.Fitted.Keys.Count(at => prepared.Declaration.Steps[at] is IFittedStep));
     }
 
     // ---- the file ------------------------------------------------------------------------------------
@@ -467,9 +467,20 @@ public class RefusalsAndEdgesTests
 
         foreach (var step in steps)
         {
-            var one = new PipelineDeclaration([new SplitByTimeStep("t", new SplitShares(0.7, 0.15, 0.15)), step]);
+            // A step that learns needs a split before it; a split is the one thing that must not get a
+            // second split in front of it, because a declaration divides its rows once.
+            IPipelineStep schema = new DeclareStep([
+                new ColumnDeclaration("t", ColumnKind.Timestamp, false),
+                new ColumnDeclaration("g", ColumnKind.Category, false),
+                new ColumnDeclaration("a", ColumnKind.Number, false),
+                new ColumnDeclaration("b", ColumnKind.Number, false),
+            ]);
 
-            Assert.Equal(one, PipelineDeclaration.FromJson(one.ToJson()));
+            var one = new PipelineDeclaration(step is ISplitStep
+                ? [schema, step]
+                : [schema, new SplitByTimeStep("t", new SplitShares(0.7, 0.15, 0.15)), step]);
+
+            Assert.Equal(one, PipelineDeclaration.FromJson(one.ToJson(), StepCatalog.BuiltIn()));
         }
     }
 
@@ -478,7 +489,7 @@ public class RefusalsAndEdgesTests
     {
         const string json = """{"declaration":[{"step":"normalise.row","norm":"l2"}]}""";
 
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -486,7 +497,7 @@ public class RefusalsAndEdgesTests
     {
         const string json = """{"declaration":[{"step":"declare","remainder":"drop"}]}""";
 
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -497,7 +508,7 @@ public class RefusalsAndEdgesTests
                              "columns":[{"name":"a","kind":"number"}]}]}
             """;
 
-        Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
+        Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
     }
 
     [Fact]
@@ -563,7 +574,7 @@ public class RefusalsAndEdgesTests
         learned.Learned("value", 1);
 
         Assert.Throws<InvalidOperationException>(
-            () => new FillMissingStep("a", With.Mean).ApplyTo(table, learned));
+            () => FillMissingStep.Of("a", With.Mean).ApplyTo(table, learned));
     }
 
     [Fact]
@@ -581,28 +592,15 @@ public class RefusalsAndEdgesTests
     public void APipelineThatLearnsNothing_NeedsNoSplitAtAll()
     {
         var prepared = Pdd.Create()
-            .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "titanic.csv"))
+            .ReadCsv(Repository.Data("titanic.csv"))
             .Declare(schema => schema.Integer("sibsp", "parch"))
             .AddFeature("family", "sibsp", Arithmetic.Plus, "parch")
             .Build()
             .Run();
 
-        Assert.Equal(891, prepared.CountIn(Part.Train));
+        Assert.Equal(891, prepared.CountIn(Part.Undivided));
         Assert.Empty(prepared.Fitted);
         Assert.True(prepared.Table.Has("family"));
-    }
-
-    private static string RepoRoot()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
-        {
-            directory = directory.Parent;
-        }
-
-        Assert.NotNull(directory);
-        return directory!.FullName;
     }
 
     [Fact]
@@ -614,7 +612,7 @@ public class RefusalsAndEdgesTests
             new DeclareStep([new ColumnDeclaration("paid", ColumnKind.Boolean, true)]),
             CsvRowSource.FromText("paid\ntrue\nfalse\n\n"));
 
-        var numbers = Numbers.Of(table, "paid");
+        var numbers = table.NumbersOf("paid");
 
         Assert.Equal(1, numbers[0]);
         Assert.Equal(0, numbers[1]);
@@ -630,7 +628,7 @@ public class RefusalsAndEdgesTests
             new DeclareStep([new ColumnDeclaration("trades", ColumnKind.Integer, true)]),
             CsvRowSource.FromText("trades\n8123\n\n"));
 
-        var numbers = Numbers.Of(table, "trades");
+        var numbers = table.NumbersOf("trades");
 
         Assert.Equal(8123, numbers[0]);
         Assert.Null(numbers[1]);

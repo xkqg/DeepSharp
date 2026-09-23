@@ -57,7 +57,7 @@ public static class ServiceCollectionExtensions
 /// <remarks>
 /// A package that brings verbs registers one of these rather than a catalog of its own, so every package's
 /// verbs end up in the one catalog no matter which order the registrations were written in. A genuine
-/// duplicate still throws where it should, in <see cref="StepCatalog.Register"/>.
+/// duplicate still throws where it should, in <see cref="StepCatalog.Register{TStep}"/>.
 /// </remarks>
 public interface IStepContribution
 {

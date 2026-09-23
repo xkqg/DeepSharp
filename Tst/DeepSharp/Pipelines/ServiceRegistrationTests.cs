@@ -100,8 +100,7 @@ public class ServiceRegistrationTests
     /// <summary>A package bringing one verb, registered the way another package would register its own.</summary>
     private sealed class ScalingSteps : IStepContribution
     {
-        public void AddTo(StepCatalog catalog) =>
-            catalog.Register("scale.by", _ => new ReadCsvStep("scaled.csv"));
+        public void AddTo(StepCatalog catalog) => catalog.Register<ScaleByStep>();
     }
 
     [Fact]

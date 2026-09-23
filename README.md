@@ -15,8 +15,8 @@ and the arithmetic runs on .NET's own vector maths out of the box or on a heavie
 between them does not change a line of your model. What it adds is everything around the engine: getting
 your data in, the layers, the training loop, the checkpoints and the pictures.
 
-**0.2.1 is the tensors and the data half.** What learns from them is next; the
-[roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says in which order, and the
+**0.3.0 is the tensors, the data half, and a notebook to see the data in.** What learns from them is next;
+the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says in which order, and the
 [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release added.
 
 ```
@@ -29,6 +29,10 @@ using DeepSharp.Pipelines;
 
 var prepared = Pdd.Create()
     .ReadCsv("btceur-1d.csv")                                // declared, not opened
+    .Declare(schema => schema
+        .Timestamp("timestamp")
+        .Number("close")
+        .Optional("trades", ColumnKind.Number))              // a column that may have gaps
     .SplitByTime("timestamp", train: 0.70, validation: 0.15) // test is the rest
     .FillMissing("trades", With.Mean)                        // only offered after the split
     .Normalise("close")
@@ -40,6 +44,36 @@ The course from raw data to a validated model is declared once as an artefact an
 that learns from the data is fitted on the training rows alone. That is the whole idea, and
 [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) is where it is explained.
 
+The steps and what they learned are one file: `prepared.ToJson()` writes it, and
+`PreparedData.FromJson(text, StepCatalog.BuiltIn())` reads it back in a program that has never seen the data.
+The catalog is the list of verbs the reader knows — add `.WithIndicators()` for a file that holds indicators,
+which read the rows in their order and so need that order said first, with `.OrderBy("timestamp")`.
+
+## A notebook to see it in
+
+`DeepSharp.Notebooks.Verso` writes the same pipeline as a [Verso](https://www.versonotebooks.com/) notebook,
+one block per step, each block the step's own JSON — edited as text, or field by field in Verso's properties
+panel. "Show the data here" on a block runs the pipeline down to it and shows the rows there, each column
+coloured over the training rows and every row marked with the part it lands in. A column is excluded or made
+a category from the grid, and the notebook writes the step that does it. The toolbar runs the whole pipeline
+and exports it as the same file the chain writes.
+
+Install it from Verso's Extensions panel; it runs in Verso's VS Code extension and in `verso serve`. A C# cell
+in the same notebook reads what the blocks declare, as text — it is there after "Show the data here" or the
+toolbar's run, and taken back whenever the blocks may no longer make it:
+
+```csharp
+#r "nuget: DeepSharp.Pipelines.Indicators"
+using DeepSharp.Pipelines;
+
+if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
+{
+    var folder = Variables.TryGet<string>("deepsharp.folder", out var saved) ? SourceFolder.Of(saved) : SourceFolder.WorkingDirectory;
+    var declaration = PipelineDeclaration.FromJson(text, StepCatalog.BuiltIn().WithIndicators());
+    var prepared = new Pipeline(declaration, rows: null, folder).Run();
+}
+```
+
 ## Read on
 
 | | |
@@ -47,6 +81,7 @@ that learns from the data is fitted on the training rows alone. That is the whol
 | [Getting started](https://github.com/xkqg/DeepSharp/wiki/Getting-Started) | Install it, add two tensors, prepare a real file. |
 | [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) | The idea this library is built around, and the mistake it removes. |
 | [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) | Every verb in the order you write it: readers, features, the split, gaps, scales, the handover. |
+| [Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook) | A pipeline written block by block in Verso, and the data at any block. |
 | [Architecture](https://github.com/xkqg/DeepSharp/wiki/Architecture) | The design decisions, and what was deliberately left out. |
 | [Next to TorchSharp and TensorFlow.NET](https://github.com/xkqg/DeepSharp/wiki#how-this-sits-next-to-torchsharp-and-tensorflownet) | What those give you, what they do not, and why the choice of engine stays a choice. |
 | [Quality](https://github.com/xkqg/DeepSharp/wiki/Quality) | What has to be true before anything is allowed in. |
@@ -62,5 +97,6 @@ that learns from the data is fitted on the training rows alone. That is the whol
 | `DeepSharp.Pipelines` | The data half: readers, features, the split, gaps, scales, the handover — saved as a file and replayed. |
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand, through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
+| `DeepSharp.Notebooks.Verso` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block. |
 
 Runs on .NET 10. MIT — see [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE).

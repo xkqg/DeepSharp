@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
@@ -14,17 +15,15 @@ namespace DeepSharp.Pipelines;
 /// and the same mistake wears a quieter costume when a column merely restates the answer, which is what
 /// declaring the columns is for.
 /// </remarks>
-public sealed record TargetStep : IPipelineStep<TargetStep>
+public sealed record TargetStep : IPipelineStep<TargetStep>, IDescribesColumns
 {
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column a model is asked to predict, handed over apart from the numbers it is shown.", "answer", ColumnKinds.Any);
+
     /// <summary>Declares which column holds the answer.</summary>
     /// <param name="column">The column being predicted.</param>
     /// <exception cref="ArgumentException">The column has no name.</exception>
-    public TargetStep(string column)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(column);
-
-        Column = column;
-    }
+    public TargetStep(string column) => Column = ColumnKey.Require(column);
 
     /// <summary>The column being predicted.</summary>
     public string Column { get; }
@@ -33,23 +32,22 @@ public sealed record TargetStep : IPipelineStep<TargetStep>
     public static string Name => "target";
 
     /// <inheritdoc />
+    public static string Purpose => "Names the column a model is asked to predict, which is handed over apart from the numbers it is shown.";
+
+    /// <inheritdoc />
+    public static StepParameters<TargetStep> Parameters { get; } =
+        new StepParameters<TargetStep>().With(ColumnKey, step => step.Column);
+
+    /// <inheritdoc />
     public string Verb => Name;
 
     /// <inheritdoc />
-    public void WriteTo(Utf8JsonWriter writer)
-    {
-        ArgumentNullException.ThrowIfNull(writer);
-
-        writer.WriteStartObject();
-        writer.WriteString("step", Verb);
-        writer.WriteString("column", Column);
-        writer.WriteEndObject();
-    }
+    public ColumnState After(ColumnState before) => before;
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
-    public static TargetStep ReadFrom(JsonElement element) => new(element.RequiredString("column"));
+    public static TargetStep ReadFrom(JsonElement element) => new(ColumnKey.Read(element));
 }
 
 /// <summary>
@@ -75,6 +73,25 @@ public readonly record struct Batch(
 }
 
 /// <summary>
+/// Rows served through a trained pipeline, in the shape the training rows were handed over in.
+/// </summary>
+/// <param name="FeatureNames">The columns, in the order every row lists them — the training order.</param>
+/// <param name="Features">One row of numbers per served row.</param>
+/// <param name="HandedInAt">For each served row, which of the handed-in rows it is, counting from nought.</param>
+/// <remarks>
+/// No answers: a served row is asked for one. Which handed-in row each is, because a replay can drop rows
+/// and put them in order, and a prediction has to find its way back to the row it was made for.
+/// </remarks>
+public readonly record struct ServedBatch(
+    IReadOnlyList<string> FeatureNames,
+    IReadOnlyList<double[]> Features,
+    IReadOnlyList<int> HandedInAt)
+{
+    /// <summary>How many rows were served.</summary>
+    public int RowCount => Features.Count;
+}
+
+/// <summary>
 /// Handing prepared data over to whatever learns from it.
 /// </summary>
 /// <remarks>
@@ -96,15 +113,48 @@ public static class Handover
     {
         ArgumentNullException.ThrowIfNull(prepared);
 
+        var rows = Enumerable.Range(0, prepared.Table.RowCount)
+            .Where(row => prepared.Parts[row] == part)
+            .ToArray();
+
+        return HandedOver(prepared, prepared.Table, rows, answers: true);
+    }
+
+    /// <summary>Rows that arrived after training, replayed and handed over in the shape the training rows were.</summary>
+    /// <param name="prepared">The trained pipeline.</param>
+    /// <param name="rows">The rows to serve, without the answer — it is what is being asked.</param>
+    /// <returns>Their numbers in the training order, and which handed-in row each is.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// A served row is refused for what a training row would be: a column still holding words, a gap, a value
+    /// that is not a finite number.
+    /// </exception>
+    /// <remarks>
+    /// Nothing is fitted: the rows are replayed with the numbers the training rows produced, which is the
+    /// only way a model sees tomorrow's rows the way it saw the ones it learned from.
+    /// </remarks>
+    public static ServedBatch Served(this PreparedData prepared, IRowSource rows)
+    {
+        ArgumentNullException.ThrowIfNull(prepared);
+        ArgumentNullException.ThrowIfNull(rows);
+
+        var table = prepared.Replay(rows);
+        var all = Enumerable.Range(0, table.RowCount).ToArray();
+        var batch = HandedOver(prepared, table, all, answers: false);
+
+        return new ServedBatch(batch.FeatureNames, batch.Features, [.. all.Select(row => table.Identities[row].ReadAt)]);
+    }
+
+    private static Batch HandedOver(PreparedData prepared, Table table, int[] rows, bool answers)
+    {
         var target = prepared.Declaration.Steps.OfType<TargetStep>().LastOrDefault()?.Column;
 
-        if (target is not null && !prepared.Table.Has(target))
+        if (target is not null && !table.Has(target))
         {
             throw new InvalidOperationException(
                 $"This pipeline predicts '{target}', and no column of that name reached the end of it.");
         }
 
-        var features = prepared.Table.Columns
+        var features = table.Columns
             .Where(column => column.Name != target)
             .ToArray();
 
@@ -118,31 +168,41 @@ public static class Handover
                 $"'{words.Name}' still holds words. Encode it, or do not declare it.");
         }
 
-        var rows = Enumerable.Range(0, prepared.Table.RowCount)
-            .Where(row => prepared.Parts[row] == part)
-            .ToArray();
-
-        var values = features.Select(column => Numbers.Of(prepared.Table, column.Name)).ToArray();
-        var answers = target is null ? null : Numbers.Of(prepared.Table, target);
+        var values = features.Select(column => table.NumbersOf(column.Name)).ToArray();
+        var known = target is null || !answers ? null : table.NumbersOf(target);
         var batch = new List<double[]>(rows.Length);
-        var labels = answers is null ? null : new List<double>(rows.Length);
+        var labels = known is null ? null : new List<double>(rows.Length);
 
         foreach (var row in rows)
         {
+            // A refusal names the row as it was read, which is the row a person can find in their file.
+            var readAt = table.Identities[row].ReadAt;
             var line = new double[features.Length];
 
             for (var at = 0; at < features.Length; at++)
             {
-                line[at] = values[at][row] ?? throw Unfilled(features[at].Name, row);
+                line[at] = Handed(values[at][row], features[at].Name, readAt);
             }
 
             batch.Add(line);
-            labels?.Add(answers![row] ?? throw Unfilled(target!, row));
+            labels?.Add(Handed(known![row], target!, readAt));
         }
 
         return new Batch([.. features.Select(column => column.Name)], batch, labels);
     }
 
-    private static InvalidOperationException Unfilled(string column, int row) =>
-        new($"Row {row + 1} of '{column}' is still a gap. Fill it, drop it, or leave the column out.");
+    /// <summary>A value as it may be handed to something that learns, or the reason it may not.</summary>
+    private static double Handed(double? value, string column, int readAt) => value switch
+    {
+        null => throw new InvalidOperationException(
+            $"Row {readAt + 1} of '{column}' is still a gap. Fill it, drop it, or leave the column out."),
+
+        // A model handed an infinity or a not-a-number learns nothing from that row and says nothing about
+        // it. Either is a fault upstream, and the verb for it is fill.nan.
+        { } number when !double.IsFinite(number) => throw new InvalidOperationException(string.Create(
+            CultureInfo.InvariantCulture,
+            $"Row {readAt + 1} of '{column}' is not a finite number ({number}). Declare fill.nan for it, or leave the column out.")),
+
+        { } number => number,
+    };
 }
