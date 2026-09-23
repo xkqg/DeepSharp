@@ -6,8 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
 // A pipeline reached the way an application reaches everything else: a builder, its services, and the app
-// that comes out of it. Nothing here is required to use the library -- the last few lines do the same thing
-// with no host anywhere -- but this is the shape a .NET application already has, so the library fits into it.
+// that comes out of it. None of it is required -- the last lines do the same with no host anywhere -- but
+// this is the shape a .NET application already has, so the library fits into it.
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddDeepSharpPipelines();
@@ -15,31 +15,88 @@ builder.Services.AddDeepSharpPipelines();
 using var app = builder.Build();
 
 var pipelines = app.Services.GetRequiredService<IPipelineFactory>();
+var data = Path.Join(AppContext.BaseDirectory, "..", "..", "..", "..", "data");
 
-// Declaring, not doing: no file is opened by any of this. The path need not even exist yet.
-var declaration = pipelines.Create()
-    .ReadCsv("btceur-1d.csv")
-    .SplitByTime("timestamp", train: 0.70, validation: 0.15, test: 0.15)
-    .FillMissing("trades", With.Mean)
-    .Declaration;
+// ---------------------------------------------------------------------------------------------------
+// A table of people: gaps of two very different sizes, a category, and no time column at all.
+// ---------------------------------------------------------------------------------------------------
+var passengers = pipelines.Create()
+    .ReadCsv(Path.Join(data, "titanic.csv"))
+    .Declare(schema => schema
+        .Integer("survived", "pclass", "sibsp", "parch")
+        .Text("sex", "embarked")
+        .Number("fare")
+        .Optional("age", ColumnKind.Number))
+    .AddFeature("family", "sibsp", Arithmetic.Plus, "parch")
+    // 'alive' and 'class' are 'survived' and 'pclass' written as words. Neither was declared, so neither
+    // comes along: a pipeline that carried everything in the file would hand a model its own answer.
+    .SplitStratified("survived", train: 0.70, validation: 0.15, test: 0.15)
+    // ---- nothing above this line is allowed to learn from the data ----
+    .FillMissing("age", With.Median)
+    .Encode("sex")
+    .Encode("embarked")
+    .Normalise("age", "fare", "family")
+    .Build()
+    .Run();
 
-Console.WriteLine("Declared:");
-Console.WriteLine($"  {declaration}");
-Console.WriteLine();
+Report("Titanic", passengers);
 
-var json = declaration.ToJson();
+// ---------------------------------------------------------------------------------------------------
+// A series in time: the split runs along the date, and the day of the week is written as a place on a
+// circle so that Monday and Sunday are neighbours.
+// ---------------------------------------------------------------------------------------------------
+var prices = pipelines.Create()
+    .ReadCsv(Path.Join(data, "apple.csv"))
+    .Declare(schema => schema
+        .Timestamp("Date")
+        .Number("AAPL.Open", "AAPL.High", "AAPL.Low", "AAPL.Close", "AAPL.Volume")
+        .Text("direction"))
+    .AddFeature("range", "AAPL.High", Arithmetic.Minus, "AAPL.Low")
+    .Cyclical("Date", Period.DayOfWeek, Form.SplitSign)
+    .SplitByTime("Date", train: 0.70, validation: 0.15, test: 0.15)
+    .Normalise("AAPL.Close", Scale.Robust)
+    .Normalise("AAPL.Volume", Scale.Robust)
+    .Normalise("range", Scale.Robust)
+    .Encode("direction")
+    .Build()
+    .Run();
 
-Console.WriteLine("As a file:");
-Console.WriteLine(json);
-Console.WriteLine();
+Report("Apple", prices);
 
-// The other direction, which is the property the whole design rests on: what was built in C# reads back as
-// the same declaration, so a pipeline written by hand and one written in code reach equally far.
-var returned = PipelineDeclaration.FromJson(json);
+// The whole pipeline, both halves, as it would be saved beside a model.
+Console.WriteLine("The Titanic pipeline, as a file:");
+Console.WriteLine(passengers.ToJson());
 
-Console.WriteLine($"Read back:  {returned}");
-Console.WriteLine($"Identical:  {returned.Equals(declaration)}");
-Console.WriteLine();
+// And the same declaration, read back from that file and run again with no builder in sight.
+var again = new Pipeline(PipelineDeclaration.FromJson(passengers.ToJson())).Run();
 
-// And the same thing again, with no container in sight.
-Console.WriteLine($"Without a host: {Pdd.Create().ReadCsv("btceur-1d.csv").Declaration}");
+Console.WriteLine($"Read back and run again: {again.Table.Columns.Count} columns, "
+                  + $"{again.CountIn(Split.Train)} training rows — identical: "
+                  + $"{again.Declaration.Equals(passengers.Declaration)}");
+
+static void Report(string what, PreparedData prepared)
+{
+    Console.WriteLine($"=== {what} ===");
+    Console.WriteLine($"  rows      {prepared.Table.RowCount}"
+                      + $" (train {prepared.CountIn(Split.Train)},"
+                      + $" validation {prepared.CountIn(Split.Validation)},"
+                      + $" test {prepared.CountIn(Split.Test)})");
+    Console.WriteLine($"  columns   {string.Join(", ", prepared.Table.Columns.Select(column => column.Name))}");
+
+    foreach (var (at, values) in prepared.Fitted.OrderBy(each => each.Key))
+    {
+        var step = prepared.Declaration.Steps[at].Verb;
+
+        foreach (var (name, value) in values.Numbers)
+        {
+            Console.WriteLine($"  learned   {step}[{at}] {name} = {value:0.####}");
+        }
+
+        foreach (var (name, list) in values.Lists)
+        {
+            Console.WriteLine($"  learned   {step}[{at}] {name} = {string.Join(", ", list)}");
+        }
+    }
+
+    Console.WriteLine();
+}

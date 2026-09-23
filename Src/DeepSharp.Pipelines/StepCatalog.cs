@@ -29,6 +29,11 @@ public sealed class StepCatalog
         catalog.Register<SplitAtRandomStep>();
         catalog.Register<SplitStratifiedStep>();
         catalog.Register<FillMissingStep>();
+        catalog.Register<AddFeatureStep>();
+        catalog.Register<CyclicalStep>();
+        catalog.Register<NormaliseStep>();
+        catalog.Register<NormaliseRowStep>();
+        catalog.Register<EncodeStep>();
 
         return catalog;
     }

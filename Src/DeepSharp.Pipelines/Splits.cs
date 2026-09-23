@@ -61,11 +61,6 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
         var train = (int)Math.Round(rows * Train, MidpointRounding.AwayFromZero);
         var validation = (int)Math.Round(rows * Validation, MidpointRounding.AwayFromZero);
 
-        if (train + validation > rows)
-        {
-            validation = Math.Max(0, rows - train);
-        }
-
         var splits = new Split[rows];
 
         for (var at = 0; at < rows; at++)

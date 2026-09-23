@@ -86,19 +86,45 @@ public sealed class Pipeline
     public PreparedData Run()
     {
         var table = Prepare();
+        var steps = Declaration.Steps;
+        var line = steps.Count;
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is ISplitStep)
+            {
+                line = at;
+                break;
+            }
+        }
+
+        // Everything before the split is arithmetic on a row, and it has to happen before the rows are
+        // divided: a feature is what the split then divides, not something added to one part of it.
+        for (var at = 0; at < line; at++)
+        {
+            if (steps[at] is IAddsColumns adds)
+            {
+                adds.AddTo(table);
+            }
+        }
+
         var splits = Assign(table);
         var fitted = new Dictionary<int, FittedStepValues>();
 
-        for (var at = 0; at < Declaration.Steps.Count; at++)
+        for (var at = line; at < steps.Count; at++)
         {
-            if (Declaration.Steps[at] is not ILearnsFromData step)
+            switch (steps[at])
             {
-                continue;
-            }
+                case ILearnsFromData learns:
+                    var learned = learns.Fit(table, splits);
+                    learns.ApplyTo(table, learned);
+                    fitted[at] = learned;
+                    break;
 
-            var learned = step.Fit(table, splits);
-            step.ApplyTo(table, learned);
-            fitted[at] = learned;
+                case IAddsColumns adds:
+                    adds.AddTo(table);
+                    break;
+            }
         }
 
         return new PreparedData(Declaration, table, splits, fitted);
@@ -113,12 +139,8 @@ public sealed class Pipeline
             return split.Assign(table);
         }
 
-        if (Declaration.Steps.Any(step => step is IFittedStep))
-        {
-            throw new InvalidOperationException(
-                "Something in this pipeline learns from the data, and the rows have not been divided.");
-        }
-
+        // Nothing here needs to refuse a pipeline that learns without splitting: a declaration carrying a
+        // step that learns and no split is refused when it is built, whichever door it came through.
         // A pipeline that learns nothing needs no split, and every row is simply itself.
         return [.. Enumerable.Repeat(Split.Train, table.RowCount)];
     }

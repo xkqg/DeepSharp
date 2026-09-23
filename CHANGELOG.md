@@ -49,6 +49,27 @@ where the arithmetic happens.
   `With.Constant(0)` — a word a file did not define is refused rather than carried to whatever a default
   branch would have done with it, and a strategy that takes a number is written with one.
 
+- **It reads real files.** `Declare` names the columns and their kinds and says what becomes of the rest —
+  dropped by default, because a column nobody declared is a column nobody checked. An empty cell is a gap
+  and stays one; a cell that cannot be read as what it was declared to be is refused with its row, its
+  column and its value. True and false are accepted in the spellings files actually use, and numbers and
+  dates are read the same way on every machine.
+
+- **Three ways to divide the rows, and none of them a default.** By time, which refuses a row that has no
+  time rather than guessing where it belongs; at random with a seed written into the declaration; and
+  stratified, which deals each group out separately so a rare answer survives into validation.
+
+- **Features, before the split, because they learn nothing.** A column worked out from two others, and a
+  moment in time written as a place on a circle so that eleven at night and midnight are neighbours — in
+  whichever of three forms you ask for: the plain value, the same value between nothing and one, or two
+  columns saying how far up and how far down.
+
+- **Everything that learns, after it.** Filling a gap, encoding a category, and six ways of bringing a
+  column onto a comparable scale. Each is fitted on the training rows alone and then replayed unchanged
+  over validation, test and anything that arrives later; what each one learned is written into the file
+  beside the declaration. What happens to a value outside the learned range is your choice, said out loud —
+  a price meets a new high the first week it is in production.
+
 - **It fits an application that has a host.** `services.AddDeepSharpPipelines()` registers the pipeline
   factory and the catalog of verbs, so a pipeline is resolved the way everything else in a .NET application
   is. A package that brings verbs of its own registers them as a contribution, and every contribution is

@@ -121,11 +121,7 @@ public sealed class TextColumn : IColumn
     /// <summary>The word in a row, or nothing when the cell is a gap.</summary>
     /// <param name="row">The row to look at.</param>
     /// <returns>The word, or <see langword="null"/>.</returns>
-    public string? this[int row]
-    {
-        get => _values[row];
-        set => _values[row] = value;
-    }
+    public string? this[int row] => _values[row];
 
     /// <inheritdoc />
     public bool IsMissing(int row) => _values[row] is null;

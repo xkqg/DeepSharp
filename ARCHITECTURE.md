@@ -7,8 +7,15 @@ written down here is not a decision, it is a habit.
 
 ```
 Src/DeepSharp/            the engine side: Shape, Tensor, ITensorBackend, CpuBackend
-Src/DeepSharp.Pipelines/  the data side: the declaration, its steps, the catalog, the builders
-Samples/                  runnable programs, one per thing worth showing
+Src/DeepSharp.Pipelines/  the data side
+    IPipelineStep.cs        what a step is, and the two markers that place it in the chain
+    Steps.cs Schema.cs      reading, declaring, splitting in time, filling a gap
+    Splits.cs               the three shares, and splitting at random or stratified
+    Features.cs             a derived column, a cycle, and the three forms
+    Transforms.cs           the scales, the row norms, the encodings
+    RowSource.cs Table.cs   where rows come from, and what they become
+    Binding.cs Execution.cs text into typed columns, and the run itself
+Samples/                  runnable programs and the published data they read
 Tst/DeepSharp/            the tests, mirroring both libraries' folders
 ```
 
@@ -399,6 +406,24 @@ quarters empty, a boolean dialect, a category that is sometimes absent, and a sp
 time because there is no time in the file. Landed rather than downloaded at run time, for the same reason
 a live source is fetched and landed: a sample that reaches the network is a sample that behaves
 differently on the day the network does.
+
+### A step says what it can do, and the run asks
+
+`IPipelineStep` stays two members wide — a verb and how to write itself down — because most of what a step
+might do applies to only some steps. What a step can *do* is said by the capability it implements, and the
+run asks with a type test: `IOpensRows` for a source, `IBindsColumns` for a schema, `IAddsColumns` for
+arithmetic on a row, `IAssignsSplits` for dividing the rows, `ILearnsFromData` for the pair of fitting and
+replaying.
+
+Widening the step interface instead would force a split step to answer for column effects and a report step
+to answer for fitting, which is the interface-segregation complaint in its usual disguise. As capabilities,
+a package adds a verb that does something new by implementing one more interface, and nothing existing
+changes.
+
+The order the run uses falls out of the same idea. Everything before the split that adds columns runs
+first, because a feature is what the split then divides rather than something added to one part of it;
+then the rows are divided; then each remaining step is fitted on the training rows and replayed over all
+of them.
 
 ## Decisions
 
