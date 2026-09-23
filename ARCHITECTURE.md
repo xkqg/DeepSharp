@@ -50,7 +50,7 @@ The obvious alternative is a method per format on the pipeline type itself. It r
 the whole architecture: the core would have to reference Parquet.Net, ExcelDataReader and an HTTP client,
 every project would carry all of them, and adding a format would mean editing the core.
 
-As extensions, a verb exists exactly when its package is referenced. Reference `DeepSharp.Data.Parquet`
+As extensions, a verb exists exactly when its package is referenced. Reference `DeepSharp.Pdd.Parquet`
 and `.ReadParquet` appears; do not, and it is not in the list. Nothing is carried that is not asked for,
 and a new format is a new package rather than a change here.
 
@@ -176,7 +176,7 @@ a time, five times over, stops using the thing.
 ```
 btceur.pdd.yaml(7,3): column 'trades' is not in btceur-1d.csv — there is a 'numberOfTrades'
 btceur.pdd.yaml(4,10): train+validation+test = 0.95, must be 1.0
-btceur.pdd.yaml(2,8): step 'parquet' exists, but the package DeepSharp.Data.Parquet is not referenced
+btceur.pdd.yaml(2,8): step 'parquet' exists, but the package DeepSharp.Pdd.Parquet is not referenced
 ```
 
 That last message is deliberately not the same as the first kind. "I do not know this step" and "I know it,
@@ -286,6 +286,59 @@ learner says it needs. Everything else about a learner is its own package's busi
 A cut like this is not kept by intention, so it is pinned: a test reads the assembly references and fails
 the moment the pipeline acquires one it is not allowed to have. Direction is easy to state and easy to
 break, and by the time it is broken the fix is no longer a line.
+
+### A package is named after the role it plays, never after the vendor it brings
+
+The segment after `DeepSharp.` says which side of a seam a package sits on; the segment after that says
+which outside thing it carries.
+
+```
+DeepSharp                   tensors, the backend seam, the light engine, the model, the training loop
+DeepSharp.Pdd               the pipeline, ending at prepared splits and the declared evidence
+DeepSharp.Pdd.<Format>      a reader: Parquet, Excel, Json
+DeepSharp.Pdd.<Source>      a live source: it fetches and lands, it does not read during training
+DeepSharp.Learners.<Name>   something that learns from prepared data, behind the learner seam
+DeepSharp.Backends.<Name>   an engine behind ITensorBackend
+DeepSharp.Import.<Name>     reading weights or a model trained somewhere else
+DeepSharp.Charts            drawing, from the metrics the loop already keeps
+```
+
+Naming by role rather than by vendor is not tidiness. A package called after a framework implies that the
+framework is *in* there as itself, and for one of them that would quietly contradict the design: the
+declarative vocabulary — stack the layers, compile, fit — is a **way of speaking**, not an engine. It lives
+in the core and lowers onto the same model the imperative door produces, so there is nothing to put in a
+package named after it. What deserves a package of its own is reading what that framework *saved*, and
+`DeepSharp.Import.<Name>` says exactly that and nothing more.
+
+The same test applies to the other two. An engine belongs under `Backends` because a model cannot tell
+which one is underneath; a trainer from an established .NET library belongs under `Learners` because it
+sits beside the model rather than below it. Both distinctions disappear the moment a package is named
+after the logo instead.
+
+A project is created when there is code to put in it. Six empty assemblies laid out in advance are a
+diagram that has to be maintained; the layout above is the decision, and each package appears the day its
+first type does.
+
+### Four seams, one interface each, and a package implements exactly one
+
+What makes the layout above a structure rather than a filing habit is that every satellite package exists
+to implement **one** interface, and the four are not interchangeable:
+
+| seam | the question it answers | who implements it |
+|---|---|---|
+| `ITensorBackend` | where does the arithmetic run | the light engine, and anything heavier |
+| `IRowSource` | where do the rows come from | a file format, a database reader, a landed fetch |
+| a learner | what learns from prepared data | a network here, a trainer from elsewhere |
+| an importer | what does a model trained elsewhere look like here | a saved-model or weight-file reader |
+
+A package that implements two of them is doing two jobs and should be two packages; a package that
+implements none is a convenience and belongs in whatever it is convenient for.
+
+A seam is only real when two implementations of it differ in kind, so each one is held to that: the backend
+has a pure-managed engine beside a native one, rows arrive from a file and from a database reader, a
+learner is a network or a decision tree, an importer reads one foreign format or another. An interface
+shaped around a single implementation is not a seam, it is that implementation with a longer name — and the
+cost is paid later, by the second implementation that turns out not to fit.
 
 ## Decisions
 
