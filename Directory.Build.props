@@ -8,6 +8,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>icon.png</PackageIcon>
 
     <!-- One number for every packable project. It is handed out when the work starts, never invented here,
          and the changelog heading carries the same one. -->

@@ -30,3 +30,6 @@ packages/
 ## Local scratch
 *.tmp
 *.log
+
+# Python leaves this behind next to the icon script.
+__pycache__/

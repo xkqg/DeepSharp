@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/xkqg/DeepSharp/main/assets/icon.png" width="96" align="right" alt="" />
+
 # DeepSharp — deep learning in C#
 
 **The best of both worlds: TensorFlow's way of describing a network, PyTorch's way of running it.**
