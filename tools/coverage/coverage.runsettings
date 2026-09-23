@@ -10,6 +10,7 @@
                 <ModulePath>.*DeepSharp[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]DataFrame[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Pipelines[.]Indicators[.]dll$</ModulePath>
             </Include>
             <Exclude>
                 <ModulePath>.*\.Tests\.dll$</ModulePath>

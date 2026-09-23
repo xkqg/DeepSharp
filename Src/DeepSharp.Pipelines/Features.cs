@@ -304,14 +304,19 @@ public interface IAddsColumns : IPipelineStep
 /// <summary>
 /// Reading a column as numbers, whatever kind of number it holds.
 /// </summary>
-internal static class Numbers
+/// <remarks>
+/// Public because a package that adds a verb needs exactly this and would otherwise write its own, and two
+/// readings of "what is a number here" is one too many: a boolean counts as one and nought, a gap stays a
+/// gap, and words are refused by name.
+/// </remarks>
+public static class Numbers
 {
     /// <summary>The column's values as numbers, with a gap where a cell is a gap.</summary>
     /// <param name="table">The table to look in.</param>
     /// <param name="name">The column's name.</param>
     /// <returns>One value per row.</returns>
     /// <exception cref="InvalidOperationException">The column holds something that is not a number.</exception>
-    internal static double?[] Of(Table table, string name) => table[name] switch
+    public static double?[] Of(Table table, string name) => table[name] switch
     {
         Column<double> numbers => [.. Enumerable.Range(0, numbers.Count).Select(row => numbers[row])],
         Column<long> whole => [.. Enumerable.Range(0, whole.Count).Select(row => (double?)whole[row])],

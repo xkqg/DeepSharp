@@ -89,6 +89,17 @@ where the arithmetic happens.
   the same door the pipeline already had for rows handed in, which is why the pipeline itself still needs no
   reader beyond its own. An absent value stays absent rather than becoming a not-a-number.
 
+- **`DeepSharp.Pipelines.Indicators` — a fourth package, and not a line of indicator arithmetic.** Moving
+  averages, RSI, ATR, ADX, MACD, Bollinger bands, the stochastic and VWAP, borrowed from MatPlotLibNet's
+  published package. They stand above the split because they learn nothing, and two things about them are
+  measured rather than promised: every one is held to an impulse test — change one row and no earlier row
+  may move — and the warm-up arrives as an absence rather than as a number nobody took.
+
+- **Which columns are categories is said where the data is declared.** `Category("sex", "embarked")` in the
+  schema, and `EncodeCategories()` takes them by name afterwards, so adding one to the schema does not mean
+  remembering a second line further down. A category that never became numbers is refused at the handover
+  rather than dropped in silence.
+
 - **It fits an application that has a host.** `services.AddDeepSharpPipelines()` registers the pipeline
   factory and the catalog of verbs, so a pipeline is resolved the way everything else in a .NET application
   is. A package that brings verbs of its own registers them as a contribution, and every contribution is

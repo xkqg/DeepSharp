@@ -22,6 +22,15 @@ public enum ColumnKind
 
     /// <summary>A moment in time.</summary>
     Timestamp,
+
+    /// <summary>Words that stand for a group rather than for themselves: a port, a class, a symbol.</summary>
+    /// <remarks>
+    /// Said at the top, where the columns are declared, because it is a fact about the data and not a
+    /// decision about the model. Everything downstream can then act on it: encoding takes them by name
+    /// without being told twice, and a category that never reached a model as numbers is refused at the
+    /// handover rather than silently dropped.
+    /// </remarks>
+    Category,
 }
 
 /// <summary>What happens to the columns the schema does not mention.</summary>
@@ -84,6 +93,15 @@ public sealed class SchemaBuilder
     /// <param name="names">The column names.</param>
     /// <returns>This schema, so the next kind can be written after it.</returns>
     public SchemaBuilder Timestamp(params string[] names) => Add(names, ColumnKind.Timestamp);
+
+    /// <summary>Columns whose words stand for a group rather than for themselves.</summary>
+    /// <param name="names">The column names.</param>
+    /// <returns>This schema, so the next kind can be written after it.</returns>
+    /// <remarks>
+    /// The same words a text column holds, said to be a category here so that everything after knows it.
+    /// The list of categories is still learned from the training rows alone, when they are encoded.
+    /// </remarks>
+    public SchemaBuilder Category(params string[] names) => Add(names, ColumnKind.Category);
 
     /// <summary>A column the source is allowed not to have at all.</summary>
     /// <param name="name">The column name.</param>
@@ -167,6 +185,10 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns
 
     /// <summary>The columns that take part, in the order they were written.</summary>
     public IReadOnlyList<ColumnDeclaration> Columns { get; }
+
+    /// <summary>The columns declared as standing for a group rather than for themselves.</summary>
+    public IEnumerable<string> Categories =>
+        Columns.Where(column => column.Kind == ColumnKind.Category).Select(column => column.Name);
 
     /// <summary>What becomes of the columns the schema does not name.</summary>
     public Remainder Remainder { get; }

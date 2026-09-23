@@ -24,17 +24,18 @@ var passengers = pipelines.Create()
     .ReadCsv(Path.Join(data, "titanic.csv"))
     .Declare(schema => schema
         .Integer("survived", "pclass", "sibsp", "parch")
-        .Text("sex", "embarked")
         .Number("fare")
-        .Optional("age", ColumnKind.Number))
+        .Optional("age", ColumnKind.Number)
+        // Said here, where the data is declared, because which columns stand for a group is a fact about
+        // the data rather than a decision about the model. EncodeCategories then takes them by name.
+        .Category("sex", "embarked"))
     .AddFeature("family", "sibsp", Arithmetic.Plus, "parch")
     // 'alive' and 'class' are 'survived' and 'pclass' written as words. Neither was declared, so neither
     // comes along: a pipeline that carried everything in the file would hand a model its own answer.
     .SplitStratified("survived", train: 0.70, validation: 0.15, test: 0.15)
     // ---- nothing above this line is allowed to learn from the data ----
     .FillMissing("age", With.Median)
-    .Encode("sex")
-    .Encode("embarked")
+    .EncodeCategories()
     .Normalise("age", "fare", "family")
     .Target("survived")
     .Build()
@@ -53,11 +54,21 @@ var prices = pipelines.Create()
         .Number("AAPL.Open", "AAPL.High", "AAPL.Low", "AAPL.Close", "AAPL.Volume")
         .Text("direction"))
     .AddFeature("range", "AAPL.High", Arithmetic.Minus, "AAPL.Low")
+    // Indicators are borrowed from MatPlotLibNet rather than written again, and they stand above the line
+    // because they learn nothing: arithmetic over the rows that came before, looking only backwards.
+    .AddIndicator("rsi", Indicator.Rsi, ["AAPL.Close"], 14)
+    .AddIndicator("atr", Indicator.Atr, ["AAPL.High", "AAPL.Low", "AAPL.Close"], 14)
+    .AddIndicator("bb", Indicator.BollingerBands, ["AAPL.Close"], 20)
     .Cyclical("Date", Period.DayOfWeek, Form.SplitSign)
     .SplitByTime("Date", train: 0.70, validation: 0.15, test: 0.15)
     .Normalise("AAPL.Close", Scale.Robust)
     .Normalise("AAPL.Volume", Scale.Robust)
     .Normalise("range", Scale.Robust)
+    // The warm-up of an indicator is an absence, not a value, so it is filled like any other gap -- after
+    // the split, with a number learned from the training rows alone.
+    .FillMissing("rsi", With.Median)
+    .FillMissing("atr", With.Median)
+    .Normalise("rsi", Scale.MinMax)
     .Encode("direction")
     .Build()
     .Run();

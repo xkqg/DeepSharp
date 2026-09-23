@@ -27,6 +27,7 @@
     <ProjectReference Include="..\..\Src\DeepSharp\DeepSharp.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.DataFrame\DeepSharp.Pipelines.DataFrame.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.Indicators\DeepSharp.Pipelines.Indicators.csproj" />
   </ItemGroup>
 
   <ItemGroup>

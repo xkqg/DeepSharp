@@ -3,6 +3,7 @@
     <Project Path="Src/DeepSharp/DeepSharp.csproj" />
     <Project Path="Src/DeepSharp.Pipelines/DeepSharp.Pipelines.csproj" />
     <Project Path="Src/DeepSharp.Pipelines.DataFrame/DeepSharp.Pipelines.DataFrame.csproj" />
+    <Project Path="Src/DeepSharp.Pipelines.Indicators/DeepSharp.Pipelines.Indicators.csproj" />
   </Folder>
   <Folder Name="/Samples/">
     <Project Path="Samples/DeepSharp.Sample.Pipelines/DeepSharp.Sample.Pipelines.csproj" />

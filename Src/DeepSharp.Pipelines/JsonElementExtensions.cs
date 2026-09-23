@@ -12,10 +12,20 @@ namespace DeepSharp.Pipelines;
 /// The BCL throws a different exception for each of those, and neither says which step or which parameter
 /// was at fault. A person editing a pipeline by hand has to be told where to look, so both become one
 /// <see cref="FormatException"/> that names the parameter.
+/// <para>
+/// Public because a package that adds a verb reads its parameters the same way, and a reader that threw
+/// three other exception types instead would make the file-loading boundary mean something different
+/// depending on which package wrote the step.
+/// </para>
 /// </remarks>
-internal static class JsonElementExtensions
+public static class JsonElementExtensions
 {
-    internal static string RequiredString(this JsonElement element, string name)
+    /// <summary>The text value of a named property, or a fault naming it.</summary>
+    /// <param name="element">The object to read from.</param>
+    /// <param name="name">The property's name.</param>
+    /// <returns>The text.</returns>
+    /// <exception cref="FormatException">The property is absent or is not text.</exception>
+    public static string RequiredString(this JsonElement element, string name)
     {
         if (!element.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String)
         {
@@ -25,7 +35,12 @@ internal static class JsonElementExtensions
         return value.GetString()!;
     }
 
-    internal static bool RequiredBoolean(this JsonElement element, string name)
+    /// <summary>The true or false of a named property, or a fault naming it.</summary>
+    /// <param name="element">The object to read from.</param>
+    /// <param name="name">The property's name.</param>
+    /// <returns>The value.</returns>
+    /// <exception cref="FormatException">The property is absent or is not true or false.</exception>
+    public static bool RequiredBoolean(this JsonElement element, string name)
     {
         if (!element.TryGetProperty(name, out var value)
             || value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
@@ -36,7 +51,13 @@ internal static class JsonElementExtensions
         return value.GetBoolean();
     }
 
-    internal static TEnum RequiredEnum<TEnum>(this JsonElement element, string name)
+    /// <summary>One of a named set of words, or a fault listing the set.</summary>
+    /// <typeparam name="TEnum">The set of words.</typeparam>
+    /// <param name="element">The object to read from.</param>
+    /// <param name="name">The property's name.</param>
+    /// <returns>The value the word stands for.</returns>
+    /// <exception cref="FormatException">The property is absent, or is a word nobody defined.</exception>
+    public static TEnum RequiredEnum<TEnum>(this JsonElement element, string name)
         where TEnum : struct, Enum
     {
         var written = element.RequiredString(name);
@@ -51,7 +72,12 @@ internal static class JsonElementExtensions
         return value;
     }
 
-    internal static double RequiredNumber(this JsonElement element, string name)
+    /// <summary>The number of a named property, or a fault naming it.</summary>
+    /// <param name="element">The object to read from.</param>
+    /// <param name="name">The property's name.</param>
+    /// <returns>The number.</returns>
+    /// <exception cref="FormatException">The property is absent or is not a number.</exception>
+    public static double RequiredNumber(this JsonElement element, string name)
     {
         if (!element.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Number)
         {

@@ -101,11 +101,27 @@ public sealed class TextColumn : IColumn
     /// <param name="name">The column's name.</param>
     /// <param name="values">The words; nothing where a cell is a gap.</param>
     public TextColumn(string name, IEnumerable<string?> values)
+        : this(name, ColumnKind.Text, values)
+    {
+    }
+
+    /// <summary>A column of these words, said to be plain text or a category.</summary>
+    /// <param name="name">The column's name.</param>
+    /// <param name="kind">Text, or a category.</param>
+    /// <param name="values">The words; nothing where a cell is a gap.</param>
+    /// <exception cref="ArgumentException">The kind is not one a column of words can be.</exception>
+    public TextColumn(string name, ColumnKind kind, IEnumerable<string?> values)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         ArgumentNullException.ThrowIfNull(values);
 
+        if (kind is not (ColumnKind.Text or ColumnKind.Category))
+        {
+            throw new ArgumentException($"A column of words is text or a category, not {kind}.", nameof(kind));
+        }
+
         Name = name;
+        Kind = kind;
         _values = [.. values];
     }
 
@@ -113,7 +129,7 @@ public sealed class TextColumn : IColumn
     public string Name { get; }
 
     /// <inheritdoc />
-    public ColumnKind Kind => ColumnKind.Text;
+    public ColumnKind Kind { get; }
 
     /// <inheritdoc />
     public int Count => _values.Length;

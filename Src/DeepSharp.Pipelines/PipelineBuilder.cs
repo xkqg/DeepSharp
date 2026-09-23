@@ -242,6 +242,34 @@ public sealed class FittingBuilder
     public FittingBuilder NormaliseRow(Norm norm, params string[] columns) =>
         Add(new NormaliseRowStep(columns, norm));
 
+    /// <summary>Writes every column the schema declared a category down as numbers.</summary>
+    /// <param name="how">One column per category, or one column of places.</param>
+    /// <param name="unseen">What happens to a category the training rows never held.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="InvalidOperationException">The schema declares no categories, or there is no schema.</exception>
+    /// <remarks>
+    /// Which columns are categories was said once, at the top, where the data was declared. This takes them
+    /// by name rather than asking again, so adding a category to the schema does not mean remembering to
+    /// add a line down here as well.
+    /// </remarks>
+    public FittingBuilder EncodeCategories(As how = As.OneHot, Unseen unseen = Unseen.Reserve)
+    {
+        var categories = _steps.OfType<DeclareStep>().LastOrDefault()?.Categories.ToArray() ?? [];
+
+        if (categories.Length == 0)
+        {
+            throw new InvalidOperationException(
+                "This pipeline declares no categories, so there is nothing to write down as numbers.");
+        }
+
+        foreach (var column in categories)
+        {
+            Add(new EncodeStep(column, how, unseen));
+        }
+
+        return this;
+    }
+
     /// <summary>Says what happens to a value in a column that is not a number.</summary>
     /// <param name="column">The column to watch.</param>
     /// <param name="strategy">What to do; refusing is the default and usually the right answer.</param>

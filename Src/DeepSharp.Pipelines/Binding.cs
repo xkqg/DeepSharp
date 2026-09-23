@@ -97,8 +97,8 @@ public static class SchemaBinding
 
         return declared.Kind switch
         {
-            ColumnKind.Text => new TextColumn(
-                declared.Name, cells.Select(cell => string.IsNullOrEmpty(cell) ? null : cell)),
+            ColumnKind.Text or ColumnKind.Category => new TextColumn(
+                declared.Name, declared.Kind, cells.Select(cell => string.IsNullOrEmpty(cell) ? null : cell)),
             ColumnKind.Number => new Column<double>(
                 declared.Name, ColumnKind.Number, cells.Select((cell, row) => AsNumber(declared, cell, row))),
             ColumnKind.Integer => new Column<long>(
