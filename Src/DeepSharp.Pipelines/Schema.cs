@@ -156,7 +156,7 @@ public sealed class SchemaBuilder
 /// carries everything it finds hands a model its own answer. Nothing splits its way out of that, so the
 /// defence is that a column nobody declared does not come along.
 /// </remarks>
-public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns
+public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, IDeclaresCategories
 {
     /// <summary>Declares the columns and the policy for everything else.</summary>
     /// <param name="columns">The columns that take part, in the order they were written.</param>

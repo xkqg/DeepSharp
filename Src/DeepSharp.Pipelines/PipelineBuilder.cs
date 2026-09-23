@@ -97,6 +97,29 @@ public sealed class PipelineBuilder
     public PipelineBuilder Cyclical(string column, Period period, Form form = Form.Signed) =>
         Add(new CyclicalStep(column, period, form));
 
+    /// <summary>Takes a moment in time apart into the pieces people reason with.</summary>
+    /// <param name="column">The column holding the moment.</param>
+    /// <param name="parts">Which pieces to take out of it.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// The pieces arrive as categories, because a month is not a quantity: March is not three of anything,
+    /// and December is not twelve times January. <see cref="FittingBuilder.EncodeCategories"/> then turns them into the
+    /// numbers a model can take. Use <see cref="TimePartsAsNumbers"/> where the order is the point.
+    /// </remarks>
+    public PipelineBuilder TimeParts(string column, params TimePart[] parts) =>
+        Add(new TimePartsStep(column, parts));
+
+    /// <summary>Takes a moment in time apart, as numbers rather than as groups.</summary>
+    /// <param name="column">The column holding the moment.</param>
+    /// <param name="parts">Which pieces to take out of it.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// For a piece where the order is the point — a year across a long span, where a column per year would
+    /// be refused the first time next year arrives.
+    /// </remarks>
+    public PipelineBuilder TimePartsAsNumbers(string column, params TimePart[] parts) =>
+        Add(new TimePartsStep(column, parts, asCategories: false));
+
     /// <summary>Drops the rows at the start that no column can speak for yet.</summary>
     /// <param name="atMost">The most rows this is allowed to drop; beyond it the run stops.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
@@ -264,7 +287,10 @@ public sealed class FittingBuilder
     /// </remarks>
     public FittingBuilder EncodeCategories(As how = As.OneHot, Unseen unseen = Unseen.Reserve)
     {
-        var categories = _steps.OfType<DeclareStep>().LastOrDefault()?.Categories.ToArray() ?? [];
+        // From everything that has said so far which of its columns stand for a group: the schema, for the
+        // columns that came out of the file, and any step that made one -- taking a moment in time apart,
+        // say. Said once each, collected here, rather than named a second time.
+        var categories = _steps.OfType<IDeclaresCategories>().SelectMany(step => step.Categories).ToArray();
 
         if (categories.Length == 0)
         {

@@ -52,13 +52,16 @@ var prices = pipelines.Create()
     .Declare(schema => schema
         .Timestamp("Date")
         .Number("AAPL.Open", "AAPL.High", "AAPL.Low", "AAPL.Close", "AAPL.Volume")
-        .Text("direction"))
+        .Category("direction"))
     .AddFeature("range", "AAPL.High", Arithmetic.Minus, "AAPL.Low")
     // Indicators are borrowed from MatPlotLibNet rather than written again, and they stand above the line
     // because they learn nothing: arithmetic over the rows that came before, looking only backwards.
     .AddIndicator("rsi", Indicator.Rsi, ["AAPL.Close"], 14)
     .AddIndicator("atr", Indicator.Atr, ["AAPL.High", "AAPL.Low", "AAPL.Close"], 14)
     .AddIndicator("bb", Indicator.BollingerBands, ["AAPL.Close"], 20)
+    // A month is not a quantity and Tuesday is not two of anything, so the pieces of a moment arrive as
+    // categories and the encoder takes them from there. Where time wraps round, a circle says it better.
+    .TimeParts("Date", TimePart.Season, TimePart.Quarter)
     .Cyclical("Date", Period.DayOfWeek, Form.SplitSign)
     // An indicator of period N says nothing about the first N rows, and filling that would invent
     // measurements nobody took. So with indicators on the data, 506 rows are 487 rows and 19 of not-yet.
@@ -68,7 +71,7 @@ var prices = pipelines.Create()
     .Normalise("AAPL.Volume", Scale.Robust)
     .Normalise("range", Scale.Robust)
     .Normalise("rsi", Scale.MinMax)
-    .Encode("direction")
+    .EncodeCategories()
     .Build()
     .Run();
 

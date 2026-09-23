@@ -101,6 +101,12 @@ where the arithmetic happens.
   rows, it says "not enough history yet" — and filling that with a number learned from training would
   invent a measurement nobody took. 506 rows with a twenty-period average on them are 487 rows of data.
 
+- **A moment in time comes apart into the pieces people reason with.** `TimeParts("Date", TimePart.Season,
+  TimePart.Quarter)` — and the minute, the hour, the day of the week, the day of the month, the month and
+  the year. They arrive as **categories**, because a month is not a quantity: March is not three of
+  anything and December is not twelve times January. `TimePartsAsNumbers` is there for the piece where the
+  order really is the point, and where time wraps round a circle says it better than either.
+
 - **Which columns are categories is said where the data is declared.** `Category("sex", "embarked")` in the
   schema, and `EncodeCategories()` takes them by name afterwards, so adding one to the schema does not mean
   remembering a second line further down. A category that never became numbers is refused at the handover
