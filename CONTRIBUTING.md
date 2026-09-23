@@ -22,8 +22,14 @@ repeats the name is noise.
 
 ## Coverage is a gate, not a report
 
-90% of lines and 90% of branches, measured over the library, checked in CI. Below either number the build
-fails. A gate that reports and continues is a report.
+90% of lines and 90% of branches, **per class** and over the library as a whole, checked in CI. Below either
+number the build fails and the failing classes are named. A gate that reports and continues is a report.
+
+Per class is the part that does the work. A total has a big denominator: a hundred well-covered classes
+carry an untested one across the line, and the gap stays invisible until somebody edits it. Code that moves
+into a smaller class brings its untested branches with it, and they only become visible at the granularity
+they landed in. The compiler's own types — a lambda's closure, an iterator's state machine — are counted
+with the class they were generated for, because that is the class somebody wrote.
 
 If a branch is hard to reach, that is usually the code telling you it should not exist. Delete it before you
 reach for a test that pretends to cover it.

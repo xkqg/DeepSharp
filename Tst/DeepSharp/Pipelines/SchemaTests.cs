@@ -124,4 +124,33 @@ public class SchemaTests
 
         Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json));
     }
+
+    [Fact]
+    public void AColumnDeclaredTwice_IsRefusedWithItsName()
+    {
+        // Two declarations of one column is a person having meant two different things, and whichever the
+        // binding happened to keep would be right half the time.
+        var refused = Assert.Throws<ArgumentException>(() => new DeclareStep([
+            new ColumnDeclaration("age", ColumnKind.Number, true),
+            new ColumnDeclaration("age", ColumnKind.Integer, false),
+        ]));
+
+        Assert.Contains("'age'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("twice", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TwoSchemasThatDisagreeAboutTheRest_AreNotTheSameSchema()
+    {
+        // What happens to the columns nobody named is part of what the schema says, so two schemas with
+        // the same columns and different answers to that are two schemas.
+        var columns = new[] { new ColumnDeclaration("age", ColumnKind.Number, true) };
+
+        var drops = new DeclareStep(columns);
+        var keeps = new DeclareStep(columns, Remainder.Keep);
+
+        Assert.NotEqual(drops, keeps);
+        Assert.False(drops.Equals(null));
+        Assert.Equal(drops, new DeclareStep(columns));
+    }
 }

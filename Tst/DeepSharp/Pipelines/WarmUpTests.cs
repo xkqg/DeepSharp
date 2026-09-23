@@ -28,12 +28,12 @@ public class WarmUpTests
         var prepared = Prices()
             .AddIndicator("sma20", Indicator.Sma, ["AAPL.Close"], 20)
             .DropWarmUp()
-            .SplitByTime("Date", 0.70, 0.15, 0.15)
+            .SplitByTime("Date", 0.70, 0.15)
             .Build()
             .Run();
 
         Assert.Equal(487, prepared.Table.RowCount);
-        Assert.Equal(487, prepared.Splits.Count);
+        Assert.Equal(487, prepared.Parts.Count);
         Assert.DoesNotContain(
             Enumerable.Range(0, prepared.Table.RowCount), prepared.Table["sma20"].IsMissing);
     }
@@ -47,7 +47,7 @@ public class WarmUpTests
             .AddIndicator("sma20", Indicator.Sma, ["AAPL.Close"], 20)
             .AddIndicator("rsi", Indicator.Rsi, ["AAPL.Close"], 14)
             .DropWarmUp()
-            .SplitByTime("Date", 0.70, 0.15, 0.15)
+            .SplitByTime("Date", 0.70, 0.15)
             .Build()
             .Run();
 

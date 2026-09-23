@@ -53,8 +53,8 @@ public class DeclarationContractTests
         // The contractual direction, and the one a dictionary depends on. The opposite — two unequal
         // declarations having unequal hashes — is not promised by anything and was asserted here by
         // mistake, passing only because these two happened not to collide.
-        var one = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.70, 0.15, 0.15).Declaration;
-        var other = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.70, 0.15, 0.15).Declaration;
+        var one = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.70, 0.15).Declaration;
+        var other = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.70, 0.15).Declaration;
 
         Assert.Equal(one, other);
         Assert.Equal(one.GetHashCode(), other.GetHashCode());
@@ -130,7 +130,7 @@ public class DeclarationContractTests
     [Fact]
     public void AStrategyThatWasNeverGivenAName_IsRefusedWhereItIsWritten()
     {
-        var after = Pdd.Create().ReadCsv("x.csv").SplitByTime("t", 0.70, 0.15, 0.15);
+        var after = Pdd.Create().ReadCsv("x.csv").SplitByTime("t", 0.70, 0.15);
 
         Assert.Throws<ArgumentException>(() => after.FillMissing("age", default));
     }
@@ -143,7 +143,7 @@ public class DeclarationContractTests
     [InlineData("mean", 3.0)]
     public void AStrategyWrittenWithTheWrongNumberOfNumbers_IsRefused(string name, double? value)
     {
-        var after = Pdd.Create().ReadCsv("x.csv").SplitByTime("t", 0.70, 0.15, 0.15);
+        var after = Pdd.Create().ReadCsv("x.csv").SplitByTime("t", 0.70, 0.15);
 
         var refused = Assert.Throws<ArgumentException>(
             () => after.FillMissing("age", new FillStrategy(name, value)));
@@ -181,7 +181,7 @@ public class DeclarationContractTests
         // written form has room for it now, while nothing has shipped.
         var declaration = Pdd.Create()
             .ReadCsv("x.csv")
-            .SplitByTime("t", 0.70, 0.15, 0.15)
+            .SplitByTime("t", 0.70, 0.15)
             .FillMissing("age", With.Constant(-1))
             .Declaration;
 

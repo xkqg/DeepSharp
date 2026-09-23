@@ -127,9 +127,9 @@ public interface ILearnsFromData : IFittedStep
 {
     /// <summary>Learns whatever this step needs, from the training rows alone.</summary>
     /// <param name="table">The data.</param>
-    /// <param name="splits">Which split each row belongs to.</param>
+    /// <param name="parts">Which part each row belongs to.</param>
     /// <returns>What was learned.</returns>
-    FittedStepValues Fit(Table table, IReadOnlyList<Split> splits);
+    FittedStepValues Fit(Table table, IReadOnlyList<Part> parts);
 
     /// <summary>Applies what was learned to every row.</summary>
     /// <param name="table">The data, changed in place.</param>
@@ -166,7 +166,7 @@ public sealed class PreparedData
     /// <summary>A pipeline that has been run, or one loaded back from the file it was saved as.</summary>
     /// <param name="declaration">The steps, in the order they were written.</param>
     /// <param name="table">The data, as the last step left it.</param>
-    /// <param name="splits">Which split each row belongs to.</param>
+    /// <param name="parts">Which part each row belongs to.</param>
     /// <param name="fitted">What each step learned, by its position in the declaration.</param>
     /// <remarks>
     /// Public because a saved pipeline has to be usable without the data it was fitted on: a serving host
@@ -176,17 +176,17 @@ public sealed class PreparedData
     public PreparedData(
         PipelineDeclaration declaration,
         Table table,
-        IReadOnlyList<Split> splits,
+        IReadOnlyList<Part> parts,
         IReadOnlyDictionary<int, FittedStepValues> fitted)
     {
         ArgumentNullException.ThrowIfNull(declaration);
         ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(splits);
+        ArgumentNullException.ThrowIfNull(parts);
         ArgumentNullException.ThrowIfNull(fitted);
 
         Declaration = declaration;
         Table = table;
-        Splits = splits;
+        Parts = parts;
         Fitted = fitted;
     }
 
@@ -261,8 +261,8 @@ public sealed class PreparedData
     /// <summary>The data, as the last step left it.</summary>
     public Table Table { get; }
 
-    /// <summary>Which split each row belongs to, in row order.</summary>
-    public IReadOnlyList<Split> Splits { get; }
+    /// <summary>Which part of the data each row belongs to, in row order.</summary>
+    public IReadOnlyList<Part> Parts { get; }
 
     /// <summary>What each step learned, by its position in the declaration.</summary>
     /// <remarks>
@@ -272,9 +272,9 @@ public sealed class PreparedData
     public IReadOnlyDictionary<int, FittedStepValues> Fitted { get; }
 
     /// <summary>How many rows landed in one split.</summary>
-    /// <param name="split">The split to count.</param>
+    /// <param name="part">The part to count.</param>
     /// <returns>The number of rows.</returns>
-    public int CountIn(Split split) => Splits.Count(each => each == split);
+    public int CountIn(Part part) => Parts.Count(each => each == part);
 
     /// <summary>Runs the same declaration over new rows, with the same numbers it learned before.</summary>
     /// <param name="rows">The rows to prepare — one of them, or a million.</param>

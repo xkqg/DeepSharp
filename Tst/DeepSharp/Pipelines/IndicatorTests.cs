@@ -130,7 +130,7 @@ public class IndicatorTests
     {
         var declaration = Prices()
             .AddIndicator("rsi", Indicator.Rsi, ["AAPL.Close"])
-            .SplitByTime("Date", 0.70, 0.15, 0.15)
+            .SplitByTime("Date", 0.70, 0.15)
             .Normalise("rsi")
             .Declaration;
 

@@ -45,7 +45,7 @@ public class CategoryTests
     public void EncodingTakesThemByNameRatherThanAskingAgain()
     {
         var prepared = Passengers()
-            .SplitStratified("survived", 0.70, 0.15, 0.15)
+            .SplitStratified("survived", 0.70, 0.15)
             .EncodeCategories()
             .Build()
             .Run();
@@ -63,12 +63,12 @@ public class CategoryTests
     public void AndTheResultIsHandedOverAsNumbers()
     {
         var batch = Passengers()
-            .SplitStratified("survived", 0.70, 0.15, 0.15)
+            .SplitStratified("survived", 0.70, 0.15)
             .EncodeCategories(As.Ordinal)
             .Target("survived")
             .Build()
             .Run()
-            .Batch(Split.Train);
+            .Batch(Part.Train);
 
         Assert.Contains("sex", batch.FeatureNames);
         Assert.Equal(batch.Width, batch.Features[0].Length);
@@ -79,10 +79,10 @@ public class CategoryTests
     {
         var refused = Assert.Throws<InvalidOperationException>(
             () => Passengers()
-                .SplitStratified("survived", 0.70, 0.15, 0.15)
+                .SplitStratified("survived", 0.70, 0.15)
                 .Build()
                 .Run()
-                .Batch(Split.Train));
+                .Batch(Part.Train));
 
         Assert.Contains("sex", refused.Message);
         Assert.Contains("Encode it", refused.Message);
@@ -95,7 +95,7 @@ public class CategoryTests
             () => Pdd.Create()
                 .ReadCsv(Titanic)
                 .Declare(schema => schema.Integer("survived"))
-                .SplitAtRandom(0.70, 0.15, 0.15)
+                .SplitAtRandom(0.70, 0.15)
                 .EncodeCategories());
 
         Assert.Contains("no categories", refused.Message);

@@ -16,6 +16,7 @@ public sealed class PipelineBuilder
 {
     private readonly List<IPipelineStep> _steps = [];
     private bool _split;
+    private double _predict;
     private IRowSource? _rows;
 
     internal PipelineBuilder()
@@ -143,45 +144,95 @@ public sealed class PipelineBuilder
     /// </remarks>
     public PipelineBuilder DropWarmUp(int atMost = 1000) => Add(new DropWarmUpStep(atMost));
 
+    /// <summary>Holds a share of the rows back, to predict on once a model has been trained.</summary>
+    /// <param name="share">How much to hold back, as a fraction or as a percentage.</param>
+    /// <returns>This builder, so the split can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The share is not a share.</exception>
+    /// <exception cref="InvalidOperationException">A share has already been held back, or this builder has been split.</exception>
+    /// <remarks>
+    /// A fourth part, outside the three a model is trained and measured with: <c>Predict(10)</c> keeps a
+    /// tenth of the rows out of everything, and training, validation and test are then the ninety that
+    /// remain. Nothing is fitted on it and nothing is measured on it — it is there to be run through the
+    /// trained network, the way the data that arrives tomorrow will be.
+    /// </remarks>
+    public PipelineBuilder Predict(double share)
+    {
+        ThrowIfSplit();
+
+        if (!double.IsFinite(share) || share <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(share), share, "A share to predict on is more than none of the data.");
+        }
+
+        if (_predict > 0)
+        {
+            throw new InvalidOperationException(
+                $"This pipeline already holds {_predict} back to predict on, and a second share would "
+                + "quietly replace the first.");
+        }
+
+        _predict = share;
+
+        return this;
+    }
+
     /// <summary>Splits the rows by where they sit in time, and opens the half of the chain that learns.</summary>
     /// <param name="column">The column that says when a row happened.</param>
     /// <param name="train">The share the model learns from.</param>
-    /// <param name="validation">The share used while choosing between models.</param>
-    /// <param name="test">The share kept back until the end.</param>
+    /// <param name="validation">The share used while choosing between models; none, unless you say.</param>
     /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
-    /// <exception cref="ArgumentException">The column has no name, or the shares do not make a whole.</exception>
+    /// <exception cref="ArgumentException">The column has no name, or the shares ask for more than there is.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A share is not a share.</exception>
     /// <exception cref="InvalidOperationException">This builder has already been split.</exception>
-    public FittingBuilder SplitByTime(string column, double train, double validation, double test)
-    {
-        return Split(new SplitByTimeStep(column, train, validation, test));
-    }
+    /// <remarks>
+    /// The earliest rows to learn from, the latest to be measured on, which is the only honest division for
+    /// data that arrives in order. The share to be measured on is never written down: it is what is left
+    /// once training, validation and anything held back to predict on have been taken, so nothing can add
+    /// up to more than everything there is. <c>80, 10</c> and <c>0.80, 0.10</c> say the same thing.
+    /// </remarks>
+    public FittingBuilder SplitByTime(string column, double train, double validation = 0) =>
+        Split(new SplitByTimeStep(column, SplitShares.Of(train, validation, _predict)));
 
     /// <summary>Splits the rows at random, and opens the half of the chain that learns.</summary>
     /// <param name="train">The share the model learns from.</param>
-    /// <param name="validation">The share used while choosing between models.</param>
-    /// <param name="test">The share kept back until the end.</param>
+    /// <param name="validation">The share used while choosing between models; none, unless you say.</param>
     /// <param name="seed">The number that makes the shuffle repeatable.</param>
     /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
-    /// <remarks>The right split for rows that do not depend on one another.</remarks>
-    public FittingBuilder SplitAtRandom(double train, double validation, double test, int seed = 20260923) =>
-        Split(new SplitAtRandomStep(new SplitShares(train, validation, test), seed));
+    /// <remarks>
+    /// The right split for rows that do not depend on one another. The share to be measured on is worked
+    /// out rather than written, as it is everywhere here.
+    /// </remarks>
+    public FittingBuilder SplitAtRandom(double train, double validation = 0, int seed = 20260923) =>
+        Split(new SplitAtRandomStep(SplitShares.Of(train, validation, _predict), seed));
 
     /// <summary>Splits at random while keeping the mixture of one column the same in every part.</summary>
     /// <param name="column">The column whose mixture is kept.</param>
     /// <param name="train">The share the model learns from.</param>
-    /// <param name="validation">The share used while choosing between models.</param>
-    /// <param name="test">The share kept back until the end.</param>
+    /// <param name="validation">The share used while choosing between models; none, unless you say.</param>
     /// <param name="seed">The number that makes the shuffle repeatable.</param>
     /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
     /// <remarks>The right split when an answer is rare enough that a plain shuffle could lose it.</remarks>
     public FittingBuilder SplitStratified(
-        string column, double train, double validation, double test, int seed = 20260923) =>
-        Split(new SplitStratifiedStep(column, new SplitShares(train, validation, test), seed));
+        string column, double train, double validation = 0, int seed = 20260923) =>
+        Split(new SplitStratifiedStep(column, SplitShares.Of(train, validation, _predict), seed));
 
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
-    public Pipeline Build() => new(Declaration, _rows);
+    /// <exception cref="InvalidOperationException">A share was held back to predict on and nothing splits the rows.</exception>
+    public Pipeline Build()
+    {
+        // A share held back by a pipeline that never divides anything is a promise nothing keeps: the
+        // split is what carries it, so without one the rows would all come out as training.
+        if (_predict > 0)
+        {
+            throw new InvalidOperationException(
+                $"This pipeline holds {_predict} back to predict on but never splits the rows, and the "
+                + "split is what sets that share aside.");
+        }
+
+        return new Pipeline(Declaration, _rows);
+    }
 
     private FittingBuilder Split(ISplitStep step)
     {

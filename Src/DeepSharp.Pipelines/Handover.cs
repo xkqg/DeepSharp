@@ -85,14 +85,14 @@ public readonly record struct Batch(
 /// </remarks>
 public static class Handover
 {
-    /// <summary>The numbers of one split, ready for something that learns.</summary>
+    /// <summary>The numbers of one part, ready for something that learns.</summary>
     /// <param name="prepared">The data as the pipeline left it.</param>
-    /// <param name="split">Which part of it to hand over.</param>
+    /// <param name="part">Which part of it to hand over.</param>
     /// <returns>The rows of that split, and their answers when the pipeline named a target.</returns>
     /// <exception cref="InvalidOperationException">
     /// A column still holds words, or the target column is not there.
     /// </exception>
-    public static Batch Batch(this PreparedData prepared, Split split)
+    public static Batch Batch(this PreparedData prepared, Part part)
     {
         ArgumentNullException.ThrowIfNull(prepared);
 
@@ -119,7 +119,7 @@ public static class Handover
         }
 
         var rows = Enumerable.Range(0, prepared.Table.RowCount)
-            .Where(row => prepared.Splits[row] == split)
+            .Where(row => prepared.Parts[row] == part)
             .ToArray();
 
         var values = features.Select(column => Numbers.Of(prepared.Table, column.Name)).ToArray();

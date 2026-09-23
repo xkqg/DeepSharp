@@ -40,8 +40,9 @@ jobs:
       # commit here: 0% coverage over 0 executed tests. So the executable is run and the collector is wrapped
       # around it.
       #
-      # 90% of lines and 90% of branches, over the library only. Below either number this fails the build: a
-      # gate that reports and carries on is a report.
+      # 90% of lines and 90% of branches, per class and over the library as a whole. Below either number this
+      # fails the build and names the classes that are short: a gate that reports and carries on is a report,
+      # and a total has a denominator big enough to carry one untested class across the line.
       - name: Test with coverage
         shell: pwsh
         run: ./tools/coverage/run.ps1 -Check

@@ -17,7 +17,7 @@ public class DeclarationRoundTripTests
     private static PipelineDeclaration ADeclaration() =>
         Pdd.Create()
             .ReadCsv("btceur-1d.csv")
-            .SplitByTime("timestamp", train: 0.70, validation: 0.15, test: 0.15)
+            .SplitByTime("timestamp", train: 0.70, validation: 0.15)
             .FillMissing("trades", With.Mean)
             .Declaration;
 

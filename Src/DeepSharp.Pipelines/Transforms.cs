@@ -141,14 +141,14 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IUndoesItself
     public string Verb => Name;
 
     /// <inheritdoc />
-    public FittedStepValues Fit(Table table, IReadOnlyList<Split> splits)
+    public FittedStepValues Fit(Table table, IReadOnlyList<Part> parts)
     {
         ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(splits);
+        ArgumentNullException.ThrowIfNull(parts);
 
         var values = Numbers.Of(table, Column);
         var training = Enumerable.Range(0, values.Length)
-            .Where(row => splits[row] == Split.Train && values[row] is not null)
+            .Where(row => parts[row] == Part.Train && values[row] is not null)
             .Select(row => values[row]!.Value)
             .Order()
             .ToArray();
@@ -491,15 +491,15 @@ public sealed record EncodeStep : IFittedStep, ILearnsFromData, IPipelineStep<En
     public string Verb => Name;
 
     /// <inheritdoc />
-    public FittedStepValues Fit(Table table, IReadOnlyList<Split> splits)
+    public FittedStepValues Fit(Table table, IReadOnlyList<Part> parts)
     {
         ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(splits);
+        ArgumentNullException.ThrowIfNull(parts);
 
         var column = table[Column];
 
         var categories = Enumerable.Range(0, table.RowCount)
-            .Where(row => splits[row] == Split.Train && !column.IsMissing(row))
+            .Where(row => parts[row] == Part.Train && !column.IsMissing(row))
             .Select(row => column.TextAt(row)!)
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)

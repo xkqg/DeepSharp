@@ -18,7 +18,7 @@ public class RefusalTests
     [Fact]
     public void FillingGapsInAColumnWithoutAName_IsRefused()
     {
-        var after = Pdd.Create().ReadCsv("x.csv").SplitByTime("t", 0.70, 0.15, 0.15);
+        var after = Pdd.Create().ReadCsv("x.csv").SplitByTime("t", 0.70, 0.15);
 
         Assert.Throws<ArgumentException>(() => after.FillMissing("   ", With.Mean));
     }
@@ -27,7 +27,7 @@ public class RefusalTests
     public void AStepThatIsNotThere_IsRefusedByBothBuilders()
     {
         var before = Pdd.Create();
-        var after = Pdd.Create().ReadCsv("x.csv").SplitByTime("t", 0.70, 0.15, 0.15);
+        var after = Pdd.Create().ReadCsv("x.csv").SplitByTime("t", 0.70, 0.15);
 
         Assert.Throws<ArgumentNullException>(() => before.Add(null!));
         Assert.Throws<ArgumentNullException>(() => after.Add(null!));
@@ -59,7 +59,7 @@ public class RefusalTests
     public void AStepAskedToWriteItselfNowhere_IsRefused()
     {
         Assert.Throws<ArgumentNullException>(() => new ReadCsvStep("x.csv").WriteTo(null!));
-        Assert.Throws<ArgumentNullException>(() => new SplitByTimeStep("t", 0.70, 0.15, 0.15).WriteTo(null!));
+        Assert.Throws<ArgumentNullException>(() => new SplitByTimeStep("t", new SplitShares(0.70, 0.15, 0.15)).WriteTo(null!));
         Assert.Throws<ArgumentNullException>(() => new FillMissingStep("trades", With.Mean).WriteTo(null!));
     }
 

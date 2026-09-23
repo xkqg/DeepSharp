@@ -86,4 +86,30 @@ public static class JsonElementExtensions
 
         return value.GetDouble();
     }
+
+    /// <summary>The number of a named property, or a given value where the file does not mention it.</summary>
+    /// <param name="element">The object to read from.</param>
+    /// <param name="name">The property's name.</param>
+    /// <param name="whenAbsent">What the value is when the file says nothing about it.</param>
+    /// <returns>The number, or <paramref name="whenAbsent"/>.</returns>
+    /// <exception cref="FormatException">The property is there but is not a number.</exception>
+    /// <remarks>
+    /// For a value whose absence is an ordinary thing to say rather than an omission — a share of the data
+    /// that is simply not held back. A property that is present but is not a number is still a fault,
+    /// because that is a person having meant something the file cannot express.
+    /// </remarks>
+    public static double OptionalNumber(this JsonElement element, string name, double whenAbsent = 0)
+    {
+        if (!element.TryGetProperty(name, out var value))
+        {
+            return whenAbsent;
+        }
+
+        if (value.ValueKind != JsonValueKind.Number)
+        {
+            throw new FormatException($"The step has something other than a number for '{name}'.");
+        }
+
+        return value.GetDouble();
+    }
 }

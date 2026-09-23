@@ -51,7 +51,7 @@ public class DataFrameSourceTests
         var prepared = Pdd.Create()
             .ReadDataFrame(Frame())
             .Declare(schema => schema.Optional("age", ColumnKind.Number).Text("sex").Number("fare"))
-            .SplitAtRandom(0.60, 0.20, 0.20, seed: 3)
+            .SplitAtRandom(0.60, 0.20, seed: 3)
             .FillMissing("age", With.Median)
             .Encode("sex")
             .Normalise("fare")
@@ -156,7 +156,7 @@ public class DataFrameSourceTests
 
         var prepared = pipeline
             .Declare(schema => schema.Number("fare").Text("sex"))
-            .SplitAtRandom(0.60, 0.20, 0.20, seed: 1)
+            .SplitAtRandom(0.60, 0.20, seed: 1)
             .Encode("sex")
             .Build()
             .Run();
@@ -193,5 +193,21 @@ public class DataFrameSourceTests
 
         Assert.NotNull(directory);
         return directory!.FullName;
+    }
+
+    [Fact]
+    public void AMomentInTimeCrossesTheSeamAsAMomentInTime()
+    {
+        // Everything leaves a frame as text, and a date written the short way is read back as a different
+        // day on a machine set to another country. The round-trip form is the one that cannot be.
+        var frame = new DataFrame(
+            new PrimitiveDataFrameColumn<DateTime>("when", [new DateTime(2016, 12, 8, 14, 30, 0, DateTimeKind.Utc)]),
+            new PrimitiveDataFrameColumn<double>("close", [111.5]));
+
+        var source = new DataFrameRowSource(frame);
+        var row = source.Rows.Single();
+
+        Assert.StartsWith("2016-12-08T14:30:00", row[0], StringComparison.Ordinal);
+        Assert.Equal("111.5", row[1]);
     }
 }

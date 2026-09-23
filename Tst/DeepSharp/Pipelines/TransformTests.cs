@@ -38,7 +38,7 @@ public class TransformTests
 
         before(builder);
 
-        var fitting = builder.SplitByTime("Date", 0.70, 0.15, 0.15);
+        var fitting = builder.SplitByTime("Date", 0.70, 0.15);
         after?.Invoke(fitting);
 
         return fitting.Build().Run();
@@ -167,7 +167,7 @@ public class TransformTests
         var learned = prepared.Fitted.Values.Single();
 
         var closes = Enumerable.Range(0, prepared.Table.RowCount)
-            .Where(row => prepared.Splits[row] == Split.Train)
+            .Where(row => prepared.Parts[row] == Part.Train)
             .Select(row => ((Column<double>)prepared.Table["AAPL.Close"])[row]!.Value)
             .ToArray();
 
@@ -230,9 +230,9 @@ public class TransformTests
     {
         var table = Read("kind\na\nb\nz\n", ColumnKind.Text);
         var step = new EncodeStep("kind", As.Ordinal, Unseen.Refuse);
-        var splits = new[] { Split.Train, Split.Train, Split.Test };
+        var parts = new[] { Part.Train, Part.Train, Part.Test };
 
-        var learned = step.Fit(table, splits);
+        var learned = step.Fit(table, parts);
 
         var refused = Assert.Throws<InvalidOperationException>(() => step.ApplyTo(table, learned));
 
@@ -274,7 +274,7 @@ public class TransformTests
             .Declare(schema => schema.Timestamp("Date").Number("high", "low").Text("direction"))
             .AddFeature("range", "high", Arithmetic.Minus, "low")
             .Cyclical("Date", Period.DayOfWeek, Form.SplitSign)
-            .SplitByTime("Date", 0.70, 0.15, 0.15)
+            .SplitByTime("Date", 0.70, 0.15)
             .FillMissing("range", With.Median)
             .Normalise("high", Scale.Robust, OutOfRange.Clip)
             .Encode("direction", As.Ordinal, Unseen.Refuse)
@@ -296,5 +296,63 @@ public class TransformTests
         }
 
         return SchemaBinding.Bind(new DeclareStep(schema.Columns), source);
+    }
+
+    // ---- the limits of the bell-curve shape ----------------------------------------------------------
+
+    private static Table OneColumn(params double[] values) => SchemaBinding.Bind(
+        new DeclareStep([new ColumnDeclaration("a", ColumnKind.Number, true)]),
+        CsvRowSource.FromText(
+            "a\n" + string.Join("\n", values.Select(
+                value => value.ToString("R", System.Globalization.CultureInfo.InvariantCulture))) + "\n"));
+
+    [Fact]
+    public void AColumnThatNeverVaries_HasNoShapeToLookFor()
+    {
+        // Every candidate leaves a column with no spread at all, so none of them is better than another
+        // and the search says so instead of picking whichever came first by an arithmetic accident.
+        var table = OneColumn(5, 5, 5, 5);
+        var step = new NormaliseStep("a", Scale.Power);
+
+        var learned = step.Fit(table, [.. Enumerable.Repeat(Part.Train, 4)]);
+
+        Assert.Equal(1, learned.Number("lambda"));
+        Assert.Equal(1, learned.Number("spread"));
+    }
+
+    [Fact]
+    public void AColumnSoLargeThatTheShapeOverflows_PassesOverThoseCandidates()
+    {
+        // Raising a number that size to a power leaves the range of a double entirely. A candidate that
+        // produces infinities is not a good fit that happens to be unrepresentable — it is no fit.
+        var table = OneColumn(1e200, 2e200, 3e200, 4e200);
+
+        var learned = new NormaliseStep("a", Scale.Power).Fit(table, [.. Enumerable.Repeat(Part.Train, 4)]);
+
+        Assert.True(double.IsFinite(learned.Number("lambda")), "the search returned something unusable");
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(2.0)]
+    public void TheTwoCandidatesTheFormulaCannotDivideBy_HaveTheirOwnArithmetic(double lambda)
+    {
+        // At nought and at two the general formula divides by nothing, so the shape is a logarithm there
+        // instead. A saved pipeline can name either — the search rounds to four places — and both have to
+        // come back to the number that was read.
+        var fitted = new FittedStepValues();
+        fitted.Learned("lambda", lambda);
+        fitted.Learned("centre", 0);
+        fitted.Learned("spread", 1);
+
+        var table = OneColumn(3, -3);
+        var step = new NormaliseStep("a", Scale.Power);
+
+        step.ApplyTo(table, fitted);
+        var shaped = (Column<double>)table["a"];
+
+        Assert.Equal(lambda == 0 ? Math.Log(4) : (Math.Pow(4, 2) - 1) / 2, shaped[0]!.Value, 9);
+        Assert.Equal(3, step.Undo(shaped[0]!.Value, fitted), 9);
+        Assert.Equal(-3, step.Undo(shaped[1]!.Value, fitted), 9);
     }
 }

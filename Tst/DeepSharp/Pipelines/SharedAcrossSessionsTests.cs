@@ -68,7 +68,7 @@ public class SharedAcrossSessionsTests
         var trained = Pdd.Create()
             .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "titanic.csv"))
             .Declare(schema => schema.Integer("pclass").Text("sex").Optional("age", ColumnKind.Number))
-            .SplitStratified("pclass", 0.70, 0.15, 0.15)
+            .SplitStratified("pclass", 0.70, 0.15)
             .FillMissing("age", With.Median)
             .Encode("sex")
             .Normalise("age")
@@ -97,7 +97,7 @@ public class SharedAcrossSessionsTests
         var trained = Pdd.Create()
             .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "titanic.csv"))
             .Declare(schema => schema.Integer("pclass"))
-            .SplitAtRandom(0.70, 0.15, 0.15)
+            .SplitAtRandom(0.70, 0.15)
             .Normalise("pclass")
             .Build()
             .Run();

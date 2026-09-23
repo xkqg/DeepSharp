@@ -20,7 +20,7 @@ public class OutlierAndMathsTests
         return SchemaBinding.Bind(new DeclareStep([new ColumnDeclaration("a", ColumnKind.Number, true)]), source);
     }
 
-    private static Split[] AllTraining(Table table) => [.. Enumerable.Repeat(Split.Train, table.RowCount)];
+    private static Part[] AllTraining(Table table) => [.. Enumerable.Repeat(Part.Train, table.RowCount)];
 
     // ---- holding the tail ----------------------------------------------------------------------------
 
@@ -102,7 +102,7 @@ public class OutlierAndMathsTests
         var step = new ClipOutliersStep("a", Bounds.Quantile, 0.1);
 
         // The spike is in test, so it has no say in where the bounds sit — and it is held all the same.
-        var learned = step.Fit(table, [Split.Train, Split.Train, Split.Train, Split.Train, Split.Train, Split.Test]);
+        var learned = step.Fit(table, [Part.Train, Part.Train, Part.Train, Part.Train, Part.Train, Part.Test]);
         step.ApplyTo(table, learned);
 
         Assert.True(learned.Number("upper") < 10, $"the bound was {learned.Number("upper")}");
@@ -139,7 +139,7 @@ public class OutlierAndMathsTests
         var declaration = Pdd.Create()
             .ReadCsv("x.csv")
             .Declare(schema => schema.Number("a"))
-            .SplitAtRandom(0.70, 0.15, 0.15)
+            .SplitAtRandom(0.70, 0.15)
             .ClipOutliers("a", Bounds.Sigma, 2.5, Outlier.Blank)
             .Declaration;
 
@@ -223,7 +223,7 @@ public class OutlierAndMathsTests
             .ReadCsv("x.csv")
             .Declare(schema => schema.Number("a"))
             .Reshape("a", Maths.Log1P, into: "log_a")
-            .SplitAtRandom(0.70, 0.15, 0.15)
+            .SplitAtRandom(0.70, 0.15)
             .Declaration;
 
         Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson()));

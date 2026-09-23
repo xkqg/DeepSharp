@@ -20,7 +20,7 @@ public class TheWayBackTests
         var fitting = Pdd.Create()
             .ReadCsv(Titanic)
             .Declare(schema => schema.Number("fare").Integer("pclass"))
-            .SplitAtRandom(0.70, 0.15, 0.15, seed: 4);
+            .SplitAtRandom(0.70, 0.15, seed: 4);
 
         how(fitting);
 
@@ -60,7 +60,7 @@ public class TheWayBackTests
             // itself does not exist. Shifted by the class it becomes a number every reshaping can take.
             .AddFeature("paid", "fare", Arithmetic.Plus, "pclass")
             .Reshape("paid", maths)
-            .SplitAtRandom(0.70, 0.15, 0.15, seed: 4)
+            .SplitAtRandom(0.70, 0.15, seed: 4)
             .Target("paid")
             .Build();
 
@@ -80,7 +80,7 @@ public class TheWayBackTests
             .Declare(schema => schema.Number("fare").Integer("pclass"))
             .AddFeature("paid", "fare", Arithmetic.Plus, "pclass")
             .Reshape("paid", Maths.Log1P)
-            .SplitAtRandom(0.70, 0.15, 0.15, seed: 4)
+            .SplitAtRandom(0.70, 0.15, seed: 4)
             .Normalise("paid", Scale.Standard)
             .Target("paid")
             .Build()
@@ -117,7 +117,7 @@ public class TheWayBackTests
         var prepared = Pdd.Create()
             .ReadCsv(Titanic)
             .Declare(schema => schema.Number("fare"))
-            .SplitAtRandom(0.70, 0.15, 0.15)
+            .SplitAtRandom(0.70, 0.15)
             .Normalise("fare")
             .Build()
             .Run();
@@ -152,7 +152,7 @@ public class TheWayBackTests
                 .ReadCsv(Titanic)
                 .Declare(schema => schema.Number("fare"))
                 .Reshape("fare", Maths.Sign)
-                .SplitAtRandom(0.70, 0.15, 0.15)
+                .SplitAtRandom(0.70, 0.15)
                 .Target("fare")
                 .Build()
                 .Run());
@@ -178,7 +178,7 @@ public class TheWayBackTests
         var prepared = Pdd.Create()
             .ReadCsv(Titanic)
             .Declare(schema => schema.Category("sex").Number("fare"))
-            .SplitAtRandom(0.70, 0.15, 0.15)
+            .SplitAtRandom(0.70, 0.15)
             .Target("sex")
             .Build()
             .Run();

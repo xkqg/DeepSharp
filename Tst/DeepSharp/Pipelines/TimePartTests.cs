@@ -128,7 +128,7 @@ public class TimePartTests
             .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "apple.csv"))
             .Declare(schema => schema.Timestamp("Date").Number("AAPL.Close").Category("direction"))
             .TimeParts("Date", TimePart.Season, TimePart.DayOfWeek)
-            .SplitByTime("Date", 0.70, 0.15, 0.15)
+            .SplitByTime("Date", 0.70, 0.15)
             .EncodeCategories()
             .Build()
             .Run();

@@ -11,7 +11,7 @@
 
     <!-- One number for every packable project. It is handed out when the work starts, never invented here,
          and the changelog heading carries the same one. -->
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
 
     <!-- Which frameworks a project targets is the project's own business: the library ships for two, the
          test runner is an executable for one. Setting it here made the test project inherit both and then

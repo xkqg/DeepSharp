@@ -97,14 +97,14 @@ public sealed record ClipOutliersStep : IFittedStep, ILearnsFromData, IPipelineS
     public string Verb => Name;
 
     /// <inheritdoc />
-    public FittedStepValues Fit(Table table, IReadOnlyList<Split> splits)
+    public FittedStepValues Fit(Table table, IReadOnlyList<Part> parts)
     {
         ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(splits);
+        ArgumentNullException.ThrowIfNull(parts);
 
         var values = Numbers.Of(table, Column);
         var training = Enumerable.Range(0, values.Length)
-            .Where(row => splits[row] == Split.Train && values[row] is not null)
+            .Where(row => parts[row] == Part.Train && values[row] is not null)
             .Select(row => values[row]!.Value)
             .Order()
             .ToArray();

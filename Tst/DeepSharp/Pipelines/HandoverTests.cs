@@ -35,7 +35,7 @@ public class HandoverTests
                 .Text("sex")
                 .Number("fare")
                 .Optional("age", ColumnKind.Number))
-            .SplitStratified("survived", 0.70, 0.15, 0.15)
+            .SplitStratified("survived", 0.70, 0.15)
             .FillMissing("age", With.Median)
             .Encode("sex")
             .Normalise("age", "fare")
@@ -47,9 +47,9 @@ public class HandoverTests
     public void AHandover_IsRowsOfNumbersWithTheirNamesInOrder()
     {
         var prepared = Passengers();
-        var batch = prepared.Batch(Split.Train);
+        var batch = prepared.Batch(Part.Train);
 
-        Assert.Equal(prepared.CountIn(Split.Train), batch.RowCount);
+        Assert.Equal(prepared.CountIn(Part.Train), batch.RowCount);
         Assert.Equal(batch.Width, batch.Features[0].Length);
         Assert.DoesNotContain("survived", batch.FeatureNames);
         Assert.Contains("age_was_missing", batch.FeatureNames);
@@ -59,7 +59,7 @@ public class HandoverTests
     [Fact]
     public void TheAnswerIsHandedOverSeparately_NeverAmongTheNumbers()
     {
-        var batch = Passengers().Batch(Split.Test);
+        var batch = Passengers().Batch(Part.Test);
 
         Assert.NotNull(batch.Labels);
         Assert.Equal(batch.RowCount, batch.Labels!.Count);
@@ -71,7 +71,7 @@ public class HandoverTests
     {
         var prepared = Passengers();
 
-        var counted = new[] { Split.Train, Split.Validation, Split.Test }
+        var counted = new[] { Part.Train, Part.Validation, Part.Test }
             .Sum(split => prepared.Batch(split).RowCount);
 
         Assert.Equal(891, counted);
@@ -83,11 +83,11 @@ public class HandoverTests
         var prepared = Pdd.Create()
             .ReadCsv(Data("titanic.csv"))
             .Declare(schema => schema.Integer("pclass"))
-            .SplitAtRandom(0.70, 0.15, 0.15)
+            .SplitAtRandom(0.70, 0.15)
             .Build()
             .Run();
 
-        Assert.Null(prepared.Batch(Split.Train).Labels);
+        Assert.Null(prepared.Batch(Part.Train).Labels);
     }
 
     [Fact]
@@ -96,11 +96,11 @@ public class HandoverTests
         var prepared = Pdd.Create()
             .ReadCsv(Data("titanic.csv"))
             .Declare(schema => schema.Text("sex").Integer("pclass"))
-            .SplitAtRandom(0.70, 0.15, 0.15)
+            .SplitAtRandom(0.70, 0.15)
             .Build()
             .Run();
 
-        var refused = Assert.Throws<InvalidOperationException>(() => prepared.Batch(Split.Train));
+        var refused = Assert.Throws<InvalidOperationException>(() => prepared.Batch(Part.Train));
 
         Assert.Contains("sex", refused.Message);
     }
@@ -111,11 +111,11 @@ public class HandoverTests
         var prepared = Pdd.Create()
             .ReadCsv(Data("titanic.csv"))
             .Declare(schema => schema.Optional("age", ColumnKind.Number))
-            .SplitAtRandom(0.70, 0.15, 0.15)
+            .SplitAtRandom(0.70, 0.15)
             .Build()
             .Run();
 
-        var refused = Assert.Throws<InvalidOperationException>(() => prepared.Batch(Split.Train));
+        var refused = Assert.Throws<InvalidOperationException>(() => prepared.Batch(Part.Train));
 
         Assert.Contains("age", refused.Message);
         Assert.Contains("still a gap", refused.Message);
@@ -129,13 +129,13 @@ public class HandoverTests
         var prepared = Pdd.Create()
             .ReadCsv(Data("titanic.csv"))
             .Declare(schema => schema.Text("sex").Integer("pclass"))
-            .SplitAtRandom(0.70, 0.15, 0.15)
+            .SplitAtRandom(0.70, 0.15)
             .Encode("sex")
             .Target("sex")
             .Build()
             .Run();
 
-        Assert.Throws<InvalidOperationException>(() => prepared.Batch(Split.Train));
+        Assert.Throws<InvalidOperationException>(() => prepared.Batch(Part.Train));
     }
 
     [Fact]

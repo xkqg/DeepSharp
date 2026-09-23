@@ -3,29 +3,12 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.1.0]
+## [0.2.0]
 
-The first release. It is the foundation the rest of the library is built on: the numbers, their size, and
-where the arithmetic happens.
+The data half of the library: everything a set of rows goes through before a model ever sees it, declared
+once as a file you can save and replay. The tensors of the first release are untouched.
 
 ### Added
-
-- **`Shape` — how big a tensor is.** `new Shape(2, 3)` is two rows of three, and it prints as `2x3`. Two
-  shapes with the same sizes count as the same shape, so you can compare them and use them as keys. A size
-  that cannot exist is refused the moment you write it: a negative length, or sizes so large that the total
-  could not be counted. A shape with no sizes at all is a single number — which is what a loss is.
-
-- **`Tensor` — the numbers themselves.** A shape, and the values filling it. A tensor never changes once it
-  exists, so handing the same one to two parts of your network is safe. `Tensor.From` takes a copy of what
-  you give it, so reusing your own array afterwards cannot alter a tensor you have already passed on.
-
-- **`CpuBackend` — the arithmetic.** Adds and multiplies tensors, using your processor's vector
-  instructions through .NET's own maths library. There is nothing native behind it and nothing to install.
-  Adding two tensors of different sizes is refused, with a message naming both.
-
-- **`ITensorBackend` — the plug it all goes through.** Every calculation a network does goes through this,
-  which is why a model written today can run its heavy work on something else later without being rewritten.
-  You create a backend and hand it to what needs it; nothing goes looking for a shared one of its own accord.
 
 - **`DeepSharp.Pipelines` — a pipeline you can write down.** A second package, for the path your data takes
   before a model ever sees it. `Pdd.Create()` starts a pipeline and every verb after it *records* what is to
@@ -59,6 +42,24 @@ where the arithmetic happens.
   time rather than guessing where it belongs; at random with a seed written into the declaration; and
   stratified, which deals each group out separately so a rare answer survives into validation.
 
+- **A row belongs to a `Part`, not to a "split".** You *split* the rows; what each row lands in is a part
+  of the data — `Part.Train`, `Part.Validation`, `Part.Test`, `Part.Predict` — which is what `Batch`,
+  `CountIn` and `PreparedData.Parts` speak in. The verbs keep the word for the act: `SplitByTime`,
+  `SplitAtRandom`, `SplitStratified`.
+
+- **The share you are measured on is never written down.** You say what training takes and what validation
+  takes; test is whatever is left. Three numbers that must add to one is a rule that breaks quietly — 0.70,
+  0.15 and 0.10 leaves a twentieth of the rows in no split at all and every number afterwards is computed
+  over less data than you think — so the third number is not a parameter at all. `80, 10` and `0.80, 0.10`
+  say the same thing, and mixing percentages and fractions in one call is refused rather than read.
+  `SplitAtRandom(0.80)` is the two-way division, with nothing held for validation.
+
+- **`Predict(10)` holds a part back that takes no part in anything.** Nothing is fitted on it and nothing
+  is measured on it, so running a trained network over those rows is the closest thing to running it
+  tomorrow; with a split in time they are the newest rows in the file. Training, validation and test are
+  then the ninety that remain, and `Batch(Part.Predict)` hands them over like any other part. A pipeline
+  that holds rows back and then never splits is refused where it is built.
+
 - **Features, before the split, because they learn nothing.** A column worked out from two others, and a
   moment in time written as a place on a circle so that eleven at night and midnight are neighbours — in
   whichever of three forms you ask for: the plain value, the same value between nothing and one, or two
@@ -71,7 +72,7 @@ where the arithmetic happens.
   a price meets a new high the first week it is in production.
 
 - **A handover, and a way back in.** `Target` names the column being predicted and it is handed over apart
-  from the numbers, never among them. `Batch(split)` gives rows of numbers with their names in a fixed
+  from the numbers, never among them. `Batch(part)` gives rows of numbers with their names in a fixed
   order, and refuses a column that still holds words, a gap nobody filled, or a target that no longer
   exists. `Replay` runs the same declaration over rows nobody had seen, with the numbers the training rows
   produced and nothing fitted again — which is what serving is — and a saved pipeline can be loaded back
@@ -131,3 +132,27 @@ where the arithmetic happens.
   applied whichever order the registrations happen to be written in. None of it is required: a console
   program that writes `Pdd.Create()` with no container anywhere works exactly the same, and a test holds
   that door open. `Samples/DeepSharp.Sample.Pipelines` shows both.
+
+## [0.1.0]
+
+The first release. It is the foundation the rest of the library is built on: the numbers, their size, and
+where the arithmetic happens.
+
+### Added
+
+- **`Shape` — how big a tensor is.** `new Shape(2, 3)` is two rows of three, and it prints as `2x3`. Two
+  shapes with the same sizes count as the same shape, so you can compare them and use them as keys. A size
+  that cannot exist is refused the moment you write it: a negative length, or sizes so large that the total
+  could not be counted. A shape with no sizes at all is a single number — which is what a loss is.
+
+- **`Tensor` — the numbers themselves.** A shape, and the values filling it. A tensor never changes once it
+  exists, so handing the same one to two parts of your network is safe. `Tensor.From` takes a copy of what
+  you give it, so reusing your own array afterwards cannot alter a tensor you have already passed on.
+
+- **`CpuBackend` — the arithmetic.** Adds and multiplies tensors, using your processor's vector
+  instructions through .NET's own maths library. There is nothing native behind it and nothing to install.
+  Adding two tensors of different sizes is refused, with a message naming both.
+
+- **`ITensorBackend` — the plug it all goes through.** Every calculation a network does goes through this,
+  which is why a model written today can run its heavy work on something else later without being rewritten.
+  You create a backend and hand it to what needs it; nothing goes looking for a shared one of its own accord.

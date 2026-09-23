@@ -158,7 +158,7 @@ public sealed class Pipeline
             table = table.From(step.FirstUsableRow(table));
         }
 
-        var splits = Assign(table);
+        var parts = Assign(table);
         var fitted = new Dictionary<int, FittedStepValues>();
 
         for (var at = line; at < steps.Count; at++)
@@ -166,7 +166,7 @@ public sealed class Pipeline
             switch (steps[at])
             {
                 case ILearnsFromData learns:
-                    var learned = learns.Fit(table, splits);
+                    var learned = learns.Fit(table, parts);
                     learns.ApplyTo(table, learned);
                     fitted[at] = learned;
                     break;
@@ -177,7 +177,7 @@ public sealed class Pipeline
             }
         }
 
-        var prepared = new PreparedData(Declaration, table, splits, fitted);
+        var prepared = new PreparedData(Declaration, table, parts, fitted);
 
         if (before is not null)
         {
@@ -216,9 +216,9 @@ public sealed class Pipeline
         }
     }
 
-    private Split[] Assign(Table table)
+    private Part[] Assign(Table table)
     {
-        var split = Declaration.Steps.OfType<IAssignsSplits>().FirstOrDefault();
+        var split = Declaration.Steps.OfType<IAssignsParts>().FirstOrDefault();
 
         if (split is not null)
         {
@@ -228,6 +228,6 @@ public sealed class Pipeline
         // Nothing here needs to refuse a pipeline that learns without splitting: a declaration carrying a
         // step that learns and no split is refused when it is built, whichever door it came through.
         // A pipeline that learns nothing needs no split, and every row is simply itself.
-        return [.. Enumerable.Repeat(Split.Train, table.RowCount)];
+        return [.. Enumerable.Repeat(Part.Train, table.RowCount)];
     }
 }

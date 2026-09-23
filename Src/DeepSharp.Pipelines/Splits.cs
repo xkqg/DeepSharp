@@ -6,8 +6,8 @@ using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
 
-/// <summary>Which part of the data a row belongs to.</summary>
-public enum Split
+/// <summary>Which part of the data a row belongs to: what it is there for, not where it sits.</summary>
+public enum Part
 {
     /// <summary>The rows a model learns from, and the only rows anything is fitted on.</summary>
     Train,
@@ -17,60 +17,144 @@ public enum Split
 
     /// <summary>The rows kept back until the end.</summary>
     Test,
+
+    /// <summary>The rows held back further still, to predict on once the model is trained.</summary>
+    Predict,
 }
 
 /// <summary>
-/// The three shares a split divides the rows into.
+/// The shares a split divides the rows into.
 /// </summary>
 /// <param name="Train">The share the model learns from.</param>
 /// <param name="Validation">The share used while choosing between models.</param>
 /// <param name="Test">The share kept back until the end.</param>
+/// <param name="Predict">The share held back to predict on; usually none.</param>
 /// <remarks>
-/// One type rather than three loose numbers, because the three are only meaningful together: each has to be
-/// a share, and the three have to make a whole. Written as the negation of what a share is, because every
+/// One type rather than four loose numbers, because they are only meaningful together: each has to be a
+/// share, and together they have to make a whole. Written as the negation of what a share is, because every
 /// comparison against a not-a-number is false and a range test lets NaN through.
 /// </remarks>
-public readonly record struct SplitShares(double Train, double Validation, double Test)
+public readonly record struct SplitShares(double Train, double Validation, double Test, double Predict = 0)
 {
-    /// <summary>Checks that these are three shares that make a whole.</summary>
+    /// <summary>The shares you write down; the one to be measured on is worked out.</summary>
+    /// <param name="train">The share the model learns from.</param>
+    /// <param name="validation">The share used while choosing between models; none, unless you say.</param>
+    /// <param name="predict">The share held back to predict on; none, unless you say.</param>
+    /// <returns>The shares, as fractions.</returns>
+    /// <exception cref="ArgumentException">They ask for more than there is, or leave nothing to measure on.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">One of them is not a number.</exception>
+    /// <remarks>
+    /// The test share is never written down: it is whatever is left, so nothing can add up to more than
+    /// everything there is. Percentages and fractions are told apart by what the written shares add up to —
+    /// more than one means percentages — so <c>Of(80, 10)</c> and <c>Of(0.8, 0.1)</c> say the same thing,
+    /// and <c>Of(0.7, 0.1, 10)</c>, which mixes the two, is refused rather than read as seven-tenths of a
+    /// percent.
+    /// </remarks>
+    public static SplitShares Of(double train, double validation = 0, double predict = 0)
+    {
+        // A share that is not a finite number is refused before anything is added up: the sum of an
+        // infinity is an infinity, and the message would then be about a whole rather than about the
+        // number that is not one.
+        ThrowIfNotFinite(train, nameof(train));
+        ThrowIfNotFinite(validation, nameof(validation));
+        ThrowIfNotFinite(predict, nameof(predict));
+
+        // Percentages or fractions, decided by whether any one of them is bigger than a whole — not by
+        // what they add up to, because 0.70 and 0.45 add up to more than one while plainly being written
+        // as fractions, and reading them as percentages would quietly make training seven-tenths of one.
+        var spoken = train + validation + predict;
+        var whole = train > 1 || validation > 1 || predict > 1 ? 100 : 1;
+
+        if (whole == 100 && new[] { train, validation, predict }.Any(share => share > 0 && share < 1))
+        {
+            throw new ArgumentException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{train}, {validation} and {predict} are not written in the same units: one of them is a fraction among percentages."),
+                nameof(train));
+        }
+
+        if (spoken > whole + 1e-9)
+        {
+            throw new ArgumentException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{train}, {validation} and {predict} ask for {spoken:0.####} of {whole}, and a split cannot use more rows than there are."),
+                nameof(train));
+        }
+
+        if (Math.Abs(spoken - whole) <= 1e-9)
+        {
+            throw new ArgumentException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{train}, {validation} and {predict} are the whole of the data and leave nothing to be measured on."),
+                nameof(train));
+        }
+
+        // Rounded, because a subtraction in one unit and the same subtraction in the other do not give
+        // the same bits — 1 - 0.9 is not 10 / 100 — and two declarations that say the same thing have
+        // to compare equal.
+        var test = Math.Round(whole - spoken, 12);
+
+        return new SplitShares(train / whole, validation / whole, test / whole, predict / whole);
+    }
+
+    /// <summary>Checks that these are shares that make a whole.</summary>
     /// <exception cref="ArgumentOutOfRangeException">One of them is not a share.</exception>
     /// <exception cref="ArgumentException">Together they are not a whole.</exception>
     public void Validate()
     {
         ThrowIfNotAShare(Train, nameof(Train));
-        ThrowIfNotAShare(Validation, nameof(Validation));
         ThrowIfNotAShare(Test, nameof(Test));
 
-        var total = Train + Validation + Test;
+        // Validation and predict may be nothing at all: a two-way division into training and test is an
+        // ordinary way to work, and so is having no slice to predict on. A part that is simply not there
+        // is different from one that was meant to exist and came out empty. Training and test may not be
+        // nothing, because a model learns from one and is measured on the other.
+        ThrowIfNotAShareOrNothing(Validation, nameof(Validation));
+        ThrowIfNotAShareOrNothing(Predict, nameof(Predict));
+
+        var total = Train + Validation + Test + Predict;
 
         if (Math.Abs(total - 1) > 1e-9)
         {
             throw new ArgumentException(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"The three shares add up to {total:0.####} and a split has to use every row."),
+                    $"The shares add up to {total:0.####} and a split has to use every row."),
                 nameof(Train));
         }
     }
 
-    /// <summary>Hands out the splits for a given number of rows, in order.</summary>
+    /// <summary>Hands out the parts for a given number of rows, in order.</summary>
     /// <param name="rows">How many rows there are.</param>
-    /// <returns>Which split each position belongs to, training first.</returns>
-    public Split[] Over(int rows)
+    /// <returns>Which part each position belongs to, training first and predict last.</returns>
+    public Part[] Over(int rows)
     {
         var train = (int)Math.Round(rows * Train, MidpointRounding.AwayFromZero);
         var validation = (int)Math.Round(rows * Validation, MidpointRounding.AwayFromZero);
+        var test = (int)Math.Round(rows * Test, MidpointRounding.AwayFromZero);
 
-        var splits = new Split[rows];
+        var parts = new Part[rows];
 
         for (var at = 0; at < rows; at++)
         {
-            splits[at] = at < train ? Split.Train
-                : at < train + validation ? Split.Validation
-                : Split.Test;
+            parts[at] = at < train ? Part.Train
+                : at < train + validation ? Part.Validation
+                : at < train + validation + test || Predict == 0 ? Part.Test
+                : Part.Predict;
         }
 
-        return splits;
+        return parts;
+    }
+
+    private static void ThrowIfNotFinite(double share, string name)
+    {
+        if (!double.IsFinite(share))
+        {
+            throw new ArgumentOutOfRangeException(name, share, "A share of the data is a number.");
+        }
     }
 
     private static void ThrowIfNotAShare(double share, string name)
@@ -81,17 +165,26 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
                 name, share, "A share of the data is more than none of it and at most all of it.");
         }
     }
+
+    private static void ThrowIfNotAShareOrNothing(double share, string name)
+    {
+        if (!(share >= 0 && share <= 1))
+        {
+            throw new ArgumentOutOfRangeException(
+                name, share, "A share of the data is at least none of it and at most all of it.");
+        }
+    }
 }
 
 /// <summary>
 /// A step that says which rows belong to which part of the data.
 /// </summary>
-public interface IAssignsSplits : ISplitStep
+public interface IAssignsParts : ISplitStep
 {
-    /// <summary>Works out which split every row belongs to.</summary>
+    /// <summary>Works out which part every row belongs to.</summary>
     /// <param name="table">The rows to divide.</param>
-    /// <returns>One split per row, in row order.</returns>
-    Split[] Assign(Table table);
+    /// <returns>One part per row, in row order.</returns>
+    Part[] Assign(Table table);
 }
 
 /// <summary>
@@ -102,7 +195,7 @@ public interface IAssignsSplits : ISplitStep
 /// than something the fit discovers, because a split you cannot reproduce makes every number after it
 /// unreproducible too.
 /// </remarks>
-public sealed record SplitAtRandomStep : ISplitStep, IAssignsSplits, IPipelineStep<SplitAtRandomStep>
+public sealed record SplitAtRandomStep : ISplitStep, IAssignsParts, IPipelineStep<SplitAtRandomStep>
 {
     /// <summary>Declares a split at random.</summary>
     /// <param name="shares">How much goes to training, validation and test.</param>
@@ -128,7 +221,7 @@ public sealed record SplitAtRandomStep : ISplitStep, IAssignsSplits, IPipelineSt
     public string Verb => Name;
 
     /// <inheritdoc />
-    public Split[] Assign(Table table)
+    public Part[] Assign(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);
 
@@ -154,6 +247,7 @@ public sealed record SplitAtRandomStep : ISplitStep, IAssignsSplits, IPipelineSt
         writer.WriteNumber("train", Shares.Train);
         writer.WriteNumber("validation", Shares.Validation);
         writer.WriteNumber("test", Shares.Test);
+        writer.WriteNumber("predict", Shares.Predict);
         writer.WriteNumber("seed", Seed);
         writer.WriteEndObject();
     }
@@ -165,7 +259,8 @@ public sealed record SplitAtRandomStep : ISplitStep, IAssignsSplits, IPipelineSt
         new(new SplitShares(
                 element.RequiredNumber("train"),
                 element.RequiredNumber("validation"),
-                element.RequiredNumber("test")),
+                element.RequiredNumber("test"),
+                element.OptionalNumber("predict")),
             (int)element.RequiredNumber("seed"));
 }
 
@@ -177,7 +272,7 @@ public sealed record SplitAtRandomStep : ISplitStep, IAssignsSplits, IPipelineSt
 /// and a model measured there is measured on nothing much; this deals each group out separately so every
 /// part looks like the whole.
 /// </remarks>
-public sealed record SplitStratifiedStep : ISplitStep, IAssignsSplits, IPipelineStep<SplitStratifiedStep>
+public sealed record SplitStratifiedStep : ISplitStep, IAssignsParts, IPipelineStep<SplitStratifiedStep>
 {
     /// <summary>Declares a split that keeps the mixture of a column.</summary>
     /// <param name="column">The column whose mixture is kept.</param>
@@ -210,12 +305,12 @@ public sealed record SplitStratifiedStep : ISplitStep, IAssignsSplits, IPipeline
     public string Verb => Name;
 
     /// <inheritdoc />
-    public Split[] Assign(Table table)
+    public Part[] Assign(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);
 
         var column = table[Column];
-        var splits = new Split[table.RowCount];
+        var parts = new Part[table.RowCount];
         var random = new Random(Seed);
 
         var groups = Enumerable.Range(0, table.RowCount)
@@ -236,11 +331,11 @@ public sealed record SplitStratifiedStep : ISplitStep, IAssignsSplits, IPipeline
 
             for (var at = 0; at < rows.Length; at++)
             {
-                splits[rows[at]] = share[at];
+                parts[rows[at]] = share[at];
             }
         }
 
-        return splits;
+        return parts;
     }
 
     /// <inheritdoc />
@@ -254,6 +349,7 @@ public sealed record SplitStratifiedStep : ISplitStep, IAssignsSplits, IPipeline
         writer.WriteNumber("train", Shares.Train);
         writer.WriteNumber("validation", Shares.Validation);
         writer.WriteNumber("test", Shares.Test);
+        writer.WriteNumber("predict", Shares.Predict);
         writer.WriteNumber("seed", Seed);
         writer.WriteEndObject();
     }
@@ -266,28 +362,29 @@ public sealed record SplitStratifiedStep : ISplitStep, IAssignsSplits, IPipeline
             new SplitShares(
                 element.RequiredNumber("train"),
                 element.RequiredNumber("validation"),
-                element.RequiredNumber("test")),
+                element.RequiredNumber("test"),
+                element.OptionalNumber("predict")),
             (int)element.RequiredNumber("seed"));
 }
 
 /// <summary>
-/// Putting a run of splits back onto the rows they belong to.
+/// Putting a run of parts back onto the rows they belong to.
 /// </summary>
 internal static class SplitPlacement
 {
-    /// <summary>Lays a run of splits out over the rows in a given order.</summary>
-    /// <param name="inOrder">The splits, training first.</param>
-    /// <param name="rows">The rows, in the order the splits should be handed out.</param>
-    /// <returns>One split per row, in row order.</returns>
-    internal static Split[] Placed(this Split[] inOrder, int[] rows)
+    /// <summary>Lays a run of parts out over the rows in a given order.</summary>
+    /// <param name="inOrder">The parts, training first.</param>
+    /// <param name="rows">The rows, in the order the parts should be handed out.</param>
+    /// <returns>One part per row, in row order.</returns>
+    internal static Part[] Placed(this Part[] inOrder, int[] rows)
     {
-        var splits = new Split[inOrder.Length];
+        var parts = new Part[inOrder.Length];
 
         for (var at = 0; at < rows.Length; at++)
         {
-            splits[rows[at]] = inOrder[at];
+            parts[rows[at]] = inOrder[at];
         }
 
-        return splits;
+        return parts;
     }
 }

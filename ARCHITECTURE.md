@@ -10,7 +10,7 @@ Src/DeepSharp/            the engine side: Shape, Tensor, ITensorBackend, CpuBac
 Src/DeepSharp.Pipelines/  the data side
     IPipelineStep.cs        what a step is, and the two markers that place it in the chain
     Steps.cs Schema.cs      reading, declaring, splitting in time, filling a gap
-    Splits.cs               the three shares, and splitting at random or stratified
+    Splits.cs               the shares, and splitting at random or stratified
     Features.cs             a derived column, a cycle, and the three forms
     Transforms.cs           the scales, the row norms, the encodings
     RowSource.cs Table.cs   where rows come from, and what they become
@@ -190,14 +190,14 @@ it. Anything hand-maintained drifts from the code it describes, and a validator 
 none: a file can then be legal in a way the fluent chain is not.
 
 Validation has two halves and they run at different moments. **Shape** — does the step exist, are its
-parameters the right kind, do the three split fractions add to one — needs no data at all. **Binding** —
+parameters the right kind, do the shares fit inside a whole — needs no data at all. **Binding** —
 does that column exist in the source, is it numeric — needs the source open. Both finish before anything
 runs, and both report every fault at once with its position in the file. Someone who is handed one error at
 a time, five times over, stops using the thing.
 
 ```
 btceur.pdd.yaml(7,3): column 'trades' is not in btceur-1d.csv — there is a 'numberOfTrades'
-btceur.pdd.yaml(4,10): train+validation+test = 0.95, must be 1.0
+btceur.pdd.yaml(4,10): 0.7 and 0.45 ask for 1.15 of 1, and a split cannot use more rows than there are
 btceur.pdd.yaml(2,8): step 'parquet' exists, but the package DeepSharp.Pipelines.Parquet is not referenced
 ```
 
@@ -207,6 +207,21 @@ afternoon.
 
 The file also names the declaration version it was written against, so a pipeline from a year ago either
 loads or says precisely which step changed underneath it.
+
+### The share you never write down
+
+Three numbers that have to add to one is a rule a caller can break, and the way it breaks is quiet: shares
+of 0.70, 0.15 and 0.10 leave a twentieth of the data in no split at all, the run works, and every number
+after it is computed over less data than anyone thinks. So the share to be measured on is not a parameter.
+You write what training takes and what validation takes; test is whatever is left, and nothing can add up
+to more than there is. Writing them as percentages or as fractions says the same thing — `80, 10` and
+`0.80, 0.10` — and mixing the two in one call is refused rather than read.
+
+`Predict(10)` holds a fourth part back, outside the three: nothing is fitted on it and nothing is measured
+on it, so running a trained network over it is the closest thing to running it tomorrow. Training,
+validation and test are then the ninety that remain. It is written once, before the split, and the split is
+what carries it — a pipeline that holds rows back and never divides anything is refused at the point it is
+built, because that share would otherwise simply disappear.
 
 ### One description drives both doors
 
@@ -409,7 +424,7 @@ differently on the day the network does.
 
 ### The pipeline ends at a handover, and the same one serves
 
-`Batch(split)` is where the pipeline stops: rows of numbers, their column names in a fixed order, and the
+`Batch(part)` is where the pipeline stops: rows of numbers, their column names in a fixed order, and the
 answer handed over separately when a target was named. A network built here, a trainer from an established
 .NET library and a caller's own learner all take that same handover, which is the only reason two of them
 can honestly be compared.
@@ -429,7 +444,7 @@ used: the numbers reaching it would not be the numbers it was trained on.
 `IPipelineStep` stays two members wide — a verb and how to write itself down — because most of what a step
 might do applies to only some steps. What a step can *do* is said by the capability it implements, and the
 run asks with a type test: `IOpensRows` for a source, `IBindsColumns` for a schema, `IAddsColumns` for
-arithmetic on a row, `IAssignsSplits` for dividing the rows, `ILearnsFromData` for the pair of fitting and
+arithmetic on a row, `IAssignsParts` for dividing the rows, `ILearnsFromData` for the pair of fitting and
 replaying.
 
 Widening the step interface instead would force a split step to answer for column effects and a report step

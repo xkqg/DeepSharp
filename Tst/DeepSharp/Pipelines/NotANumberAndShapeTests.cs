@@ -25,7 +25,7 @@ public class NotANumberAndShapeTests
         return SchemaBinding.Bind(new DeclareStep(schema.Columns), source);
     }
 
-    private static Split[] AllTraining(Table table) => [.. Enumerable.Repeat(Split.Train, table.RowCount)];
+    private static Part[] AllTraining(Table table) => [.. Enumerable.Repeat(Part.Train, table.RowCount)];
 
     // ---- not a number --------------------------------------------------------------------------------
 
@@ -126,7 +126,7 @@ public class NotANumberAndShapeTests
         var declaration = Pdd.Create()
             .ReadCsv("x.csv")
             .Declare(schema => schema.Number("a"))
-            .SplitAtRandom(0.70, 0.15, 0.15)
+            .SplitAtRandom(0.70, 0.15)
             .FillNaN("a")
             .FillNaN("a", With.Constant(0))
             .Target("a")
@@ -193,7 +193,7 @@ public class NotANumberAndShapeTests
         var table = Read("a\n1\n2\n3\n100\n-100\n");
         var step = new NormaliseStep("a", Scale.Quantile);
 
-        var learned = step.Fit(table, [Split.Train, Split.Train, Split.Train, Split.Test, Split.Test]);
+        var learned = step.Fit(table, [Part.Train, Part.Train, Part.Train, Part.Test, Part.Test]);
         step.ApplyTo(table, learned);
 
         var scaled = (Column<double>)table["a"];
@@ -275,5 +275,22 @@ public class NotANumberAndShapeTests
 
             Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson()));
         }
+    }
+
+    [Fact]
+    public void TheMiddleOfAnEvenNumberOfRowsIsBetweenTheTwo_AndOnlyTrainingRowsCount()
+    {
+        // Three things a real column does at once: a cell that was never filled, a cell holding arithmetic
+        // that produced no number, and a row that belongs to another part. A gap is not a not-a-number and
+        // neither of them is training data, so the middle is taken from the four rows that are.
+        var table = Read("a\n1\n2\n3\n4\nNaN\n\n100\n");
+        var step = new FillNaNStep("a", With.Median);
+
+        var learned = step.Fit(
+            table,
+            [Part.Train, Part.Train, Part.Train, Part.Train, Part.Train, Part.Train, Part.Test]);
+
+        Assert.Equal(1, learned.Number("notNumbers"));
+        Assert.Equal(2.5, learned.Number("value"));
     }
 }

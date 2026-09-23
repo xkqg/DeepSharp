@@ -48,10 +48,10 @@ public sealed record FillNaNStep : IFittedStep, ILearnsFromData, IPipelineStep<F
     public string Verb => Name;
 
     /// <inheritdoc />
-    public FittedStepValues Fit(Table table, IReadOnlyList<Split> splits)
+    public FittedStepValues Fit(Table table, IReadOnlyList<Part> parts)
     {
         ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(splits);
+        ArgumentNullException.ThrowIfNull(parts);
 
         var values = Numbers.Of(table, Column);
         var learned = new FittedStepValues();
@@ -59,7 +59,7 @@ public sealed record FillNaNStep : IFittedStep, ILearnsFromData, IPipelineStep<F
         learned.Learned("notNumbers", values.Count(value => value is { } number && double.IsNaN(number)));
 
         var training = Enumerable.Range(0, values.Length)
-            .Where(row => splits[row] == Split.Train && values[row] is { } number && !double.IsNaN(number))
+            .Where(row => parts[row] == Part.Train && values[row] is { } number && !double.IsNaN(number))
             .Select(row => values[row]!.Value)
             .Order()
             .ToArray();

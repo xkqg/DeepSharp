@@ -40,7 +40,8 @@ public class ChainBarrierTests
         Assert.Contains("SplitByTime", PublicMethodsOf<PipelineBuilder>());
         Assert.NotEqual(typeof(PipelineBuilder), typeof(FittingBuilder));
 
-        var split = typeof(PipelineBuilder).GetMethod("SplitByTime");
+        var split = typeof(PipelineBuilder).GetMethod(
+            "SplitByTime", [typeof(string), typeof(double), typeof(double)]);
 
         Assert.NotNull(split);
         Assert.Equal(typeof(FittingBuilder), split.ReturnType);
@@ -100,7 +101,7 @@ public class ChainBarrierTests
         var wrongOrder = new IPipelineStep[]
         {
             new FillMissingStep("age", With.Mean),
-            new SplitByTimeStep("t", 0.70, 0.15, 0.15),
+            new SplitByTimeStep("t", new SplitShares(0.70, 0.15, 0.15)),
         };
 
         Assert.Throws<InvalidOperationException>(() => new PipelineDeclaration(wrongOrder));
@@ -112,10 +113,10 @@ public class ChainBarrierTests
         // Holding on to the pre-split builder used to let a feature be declared after the split, into the
         // same list, which is the leak arriving from the side. The builder says so instead.
         var before = Pdd.Create().ReadCsv("a.csv");
-        before.SplitByTime("t", 0.70, 0.15, 0.15);
+        before.SplitByTime("t", 0.70, 0.15);
 
         Assert.Throws<InvalidOperationException>(() => before.Add(new ReadCsvStep("b.csv")));
-        Assert.Throws<InvalidOperationException>(() => before.SplitByTime("t2", 0.50, 0.25, 0.25));
+        Assert.Throws<InvalidOperationException>(() => before.SplitByTime("t2", 0.50, 0.25));
     }
 
     [Fact]
@@ -123,8 +124,8 @@ public class ChainBarrierTests
     {
         // A parameter sweep that reuses a common prefix used to produce one declaration containing every
         // arm, with each arm reporting the other's steps as its own.
-        var first = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.70, 0.15, 0.15);
-        var second = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.50, 0.25, 0.25);
+        var first = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.70, 0.15);
+        var second = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.50, 0.25);
 
         first.FillMissing("age", With.Mean);
         second.FillMissing("age", With.Median);

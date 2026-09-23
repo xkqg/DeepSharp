@@ -31,7 +31,7 @@ public class FittingTests
         Pdd.Create()
             .ReadCsv(Titanic)
             .Declare(schema => schema.Integer("survived").Text("sex").Optional("age", ColumnKind.Number))
-            .SplitStratified("survived", 0.70, 0.15, 0.15)
+            .SplitStratified("survived", 0.70, 0.15)
             .FillMissing("age", strategy)
             .Build()
             .Run();
@@ -118,10 +118,10 @@ public class FittingTests
         var prepared = Prepared(With.Mean);
         var survived = (Column<long>)prepared.Table["survived"];
 
-        foreach (var split in new[] { Split.Train, Split.Validation, Split.Test })
+        foreach (var split in new[] { Part.Train, Part.Validation, Part.Test })
         {
             var rows = Enumerable.Range(0, prepared.Table.RowCount)
-                .Where(row => prepared.Splits[row] == split)
+                .Where(row => prepared.Parts[row] == split)
                 .ToArray();
 
             // 342 of 891 survived, which is 38.4 per cent; every part is within a point of it.
@@ -132,7 +132,7 @@ public class FittingTests
     [Fact]
     public void TheSameSeed_LandsEveryRowInTheSamePlace()
     {
-        Assert.Equal(Prepared(With.Mean).Splits, Prepared(With.Mean).Splits);
+        Assert.Equal(Prepared(With.Mean).Parts, Prepared(With.Mean).Parts);
     }
 
     [Fact]
@@ -141,21 +141,21 @@ public class FittingTests
         var prepared = Pdd.Create()
             .ReadCsv(Path.Join(RepoRoot(), "Samples", "data", "apple.csv"))
             .Declare(schema => schema.Timestamp("Date").Number("AAPL.Close"))
-            .SplitByTime("Date", 0.70, 0.15, 0.15)
+            .SplitByTime("Date", 0.70, 0.15)
             .Build()
             .Run();
 
         var dates = (Column<DateTime>)prepared.Table["Date"];
 
         var lastTraining = Enumerable.Range(0, prepared.Table.RowCount)
-            .Where(row => prepared.Splits[row] == Split.Train).Max(row => dates[row]!.Value);
+            .Where(row => prepared.Parts[row] == Part.Train).Max(row => dates[row]!.Value);
 
         var firstTest = Enumerable.Range(0, prepared.Table.RowCount)
-            .Where(row => prepared.Splits[row] == Split.Test).Min(row => dates[row]!.Value);
+            .Where(row => prepared.Parts[row] == Part.Test).Min(row => dates[row]!.Value);
 
         Assert.True(lastTraining < firstTest, $"{lastTraining} should come before {firstTest}");
-        Assert.Equal(354, prepared.CountIn(Split.Train));
-        Assert.Equal(506, prepared.Splits.Count);
+        Assert.Equal(354, prepared.CountIn(Part.Train));
+        Assert.Equal(506, prepared.Parts.Count);
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public class FittingTests
             () => Pdd.Create()
                 .ReadCsv(Titanic)
                 .Declare(schema => schema.Optional("age", ColumnKind.Number))
-                .SplitByTime("age", 0.70, 0.15, 0.15)
+                .SplitByTime("age", 0.70, 0.15)
                 .Build()
                 .Run());
 
@@ -195,13 +195,13 @@ public class FittingTests
         var prepared = Pdd.Create()
             .ReadCsv(Titanic)
             .Declare(schema => schema.Integer("survived"))
-            .SplitAtRandom(0.60, 0.20, 0.20, seed: 7)
+            .SplitAtRandom(0.60, 0.20, seed: 7)
             .Build()
             .Run();
 
-        Assert.Equal(535, prepared.CountIn(Split.Train));
-        Assert.Equal(178, prepared.CountIn(Split.Validation));
-        Assert.Equal(178, prepared.CountIn(Split.Test));
+        Assert.Equal(535, prepared.CountIn(Part.Train));
+        Assert.Equal(178, prepared.CountIn(Part.Validation));
+        Assert.Equal(178, prepared.CountIn(Part.Test));
     }
 
     [Fact]

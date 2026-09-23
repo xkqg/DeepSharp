@@ -1,7 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using System.Globalization;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
@@ -118,58 +117,34 @@ public sealed record ReadRowsStep : IPipelineStep<ReadRowsStep>, IOpensRows
 /// This is the line in the chain. Above it nothing may learn from the data; below it the operations that do
 /// become available, and each of them is fitted on the training rows alone.
 /// </remarks>
-public sealed record SplitByTimeStep : ISplitStep, IAssignsSplits, IPipelineStep<SplitByTimeStep>
+public sealed record SplitByTimeStep : ISplitStep, IAssignsParts, IPipelineStep<SplitByTimeStep>
 {
-    /// <summary>Declares a split in time, by three shares that together make a whole.</summary>
+    /// <summary>Declares a split in time, by shares that together make a whole.</summary>
     /// <param name="column">The column that says when a row happened.</param>
-    /// <param name="train">The share the model learns from.</param>
-    /// <param name="validation">The share used while choosing between models.</param>
-    /// <param name="test">The share kept back until the end.</param>
+    /// <param name="shares">How much goes to training, validation, test and predicting.</param>
     /// <exception cref="ArgumentException">The column has no name, or the shares do not make a whole.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A share is not a share: nothing, or more than everything.</exception>
-    public SplitByTimeStep(string column, double train, double validation, double test)
+    public SplitByTimeStep(string column, SplitShares shares)
     {
         if (string.IsNullOrWhiteSpace(column))
         {
             throw new ArgumentException("A split in time needs the column that says when.", nameof(column));
         }
 
-        // Each share first, then the sum. An empty split is not a split — a model measured on nothing
-        // scores perfectly on nothing — and three shares can add to one while one of them is nonsense.
-        ThrowIfNotAShare(train, nameof(train));
-        ThrowIfNotAShare(validation, nameof(validation));
-        ThrowIfNotAShare(test, nameof(test));
-
-        var total = train + validation + test;
-        if (Math.Abs(total - 1) > 1e-9)
-        {
-            throw new ArgumentException(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The three shares add up to {total:0.####} and a split has to use every row."),
-                nameof(train));
-        }
+        shares.Validate();
 
         Column = column;
-        Train = train;
-        Validation = validation;
-        Test = test;
+        Shares = shares;
     }
 
     /// <summary>The column that says when a row happened.</summary>
     public string Column { get; }
 
-    /// <summary>The share the model learns from.</summary>
-    public double Train { get; }
-
-    /// <summary>The share used while choosing between models.</summary>
-    public double Validation { get; }
-
-    /// <summary>The share kept back until the end.</summary>
-    public double Test { get; }
+    /// <summary>How much goes to training, validation, test and predicting.</summary>
+    public SplitShares Shares { get; }
 
     /// <inheritdoc />
-    public Split[] Assign(Table table)
+    public Part[] Assign(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);
 
@@ -191,7 +166,7 @@ public sealed record SplitByTimeStep : ISplitStep, IAssignsSplits, IPipelineStep
 
         Array.Sort(order, (left, right) => left.When.CompareTo(right.When));
 
-        return new SplitShares(Train, Validation, Test)
+        return Shares
             .Over(table.RowCount)
             .Placed([.. order.Select(each => each.Row)]);
     }
@@ -219,9 +194,10 @@ public sealed record SplitByTimeStep : ISplitStep, IAssignsSplits, IPipelineStep
         writer.WriteStartObject();
         writer.WriteString("step", Verb);
         writer.WriteString("column", Column);
-        writer.WriteNumber("train", Train);
-        writer.WriteNumber("validation", Validation);
-        writer.WriteNumber("test", Test);
+        writer.WriteNumber("train", Shares.Train);
+        writer.WriteNumber("validation", Shares.Validation);
+        writer.WriteNumber("test", Shares.Test);
+        writer.WriteNumber("predict", Shares.Predict);
         writer.WriteEndObject();
     }
 
@@ -231,21 +207,11 @@ public sealed record SplitByTimeStep : ISplitStep, IAssignsSplits, IPipelineStep
     /// <exception cref="FormatException">A parameter is missing or is of the wrong kind.</exception>
     public static SplitByTimeStep ReadFrom(JsonElement element) =>
         new(element.RequiredString("column"),
-            element.RequiredNumber("train"),
-            element.RequiredNumber("validation"),
-            element.RequiredNumber("test"));
-
-    private static void ThrowIfNotAShare(double share, string name)
-    {
-        // Written as the negation of what a share IS, because every comparison against a not-a-number is
-        // false: a range test lets NaN through both this check and the sum, and the declaration that
-        // results cannot even be written down.
-        if (!(share > 0 && share <= 1))
-        {
-            throw new ArgumentOutOfRangeException(
-                name, share, "A share of the data is more than none of it and at most all of it.");
-        }
-    }
+            new SplitShares(
+                element.RequiredNumber("train"),
+                element.RequiredNumber("validation"),
+                element.RequiredNumber("test"),
+                element.OptionalNumber("predict")));
 }
 
 /// <summary>
@@ -307,10 +273,10 @@ public sealed record FillMissingStep : IFittedStep, ILearnsFromData, IPipelineSt
     public string MarkerColumn => $"{Column}_was_missing";
 
     /// <inheritdoc />
-    public FittedStepValues Fit(Table table, IReadOnlyList<Split> splits)
+    public FittedStepValues Fit(Table table, IReadOnlyList<Part> parts)
     {
         ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(splits);
+        ArgumentNullException.ThrowIfNull(parts);
 
         var column = table[Column];
         var learned = new FittedStepValues();
@@ -318,7 +284,7 @@ public sealed record FillMissingStep : IFittedStep, ILearnsFromData, IPipelineSt
         // Every number here comes from the training rows and from nowhere else. Fit on all of them and the
         // validation rows have quietly taught the model about themselves, and nothing goes red.
         var training = Enumerable.Range(0, table.RowCount)
-            .Where(row => splits[row] == Split.Train && !column.IsMissing(row))
+            .Where(row => parts[row] == Part.Train && !column.IsMissing(row))
             .Select(row => NumberAt(column, row))
             .ToArray();
 

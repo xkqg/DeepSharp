@@ -38,7 +38,7 @@ public class PipelineBuilderTests
     {
         var builder = Pdd.Create()
             .ReadCsv("first.csv")
-            .SplitByTime("timestamp", train: 0.70, validation: 0.15, test: 0.15)
+            .SplitByTime("timestamp", train: 0.70, validation: 0.15)
             .FillMissing("trades", With.Mean);
 
         Assert.Collection(
@@ -49,54 +49,55 @@ public class PipelineBuilderTests
     }
 
     [Fact]
-    public void ASplit_RemembersItsColumnAndItsThreeShares()
+    public void ASplit_RemembersItsColumnAndItsShares()
     {
         var builder = Pdd.Create()
             .ReadCsv("btceur-1d.csv")
-            .SplitByTime("timestamp", train: 0.70, validation: 0.15, test: 0.15);
+            .SplitByTime("timestamp", train: 0.70, validation: 0.15);
 
         var split = Assert.IsType<SplitByTimeStep>(builder.Declaration.Steps[1]);
 
         Assert.Equal("timestamp", split.Column);
-        Assert.Equal(0.70, split.Train);
-        Assert.Equal(0.15, split.Validation);
-        Assert.Equal(0.15, split.Test);
+        Assert.Equal(0.70, split.Shares.Train);
+        Assert.Equal(0.15, split.Shares.Validation);
+        // Never written down, always what is left.
+        Assert.Equal(0.15, split.Shares.Test, 9);
+        Assert.Equal(0, split.Shares.Predict);
     }
 
     [Fact]
-    public void ThreeSharesThatDoNotMakeAWhole_AreRefusedWhereTheyAreWritten()
+    public void SharesThatAskForMoreThanThereIs_AreRefusedWhereTheyAreWritten()
     {
-        // 0.95 is the mistake that costs an afternoon: the run works, a twentieth of the data is silently
-        // in no split at all, and every number afterwards is computed over less data than you think.
+        // Shares adding to 0.95 used to be the mistake that cost an afternoon: the run worked, a twentieth
+        // of the data was silently in no split at all, and every number afterwards was computed over less
+        // data than you thought. That cannot be written any more, because the share to be measured on is
+        // whatever is left. What is left to refuse is asking for more than there is.
         var refused = Assert.Throws<ArgumentException>(
-            () => Pdd.Create().ReadCsv("x.csv").SplitByTime("timestamp", 0.70, 0.15, 0.10));
+            () => Pdd.Create().ReadCsv("x.csv").SplitByTime("timestamp", 0.70, 0.45));
 
-        Assert.Contains("0.95", refused.Message);
+        Assert.Contains("1.15", refused.Message);
     }
 
     [Theory]
-    [InlineData(0.0, 0.5, 0.5)]
-    [InlineData(0.5, 0.0, 0.5)]
-    [InlineData(0.5, 0.5, 0.0)]
-    [InlineData(1.2, -0.1, -0.1)]
+    [InlineData(0.0, 0.5)]
+    [InlineData(1.2, -0.1)]
     // Not a number defeats a guard written as a range: every comparison against it is false, so both the
     // per-share check and the sum passed it through, and the declaration could then not be written down.
-    [InlineData(double.NaN, 0.5, 0.5)]
-    [InlineData(0.5, double.NaN, 0.5)]
-    [InlineData(0.5, 0.5, double.NaN)]
-    [InlineData(double.PositiveInfinity, 0.5, 0.5)]
-    public void AShareThatIsNotAShare_IsRefused(double train, double validation, double test)
+    [InlineData(double.NaN, 0.5)]
+    [InlineData(0.5, double.NaN)]
+    [InlineData(double.PositiveInfinity, 0.5)]
+    public void AShareThatIsNotAShare_IsRefused(double train, double validation)
     {
         // An empty split is not a split: a model measured on nothing scores perfectly on nothing.
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => Pdd.Create().ReadCsv("x.csv").SplitByTime("timestamp", train, validation, test));
+            () => Pdd.Create().ReadCsv("x.csv").SplitByTime("timestamp", train, validation));
     }
 
     [Fact]
     public void AColumnWithoutAName_IsRefused()
     {
         Assert.Throws<ArgumentException>(
-            () => Pdd.Create().ReadCsv("x.csv").SplitByTime("  ", 0.70, 0.15, 0.15));
+            () => Pdd.Create().ReadCsv("x.csv").SplitByTime("  ", 0.70, 0.15));
     }
 
     [Fact]
@@ -110,7 +111,7 @@ public class PipelineBuilderTests
     {
         var builder = Pdd.Create()
             .ReadCsv("btceur-1d.csv")
-            .SplitByTime("timestamp", 0.70, 0.15, 0.15)
+            .SplitByTime("timestamp", 0.70, 0.15)
             .FillMissing("trades", With.Median);
 
         var fill = Assert.IsType<FillMissingStep>(builder.Declaration.Steps[2]);
@@ -135,7 +136,7 @@ public class PipelineBuilderTests
     {
         var builder = Pdd.Create()
             .ReadCsv("btceur-1d.csv")
-            .SplitByTime("timestamp", 0.70, 0.15, 0.15)
+            .SplitByTime("timestamp", 0.70, 0.15)
             .FillMissing("trades", With.Mean);
 
         Assert.Equal(

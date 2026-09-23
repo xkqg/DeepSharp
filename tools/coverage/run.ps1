@@ -47,9 +47,50 @@ if ($LASTEXITCODE -ne 0) { throw 'Coverage collection failed' }
 $lineRate = [double]$cobertura.coverage.'line-rate' * 100
 $branchRate = [double]$cobertura.coverage.'branch-rate' * 100
 
+# Per class, not only over everything. A big denominator hides a small class: a hundred well-tested classes
+# carry an untested one to a passing total, and the gap only becomes visible the day somebody edits it. The
+# compiler's own types -- a lambda's closure, an iterator's state machine -- are pooled into the class they
+# were generated for, because that is the class a person wrote and the granularity the rule is about.
+$pool = @{}
+
+foreach ($class in $cobertura.SelectNodes('//class')) {
+    $owner = $class.name -replace '\.<[^>]*>[a-z]__[A-Za-z0-9_|]*', '' -replace '\.<>c(__DisplayClass[0-9_]*)?', ''
+
+    if (-not $pool.ContainsKey($owner)) {
+        $pool[$owner] = [pscustomobject]@{ Lines = 0; LinesHit = 0; Branches = 0; BranchesHit = 0 }
+    }
+
+    $counts = $pool[$owner]
+
+    foreach ($line in $class.SelectNodes('lines/line')) {
+        $counts.Lines++
+        if ([int]$line.hits -gt 0) { $counts.LinesHit++ }
+
+        if ($line.branch -eq 'True' -and $line.'condition-coverage' -match '\((\d+)/(\d+)\)') {
+            $counts.BranchesHit += [int]$Matches[1]
+            $counts.Branches += [int]$Matches[2]
+        }
+    }
+}
+
+$thin = @()
+foreach ($owner in $pool.Keys | Sort-Object) {
+    $counts = $pool[$owner]
+    if ($counts.Lines -eq 0) { continue }
+
+    $classLines = $counts.LinesHit / $counts.Lines * 100
+    $classBranches = 100.0
+    if ($counts.Branches -gt 0) { $classBranches = $counts.BranchesHit / $counts.Branches * 100 }
+
+    if ($classLines -lt $LineThreshold -or $classBranches -lt $BranchThreshold) {
+        $thin += ("    {0,-56} lines {1,5:N1}%  branches {2,5:N1}%" -f $owner, $classLines, $classBranches)
+    }
+}
+
 Write-Host ''
 Write-Host ("    Lines    {0:N1}%" -f $lineRate)
 Write-Host ("    Branches {0:N1}%" -f $branchRate)
+Write-Host ("    Classes  {0}, of which {1} below the gate" -f $pool.Count, $thin.Count)
 Write-Host ''
 
 if (-not $Check) { return }
@@ -61,10 +102,14 @@ if ($lineRate -lt $LineThreshold) {
 if ($branchRate -lt $BranchThreshold) {
     $failures += ("branch coverage is {0:N1}% and the gate is {1}%" -f $branchRate, $BranchThreshold)
 }
+if ($thin.Count -gt 0) {
+    $failures += ("{0} class(es) are below {1}% of lines or {2}% of branches:" -f $thin.Count, $LineThreshold, $BranchThreshold)
+    $failures += $thin
+}
 
 if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "FAIL: $failure" }
     exit 1
 }
 
-Write-Host ("PASS: {0:N1}% of lines and {1:N1}% of branches, both above {2}%." -f $lineRate, $branchRate, $LineThreshold)
+Write-Host ("PASS: {0:N1}% of lines and {1:N1}% of branches over everything, and all {2} classes are above {3}% on both." -f $lineRate, $branchRate, $pool.Count, $LineThreshold)
