@@ -80,6 +80,27 @@ public sealed class StepCatalog
                 $"Nothing here knows the step '{verb}'. Either it is misspelled, or the package that brings it is not referenced.");
         }
 
-        return read(element);
+        IPipelineStep step;
+
+        try
+        {
+            step = read(element);
+        }
+        catch (Exception fault) when (fault is not FormatException)
+        {
+            // A step refuses its own arguments in the language of a C# parameter, which is right at a call
+            // site and useless at a file-loading boundary. Reading a file is one kind of fault, named after
+            // the step it happened in, and this is also where a position in the file will later attach.
+            throw new FormatException($"The step '{verb}' cannot be read: {fault.Message}", fault);
+        }
+
+        if (step.Verb != verb)
+        {
+            throw new FormatException(
+                $"The step written as '{verb}' was read as a '{step.Verb}', so it would be written back "
+                + "under a different name than the one it was loaded from.");
+        }
+
+        return step;
     }
 }

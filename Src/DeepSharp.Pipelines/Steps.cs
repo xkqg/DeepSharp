@@ -59,7 +59,7 @@ public sealed record ReadCsvStep : IPipelineStep
 /// This is the line in the chain. Above it nothing may learn from the data; below it the operations that do
 /// become available, and each of them is fitted on the training rows alone.
 /// </remarks>
-public sealed record SplitByTimeStep : IPipelineStep
+public sealed record SplitByTimeStep : ISplitStep
 {
     /// <summary>Declares a split in time, by three shares that together make a whole.</summary>
     /// <param name="column">The column that says when a row happened.</param>
@@ -138,7 +138,10 @@ public sealed record SplitByTimeStep : IPipelineStep
 
     private static void ThrowIfNotAShare(double share, string name)
     {
-        if (share is <= 0 or > 1)
+        // Written as the negation of what a share IS, because every comparison against a not-a-number is
+        // false: a range test lets NaN through both this check and the sum, and the declaration that
+        // results cannot even be written down.
+        if (!(share > 0 && share <= 1))
         {
             throw new ArgumentOutOfRangeException(
                 name, share, "A share of the data is more than none of it and at most all of it.");
@@ -154,7 +157,7 @@ public sealed record SplitByTimeStep : IPipelineStep
 /// while a not-a-number is arithmetic that produced no number, which is a fault further upstream. They get
 /// different verbs because they deserve different answers.
 /// </remarks>
-public sealed record FillMissingStep : IPipelineStep
+public sealed record FillMissingStep : IFittedStep
 {
     /// <summary>Declares that the gaps in a column are filled the named way.</summary>
     /// <param name="column">The column with gaps in it.</param>
@@ -165,6 +168,26 @@ public sealed record FillMissingStep : IPipelineStep
         if (string.IsNullOrWhiteSpace(column))
         {
             throw new ArgumentException("Filling gaps needs the column they are in.", nameof(column));
+        }
+
+        // A strategy is a name, so a default one carries no name at all and a hand-written file can carry
+        // any word. Both are caught here, at the one point a strategy enters a declaration.
+        if (string.IsNullOrWhiteSpace(strategy.Name))
+        {
+            throw new ArgumentException("Filling gaps needs a strategy; With has the names.", nameof(strategy));
+        }
+
+        if (!With.Knows(strategy.Name))
+        {
+            throw new ArgumentException(
+                $"'{strategy.Name}' is not a way of filling a gap. With has the names.", nameof(strategy));
+        }
+
+        if (With.TakesAValue(strategy.Name) != strategy.Value.HasValue)
+        {
+            throw new ArgumentException(
+                $"The strategy '{strategy.Name}' is written {(strategy.Value.HasValue ? "without" : "with")} a number.",
+                nameof(strategy));
         }
 
         Column = column;
@@ -188,7 +211,21 @@ public sealed record FillMissingStep : IPipelineStep
         writer.WriteStartObject();
         writer.WriteString("step", Verb);
         writer.WriteString("column", Column);
-        writer.WriteString("with", Strategy.Name);
+
+        // A strategy with no number is written as the word alone, which is what a person reads best. One
+        // that carries a number becomes an object, so the number has somewhere to live.
+        if (Strategy.Value is { } value)
+        {
+            writer.WriteStartObject("with");
+            writer.WriteString("kind", Strategy.Name);
+            writer.WriteNumber("value", value);
+            writer.WriteEndObject();
+        }
+        else
+        {
+            writer.WriteString("with", Strategy.Name);
+        }
+
         writer.WriteEndObject();
     }
 
@@ -196,6 +233,21 @@ public sealed record FillMissingStep : IPipelineStep
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     /// <exception cref="FormatException">A parameter is missing or is not text.</exception>
-    public static FillMissingStep ReadFrom(JsonElement element) =>
-        new(element.RequiredString("column"), new FillStrategy(element.RequiredString("with")));
+    public static FillMissingStep ReadFrom(JsonElement element)
+    {
+        var column = element.RequiredString("column");
+
+        if (!element.TryGetProperty("with", out var with))
+        {
+            throw new FormatException("The step is missing a text value for 'with'.");
+        }
+
+        return with.ValueKind switch
+        {
+            JsonValueKind.String => new FillMissingStep(column, new FillStrategy(with.GetString()!)),
+            JsonValueKind.Object => new FillMissingStep(
+                column, new FillStrategy(with.RequiredString("kind"), with.RequiredNumber("value"))),
+            _ => throw new FormatException("The step is missing a text value for 'with'."),
+        };
+    }
 }

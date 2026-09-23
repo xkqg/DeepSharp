@@ -94,6 +94,28 @@ public class ReleaseContractTests
         Assert.Contains("DeepSharp.Tests.csproj", workflow, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheCoverageSettings_CanBeReadAtAllAndNameEveryLibrary()
+    {
+        // A settings file the collector cannot parse is ignored without a word, and the gate then measures
+        // something else entirely and still says PASS. Measured: one double hyphen inside an XML comment
+        // was enough, and the number went from 204 lines of library to 841 of library-and-tests.
+        var settings = XDocument.Load(Path.Join(Root, "tools", "coverage", "coverage.runsettings"));
+
+        var included = settings.Descendants("Include").Descendants("ModulePath")
+            .Select(module => module.Value).ToArray();
+
+        var libraries = Directory.EnumerateFiles(Path.Join(Root, "Src"), "*.csproj", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                                          StringComparison.Ordinal))
+            .Select(file => $"{Path.GetFileNameWithoutExtension(file)}.dll");
+
+        foreach (var library in libraries)
+        {
+            Assert.Contains(included, pattern => Regex.IsMatch(library, pattern));
+        }
+    }
+
     [Theory]
     [InlineData("ci.yml")]
     [InlineData("publish.yml")]

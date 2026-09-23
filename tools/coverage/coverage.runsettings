@@ -3,9 +3,12 @@
     <CodeCoverage>
         <ModulePaths>
             <Include>
-                <!-- The library, and only the library. A test assembly that counts towards its own coverage
-                     is a number that always looks good and never means anything. -->
-                <ModulePath>.*DeepSharp.*[.]dll$</ModulePath>
+                <!-- The libraries, by name, and only those. ModulePath matches the module's PATH, so a
+                     pattern like ".*DeepSharp.*" reads as "everything under this repository" and quietly
+                     takes in every dependency sitting beside the tests, so the gate would judge
+                     somebody else's code, and the number would move without a line of ours changing. -->
+                <ModulePath>.*DeepSharp[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Pipelines[.]dll$</ModulePath>
             </Include>
             <Exclude>
                 <ModulePath>.*\.Tests\.dll$</ModulePath>

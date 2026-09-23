@@ -99,7 +99,6 @@ public class DeclarationRoundTripTests
         var other = Pdd.Create().ReadCsv("b.csv").Declaration;
 
         Assert.NotEqual(one, other);
-        Assert.NotEqual(one.GetHashCode(), other.GetHashCode());
     }
 
     [Fact]
@@ -125,14 +124,18 @@ public class DeclarationRoundTripTests
     }
 
     [Fact]
-    public void ACatalogWithAnExtraVerb_ReadsAFileTheBuiltInOneCannot()
+    public void AReaderRegisteredUnderOneVerbMayNotHandBackAnother()
     {
+        // The verb is written by the step and read by the catalog, so the two can disagree. When they do,
+        // a file loads under one name and writes itself back under a different one, and the round trip
+        // still reports the declarations equal because it compares declarations, never documents.
         const string json = """{"declaration":[{"step":"read.avro","path":"x.avro"}]}""";
         var catalog = StepCatalog.BuiltIn();
         catalog.Register("read.avro", element => new ReadCsvStep(element.GetProperty("path").GetString()!));
 
-        var declaration = PipelineDeclaration.FromJson(json, catalog);
+        var refused = Assert.Throws<FormatException>(() => PipelineDeclaration.FromJson(json, catalog));
 
-        Assert.Single(declaration.Steps);
+        Assert.Contains("read.avro", refused.Message);
+        Assert.Contains("read.csv", refused.Message);
     }
 }

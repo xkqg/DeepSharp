@@ -8,13 +8,14 @@ namespace DeepSharp.Pipelines;
 /// </summary>
 /// <remarks>
 /// Everything offered here is arithmetic on a row: where the data comes from, which columns are derived
-/// from which. Nothing here learns anything from the data as a whole, and that is not a convention — the
-/// operations that do learn are not methods on this type. They arrive with <see cref="FittingBuilder"/>,
-/// which is only reachable by saying how the data is split.
+/// from which. Nothing here learns anything from the data as a whole — the operations that do are not
+/// methods on this type, and the one door that takes a step from another package refuses a step that says
+/// it learns. They arrive with <see cref="FittingBuilder"/>, which is only reachable by splitting.
 /// </remarks>
 public sealed class PipelineBuilder
 {
     private readonly List<IPipelineStep> _steps = [];
+    private bool _split;
 
     internal PipelineBuilder()
     {
@@ -24,11 +25,21 @@ public sealed class PipelineBuilder
     public PipelineDeclaration Declaration => new(_steps);
 
     /// <summary>Adds a declared step. Every verb, including one from another package, comes through here.</summary>
-    /// <param name="step">The step to declare.</param>
+    /// <param name="step">The step to declare. It must not be one that learns from the data.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The step learns from the data, or this builder has already been split and is finished.
+    /// </exception>
     public PipelineBuilder Add(IPipelineStep step)
     {
         ArgumentNullException.ThrowIfNull(step);
+        ThrowIfSplit();
+
+        if (step is IFittedStep)
+        {
+            throw new InvalidOperationException(
+                $"'{step.Verb}' learns from the data, so it belongs after the split, not before it.");
+        }
 
         _steps.Add(step);
 
@@ -43,11 +54,28 @@ public sealed class PipelineBuilder
     /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
     /// <exception cref="ArgumentException">The column has no name, or the shares do not make a whole.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A share is not a share.</exception>
+    /// <exception cref="InvalidOperationException">This builder has already been split.</exception>
     public FittingBuilder SplitByTime(string column, double train, double validation, double test)
     {
-        Add(new SplitByTimeStep(column, train, validation, test));
+        ThrowIfSplit();
+
+        _steps.Add(new SplitByTimeStep(column, train, validation, test));
+        _split = true;
 
         return new FittingBuilder(_steps);
+    }
+
+    private void ThrowIfSplit()
+    {
+        // Holding on to this builder after splitting used to let a feature be declared into the same list,
+        // after the split — the leak arriving from the side — and a second split made one declaration that
+        // claimed to divide the rows twice. Two pipelines are two chains, said out loud.
+        if (_split)
+        {
+            throw new InvalidOperationException(
+                "This pipeline has been split; carry on with the builder the split handed back, "
+                + "or start another pipeline for a second arrangement.");
+        }
     }
 }
 
@@ -56,9 +84,8 @@ public sealed class PipelineBuilder
 /// </summary>
 /// <remarks>
 /// This is where everything that learns from the data lives, and each of those things is fitted on the
-/// training rows alone. There is no way back to <see cref="PipelineBuilder"/>: declaring a feature after
-/// the split is the same leak from the other side, since the feature would be computed over rows the model
-/// is meant never to have seen.
+/// training rows alone. There is no way back to <see cref="PipelineBuilder"/>, and the builder the chain
+/// started with is finished the moment it is split, so nothing can be added on the far side of the line.
 /// </remarks>
 public sealed class FittingBuilder
 {
@@ -69,7 +96,7 @@ public sealed class FittingBuilder
     /// <summary>What has been declared so far.</summary>
     public PipelineDeclaration Declaration => new(_steps);
 
-    /// <summary>Adds a declared step that is fitted on the training rows.</summary>
+    /// <summary>Adds a declared step, which may be one that is fitted on the training rows.</summary>
     /// <param name="step">The step to declare.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
     public FittingBuilder Add(IPipelineStep step)
@@ -85,7 +112,7 @@ public sealed class FittingBuilder
     /// <param name="column">The column with gaps in it.</param>
     /// <param name="strategy">What to put in them — <see cref="With"/> has the names.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
-    /// <exception cref="ArgumentException">The column has no name.</exception>
+    /// <exception cref="ArgumentException">The column has no name, or the strategy is not one of the names.</exception>
     public FittingBuilder FillMissing(string column, FillStrategy strategy) =>
         Add(new FillMissingStep(column, strategy));
 }

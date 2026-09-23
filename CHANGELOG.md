@@ -35,11 +35,23 @@ where the arithmetic happens.
 
 - **The split is a line you cannot step over.** `SplitByTime` hands back a different kind of builder, and the
   steps that learn from the data — filling a gap, and everything that follows it — exist only on that one.
-  Fitting on all of your data is therefore not a mistake to be warned about afterwards: it is a method that
-  is not there yet. A file naming a step nothing has registered is refused rather than read with the step
-  left out, and a message says which verb and whether it is unknown or merely not installed.
+  The rule holds wherever a step arrives from: through the chain, through the extension point another
+  package uses, or out of a file somebody edited by hand, because it is checked on the declaration itself.
+  A step that learns says so in its type, and one that divides the rows says so too. A file naming a step
+  nothing has registered is refused rather than read with the step left out, and a message says which verb
+  and whether it is unknown or merely not installed.
+
+- **A pipeline you split is finished.** The builder you started with cannot be written to afterwards, so a
+  feature cannot arrive on the far side of the line, and two arrangements of the same data are two
+  pipelines rather than one declaration containing both.
+
+- **A gap is filled by a name you can check.** `With.Mean`, `With.Median`, `With.Zero`, `With.Previous` and
+  `With.Constant(0)` — a word a file did not define is refused rather than carried to whatever a default
+  branch would have done with it, and a strategy that takes a number is written with one.
 
 - **It fits an application that has a host.** `services.AddDeepSharpPipelines()` registers the pipeline
   factory and the catalog of verbs, so a pipeline is resolved the way everything else in a .NET application
-  is. None of it is required: a console program that writes `Pdd.Create()` with no container anywhere works
-  exactly the same, and a test holds that door open. `Samples/DeepSharp.Sample.Pipelines` shows both.
+  is. A package that brings verbs of its own registers them as a contribution, and every contribution is
+  applied whichever order the registrations happen to be written in. None of it is required: a console
+  program that writes `Pdd.Create()` with no container anywhere works exactly the same, and a test holds
+  that door open. `Samples/DeepSharp.Sample.Pipelines` shows both.

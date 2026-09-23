@@ -28,11 +28,21 @@ at each stage by whoever happens to be writing that stage.
 That is the difference between a pipeline and a script. A script does the steps; a pipeline is a thing you
 can hand to somebody, save beside a model, and run again a year later on data that did not exist yet.
 
-### The chain is the enforcement, not the decoration
+### The declaration is the enforcement, and the chain is where you meet it
 
 Everything is reached through a factory and built with a fluent chain, and the stages of that chain are
 different types. A pipeline under construction offers `Normalise` and `FillMissing` **only after** it has
 been told how to split, because those are the operations that learn from the data.
+
+That is where this started, and it was not enough. A council found the rule held for the *verbs* and not
+for the *steps*: the extension point every other package uses took a step that learns, and a hand-edited
+file could put one anywhere at all. Both were executed, not argued. So the rule moved to the one place all
+three doors pass through — the declaration's own constructor — and the type system now carries the concept
+rather than the arrangement of methods: a step that learns from the data says so, by implementing
+`IFittedStep`, and a step that divides the rows says so with `ISplitStep`.
+
+A package adding a verb inherits the rule by saying which kind its step is. It cannot forget to, because
+the two markers are the only way to be either kind.
 
 Which split is a separate question, and the library does not answer it: random for independent rows, by
 time when you predict forward, stratified when a class is rare, by group when several rows belong to one

@@ -79,6 +79,12 @@ public class PipelineBuilderTests
     [InlineData(0.5, 0.0, 0.5)]
     [InlineData(0.5, 0.5, 0.0)]
     [InlineData(1.2, -0.1, -0.1)]
+    // Not a number defeats a guard written as a range: every comparison against it is false, so both the
+    // per-share check and the sum passed it through, and the declaration could then not be written down.
+    [InlineData(double.NaN, 0.5, 0.5)]
+    [InlineData(0.5, double.NaN, 0.5)]
+    [InlineData(0.5, 0.5, double.NaN)]
+    [InlineData(double.PositiveInfinity, 0.5, 0.5)]
     public void AShareThatIsNotAShare_IsRefused(double train, double validation, double test)
     {
         // An empty split is not a split: a model measured on nothing scores perfectly on nothing.

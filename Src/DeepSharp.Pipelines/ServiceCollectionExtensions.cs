@@ -29,9 +29,39 @@ public static class ServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
 
-        services.TryAddSingleton(_ => StepCatalog.BuiltIn());
+        // Every contribution is applied, whoever registered first. The obvious shape -- each package
+        // registering a catalog of its own and the container keeping one -- makes the order of two lines in
+        // a startup file decide which verbs exist, silently, and the error message then blames a package
+        // that is present.
+        services.TryAddSingleton(provider =>
+        {
+            var catalog = StepCatalog.BuiltIn();
+
+            foreach (var contribution in provider.GetServices<IStepContribution>())
+            {
+                contribution.AddTo(catalog);
+            }
+
+            return catalog;
+        });
+
         services.TryAddSingleton<IPipelineFactory, PipelineFactory>();
 
         return services;
     }
+}
+
+/// <summary>
+/// A package's verbs, offered to whichever catalog an application builds.
+/// </summary>
+/// <remarks>
+/// A package that brings verbs registers one of these rather than a catalog of its own, so every package's
+/// verbs end up in the one catalog no matter which order the registrations were written in. A genuine
+/// duplicate still throws where it should, in <see cref="StepCatalog.Register"/>.
+/// </remarks>
+public interface IStepContribution
+{
+    /// <summary>Teaches the catalog the verbs this package brings.</summary>
+    /// <param name="catalog">The catalog being assembled.</param>
+    void AddTo(StepCatalog catalog);
 }

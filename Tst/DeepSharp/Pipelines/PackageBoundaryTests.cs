@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Xml.Linq;
 using DeepSharp.Pipelines;
 using DeepSharp.Tensors;
 
@@ -32,6 +33,40 @@ public class PackageBoundaryTests
         var referenced = typeof(Tensor).Assembly.GetReferencedAssemblies().Select(assembly => assembly.Name);
 
         Assert.DoesNotContain("DeepSharp.Pipelines", referenced);
+    }
+
+    [Fact]
+    public void AndNeitherProjectEvenAsksForTheOther()
+    {
+        // The metadata test above fires one commit late: the compiler leaves an unused assembly out of the
+        // emitted references entirely, so a project reference that nothing has called yet is invisible to
+        // it. The reference itself is what a person adds, so that is what this reads.
+        foreach (var (project, forbidden) in new[]
+                 {
+                     (Path.Join("Src", "DeepSharp.Pipelines", "DeepSharp.Pipelines.csproj"), "DeepSharp.csproj"),
+                     (Path.Join("Src", "DeepSharp", "DeepSharp.csproj"), "DeepSharp.Pipelines.csproj"),
+                 })
+        {
+            var references = XDocument.Load(Path.Join(RepoRoot(), project))
+                .Descendants("ProjectReference")
+                .Select(reference => reference.Attribute("Include")?.Value ?? string.Empty)
+                .ToArray();
+
+            Assert.DoesNotContain(references, reference => reference.EndsWith(forbidden, StringComparison.Ordinal));
+        }
+    }
+
+    private static string RepoRoot()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null && !File.Exists(Path.Join(directory.FullName, "DeepSharp.slnx")))
+        {
+            directory = directory.Parent;
+        }
+
+        Assert.NotNull(directory);
+        return directory!.FullName;
     }
 
     [Fact]

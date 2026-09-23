@@ -7,10 +7,10 @@ using DeepSharp.Pipelines;
 namespace DeepSharp.Tests.Pipelines;
 
 /// <summary>
-/// The rule this library exists to keep — nothing learns from the data before it has been split — is not
-/// enforced by a warning or a paragraph but by which methods exist at that point in the chain. That is a
-/// property of the API surface, so it is tested as one: a step that learns must be absent before the split
-/// and present after it. If a later increment adds a learning verb to the wrong builder, this fails.
+/// The rule this library exists to keep — nothing learns from the data before it has been split — held at
+/// the only place both doors pass through. Method placement alone is not enough and a council proved it:
+/// the builder's own extension point took a learning step, and a hand-written file could put one anywhere
+/// it liked. So the invariant lives on the declaration, and these tests come at it from every side.
 /// </summary>
 public class ChainBarrierTests
 {
@@ -37,9 +37,6 @@ public class ChainBarrierTests
     [Fact]
     public void TheSplitIsWhatMovesYouAcross()
     {
-        // The two builders are different types on purpose: reaching the second one is only possible by
-        // saying how the data is split, so "fit on everything" is not a mistake you can make and be warned
-        // about later — it is a method that does not exist yet.
         Assert.Contains("SplitByTime", PublicMethodsOf<PipelineBuilder>());
         Assert.NotEqual(typeof(PipelineBuilder), typeof(FittingBuilder));
 
@@ -52,13 +49,88 @@ public class ChainBarrierTests
     [Fact]
     public void AndYouCannotGoBack()
     {
-        // A way back to the pre-split builder would let a caller declare a feature after the split, which
-        // is the same leak from the other side: the feature would be computed over data the model is meant
-        // never to have seen.
         var returns = typeof(FittingBuilder)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
             .Select(method => method.ReturnType);
 
         Assert.DoesNotContain(typeof(PipelineBuilder), returns);
+    }
+
+    [Fact]
+    public void TheExtensionPointWillNotTakeALearningStep()
+    {
+        // `Add` is the door every verb from every other package comes through, so it is also the door a
+        // learning verb would come through. It takes the narrower kind, and a step that learns is refused
+        // where it is written rather than in a number three weeks later.
+        var before = Pdd.Create().ReadCsv("x.csv");
+
+        Assert.Throws<InvalidOperationException>(() => before.Add(new FillMissingStep("age", With.Mean)));
+    }
+
+    [Fact]
+    public void AFileThatFitsBeforeItSplits_RefusesToLoad()
+    {
+        // The same rule, from the other door. A hand-edited file that moves the fill above the split is
+        // the most ordinary way this leak arrives, and it is the one the type system cannot see.
+        const string json = """
+            {"declaration":[{"step":"read.csv","path":"x.csv"},
+                            {"step":"fill.missing","column":"age","with":"mean"},
+                            {"step":"split.byTime","column":"t","train":0.7,"validation":0.15,"test":0.15}]}
+            """;
+
+        var refused = Assert.Throws<InvalidOperationException>(() => PipelineDeclaration.FromJson(json));
+
+        Assert.Contains("fill.missing", refused.Message);
+        Assert.Contains("split", refused.Message);
+    }
+
+    [Fact]
+    public void AFileThatFitsWithoutSplittingAtAll_RefusesToLoad()
+    {
+        const string json = """{"declaration":[{"step":"fill.missing","column":"age","with":"mean"}]}""";
+
+        Assert.Throws<InvalidOperationException>(() => PipelineDeclaration.FromJson(json));
+    }
+
+    [Fact]
+    public void ADeclarationBuiltByHandFromStepsInTheWrongOrder_IsRefusedToo()
+    {
+        // The declaration's own constructor is the one place the builder, the extension point and the file
+        // all pass through, which is why the rule lives there and not in three places that must agree.
+        var wrongOrder = new IPipelineStep[]
+        {
+            new FillMissingStep("age", With.Mean),
+            new SplitByTimeStep("t", 0.70, 0.15, 0.15),
+        };
+
+        Assert.Throws<InvalidOperationException>(() => new PipelineDeclaration(wrongOrder));
+    }
+
+    [Fact]
+    public void OnceSplit_TheBuilderYouStartedWithIsSpent()
+    {
+        // Holding on to the pre-split builder used to let a feature be declared after the split, into the
+        // same list, which is the leak arriving from the side. The builder says so instead.
+        var before = Pdd.Create().ReadCsv("a.csv");
+        before.SplitByTime("t", 0.70, 0.15, 0.15);
+
+        Assert.Throws<InvalidOperationException>(() => before.Add(new ReadCsvStep("b.csv")));
+        Assert.Throws<InvalidOperationException>(() => before.SplitByTime("t2", 0.50, 0.25, 0.25));
+    }
+
+    [Fact]
+    public void TwoPipelinesFromOneStart_AreNotQuietlyTheSamePipeline()
+    {
+        // A parameter sweep that reuses a common prefix used to produce one declaration containing every
+        // arm, with each arm reporting the other's steps as its own.
+        var first = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.70, 0.15, 0.15);
+        var second = Pdd.Create().ReadCsv("a.csv").SplitByTime("t", 0.50, 0.25, 0.25);
+
+        first.FillMissing("age", With.Mean);
+        second.FillMissing("age", With.Median);
+
+        Assert.NotEqual(first.Declaration, second.Declaration);
+        Assert.Equal(3, first.Declaration.Steps.Count);
+        Assert.Equal(3, second.Declaration.Steps.Count);
     }
 }

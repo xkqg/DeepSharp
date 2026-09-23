@@ -69,6 +69,42 @@ public class ServiceRegistrationTests
     }
 
     [Fact]
+    public void APackagesVerbsSurvive_WhicheverOrderTheRegistrationsAreWrittenIn()
+    {
+        // Two lines in a startup file used to decide which verbs existed: whichever registered a catalog
+        // first won, the other package's verbs vanished, and the file that then refused to load blamed a
+        // package that was right there.
+        foreach (var coreFirst in new[] { true, false })
+        {
+            var services = new ServiceCollection();
+
+            if (coreFirst)
+            {
+                services.AddDeepSharpPipelines();
+                services.AddSingleton<IStepContribution, ScalingSteps>();
+            }
+            else
+            {
+                services.AddSingleton<IStepContribution, ScalingSteps>();
+                services.AddDeepSharpPipelines();
+            }
+
+            using var provider = services.BuildServiceProvider();
+            var catalog = provider.GetRequiredService<StepCatalog>();
+
+            Assert.True(catalog.Knows("scale.by"), $"core first: {coreFirst}");
+            Assert.True(catalog.Knows("read.csv"), $"core first: {coreFirst}");
+        }
+    }
+
+    /// <summary>A package bringing one verb, registered the way another package would register its own.</summary>
+    private sealed class ScalingSteps : IStepContribution
+    {
+        public void AddTo(StepCatalog catalog) =>
+            catalog.Register("scale.by", _ => new ReadCsvStep("scaled.csv"));
+    }
+
+    [Fact]
     public void AndNoneOfThatIsRequired()
     {
         // The same pipeline, with no container anywhere. If this ever stops compiling, the library has
