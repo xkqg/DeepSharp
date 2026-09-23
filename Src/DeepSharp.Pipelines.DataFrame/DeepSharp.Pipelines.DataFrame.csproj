@@ -3,12 +3,15 @@
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <PackageId>DeepSharp.Pipelines.DataFrame</PackageId>
-    <Description>Reads a DeepSharp pipeline's rows out of a Microsoft.Data.Analysis DataFrame, or out of anything that can fill one: a comma-separated file, a database query, rows somebody already had. One reader for the long tail of formats, so the pipeline itself needs none of them. An absent value stays absent rather than becoming a not-a-number, because never-there and arithmetic-went-wrong are different answers.</Description>
+    <Description>Reads a DeepSharp pipeline's rows out of a DataFrame, or out of anything that can fill one: a comma-separated file, a database query, rows somebody already had. One reader for the long tail of formats, so the pipeline itself needs none of them. An absent value stays absent rather than becoming a not-a-number, because never-there and arithmetic-went-wrong are different answers.</Description>
     <PackageTags>machine-learning;pipeline;dataframe;data-preparation;etl;sql;csv;dotnet</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Analysis" Version="0.23.*" />
+    <!-- Through MatPlotLibNet.DataFrame rather than straight at Microsoft.Data.Analysis: that package is
+         built on the same DataFrame and carries it along, and it is where the charts and the indicators
+         over a frame already live. One door to the frame, the same one the indicator package uses. -->
+    <PackageReference Include="MatPlotLibNet.DataFrame" Version="1.17.1" />
   </ItemGroup>
 
   <ItemGroup>

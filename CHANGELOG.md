@@ -3,6 +3,21 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.2.1]
+
+### Changed
+
+- **The reader reaches a data frame through MatPlotLibNet.** `DeepSharp.Pipelines.DataFrame` no longer
+  asks for `Microsoft.Data.Analysis` itself. It depends on `MatPlotLibNet.DataFrame`, which is built on
+  that same frame and carries it along, and which is where the charts and the indicators over a frame
+  already live — the door `DeepSharp.Pipelines.Indicators` was already using. Nothing you write changes:
+  the frame is the same type it always was, and a package that wants it directly may still say so.
+
+  One thing stays deliberately apart. That package's column reader turns an absent value into a
+  not-a-number, which is right for drawing, where a not-a-number means "do not draw this point". In a
+  pipeline it would mean "the arithmetic went wrong", and a gap would disappear into a number nobody
+  measured. So the reader here keeps its own conversion, with the test that says why.
+
 ## [0.2.0]
 
 The data half of the library: everything a set of rows goes through before a model ever sees it, declared

@@ -34,7 +34,7 @@ training split alone and replayed unchanged.**
 The wiki has both halves: [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) for the idea and the mistake it
 removes, [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) for the verbs themselves.
 
-## Version 0.2.0 — what is here today
+## Version 0.2.1 — what is here today
 
 The first release was the tensors. This one is the data half: everything a set of rows goes through before a
 model sees it, written down once as a file you can save, hand over and replay. What it contains works and is
@@ -48,7 +48,7 @@ release actually added.
 | `ITensorBackend` | Which engine does the arithmetic. Your model is written against this, not against an engine. |
 | `CpuBackend` | The engine that needs no installing: your processor's vector instructions, through .NET's own maths. |
 | `DeepSharp.Pipelines` | The data half: say where the rows come from, what the columns are, which features are worked out, where the split falls, how gaps are filled and how the numbers are scaled — then save all of it as a file and read it back unchanged. |
-| `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: anything that can fill a `DataFrame` — a CSV, a database query, rows already in hand — comes in through it. |
+| `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: anything that can fill a `DataFrame` — a CSV, a database query, rows already in hand — comes in through it. It reaches the frame through MatPlotLibNet.DataFrame, the same door the indicators use. |
 | `DeepSharp.Pipelines.Indicators` | Indicators over a series, borrowed from the published MatPlotLibNet packages rather than written again. |
 
 ```csharp
