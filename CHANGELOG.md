@@ -95,6 +95,12 @@ where the arithmetic happens.
   measured rather than promised: every one is held to an impulse test — change one row and no earlier row
   may move — and the warm-up arrives as an absence rather than as a number nobody took.
 
+- **With indicators on the data, the row count is the rows minus the longest warm-up.** `DropWarmUp()` cuts
+  the rows at the start that no column can speak for yet, before the split, because a row nobody can use
+  should never land in one. An indicator of period N does not say "nothing happened" about the first N
+  rows, it says "not enough history yet" — and filling that with a number learned from training would
+  invent a measurement nobody took. 506 rows with a twenty-period average on them are 487 rows of data.
+
 - **Which columns are categories is said where the data is declared.** `Category("sex", "embarked")` in the
   schema, and `EncodeCategories()` takes them by name afterwards, so adding one to the schema does not mean
   remembering a second line further down. A category that never became numbers is refused at the handover

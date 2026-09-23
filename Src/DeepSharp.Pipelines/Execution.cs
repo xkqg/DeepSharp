@@ -139,6 +139,13 @@ public sealed class Pipeline
             }
         }
 
+        // Dropping rows happens after the features and before the split, because it is the features that
+        // say which rows nobody can speak for, and the split may only divide rows that are usable.
+        foreach (var step in steps.Take(line).OfType<IDropsRows>())
+        {
+            table = table.From(step.FirstUsableRow(table));
+        }
+
         var splits = Assign(table);
         var fitted = new Dictionary<int, FittedStepValues>();
 

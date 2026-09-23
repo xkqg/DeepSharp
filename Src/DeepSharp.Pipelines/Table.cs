@@ -33,6 +33,15 @@ public interface IColumn
     /// <param name="row">The row to look at.</param>
     /// <returns>The value as text, or <see langword="null"/>.</returns>
     string? TextAt(int row);
+
+    /// <summary>The same column, from this row onwards.</summary>
+    /// <param name="first">The first row to keep.</param>
+    /// <returns>A column of the rows that were kept.</returns>
+    IColumn From(int first);
+
+    /// <summary>How many rows at the start of this column are gaps.</summary>
+    /// <returns>The number of leading gaps, which for an indicator is its warm-up.</returns>
+    int LeadingGaps();
 }
 
 /// <summary>
@@ -84,6 +93,12 @@ public sealed class Column<T> : IColumn
         _values[row] is { } value
             ? Convert.ToString(value, CultureInfo.InvariantCulture)
             : null;
+
+    /// <inheritdoc />
+    public IColumn From(int first) => new Column<T>(Name, Kind, _values.Skip(first));
+
+    /// <inheritdoc />
+    public int LeadingGaps() => _values.TakeWhile(value => value is null).Count();
 }
 
 /// <summary>
@@ -144,6 +159,12 @@ public sealed class TextColumn : IColumn
 
     /// <inheritdoc />
     public string? TextAt(int row) => _values[row];
+
+    /// <inheritdoc />
+    public IColumn From(int first) => new TextColumn(Name, Kind, _values.Skip(first));
+
+    /// <inheritdoc />
+    public int LeadingGaps() => _values.TakeWhile(value => value is null).Count();
 }
 
 /// <summary>
@@ -229,6 +250,22 @@ public sealed class Table
         {
             _columns[at] = column;
         }
+    }
+
+    /// <summary>Keeps the rows from this one onwards, dropping everything before it.</summary>
+    /// <param name="first">The first row to keep.</param>
+    /// <returns>A table of the rows that were kept, with the same columns in the same order.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">That row is not in the table.</exception>
+    /// <remarks>
+    /// A new table rather than a change in place: rows are what a split divides and what a fit counts, so a
+    /// step that drops some of them is making a different dataset and had better say so.
+    /// </remarks>
+    public Table From(int first)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(first);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(first, RowCount);
+
+        return new Table(_columns.Select(column => column.From(first)));
     }
 
     /// <summary>Removes the column with this name, if it is there.</summary>

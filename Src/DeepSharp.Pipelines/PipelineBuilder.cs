@@ -97,6 +97,16 @@ public sealed class PipelineBuilder
     public PipelineBuilder Cyclical(string column, Period period, Form form = Form.Signed) =>
         Add(new CyclicalStep(column, period, form));
 
+    /// <summary>Drops the rows at the start that no column can speak for yet.</summary>
+    /// <param name="atMost">The most rows this is allowed to drop; beyond it the run stops.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// What you want as soon as there are indicators on the data. A twenty-period average says nothing
+    /// about the first nineteen rows, and filling them would invent measurements nobody took: with
+    /// indicators, 506 rows are 487 rows of data and nineteen rows of not-yet.
+    /// </remarks>
+    public PipelineBuilder DropWarmUp(int atMost = 1000) => Add(new DropWarmUpStep(atMost));
+
     /// <summary>Splits the rows by where they sit in time, and opens the half of the chain that learns.</summary>
     /// <param name="column">The column that says when a row happened.</param>
     /// <param name="train">The share the model learns from.</param>

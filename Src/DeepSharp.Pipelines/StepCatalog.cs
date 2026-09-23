@@ -41,6 +41,7 @@ public sealed class StepCatalog
         catalog.Register<EncodeStep>();
         catalog.Register<TargetStep>();
         catalog.Register<FillNaNStep>();
+        catalog.Register<DropWarmUpStep>();
 
         return catalog;
     }

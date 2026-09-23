@@ -60,14 +60,13 @@ var prices = pipelines.Create()
     .AddIndicator("atr", Indicator.Atr, ["AAPL.High", "AAPL.Low", "AAPL.Close"], 14)
     .AddIndicator("bb", Indicator.BollingerBands, ["AAPL.Close"], 20)
     .Cyclical("Date", Period.DayOfWeek, Form.SplitSign)
+    // An indicator of period N says nothing about the first N rows, and filling that would invent
+    // measurements nobody took. So with indicators on the data, 506 rows are 487 rows and 19 of not-yet.
+    .DropWarmUp()
     .SplitByTime("Date", train: 0.70, validation: 0.15, test: 0.15)
     .Normalise("AAPL.Close", Scale.Robust)
     .Normalise("AAPL.Volume", Scale.Robust)
     .Normalise("range", Scale.Robust)
-    // The warm-up of an indicator is an absence, not a value, so it is filled like any other gap -- after
-    // the split, with a number learned from the training rows alone.
-    .FillMissing("rsi", With.Median)
-    .FillMissing("atr", With.Median)
     .Normalise("rsi", Scale.MinMax)
     .Encode("direction")
     .Build()
