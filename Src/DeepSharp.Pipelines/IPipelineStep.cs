@@ -29,6 +29,27 @@ public interface IPipelineStep
 }
 
 /// <summary>
+/// A step that knows its own name and how to read itself back.
+/// </summary>
+/// <typeparam name="TSelf">The step itself.</typeparam>
+/// <remarks>
+/// The verb used to be written twice — once in the step, once in the line that registered it — and nothing
+/// required the two to agree or to both exist. Here the name and the reader belong to the type, so
+/// registering a step is one token and a step that forgot to register is something a test can find.
+/// </remarks>
+public interface IPipelineStep<TSelf> : IPipelineStep
+    where TSelf : IPipelineStep<TSelf>
+{
+    /// <summary>The single place this step's verb is written.</summary>
+    static abstract string Name { get; }
+
+    /// <summary>Reads this step back out of the JSON object it was written as.</summary>
+    /// <param name="element">The object, including its <c>step</c> key.</param>
+    /// <returns>The step the file describes.</returns>
+    static abstract TSelf ReadFrom(JsonElement element);
+}
+
+/// <summary>
 /// A step that learns something from the data.
 /// </summary>
 /// <remarks>

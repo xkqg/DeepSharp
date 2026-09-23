@@ -23,12 +23,20 @@ public sealed class StepCatalog
     {
         var catalog = new StepCatalog();
 
-        catalog.Register("read.csv", ReadCsvStep.ReadFrom);
-        catalog.Register("split.byTime", SplitByTimeStep.ReadFrom);
-        catalog.Register("fill.missing", FillMissingStep.ReadFrom);
+        catalog.Register<ReadCsvStep>();
+        catalog.Register<DeclareStep>();
+        catalog.Register<SplitByTimeStep>();
+        catalog.Register<FillMissingStep>();
 
         return catalog;
     }
+
+    /// <summary>Teaches this catalog a step, under the name the step itself carries.</summary>
+    /// <typeparam name="TStep">The step to register.</typeparam>
+    /// <exception cref="InvalidOperationException">The verb is already known.</exception>
+    public void Register<TStep>()
+        where TStep : IPipelineStep<TStep> =>
+        Register(TStep.Name, element => TStep.ReadFrom(element));
 
     /// <summary>Teaches this catalog a verb.</summary>
     /// <param name="verb">The name the step is written under.</param>

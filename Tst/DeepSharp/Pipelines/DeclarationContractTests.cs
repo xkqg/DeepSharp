@@ -81,31 +81,21 @@ public class DeclarationContractTests
     {
         // A verb is written in the step and read in the catalog, so the two can drift, and a forgotten
         // registration breaks the round trip for that verb alone while every existing test stays green.
-        var steps = typeof(Pdd).Assembly.GetTypes()
-            .Where(type => type.IsClass && !type.IsAbstract && typeof(IPipelineStep).IsAssignableFrom(type))
-            .Select(type => (IPipelineStep)Activator.CreateInstance(
-                type, BindingFlags.Public | BindingFlags.Instance | BindingFlags.CreateInstance,
-                binder: null, args: ExampleArgumentsFor(type), culture: null)!)
+        var verbs = typeof(Pdd).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract)
+            .Where(type => type.GetInterfaces().Any(
+                face => face.IsGenericType && face.GetGenericTypeDefinition() == typeof(IPipelineStep<>)))
+            .Select(type => (Verb: (string)type.GetProperty(
+                "Name", BindingFlags.Public | BindingFlags.Static)!.GetValue(null)!, Type: type))
             .ToArray();
 
         var catalog = StepCatalog.BuiltIn();
-        var unknown = steps.Where(step => !catalog.Knows(step.Verb)).Select(step => step.Verb).ToArray();
+        var unknown = verbs.Where(step => !catalog.Knows(step.Verb))
+                           .Select(step => $"{step.Type.Name} ({step.Verb})").ToArray();
 
-        Assert.NotEmpty(steps);
+        Assert.NotEmpty(verbs);
         Assert.True(unknown.Length == 0, $"The built-in catalog cannot read back: {string.Join(", ", unknown)}");
     }
-
-    private static object?[] ExampleArgumentsFor(Type step) =>
-        step.GetConstructors().Single().GetParameters()
-            .Select(parameter => parameter.ParameterType switch
-            {
-                var type when type == typeof(string) => "column",
-                var type when type == typeof(double) => 1.0 / 3.0,
-                var type when type == typeof(FillStrategy) => (object)With.Mean,
-                _ => throw new NotSupportedException(
-                    $"{step.Name} takes a {parameter.ParameterType.Name}, which this test cannot make an example of yet."),
-            })
-            .ToArray();
 
     [Fact]
     public void AFaultInsideOneStep_ReachesTheCallerAsAFaultInTheFile()

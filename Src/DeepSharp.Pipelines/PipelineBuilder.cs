@@ -46,6 +46,21 @@ public sealed class PipelineBuilder
         return this;
     }
 
+    /// <summary>Declares which columns take part, what they hold, and what becomes of the rest.</summary>
+    /// <param name="schema">Names the columns, in the order they should reach a model.</param>
+    /// <param name="remainder">What becomes of the columns the schema does not name.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">There are no columns, or one is declared twice.</exception>
+    public PipelineBuilder Declare(Action<SchemaBuilder> schema, Remainder remainder = Remainder.Drop)
+    {
+        ArgumentNullException.ThrowIfNull(schema);
+
+        var builder = new SchemaBuilder();
+        schema(builder);
+
+        return Add(new DeclareStep(builder.Columns, remainder));
+    }
+
     /// <summary>Splits the rows by where they sit in time, and opens the half of the chain that learns.</summary>
     /// <param name="column">The column that says when a row happened.</param>
     /// <param name="train">The share the model learns from.</param>
@@ -64,6 +79,10 @@ public sealed class PipelineBuilder
 
         return new FittingBuilder(_steps);
     }
+
+    /// <summary>Finishes the pipeline, so it can be run.</summary>
+    /// <returns>The declaration with the means to carry it out.</returns>
+    public Pipeline Build() => new(Declaration);
 
     private void ThrowIfSplit()
     {
@@ -115,4 +134,8 @@ public sealed class FittingBuilder
     /// <exception cref="ArgumentException">The column has no name, or the strategy is not one of the names.</exception>
     public FittingBuilder FillMissing(string column, FillStrategy strategy) =>
         Add(new FillMissingStep(column, strategy));
+
+    /// <summary>Finishes the pipeline, so it can be run.</summary>
+    /// <returns>The declaration with the means to carry it out.</returns>
+    public Pipeline Build() => new(Declaration);
 }

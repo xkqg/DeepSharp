@@ -13,7 +13,7 @@ namespace DeepSharp.Pipelines;
 /// Declaring where the data comes from is not the same act as going to get it: nothing is opened until the
 /// pipeline runs, so a declaration can be written, saved and checked on a machine that has no data on it.
 /// </remarks>
-public sealed record ReadCsvStep : IPipelineStep
+public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows
 {
     /// <summary>Declares that the rows come from the file at this path.</summary>
     /// <param name="path">Where the file will be, when the pipeline runs.</param>
@@ -32,7 +32,10 @@ public sealed record ReadCsvStep : IPipelineStep
     public string Path { get; }
 
     /// <inheritdoc />
-    public string Verb => "read.csv";
+    public static string Name => "read.csv";
+
+    /// <inheritdoc />
+    public string Verb => Name;
 
     /// <inheritdoc />
     public void WriteTo(Utf8JsonWriter writer)
@@ -44,6 +47,9 @@ public sealed record ReadCsvStep : IPipelineStep
         writer.WriteString("path", Path);
         writer.WriteEndObject();
     }
+
+    /// <inheritdoc />
+    public IRowSource Open() => new CsvRowSource(Path);
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
@@ -59,7 +65,7 @@ public sealed record ReadCsvStep : IPipelineStep
 /// This is the line in the chain. Above it nothing may learn from the data; below it the operations that do
 /// become available, and each of them is fitted on the training rows alone.
 /// </remarks>
-public sealed record SplitByTimeStep : ISplitStep
+public sealed record SplitByTimeStep : ISplitStep, IPipelineStep<SplitByTimeStep>
 {
     /// <summary>Declares a split in time, by three shares that together make a whole.</summary>
     /// <param name="column">The column that says when a row happened.</param>
@@ -110,7 +116,10 @@ public sealed record SplitByTimeStep : ISplitStep
     public double Test { get; }
 
     /// <inheritdoc />
-    public string Verb => "split.byTime";
+    public static string Name => "split.byTime";
+
+    /// <inheritdoc />
+    public string Verb => Name;
 
     /// <inheritdoc />
     public void WriteTo(Utf8JsonWriter writer)
@@ -157,7 +166,7 @@ public sealed record SplitByTimeStep : ISplitStep
 /// while a not-a-number is arithmetic that produced no number, which is a fault further upstream. They get
 /// different verbs because they deserve different answers.
 /// </remarks>
-public sealed record FillMissingStep : IFittedStep
+public sealed record FillMissingStep : IFittedStep, IPipelineStep<FillMissingStep>
 {
     /// <summary>Declares that the gaps in a column are filled the named way.</summary>
     /// <param name="column">The column with gaps in it.</param>
@@ -201,7 +210,10 @@ public sealed record FillMissingStep : IFittedStep
     public FillStrategy Strategy { get; }
 
     /// <inheritdoc />
-    public string Verb => "fill.missing";
+    public static string Name => "fill.missing";
+
+    /// <inheritdoc />
+    public string Verb => Name;
 
     /// <inheritdoc />
     public void WriteTo(Utf8JsonWriter writer)

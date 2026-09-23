@@ -25,6 +25,32 @@ internal static class JsonElementExtensions
         return value.GetString()!;
     }
 
+    internal static bool RequiredBoolean(this JsonElement element, string name)
+    {
+        if (!element.TryGetProperty(name, out var value)
+            || value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+        {
+            throw new FormatException($"The step is missing a true or false for '{name}'.");
+        }
+
+        return value.GetBoolean();
+    }
+
+    internal static TEnum RequiredEnum<TEnum>(this JsonElement element, string name)
+        where TEnum : struct, Enum
+    {
+        var written = element.RequiredString(name);
+
+        if (!Enum.TryParse<TEnum>(written, ignoreCase: true, out var value) || !Enum.IsDefined(value))
+        {
+            throw new FormatException(
+                $"'{written}' is not one of the things '{name}' can be: "
+                + string.Join(", ", Enum.GetNames<TEnum>().Select(each => each.ToLowerInvariant())) + ".");
+        }
+
+        return value;
+    }
+
     internal static double RequiredNumber(this JsonElement element, string name)
     {
         if (!element.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Number)
