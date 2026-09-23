@@ -43,6 +43,8 @@ public sealed class StepCatalog
         catalog.Register<FillNaNStep>();
         catalog.Register<DropWarmUpStep>();
         catalog.Register<TimePartsStep>();
+        catalog.Register<MathsStep>();
+        catalog.Register<ClipOutliersStep>();
 
         return catalog;
     }

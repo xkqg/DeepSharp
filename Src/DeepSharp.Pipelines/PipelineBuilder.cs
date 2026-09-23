@@ -97,6 +97,19 @@ public sealed class PipelineBuilder
     public PipelineBuilder Cyclical(string column, Period period, Form form = Form.Signed) =>
         Add(new CyclicalStep(column, period, form));
 
+    /// <summary>Pulls a column into another shape, by arithmetic that learns nothing.</summary>
+    /// <param name="column">The column to reshape.</param>
+    /// <param name="maths">Which shape: a logarithm, a root, a reciprocal.</param>
+    /// <param name="into">What to call the result; the same column, unless you say otherwise.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// The variance-stabilising transformations. They belong here, before the split, because the logarithm
+    /// of a number does not depend on any other number — and a column of money or of volume usually wants
+    /// one, because there the ratio carries the meaning and the difference does not.
+    /// </remarks>
+    public PipelineBuilder Reshape(string column, Maths maths, string? into = null) =>
+        Add(new MathsStep(column, maths, into));
+
     /// <summary>Takes a moment in time apart into the pieces people reason with.</summary>
     /// <param name="column">The column holding the moment.</param>
     /// <param name="parts">Which pieces to take out of it.</param>
@@ -274,6 +287,16 @@ public sealed class FittingBuilder
     /// <returns>This builder, so the next verb can be written after it.</returns>
     public FittingBuilder NormaliseRow(Norm norm, params string[] columns) =>
         Add(new NormaliseRowStep(columns, norm));
+
+    /// <summary>Holds the extreme values of a column to bounds learned from the training rows.</summary>
+    /// <param name="column">The column to hold.</param>
+    /// <param name="bounds">How the bounds are worked out: by quantile, by spread, or by the middle half.</param>
+    /// <param name="at">How far out they sit: a share for a quantile, a multiple otherwise.</param>
+    /// <param name="outlier">What happens to a value outside them.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public FittingBuilder ClipOutliers(
+        string column, Bounds bounds = Bounds.Iqr, double at = 1.5, Outlier outlier = Outlier.Clip) =>
+        Add(new ClipOutliersStep(column, bounds, at, outlier));
 
     /// <summary>Writes every column the schema declared a category down as numbers.</summary>
     /// <param name="how">One column per category, or one column of places.</param>

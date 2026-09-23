@@ -101,6 +101,19 @@ where the arithmetic happens.
   rows, it says "not enough history yet" — and filling that with a number learned from training would
   invent a measurement nobody took. 506 rows with a twenty-period average on them are 487 rows of data.
 
+- **A prediction comes back in the units it was read in.** Scale what a model is asked to predict and its
+  predictions come back scaled, so `BackToOriginal` walks the steps that touched the target backwards and
+  undoes each — every scaling, and a logarithm, a root or a reciprocal. The run checks it before handing
+  anything over: transform, undo, compare against what was read, and stop if it does not lead back. A step
+  that threw information away says so rather than returning a number in units nobody can name, and undoing
+  a logarithm gives the middle value rather than the average one, which is said where it matters.
+
+- **The variance-stabilising shapes, and the tail.** `Reshape(column, Maths.Log)` — and Log1P, Reciprocal,
+  Sqrt, Square, ArcSin, Abs, Sign — above the split, because the logarithm of a number does not depend on
+  any other number. `ClipOutliers` holds the extremes to bounds learned from the training rows, by
+  quantile, by spread, or by the middle half, and what happens outside them is your choice: held at the
+  edge, made a gap, or refused.
+
 - **A moment in time comes apart into the pieces people reason with.** `TimeParts("Date", TimePart.Season,
   TimePart.Quarter)` — and the minute, the hour, the day of the week, the day of the month, the month and
   the year. They arrive as **categories**, because a month is not a quantity: March is not three of

@@ -118,6 +118,18 @@ public sealed class Pipeline
     {
         var table = Prepare(rows);
         var steps = Declaration.Steps;
+
+        // The target as it was read, kept for one check at the end. Scale what a model predicts and the
+        // predictions come back scaled; the way back has to be real, and the only way to know that is to
+        // try it on values whose answer is already known.
+        var target = steps.OfType<TargetStep>().LastOrDefault()?.Column;
+        // Only for a target that is a number to begin with. A target of words is predicted as a category
+        // and there is no arithmetic to come back through, which the check would otherwise report as a
+        // fault in the pipeline rather than as the ordinary thing it is.
+        var before = target is not null && table.Has(target)
+                     && table[target].Kind is not (ColumnKind.Text or ColumnKind.Category)
+            ? Numbers.Of(table, target)
+            : null;
         var line = steps.Count;
 
         for (var at = 0; at < steps.Count; at++)
@@ -165,7 +177,43 @@ public sealed class Pipeline
             }
         }
 
-        return new PreparedData(Declaration, table, splits, fitted);
+        var prepared = new PreparedData(Declaration, table, splits, fitted);
+
+        if (before is not null)
+        {
+            ThrowIfTheWayBackIsNotReal(prepared, target!, before);
+        }
+
+        return prepared;
+    }
+
+    private static void ThrowIfTheWayBackIsNotReal(PreparedData prepared, string target, double?[] before)
+    {
+        if (!prepared.Declaration.Steps.OfType<IUndoesItself>().Any(step => step.Produces == target))
+        {
+            return;
+        }
+
+        var now = Numbers.Of(prepared.Table, target);
+
+        for (var row = 0; row < Math.Min(before.Length, now.Length); row++)
+        {
+            if (before[row] is not { } was || now[row] is not { } is_)
+            {
+                continue;
+            }
+
+            var back = prepared.BackToOriginal(is_);
+
+            if (Math.Abs(back - was) <= 1e-6 * Math.Max(1, Math.Abs(was)))
+            {
+                continue;
+            }
+
+            throw new InvalidOperationException(
+                $"The way back for '{target}' does not lead back: row {row + 1} was {was}, became {is_}, "
+                + $"and comes back as {back}. A prediction from this pipeline would be in units nobody can name.");
+        }
     }
 
     private Split[] Assign(Table table)

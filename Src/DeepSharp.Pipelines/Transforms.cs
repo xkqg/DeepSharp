@@ -83,7 +83,7 @@ public enum Norm
 /// and min-max are both moved by a single extreme value, so on prices and volumes the robust form is
 /// usually the one describing the data rather than the spike.
 /// </remarks>
-public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IPipelineStep<NormaliseStep>
+public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IUndoesItself, IPipelineStep<NormaliseStep>
 {
     /// <summary>Declares that a column is brought onto a comparable scale.</summary>
     /// <param name="column">The column to scale.</param>
@@ -107,6 +107,32 @@ public sealed record NormaliseStep : IFittedStep, ILearnsFromData, IPipelineStep
 
     /// <summary>What happens to a value outside the range the fit learned.</summary>
     public OutOfRange OutOfRange { get; }
+
+    /// <inheritdoc />
+    public string Produces => Column;
+
+    /// <inheritdoc />
+    public double Undo(double value, FittedStepValues? fitted)
+    {
+        ArgumentNullException.ThrowIfNull(fitted);
+
+        if (Scale == Scale.Quantile)
+        {
+            // A rank says where a value sat among the training values, so coming back is reading that
+            // place off the same knots. Outside them there is nothing to read, and the edge is the honest
+            // answer rather than an extrapolation nobody asked for.
+            var knots = fitted.Curve("knots");
+            var place = Math.Clamp(value, 0, 1) * (knots.Count - 1);
+            var below = (int)Math.Floor(place);
+            var above = Math.Min(below + 1, knots.Count - 1);
+
+            return knots[below] + ((knots[above] - knots[below]) * (place - below));
+        }
+
+        var plain = (value * fitted.Number("spread")) + fitted.Number("centre");
+
+        return Scale == Scale.Power ? YeoJohnson.Undo(plain, fitted.Number("lambda")) : plain;
+    }
 
     /// <inheritdoc />
     public static string Name => "normalise";
@@ -584,6 +610,10 @@ internal static class YeoJohnson
     internal static double Of(double value, double lambda) => value >= 0
         ? lambda == 0 ? Math.Log(value + 1) : (Math.Pow(value + 1, lambda) - 1) / lambda
         : lambda == 2 ? -Math.Log(1 - value) : -((Math.Pow(1 - value, 2 - lambda) - 1) / (2 - lambda));
+
+    internal static double Undo(double value, double lambda) => value >= 0
+        ? lambda == 0 ? Math.Exp(value) - 1 : Math.Pow((lambda * value) + 1, 1 / lambda) - 1
+        : lambda == 2 ? 1 - Math.Exp(-value) : 1 - Math.Pow(1 - ((2 - lambda) * value), 1 / (2 - lambda));
 
     internal static double Lambda(double[] training)
     {

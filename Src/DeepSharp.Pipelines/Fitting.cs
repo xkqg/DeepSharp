@@ -138,6 +138,27 @@ public interface ILearnsFromData : IFittedStep
 }
 
 /// <summary>
+/// A step that can put a value back the way it found it.
+/// </summary>
+/// <remarks>
+/// For the target, and only really for the target. Scale what a model predicts and its predictions come
+/// back scaled: an error of 0.03 means nothing until it is 0.03 of something, and a report in scaled units
+/// flatters every model equally. So the way back is part of the saved pipeline rather than a sum somebody
+/// does by hand afterwards.
+/// </remarks>
+public interface IUndoesItself : IPipelineStep
+{
+    /// <summary>The column this step leaves behind.</summary>
+    string Produces { get; }
+
+    /// <summary>Puts one value back into the units this step found it in.</summary>
+    /// <param name="value">The value as this step left it.</param>
+    /// <param name="fitted">What this step learned, when it learned anything.</param>
+    /// <returns>The value in the units of the column before this step touched it.</returns>
+    double Undo(double value, FittedStepValues? fitted);
+}
+
+/// <summary>
 /// A pipeline that has been run: the data, where every row landed, and what each step learned.
 /// </summary>
 public sealed class PreparedData
@@ -291,6 +312,43 @@ public sealed class PreparedData
 
         return table;
     }
+
+    /// <summary>Puts predictions back into the units the target was read in.</summary>
+    /// <param name="predictions">What a model said, in the units it was trained on.</param>
+    /// <returns>The same numbers, in the units of the column the pipeline started from.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The pipeline names no target, or a step on the way to it cannot be undone.
+    /// </exception>
+    /// <remarks>
+    /// The steps that touched the target are walked backwards, each undoing what it did. A step that
+    /// cannot be undone — one that clipped, or blanked, or threw information away — says so rather than
+    /// quietly handing back a number in the wrong units, which is the failure this exists to prevent.
+    /// </remarks>
+    public IReadOnlyList<double> BackToOriginal(IEnumerable<double> predictions)
+    {
+        ArgumentNullException.ThrowIfNull(predictions);
+
+        var target = Declaration.Steps.OfType<TargetStep>().LastOrDefault()?.Column
+            ?? throw new InvalidOperationException(
+                "This pipeline names no target, so there is nothing to put back into any units.");
+
+        var undoing = new List<(IUndoesItself Step, FittedStepValues? Fitted)>();
+
+        for (var at = Declaration.Steps.Count - 1; at >= 0; at--)
+        {
+            if (Declaration.Steps[at] is IUndoesItself step && step.Produces == target)
+            {
+                undoing.Add((step, Fitted.GetValueOrDefault(at)));
+            }
+        }
+
+        return [.. predictions.Select(value => undoing.Aggregate(value, (each, undo) => undo.Step.Undo(each, undo.Fitted)))];
+    }
+
+    /// <summary>Puts one prediction back into the units the target was read in.</summary>
+    /// <param name="prediction">What a model said.</param>
+    /// <returns>The number in the units of the column the pipeline started from.</returns>
+    public double BackToOriginal(double prediction) => BackToOriginal([prediction])[0];
 
     /// <summary>Writes the whole pipeline: what was declared, and what the fit learned.</summary>
     /// <returns>The pipeline as one JSON document.</returns>
