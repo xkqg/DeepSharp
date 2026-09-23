@@ -94,6 +94,35 @@ public class ReleaseContractTests
         Assert.Contains("DeepSharp.Tests.csproj", workflow, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("ci.yml")]
+    [InlineData("publish.yml")]
+    public void EveryProjectThatBecomesAPackage_IsOneTheWorkflowPacks(string file)
+    {
+        // A workflow that names one project by hand keeps working perfectly when a second package is added,
+        // and ships one of the two. Nothing goes red: the pack succeeds, the push succeeds, and the package
+        // the release notes describe is simply not on the feed.
+        string workflow = Read(".github", "workflows", file);
+        var packsEverything = workflow.Contains("dotnet pack DeepSharp.slnx", StringComparison.Ordinal);
+
+        var missing = PackableProjects()
+            .Where(project => !packsEverything && !workflow.Contains(project, StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.True(missing.Length == 0,
+            $"{file} does not pack: {string.Join(", ", missing)}");
+    }
+
+    /// <summary>The projects that produce a package, named the way a workflow would name them.</summary>
+    private static IEnumerable<string> PackableProjects() =>
+        Directory.EnumerateFiles(Path.Join(Root, "Src"), "*.csproj", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                                          StringComparison.Ordinal))
+            .Where(file => XDocument.Load(file).Descendants("IsPackable")
+                               .All(packable => !string.Equals(packable.Value.Trim(), "false",
+                                                               StringComparison.OrdinalIgnoreCase)))
+            .Select(file => Path.GetRelativePath(Root, file).Replace(Path.DirectorySeparatorChar, '/'));
+
     [Fact]
     public void TheReadmeAndTheChangelog_AgreeOnWhichVersionThisIs()
     {

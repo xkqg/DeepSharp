@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <!-- A sample is read as much as it is run, so it is held to the same build as the library: no warnings,
+         and the analyser that finds an unused using needs the documentation file to exist. A top-level
+         program has nothing public to document, so the demand for prose is off here. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+</Project>

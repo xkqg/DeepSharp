@@ -1,6 +1,10 @@
 <Solution>
   <Folder Name="/Src/">
     <Project Path="Src/DeepSharp/DeepSharp.csproj" />
+    <Project Path="Src/DeepSharp.Pipelines/DeepSharp.Pipelines.csproj" />
+  </Folder>
+  <Folder Name="/Samples/">
+    <Project Path="Samples/DeepSharp.Sample.Pipelines/DeepSharp.Sample.Pipelines.csproj" />
   </Folder>
   <Folder Name="/Tst/" />
   <Folder Name="/Tst/DeepSharp/">

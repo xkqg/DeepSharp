@@ -44,9 +44,22 @@ actually added.
 | `Tensor` | The numbers themselves, laid out in that shape. Once made it never changes, so it is safe to reuse. |
 | `ITensorBackend` | Which engine does the arithmetic. Your model is written against this, not against an engine. |
 | `CpuBackend` | The engine that needs no installing: your processor's vector instructions, through .NET's own maths. |
+| `DeepSharp.Pipelines` | A second package: declare where the data comes from, how it is split and how its gaps are filled, then save that as a file and read it back unchanged. |
 
-Next is the pipeline, then gradients, the layers, the optimizers and the training loop — see the
-[roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap).
+```csharp
+using DeepSharp.Pipelines;
+
+var declaration = Pdd.Create()
+    .ReadCsv("btceur-1d.csv")                                   // declared, not opened
+    .SplitByTime("timestamp", train: 0.70, validation: 0.15, test: 0.15)
+    .FillMissing("trades", With.Mean)                           // only offered after the split
+    .Declaration;
+
+File.WriteAllText("btceur.pdd.json", declaration.ToJson());
+```
+
+Next come the features, the normalisers and the report, then gradients, the layers, the optimizers and the
+training loop — see the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap).
 
 ## Next to TorchSharp and TensorFlow.NET
 

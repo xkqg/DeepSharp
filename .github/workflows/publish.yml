@@ -53,7 +53,7 @@ jobs:
         run: dotnet run --project Tst/DeepSharp/DeepSharp.Tests.csproj --configuration Release --no-build
 
       - name: Pack
-        run: dotnet pack Src/DeepSharp/DeepSharp.csproj --no-build --configuration Release --output nupkgs
+        run: dotnet pack DeepSharp.slnx --no-build --configuration Release --output nupkgs
 
       # The key this returns is valid for one hour, so it is asked for here rather than at the top of the job.
       # `user` is the nuget.org profile name that owns the trusted-publishing policy — not an email address,

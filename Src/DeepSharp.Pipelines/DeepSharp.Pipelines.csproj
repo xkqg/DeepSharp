@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <PackageId>DeepSharp.Pipelines</PackageId>
+    <Description>Pipeline-driven design for .NET: declare the whole course from raw data to a validated model once, as one artefact, and replay it. The chain is the enforcement — anything that learns from the data is only offered after you have said how to split, so fitting on everything is not a mistake you can make and be warned about later. A declaration written in C# and one written as a file reach equally far, and each is the other read back.</Description>
+    <PackageTags>machine-learning;pipeline;data-preparation;feature-engineering;normalization;data-leakage;etl;dataframe;dotnet</PackageTags>
+    <InternalsVisibleTo>DeepSharp.Tests</InternalsVisibleTo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Abstractions only: a pipeline can be registered in a host that has a container, and built with
+         `new` in a program that has none. The library never requires one. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

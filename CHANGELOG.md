@@ -26,3 +26,20 @@ where the arithmetic happens.
 - **`ITensorBackend` — the plug it all goes through.** Every calculation a network does goes through this,
   which is why a model written today can run its heavy work on something else later without being rewritten.
   You create a backend and hand it to what needs it; nothing goes looking for a shared one of its own accord.
+
+- **`DeepSharp.Pipelines` — a pipeline you can write down.** A second package, for the path your data takes
+  before a model ever sees it. `Pdd.Create()` starts a pipeline and every verb after it *records* what is to
+  be done rather than doing it, so what you wrote can be saved as a file, handed to somebody, and replayed
+  later. `ToJson` writes the declaration out and `FromJson` reads it back as the same declaration — a
+  property with a test on it, because a promise that both ways reach equally far decays silently otherwise.
+
+- **The split is a line you cannot step over.** `SplitByTime` hands back a different kind of builder, and the
+  steps that learn from the data — filling a gap, and everything that follows it — exist only on that one.
+  Fitting on all of your data is therefore not a mistake to be warned about afterwards: it is a method that
+  is not there yet. A file naming a step nothing has registered is refused rather than read with the step
+  left out, and a message says which verb and whether it is unknown or merely not installed.
+
+- **It fits an application that has a host.** `services.AddDeepSharpPipelines()` registers the pipeline
+  factory and the catalog of verbs, so a pipeline is resolved the way everything else in a .NET application
+  is. None of it is required: a console program that writes `Pdd.Create()` with no container anywhere works
+  exactly the same, and a test holds that door open. `Samples/DeepSharp.Sample.Pipelines` shows both.

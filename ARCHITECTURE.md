@@ -6,10 +6,14 @@ written down here is not a decision, it is a habit.
 ## The layout
 
 ```
-Src/DeepSharp/            the library
-  Tensors/                Shape, Tensor, ITensorBackend, CpuBackend
-Tst/DeepSharp/            the tests, mirroring the library's folders
+Src/DeepSharp/            the engine side: Shape, Tensor, ITensorBackend, CpuBackend
+Src/DeepSharp.Pipelines/  the data side: the declaration, its steps, the catalog, the builders
+Samples/                  runnable programs, one per thing worth showing
+Tst/DeepSharp/            the tests, mirroring both libraries' folders
 ```
+
+The two libraries do not reference each other, and a test reads their assembly references to keep it that
+way.
 
 ## The design language: PDD, pipeline-driven design
 
@@ -50,7 +54,7 @@ The obvious alternative is a method per format on the pipeline type itself. It r
 the whole architecture: the core would have to reference Parquet.Net, ExcelDataReader and an HTTP client,
 every project would carry all of them, and adding a format would mean editing the core.
 
-As extensions, a verb exists exactly when its package is referenced. Reference `DeepSharp.Pdd.Parquet`
+As extensions, a verb exists exactly when its package is referenced. Reference `DeepSharp.Pipelines.Parquet`
 and `.ReadParquet` appears; do not, and it is not in the list. Nothing is carried that is not asked for,
 and a new format is a new package rather than a change here.
 
@@ -176,7 +180,7 @@ a time, five times over, stops using the thing.
 ```
 btceur.pdd.yaml(7,3): column 'trades' is not in btceur-1d.csv — there is a 'numberOfTrades'
 btceur.pdd.yaml(4,10): train+validation+test = 0.95, must be 1.0
-btceur.pdd.yaml(2,8): step 'parquet' exists, but the package DeepSharp.Pdd.Parquet is not referenced
+btceur.pdd.yaml(2,8): step 'parquet' exists, but the package DeepSharp.Pipelines.Parquet is not referenced
 ```
 
 That last message is deliberately not the same as the first kind. "I do not know this step" and "I know it,
@@ -294,9 +298,9 @@ which outside thing it carries.
 
 ```
 DeepSharp                   tensors, the backend seam, the light engine, the model, the training loop
-DeepSharp.Pdd               the pipeline, ending at prepared splits and the declared evidence
-DeepSharp.Pdd.<Format>      a reader: Parquet, Excel, Json
-DeepSharp.Pdd.<Source>      a live source: it fetches and lands, it does not read during training
+DeepSharp.Pipelines               the pipeline, ending at prepared splits and the declared evidence
+DeepSharp.Pipelines.<Format>      a reader: Parquet, Excel, Json
+DeepSharp.Pipelines.<Source>      a live source: it fetches and lands, it does not read during training
 DeepSharp.Learners.<Name>   something that learns from prepared data, behind the learner seam
 DeepSharp.Backends.<Name>   an engine behind ITensorBackend
 DeepSharp.Import.<Name>     reading weights or a model trained somewhere else

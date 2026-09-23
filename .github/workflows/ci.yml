@@ -47,7 +47,7 @@ jobs:
         run: ./tools/coverage/run.ps1 -Check
 
       - name: Pack
-        run: dotnet pack Src/DeepSharp/DeepSharp.csproj --no-build --configuration Release --output nupkgs
+        run: dotnet pack DeepSharp.slnx --no-build --configuration Release --output nupkgs
 
       - name: Keep the package for inspection
         uses: actions/upload-artifact@v7

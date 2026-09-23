@@ -5,10 +5,11 @@
             <Include>
                 <!-- The library, and only the library. A test assembly that counts towards its own coverage
                      is a number that always looks good and never means anything. -->
-                <ModulePath>.*DeepSharp\.dll$</ModulePath>
+                <ModulePath>.*DeepSharp.*[.]dll$</ModulePath>
             </Include>
             <Exclude>
                 <ModulePath>.*\.Tests\.dll$</ModulePath>
+                <ModulePath>.*Sample.*[.]dll$</ModulePath>
                 <ModulePath>.*xunit.*\.dll$</ModulePath>
                 <ModulePath>.*Microsoft\.Testing.*\.dll$</ModulePath>
             </Exclude>
