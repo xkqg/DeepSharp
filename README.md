@@ -2,91 +2,65 @@
 
 # DeepSharp — deep learning in C#
 
+[![CI](https://github.com/xkqg/DeepSharp/actions/workflows/ci.yml/badge.svg)](https://github.com/xkqg/DeepSharp/actions/workflows/ci.yml)
+[![NuGet](https://img.shields.io/nuget/v/DeepSharp)](https://www.nuget.org/packages/DeepSharp)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/DeepSharp)](https://www.nuget.org/packages/DeepSharp)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/xkqg/DeepSharp/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/xkqg/DeepSharp)](https://github.com/xkqg/DeepSharp)
+
 **The best of both worlds: TensorFlow's way of describing a network, PyTorch's way of running it.**
 
-DeepSharp is the C# layer over the engines that already exist. You describe, train and use a network in C#,
-and the arithmetic runs on whichever engine suits the job — .NET's own vector maths out of the box, libtorch
-through TorchSharp when the work gets bigger. Swapping between them does not change a line of your model.
+DeepSharp is the C# layer over the engines that already exist: you describe, train and use a network in C#,
+and the arithmetic runs on .NET's own vector maths out of the box or on a heavier engine later — swapping
+between them does not change a line of your model. What it adds is everything around the engine: getting
+your data in, the layers, the training loop, the checkpoints and the pictures.
 
-**What DeepSharp adds is everything around the engine.** Getting your data in, the layers, the training
-loop, the checkpoints, the metrics and the pictures. An engine gives you fast arithmetic; it does not give
-you a way to describe a network in C#, feed it real data, watch it learn and save the result.
+**0.2.1 is the tensors and the data half.** What learns from them is next; the
+[roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says in which order, and the
+[changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release added.
 
-```csharp
-using DeepSharp.Tensors;
-
-var maths = new CpuBackend();
-
-var a = Tensor.From(new Shape(2, 2), [1f, 2f, 3f, 4f]);
-var b = Tensor.From(new Shape(2, 2), [10f, 20f, 30f, 40f]);
-
-var sum = maths.Add(a, b);   // 11, 22, 33, 44
 ```
-
-## Pipeline-driven design
-
-The course from raw data to a validated model is always the same — collect, add features, normalise, deal
-with the gaps, split into training, validation and test, build, and check against data it has never seen.
-DeepSharp asks you to **declare that course in advance as one artefact** rather than perform it, and then
-replays it. The rule that makes it worth doing: **anything that learns from the data is fitted on the
-training split alone and replayed unchanged.**
-
-The wiki has both halves: [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) for the idea and the mistake it
-removes, [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) for the verbs themselves.
-
-## Version 0.2.1 — what is here today
-
-The first release was the tensors. This one is the data half: everything a set of rows goes through before a
-model sees it, written down once as a file you can save, hand over and replay. What it contains works and is
-tested; everything above describes where it is going, and the [changelog](CHANGELOG.md) records what each
-release actually added.
-
-| | What it does |
-|---|---|
-| `Shape` | Says how big a tensor is — `2x3` is two rows of three. Tells you off straight away if the sizes do not match. |
-| `Tensor` | The numbers themselves, laid out in that shape. Once made it never changes, so it is safe to reuse. |
-| `ITensorBackend` | Which engine does the arithmetic. Your model is written against this, not against an engine. |
-| `CpuBackend` | The engine that needs no installing: your processor's vector instructions, through .NET's own maths. |
-| `DeepSharp.Pipelines` | The data half: say where the rows come from, what the columns are, which features are worked out, where the split falls, how gaps are filled and how the numbers are scaled — then save all of it as a file and read it back unchanged. |
-| `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: anything that can fill a `DataFrame` — a CSV, a database query, rows already in hand — comes in through it. It reaches the frame through MatPlotLibNet.DataFrame, the same door the indicators use. |
-| `DeepSharp.Pipelines.Indicators` | Indicators over a series, borrowed from the published MatPlotLibNet packages rather than written again. |
+dotnet add package DeepSharp
+dotnet add package DeepSharp.Pipelines
+```
 
 ```csharp
 using DeepSharp.Pipelines;
 
-var declaration = Pdd.Create()
-    .ReadCsv("btceur-1d.csv")                                   // declared, not opened
-    .SplitByTime("timestamp", train: 0.70, validation: 0.15)      // test is the rest: 0.15
-    .FillMissing("trades", With.Mean)                           // only offered after the split
-    .Declaration;
-
-File.WriteAllText("btceur.pdd.json", declaration.ToJson());
+var prepared = Pdd.Create()
+    .ReadCsv("btceur-1d.csv")                                // declared, not opened
+    .SplitByTime("timestamp", train: 0.70, validation: 0.15) // test is the rest
+    .FillMissing("trades", With.Mean)                        // only offered after the split
+    .Normalise("close")
+    .Build()
+    .Run();
 ```
 
-Next come the features, the normalisers and the report, then gradients, the layers, the optimizers and the
-training loop — see the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap).
+The course from raw data to a validated model is declared once as an artefact and replayed, and anything
+that learns from the data is fitted on the training rows alone. That is the whole idea, and
+[PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) is where it is explained.
 
-## Next to TorchSharp and TensorFlow.NET
+## Read on
 
-Those are bindings: PyTorch's or TensorFlow's own interface written in C#, with the original engine
-underneath. They are excellent at being that, and DeepSharp is happy to use one. What they do not give you
-is a library that reads like C#, a way to pour your data in, a training loop you did not write yourself, or
-a picture of what happened — and because your model talks to a backend rather than to an engine, the choice
-of engine stays a choice. The [wiki](https://github.com/xkqg/DeepSharp/wiki) has the full comparison.
+| | |
+|---|---|
+| [Getting started](https://github.com/xkqg/DeepSharp/wiki/Getting-Started) | Install it, add two tensors, prepare a real file. |
+| [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) | The idea this library is built around, and the mistake it removes. |
+| [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) | Every verb in the order you write it: readers, features, the split, gaps, scales, the handover. |
+| [Architecture](https://github.com/xkqg/DeepSharp/wiki/Architecture) | The design decisions, and what was deliberately left out. |
+| [Next to TorchSharp and TensorFlow.NET](https://github.com/xkqg/DeepSharp/wiki#how-this-sits-next-to-torchsharp-and-tensorflownet) | What those give you, what they do not, and why the choice of engine stays a choice. |
+| [Quality](https://github.com/xkqg/DeepSharp/wiki/Quality) | What has to be true before anything is allowed in. |
+| [Roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) | What is next, and in which order. |
+| [Contributing](https://github.com/xkqg/DeepSharp/blob/main/CONTRIBUTING.md) | A failing test first, no warnings, a coverage check that fails rather than reports. |
+| [Security](https://github.com/xkqg/DeepSharp/wiki/Security) | What counts as a vulnerability here, and how to report one. |
 
-## Getting started
+## The packages
 
-```
-git clone https://github.com/xkqg/DeepSharp.git
-cd DeepSharp
-dotnet build DeepSharp.slnx -c Release
-```
+| | |
+|---|---|
+| `DeepSharp` | The tensors, their shape, and the backend the arithmetic runs on. |
+| `DeepSharp.Pipelines` | The data half: readers, features, the split, gaps, scales, the handover — saved as a file and replayed. |
+| `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand, through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
+| `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
 
-Runs on .NET 10. The [wiki](https://github.com/xkqg/DeepSharp/wiki) has the walkthrough, what you can build
-with it, the design decisions and what is planned. [CONTRIBUTING.md](CONTRIBUTING.md) has the rules for
-changing anything here: a failing test first, no warnings, and a coverage check that fails rather than
-reports.
-
-## Licence
-
-MIT. See [LICENSE](LICENSE).
+Runs on .NET 10. MIT — see [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE).
