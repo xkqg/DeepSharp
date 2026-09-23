@@ -72,17 +72,44 @@ public sealed class PipelineBuilder
     /// <exception cref="InvalidOperationException">This builder has already been split.</exception>
     public FittingBuilder SplitByTime(string column, double train, double validation, double test)
     {
-        ThrowIfSplit();
-
-        _steps.Add(new SplitByTimeStep(column, train, validation, test));
-        _split = true;
-
-        return new FittingBuilder(_steps);
+        return Split(new SplitByTimeStep(column, train, validation, test));
     }
+
+    /// <summary>Splits the rows at random, and opens the half of the chain that learns.</summary>
+    /// <param name="train">The share the model learns from.</param>
+    /// <param name="validation">The share used while choosing between models.</param>
+    /// <param name="test">The share kept back until the end.</param>
+    /// <param name="seed">The number that makes the shuffle repeatable.</param>
+    /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
+    /// <remarks>The right split for rows that do not depend on one another.</remarks>
+    public FittingBuilder SplitAtRandom(double train, double validation, double test, int seed = 20260923) =>
+        Split(new SplitAtRandomStep(new SplitShares(train, validation, test), seed));
+
+    /// <summary>Splits at random while keeping the mixture of one column the same in every part.</summary>
+    /// <param name="column">The column whose mixture is kept.</param>
+    /// <param name="train">The share the model learns from.</param>
+    /// <param name="validation">The share used while choosing between models.</param>
+    /// <param name="test">The share kept back until the end.</param>
+    /// <param name="seed">The number that makes the shuffle repeatable.</param>
+    /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
+    /// <remarks>The right split when an answer is rare enough that a plain shuffle could lose it.</remarks>
+    public FittingBuilder SplitStratified(
+        string column, double train, double validation, double test, int seed = 20260923) =>
+        Split(new SplitStratifiedStep(column, new SplitShares(train, validation, test), seed));
 
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
     public Pipeline Build() => new(Declaration);
+
+    private FittingBuilder Split(ISplitStep step)
+    {
+        ThrowIfSplit();
+
+        _steps.Add(step);
+        _split = true;
+
+        return new FittingBuilder(_steps);
+    }
 
     private void ThrowIfSplit()
     {

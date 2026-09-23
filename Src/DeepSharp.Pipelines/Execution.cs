@@ -38,7 +38,18 @@ public interface IBindsColumns : IPipelineStep
 /// </remarks>
 public sealed class Pipeline
 {
-    internal Pipeline(PipelineDeclaration declaration) => Declaration = declaration;
+    /// <summary>A pipeline that carries out this declaration.</summary>
+    /// <param name="declaration">The steps, in the order they were written.</param>
+    /// <remarks>
+    /// Public because a declaration read back from a file is exactly as runnable as one written in C#,
+    /// which is the whole promise: <c>new Pipeline(PipelineDeclaration.FromJson(text)).Run()</c>.
+    /// </remarks>
+    public Pipeline(PipelineDeclaration declaration)
+    {
+        ArgumentNullException.ThrowIfNull(declaration);
+
+        Declaration = declaration;
+    }
 
     /// <summary>The steps, exactly as they were declared.</summary>
     public PipelineDeclaration Declaration { get; }
@@ -60,5 +71,55 @@ public sealed class Pipeline
                 "This pipeline never says which columns take part. Declare them, and the rest is dropped.");
 
         return schema.Bind(source.Open());
+    }
+
+    /// <summary>Runs the whole declaration: reads, divides the rows, fits on training, replays everywhere.</summary>
+    /// <returns>The data, where every row landed, and what each step learned.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The declaration names no source, no columns, or no split while something in it learns.
+    /// </exception>
+    /// <remarks>
+    /// The order is the point. Rows are divided before anything is fitted, every fit sees the training
+    /// rows alone, and what it learned is then applied to all of them — so validation, test and a row that
+    /// arrives a year from now meet the same numbers.
+    /// </remarks>
+    public PreparedData Run()
+    {
+        var table = Prepare();
+        var splits = Assign(table);
+        var fitted = new Dictionary<int, FittedStepValues>();
+
+        for (var at = 0; at < Declaration.Steps.Count; at++)
+        {
+            if (Declaration.Steps[at] is not ILearnsFromData step)
+            {
+                continue;
+            }
+
+            var learned = step.Fit(table, splits);
+            step.ApplyTo(table, learned);
+            fitted[at] = learned;
+        }
+
+        return new PreparedData(Declaration, table, splits, fitted);
+    }
+
+    private Split[] Assign(Table table)
+    {
+        var split = Declaration.Steps.OfType<IAssignsSplits>().FirstOrDefault();
+
+        if (split is not null)
+        {
+            return split.Assign(table);
+        }
+
+        if (Declaration.Steps.Any(step => step is IFittedStep))
+        {
+            throw new InvalidOperationException(
+                "Something in this pipeline learns from the data, and the rows have not been divided.");
+        }
+
+        // A pipeline that learns nothing needs no split, and every row is simply itself.
+        return [.. Enumerable.Repeat(Split.Train, table.RowCount)];
     }
 }

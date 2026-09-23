@@ -26,6 +26,8 @@ public sealed class StepCatalog
         catalog.Register<ReadCsvStep>();
         catalog.Register<DeclareStep>();
         catalog.Register<SplitByTimeStep>();
+        catalog.Register<SplitAtRandomStep>();
+        catalog.Register<SplitStratifiedStep>();
         catalog.Register<FillMissingStep>();
 
         return catalog;

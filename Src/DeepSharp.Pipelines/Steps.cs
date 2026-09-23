@@ -65,7 +65,7 @@ public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows
 /// This is the line in the chain. Above it nothing may learn from the data; below it the operations that do
 /// become available, and each of them is fitted on the training rows alone.
 /// </remarks>
-public sealed record SplitByTimeStep : ISplitStep, IPipelineStep<SplitByTimeStep>
+public sealed record SplitByTimeStep : ISplitStep, IAssignsSplits, IPipelineStep<SplitByTimeStep>
 {
     /// <summary>Declares a split in time, by three shares that together make a whole.</summary>
     /// <param name="column">The column that says when a row happened.</param>
@@ -114,6 +114,43 @@ public sealed record SplitByTimeStep : ISplitStep, IPipelineStep<SplitByTimeStep
 
     /// <summary>The share kept back until the end.</summary>
     public double Test { get; }
+
+    /// <inheritdoc />
+    public Split[] Assign(Table table)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+
+        var column = table[Column];
+        var order = new (int Row, double When)[table.RowCount];
+
+        for (var row = 0; row < table.RowCount; row++)
+        {
+            if (column.IsMissing(row))
+            {
+                // A row with no time cannot be placed in a split by time, and guessing where it belongs is
+                // how a row from next year ends up in the training data.
+                throw new InvalidOperationException(
+                    $"Row {row + 1} has no '{Column}', so a split in time has nowhere to put it.");
+            }
+
+            order[row] = (row, When(column, row));
+        }
+
+        Array.Sort(order, (left, right) => left.When.CompareTo(right.When));
+
+        return new SplitShares(Train, Validation, Test)
+            .Over(table.RowCount)
+            .Placed([.. order.Select(each => each.Row)]);
+    }
+
+    private static double When(IColumn column, int row) => column switch
+    {
+        Column<DateTime> timestamps => timestamps[row]!.Value.Ticks,
+        Column<long> numbers => numbers[row]!.Value,
+        Column<double> numbers => numbers[row]!.Value,
+        _ => throw new InvalidOperationException(
+            $"'{column.Name}' holds {column.Kind.ToString().ToLowerInvariant()}, which has no order in time."),
+    };
 
     /// <inheritdoc />
     public static string Name => "split.byTime";
@@ -166,7 +203,7 @@ public sealed record SplitByTimeStep : ISplitStep, IPipelineStep<SplitByTimeStep
 /// while a not-a-number is arithmetic that produced no number, which is a fault further upstream. They get
 /// different verbs because they deserve different answers.
 /// </remarks>
-public sealed record FillMissingStep : IFittedStep, IPipelineStep<FillMissingStep>
+public sealed record FillMissingStep : IFittedStep, ILearnsFromData, IPipelineStep<FillMissingStep>
 {
     /// <summary>Declares that the gaps in a column are filled the named way.</summary>
     /// <param name="column">The column with gaps in it.</param>
@@ -208,6 +245,118 @@ public sealed record FillMissingStep : IFittedStep, IPipelineStep<FillMissingSte
 
     /// <summary>What goes in them, learned from the training rows.</summary>
     public FillStrategy Strategy { get; }
+
+    /// <summary>The column written beside a filled one, saying where the gaps were.</summary>
+    /// <remarks>
+    /// Always, and not behind a flag. Filling destroys the difference between "absent" and "the value
+    /// happened to be that" permanently, so the difference is written down before it goes.
+    /// </remarks>
+    public string MarkerColumn => $"{Column}_was_missing";
+
+    /// <inheritdoc />
+    public FittedStepValues Fit(Table table, IReadOnlyList<Split> splits)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(splits);
+
+        var column = table[Column];
+        var learned = new FittedStepValues();
+
+        // Every number here comes from the training rows and from nowhere else. Fit on all of them and the
+        // validation rows have quietly taught the model about themselves, and nothing goes red.
+        var training = Enumerable.Range(0, table.RowCount)
+            .Where(row => splits[row] == Split.Train && !column.IsMissing(row))
+            .Select(row => NumberAt(column, row))
+            .ToArray();
+
+        learned.Learned("gaps", Enumerable.Range(0, table.RowCount).Count(column.IsMissing));
+
+        switch (Strategy.Name)
+        {
+            case "mean":
+                learned.Learned("value", Refuse.IfEmpty(training, Column).Average());
+                break;
+
+            case "median":
+                var sorted = Refuse.IfEmpty(training, Column).Order().ToArray();
+                learned.Learned("value", sorted.Length % 2 == 1
+                    ? sorted[sorted.Length / 2]
+                    : (sorted[(sorted.Length / 2) - 1] + sorted[sorted.Length / 2]) / 2);
+                break;
+
+            case "zero":
+                learned.Learned("value", 0);
+                break;
+
+            case "constant":
+                learned.Learned("value", Strategy.Value!.Value);
+                break;
+
+            default:
+                // Carrying the previous value forward learns nothing, and the value it uses depends on the
+                // row above rather than on the training set.
+                break;
+        }
+
+        return learned;
+    }
+
+    /// <inheritdoc />
+    public void ApplyTo(Table table, FittedStepValues fitted)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(fitted);
+
+        var column = table[Column];
+        var marker = new Column<double>(
+            MarkerColumn, ColumnKind.Number,
+            Enumerable.Range(0, table.RowCount).Select(row => (double?)(column.IsMissing(row) ? 1 : 0)));
+
+        switch (column)
+        {
+            case Column<double> numbers:
+                Fill(numbers, fitted, value => value);
+                break;
+
+            case Column<long> whole:
+                Fill(whole, fitted, value => (long)Math.Round(value, MidpointRounding.AwayFromZero));
+                break;
+
+            default:
+                throw new InvalidOperationException(
+                    $"'{Column}' holds {column.Kind.ToString().ToLowerInvariant()}, and a gap in it is not filled with a number.");
+        }
+
+        table.Put(marker);
+    }
+
+    private void Fill<T>(Column<T> column, FittedStepValues fitted, Func<double, T> asValue)
+        where T : struct
+    {
+        T? previous = null;
+
+        for (var row = 0; row < column.Count; row++)
+        {
+            if (!column.IsMissing(row))
+            {
+                previous = column[row];
+                continue;
+            }
+
+            column[row] = Strategy.Name == "previous"
+                ? previous ?? throw new InvalidOperationException(
+                    $"Row {row + 1} of '{Column}' is a gap with nothing before it to carry forward.")
+                : asValue(fitted.Number("value"));
+        }
+    }
+
+    private static double NumberAt(IColumn column, int row) => column switch
+    {
+        Column<double> numbers => numbers[row]!.Value,
+        Column<long> whole => whole[row]!.Value,
+        _ => throw new InvalidOperationException(
+            $"'{column.Name}' holds {column.Kind.ToString().ToLowerInvariant()}, and a gap in it is not filled with a number."),
+    };
 
     /// <inheritdoc />
     public static string Name => "fill.missing";
