@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Collections.Concurrent;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
@@ -15,7 +16,10 @@ namespace DeepSharp.Pipelines;
 /// </remarks>
 public sealed class StepCatalog
 {
-    private readonly Dictionary<string, Func<JsonElement, IPipelineStep>> _readers = [];
+    // Concurrent because one catalog is registered once and then read by everything in the process, and
+    // because a host may still teach it a verb after that. It also makes the one rule atomic: TryAdd either
+    // takes the slot or refuses it, so two packages registering the same verb cannot both believe they won.
+    private readonly ConcurrentDictionary<string, Func<JsonElement, IPipelineStep>> _readers = new(StringComparer.Ordinal);
 
     /// <summary>The verbs this library ships with, in a catalog of their own.</summary>
     /// <returns>A new catalog; the caller owns it.</returns>
