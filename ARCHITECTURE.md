@@ -100,7 +100,8 @@ grid of numbers or drawn. Naming them before the numbers exist is the point: eve
 same evidence, two runs are comparable without anyone remembering what was shown last time, and the report
 cannot quietly shrink to whatever happened to look good.
 
-The drawing lives in a separate, optional package; the pipeline holds only the declaration.
+The drawing lives in a separate, optional package that draws with **MatPlotLibNet**; the pipeline holds
+only the declaration.
 
 ### The rule that gives it meaning
 
@@ -344,6 +345,51 @@ learner is a network or a decision tree, an importer reads one foreign format or
 shaped around a single implementation is not a seam, it is that implementation with a longer name — and the
 cost is paid later, by the second implementation that turns out not to fit.
 
+### A column nobody declared is not carried, and that is a safety rule
+
+The split protects against learning from the wrong **rows**. It does nothing at all about the wrong
+**column**, and that gap is not theoretical: walking one row of a public dataset through this design found
+a column holding the answer in words. In the Titanic set as it is published, `alive` maps one-to-one onto
+`survived` — measured, 549 rows of `0`/`no` and 342 of `1`/`yes` — and `class` maps one-to-one onto
+`pclass`. Predict `survived`, carry everything the file happens to contain, and the model is handed the
+answer as an input. It scores beautifully on every split, and nothing goes red, because no fit was
+corrupted: the leak arrived as a column.
+
+So `Declare` names which columns take part, and what happens to the rest is declared rather than assumed:
+dropped, passed through, or handled. Dropping is the default, because a column nobody thought about is a
+column nobody checked. A warning on a feature that predicts the target perfectly is worth having as well,
+but it is the second line of defence; the first is that unnamed means absent.
+
+### A fill has a point beyond which it is invention
+
+Measured on the same dataset: `deck` is empty in 688 of 891 rows, 77 per cent, and 77.7 per cent within
+the training split alone. Filling it manufactures 688 values out of 203, after which the marking column
+carries every scrap of information the original had.
+
+The design knew two answers — fill it, or drop the row — and needed a third. A declared threshold above
+which filling is refused, leaving the marking column to speak for itself, so that a decision this large is
+made once, in the open, rather than by a mean quietly copied into three quarters of a column.
+
+### Reading a value is reading a dialect
+
+Two columns in that file hold `True` and `False`, capitalised, which is how one popular tool writes a
+boolean and is not how any of the others do. A parser expecting `true`/`false` or `1`/`0` does not fail on
+them: it reads text, and the column silently becomes categorical.
+
+Every scalar kind therefore has its accepted forms written down and parsed under the invariant culture —
+which also settles the decimal point, the thousands separator and the date order before they can settle
+themselves differently on somebody else's machine.
+
+### The samples read real files, landed in the repository
+
+`Samples/data` holds two published datasets, fetched once and committed: one with gaps and categories and
+no time column at all, one that is a price series with a date. Invented numbers demonstrate the happy path
+and nothing else, while these two between them force the design to answer for a column that is three
+quarters empty, a boolean dialect, a category that is sometimes absent, and a split that cannot be made by
+time because there is no time in the file. Landed rather than downloaded at run time, for the same reason
+a live source is fetched and landed: a sample that reaches the network is a sample that behaves
+differently on the day the network does.
+
 ## Decisions
 
 ### A tensor knows nothing about arithmetic
@@ -409,8 +455,8 @@ a runtime that runs alongside.
 ### Charts come from the training loop, not from the caller
 
 When the training loop exists, the metrics it already keeps are what the charts are drawn from — the caller
-never assembles arrays to plot. The drawing itself lives in a separate, optional package, so a trainer on a
-headless machine does not carry a renderer.
+never assembles arrays to plot. The drawing itself is **MatPlotLibNet**, in a separate optional package,
+so a trainer on a headless machine does not carry a renderer.
 
 ## What is borrowed on purpose
 
