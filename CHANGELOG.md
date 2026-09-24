@@ -78,7 +78,7 @@ wrong with it at once, each at its line and column.
 
 ### Added
 
-- **`DeepSharp.Notebooks.Verso` — a pipeline written as a notebook.** An extension for
+- **`DeepSharp.Verso.Notebooks` — a pipeline written as a notebook.** An extension for
   [Verso](https://www.versonotebooks.com/) in which every block is one step, written as the step's own
   JSON, and the blocks in the order they stand are the pipeline. A block is edited as text, with the verbs,
   keys and columns offered as you type, or field by field in Verso's properties panel; both write the same
@@ -89,8 +89,13 @@ wrong with it at once, each at its line and column.
   every problem it finds, the step that answers it, and a correlation block is drawn as a heatmap over the
   complete training rows. The toolbar runs the whole pipeline, fitting every step on the training rows, and
   exports it as the same pipeline file the chain writes. C# cells in the same notebook are handed the
-  pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. It
-  runs in Verso's VS Code extension and in `verso serve`, and is installed from Verso's Extensions panel.
+  pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. It is
+  installed from Verso's Extensions panel and runs in Verso's VS Code extension, in the browser editor
+  `verso serve` opens, and inside an application that takes Verso's engine as a dependency.
+
+- **Every package runs on .NET 8 as well as .NET 10.** Verso's browser editor runs on .NET 8 for as long as
+  .NET 8 is installed, and a package built for .NET 10 alone does not load there. Each package now carries a
+  build for both, a host takes the one for the runtime it is on, and every test runs on both.
 
 - **`OrderBy`, `order.by`** — the rows in the order of one or more columns, smallest first, so a time column
   puts the oldest row first. It refuses a gap in a key, and two rows whose keys are equal: nothing says which

@@ -30,10 +30,10 @@ Src/DeepSharp.Pipelines/          the data side
                                     the one walk every run is, the data after any step, what a fit learned, the handover
 Src/DeepSharp.Pipelines.DataFrame/   a reader through MatPlotLibNet.DataFrame
 Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
-Src/DeepSharp.Notebooks.Verso/       a pipeline written as a notebook in Verso
+Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
 Samples/                          runnable programs and the published data they read
 Tst/DeepSharp/                    the tests of the libraries
-Tst/DeepSharp.Notebooks.Verso/    the notebook's tests, run inside Verso's own engine
+Tst/DeepSharp.Verso.Notebooks/    the notebook's tests, run inside Verso's own engine
 ```
 
 The tensor library and the pipeline library do not reference each other, and a test reads their assembly
@@ -41,7 +41,10 @@ references to keep it that way.
 
 The notebook's tests are a suite of their own because Verso's engine and the validator the core's tests hold
 the pipeline schema to each need a different version of the C# compiler, and one test program can load only
-one. The coverage check and the release both run every suite they find, by the name every suite has.
+one. The coverage check and the release both run every suite they find, by the name every suite has, on every
+runtime the suite is built for. The check measures on the newest and runs the others: the two builds of one
+assembly, measured together, merge as one module and most of its branches lose their counts, so every class
+read as fully covered. The code is one code on both runtimes, so one measurement covers it.
 
 ## The design language: PDD, pipeline-driven design
 
@@ -435,7 +438,7 @@ DeepSharp.Learners.<Name>   something that learns from prepared data, behind the
 DeepSharp.Backends.<Name>   an engine behind ITensorBackend
 DeepSharp.Import.<Name>     reading weights or a model trained somewhere else
 DeepSharp.Charts            drawing, from the metrics the loop already keeps
-DeepSharp.Notebooks.<Host>  a front end: a pipeline written and looked at in a notebook host
+DeepSharp.<Host>.<Part>     a front end inside a host: DeepSharp.Verso.Notebooks
 ```
 
 Naming by role rather than by vendor is not tidiness. A package called after a framework implies that the
@@ -450,8 +453,10 @@ which one is underneath; a trainer from an established .NET library belongs unde
 sits beside the model rather than below it. Both distinctions disappear the moment a package is named
 after the logo instead.
 
-A notebook front end is named the same way: its role first, the host it runs in second. The host names what
-it carries, the way a reader's format does; the package is not Verso's, it is DeepSharp's way into it.
+A front end is the one exception, by decision: it is named after its host first and after what it is there
+second — `DeepSharp.Verso.Notebooks`. It carries nothing of the host inside it, it plugs into it, and a person
+looks for it by the host's name, in the host's own list of extensions. Another part for the same host takes the
+same prefix. The package is not Verso's; it is DeepSharp's way into it.
 
 A project is created when there is code to put in it. Six empty assemblies laid out in advance are a
 diagram that has to be maintained; the layout above is the decision, and each package appears the day its
@@ -615,7 +620,7 @@ the same view.
 
 ### A notebook is one more front end of the declaration
 
-`DeepSharp.Notebooks.Verso` writes a pipeline as a Verso notebook: one block per step, each block the step's
+`DeepSharp.Verso.Notebooks` writes a pipeline as a Verso notebook: one block per step, each block the step's
 own JSON, and the blocks, in the order they stand, are the steps in the order they run. The notebook is the
 declaration; saving it saves the steps, and what a block shows is never saved, because it is worked out from
 somebody's own data each time it is asked for. The steps are read through a catalog as a file's are, and
@@ -656,6 +661,33 @@ as steps is refused too. Two ways around that are written down rather than trust
 Jupyter without asking any extension, and a package installed from Verso's Extensions panel is loaded only after
 a Jupyter file has been opened, so the refusal on the way in holds only for an install at the top of Verso's
 extensions folder. A test pins the order Verso opens things in, so a Verso that changes it is noticed.
+
+The same package runs wherever Verso does, and it is the same code in each: Verso's VS Code extension, the
+browser editor `verso serve` starts, and an application that takes Verso's engine as an ordinary dependency. They
+drive a part through the same interfaces and differ in what surrounds it — how the package is loaded, and who
+draws the output and passes a click on. What does differ is the runtime, and not the way one would guess: the
+VS Code host takes the newest .NET installed, while the browser host stays on .NET 8 for as long as .NET 8 is
+there. A package built for .NET 10 alone failed to load in the browser — "System.Runtime, Version=10.0.0.0"
+not found — so every package ships a build for .NET 8 and one for .NET 10, and a host takes the one that
+matches the runtime it is on. The Extensions panel keeps one install per runtime, in a folder named after it,
+and loads the newest one the runtime it is on can run, so two hosts on one machine each find their own. The
+code is one code for both: where .NET 10 had a shorter way to say something, the way both runtimes have is the
+one used — a JSON writer's line ending among them, so a pipeline file is written with a line feed on every
+machine and runtime — and both suites run on both runtimes.
+
+The block's kernel answers Verso's question for the faults in a text, but no Verso editor asks it: they ask for
+completions and hover texts only. A fault is therefore shown where a block runs, on its card, each at its line.
+
+An application that embeds the engine gets the notebook's parts from Verso's own discovery, which reads every
+assembly beside the application that references Verso's abstractions; the notebook's own tests open it exactly
+so. Verso's editor itself is not published for applications to reuse, so such an application does what the
+editor does: it draws a block's output, which is HTML; it hands a button's `data-action`, `data-extension-id`
+and `data-payload` to the part the button names, with the notebook's variables and operations; it draws again
+when a block's output is updated or a gesture says it changed the blocks; and it gives the toolbar's Run and
+Export a context of its own. An application that only wants the pipeline reads each block with
+`StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write the file
+with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds the
+steps and no fit, because nothing ran them there.
 
 ## Decisions
 

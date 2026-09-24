@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <PackageId>DeepSharp</PackageId>
     <Description>The best of both worlds: TensorFlow's way of describing a network, PyTorch's way of running it. Deep learning in C#: the layer over the engines that already exist. Describe, train and use a network in C# while the arithmetic runs on .NET's own vector maths out of the box, or on libtorch through TorchSharp when the work gets bigger — swapping between them does not change a line of your model. DeepSharp provides what an engine does not: the model's shape, the path your data takes into it, the training loop, the checkpoints and the charts.</Description>
     <PackageTags>deep-learning;machine-learning;neural-network;tensor;autograd;tensorflow;pytorch;torchsharp;keras;dotnet</PackageTags>

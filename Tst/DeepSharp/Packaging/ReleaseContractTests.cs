@@ -182,6 +182,31 @@ public class ReleaseContractTests
             .Select(file => Path.GetRelativePath(Root, file).Replace(Path.DirectorySeparatorChar, '/'));
 
     [Fact]
+    public void EveryPackage_ShipsABuildForEachRuntimeAVersoSurfaceRuns()
+    {
+        // Verso's browser host stays on .NET 8 for as long as that runtime is installed, its VS Code host takes the
+        // newest one, and a notebook cell may reference any of these packages. A package built for one runtime alone
+        // fails to load on the other with an error that names neither the package nor the cure. Measured: .NET 8
+        // could not load a build for .NET 10 alone, "System.Runtime, Version=10.0.0.0" not found.
+        var single = PackableProjects()
+            .Where(project => !FrameworksOf(project).SequenceEqual(["net8.0", "net10.0"]))
+            .ToArray();
+
+        Assert.True(single.Length == 0, $"Built for one runtime only: {string.Join(", ", single)}");
+    }
+
+    /// <summary>The frameworks a project is built for, in the order it names them.</summary>
+    private static IReadOnlyList<string> FrameworksOf(string project)
+    {
+        var document = XDocument.Load(Path.Join(Root, project));
+        var named = document.Descendants("TargetFrameworks").Select(frameworks => frameworks.Value)
+            .Concat(document.Descendants("TargetFramework").Select(framework => framework.Value))
+            .First();
+
+        return [.. named.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+    }
+
+    [Fact]
     public void TheReadmeAndTheChangelog_AgreeOnWhichVersionThisIs()
     {
         // The README is the package's front page on NuGet. A number there that is behind the package it is

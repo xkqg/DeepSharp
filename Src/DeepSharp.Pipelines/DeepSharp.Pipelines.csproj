@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <PackageId>DeepSharp.Pipelines</PackageId>
     <Description>Pipeline-driven design for .NET: declare the whole course from raw data to a validated model once, as one artefact, and replay it. The chain is the enforcement — anything that learns from the data is only offered after you have said how to split, so fitting on everything is not a mistake you can make and be warned about later. A declaration written in C# and one written as a file reach equally far, and each is the other read back.</Description>
     <PackageTags>machine-learning;pipeline;data-preparation;feature-engineering;normalization;data-leakage;etl;dataframe;dotnet</PackageTags>

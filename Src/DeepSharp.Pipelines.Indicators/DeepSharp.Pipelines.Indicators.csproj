@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <PackageId>DeepSharp.Pipelines.Indicators</PackageId>
     <Description>Financial and signal-processing indicators as pipeline features, borrowed from MatPlotLibNet rather than written again: moving averages, RSI, ATR, ADX, MACD, Bollinger bands, stochastic, VWAP and more, each arriving as one or more columns before the split because an indicator learns nothing from the data as a whole. Two properties are tested rather than promised — the window only looks backwards, and the warm-up is an absence rather than a value.</Description>
     <PackageTags>machine-learning;pipeline;indicators;technical-analysis;feature-engineering;finance;dotnet</PackageTags>

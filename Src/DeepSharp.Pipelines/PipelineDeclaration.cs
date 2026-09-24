@@ -152,8 +152,8 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
 
         var walked = KeyAt(WalkedFor(position + 1) - 1);
 
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(
-            string.Create(CultureInfo.InvariantCulture, $"{walked}@{position}"))));
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            string.Create(CultureInfo.InvariantCulture, $"{walked}@{position}")))).ToLowerInvariant();
     }
 
     /// <summary>How many steps the rows after the first so many are worked out through.</summary>
@@ -173,7 +173,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
             hash.AppendData(previous);
             hash.AppendData(steps[at].Canonical());
             previous = hash.GetHashAndReset();
-            keys[at] = Convert.ToHexStringLower(previous);
+            keys[at] = Convert.ToHexString(previous).ToLowerInvariant();
         }
 
         return keys;

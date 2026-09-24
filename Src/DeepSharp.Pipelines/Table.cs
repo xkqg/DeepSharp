@@ -265,7 +265,7 @@ public sealed class Table
             hash.AppendData(bytes);
         }
 
-        return Convert.ToHexStringLower(hash.GetHashAndReset());
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
 
     private IEnumerable<RowIdentity> OwnIdentities()

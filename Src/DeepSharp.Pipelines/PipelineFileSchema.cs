@@ -25,7 +25,6 @@ internal static class PipelineFileSchema
     private static readonly JsonSerializerOptions Indented = new()
     {
         WriteIndented = true,
-        NewLine = "\n",
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
@@ -165,7 +164,8 @@ internal static class PipelineFileSchema
             })]);
         }
 
-        return schema.ToJsonString(Indented) + "\n";
+        // A serializer ends its lines the way the machine does on some runtimes; the schema is the same text everywhere.
+        return schema.ToJsonString(Indented).ReplaceLineEndings("\n") + "\n";
     }
 
     // More than spaces: the rule every name and every word a step holds is kept to.

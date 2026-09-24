@@ -51,14 +51,16 @@ which read the rows in their order and so need that order said first, with `.Ord
 
 ## A notebook to see it in
 
-`DeepSharp.Notebooks.Verso` writes the same pipeline as a [Verso](https://www.versonotebooks.com/) notebook,
+`DeepSharp.Verso.Notebooks` writes the same pipeline as a [Verso](https://www.versonotebooks.com/) notebook,
 one block per step, each block the step's own JSON — edited as text, or field by field in Verso's properties
 panel. "Show the data here" on a block runs the pipeline down to it and shows the rows there, each column
 coloured over the training rows and every row marked with the part it lands in. A column is excluded or made
 a category from the grid, and the notebook writes the step that does it. The toolbar runs the whole pipeline
 and exports it as the same file the chain writes.
 
-Install it from Verso's Extensions panel; it runs in Verso's VS Code extension and in `verso serve`. A C# cell
+Install it from Verso's Extensions panel. The same package runs in Verso's VS Code extension, in the browser
+editor `verso serve` opens, and inside an application of your own — the
+[Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook#where-it-runs) page says what each needs. A C# cell
 in the same notebook reads what the blocks declare, as text — it is there after "Show the data here" or the
 toolbar's run, and taken back whenever the blocks may no longer make it:
 
@@ -97,6 +99,6 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 | `DeepSharp.Pipelines` | The data half: readers, features, the split, gaps, scales, the handover — saved as a file and replayed. |
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand, through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
-| `DeepSharp.Notebooks.Verso` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block. |
+| `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block. |
 
-Runs on .NET 10. MIT — see [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE).
+Runs on .NET 8 and .NET 10. MIT — see [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE).

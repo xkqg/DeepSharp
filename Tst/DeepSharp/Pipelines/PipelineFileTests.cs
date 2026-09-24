@@ -198,6 +198,17 @@ public class PipelineFileTests
     }
 
     [Fact]
+    public void APipelineFile_IsWrittenWithOneLineEnding_WhateverMachineOrRuntimeWritesIt()
+    {
+        // A file written on one machine is diffed, compared and read back on another. A line ending taken from the
+        // machine would make the same pipeline two different files, and the schema two different schemas.
+        string[] written = [Passengers().ToJson(), Trained().ToJson(), StepCatalog.BuiltIn().JsonSchema()];
+
+        Assert.All(written, text => Assert.Contains('\n', text));
+        Assert.All(written, text => Assert.DoesNotContain('\r', text));
+    }
+
+    [Fact]
     public void AStepRefusingItsOwnValues_IsReportedInTheFilesWords_NotInThoseOfACSharpParameter()
     {
         // A step refuses a value the way a C# method refuses an argument, naming the parameter; a file has keys,

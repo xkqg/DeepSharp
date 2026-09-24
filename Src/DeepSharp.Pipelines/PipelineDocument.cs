@@ -59,7 +59,7 @@ internal sealed class PipelineDocument
     {
         var buffer = new ArrayBufferWriter<byte>();
 
-        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true, NewLine = "\n" }))
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
         {
             writer.WriteStartObject();
             writer.WriteNumber(VersionKey, PipelineDeclaration.Version);
@@ -92,7 +92,8 @@ internal sealed class PipelineDocument
             writer.WriteEndObject();
         }
 
-        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+        // A writer ends its lines the way the machine does on some runtimes; a file is the same file everywhere.
+        return Encoding.UTF8.GetString(buffer.WrittenSpan).ReplaceLineEndings("\n");
     }
 
     /// <summary>Reads the steps a file declares, leaving what a fit learned to the fit.</summary>

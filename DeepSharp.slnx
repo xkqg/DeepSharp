@@ -4,7 +4,7 @@
     <Project Path="Src/DeepSharp.Pipelines/DeepSharp.Pipelines.csproj" />
     <Project Path="Src/DeepSharp.Pipelines.DataFrame/DeepSharp.Pipelines.DataFrame.csproj" />
     <Project Path="Src/DeepSharp.Pipelines.Indicators/DeepSharp.Pipelines.Indicators.csproj" />
-    <Project Path="Src/DeepSharp.Notebooks.Verso/DeepSharp.Notebooks.Verso.csproj" />
+    <Project Path="Src/DeepSharp.Verso.Notebooks/DeepSharp.Verso.Notebooks.csproj" />
   </Folder>
   <Folder Name="/Samples/">
     <Project Path="Samples/DeepSharp.Sample.Pipelines/DeepSharp.Sample.Pipelines.csproj" />
@@ -13,7 +13,7 @@
   <Folder Name="/Tst/DeepSharp/">
     <Project Path="Tst/DeepSharp/DeepSharp.Tests.csproj" />
   </Folder>
-  <Folder Name="/Tst/DeepSharp.Notebooks.Verso/">
-    <Project Path="Tst/DeepSharp.Notebooks.Verso/DeepSharp.Notebooks.Verso.Tests.csproj" />
+  <Folder Name="/Tst/DeepSharp.Verso.Notebooks/">
+    <Project Path="Tst/DeepSharp.Verso.Notebooks/DeepSharp.Verso.Notebooks.Tests.csproj" />
   </Folder>
 </Solution>

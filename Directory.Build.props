@@ -14,9 +14,9 @@
          and the changelog heading carries the same one. -->
     <Version>0.3.0</Version>
 
-    <!-- Which frameworks a project targets is the project's own business: the library ships for two, the
-         test runner is an executable for one. Setting it here made the test project inherit both and then
-         refuse to run, having two entry points to choose between. -->
+    <!-- Which frameworks a project targets is the project's own business, said in the project itself. The
+         packages and the two suites are built for .NET 8 and .NET 10, because Verso's hosts run on either;
+         the sample is a program for one. A suite built for two is run with -f, naming which. -->
     <LangVersion>14</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

@@ -31,6 +31,9 @@ if (-not (Get-Command dotnet-coverage -ErrorAction SilentlyContinue)) {
 
 New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 
+# A part left from an earlier run is not evidence of this one.
+Get-ChildItem $outputDir -Filter '*.cobertura.xml' | Remove-Item
+
 # Every suite, found by the name every suite has rather than listed: a suite the gate never ran would leave its
 # package measured by nothing while the total still said PASS. Each is collected on its own and the results are
 # merged, so a class two suites both reach is judged on everything that reached it.
@@ -46,15 +49,27 @@ foreach ($suite in $suites) {
     dotnet build $suite.FullName --configuration Release
     if ($LASTEXITCODE -ne 0) { throw "Build failed: $name" }
 
-    $dll = Join-Path $suite.DirectoryName "bin/Release/net10.0/$name.dll"
-    if (-not (Test-Path $dll)) { throw "The test assembly is not where it was expected: $dll" }
+    # Every framework the suite was built for, newest first. The newest is measured; every other one is run, and a
+    # failure there fails the gate exactly as one on the newest does. Measuring both and merging them was tried and
+    # is wrong: the two builds of one assembly merge as one module and most of its branches lose their counts, so
+    # every class read as fully branched. The code is one code on both runtimes, so one measurement covers it.
+    $builds = @(Get-ChildItem (Join-Path $suite.DirectoryName 'bin/Release') -Directory |
+        Where-Object { Test-Path (Join-Path $_.FullName "$name.dll") } |
+        Sort-Object { [version]($_.Name -replace '^net', '') } -Descending)
+    if ($builds.Count -eq 0) { throw "The test assembly was built for no framework: $name" }
 
-    Write-Host "==> Collecting coverage: $name"
+    $measured = $builds[0]
+    Write-Host "==> Collecting coverage: $name on $($measured.Name)"
     $part = Join-Path $outputDir "$name.cobertura.xml"
-    & dotnet-coverage collect "dotnet exec $dll" --settings $settings --output $part --output-format cobertura
-    if ($LASTEXITCODE -ne 0) { throw "Coverage collection failed: $name" }
-
+    & dotnet-coverage collect "dotnet exec $(Join-Path $measured.FullName "$name.dll")" --settings $settings --output $part --output-format cobertura
+    if ($LASTEXITCODE -ne 0) { throw "Coverage collection failed: $name on $($measured.Name)" }
     $parts += $part
+
+    foreach ($build in $builds | Select-Object -Skip 1) {
+        Write-Host "==> Running $name on $($build.Name)"
+        & dotnet exec (Join-Path $build.FullName "$name.dll")
+        if ($LASTEXITCODE -ne 0) { throw "The suite failed: $name on $($build.Name)" }
+    }
 }
 
 Write-Host '==> Merging'
