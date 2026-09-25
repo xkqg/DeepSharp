@@ -107,8 +107,9 @@ wrong with it at once, each at its line and column.
   every problem it finds, the step that answers it, and a correlation block is drawn as a heatmap over the
   complete training rows. The toolbar runs the whole pipeline, fitting every step on the training rows, and
   exports it as the same pipeline file the chain writes. Its "Take over the saved columns" lists, at the schema's
-  block, every column whose decision taking the saved ones over would change, and changes nothing until the list's
-  own box is ticked. C# cells in the same notebook are handed the
+  block, every column whose decision taking the saved ones over would change — whether the source may lack it too, and
+  what becomes of the columns the schema does not name — with every saved drop the blocks cannot make and why, and
+  changes nothing until the list's own box is ticked. C# cells in the same notebook are handed the
   pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. It is
   installed from Verso's Extensions panel and runs in Verso's VS Code extension, in the browser editor
   `verso serve` opens, and inside an application that takes Verso's engine as a dependency.
@@ -155,7 +156,8 @@ wrong with it at once, each at its line and column.
   out; a column no step reads excluded in the schema with its kind, and any other dropped below the last step that
   reads it and the step that makes it; a category that remembers the kind it came from. Asked for what already is,
   each hands back the steps it was given. `ChoicesFor(columns)` says how each column stands — taking part, excluded,
-  dropped, made by a step and which one, kept with the rest, or not declared — and what can be done to it without
+  dropped, made by a step and which one, kept with the rest, or not declared, and whether the source may lack it —
+  and what can be done to it without
   breaking a rule, and `KindsFor(column, header)` the kinds it can be given, so the answer is never
   offered to be left out and a column a later step scales as a number is never offered to become a category. The
   schema's own `WithColumn`, `WithColumnExcluded` and `WithColumnKind` change one block alone. `WithOutput` places
@@ -175,9 +177,11 @@ wrong with it at once, each at its line and column.
   `PipelinePreset.FromJson(text, catalog)` reads it back through the same door as a pipeline file: every fault at
   once at its line and column, and a file from a newer version refused whole. A part it does not hold is not
   written. `preset.TakeOver(pipeline, header)` makes the steps the preset's decisions make of a pipeline and lists,
-  before anything is applied, every column whose decision changes, the output before and after, the schema's order
-  when that changes, and the source's columns the preset never showed; steps that would break a rule are refused
-  with every fault. `preset.NewColumns(header)` names the source's columns the decisions never showed.
+  before anything is applied, every column whose decision changes — its standing, its kind, the kind a category was,
+  whether the source may lack it — the output before and after, the schema's order and what it does with the columns
+  it does not name when those change, the source's columns the preset never showed, and every saved drop it cannot
+  make because its column no longer reaches the end, with how that column stands; steps that would break a rule are
+  refused with every fault. `preset.NewColumns(header)` names the source's columns the decisions never showed.
   `CsvRowSource.HeaderOf(path)` reads a file's header alone. In a chain,
   `.Declare(preset, out declared)` takes the saved schema at the source and `.Output(preset, out taken)` the drops and
   the output where the chain names its answer, each saying what it decides before anything runs.

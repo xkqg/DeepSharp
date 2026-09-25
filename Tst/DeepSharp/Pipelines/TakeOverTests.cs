@@ -204,6 +204,8 @@ public class TakeOverTests
         Assert.Equal(expected.Output, actual.Output);
         Assert.Equal(expected.DeclareOrder?.Before, actual.DeclareOrder?.Before);
         Assert.Equal(expected.DeclareOrder?.After, actual.DeclareOrder?.After);
+        Assert.Equal(expected.DeclareRemainder, actual.DeclareRemainder);
+        Assert.Equal(expected.DropsNotMade, actual.DropsNotMade);
     }
 
     [Fact]
@@ -302,4 +304,279 @@ public class TakeOverTests
         Assert.Equal(3, ordered.Declaration.Steps.Count);
         Assert.Equal(4, filled.Declaration.Steps.Count);
     }
+
+    [Fact]
+    public void AChainWithoutTheStepThatMakesASavedDrop_ListsItAsNotMadeWhereItNamesItsAnswer_AndOnlyThere()
+    {
+        var path = Repository.Data("titanic.csv");
+        var saved = PipelinePreset.Of(FillsAndDrops(path).Declaration, header: null);
+
+        var written = Pdd.Create()
+            .ReadCsv(path)
+            .Declare(saved, out var declared)
+            .SplitStratified("survived", 0.70, 0.15)
+            .Normalise("fare");
+
+        written.Output(saved, out var taken);
+
+        Assert.Empty(declared.DropsNotMade);
+        Assert.Equal(["age_was_missing"], taken.DropsNotMade.Select(drop => drop.Column));
+        Assert.Equal(ColumnStanding.NotDeclared, taken.DropsNotMade[0].After.Standing);
+        Assert.False(taken.DropsNotMade[0].InSource);
+        Assert.DoesNotContain(taken.Changes, change => change.Column == "age_was_missing");
+        Assert.DoesNotContain(written.Declaration.Steps, step => step is DropColumnsStep);
+    }
+
+    // ---- a saved drop the take-over cannot make: listed, never made, never refused
+
+    private static readonly string[] Seaborn =
+        ["survived", "pclass", "sex", "age", "sibsp", "parch", "fare", "embarked", "class", "who", "adult_male", "deck", "embark_town", "alive", "alone"];
+
+    private static PipelineBuilder Head(Action<SchemaBuilder>? schema = null, Remainder remainder = Remainder.Drop) =>
+        Pdd.Create()
+            .ReadCsv("titanic.csv")
+            .Declare(schema ?? (columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Number("fare")), remainder);
+
+    // The pipeline the drops were saved from: the fill makes age_was_missing, and a drop leaves it out.
+    private static FittingBuilder FillsAndDrops(string path = "titanic.csv", Remainder remainder = Remainder.Drop) =>
+        Pdd.Create()
+            .ReadCsv(path)
+            .Declare(columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Number("fare"), remainder)
+            .SplitStratified("survived", 0.70, 0.15)
+            .FillMissing("age", With.Median)
+            .Normalise("fare")
+            .Drop("age_was_missing")
+            .Target("survived");
+
+    private static PipelineDeclaration WithMaker(Action<SchemaBuilder>? schema = null, Remainder remainder = Remainder.Drop) =>
+        Head(schema, remainder).SplitStratified("survived", 0.70, 0.15).FillMissing("age", With.Median).Normalise("fare").Target("survived").Declaration;
+
+    private static PipelineDeclaration NoMaker(Remainder remainder = Remainder.Drop) =>
+        Head(remainder: remainder).SplitStratified("survived", 0.70, 0.15).Normalise("fare").Target("survived").Declaration;
+
+    // Blocks that declare embarked and write it down as numbers, one column per port, which takes embarked away.
+    private static PipelineDeclaration Encoded(As how = As.OneHot) =>
+        Head(columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Number("fare").Text("embarked"))
+            .SplitStratified("survived", 0.70, 0.15)
+            .FillMissing("age", With.Median)
+            .Encode("embarked", how)
+            .Normalise("fare")
+            .Target("survived")
+            .Declaration;
+
+    private static PipelinePreset DropsEmbarked(DeclareStep declare) => new(declare, ["embarked"], new TargetStep("survived"), Seaborn);
+
+    private static DeclareStep ExcludesSex() => new(
+    [
+        new ColumnDeclaration("survived", ColumnKind.Integer, false), new ColumnDeclaration("pclass", ColumnKind.Integer, false),
+        new ColumnDeclaration("age", ColumnKind.Number, true), new ColumnDeclaration("fare", ColumnKind.Number, false),
+        new ColumnDeclaration("sex", ColumnKind.Text, false) { Excluded = true },
+    ]);
+
+    [Fact]
+    public void ASavedDropOfAColumnNothingMakesOrTheSchemaLeavesOut_IsListedAsNotMade_AndTheStepsStayAsTheyAre()
+    {
+        var fromTheFill = PipelinePreset.Of(FillsAndDrops().Declaration, Seaborn);
+
+        var known = fromTheFill.TakeOver(NoMaker(), Seaborn);
+        var unknown = fromTheFill.TakeOver(NoMaker(), header: null);
+        var embarked = DropsEmbarked(fromTheFill.Declare).TakeOver(WithMaker(), Seaborn);
+
+        Assert.Equal(NoMaker().Steps, known.Steps);
+        Assert.Empty(known.Changes);
+        Assert.Equal(["age_was_missing"], known.DropsNotMade.Select(drop => drop.Column));
+        Assert.Equal(ColumnStanding.NotDeclared, known.DropsNotMade[0].After.Standing);
+        Assert.False(known.DropsNotMade[0].InSource);
+        Assert.Equal(["age_was_missing"], unknown.DropsNotMade.Select(drop => drop.Column));
+        Assert.Null(unknown.DropsNotMade[0].InSource);
+        Assert.Equal(WithMaker().Steps, embarked.Steps);
+        Assert.Equal(["embarked"], embarked.DropsNotMade.Select(drop => drop.Column));
+        Assert.True(embarked.DropsNotMade[0].InSource);
+    }
+
+    [Fact]
+    public void ASavedDropOfAColumnAStepBelowTakesAway_IsListedAsNotMade_WithHowItStands()
+    {
+        var consumed = DropsEmbarked(Encoded().Steps.OfType<DeclareStep>().Single());
+        var months = Pdd.Create()
+            .ReadCsv("series.csv")
+            .Declare(schema => schema.Timestamp("Date").Number("close"))
+            .OrderBy("Date")
+            .TimeParts("Date", TimePart.Month)
+            .SplitByTime("Date", 0.70, 0.15, 5)
+            .EncodeCategories()
+            .Target("close")
+            .Declaration;
+        var savedMonths = new PipelinePreset(months.Steps.OfType<DeclareStep>().Single(), ["Date_month"], new TargetStep("close"));
+
+        var encoded = consumed.TakeOver(Encoded(), Seaborn);
+        var madeThenTaken = savedMonths.TakeOver(months, ["Date", "close"]);
+
+        Assert.Equal(Encoded().Steps, encoded.Steps);
+        Assert.Equal(["embarked"], encoded.DropsNotMade.Select(drop => drop.Column));
+        Assert.Equal(ColumnStanding.Taking, encoded.DropsNotMade[0].After.Standing);
+        Assert.True(encoded.DropsNotMade[0].InSource);
+        Assert.Null(consumed.TakeOver(Encoded(), header: null).DropsNotMade[0].InSource);
+        Assert.Equal(["Date_month"], madeThenTaken.DropsNotMade.Select(drop => drop.Column));
+        Assert.Equal(ColumnStanding.Made, madeThenTaken.DropsNotMade[0].After.Standing);
+        Assert.Null(madeThenTaken.DropsNotMade[0].InSource);
+    }
+
+    [Fact]
+    public void ASavedDropThatIsPlaced_AlreadyHeld_OrCoveredByTheSavedSchema_IsNeverListedAsNotMade_AndEachIsListedOnce()
+    {
+        var fromTheFill = PipelinePreset.Of(FillsAndDrops().Declaration, Seaborn);
+        var kept = PipelinePreset.Of(FillsAndDrops(remainder: Remainder.Keep).Declaration, Seaborn);
+        var fareDropped = PipelinePreset.Of(
+            Head().SplitStratified("survived", 0.70, 0.15).FillMissing("age", With.Median).Normalise("fare").Drop("fare").Target("survived").Declaration, Seaborn);
+        var noReaderOfFare = Head().SplitStratified("survived", 0.70, 0.15).FillMissing("age", With.Median).Target("survived").Declaration;
+        var sexDropped = PipelinePreset.Of(new PipelineDeclaration(WithMaker(remainder: Remainder.Keep).Excluding("sex")), Seaborn);
+
+        // A source that carries a column of the name the fill would make, kept with the rest of the file: its drop is placed.
+        string[] carries = [.. Seaborn, "age_was_missing"];
+
+        TakeOverCase[] cases =
+        [
+            new(fromTheFill, WithMaker(), Seaborn),
+            new(fromTheFill, FillsAndDrops().Declaration, Seaborn),
+            new(new PipelinePreset(ExcludesSex(), ["sex"], new TargetStep("survived"), Seaborn), WithMaker(), Seaborn),
+            new(fareDropped, noReaderOfFare, Seaborn),
+            new(kept, NoMaker(Remainder.Keep), Seaborn),
+            new(kept, NoMaker(Remainder.Keep), null),
+            new(kept, NoMaker(Remainder.Keep), carries),
+            new(sexDropped, WithMaker(remainder: Remainder.Keep), Seaborn),
+            new(DropsEmbarked(Encoded().Steps.OfType<DeclareStep>().Single()), Encoded(As.Ordinal), Seaborn),
+        ];
+
+        Assert.All(cases, each =>
+        {
+            var takenOver = each.Saved.TakeOver(each.Into, each.Header);
+
+            Assert.Empty(takenOver.Faults);
+            Assert.Empty(takenOver.DropsNotMade);
+            Assert.All(each.Saved.Drop, column =>
+            {
+                var listed = takenOver.Changes.Count(change => change.Column == column);
+                var held = each.Into.ChoicesFor([column]).Rows[0].Standing is ColumnStanding.Dropped or ColumnStanding.Excluded;
+
+                Assert.Equal(1, listed + (listed == 0 && held ? 1 : 0));
+            });
+        });
+    }
+
+    [Fact]
+    public void ARefusedTakeOver_ListsNoDropAsNotMade()
+    {
+        var withoutAge = new PipelinePreset(
+            Pdd.Create().ReadCsv("titanic.csv").Declare(columns => columns.Integer("survived", "pclass").Number("fare")).Declaration.Steps.OfType<DeclareStep>().Single(),
+            ["colour"]);
+
+        var refused = withoutAge.TakeOver(Blocks(), Header);
+
+        Assert.NotEmpty(refused.Faults);
+        Assert.Empty(refused.DropsNotMade);
+        Assert.Null(refused.DeclareRemainder);
+    }
+
+    [Fact]
+    public void AColumnWhoseOnlyChangeIsWhetherTheSourceMayLackIt_IsListed()
+    {
+        var ageRequired = WithMaker(columns => columns.Integer("survived", "pclass").Number("age").Number("fare"));
+
+        var required = PipelinePreset.Of(ageRequired, Seaborn).TakeOver(WithMaker(), Seaborn);
+        var optional = PipelinePreset.Of(WithMaker(), Seaborn).TakeOver(ageRequired, Seaborn);
+
+        var age = Assert.Single(required.Changes);
+
+        Assert.Equal("age", age.Column);
+        Assert.Equal(true, age.Before.Optional);
+        Assert.Equal(false, age.After.Optional);
+        Assert.Equal(false, Assert.Single(optional.Changes).Before.Optional);
+        Assert.Null(WithMaker().ChoicesFor(["sex"]).Rows[0].Optional);
+    }
+
+    [Fact]
+    public void WhatBecomesOfTheColumnsTheSchemaDoesNotName_IsListedWhenItChanges_WhetherTheSourcesColumnsAreKnownOrNot()
+    {
+        var keep = PipelinePreset.Of(WithMaker(remainder: Remainder.Keep), Seaborn);
+        var refuse = PipelinePreset.Of(WithMaker(remainder: Remainder.Refuse), Seaborn);
+
+        Assert.Equal(new RemainderChange(Remainder.Drop, Remainder.Keep), keep.TakeOver(WithMaker(), Seaborn).DeclareRemainder);
+        Assert.Equal(new RemainderChange(Remainder.Drop, Remainder.Keep), keep.TakeOver(WithMaker(), header: null).DeclareRemainder);
+        Assert.Equal(new RemainderChange(Remainder.Drop, Remainder.Refuse), refuse.TakeOver(WithMaker(), Seaborn).DeclareRemainder);
+        Assert.Equal(new RemainderChange(Remainder.Refuse, Remainder.Drop), PipelinePreset.Of(WithMaker(), Seaborn).TakeOver(WithMaker(remainder: Remainder.Refuse), Seaborn).DeclareRemainder);
+        Assert.Null(keep.TakeOver(WithMaker(remainder: Remainder.Keep), Seaborn).DeclareRemainder);
+
+        // Blocks without a schema said nothing about the rest before.
+        Assert.Equal(
+            new RemainderChange(null, Remainder.Drop),
+            Saved(Blocks()).TakeOver(new PipelineDeclaration([new ReadCsvStep("titanic.csv")]), Header).DeclareRemainder);
+    }
+
+    [Fact]
+    public void EveryPartOfASavedColumn_TheRemainder_AndEveryParameterOfAnOutput_IsListedWhenItAloneChanges()
+    {
+        var catalog = StepCatalog.BuiltIn();
+        var parts = catalog.Describe("declare").Parameters.OfType<ColumnDeclarationsParameter>().Single().Parts;
+
+        // A part the listing does not compare would be applied unseen: every part is here, the name being the row itself.
+        Assert.Equal(["name", "kind", "optional", "excluded", "was"], parts.Select(part => part.Parameter.Key));
+
+        var blocks = WithMaker();
+        var category = new PipelineDeclaration(blocks.WithKind("pclass", ColumnKind.Category));
+        var categoryWithoutWas = WithMaker(columns => columns.Integer("survived").Category("pclass").Optional("age", ColumnKind.Number).Number("fare"));
+        PartCase[] flips =
+        [
+            new("kind", WithMaker(columns => columns.Integer("survived").Number("pclass").Optional("age", ColumnKind.Number).Number("fare")), blocks, "pclass"),
+            new("optional", WithMaker(columns => columns.Integer("survived", "pclass").Number("age").Number("fare")), blocks, "age"),
+            new("excluded", new PipelineDeclaration(blocks.Excluding("pclass")), blocks, "pclass"),
+            new("was", category, categoryWithoutWas, "pclass"),
+        ];
+
+        Assert.Equal(parts.Skip(1).Select(part => part.Parameter.Key), flips.Select(flip => flip.Part));
+        Assert.All(flips, flip =>
+            Assert.Equal([flip.Column], PipelinePreset.Of(flip.Saved, Seaborn).TakeOver(flip.Into, Seaborn).Changes.Select(change => change.Column)));
+        Assert.NotNull(PipelinePreset.Of(WithMaker(remainder: Remainder.Refuse), Seaborn).TakeOver(blocks, Seaborn).DeclareRemainder);
+
+        // Every parameter of every kind of output, changed alone.
+        var series = Pdd.Create()
+            .ReadCsv("series.csv")
+            .Declare(schema => schema.Timestamp("Date").Number("close", "open", "a", "b", "w"))
+            .OrderBy("Date")
+            .SplitByTime("Date", 0.70, 0.15, 5)
+            .Declaration;
+        OutputCase[] outputs =
+        [
+            new(new TargetStep("close"), new TargetStep("open"), "column"),
+            new(new DistributionStep(["a", "b"]), new DistributionStep(["a", "w"]), "columns"),
+            new(new DistributionStep(["a", "b"]), new DistributionStep(["a", "b"], "w"), "scaleBy"),
+            new(new LabelsStep(["a", "b"]), new LabelsStep(["a", "w"]), "columns"),
+            new(new LabelsStep(["a", "b"]), new LabelsStep(["a", "b"], 1), "ones"),
+            new(new AheadStep("close", 5), new AheadStep("open", 5), "column"),
+            new(new AheadStep("close", 5), new AheadStep("close", 3), "ahead"),
+            new(new AheadStep("close", 5), new AheadStep("close", 5, AheadAs.Return), "as"),
+        ];
+
+        foreach (var verb in catalog.Descriptions.Where(description => catalog.ReadStep(description.Template) is INamesTheAnswer).Select(description => description.Verb))
+        {
+            Assert.Equal(
+                catalog.Describe(verb).Parameters.Select(parameter => parameter.Key).Order(StringComparer.Ordinal),
+                outputs.Where(output => output.Before.Verb == verb).Select(output => output.Parameter).Order(StringComparer.Ordinal));
+        }
+
+        Assert.All(outputs, output =>
+        {
+            var into = new PipelineDeclaration(series.WithOutput(output.Before));
+            var takenOver = PipelinePreset.Of(new PipelineDeclaration(series.WithOutput(output.After)), header: null).TakeOver(into, header: null);
+
+            Assert.Empty(takenOver.Faults);
+            Assert.Equal(new OutputChange(output.Before, output.After), takenOver.Output);
+        });
+    }
+
+    private readonly record struct TakeOverCase(PipelinePreset Saved, PipelineDeclaration Into, IReadOnlyList<string>? Header);
+
+    private readonly record struct PartCase(string Part, PipelineDeclaration Saved, PipelineDeclaration Into, string Column);
+
+    private readonly record struct OutputCase(INamesTheAnswer Before, INamesTheAnswer After, string Parameter);
 }

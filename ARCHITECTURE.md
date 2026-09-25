@@ -287,11 +287,16 @@ without exception: none was written before the second, and its output may be a w
 
 Taking a preset over lists before it applies. `TakeOver` makes the steps — the schema whole, in place of the one
 there or directly after the source; the drops made the preset's; the output the preset's, placed whole, or none — and
-lists every column whose decision that changes, from how it stood to how it stands after: how it stands, its kind,
-the kind a category was. What a column offers and what it is to the output follow from those, so they are not listed
-for themselves; the output is listed once, before and after, and the schema's order when the columns both schemas
-name stand in another. A column a step makes is never said to be missing from the source. The source's columns the
-preset never showed are named new. A take-over whose steps would break a rule is refused with every fault and
+lists every column whose decision that changes, from how it stood to how it stands after: every part the schema
+writes of it — how it stands, its kind, the kind a category was, whether the source may lack it. What a column offers
+and what it is to the output follow from those, so they are not listed for themselves; the output is listed once,
+before and after, the schema's order when the columns both schemas name stand in another, and what the schema does
+with the columns it does not name when that changes. A column a step makes is never said to be missing from the
+source. The source's columns the preset never showed are named new. A drop the preset saved can only be made of a
+column that reaches the end of the pipeline: one that nothing makes any more, that the schema leaves out, or that a
+step below takes away cannot be dropped, and it is listed as not made, with how it stands, rather than refused —
+refusing would hold back every other decision the preset saved, and a notebook's saved columns are written again from
+the blocks at their next change anyway. A take-over whose steps would break a rule is refused with every fault and
 applies nothing, and the same pipeline, preset and header give the same answer whoever asks: a notebook's list, its
 Apply, and code. A source's header is read on its own, by the same reading as the whole file, so a large file costs
 its first line. A chain written in code takes a preset over in two places, because it is written in order: the
@@ -799,8 +804,11 @@ The columns saved beside a notebook are taken over in two presses, and the first
 "Take over the saved columns" reads the file and the source's first line, works the take-over out against the blocks
 as they stand, and lists it at the schema's block — at the source's, for blocks without a schema, which the saved one
 would follow: every column whose decision would change, from how it stands to how it would stand, a column a step
-makes named by that step; the output and the schema's order, when they would change; and the source's columns the
-file never showed. Under the list is one box, and ticking it applies what the list showed. The box carries it — the
+makes named by that step; the output, the schema's order and what the schema does with the columns it does not name,
+when they would change; every saved drop the blocks cannot make, with why, since the file forgets it the next time it
+is written; and the source's columns the file never showed. When the blocks already hold everything else, those drops
+are all the list says, and there is nothing to apply. Otherwise under the list is one box, and ticking it applies
+what the list showed. The box carries it — the
 file's text as it was read, and the key of the blocks it was listed for — so nothing is remembered between the two
 presses and what is applied is what was shown. Ticked over other blocks it is refused, with the words to take over
 again; while the blocks make no pipeline it is refused, naming the block that stops them; and a tick that finds the

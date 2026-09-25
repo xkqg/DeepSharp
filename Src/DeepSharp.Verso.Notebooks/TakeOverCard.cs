@@ -13,11 +13,13 @@ namespace DeepSharp.Verso.Notebooks;
 /// What taking over the columns saved beside a notebook would change, listed at a block before anything is changed.
 /// </summary>
 /// <remarks>
-/// Every column whose decision would change, from how it stands to how it would stand; the output and the schema's order
-/// when they would change; and the source's columns the saved file never showed. Under the list, one box that applies
+/// Every column whose decision would change, from how it stands to how it would stand; the output, the schema's order,
+/// and what the schema does with the columns it does not name, when they would change; every saved drop the blocks
+/// cannot make, with why; and the source's columns the saved file never showed. Under the list, one box that applies
 /// it, carrying what it listed: the saved file as it was read, and the key of the blocks it was listed for — so what is
-/// applied is what was shown, and only to the blocks it was shown for. A take-over whose blocks would break a rule is
-/// listed with every rule and offers nothing to apply.
+/// applied is what was shown, and only to the blocks it was shown for. A drop the blocks cannot make is never made, and
+/// the saved file forgets it the next time it is written; when nothing else would change there is nothing to apply. A
+/// take-over whose blocks would break a rule is listed with every rule and offers nothing to apply.
 /// </remarks>
 internal static class TakeOverCard
 {
@@ -42,9 +44,18 @@ internal static class TakeOverCard
 
         var html = new StringBuilder(Style).Append("<div class=\"deepsharp-block deepsharp-takeover\">");
 
+        // The blocks hold everything the saved columns can make: nothing to apply, only the drops they cannot make to say.
         if (takenOver.Steps.SequenceEqual(blocks.Steps))
         {
-            html.Append("<div class=\"deepsharp-head\">The blocks already hold every column decision saved beside the notebook.</div>");
+            html.Append("<div class=\"deepsharp-head\">")
+                .Append(takenOver.DropsNotMade.Count == 0
+                    ? "The blocks already hold every column decision saved beside the notebook."
+                    : "The blocks hold every other column decision saved beside the notebook.")
+                .Append("</div>");
+            NotMade(
+                html, takenOver.DropsNotMade,
+                "The saved columns also drop these, which the blocks cannot drop; the saved file forgets them at the next change the blocks "
+                + "accept or the next run of the whole pipeline:");
             NewColumns(html, takenOver.NewColumns);
 
             return CellOutput.Html(html.Append("</div>").ToString());
@@ -72,7 +83,13 @@ internal static class TakeOverCard
                 .Append(Encoded(string.Join(", ", order.After))).Append("</li>");
         }
 
+        if (takenOver.DeclareRemainder is { } rest)
+        {
+            html.Append("<li>the columns the schema does not name: ").Append(Rest(rest.Before)).Append(" → ").Append(Rest(rest.After)).Append("</li>");
+        }
+
         html.Append("</ul>");
+        NotMade(html, takenOver.DropsNotMade, "The saved columns also drop these, which the blocks cannot drop, and applying forgets them:");
         NewColumns(html, takenOver.NewColumns);
 
         // Drawn unticked; ticking it applies what is listed above, and the key says which blocks it was listed for.
@@ -97,16 +114,51 @@ internal static class TakeOverCard
     // How a column stands, in the words a person reads: a column a step makes is named by that step.
     private static string Stands(ColumnChoice column, PipelineDeclaration declaration) => column.Standing switch
     {
-        ColumnStanding.Taking => $"taken, {Kind(column)}",
-        ColumnStanding.Excluded => $"excluded, {Kind(column)}",
+        ColumnStanding.Taking => $"taken, {Declared(column)}",
+        ColumnStanding.Excluded => $"excluded, {Declared(column)}",
         ColumnStanding.Dropped => "dropped",
         ColumnStanding.Kept => "kept with the rest of the file",
         ColumnStanding.Made => $"made by step {column.MadeBy + 1}, '{declaration.Steps[column.MadeBy!.Value].Verb}'",
         _ => "not in the schema",
     };
 
-    private static string Kind(ColumnChoice column) =>
-        column is { Kind: ColumnKind.Category, Was: { } was } ? $"category (was {Word(was)})" : Word(column.Kind!.Value);
+    // What the schema says of a column it names: its kind, what a category was, and whether the source may lack it.
+    private static string Declared(ColumnChoice column) =>
+        (column is { Kind: ColumnKind.Category, Was: { } was } ? $"category (was {Word(was)})" : Word(column.Kind!.Value))
+        + (column.Optional == true ? ", the source may lack it" : string.Empty);
+
+    // Why a saved drop cannot be made, without naming a step: a column may come from more than one.
+    private static string WhyNotMade(DropNotMade drop) => drop.After.Standing != ColumnStanding.NotDeclared
+        ? "a step below takes it before the end"
+        : drop.InSource == true
+            ? "the schema does not take it, so it is left out already"
+            : "nothing declares or makes it, so there is nothing to drop, and a step that makes it again makes it take part";
+
+    // What the schema does with the columns it does not name.
+    private static string Rest(Remainder? remainder) => remainder switch
+    {
+        Remainder.Drop => "left behind",
+        Remainder.Keep => "kept as text",
+        Remainder.Refuse => "refused",
+        _ => "no schema yet",
+    };
+
+    private static void NotMade(StringBuilder html, IReadOnlyList<DropNotMade> drops, string head)
+    {
+        if (drops.Count == 0)
+        {
+            return;
+        }
+
+        html.Append("<div class=\"deepsharp-head\">").Append(Encoded(head)).Append("</div><ul class=\"deepsharp-changes\">");
+
+        foreach (var drop in drops)
+        {
+            html.Append("<li><code>").Append(Encoded(drop.Column)).Append("</code>: ").Append(Encoded(WhyNotMade(drop))).Append("</li>");
+        }
+
+        html.Append("</ul>");
+    }
 
     private static string Word(ColumnKind kind) => kind.ToString().ToLowerInvariant();
 

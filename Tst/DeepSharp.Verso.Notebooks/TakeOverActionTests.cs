@@ -374,6 +374,120 @@ public sealed class TakeOverActionTests : IDisposable
         });
     }
 
+    // Blocks without the fill, so nothing makes the column the saved decisions drop.
+    private static readonly string[] Unfilled = [Titanic[0], Titanic[1], Titanic[2], Titanic[4]];
+
+    // The decisions saved from the blocks with the fill, dropping the column the fill makes.
+    private static PipelineDeclaration Filled(Func<PipelineDeclaration, IReadOnlyList<IPipelineStep>>? then = null)
+    {
+        var blocks = new PipelineDeclaration([.. Titanic.Select(text => NotebookVerbs.Catalog().ReadStep(text))]);
+
+        return new PipelineDeclaration(new PipelineDeclaration(then?.Invoke(blocks) ?? blocks.Steps).Excluding("age_was_missing"));
+    }
+
+    [Fact]
+    public async Task ASavedDropTheBlocksCannotMake_IsListedWithoutApply_WhenTheBlocksHoldEveryOtherDecision()
+    {
+        await using var notebook = await NotebookAsync(Unfilled);
+
+        Saved(Filled().Steps);
+        await ListAsync(notebook);
+
+        var card = Card(notebook);
+
+        Assert.DoesNotContain("The blocks already hold every column decision saved beside the notebook.", card, StringComparison.Ordinal);
+        Assert.Contains("The blocks hold every other column decision saved beside the notebook.", card, StringComparison.Ordinal);
+        Assert.Contains(
+            "the saved file forgets them at the next change the blocks accept or the next run of the whole pipeline", card, StringComparison.Ordinal);
+        Assert.Contains(
+            "<code>age_was_missing</code>: nothing declares or makes it, so there is nothing to drop, and a step that makes it again makes it take part",
+            card, StringComparison.Ordinal);
+        Assert.Null(ApplyBox(notebook));
+    }
+
+    [Fact]
+    public async Task ASavedDropTheBlocksCannotMake_IsListedBesideTheChanges_AndApplyingForgetsIt_WhileItsEchoChangesNothing()
+    {
+        await using var notebook = await NotebookAsync(Unfilled);
+        var decided = new PipelineDeclaration(new PipelineDeclaration([.. Unfilled.Select(text => NotebookVerbs.Catalog().ReadStep(text))]).Excluding("pclass"));
+
+        Saved(Filled(blocks => blocks.Excluding("pclass")).Steps);
+        await ListAsync(notebook);
+
+        var card = Card(notebook);
+
+        Assert.Contains("<code>pclass</code>: taken, integer → excluded, integer", card, StringComparison.Ordinal);
+        Assert.Contains("The saved columns also drop these, which the blocks cannot drop, and applying forgets them:", card, StringComparison.Ordinal);
+        Assert.True(card.IndexOf("<code>pclass</code>", StringComparison.Ordinal) < card.IndexOf("<code>age_was_missing</code>", StringComparison.Ordinal));
+
+        var action = ApplyBox(notebook)!.Value.Action;
+        var applied = await ApplyAsync(notebook, action, ticked: true);
+
+        Assert.True(applied.StateChanged);
+        Assert.Equal(decided, Blocks(notebook));
+        Assert.Empty(PipelinePreset.FromJson(await File.ReadAllTextAsync(ColumnsFile, TestContext.Current.CancellationToken), NotebookVerbs.Catalog()).Drop);
+
+        // The echo carries the saved file that still drops the column: the blocks hold everything it can make.
+        var echo = await ApplyAsync(notebook, action, ticked: true);
+
+        Assert.False(echo.StateChanged);
+        Assert.Equal(decided, Blocks(notebook));
+        Assert.DoesNotContain(notebook.Scaffold.Cells[1].Outputs, output => output.IsError);
+    }
+
+    [Fact]
+    public async Task EachSavedDropTheBlocksCannotMake_SaysWhy_WithoutNamingAStep()
+    {
+        await using var notebook = await NotebookAsync(
+            Titanic[0],
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "pclass", "kind": "integer", "optional": false}, {"name": "age", "kind": "number", "optional": true}, {"name": "fare", "kind": "number", "optional": false}, {"name": "embarked", "kind": "text", "optional": false}]}""",
+            Titanic[2],
+            """{"step": "encode", "column": "embarked", "as": "onehot", "unseen": "reserve"}""",
+            Titanic[4]);
+
+        File.WriteAllText(ColumnsFile, new PipelinePreset((DeclareStep)Blocks(notebook).Steps[1], ["age_was_missing", "sex", "embarked"]).ToJson());
+        await ListAsync(notebook);
+
+        var card = Card(notebook);
+
+        Assert.Contains("<code>age_was_missing</code>: nothing declares or makes it, so there is nothing to drop", card, StringComparison.Ordinal);
+        Assert.Contains("<code>sex</code>: the schema does not take it, so it is left out already", card, StringComparison.Ordinal);
+        Assert.Contains("<code>embarked</code>: a step below takes it before the end", card, StringComparison.Ordinal);
+        Assert.Null(ApplyBox(notebook));
+    }
+
+    [Fact]
+    public async Task WhetherTheSourceMayLackAColumn_AndWhatBecomesOfTheColumnsTheSchemaDoesNotName_AreListed()
+    {
+        await using var notebook = await NotebookAsync([Titanic[0], Titanic[1].Replace("\"remainder\": \"drop\"", "\"remainder\": \"keep\"", StringComparison.Ordinal), .. Titanic[2..]]);
+        var saved = Blocks(notebook).Steps.Select(step => step is DeclareStep declare
+            ? new DeclareStep(declare.Columns.Select(column => column.Name == "age" ? column with { Optional = false } : column), Remainder.Refuse)
+            : step);
+
+        Saved([.. saved]);
+        await ListAsync(notebook);
+
+        var card = Card(notebook);
+
+        Assert.Contains("<code>age</code>: taken, number, the source may lack it → taken, number</li>", card, StringComparison.Ordinal);
+        Assert.Contains("the columns the schema does not name: kept as text → refused", card, StringComparison.Ordinal);
+        Assert.NotNull(ApplyBox(notebook));
+    }
+
+    [Fact]
+    public async Task UnderASchemaThatKeepsTheRest_ASavedDropIsMade_EvenOfAColumnTheSourceLacks()
+    {
+        await using var notebook = await NotebookAsync([Titanic[0], Titanic[1].Replace("\"remainder\": \"drop\"", "\"remainder\": \"keep\"", StringComparison.Ordinal), Titanic[2], Titanic[4]]);
+        var kept = new PipelineDeclaration(new PipelineDeclaration([.. Titanic.Select(text => NotebookVerbs.Catalog().ReadStep(text)).Select(step => step is DeclareStep declare
+            ? new DeclareStep(declare.Columns, Remainder.Keep) : step)]).Excluding("age_was_missing"));
+
+        Saved(kept.Steps);
+        await ListAsync(notebook);
+
+        Assert.Contains("<code>age_was_missing</code>: kept with the rest of the file → dropped — not in the source", Card(notebook), StringComparison.Ordinal);
+        Assert.NotNull(ApplyBox(notebook));
+    }
+
     [Fact]
     public async Task BlocksWithoutASchema_AreListedAtTheirSource_AndTakeTheSavedSchemaDirectlyAfterIt()
     {
@@ -387,6 +501,7 @@ public sealed class TakeOverActionTests : IDisposable
         var action = notebook.Scaffold.Cells[0].Outputs[^1].Content.Boxes().Single().Action;
 
         Assert.Contains("<code>survived</code>: not in the schema → taken, integer", card, StringComparison.Ordinal);
+        Assert.Contains("the columns the schema does not name: no schema yet → left behind", card, StringComparison.Ordinal);
 
         var applied = await notebook.GestureAsync(notebook.Scaffold.Cells[0], action, "true");
 

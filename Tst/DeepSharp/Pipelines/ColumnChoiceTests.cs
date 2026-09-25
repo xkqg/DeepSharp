@@ -399,7 +399,7 @@ public class ColumnChoiceTests
         Assert.Equal(unread.Steps, unread.Including("sex", ColumnKind.Text, Header));
         Assert.Equal(unread.Steps, unread.Excluding("sex"));
         Assert.Equal(unread.Steps, unread.WithKind("sex", ColumnKind.Category));
-        Assert.Equal(new ColumnChoice("sex", ColumnStanding.NotDeclared, null, null, ColumnOffers.None, ColumnRole.None), Row(unread, "sex"));
+        Assert.Equal(new ColumnChoice("sex", ColumnStanding.NotDeclared, null, null, null, ColumnOffers.None, ColumnRole.None), Row(unread, "sex"));
     }
 
     // ---- how each column stands, and what it offers

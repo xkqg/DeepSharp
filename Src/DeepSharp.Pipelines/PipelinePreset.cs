@@ -64,20 +64,24 @@ public sealed record PipelinePreset
     /// <param name="header">The source's columns as they are now, or nothing when they are not known.</param>
     /// <returns>
     /// The steps the decisions make of the pipeline and every change they make: each column whose decision changes, the
-    /// output, the schema's order, and the source's columns the decisions never showed. When those steps would break a
-    /// rule, every fault instead, and no steps.
+    /// output, the schema's order, what the schema does with the columns it does not name, the source's columns the
+    /// decisions never showed, and every saved drop that cannot be made. When those steps would break a rule, every
+    /// fault instead, and no steps.
     /// </returns>
     /// <remarks>
     /// The schema is taken whole — in place of the one there, or directly after the source when there is none; the
-    /// drops are made these; and the output is this one, placed whole, or none. A column is listed when how it stands,
-    /// its kind or the kind it was changes: what it offers, or what it is to the output, follows from those, and the
-    /// output is listed once. The same pipeline, decisions and header give the same answer, whoever asks.
+    /// drops are made these; and the output is this one, placed whole, or none. A column is listed when a part the
+    /// schema writes of it changes — how it stands, its kind, the kind it was, whether the source may lack it: what it
+    /// offers, or what it is to the output, follows from those, and the output is listed once. A saved drop whose column
+    /// does not reach the end — nothing makes it, the schema leaves it out, or a step below takes it away — cannot be
+    /// made and is listed as such, never refused. The same pipeline, decisions and header give the same answer, whoever
+    /// asks.
     /// </remarks>
     public PresetTakeOver TakeOver(PipelineDeclaration into, IReadOnlyList<string>? header)
     {
         ArgumentNullException.ThrowIfNull(into);
 
-        return Listed(into, Taken(into), header);
+        return Listed(into, Taken(into), header, Drop);
     }
 
     /// <summary>Takes the schema alone over into a pipeline, listing what it decides.</summary>
@@ -86,9 +90,10 @@ public sealed record PipelinePreset
     /// <returns>
     /// The steps with this schema in place of the one there, or directly after the source; every column whose decision
     /// that changes; and the source's columns the decisions — all of them, the drops and the output too — never showed.
+    /// No drop is made here, so none is listed as not made.
     /// </returns>
     internal PresetTakeOver TakeOverOfTheSchema(PipelineDeclaration into, IReadOnlyList<string>? header) =>
-        Listed(into, WithSchema(into), header);
+        Listed(into, WithSchema(into), header, drops: []);
 
     /// <summary>The columns of a source these decisions never showed.</summary>
     /// <param name="header">The source's columns as they are now.</param>
@@ -103,14 +108,15 @@ public sealed record PipelinePreset
         return [.. header.Except(Source ?? Named(), StringComparer.Ordinal)];
     }
 
-    // What a take-over made of a pipeline, listed against how it stood: or every fault, and no steps.
-    private PresetTakeOver Listed(PipelineDeclaration into, TakenSteps taken, IReadOnlyList<string>? header)
+    // What a take-over made of a pipeline, listed against how it stood: or every fault, and no steps. The drops it was
+    // asked to make are each looked for in the result, so one that could not be made is listed rather than lost.
+    private PresetTakeOver Listed(PipelineDeclaration into, TakenSteps taken, IReadOnlyList<string>? header, IReadOnlyList<string> drops)
     {
         var newColumns = header is null ? null : NewColumns(header);
 
         if (taken.Result is not { } result)
         {
-            return new PresetTakeOver([], taken.Faults, newColumns, [], null, null);
+            return new PresetTakeOver([], taken.Faults, newColumns, [], null, null, null, []);
         }
 
         IReadOnlyList<string> asked = [.. (header ?? []).Concat(NamedBy(into)).Concat(NamedBy(result)).Distinct(StringComparer.Ordinal)];
@@ -128,7 +134,17 @@ public sealed record PipelinePreset
             }
         }
 
-        return new PresetTakeOver(result.Steps, [], newColumns, changes, OutputChanged(into.Output, result.Output), OrderChanged(into, result));
+        // A drop is made when its column ends dropped, or left out by the schema that names it; otherwise it did not reach the end.
+        DropNotMade[] notMade =
+        [
+            .. result.ChoicesFor(drops).Rows
+                .Where(row => row.Standing is not (ColumnStanding.Dropped or ColumnStanding.Excluded))
+                .Select(row => new DropNotMade(
+                    row.Name, row, header is null || row.Standing == ColumnStanding.Made ? null : header.Contains(row.Name, StringComparer.Ordinal))),
+        ];
+
+        return new PresetTakeOver(
+            result.Steps, [], newColumns, changes, OutputChanged(into.Output, result.Output), OrderChanged(into, result), RemainderChanged(into, result), notMade);
     }
 
     /// <summary>Writes the preset as JSON.</summary>
@@ -252,8 +268,9 @@ public sealed record PipelinePreset
     private static IEnumerable<string> SchemaNames(PipelineDeclaration declaration) =>
         declaration.Steps.OfType<DeclareStep>().SelectMany(declare => declare.Columns.Select(column => column.Name));
 
-    // What decides a column: how it stands, its kind, and the kind a category was.
-    private static ColumnDecision Decided(ColumnChoice choice) => new(choice.Standing, choice.Kind, choice.Was);
+    // What decides a column: every part the schema writes of it — how it stands, which says whether it is excluded, its
+    // kind, the kind a category was, and whether the source may lack it; the name is the row itself.
+    private static ColumnDecision Decided(ColumnChoice choice) => new(choice.Standing, choice.Kind, choice.Was, choice.Optional);
 
     // The output, when it changes: by what each writes, as placing one decides.
     private static OutputChange? OutputChanged(INamesTheAnswer? before, INamesTheAnswer? after)
@@ -266,6 +283,15 @@ public sealed record PipelinePreset
         return before is not null && after is not null && before.Canonical().AsSpan().SequenceEqual(after.Canonical())
             ? null
             : new OutputChange(before, after);
+    }
+
+    // What the schema does with the columns it does not name, when that changes: from nothing, when there was no schema.
+    private static RemainderChange? RemainderChanged(PipelineDeclaration into, PipelineDeclaration result)
+    {
+        var before = into.Steps.OfType<DeclareStep>().FirstOrDefault()?.Remainder;
+        var after = result.Steps.OfType<DeclareStep>().First().Remainder;
+
+        return before == after ? null : new RemainderChange(before, after);
     }
 
     // The schemas' order, when the names both declare stand in another; a name only one declares is a change of its own.
@@ -311,5 +337,6 @@ public sealed record PipelinePreset
     /// <param name="Standing">How it stands.</param>
     /// <param name="Kind">Its kind.</param>
     /// <param name="Was">The kind a category was.</param>
-    private readonly record struct ColumnDecision(ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was);
+    /// <param name="Optional">Whether the source may lack it.</param>
+    private readonly record struct ColumnDecision(ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, bool? Optional);
 }

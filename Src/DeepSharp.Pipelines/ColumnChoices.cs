@@ -63,6 +63,7 @@ public enum ColumnRole
 /// <param name="Standing">How it stands.</param>
 /// <param name="Kind">What it holds, when that is known: the kind the schema declares, or the kind a step made it with.</param>
 /// <param name="Was">The kind a category was before it became one, when it says.</param>
+/// <param name="Optional">Whether the source may lack it, for a column the schema names; nothing for one it does not.</param>
 /// <param name="Offers">What can be done to it without breaking a rule.</param>
 /// <param name="Role">What it is to the output: a column an answer comes back to, one an answer's way back reads, or neither.</param>
 /// <param name="MadeBy">
@@ -70,7 +71,7 @@ public enum ColumnRole
 /// brings. A column a step makes and a drop below leaves out is still made by that step.
 /// </param>
 public readonly record struct ColumnChoice(
-    string Name, ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, ColumnOffers Offers, ColumnRole Role, int? MadeBy = null);
+    string Name, ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, bool? Optional, ColumnOffers Offers, ColumnRole Role, int? MadeBy = null);
 
 /// <summary>Every column asked about, as each stands.</summary>
 /// <param name="Rows">One row per column asked, in the order they were asked.</param>
@@ -323,7 +324,7 @@ public static class ColumnChoiceExtensions
         var made = declared is null && Made(declaration, column);
 
         return new(
-            column, Standing(declaration, declared, column), declared?.Kind ?? KnownKind(declaration, column), declared?.Was, offers, role,
+            column, Standing(declaration, declared, column), declared?.Kind ?? KnownKind(declaration, column), declared?.Was, declared?.Optional, offers, role,
             made ? MadeAt(declaration, column) : null);
     }
 
