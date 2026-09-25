@@ -285,6 +285,17 @@ same door as the pipeline file — read with a catalog, every fault at its line 
 whole — because a second reader of the same steps would be a second set of rules. A preset names its version
 without exception: none was written before the second, and its output may be a word only the second has.
 
+Taking a preset over lists before it applies. `TakeOver` makes the steps — the schema whole, in place of the one
+there or directly after the source; the drops made the preset's; the output the preset's, placed whole, or none — and
+lists every column whose decision that changes, from how it stood to how it stands after: how it stands, its kind,
+the kind a category was. What a column offers and what it is to the output follow from those, so they are not listed
+for themselves; the output is listed once, before and after, and the schema's order when the columns both schemas
+name stand in another. A column a step makes is never said to be missing from the source. The source's columns the
+preset never showed are named new. A take-over whose steps would break a rule is refused with every fault and
+applies nothing, and the same pipeline, preset and header give the same answer whoever asks: a notebook's list, its
+Apply, and code. A source's header is read on its own, by the same reading as the whole file, so a large file costs
+its first line.
+
 One thing does not survive being written down, and it decides the shape of the rest: an inline lambda. A
 custom step is therefore registered under a name and looked up while parsing, and a file naming a step that
 nobody registered **refuses to load** instead of quietly skipping it. That pushes features towards a named

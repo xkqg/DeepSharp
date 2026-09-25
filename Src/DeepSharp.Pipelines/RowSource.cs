@@ -75,7 +75,7 @@ public sealed class CsvRowSource : IRowSource
 
         if (lines.Count == 0)
         {
-            throw new FormatException($"{what} has no header row, so its columns have no names.");
+            throw NoHeader(what);
         }
 
         ColumnNames = [.. lines[0].Select(cell => cell ?? string.Empty)];
@@ -120,6 +120,40 @@ public sealed class CsvRowSource : IRowSource
 
     /// <inheritdoc />
     public IEnumerable<IReadOnlyList<string?>> Rows => _rows;
+
+    /// <summary>The names a comma-separated file's header row gives its columns, read without the rows below it.</summary>
+    /// <param name="path">The file.</param>
+    /// <returns>The names, in the file's order.</returns>
+    /// <exception cref="FileNotFoundException">There is no file there.</exception>
+    /// <exception cref="FormatException">The file has no header row.</exception>
+    /// <remarks>
+    /// Read as the whole file is read — a quoted comma or line break belongs to its cell — and stopped once the header's
+    /// record is whole, so a large file costs its first line: the record ends at the first line whose quotes, counted
+    /// from the start, are even.
+    /// </remarks>
+    public static IReadOnlyList<string> HeaderOf(string path)
+    {
+        using var reader = new StreamReader(path, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var text = new StringBuilder();
+        var quotes = 0;
+
+        for (var line = reader.ReadLine(); line is not null; line = reader.ReadLine())
+        {
+            text.Append(line).Append('\n');
+            quotes += line.Count(character => character == '"');
+
+            if (quotes % 2 == 0)
+            {
+                break;
+            }
+        }
+
+        var records = Split(text.ToString());
+
+        return records.Count > 0 ? [.. records[0].Select(cell => cell ?? string.Empty)] : throw NoHeader(path);
+    }
+
+    private static FormatException NoHeader(string what) => new($"{what} has no header row, so its columns have no names.");
 
     private static List<IReadOnlyList<string?>> Split(string text)
     {

@@ -59,6 +59,50 @@ public sealed record PipelinePreset
         return new(declare, declaration.Steps.OfType<DropColumnsStep>().SelectMany(drop => drop.Columns), declaration.Output, header);
     }
 
+    /// <summary>Takes the decisions over into a pipeline, listing what that changes before anything is applied.</summary>
+    /// <param name="into">The pipeline the decisions are taken into: a notebook's blocks, or a chain written in code.</param>
+    /// <param name="header">The source's columns as they are now, or nothing when they are not known.</param>
+    /// <returns>
+    /// The steps the decisions make of the pipeline and every change they make: each column whose decision changes, the
+    /// output, the schema's order, and the source's columns the decisions never showed. When those steps would break a
+    /// rule, every fault instead, and no steps.
+    /// </returns>
+    /// <remarks>
+    /// The schema is taken whole — in place of the one there, or directly after the source when there is none; the
+    /// drops are made these; and the output is this one, placed whole, or none. A column is listed when how it stands,
+    /// its kind or the kind it was changes: what it offers, or what it is to the output, follows from those, and the
+    /// output is listed once. The same pipeline, decisions and header give the same answer, whoever asks.
+    /// </remarks>
+    public PresetTakeOver TakeOver(PipelineDeclaration into, IReadOnlyList<string>? header)
+    {
+        ArgumentNullException.ThrowIfNull(into);
+
+        IReadOnlyList<string>? newColumns = header is null ? null : [.. header.Except(Source ?? Named(), StringComparer.Ordinal)];
+        var taken = Taken(into);
+
+        if (taken.Result is not { } result)
+        {
+            return new PresetTakeOver([], taken.Faults, newColumns, [], null, null);
+        }
+
+        IReadOnlyList<string> asked = [.. (header ?? []).Concat(NamedBy(into)).Concat(NamedBy(result)).Distinct(StringComparer.Ordinal)];
+        var before = into.ChoicesFor(asked).Rows;
+        var after = result.ChoicesFor(asked).Rows;
+        List<ColumnChange> changes = [];
+
+        for (var at = 0; at < asked.Count; at++)
+        {
+            if (Decided(before[at]) != Decided(after[at]))
+            {
+                var made = before[at].Standing == ColumnStanding.Made || after[at].Standing == ColumnStanding.Made;
+
+                changes.Add(new ColumnChange(asked[at], before[at], after[at], header is null || made ? null : header.Contains(asked[at], StringComparer.Ordinal)));
+            }
+        }
+
+        return new PresetTakeOver(result.Steps, [], newColumns, changes, OutputChanged(into.Output, result.Output), OrderChanged(into, result));
+    }
+
     /// <summary>Writes the preset as JSON.</summary>
     /// <returns>The version it is written against, then what it holds; a part it does not hold is not written.</returns>
     public string ToJson() => PipelineDocument.Write(this);
@@ -106,6 +150,100 @@ public sealed record PipelinePreset
         return hash.ToHashCode();
     }
 
+    // The steps these decisions make of a pipeline, a stage at a time and each kept to the rules before the next: the
+    // drops they do not make taken back in, under the schema they were made under; the schema this one, in place of the
+    // one there or directly after the source; the drops they make; the output this one, or none.
+    private TakenSteps Taken(PipelineDeclaration into)
+    {
+        var taken = new TakenSteps(into, []);
+
+        foreach (var column in into.Steps.OfType<DropColumnsStep>().SelectMany(drop => drop.Columns).Except(Drop, StringComparer.Ordinal).ToArray())
+        {
+            taken = Kept(() => taken.Result!.Including(column, ColumnKind.Text, []));
+
+            if (taken.Result is null)
+            {
+                return taken;
+            }
+        }
+
+        var steps = taken.Result!.Steps;
+        var at = taken.Result.ColumnsAt;
+
+        taken = Kept(() => at >= 0 ? [.. steps.Take(at), Declare, .. steps.Skip(at + 1)] : [.. steps.Take(1), Declare, .. steps.Skip(1)]);
+
+        foreach (var column in Drop)
+        {
+            if (taken.Result is null)
+            {
+                return taken;
+            }
+
+            taken = Kept(() => taken.Result.Excluding(column));
+        }
+
+        return taken.Result is { } decided
+            ? Kept(() => Output is { } output ? decided.WithOutput(output) : decided.WithoutOutput())
+            : taken;
+    }
+
+    // The steps an operation makes as a declaration, or every rule they break; the schema's own refusal among them.
+    private static TakenSteps Kept(Func<IReadOnlyList<IPipelineStep>> operation)
+    {
+        try
+        {
+            var steps = operation();
+            var faults = PipelineDeclaration.FaultsIn(steps);
+
+            return faults.Count == 0 ? new TakenSteps(new PipelineDeclaration(steps), []) : new TakenSteps(null, faults);
+        }
+        catch (DeclarationException refused)
+        {
+            return new TakenSteps(null, refused.Faults);
+        }
+    }
+
+    // Every column these decisions name: the schema's, excluded ones too, the drops and the output's answers.
+    private IEnumerable<string> Named() =>
+        Declare.Columns.Select(column => column.Name).Concat(Drop).Concat(Output?.Answers ?? []);
+
+    // Every column a pipeline names: its schema's, every one known after any of its steps, its drops, and every one the
+    // ways back of its answers read.
+    private static IEnumerable<string> NamedBy(PipelineDeclaration declaration) =>
+        SchemaNames(declaration)
+            .Concat(Enumerable.Range(1, declaration.Steps.Count).SelectMany(steps => declaration.ColumnsBefore(steps).Columns.Select(column => column.Name)))
+            .Concat(declaration.Steps.OfType<DropColumnsStep>().SelectMany(drop => drop.Columns))
+            .Concat(UndoChain.ReadBy(declaration));
+
+    private static IEnumerable<string> SchemaNames(PipelineDeclaration declaration) =>
+        declaration.Steps.OfType<DeclareStep>().SelectMany(declare => declare.Columns.Select(column => column.Name));
+
+    // What decides a column: how it stands, its kind, and the kind a category was.
+    private static ColumnDecision Decided(ColumnChoice choice) => new(choice.Standing, choice.Kind, choice.Was);
+
+    // The output, when it changes: by what each writes, as placing one decides.
+    private static OutputChange? OutputChanged(INamesTheAnswer? before, INamesTheAnswer? after)
+    {
+        if (before is null && after is null)
+        {
+            return null;
+        }
+
+        return before is not null && after is not null && before.Canonical().AsSpan().SequenceEqual(after.Canonical())
+            ? null
+            : new OutputChange(before, after);
+    }
+
+    // The schemas' order, when the names both declare stand in another; a name only one declares is a change of its own.
+    private static OrderChange? OrderChanged(PipelineDeclaration into, PipelineDeclaration result)
+    {
+        string[] before = [.. SchemaNames(into)];
+        string[] after = [.. SchemaNames(result)];
+        var both = before.Intersect(after, StringComparer.Ordinal).ToHashSet(StringComparer.Ordinal);
+
+        return before.Where(both.Contains).SequenceEqual(after.Where(both.Contains), StringComparer.Ordinal) ? null : new OrderChange(before, after);
+    }
+
     /// <summary>The columns a preset drops, each with a name and each once.</summary>
     /// <param name="drop">The columns.</param>
     /// <returns>The columns.</returns>
@@ -129,4 +267,15 @@ public sealed record PipelinePreset
 
         return [.. drop];
     }
+
+    /// <summary>The steps a take-over has made so far, or every rule they break.</summary>
+    /// <param name="Result">The declaration, while the steps keep the rules.</param>
+    /// <param name="Faults">Every rule broken, once one is.</param>
+    private readonly record struct TakenSteps(PipelineDeclaration? Result, IReadOnlyList<DeclarationFault> Faults);
+
+    /// <summary>What decides a column in a listing.</summary>
+    /// <param name="Standing">How it stands.</param>
+    /// <param name="Kind">Its kind.</param>
+    /// <param name="Was">The kind a category was.</param>
+    private readonly record struct ColumnDecision(ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was);
 }
