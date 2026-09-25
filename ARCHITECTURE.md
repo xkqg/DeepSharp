@@ -723,6 +723,15 @@ rewrites is written as a new block in the old one's place, and run, because Vers
 block whose text a part changed, and the next keystroke there would put the old text back; under a layout that
 cannot add a block the change is refused rather than half made.
 
+What the blocks decide about their columns is saved beside the notebook, in a file named after it
+(`<notebook>.columns.json`): the schema with the columns it excludes and their kinds, the columns dropped, and the
+output — the same shape a preset has, written and read through the same door as a pipeline file. It is written after
+every change the blocks accept and every run of the whole pipeline, and only while every block is in the pipeline;
+showing a block writes nothing. It is written whole under a name of its own and then moved into place, so nothing
+ever meets half a file, and the same decisions again leave it untouched. A file that cannot be read is never written
+over, since it may hold what this notebook cannot see; a file that cannot be written says so at the block, and the
+blocks keep the decisions. The source's columns it holds belong to the list of columns, and a write keeps them.
+
 The schema block's form changes the schema alone, through the schema's own operations. A column set "not taken"
 stays in the schema, excluded with its kind, and a step below that reads it says so at its own block rather than
 being rewritten; picking a kind for a column not taken takes it in with that kind, where the source has it. The grid

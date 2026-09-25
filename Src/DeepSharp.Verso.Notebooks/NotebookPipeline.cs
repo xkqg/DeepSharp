@@ -49,6 +49,12 @@ internal readonly record struct ViewRequest(
 {
     /// <summary>Whether to run the whole pipeline, fitting every step, and hand what it learned over.</summary>
     public bool RunsTheWholePipeline => Trigger == ViewTrigger.Run && Whole;
+
+    /// <summary>
+    /// Whether to save what the blocks decided about their columns beside the notebook: after a change the blocks
+    /// accepted, or a run of the whole pipeline, when every block is in the pipeline.
+    /// </summary>
+    public bool SavesTheColumns => Trigger is ViewTrigger.Commit or ViewTrigger.Run && Whole && NotMade.Count == 0;
 }
 
 /// <summary>

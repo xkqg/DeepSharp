@@ -22,4 +22,16 @@ internal static class NotebookMetadataExtensions
     /// <returns>The folder, or nothing for a notebook never saved.</returns>
     public static string? FolderPath(this INotebookMetadata notebook) =>
         string.IsNullOrWhiteSpace(notebook.FilePath) ? null : Path.GetDirectoryName(Path.GetFullPath(notebook.FilePath));
+
+    /// <summary>Where what the notebook decided about its columns is saved: beside it, named after it.</summary>
+    /// <param name="notebook">The notebook.</param>
+    /// <returns>The file's path, or nothing for a notebook never saved, which has nowhere beside it.</returns>
+    public static string? ColumnsFilePath(this INotebookMetadata notebook) =>
+        notebook.FolderPath() is { } folder ? Path.Join(folder, $"{Path.GetFileNameWithoutExtension(notebook.FilePath)}.columns.json") : null;
+
+    /// <summary>The name the notebook's pipeline is exported under: named after the notebook.</summary>
+    /// <param name="notebook">The notebook.</param>
+    /// <returns>The file name; a name of its own for a notebook never saved.</returns>
+    public static string PipelineFileName(this INotebookMetadata notebook) =>
+        string.IsNullOrWhiteSpace(notebook.FilePath) ? "pipeline.json" : $"{Path.GetFileNameWithoutExtension(notebook.FilePath)}.pipeline.json";
 }

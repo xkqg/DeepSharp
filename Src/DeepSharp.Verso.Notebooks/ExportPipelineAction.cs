@@ -83,10 +83,7 @@ public sealed class ExportPipelineAction : NotebookExtension, IToolbarAction
         var bytes = SourceCache.BytesOf(assembled.Readable, context.NotebookMetadata.SourceFolder());
         var file = RequiredSession.EnvelopeFor(context.Variables, assembled, bytes)!;
 
-        return context.RequestFileDownloadAsync(FileName(context.NotebookMetadata.FilePath), "application/json", Encoding.UTF8.GetBytes(file));
+        // Named after the notebook; a relative source path in it is read from wherever the file is saved.
+        return context.RequestFileDownloadAsync(context.NotebookMetadata.PipelineFileName(), "application/json", Encoding.UTF8.GetBytes(file));
     }
-
-    // Named after the notebook; a relative source path in it is read from wherever the file is saved.
-    private static string FileName(string? notebook) =>
-        string.IsNullOrWhiteSpace(notebook) ? "pipeline.json" : $"{Path.GetFileNameWithoutExtension(notebook)}.pipeline.json";
 }

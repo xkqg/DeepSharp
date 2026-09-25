@@ -160,6 +160,7 @@ public sealed class GridActionTests : IDisposable
         Assert.False(first.StateChanged);
         Assert.DoesNotContain("sex", Names(notebook));
         Assert.Contains(read.Outputs, output => output.IsError && output.Content.Contains("not read in this session", StringComparison.Ordinal));
+        Assert.DoesNotContain(read.Outputs, output => output.Content.Contains("would break", StringComparison.Ordinal));
         Assert.True(read.Outputs[^1].Content.Heads("sex"));
 
         var second = await notebook.TickAsync(read, StepRenderer.Include, "sex", ticked: true);

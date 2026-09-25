@@ -79,11 +79,22 @@ internal static class StepCard
     public static CellOutput RowsRefused(string why) =>
         Listed("There is no data to show here: the rows cannot be taken through the steps down to this one.", [why]);
 
-    /// <summary>Why a change a gesture asked for is not made: every rule it would break.</summary>
-    /// <param name="faults">Each rule, at the step that would break it.</param>
+    /// <summary>Why a change a gesture asked for is not made: every rule it would break, or what it needs that is not there.</summary>
+    /// <param name="faults">Each reason: a rule at the step that would break it, or what is missing.</param>
     /// <returns>The explanation, marked as an error; the data below it is as it was.</returns>
-    public static CellOutput NotMade(IEnumerable<string> faults) =>
-        Listed("This change is not made: the pipeline would break.", faults);
+    public static CellOutput NotMade(IEnumerable<string> faults) => Listed("This change is not made:", faults);
+
+    /// <summary>Why what the blocks decided was not saved: the file beside the notebook cannot be read.</summary>
+    /// <param name="faults">What is wrong with the file.</param>
+    /// <returns>The explanation, marked as an error; the file is as it was.</returns>
+    public static CellOutput ColumnsUnreadable(IEnumerable<string> faults) =>
+        Listed("The saved columns beside the notebook cannot be read, so they are not written over:", faults);
+
+    /// <summary>Why what the blocks decided was not saved: the file beside the notebook cannot be written.</summary>
+    /// <param name="why">What refused it.</param>
+    /// <returns>The explanation, marked as an error; the blocks hold the decisions.</returns>
+    public static CellOutput ColumnsNotWritten(string why) =>
+        Listed("The saved columns could not be written beside the notebook:", [why]);
 
     private static CellOutput Listed(string head, IEnumerable<string> items)
     {

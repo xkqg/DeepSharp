@@ -175,6 +175,12 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
             return;
         }
 
+        // What the blocks decided is saved before the rows are read: a decision stands whatever the rows meet.
+        if (request.SavesTheColumns && context.NotebookMetadata.ColumnsFilePath() is { } path && new ColumnsFile(path).Save(declaration) is { } notSaved)
+        {
+            await context.WriteOutputAsync(notSaved);
+        }
+
         var key = declaration.ViewKeyAt(request.Position);
         PipelineView view;
 
