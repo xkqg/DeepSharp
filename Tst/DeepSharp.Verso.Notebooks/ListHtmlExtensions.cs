@@ -21,7 +21,10 @@ internal readonly record struct DrawnSelect(string Action, string Value, IReadOn
 /// <param name="ShownKind">The kind its box takes the column in with.</param>
 /// <param name="Mark">What the row says of itself: new in the source, not in the source, or nothing.</param>
 /// <param name="Included">Its box for whether it is in.</param>
-internal readonly record struct ListedRow(string Column, string Values, DrawnSelect Kind, string ShownKind, string Mark, DrawnBox Included);
+/// <param name="Output">Its box for whether it is an answer of the output.</param>
+/// <param name="Role">What it is to the output, as the row says it: an answer, read by an answer's way back, or nothing.</param>
+internal readonly record struct ListedRow(
+    string Column, string Values, DrawnSelect Kind, string ShownKind, string Mark, DrawnBox Included, DrawnBox Output, string Role);
 
 /// <summary>What a test reads off the list of a source's columns.</summary>
 internal static partial class ListHtmlExtensions
@@ -32,7 +35,8 @@ internal static partial class ListHtmlExtensions
     public static IReadOnlyList<ListedRow> Rows(this string list) =>
         [.. Row().Matches(list).Select(row =>
         {
-            var included = row.Groups[2].Value.Boxes().Single();
+            var boxes = row.Groups[2].Value.Boxes();
+            var included = boxes.Single(box => box.Action.StartsWith("deepsharp.list.include ", StringComparison.Ordinal));
 
             return new ListedRow(
                 WebUtility.HtmlDecode(row.Groups[1].Value),
@@ -40,7 +44,9 @@ internal static partial class ListHtmlExtensions
                 Select(row.Groups[2].Value),
                 KindOf(included.Action),
                 Cell(row.Groups[2].Value, "mark"),
-                included);
+                included,
+                boxes.Single(box => box.Action.StartsWith("deepsharp.list.output ", StringComparison.Ordinal)),
+                Regex.Match(row.Groups[2].Value, "<span class=\"deepsharp-role\">(.*?)</span>").Groups[1].Value);
         })];
 
     /// <summary>The row of one column.</summary>
@@ -48,6 +54,23 @@ internal static partial class ListHtmlExtensions
     /// <param name="column">The column.</param>
     /// <returns>The row.</returns>
     public static ListedRow Row(this string list, string column) => list.Rows().Single(row => row.Column == column);
+
+    /// <summary>The select that picks the kind of output the list's boxes make.</summary>
+    /// <param name="list">The list's page.</param>
+    /// <returns>The select.</returns>
+    public static DrawnSelect TypeSelect(this string list) => Select(Section().Match(list).Groups[1].Value);
+
+    /// <summary>The labels of the type select's options, as a person reads them.</summary>
+    /// <param name="list">The list's page.</param>
+    /// <returns>Each option's value and its label.</returns>
+    public static IReadOnlyDictionary<string, string> TypeLabels(this string list) =>
+        OptionLabel().Matches(Section().Match(list).Groups[1].Value)
+            .ToDictionary(option => WebUtility.HtmlDecode(option.Groups[1].Value), option => WebUtility.HtmlDecode(option.Groups[2].Value));
+
+    /// <summary>The box that takes the output away.</summary>
+    /// <param name="list">The list's page.</param>
+    /// <returns>The box.</returns>
+    public static DrawnBox RemovalBox(this string list) => Section().Match(list).Groups[1].Value.Boxes().Single();
 
     private static string Cell(string row, string name) =>
         WebUtility.HtmlDecode(Regex.Match(row, $"<td class=\"deepsharp-{name}\">(.*?)</td>", RegexOptions.Singleline).Groups[1].Value);
@@ -75,6 +98,12 @@ internal static partial class ListHtmlExtensions
     [GeneratedRegex("<select\\b([^>]*)>(.*?)</select>", RegexOptions.Singleline)]
     private static partial Regex SelectTag();
 
-    [GeneratedRegex("<option value=\"([^\"]*)\"( selected)?>", RegexOptions.Singleline)]
+    [GeneratedRegex("<option value=\"([^\"]*)\"( selected)?[^>]*>", RegexOptions.Singleline)]
     private static partial Regex Option();
+
+    [GeneratedRegex("<option value=\"([^\"]*)\"[^>]*>(.*?)</option>", RegexOptions.Singleline)]
+    private static partial Regex OptionLabel();
+
+    [GeneratedRegex("<div class=\"deepsharp-output\">(.*?)</div>", RegexOptions.Singleline)]
+    private static partial Regex Section();
 }

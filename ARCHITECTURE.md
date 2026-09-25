@@ -773,6 +773,19 @@ between is never written over. A redraw ends a walk: the keys after it land nowh
 one. The options are the kinds the rules let the column take, so no value a walk passes is refused; a column the
 schema does not name starts at none, and picking a kind takes it in with that kind.
 
+Above the rows the list says what the model is asked to predict. A select picks the kind of output its boxes make —
+every kind the catalog knows that names its answer in a column — and picking commits nothing; a kind no row can take
+is drawn disabled, with the words of the rule that stops it. Each row's output box puts its column into the output of
+that kind or takes it out, through the same `StepCatalog.Make` a form's swap uses, so the rest of what the output holds
+stays; a box of its own takes the output away. A column of an output of many goes in after the nearest column the
+output holds before it in the source's order, first when none does, and comes out where it stands, so a tick never
+moves a column it does not touch. A tick on a column the schema does not take takes it in first, in the same change.
+A box is ticked when an answer comes back to its column — for an answer made from a column, the column it is made
+from — and, like the include box, it can be clicked only when the click changes the steps and the rules keep what it
+makes. So the answer of an output of one is moved or taken away rather than unticked, and a column an answer is only
+made from cannot be unticked either, since the output does not name it. The output is changed only while the blocks
+make one pipeline, and an output of another kind than the one picked is not changed from the list.
+
 What the blocks decide about their columns is saved beside the notebook, in a file named after it
 (`<notebook>.columns.json`): the schema with the columns it excludes and their kinds, the columns dropped, and the
 output — the same shape a preset has, written and read through the same door as a pipeline file. It is written after

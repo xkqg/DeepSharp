@@ -62,6 +62,24 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     /// </summary>
     internal const string ListKind = "deepsharp.list.kind";
 
+    /// <summary>
+    /// The gesture the list's type select sends, with what the list was drawn from; the router sends the kind of output
+    /// picked. A pick: it commits nothing, and the list is drawn again making that kind.
+    /// </summary>
+    internal const string ListType = "deepsharp.list.type";
+
+    /// <summary>
+    /// The gesture a row's output box sends, with its column, the kind of output it makes, the kind a tick takes the
+    /// column in with, and what the list was drawn from: ticked, the column is put into the output; unticked, taken out.
+    /// </summary>
+    internal const string ListOutput = "deepsharp.list.output";
+
+    /// <summary>The gesture the list's box that takes the output away sends, with what the list was drawn from.</summary>
+    internal const string ListRemoveOutput = "deepsharp.list.removeOutput";
+
+    /// <summary>The key a list's control carries the kind of output the list makes under.</summary>
+    internal const string TypeKey = "type";
+
     /// <summary>The key a box carries its column under.</summary>
     internal const string ColumnKey = "column";
 
@@ -184,6 +202,11 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
                     return await KindPickedAsync(gesture, assembled, context, action);
                 }
 
+                if (action.Gesture == ListType)
+                {
+                    return await TypePickedAsync(gesture, assembled, context);
+                }
+
                 if (StateOf(context.Payload) is not { } ticked)
                 {
                     return null;
@@ -193,10 +216,99 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
                 {
                     Apply => await AppliedAsync(gesture, assembled, context, action, ticked),
                     ListInclude => await ListedAsync(gesture, assembled, context, action, ticked),
+                    ListOutput => await AnsweredAsync(gesture, assembled, context, action, ticked),
+                    ListRemoveOutput => await RemovedAsync(gesture, assembled, context, action, ticked),
                     _ => action.Text(ColumnKey) is { } column ? await TickedAsync(gesture, assembled, context, action.Gesture, column, ticked) : null,
                 };
         }
     }
+
+    // The list's type select: a pick. It commits nothing; the list is drawn again with the kind picked in its boxes.
+    private static async Task<string?> TypePickedAsync(Gesture gesture, NotebookPipeline assembled, CellInteractionContext context) =>
+        assembled.SchemaBlock is { } schema && !string.IsNullOrEmpty(context.Payload)
+            ? await StepCommit.ShowAsync(gesture with { Cell = schema }, assembled, ViewTrigger.Show, page: 0, new ListPicks(context.Payload))
+            : null;
+
+    // A row's output box. The output is changed only while the blocks make one pipeline; a box from a list drawn before
+    // the blocks or the source's bytes changed draws the list again and changes nothing; otherwise the column is put into
+    // the output of the kind the box makes, or taken out, as the output box's one rule says.
+    private static async Task<string?> AnsweredAsync(
+        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    {
+        if (await RowOfAsync(gesture, assembled, action) is not { } row)
+        {
+            return null;
+        }
+
+        var picks = PicksOf(action);
+
+        if (!assembled.Whole)
+        {
+            await StepCommit.NotMadeAsync(row.List, assembled, [NotWhole(assembled)], picks);
+
+            return null;
+        }
+
+        if (!DrawnOver(action, assembled, row.Source))
+        {
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, picks);
+
+            return null;
+        }
+
+        var change = OutputBox.Change(
+            NotebookVerbs.Catalog(), assembled.Readable, action.Text(TypeKey) ?? string.Empty, row.Column,
+            KindNamed(action.Text(KindKey)) ?? ColumnKind.Text, row.Source.Rows.ColumnNames, ticked);
+
+        if (change.Steps is not { } steps)
+        {
+            await StepCommit.NotMadeAsync(row.List, assembled, change.NotMade, picks);
+
+            return null;
+        }
+
+        context.StateChanged = await StepCommit.CommitAsync(row.List, assembled, steps, picks);
+
+        return null;
+    }
+
+    // The list's box that takes the output away. Ticked with no output there — the click's echo — it changes nothing;
+    // otherwise it needs blocks that make one pipeline and a list that still says what holds.
+    private static async Task<string?> RemovedAsync(
+        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    {
+        if (!ticked || assembled.SchemaBlock is not { } schema || assembled.Readable.Output is null)
+        {
+            return null;
+        }
+
+        var list = gesture with { Cell = schema };
+        var picks = PicksOf(action);
+
+        if (!assembled.Whole)
+        {
+            await StepCommit.NotMadeAsync(list, assembled, [NotWhole(assembled)], picks);
+
+            return null;
+        }
+
+        if (assembled.Readable.Steps[0] is not ReadCsvStep read || gesture.Session.Sources.KeptFor(read) is not { } source || !DrawnOver(action, assembled, source))
+        {
+            await StepCommit.ShowAsync(list, assembled, ViewTrigger.Show, page: 0, picks);
+
+            return null;
+        }
+
+        context.StateChanged = await StepCommit.CommitAsync(list, assembled, assembled.Readable.WithoutOutput(), picks);
+
+        return null;
+    }
+
+    // What a list's control was drawn with: the kind of output its boxes make.
+    private static ListPicks PicksOf(ControlAction action) => new(action.Text(TypeKey));
+
+    // Why a change to the output is not made while the blocks make no pipeline, naming the block that stops them.
+    private static string NotWhole(NotebookPipeline assembled) => $"the blocks do not make a pipeline yet: {string.Join("; ", assembled.Stopping)}";
 
     // A row's box on the list of the source's columns. A box from a list drawn before the blocks or the source's bytes
     // changed draws the list again and changes nothing; otherwise ticked takes the column in with the kind its row showed,
@@ -211,7 +323,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         if (!DrawnOver(action, assembled, row.Source))
         {
-            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, ListPicks.None);
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, PicksOf(action));
 
             return null;
         }
@@ -226,12 +338,12 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         }
         catch (DeclarationException refused)
         {
-            await StepCommit.NotMadeAsync(row.List, assembled, [.. refused.Faults.Select(fault => fault.ToString())], ListPicks.None);
+            await StepCommit.NotMadeAsync(row.List, assembled, [.. refused.Faults.Select(fault => fault.ToString())], PicksOf(action));
 
             return null;
         }
 
-        context.StateChanged = await StepCommit.CommitAsync(row.List, assembled, steps, ListPicks.None);
+        context.StateChanged = await StepCommit.CommitAsync(row.List, assembled, steps, PicksOf(action));
 
         return null;
     }
@@ -255,7 +367,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         if (drawn is null)
         {
-            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, ListPicks.None);
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, PicksOf(action));
 
             return null;
         }
@@ -266,7 +378,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return null;
         }
 
-        if (await StepCommit.CommitAsync(row.List, assembled, steps, ListPicks.None))
+        if (await StepCommit.CommitAsync(row.List, assembled, steps, PicksOf(action)))
         {
             gesture.Session.SelectCommitted(context.InteractionType, drawn, NotebookSession.KeyOf(new PipelineDeclaration(steps)), row.Source.Fingerprint);
             context.StateChanged = true;
@@ -357,7 +469,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         }
 
         IReadOnlyList<string> notMade = !assembled.Whole
-            ? [$"the blocks do not make a pipeline yet: {string.Join("; ", assembled.Stopping)}"]
+            ? [NotWhole(assembled)]
             : drawn != NotebookSession.KeyOf(assembled.Readable)
                 ? [ListedForOtherBlocks]
                 : [.. takenOver.Faults.Select(fault => fault.ToString())];

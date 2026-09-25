@@ -242,6 +242,10 @@ public sealed partial class HostContractTests : IDisposable
     [InlineData(StepRenderer.Columns, "")]
     [InlineData(StepRenderer.ListInclude + " {\"column\":\"sex\",\"kind\":\"text\",\"drawn\":\"0\",\"source\":\"0\"}", "true")]
     [InlineData(StepRenderer.ListInclude + " {\"column\":\"pclass\",\"kind\":\"integer\",\"drawn\":\"0\",\"source\":\"0\"}", "false")]
+    [InlineData(StepRenderer.ListKind + " {\"column\":\"pclass\",\"drawn\":\"0\",\"source\":\"0\"}", "category")]
+    [InlineData(StepRenderer.ListType + " {\"drawn\":\"0\",\"source\":\"0\"}", "target.distribution")]
+    [InlineData(StepRenderer.ListOutput + " {\"column\":\"survived\",\"type\":\"target\",\"kind\":\"integer\",\"drawn\":\"0\",\"source\":\"0\"}", "true")]
+    [InlineData(StepRenderer.ListRemoveOutput + " {\"drawn\":\"0\",\"source\":\"0\"}", "true")]
     [InlineData("deepsharp.unknown", "")]
     public async Task EveryGesture_AnswersNothing_SoAHostThatAppliesAnswersLeavesTheBlockAsTheRunWroteIt(string interaction, string payload)
     {

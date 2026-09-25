@@ -33,11 +33,11 @@ internal enum ViewTrigger
 }
 
 /// <summary>What a list of the source's columns is drawn with: the picks a person made on it, which commit nothing.</summary>
-/// <remarks>None yet: the list draws every column as the blocks decide it.</remarks>
-internal sealed record ListPicks
+/// <param name="Type">The kind of output the list's boxes make, when one was picked; nothing to draw the output's own.</param>
+internal sealed record ListPicks(string? Type)
 {
     /// <summary>A list drawn with no picks.</summary>
-    public static ListPicks None { get; } = new();
+    public static ListPicks None { get; } = new(Type: null);
 }
 
 /// <summary>What a block's kernel is asked to show.</summary>

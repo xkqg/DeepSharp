@@ -99,7 +99,8 @@ wrong with it at once, each at its line and column.
   schema's block, lists every column of the source with its first values and a box that takes it in or leaves it
   out, marking new the columns the saved file never showed; each row's kind select commits the kind a keyboard walk
   ends on, as one pick from the state the list was drawn in, so a category walked away from and back to remembers
-  the kind it was. What the blocks decide about
+  the kind it was. Above the rows a select picks the kind of output, and each row's output box puts its column into
+  that output or takes it out, with a box of its own that takes the output away. What the blocks decide about
   their columns is saved beside the notebook, as `<notebook>.columns.json`, after every change they accept and
   every run of the whole pipeline. An output block is a stage of
   its own, and its form swaps it for any other kind of output. A profile block names, for

@@ -184,9 +184,9 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
             return;
         }
 
-        if (request.List is not null)
+        if (request.List is { } picks)
         {
-            await ListAsync(session, request, declaration, context);
+            await ListAsync(session, request, declaration, picks, context);
 
             return;
         }
@@ -245,7 +245,7 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
     // the columns the saved file never showed, then says in the file that it showed them; a change made from the list
     // saves the decisions with the header it showed. A saved file that cannot be read is said to be so and never written.
     private static async Task ListAsync(
-        NotebookSession session, ViewRequest request, PipelineDeclaration declaration, IExecutionContext context)
+        NotebookSession session, ViewRequest request, PipelineDeclaration declaration, ListPicks picks, IExecutionContext context)
     {
         SourceRows source;
 
@@ -284,7 +284,7 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
 
         var drawn = NotebookSession.KeyOf(declaration);
 
-        await context.WriteOutputAsync(ColumnList.Of(declaration, source, fresh, stored.Preset, drawn));
+        await context.WriteOutputAsync(ColumnList.Of(declaration, source, fresh, stored.Preset, drawn, picks, request.Whole));
         session.Listing(context.CellId, drawn);
     }
 
