@@ -46,6 +46,7 @@ public sealed class StepCatalog
         catalog.Register<TargetStep>();
         catalog.Register<DistributionStep>();
         catalog.Register<LabelsStep>();
+        catalog.Register<AheadStep>();
         catalog.Register<FillNaNStep>();
         catalog.Register<DropWarmUpStep>();
         catalog.Register<TimePartsStep>();

@@ -192,12 +192,14 @@ public sealed class Pipeline
             var now = prepared.Table.NumbersOf(answer);
 
             // Each row against the row it was read as, not against whatever row now sits at its place: rows
-            // dropped at the start used to shift every comparison onto a different row.
-            for (var row = 0; row < now.Length; row++)
+            // dropped at the start used to shift every comparison onto a different row. An answer read ahead lands
+            // on the row that many rows later, in the order the rows stand in.
+            for (var row = 0; row + chain.Ahead < now.Length; row++)
             {
                 var readAt = prepared.Table.Identities[row].ReadAt;
+                var landsAt = prepared.Table.Identities[row + chain.Ahead].ReadAt;
 
-                if (prepared.AsRead.At(chain.End, readAt) is not { } was || now[row] is not { } is_)
+                if (prepared.AsRead.At(chain.End, landsAt) is not { } was || now[row] is not { } is_)
                 {
                     continue;
                 }
@@ -209,9 +211,13 @@ public sealed class Pipeline
                     continue;
                 }
 
-                throw new InvalidOperationException(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The way back for '{answer}' does not lead back: row {readAt + 1} was {was}, became {is_}, and comes back as {back}. A prediction from this pipeline would be in units nobody can name."));
+                throw new InvalidOperationException(chain.Ahead == 0
+                    ? string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The way back for '{answer}' does not lead back: row {readAt + 1} was {was}, became {is_}, and comes back as {back}. A prediction from this pipeline would be in units nobody can name.")
+                    : string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The way back for '{answer}' does not lead back: the answer on row {readAt + 1} is {is_} and comes back as {back}, where row {landsAt + 1}, {chain.Ahead} rows later, was {was}. A prediction from this pipeline would be in units nobody can name."));
             }
         }
     }

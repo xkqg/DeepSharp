@@ -34,6 +34,44 @@ public interface INamesTheAnswer : IPipelineStep
     /// wrong thing, and says nothing about it.
     /// </remarks>
     string? Refusal(IReadOnlyList<double> answers) => null;
+
+    /// <summary>Whether this output makes its answer from the rows, rather than naming columns the rows bring.</summary>
+    /// <remarks>
+    /// An answer the rows bring is what a served row lacks and awaits; an answer made from later rows is one a
+    /// served row cannot have, and awaits nothing from the rows handed in. Said by <see cref="IMakesTheAnswer"/>, and
+    /// by nothing else.
+    /// </remarks>
+    bool MakesItsAnswer => false;
+}
+
+/// <summary>
+/// An output that makes its answer from the rows, where the rows do not bring it.
+/// </summary>
+/// <remarks>
+/// The price five days on is in the rows, five rows later; the answer is made from them where the output stands,
+/// when the pipeline is fitted. A served row has no later rows, so there it is a gap: it is what is being asked.
+/// </remarks>
+public interface IMakesTheAnswer : IActsInAWalk, INamesTheAnswer
+{
+    /// <summary>Makes the answer columns from the rows as they stand.</summary>
+    /// <param name="table">The data, changed in place.</param>
+    void MakeAnswers(Table table);
+
+    /// <inheritdoc />
+    bool INamesTheAnswer.MakesItsAnswer => true;
+
+    /// <inheritdoc />
+    void IActsInAWalk.ActOn(Walk walk) => walk.Answer(MakeAnswers, Answers);
+}
+
+/// <summary>What an answer read from later rows is.</summary>
+public enum AheadAs
+{
+    /// <summary>The value itself, as it stands those rows later.</summary>
+    Value,
+
+    /// <summary>The return on the row's own value by then: the later value divided by the row's, less one.</summary>
+    Return,
 }
 
 /// <summary>
@@ -338,4 +376,137 @@ public sealed record LabelsStep : IPipelineStep<LabelsStep>, INamesTheAnswer, ID
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     public static LabelsStep ReadFrom(JsonElement element) => new(ColumnsKey.Read(element), OnesKey.Read(element));
+}
+
+/// <summary>
+/// Names an answer read from a column a number of rows later, in the declared order: the value then, or the return
+/// on the row's own value by then.
+/// </summary>
+/// <remarks>
+/// The answer is made where the output stands, into a column of its own named after the column and how far ahead,
+/// and the last rows, with nothing that far after them, have none. It stands below a split in time whose gap is at
+/// least as wide as how far it reads, the rows ordered by the column the split divides by alone.
+/// <para>
+/// It comes back as a value of the column it was read from: a value by the steps above it that changed that column,
+/// a return by the row's own value as it was read — which is why a return stands above every step that changes the
+/// column it is made from.
+/// </para>
+/// </remarks>
+public sealed record AheadStep : IPipelineStep<AheadStep>, IMakesTheAnswer, IReadsRowsAhead, IUndoesItself, IDescribesColumns
+{
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column the answer is read from, rows later.", "close", ColumnKinds.Numbers);
+
+    private static readonly WholeNumberParameter AheadKey = new(
+        "ahead", "How many rows later the answer is read, in the declared order: at least one.", 1, atLeast: 1);
+
+    private static readonly OneOfParameter<AheadAs> AsKey = new(
+        "as", "What the answer is: the value itself then, or the return on the row's own value by then.", AheadAs.Value);
+
+    /// <summary>Declares an answer read from a column rows later.</summary>
+    /// <param name="column">The column the answer is read from.</param>
+    /// <param name="ahead">How many rows later, at least one.</param>
+    /// <param name="as">The value itself, or the return on the row's own value.</param>
+    /// <exception cref="ArgumentException">The column has no name, or the form is not one of the names.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">It reads less than one row ahead.</exception>
+    public AheadStep(string column, int ahead, AheadAs @as = AheadAs.Value)
+    {
+        Column = ColumnKey.Require(column);
+        Ahead = AheadKey.Require(ahead);
+        As = AsKey.Require(@as);
+    }
+
+    /// <summary>The column the answer is read from.</summary>
+    public string Column { get; }
+
+    /// <inheritdoc />
+    public int Ahead { get; }
+
+    /// <summary>Whether the answer is the value itself or the return on the row's own value.</summary>
+    public AheadAs As { get; }
+
+    /// <summary>The column the answer is made into: the column's name and how far ahead.</summary>
+    public string Answer => string.Create(CultureInfo.InvariantCulture, $"{Column}.ahead{Ahead}");
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> Answers => [Answer];
+
+    /// <inheritdoc />
+    public string Produces => Answer;
+
+    /// <inheritdoc />
+    public static string Name => "target.ahead";
+
+    /// <inheritdoc />
+    public static string Purpose =>
+        "Names an answer read from a column rows later in the declared order: the value then, or the return on the row's own value by then.";
+
+    /// <inheritdoc />
+    public static int Since => 2;
+
+    /// <inheritdoc />
+    public static StepParameters<AheadStep> Parameters { get; } = new StepParameters<AheadStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(AheadKey, step => step.Ahead)
+        .With(AsKey, step => step.As);
+
+    /// <inheritdoc />
+    public string Verb => Name;
+
+    /// <inheritdoc />
+    public void MakeAnswers(Table table)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+
+        var values = table.NumbersOf(Column);
+        var answers = new double?[values.Length];
+
+        for (var row = 0; row + Ahead < values.Length; row++)
+        {
+            if (values[row + Ahead] is not { } later)
+            {
+                continue;
+            }
+
+            // A return on nothing, or on a gap, is not a number: that row has no answer.
+            answers[row] = As == AheadAs.Value
+                ? later
+                : values[row] is { } now && now != 0 ? (later / now) - 1 : null;
+        }
+
+        table.Put(new Column<double>(Answer, ColumnKind.Number, answers));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The column the answer was read from: whatever changed that column above is undone next.</remarks>
+    public string From(string column) => Column;
+
+    /// <inheritdoc />
+    /// <remarks>A value is itself; a return comes back as a value only by the row's own value, so it refuses here.</remarks>
+    public double Undo(double value, FittedStepValues? fitted) =>
+        As == AheadAs.Value
+            ? value
+            : throw new InvalidOperationException(
+                $"A return comes back as a value of '{Column}' only with the row it was made on, whose '{Column}' it is a return on. "
+                + "Hand the rows over with the predictions.");
+
+    /// <inheritdoc />
+    public double Undo(double value, FittedStepValues? fitted, RowAsRead row) =>
+        As == AheadAs.Value
+            ? value
+            : (row[Column] ?? throw new InvalidOperationException(
+                $"Row {row.ReadAt + 1} has no '{Column}', so a return on it cannot come back as a value.")) * (1 + value);
+
+    /// <inheritdoc />
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return before.With(Answer, ColumnKind.Number);
+    }
+
+    /// <summary>Reads this step back out of a file.</summary>
+    /// <param name="element">The JSON object the step was written as.</param>
+    /// <returns>The step the file describes.</returns>
+    public static AheadStep ReadFrom(JsonElement element) => new(ColumnKey.Read(element), AheadKey.Read(element), AsKey.Read(element));
 }

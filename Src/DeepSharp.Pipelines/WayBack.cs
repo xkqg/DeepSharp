@@ -109,6 +109,7 @@ internal sealed class UndoChain
     {
         End = end;
         Links = links;
+        Ahead = links.Sum(link => link.Step is IReadsRowsAhead ahead ? ahead.Ahead : 0);
     }
 
     /// <summary>The column as read that the way back comes back to.</summary>
@@ -116,6 +117,9 @@ internal sealed class UndoChain
 
     /// <summary>The steps to undo, the last one first.</summary>
     public IReadOnlyList<UndoLink> Links { get; }
+
+    /// <summary>How many rows later the value it comes back to stands: nought, unless the answer was read ahead.</summary>
+    public int Ahead { get; }
 
     /// <summary>The way back for one answer.</summary>
     /// <param name="declaration">The declaration.</param>

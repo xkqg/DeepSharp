@@ -475,6 +475,19 @@ public sealed class FittingBuilder
     /// <exception cref="ArgumentOutOfRangeException">The number of ones is below nought.</exception>
     public FittingBuilder Labels(IEnumerable<string> columns, int ones = 0) => Add(new LabelsStep(columns, ones));
 
+    /// <summary>Names an answer read from a column rows later, in the declared order: the value then, or the return by then.</summary>
+    /// <param name="column">The column the answer is read from.</param>
+    /// <param name="ahead">How many rows later, at least one.</param>
+    /// <param name="as">The value itself, or the return on the row's own value.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The column has no name.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">It reads less than one row ahead.</exception>
+    /// <exception cref="DeclarationException">
+    /// It does not stand below a split in time whose gap is at least as wide, the rows ordered by that split's column
+    /// alone; or it is a return on a column a step above it changes.
+    /// </exception>
+    public FittingBuilder Ahead(string column, int ahead, AheadAs @as = AheadAs.Value) => Add(new AheadStep(column, ahead, @as));
+
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
     public Pipeline Build() => new(Declaration, _rows);

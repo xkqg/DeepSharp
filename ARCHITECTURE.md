@@ -110,6 +110,13 @@ model is measured on: in the published price series, five days ahead, the last f
 answers from validation. The gap counts moments rather than rows, so it never divides a moment either, and a gap
 that would take every row a model learns from or is measured on is refused.
 
+Reading ahead is held to that. Only an output reads rows after its own — a feature that knows the future scores
+well on every row it is measured on and on none it is asked about — and an output that does stands below a split in
+time whose gap is at least as wide as how far it reads, the rows ordered by the column that split divides by and
+nothing else, so the rows after a row are the ones that came after it. A return stands above every step that
+changes the column it is made from, since it comes back by that column as it was read. An output that acts at all
+acts by making its answer.
+
 So fitting on the whole set is not a mistake a caller can make and be warned about later: it is a method
 that does not exist yet at that point in the chain. A rule in a document is advice; a rule expressed as
 which methods are in scope is the only kind that cannot be skipped in a hurry.
@@ -557,8 +564,12 @@ column. `target.distribution` names the columns a whole is divided among — a f
 fifty grams — whose shares are at least nought and sum to one on every row; named with the column saying how many
 there were, its shares come back as how many fell in each band, since a served flock knows how many birds it has
 and not how they fall. `target.labels` names columns that are each nought or one on every row — one of them when a
-row is exactly one of its things, any number when it is not. A package adds a kind the way it adds any verb, by
-implementing `INamesTheAnswer`.
+row is exactly one of its things, any number when it is not. `target.ahead` makes its answer from a column rows
+later in the declared order — the price five days on, or the return on today's price by then — so it is an output
+that acts: it makes the answer where it stands when the pipeline is fitted, and a served row, which has no later
+rows, awaits nothing from the rows handed in. A return comes back as a price by the row's own price as it was read.
+A package adds a kind the way it adds any verb, by implementing `INamesTheAnswer`, or `IMakesTheAnswer` for an
+answer the rows do not bring.
 
 Four things are refused there rather than passed on. A column still holding words, because turning one into a
 number quietly is how a category becomes an order nobody meant. A gap, because a model cannot be handed an
@@ -606,7 +617,9 @@ through its parameters — because most of what a step might do applies to only 
 `IOrdersRows` for an order, `IAddsColumns` for arithmetic on a row, `IDropsRows` and `IDropsColumns` for taking
 something away, `ISplitStep` for dividing the rows, `IFittedStep` for learning and replaying, and
 `IProducesEvidence` for proof. An output that only names the answer acts on nothing, because it names the answer
-rather than changing the data; `INamesTheAnswer` says it is an output, whichever kind, and a pipeline has one.
+rather than changing the data; `INamesTheAnswer` says it is an output, whichever kind, and a pipeline has one. An
+output whose answer the rows do not bring makes it, and `IMakesTheAnswer` is that act: made from the rows when
+fitting, a gap in every row when replaying.
 What every step has belongs to its type — its name, its purpose, its parameters — and a step without one of
 those does not compile.
 

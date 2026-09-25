@@ -1,4 +1,4 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Globalization;
@@ -125,7 +125,7 @@ public sealed record ReadRowsStep : IPipelineStep<ReadRowsStep>, IOpensRows, IDe
 /// on. The rows in the gap are fitted on by nothing and handed to nothing.
 /// </para>
 /// </remarks>
-public sealed record SplitByTimeStep : ISplitStep, IPipelineStep<SplitByTimeStep>, IDescribesColumns
+public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep<SplitByTimeStep>, IDescribesColumns
 {
     private static readonly ColumnParameter ColumnKey = new(
         "column", "The column that says when a row happened.", "when", ColumnKinds.Ordered);

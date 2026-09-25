@@ -1,4 +1,4 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Globalization;
@@ -38,6 +38,10 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         new AtMostOne<IOrdersRows>("order"),
         new RowOrderIsDeclaredBeforeItIsRead(),
         new AtMostOne<INamesTheAnswer>("output"),
+        new AnActingOutputMakesItsAnswer(),
+        new OnlyAnOutputReadsAhead(),
+        new RowsAheadAreKeptApart(),
+        new AReturnIsMadeFromItsColumnAsRead(),
         new ColumnsAreThereWhereTheyAreRead(),
     ];
 

@@ -295,3 +295,142 @@ internal sealed class RowOrderIsDeclaredBeforeItIsRead : IDeclarationRule
         }
     }
 }
+
+/// <summary>
+/// An output that acts on the rows makes its answer from them.
+/// </summary>
+/// <remarks>
+/// Naming the answer is not doing something to the data; the one thing an output may do is make its answer, and it
+/// says so by making it. An output acting on the rows any other way would change the data a model is shown under the
+/// name of saying what it is asked.
+/// </remarks>
+internal sealed class AnActingOutputMakesItsAnswer : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is INamesTheAnswer and IActsInAWalk and not IMakesTheAnswer)
+            {
+                yield return new DeclarationFault(
+                    at, steps[at].Verb,
+                    "is an output that acts on the rows, and the one thing an output does is name its answer or make it: "
+                    + "an output that acts makes its answer.");
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Only an output reads rows after its own.
+/// </summary>
+/// <remarks>
+/// A feature that knows the future is a leak in mathematical dress: it scores beautifully on every row it is measured
+/// on, and on no row it is ever asked about, since those have no later rows yet.
+/// </remarks>
+internal sealed class OnlyAnOutputReadsAhead : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is IReadsRowsAhead and not INamesTheAnswer)
+            {
+                yield return new DeclarationFault(
+                    at, steps[at].Verb,
+                    "reads rows after the row it is on, and only an output may: a feature that knows the future is a leak "
+                    + "that scores well on every row it is measured on and on none it is asked about.");
+            }
+        }
+    }
+}
+
+/// <summary>
+/// An answer read from later rows stands below a split in time whose gap is at least as wide, the rows ordered by the
+/// column that split divides by, alone.
+/// </summary>
+/// <remarks>
+/// Without the gap, the last rows a model learns from read their answers from the rows it is measured on. Later rows
+/// are later in time only when the rows are ordered by the column the split divides by and nothing else.
+/// </remarks>
+internal sealed class RowsAheadAreKeptApart : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        var split = NothingLearnsBeforeTheSplit.FirstSplit(steps);
+        var order = steps.OfType<IOrdersRows>().FirstOrDefault();
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is not IReadsRowsAhead ahead)
+            {
+                continue;
+            }
+
+            if (split < 0 || split > at || steps[split] is not IDividesInTime time)
+            {
+                yield return new DeclarationFault(
+                    at, ahead.Verb,
+                    $"reads {ahead.Ahead} rows ahead, so the rows it learns from and the rows it is measured on are divided in time "
+                    + $"above it, with a gap of at least {ahead.Ahead}: split.byTime.");
+                continue;
+            }
+
+            if (time.Gap < ahead.Ahead)
+            {
+                yield return new DeclarationFault(
+                    at, ahead.Verb,
+                    $"reads {ahead.Ahead} rows ahead, and the split at step {split + 1} keeps a gap of {time.Gap}: the last rows a "
+                    + $"model learns from would read their answers from the rows it is measured on. Keep a gap of at least {ahead.Ahead}.");
+                continue;
+            }
+
+            if (order?.OrderedBy is not [var only] || only != time.Column)
+            {
+                yield return new DeclarationFault(
+                    at, ahead.Verb,
+                    $"reads rows ahead in the order the rows stand in, and the split divides them by '{time.Column}': order them "
+                    + $"by '{time.Column}' alone, so the rows after a row are the ones that came after it.");
+            }
+        }
+    }
+}
+
+/// <summary>
+/// A return is made from its column as it was read: no step above it changes that column.
+/// </summary>
+/// <remarks>
+/// A return comes back as a value by the row's own value as it was read, so the return has to be on that value. Made
+/// from a scaled price, it came back as a price that was never there.
+/// </remarks>
+internal sealed class AReturnIsMadeFromItsColumnAsRead : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is not AheadStep { As: AheadAs.Return } ahead)
+            {
+                continue;
+            }
+
+            for (var above = 0; above < at; above++)
+            {
+                var changes = steps[above] switch
+                {
+                    IFittedStep fitted => fitted.ColumnsRead.Any(read => read.Column == ahead.Column),
+                    IUndoesItself undoes => undoes.Undoes(ahead.Column),
+                    _ => false,
+                };
+
+                if (changes)
+                {
+                    yield return new DeclarationFault(
+                        at, ahead.Verb,
+                        $"is a return on '{ahead.Column}' as it was read, and step {above + 1}, '{steps[above].Verb}', changes "
+                        + $"'{ahead.Column}' above it. Put the return above that step.");
+                }
+            }
+        }
+    }
+}

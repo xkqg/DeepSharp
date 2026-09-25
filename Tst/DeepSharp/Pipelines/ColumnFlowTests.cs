@@ -383,6 +383,7 @@ public class ColumnFlowTests
             "split.atRandom" => new SplitAtRandomStep(new SplitShares(0.70, 0.15, 0.15), 1),
             "split.stratified" => new SplitStratifiedStep("g", new SplitShares(0.70, 0.15, 0.15), 1),
             "target" => new TargetStep("b"),
+            "target.ahead" => new AheadStep("b", 2, AheadAs.Return),
             "drop.warmup" => new DropWarmUpStep(),
             _ => catalog.Read(JsonDocument.Parse(catalog.Describe(verb).Template).RootElement),
         };
@@ -404,6 +405,10 @@ public class ColumnFlowTests
 
             case IDropsColumns drops:
                 drops.DropFrom(table);
+                break;
+
+            case IMakesTheAnswer makes:
+                makes.MakeAnswers(table);
                 break;
         }
     }

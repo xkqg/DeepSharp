@@ -1,4 +1,4 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Text.Json;
@@ -21,8 +21,26 @@ public interface IOrdersRows : IActsInAWalk
     /// <returns>The rows as they are now, in the order they are to stand: every row, once.</returns>
     IReadOnlyList<int> RowOrder(Table table);
 
+    /// <summary>The columns the rows are put in order by, the one that decides first first, when the step says.</summary>
+    /// <remarks>Nothing, unless the step orders by columns; a step that reads rows ahead needs to know which.</remarks>
+    IReadOnlyList<string> OrderedBy => [];
+
     /// <inheritdoc />
     void IActsInAWalk.ActOn(Walk walk) => walk.Reorder(RowOrder(walk.Table));
+}
+
+/// <summary>
+/// A step whose value for a row is read from rows after it, in the declared order.
+/// </summary>
+/// <remarks>
+/// Only an output may: a feature that knows the future is a leak in mathematical dress. And an output may only
+/// across a split in time that keeps a gap at least as wide as how far it reads, the rows ordered by the column the
+/// split divides by, or the last rows a model learns from read their answers from the rows it is measured on.
+/// </remarks>
+public interface IReadsRowsAhead : IReadsRowOrder
+{
+    /// <summary>How many rows later the value is read.</summary>
+    int Ahead { get; }
 }
 
 /// <summary>
@@ -34,6 +52,22 @@ public interface IOrdersRows : IActsInAWalk
 /// </remarks>
 public interface IReadsRowOrder : IPipelineStep
 {
+}
+
+/// <summary>
+/// A split that divides the rows by when they happened, and keeps a gap between its parts.
+/// </summary>
+/// <remarks>
+/// What a step reading rows ahead needs to know of the split above it: the column it divides by, which the rows are
+/// to be ordered by alone, and how many moments it keeps apart at the end of every part.
+/// </remarks>
+public interface IDividesInTime : IPipelineStep
+{
+    /// <summary>The column that says when a row happened.</summary>
+    string Column { get; }
+
+    /// <summary>How many of the last moments of every part are kept apart.</summary>
+    int Gap { get; }
 }
 
 /// <summary>
@@ -64,6 +98,9 @@ public sealed record OrderByStep : IPipelineStep<OrderByStep>, IOrdersRows, IDes
 
     /// <summary>The columns the rows are put in order by.</summary>
     public IReadOnlyList<string> Columns { get; }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> OrderedBy => Columns;
 
     /// <inheritdoc />
     public static string Name => "order.by";

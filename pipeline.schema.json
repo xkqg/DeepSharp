@@ -58,6 +58,7 @@
             "split.byTime",
             "split.stratified",
             "target",
+            "target.ahead",
             "target.distribution",
             "target.labels"
           ]
@@ -440,6 +441,21 @@
           },
           "then": {
             "$ref": "#/$defs/target"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "target.ahead"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/target.ahead"
           }
         },
         {
@@ -1588,6 +1604,48 @@
       ],
       "additionalProperties": false
     },
+    "target.ahead": {
+      "description": "Names an answer read from a column rows later in the declared order: the value then, or the return on the row's own value by then.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "target.ahead"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column the answer is read from, rows later."
+        },
+        "ahead": {
+          "description": "How many rows later the answer is read, in the declared order: at least one.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "as": {
+          "anyOf": [
+            {
+              "enum": [
+                "value",
+                "return"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Vv][Aa][Ll][Uu][Ee]|[Rr][Ee][Tt][Uu][Rr][Nn])$"
+            }
+          ],
+          "description": "What the answer is: the value itself then, or the return on the row's own value by then."
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "ahead",
+        "as"
+      ],
+      "additionalProperties": false
+    },
     "target.distribution": {
       "description": "Names the columns a model is asked to predict as one answer: how a whole is divided among them, in their order.",
       "type": "object",
@@ -1675,6 +1733,7 @@
                       "split.atRandom",
                       "split.byTime",
                       "split.stratified",
+                      "target.ahead",
                       "target.distribution",
                       "target.labels"
                     ]

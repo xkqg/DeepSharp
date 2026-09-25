@@ -33,6 +33,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`split.byTime`](#splitbytime) | Divides the rows by when they happened: the earliest to learn from, the latest to be measured on. |
 | [`split.stratified`](#splitstratified) | Divides the rows at random while keeping the mixture of one column the same in every part. |
 | [`target`](#target) | Names the column a model is asked to predict, which is handed over apart from the numbers it is shown. |
+| [`target.ahead`](#targetahead) | Names an answer read from a column rows later in the declared order: the value then, or the return on the row's own value by then. |
 | [`target.distribution`](#targetdistribution) | Names the columns a model is asked to predict as one answer: how a whole is divided among them, in their order. |
 | [`target.labels`](#targetlabels) | Names the columns a model is asked to predict as one answer of labels, each nought or one on every row. |
 
@@ -506,6 +507,26 @@ Names the column a model is asked to predict, which is handed over apart from th
 - **`column`**: The column a model is asked to predict, handed over apart from the numbers it is shown.
 
 Means what it says from version 1 of the file.
+
+## `target.ahead`
+
+Names an answer read from a column rows later in the declared order: the value then, or the return on the row's own value by then.
+
+```json
+{"step":"target.ahead","column":"close","ahead":1,"as":"value"}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `column` | the name of a column holding a number, a whole number or true or false | `"close"` |
+| `ahead` | a whole number, at least 1 | `1` |
+| `as` | one of `value` or `return` | `"value"` |
+
+- **`column`**: The column the answer is read from, rows later.
+- **`ahead`**: How many rows later the answer is read, in the declared order: at least one.
+- **`as`**: What the answer is: the value itself then, or the return on the row's own value by then.
+
+Means what it says from version 2 of the file.
 
 ## `target.distribution`
 

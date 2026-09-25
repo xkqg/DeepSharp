@@ -171,6 +171,7 @@ public class StepParameterContractTests
             ["drop.warmup"] = 2,
             ["target.distribution"] = 2,
             ["target.labels"] = 2,
+            ["target.ahead"] = 2,
         };
 
         Assert.All(since, each => Assert.Equal(newer.GetValueOrDefault(each.Key, 1), each.Value));

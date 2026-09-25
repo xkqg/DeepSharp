@@ -163,6 +163,11 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
     /// <param name="keep">One answer per row: whether it stays.</param>
     public void Keep(IReadOnlyList<bool> keep) => _table = Table.Keep(keep);
 
+    /// <summary>Makes the answer an output makes from the rows, as this walk makes answers.</summary>
+    /// <param name="make">How the output makes its answer from the rows.</param>
+    /// <param name="answers">The columns it makes it into.</param>
+    public void Answer(Action<Table> make, IReadOnlyList<string> answers) => mode.Answer(Table, make, answers);
+
     /// <summary>The rows as a step that drops rows judges them: every column, less the answers this walk awaits.</summary>
     /// <remarks>
     /// A served row is the question, so its answers arrive as gaps, and a gap there is no reason to drop the row or
@@ -287,10 +292,16 @@ internal abstract class WalkMode
     /// <summary>Whether the rows are divided at the split, which fitting does and replaying does not.</summary>
     public abstract bool Divides { get; }
 
-    /// <summary>The answers this walk awaits rather than reads: none when fitting, every one the output names when replaying.</summary>
+    /// <summary>The answers this walk awaits rather than reads: none when fitting, the ones the rows bring when replaying.</summary>
     /// <param name="declaration">The declaration being walked.</param>
     /// <returns>The answer columns, in the output's order.</returns>
     public virtual IReadOnlyList<string> Awaited(PipelineDeclaration declaration) => [];
+
+    /// <summary>Makes an answer an output makes from the rows: from the rows themselves, when fitting.</summary>
+    /// <param name="table">The data, changed in place.</param>
+    /// <param name="make">How the output makes its answer from the rows.</param>
+    /// <param name="answers">The columns it makes it into.</param>
+    public virtual void Answer(Table table, Action<Table> make, IReadOnlyList<string> answers) => make(table);
 
     /// <summary>What a step that learns applies, at its place in the walk.</summary>
     /// <param name="at">The step's place in the declaration.</param>
@@ -348,7 +359,19 @@ internal sealed class ReplayWhatWasFitted(IReadOnlyDictionary<int, FittedStepVal
     }
 
     /// <inheritdoc />
-    public override IReadOnlyList<string> Awaited(PipelineDeclaration declaration) => declaration.Output?.Answers ?? [];
+    /// <remarks>An answer the output makes from later rows is not in any row handed in, and is not asked of them.</remarks>
+    public override IReadOnlyList<string> Awaited(PipelineDeclaration declaration) =>
+        declaration.Output is { MakesItsAnswer: false } output ? output.Answers : [];
+
+    /// <inheritdoc />
+    /// <remarks>A served row has no later rows to make its answer from: the answer is a gap in every row, which is what it is.</remarks>
+    public override void Answer(Table table, Action<Table> make, IReadOnlyList<string> answers)
+    {
+        foreach (var answer in answers)
+        {
+            table.Put(new Column<double>(answer, ColumnKind.Number, new double?[table.RowCount]));
+        }
+    }
 
     /// <inheritdoc />
     public override bool Divides => false;
