@@ -8,12 +8,15 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/xkqg/DeepSharp/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/xkqg/DeepSharp)](https://github.com/xkqg/DeepSharp)
 
-**The best of both worlds: TensorFlow's way of describing a network, PyTorch's way of running it.**
+**The best of three worlds: TensorFlow's way of describing a network, PyTorch's way of running it, and ML.NET's
+way of learning from a table.**
 
 DeepSharp is the C# layer over the engines that already exist: you describe, train and use a network in C#,
 and the arithmetic runs on .NET's own vector maths out of the box or on a heavier engine later — swapping
 between them does not change a line of your model. What it adds is everything around the engine: getting
-your data in, the layers, the training loop, the checkpoints and the pictures.
+your data in, the layers, the training loop, the checkpoints and the pictures. And a table that a tree learns
+better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
+too.
 
 **0.3.0 is the tensors, the data half, and a notebook to see the data in and choose its columns.** What learns
 from them is next;
@@ -108,7 +111,7 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
 | `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block, and its columns chosen from the grid or a list and saved beside it. It runs in Verso's VS Code extension, in `verso serve` and in an application of your own. |
+| `DeepSharp.Verso.Serve` | To come: the notebook for the browser editor `verso serve` starts. On the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap), not yet released. |
+| `DeepSharp.Verso.Api` | To come: an application of your own hosting the notebook, with drawing what a block shows, passing a click on and the toolbar's context done for it. On the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap), not yet released. |
 
-`DeepSharp.Verso.Serve` and `DeepSharp.Verso.Api` are named to follow the notebook, for `verso serve` and for an
-application of your own; they are on the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap), not yet
-released. Runs on .NET 8 and .NET 10. MIT — see [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE).
+Runs on .NET 8 and .NET 10. MIT — see [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE).

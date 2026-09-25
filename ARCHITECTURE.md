@@ -34,6 +34,8 @@ Src/DeepSharp.Pipelines/          the data side
 Src/DeepSharp.Pipelines.DataFrame/   a reader of Microsoft's DataFrame, through MatPlotLibNet.DataFrame
 Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
 Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
+Src/DeepSharp.Verso.Serve/           to come: the notebook for the browser editor verso serve starts
+Src/DeepSharp.Verso.Api/             to come: an application of your own that hosts the notebook
 Samples/                          runnable programs and the published data they read
 Tst/DeepSharp/                    the tests of the libraries
 Tst/DeepSharp.Verso.Notebooks/    the notebook's tests, run inside Verso's own engine
@@ -518,7 +520,7 @@ to implement **one** interface, and the four are not interchangeable:
 |---|---|---|
 | `ITensorBackend` | where does the arithmetic run | the light engine, and anything heavier |
 | `IRowSource` | where do the rows come from | a file format, a database reader, a landed fetch |
-| a learner | what learns from prepared data | a network here, a trainer from elsewhere |
+| a learner | what learns from prepared data | a network here, a trainer from ML.NET or elsewhere |
 | an importer | what does a model trained elsewhere look like here | a saved-model or weight-file reader |
 
 A package that implements two of them is doing two jobs and should be two packages; a package that
@@ -604,8 +606,8 @@ differently on the day the network does.
 `Batch(part)` is where the pipeline stops: rows of numbers, their column names in a fixed order, and the
 answers handed over separately when the pipeline names an output — as many numbers a row as the output names,
 in the order it names them, seventy for a histogram of weights. An output of one answer hands it over as one
-label a row as well. A network built here, a trainer from an established .NET library and a caller's own
-learner all take that same handover, which is the only reason two of them can honestly be compared.
+label a row as well. A network built here, a trainer from ML.NET or another established .NET library and a
+caller's own learner all take that same handover, which is the only reason two of them can honestly be compared.
 
 Which answers there are is the output's to say, and each kind of output is a verb of its own. `target` names one
 column. `target.distribution` names the columns a whole is divided among — a flock weighed in seventy bands of
