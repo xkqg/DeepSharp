@@ -35,4 +35,19 @@ internal static class BlockTextExtensions
         // A writer ends its lines the way the machine does on some runtimes; a saved notebook is the same file everywhere.
         return Encoding.UTF8.GetString(buffer.WrittenSpan).ReplaceLineEndings("\n");
     }
+
+    /// <summary>The step on one line, as a card quotes it among other words.</summary>
+    /// <param name="step">The step.</param>
+    /// <returns>The step's JSON, with nothing between its tokens.</returns>
+    public static string AsLine(this IPipelineStep step)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            step.WriteTo(writer);
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
 }

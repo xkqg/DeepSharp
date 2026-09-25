@@ -96,7 +96,11 @@ internal static class StepCard
     public static CellOutput ColumnsNotWritten(string why) =>
         Listed("The saved columns could not be written beside the notebook:", [why]);
 
-    private static CellOutput Listed(string head, IEnumerable<string> items)
+    /// <summary>A head and what it lists, marked as an error: the one way a block says what stopped something.</summary>
+    /// <param name="head">What stopped.</param>
+    /// <param name="items">Each reason.</param>
+    /// <returns>The explanation.</returns>
+    internal static CellOutput Listed(string head, IEnumerable<string> items)
     {
         var html = new StringBuilder(Style);
 

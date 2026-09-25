@@ -65,7 +65,12 @@ public enum ColumnRole
 /// <param name="Was">The kind a category was before it became one, when it says.</param>
 /// <param name="Offers">What can be done to it without breaking a rule.</param>
 /// <param name="Role">What it is to the output: a column an answer comes back to, one an answer's way back reads, or neither.</param>
-public readonly record struct ColumnChoice(string Name, ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, ColumnOffers Offers, ColumnRole Role);
+/// <param name="MadeBy">
+/// Where the step that makes it stands, counting from nought, for a column a step makes; nothing for one the source
+/// brings. A column a step makes and a drop below leaves out is still made by that step.
+/// </param>
+public readonly record struct ColumnChoice(
+    string Name, ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, ColumnOffers Offers, ColumnRole Role, int? MadeBy = null);
 
 /// <summary>Every column asked about, as each stands.</summary>
 /// <param name="Rows">One row per column asked, in the order they were asked.</param>
@@ -290,7 +295,11 @@ public static class ColumnChoiceExtensions
             offers |= ColumnOffers.BackToWas;
         }
 
-        return new(column, Standing(declaration, declared, column), declared?.Kind ?? KnownKind(declaration, column), declared?.Was, offers, role);
+        var made = declared is null && Made(declaration, column);
+
+        return new(
+            column, Standing(declaration, declared, column), declared?.Kind ?? KnownKind(declaration, column), declared?.Was, offers, role,
+            made ? MadeAt(declaration, column) : null);
     }
 
     private static ColumnStanding Standing(PipelineDeclaration declaration, ColumnDeclaration? declared, string column)
@@ -352,9 +361,20 @@ public static class ColumnChoiceExtensions
     private static bool Reaches(PipelineDeclaration declaration, string column) =>
         declaration.ColumnsBefore(declaration.Steps.Count).Allows(column);
 
-    // Where a column comes to be: the first step after which it may be read.
-    private static int MadeAt(PipelineDeclaration declaration, string column) =>
-        Enumerable.Range(0, declaration.Steps.Count).First(at => declaration.ColumnsBefore(at + 1).Allows(column));
+    // Where a column comes to be: the first step after which it is known — the schema for one it declares, the step
+    // that makes one no source brought. One known nowhere, which only the rest of the file brings along, comes to be
+    // where the rest first may be read. Where any name may be read is no answer for a column a step makes: that is
+    // the schema, above the step, when it keeps the rest.
+    private static int MadeAt(PipelineDeclaration declaration, string column)
+    {
+        var known = FirstAfter(declaration, columns => columns.Find(column) is not null);
+
+        return known >= 0 ? known : FirstAfter(declaration, columns => columns.Allows(column));
+    }
+
+    // The first step after which the columns are as asked, or minus one when there is none.
+    private static int FirstAfter(PipelineDeclaration declaration, Func<ColumnState, bool> asked) =>
+        Enumerable.Range(0, declaration.Steps.Count).FirstOrDefault(at => asked(declaration.ColumnsBefore(at + 1)), -1);
 
     // A column no source brought, that a step names as one it leaves behind.
     private static bool Made(PipelineDeclaration declaration, string column) => KnownKind(declaration, column) is not null;

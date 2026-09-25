@@ -731,10 +731,12 @@ declaration is the pipeline, and a block below it says which block stops it.
 A box on the grid changes the declaration, never the data. Every column has a box saying whether it is in, and
 every column the schema takes a box saying whether it is a category, and both go through the one set of column
 rules every door that changes the columns uses. Unticking a column nothing reads excludes it in the schema, which
-keeps its kind; unticking one a step reads, or one a step made, writes a `drop.columns` block after the last step
-that reads it. Ticking either brings it back as it was, and a column the schema does not name comes in as text
-where the source has it — which only the source's own header says, so a tick made before anything read the source
-shows the source first and takes nothing in. Ticking a category remembers the kind the column was, and unticking
+keeps its kind; unticking one a step reads, or one a step made, writes a `drop.columns` block below the last step
+that reads it and below the step that made it — never higher, even under a schema that keeps the rest of the file,
+where any name may be read from the schema down. Ticking either brings it back as it was, and a column the schema
+does not name comes in as text where the source has it — which only the source's own header says, so a tick made
+before anything read the source shows the source first and takes nothing in. Ticking a category remembers the kind
+the column was, and unticking
 gives that kind back. A box the rules would not let change is drawn but cannot be clicked: the answer cannot be
 left out, nor the last column a schema takes, and a category that does not say what it was keeps its box ticked. A
 box carries no payload, so Verso's router sends the state it is in — on a click, on a change and on every key — and
@@ -752,6 +754,19 @@ showing a block writes nothing. It is written whole under a name of its own and 
 ever meets half a file, and the same decisions again leave it untouched. A file that cannot be read is never written
 over, since it may hold what this notebook cannot see; a file that cannot be written says so at the block, and the
 blocks keep the decisions. The source's columns it holds belong to the list of columns, and a write keeps them.
+
+The columns saved beside a notebook are taken over in two presses, and the first changes nothing. The toolbar's
+"Take over the saved columns" reads the file and the source's first line, works the take-over out against the blocks
+as they stand, and lists it at the schema's block — at the source's, for blocks without a schema, which the saved one
+would follow: every column whose decision would change, from how it stands to how it would stand, a column a step
+makes named by that step; the output and the schema's order, when they would change; and the source's columns the
+file never showed. Under the list is one box, and ticking it applies what the list showed. The box carries it — the
+file's text as it was read, and the key of the blocks it was listed for — so nothing is remembered between the two
+presses and what is applied is what was shown. Ticked over other blocks it is refused, with the words to take over
+again; while the blocks make no pipeline it is refused, naming the block that stops them; and a tick that finds the
+blocks holding it already, such as the echo of the click, does nothing. A take-over whose blocks would break a rule is
+listed with every rule and offers no box, and a file that cannot be read says so at the block. The button is offered
+only for a saved notebook whose blocks make one pipeline, with columns saved beside it.
 
 The schema block's form changes the schema alone, through the schema's own operations. A column set "not taken"
 stays in the schema, excluded with its kind, and a step below that reads it says so at its own block rather than
@@ -812,8 +827,8 @@ so. Verso's editor itself is not published for applications to reuse, so such an
 editor does: it draws a block's output, which is HTML; it hands a control's `data-action` and `data-extension-id`
 to the part the control names, with its `data-payload` — or, for a control that carries none, its state, as Verso's
 own router sends it: `true` or `false` for a box — and with the notebook's variables and operations; it draws again
-when a block's output is updated or a gesture says it changed the blocks; and it gives the toolbar's Run and
-Export a context of its own. An application that only wants the pipeline reads each block with
+when a block's output is updated or a gesture says it changed the blocks; and it gives the toolbar's buttons — Run,
+Export and the take-over — a context of its own. An application that only wants the pipeline reads each block with
 `StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write the file
 with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds the
 steps and no fit, because nothing ran them there.

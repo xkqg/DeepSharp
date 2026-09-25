@@ -439,8 +439,10 @@ internal sealed class NotebookSession
         }
     }
 
-    // The key of a whole declaration: that of its last step, which covers every step above it.
-    private static string KeyOf(PipelineDeclaration declaration) =>
+    /// <summary>The key of a whole declaration: that of its last step, which covers every step above it.</summary>
+    /// <param name="declaration">The declaration.</param>
+    /// <returns>The key; empty for a declaration without steps.</returns>
+    internal static string KeyOf(PipelineDeclaration declaration) =>
         declaration.Steps.Count == 0 ? string.Empty : declaration.KeyAt(declaration.Steps.Count - 1);
 
     /// <summary>Why a change was not made, and the text it was refused on.</summary>

@@ -59,28 +59,34 @@ public sealed class ToolbarTests : IDisposable
         await using var notebook = await NotebookAsync(Titanic);
         var run = Action<RunPipelineAction>(notebook);
         var export = Action<ExportPipelineAction>(notebook);
+        var takeOver = Action<TakeOverAction>(notebook);
 
         Assert.Equal(ToolbarPlacement.MainToolbar, run.Placement);
         Assert.Equal(ToolbarPlacement.ExportMenu, export.Placement);
+        Assert.Equal(ToolbarPlacement.MainToolbar, takeOver.Placement);
         Assert.Equal(RunPipelineAction.Id, run.ActionId);
         Assert.Equal(ExportPipelineAction.Id, export.ActionId);
+        Assert.Equal(TakeOverAction.Id, takeOver.ActionId);
         Assert.Equal(run.ActionId, run.ExtensionId);
         Assert.Equal(export.ActionId, export.ExtensionId);
+        Assert.Equal(takeOver.ActionId, takeOver.ExtensionId);
+        Assert.Equal("Take over the saved columns", takeOver.DisplayName);
 
-        foreach (IToolbarAction action in new IToolbarAction[] { run, export })
+        // Run first, then the take-over beside it.
+        Assert.Equal([0, 0, 1], new IToolbarAction[] { run, export, takeOver }.Select(action => action.Order));
+
+        foreach (NotebookExtension action in new NotebookExtension[] { run, export, takeOver })
         {
-            Assert.False(string.IsNullOrWhiteSpace(action.DisplayName));
-            Assert.StartsWith("<svg", action.Icon, StringComparison.Ordinal);
-            Assert.False(action.IconOnly);
-            Assert.False(action.IsPrimary);
-            Assert.Null(action.ConfirmationPrompt);
-            Assert.Equal(0, action.Order);
-        }
+            var button = (IToolbarAction)action;
 
-        Assert.False(string.IsNullOrWhiteSpace(run.Name));
-        Assert.False(string.IsNullOrWhiteSpace(run.Description));
-        Assert.False(string.IsNullOrWhiteSpace(export.Name));
-        Assert.False(string.IsNullOrWhiteSpace(export.Description));
+            Assert.False(string.IsNullOrWhiteSpace(button.DisplayName));
+            Assert.StartsWith("<svg", button.Icon, StringComparison.Ordinal);
+            Assert.False(button.IconOnly);
+            Assert.False(button.IsPrimary);
+            Assert.Null(button.ConfirmationPrompt);
+            Assert.False(string.IsNullOrWhiteSpace(action.Name));
+            Assert.False(string.IsNullOrWhiteSpace(action.Description));
+        }
     }
 
     [Fact]

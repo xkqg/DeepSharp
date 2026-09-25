@@ -27,6 +27,9 @@ internal enum ViewTrigger
 
     /// <summary>The toolbar's run of the whole pipeline.</summary>
     Run,
+
+    /// <summary>The toolbar's take-over of the columns saved beside the notebook: listed, and nothing changed yet.</summary>
+    TakeOver,
 }
 
 /// <summary>What a block's kernel is asked to show.</summary>
@@ -39,13 +42,17 @@ internal enum ViewTrigger
 /// <param name="NotMade">
 /// A change a gesture asked for and that is not made, each rule it would break: said above the data, which is as it was.
 /// </param>
+/// <param name="Card">
+/// What the block shows in place of its data, drawn by what asked for it: the list of a take-over, which reads no rows
+/// and changes nothing. Nothing for every other request.
+/// </param>
 /// <remarks>
 /// The whole pipeline is fitted only when the toolbar's run asks it of a notebook that makes one pipeline; every other
-/// request shows the data at its block.
+/// request shows the data at its block, or the card it carries.
 /// </remarks>
 internal readonly record struct ViewRequest(
     PipelineDeclaration? Declaration, int Position, int Page, IReadOnlyList<string> Faults, ViewTrigger Trigger, bool Whole,
-    IReadOnlyList<string> NotMade)
+    IReadOnlyList<string> NotMade, CellOutput? Card = null)
 {
     /// <summary>Whether to run the whole pipeline, fitting every step, and hand what it learned over.</summary>
     public bool RunsTheWholePipeline => Trigger == ViewTrigger.Run && Whole;

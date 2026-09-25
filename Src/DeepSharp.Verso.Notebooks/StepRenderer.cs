@@ -41,8 +41,23 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     /// </summary>
     internal const string Category = "deepsharp.category";
 
+    /// <summary>
+    /// The gesture a take-over's list sends, with the saved columns it listed and the key of the blocks it listed them
+    /// for: ticked, what it listed is made.
+    /// </summary>
+    internal const string Apply = "deepsharp.apply";
+
     /// <summary>The key a box carries its column under.</summary>
     internal const string ColumnKey = "column";
+
+    /// <summary>The key a take-over's list carries the saved columns under, as the file held them when it was listed.</summary>
+    internal const string PresetKey = "preset";
+
+    /// <summary>The key a take-over's list carries the key of the blocks it was listed for under.</summary>
+    internal const string DrawnKey = "drawn";
+
+    // Said at a block when the list of a take-over is applied to blocks that are no longer the ones it listed.
+    private const string ListedForOtherBlocks = "the blocks changed since the list was shown — take over again";
 
     // Said at a block when a column the schema does not name is ticked before anything read the source in this session.
     private const string SourceNotRead =
@@ -131,12 +146,66 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
                 return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Page, PageOf(context.Payload));
 
             default:
-                return ControlAction.Read(context.InteractionType) is { } action
-                       && action.Text(ColumnKey) is { } column
-                       && StateOf(context.Payload) is { } ticked
-                    ? await TickedAsync(gesture, assembled, context, action.Gesture, column, ticked)
-                    : null;
+                if (ControlAction.Read(context.InteractionType) is not { } action || StateOf(context.Payload) is not { } ticked)
+                {
+                    return null;
+                }
+
+                if (action.Gesture == Apply)
+                {
+                    return await AppliedAsync(gesture, assembled, context, action, ticked);
+                }
+
+                return action.Text(ColumnKey) is { } column ? await TickedAsync(gesture, assembled, context, action.Gesture, column, ticked) : null;
         }
+    }
+
+    // A take-over's list, sent with the saved columns it listed and the key of the blocks it listed them for. Ticked,
+    // what it listed is made, in one commit; asked again — the click's echo — the blocks hold it already, and nothing
+    // happens. The blocks must still make the whole pipeline the list was worked out for, or the change is not made and
+    // the block says why.
+    private static async Task<string?> AppliedAsync(
+        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    {
+        if (!ticked || action.Text(PresetKey) is not { } saved || action.Text(DrawnKey) is not { } drawn)
+        {
+            return null;
+        }
+
+        PresetTakeOver takenOver;
+
+        try
+        {
+            takenOver = PipelinePreset.FromJson(saved, NotebookVerbs.Catalog()).TakeOver(assembled.Readable, header: null);
+        }
+        catch (PipelineFileException unreadable)
+        {
+            await StepCommit.NotMadeAsync(gesture, assembled, [.. unreadable.Faults.Select(fault => fault.ToString())]);
+
+            return null;
+        }
+
+        if (takenOver.Faults.Count == 0 && takenOver.Steps.SequenceEqual(assembled.Readable.Steps))
+        {
+            return null;
+        }
+
+        IReadOnlyList<string> notMade = !assembled.Whole
+            ? [$"the blocks do not make a pipeline yet: {string.Join("; ", assembled.Stopping)}"]
+            : drawn != NotebookSession.KeyOf(assembled.Readable)
+                ? [ListedForOtherBlocks]
+                : [.. takenOver.Faults.Select(fault => fault.ToString())];
+
+        if (notMade.Count > 0)
+        {
+            await StepCommit.NotMadeAsync(gesture, assembled, notMade);
+
+            return null;
+        }
+
+        context.StateChanged = await StepCommit.CommitAsync(gesture, assembled, takenOver.Steps);
+
+        return null;
     }
 
     // A grid's box, sent with the state it is in: the steps the column rules make of that state, written when they

@@ -276,6 +276,19 @@ public class ColumnChoiceTests
     }
 
     [Fact]
+    public void ExcludingAColumnAStepMade_WhileTheSchemaKeepsTheRest_IsStillADropAfterTheStepThatMakesIt()
+    {
+        // Keeping the rest lets any name be read from the schema down, the one the fill makes too; a drop that high
+        // would take away nothing, and the fill below it would make the column again.
+        var steps = Titanic(Remainder.Keep).Excluding("age_was_missing");
+        var after = Then(steps);
+
+        Assert.Equal(["read.csv", "declare", "split.stratified", "fill.missing", "drop.columns", "normalise"], steps.Select(step => step.Verb));
+        Assert.Null(after.ColumnsBefore(after.Steps.Count).Find("age_was_missing"));
+        Assert.Empty(PipelineDeclaration.FaultsIn(steps));
+    }
+
+    [Fact]
     public void ExcludingAColumnTheRestKeeps_IsADropAfterTheSchema()
     {
         var steps = Titanic(Remainder.Keep).Excluding("sex");
@@ -405,6 +418,20 @@ public class ColumnChoiceTests
         Assert.Equal([ColumnKind.Number, ColumnKind.Integer, null, ColumnKind.Number], rows.Take(4).Select(row => row.Kind));
         Assert.NotNull(rows[4].Kind);
         Assert.Equal(ColumnStanding.Kept, Row(Titanic(Remainder.Keep), "sex").Standing);
+    }
+
+    [Theory]
+    [InlineData(Remainder.Drop)]
+    [InlineData(Remainder.Keep)]
+    public void AColumnAStepMakes_SaysWhichStepMakesIt_DroppedOrNot_AndAColumnTheSourceBringsSaysNone(Remainder remainder)
+    {
+        var dropped = Then(Titanic(remainder).Excluding("age_was_missing"));
+        var rows = Titanic(remainder).ChoicesFor(["age_was_missing", "age", "fare", "sex"]).Rows;
+
+        Assert.Equal([3, null, null, null], rows.Select(row => row.MadeBy));
+        Assert.Equal(ColumnStanding.Dropped, Row(dropped, "age_was_missing").Standing);
+        Assert.Equal(3, Row(dropped, "age_was_missing").MadeBy);
+        Assert.Null(Row(Then(Titanic(remainder).Excluding("pclass")), "pclass").MadeBy);
     }
 
     [Fact]

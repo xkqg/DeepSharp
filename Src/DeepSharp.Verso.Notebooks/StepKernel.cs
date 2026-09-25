@@ -162,6 +162,15 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
     // that is not what its column declares — is said at the block, in the words of what stopped them.
     private static async Task ShowAsync(NotebookSession session, ViewRequest request, IExecutionContext context)
     {
+        // A card asked for in place of the data — a take-over's list — reads no rows and changes nothing.
+        if (request.Card is { } card)
+        {
+            session.Hidden(context.CellId);
+            await context.WriteOutputAsync(card);
+
+            return;
+        }
+
         if (request.NotMade.Count > 0)
         {
             await context.WriteOutputAsync(StepCard.NotMade(request.NotMade));

@@ -10,9 +10,9 @@ using Verso.Extensions;
 namespace DeepSharp.Tests.Notebooks;
 
 /// <summary>
-/// What the rest of the suite cannot see, because it enters below Verso's host: how a front end reads a button, and
-/// what it does with an answer. A click reaches a part through Verso's router, which reads what a button carries
-/// from its <c>data-payload</c> and from a <c>value</c> only on a field; and a host that is answered replaces the
+/// What the rest of the suite cannot see, because it enters below Verso's host: how a front end reads a control, and
+/// what it does with an answer. A click reaches a part through Verso's router, which sends what a control carries in
+/// its <c>data-payload</c>, and a box's own state when it carries none; and a host that is answered replaces the
 /// block's outputs with the answer — so a gesture that shows or changes something answers nothing at all.
 /// </summary>
 public sealed partial class HostContractTests : IDisposable
@@ -219,6 +219,8 @@ public sealed partial class HostContractTests : IDisposable
     [InlineData(StepRenderer.Category + " {\"column\":\"pclass\"}", "true")]
     [InlineData(StepRenderer.Category + " {\"column\":\"pclass\"}", "false")]
     [InlineData(StepRenderer.Include + " {\"column\":\"sex\"}", "true")]
+    [InlineData(StepRenderer.Apply + " {\"preset\":\"not saved columns\",\"drawn\":\"0\"}", "true")]
+    [InlineData(StepRenderer.Apply + " {\"preset\":\"not saved columns\",\"drawn\":\"0\"}", "false")]
     [InlineData("deepsharp.unknown", "")]
     public async Task EveryGesture_AnswersNothing_SoAHostThatAppliesAnswersLeavesTheBlockAsTheRunWroteIt(string interaction, string payload)
     {

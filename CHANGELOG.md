@@ -101,7 +101,9 @@ wrong with it at once, each at its line and column.
   its own, and its form swaps it for any other kind of output. A profile block names, for
   every problem it finds, the step that answers it, and a correlation block is drawn as a heatmap over the
   complete training rows. The toolbar runs the whole pipeline, fitting every step on the training rows, and
-  exports it as the same pipeline file the chain writes. C# cells in the same notebook are handed the
+  exports it as the same pipeline file the chain writes. Its "Take over the saved columns" lists, at the schema's
+  block, every column whose decision taking the saved ones over would change, and changes nothing until the list's
+  own box is ticked. C# cells in the same notebook are handed the
   pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. It is
   installed from Verso's Extensions panel and runs in Verso's VS Code extension, in the browser editor
   `verso serve` opens, and inside an application that takes Verso's engine as a dependency.
@@ -145,10 +147,11 @@ wrong with it at once, each at its line and column.
 
 - **What can be done to a column is said once.** `Including`, `Excluding` and `WithKind` on a declaration hand
   back the steps a change to one column makes: a column taken back in as it was, or out of the drop that left it
-  out; a column no step reads excluded in the schema with its kind, and any other dropped after the last step that
-  reads it; a category that remembers the kind it came from. Asked for what already is, each hands back the steps
-  it was given. `ChoicesFor(columns)` says how each column stands — taking part, excluded, dropped, made by a step,
-  kept with the rest, or not declared — and what can be done to it without breaking a rule, so the answer is never
+  out; a column no step reads excluded in the schema with its kind, and any other dropped below the last step that
+  reads it and the step that makes it; a category that remembers the kind it came from. Asked for what already is,
+  each hands back the steps it was given. `ChoicesFor(columns)` says how each column stands — taking part, excluded,
+  dropped, made by a step and which one, kept with the rest, or not declared — and what can be done to it without
+  breaking a rule, so the answer is never
   offered to be left out and a column a later step scales as a number is never offered to become a category. The
   schema's own `WithColumn`, `WithColumnExcluded` and `WithColumnKind` change one block alone. `WithOutput` places
   an output, in the place of the one standing or at the end, and a return directly after the split; `WithoutOutput`

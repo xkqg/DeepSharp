@@ -54,9 +54,10 @@ which read the rows in their order and so need that order said first, with `.Ord
 `DeepSharp.Verso.Notebooks` writes the same pipeline as a [Verso](https://www.versonotebooks.com/) notebook,
 one block per step, each block the step's own JSON — edited as text, or field by field in Verso's properties
 panel. "Show the data here" on a block runs the pipeline down to it and shows the rows there, each column
-coloured over the training rows and every row marked with the part it lands in. A column is excluded or made
-a category from the grid, and the notebook writes the step that does it. The toolbar runs the whole pipeline
-and exports it as the same file the chain writes.
+coloured over the training rows and every row marked with the part it lands in. A box on the grid leaves a
+column out or makes it a category, and the notebook writes the step that does it. What the blocks decide about
+their columns is saved beside the notebook, and the toolbar takes a saved file over again, listing every change
+before it makes one. It also runs the whole pipeline and exports it as the same file the chain writes.
 
 Install it from Verso's Extensions panel. The same package runs in Verso's VS Code extension, in the browser
 editor `verso serve` opens, and inside an application of your own — the
