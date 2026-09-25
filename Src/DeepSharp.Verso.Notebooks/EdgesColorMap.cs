@@ -21,9 +21,20 @@ namespace DeepSharp.Verso.Notebooks;
 /// <param name="bad">No value: a gap, or a value that is not a number.</param>
 internal sealed class EdgesColorMap(IColorMap inner, Color under, Color over, Color bad) : IColorMap
 {
+    // Where there is no value: the same grey whatever kind of column it is missing from.
+    private static readonly Color NoValue = Color.FromHex("#d9d9d9");
+
+    // Okabe-Ito's reddish purple, the seventh of its eight colours, which tells apart under every common kind of colour blindness.
+    private const double ReddishPurple = 6 / 7.0;
+
     /// <summary>Coolwarm, from blue at the smallest training value to red at the largest, with darker ends beyond them.</summary>
-    public static EdgesColorMap Coolwarm { get; } = new(
-        ColorMaps.Coolwarm, Color.FromHex("#1b2a6b"), Color.FromHex("#5c0014"), Color.FromHex("#d9d9d9"));
+    public static EdgesColorMap Coolwarm { get; } = new(ColorMaps.Coolwarm, Color.FromHex("#1b2a6b"), Color.FromHex("#5c0014"), NoValue);
+
+    /// <summary>
+    /// A category: one colour for every value the training rows hold, the same colour darker for a value they never held —
+    /// one an encoder fitted on them does not know — and grey where there is none.
+    /// </summary>
+    public static EdgesColorMap Category { get; } = Tinted(QualitativeColorMaps.OkabeIto.GetColor(ReddishPurple));
 
     /// <inheritdoc />
     public string Name => inner.Name;
@@ -39,4 +50,8 @@ internal sealed class EdgesColorMap(IColorMap inner, Color under, Color over, Co
 
     /// <inheritdoc />
     public Color? GetBadColor() => bad;
+
+    // One colour inside, the same colour darker on either side of what was learned.
+    private static EdgesColorMap Tinted(Color tint) =>
+        new(new ListedColorMap("category", [tint]), tint.Modulate(0.6), tint.Modulate(0.6), NoValue);
 }

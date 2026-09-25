@@ -108,6 +108,28 @@ public class ViewTests
     }
 
     [Fact]
+    public void AView_KnowsTheCategoriesItsMeasuredRowsHold_ByTheRuleAnEncoderLearnsThemBy()
+    {
+        var pipeline = Pdd.Create()
+            .ReadCsv(Repository.Data("titanic.csv"))
+            .Declare(schema => schema.Integer("survived").Category("embarked"))
+            .SplitStratified("survived", 0.70, 0.15)
+            .Build();
+        var run = pipeline.Run();
+
+        var view = pipeline.ViewAt(3);
+
+        // What an encoder learns here, from the training rows, the gaps left out, in one order.
+        Assert.Equal(new EncodeStep("embarked").Fit(run.Table, run.Parts).List("categories"), view.MeasuredCategories("embarked"));
+        Assert.Equal(["C", "Q", "S"], view.MeasuredCategories("embarked"));
+
+        // Nothing divides these rows, so every one of them is measured.
+        var undivided = Pdd.Create().Read(CsvRowSource.FromText("kind\nb\na\n\nb\n"), "rows").Declare(schema => schema.Category("kind")).Build();
+
+        Assert.Equal(["a", "b"], undivided.ViewAt(2).MeasuredCategories("kind"));
+    }
+
+    [Fact]
     public void AViewWithNoSplitAnywhere_IsUndivided_NeverTraining()
     {
         var view = Passengers().AddFeature("family", "sibsp", Arithmetic.Plus, "parch").Build().ViewAt(3);

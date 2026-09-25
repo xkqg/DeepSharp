@@ -205,4 +205,26 @@ public static class TableExtensions
 
         return new TrainingValues(column, [.. finite], gaps, notFinite);
     }
+
+    /// <summary>
+    /// What some rows of a column hold as words: the categories an encoder learns from the training rows, the categories
+    /// the measured rows of a view hold.
+    /// </summary>
+    /// <param name="table">The table.</param>
+    /// <param name="column">The column's name.</param>
+    /// <param name="measured">Which rows count.</param>
+    /// <returns>Every value those rows hold, once, in ordinal order; a gap is none.</returns>
+    internal static IReadOnlyList<string> CategoriesOf(this Table table, string column, Func<int, bool> measured)
+    {
+        var values = table[column];
+
+        return
+        [
+            .. Enumerable.Range(0, table.RowCount)
+                .Where(row => measured(row) && !values.IsMissing(row))
+                .Select(row => values.TextAt(row)!)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal),
+        ];
+    }
 }

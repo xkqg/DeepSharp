@@ -32,6 +32,16 @@ public class GridTests
         html.Split("<td").First(cell =>
             cell.Contains("deepsharp-number", StringComparison.Ordinal) && cell.Contains($">{text}</td>", StringComparison.Ordinal));
 
+    // A black cell: a column that is not in, whose value is not written.
+    private const string Black = "<td class=\"deepsharp-out\"></td>";
+
+    private static int Count(string html, string piece) => html.Split(piece).Length - 1;
+
+    // A header's box for a column, as its input tag is written.
+    private static string Box(string html, string gesture, string column) =>
+        html.Split("<input").Skip(1).Select(tag => tag[..tag.IndexOf('>', StringComparison.Ordinal)])
+            .First(tag => tag.Contains($"data-action=\"{gesture} {{&quot;column&quot;:&quot;{column}&quot;}}\"", StringComparison.Ordinal));
+
     [Fact]
     public void TheGrid_IsTheSameWhateverLanguageTheInterfaceSpeaks()
     {
@@ -102,6 +112,71 @@ public class GridTests
         Assert.Contains("<td>a</td>", grid, StringComparison.Ordinal);
         Assert.Contains("rows of its column", grid, StringComparison.Ordinal);
         Assert.Contains("2 undivided", grid, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AColumnThatIsNotIn_IsBlack_ItsValuesAreNotOnThePage_AndItsBoxStillTakesItIn()
+    {
+        // The source's own rows, above the schema: every column as words, and one the schema does not take.
+        const string csv = "kept,secret\n1,hidden-one\n2,hidden-two\n";
+        var grid = Grid(csv, schema => schema.Number("kept"), steps: 1);
+        var box = Box(grid, StepRenderer.Include, "secret");
+
+        Assert.Equal(2, Count(grid, Black));
+        Assert.DoesNotContain("hidden-one", grid, StringComparison.Ordinal);
+        Assert.DoesNotContain("hidden-two", grid, StringComparison.Ordinal);
+        Assert.Contains("<td>1</td><td class", grid, StringComparison.Ordinal);
+        Assert.DoesNotContain(" checked", box, StringComparison.Ordinal);
+        Assert.DoesNotContain(" disabled", box, StringComparison.Ordinal);
+        Assert.Contains("; a column that is not in is black", grid, StringComparison.Ordinal);
+        Assert.DoesNotContain("is black", Grid(csv, schema => schema.Number("kept").Text("secret"), steps: 1), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AColumnDroppedBelowAStepThatReadsIt_IsBlackWhereItStillStands()
+    {
+        const string csv = "a,b\n11,17\n13,19\n";
+        var grid = Grid(
+            csv, schema => schema.Number("a", "b"), steps: 3,
+            more: builder => new PipelineDeclaration(builder.AddFeature("c", "a", Arithmetic.Plus, "b").Declaration.Excluding("b")));
+
+        Assert.Equal(2, Count(grid, Black));
+        Assert.DoesNotContain(">17</td>", grid, StringComparison.Ordinal);
+        Assert.DoesNotContain(">19</td>", grid, StringComparison.Ordinal);
+        Assert.Contains($"background:{Fill(0)}", Cell(grid, "28"), StringComparison.Ordinal);
+        Assert.Contains($"background:{Fill(1)}", Cell(grid, "32"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACategory_IsOneColour_DarkerForAValueTheTrainingRowsNeverHeld_AndGreyForAGap()
+    {
+        // Twenty days: training takes the first fourteen, which hold x and y alone; the later rows bring z, and a gap.
+        var csv = "t,kind\n" + string.Concat(Enumerable.Range(1, 20).Select(day => $"{day},{(day <= 14 ? (day % 2 == 0 ? "x" : "y") : day == 20 ? "" : "z")}\n"));
+        var grid = Grid(csv, schema => schema.Integer("t").Category("kind"), steps: 4, more: builder => builder.OrderBy("t").SplitByTime("t", 0.70, 0.15).Declaration);
+        var map = EdgesColorMap.Category;
+
+        string Kind(string text) => grid.Split("<td").First(cell =>
+            cell.Contains("deepsharp-category", StringComparison.Ordinal) && cell.Contains($">{text}</td>", StringComparison.Ordinal));
+
+        Assert.Contains($"background:{map.GetColor(0).ToHex()}", Kind("x"), StringComparison.Ordinal);
+        Assert.Contains($"background:{map.GetColor(0).ToHex()}", Kind("y"), StringComparison.Ordinal);
+        Assert.Contains($"background:{map.GetOverColor()!.Value.ToHex()}", Kind("z"), StringComparison.Ordinal);
+        Assert.Contains($"background:{map.GetBadColor()!.Value.ToHex()}", Kind(string.Empty), StringComparison.Ordinal);
+        Assert.Contains("; a category is one colour, darker for a value those rows never held", grid, StringComparison.Ordinal);
+        Assert.DoesNotContain("a category is", Grid(csv, schema => schema.Integer("t").Text("kind")), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheCategoryColour_IsOkabeItosReddishPurple_DarkerPastWhatTheTrainingRowsHeld_AndTheSameGreyForAGap()
+    {
+        var map = EdgesColorMap.Category;
+
+        Assert.Equal("category", map.Name);
+        Assert.Equal("#CC79A7", map.GetColor(0).ToHex());
+        Assert.Equal(map.GetColor(0), map.GetColor(1));
+        Assert.Equal("#7A4864", map.GetOverColor()!.Value.ToHex());
+        Assert.Equal(map.GetOverColor(), map.GetUnderColor());
+        Assert.Equal(EdgesColorMap.Coolwarm.GetBadColor(), map.GetBadColor());
     }
 
     [Fact]

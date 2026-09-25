@@ -77,6 +77,12 @@ public sealed class PipelineView
     /// <exception cref="InvalidOperationException">The column holds something that is not a number.</exception>
     public TrainingValues MeasuredValues(string column) =>
         Table.ValuesOf(column, row => Standings[row] == Measured);
+
+    /// <summary>The categories the measured rows of a column hold, by the one rule an encoder learns them by.</summary>
+    /// <param name="column">The column's name.</param>
+    /// <returns>Every value the measured rows hold, once, in ordinal order; a gap is none.</returns>
+    public IReadOnlyList<string> MeasuredCategories(string column) =>
+        Table.CategoriesOf(column, row => Standings[row] == Measured);
 }
 
 /// <summary>

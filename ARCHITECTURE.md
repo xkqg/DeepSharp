@@ -727,6 +727,11 @@ not depend on it. A view is therefore identified by the steps it walks and the p
 `ViewKeyAt` — together with the bytes it was read from, and two views with the same key over the same bytes are
 the same view.
 
+What a view's measured rows hold is read by the rule a fit reads them by, never by one of the view's own:
+`MeasuredValues` is what a fit of numbers sees, and `MeasuredCategories` the categories an encoder learns — every word
+those rows hold, once, a gap none, in one order. The grid colours by them, so it never calls a value known that a fit
+there would not know.
+
 ### A notebook is one more front end of the declaration
 
 `DeepSharp.Verso.Notebooks` writes a pipeline as a Verso notebook: one block per step, each block the step's
@@ -748,10 +753,12 @@ that reads it and below the step that made it — never higher, even under a sch
 where any name may be read from the schema down. Ticking either brings it back as it was, and a column the schema
 does not name comes in as text where the source has it — which only the source's own header says, so a tick made
 before anything read the source shows the source first and takes nothing in. Ticking a category remembers the kind
-the column was, and unticking
-gives that kind back. A box the rules would not let change is drawn but cannot be clicked: the answer cannot be
-left out, nor the last column a schema takes, and a category that does not say what it was keeps its box ticked. A
-box carries no payload, so Verso's router sends the state it is in — on a click, on a change and on every key — and
+the column was, and unticking gives that kind back. A box the rules would not let change is drawn but cannot be
+clicked: the answer cannot be left out, nor the last column a schema takes, and a category that does not say what it
+was keeps its box ticked. What the boxes say is what the grid draws: a column that is not in is black, and its values
+are not written into the page at all, so a column left out stays out of sight until its box is ticked again; a
+category is one colour, darker for a value the training rows never held, which an encoder fitted on them would not
+know. A box carries no payload, so Verso's router sends the state it is in — on a click, on a change and on every key — and
 the same state twice does the same thing once; a change the rules refuse, sent by a grid drawn before the blocks
 changed, is refused at the block with the rule it breaks, above data that is as it was. A block the notebook
 rewrites is written as a new block in the old one's place, and run, because Verso tells a front end nothing about a

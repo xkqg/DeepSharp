@@ -95,7 +95,9 @@ wrong with it at once, each at its line and column.
   pipeline down to that block and shows the rows there: fifty at a time, each column coloured over the
   training rows, with every row knowing the part the split below will put it in. On the grid every column has
   a box for whether it is in and, when the schema takes it, one for whether it is a category: unticking and
-  ticking again write the steps that do it and take them back, a column's kind kept. "Choose the columns", on the
+  ticking again write the steps that do it and take them back, a column's kind kept. A column that is not in is
+  black, its values left off the page, and a category is one colour, darker for a value the training rows never
+  held. "Choose the columns", on the
   schema's block, lists every column of the source with its first values and a box that takes it in or leaves it
   out, marking new the columns the saved file never showed; each row's kind select commits the kind a keyboard walk
   ends on, as one pick from the state the list was drawn in, so a category walked away from and back to remembers
@@ -219,6 +221,7 @@ wrong with it at once, each at its line and column.
 - **`Pipeline.ViewAt(steps)`** — the data after any number of steps, with where every row stands: the part
   the split puts it in, dropped before the split reaches it, or undivided when nothing divides it. A range or
   a profile drawn above the split is drawn over the rows the split below will train on, not over all of them.
+  `MeasuredCategories(column)` names the categories those rows hold, by the rule an encoder learns them by.
 
 - **Faults at their line and column.** A file that cannot be read throws `PipelineFileException`, whose
   `Faults` hold every problem at once, each with its line and column. A verb nobody has heard of is told the

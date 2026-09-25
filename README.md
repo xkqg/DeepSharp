@@ -55,7 +55,7 @@ which read the rows in their order and so need that order said first, with `.Ord
 one block per step, each block the step's own JSON — edited as text, or field by field in Verso's properties
 panel. "Show the data here" on a block runs the pipeline down to it and shows the rows there, each column
 coloured over the training rows and every row marked with the part it lands in. A box on the grid leaves a
-column out or makes it a category, and the notebook writes the step that does it. "Choose the columns" lists every
+column out — it turns black — or makes it a category, and the notebook writes the step that does it. "Choose the columns" lists every
 column of the source with its first values: tick it in or out, pick its kind, make it the answer and set the
 answer's own values — or tick a range, and seventy bands of a flock are taken in, or made the answer, with two
 ticks. What the blocks decide about their columns is saved beside the notebook, and the toolbar takes a saved file

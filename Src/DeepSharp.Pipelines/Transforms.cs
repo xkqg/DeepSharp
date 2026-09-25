@@ -518,16 +518,9 @@ public sealed record EncodeStep : IFittedStep, IPipelineStep<EncodeStep>, IDescr
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(parts);
 
-        var column = table[Column];
+        var categories = table.CategoriesOf(Column, row => parts[row] == Part.Train);
 
-        var categories = Enumerable.Range(0, table.RowCount)
-            .Where(row => parts[row] == Part.Train && !column.IsMissing(row))
-            .Select(row => column.TextAt(row)!)
-            .Distinct(StringComparer.Ordinal)
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-
-        if (categories.Length == 0)
+        if (categories.Count == 0)
         {
             throw new InvalidOperationException(
                 $"Every training row of '{Column}' is a gap, so there are no categories to learn.");
