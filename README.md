@@ -1,4 +1,4 @@
-<img src="https://raw.githubusercontent.com/xkqg/DeepSharp/main/assets/icon.png" width="96" align="right" alt="" />
+﻿<img src="https://raw.githubusercontent.com/xkqg/DeepSharp/main/assets/icon.png" width="96" align="right" alt="" />
 
 # DeepSharp — deep learning in C#
 
@@ -82,7 +82,7 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 |---|---|
 | [Getting started](https://github.com/xkqg/DeepSharp/wiki/Getting-Started) | Install it, add two tensors, prepare a real file. |
 | [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) | The idea this library is built around, and the mistake it removes. |
-| [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) | Every verb in the order you write it: readers, features, the split, gaps, scales, the handover. |
+| [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) | Every verb in the order you write it: readers, features, the split, gaps, scales, what a model is asked to predict, the handover. |
 | [Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook) | A pipeline written block by block in Verso, and the data at any block. |
 | [Architecture](https://github.com/xkqg/DeepSharp/wiki/Architecture) | The design decisions, and what was deliberately left out. |
 | [Next to TorchSharp and TensorFlow.NET](https://github.com/xkqg/DeepSharp/wiki#how-this-sits-next-to-torchsharp-and-tensorflownet) | What those give you, what they do not, and why the choice of engine stays a choice. |
@@ -96,7 +96,7 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 | | |
 |---|---|
 | `DeepSharp` | The tensors, their shape, and the backend the arithmetic runs on. |
-| `DeepSharp.Pipelines` | The data half: readers, features, the split, gaps, scales, the handover — saved as a file and replayed. |
+| `DeepSharp.Pipelines` | The data half: readers, features, the split, gaps, scales, the answer in four kinds, the handover — saved as a file and replayed. |
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand, through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
 | `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block. |

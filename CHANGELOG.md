@@ -31,7 +31,7 @@ wrong with it at once, each at its line and column.
   column nobody could find.
 
 - **The rules hold wherever a step comes from.** A pipeline has one source, one schema, one split, one order
-  and one target. Every step does something the run acts on. Rows are dropped and put in order before the
+  and one output. Every step does something the run acts on. Rows are dropped and put in order before the
   split, never after it. A column is read only where it exists, and only by a step that can work on its kind.
   The chain, the extension point, a hand-written file and a notebook all meet these rules in the same place,
   and a refusal names every fault at once: `DeclarationException.Faults`, each with its step.
@@ -75,6 +75,9 @@ wrong with it at once, each at its line and column.
   a `Purpose` and its `Parameters`, and the step is written, checked and described from those, so a key is
   typed in one place. The `StepCatalog.Register` that took a name and a function is gone: a verb arrives with
   its description or not at all. `IOpensRows.Open` is handed the `SourceFolder` a relative path is read from.
+  What a model is asked to predict is a step that implements `INamesTheAnswer`, and one that makes its answer
+  from the rows implements `IMakesTheAnswer`. A step that drops rows is shown a served row without the answers
+  it awaits: those are gaps in every served row, and no reason to drop one.
 
 ### Added
 
@@ -85,13 +88,43 @@ wrong with it at once, each at its line and column.
   text. Each block shows what its step is and does, or every fault at its line. "Show the data here" runs the
   pipeline down to that block and shows the rows there: fifty at a time, each column coloured over the
   training rows, with every row knowing the part the split below will put it in. From the grid a column is
-  excluded or marked a category, and the notebook writes the step that does it. A profile block names, for
+  excluded or marked a category, and the notebook writes the step that does it. An output block is a stage of
+  its own, and its form swaps it for any other kind of output. A profile block names, for
   every problem it finds, the step that answers it, and a correlation block is drawn as a heatmap over the
   complete training rows. The toolbar runs the whole pipeline, fitting every step on the training rows, and
   exports it as the same pipeline file the chain writes. C# cells in the same notebook are handed the
   pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. It is
   installed from Verso's Extensions panel and runs in Verso's VS Code extension, in the browser editor
   `verso serve` opens, and inside an application that takes Verso's engine as a dependency.
+
+- **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
+  `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock
+  weighed in seventy bands of fifty grams — whose shares are at least nought and sum to one on every row; named
+  with the column saying how many there were, the shares come back as how many fell in each band.
+  `Labels(columns, ones)`, `target.labels`, names columns that are each nought or one, with how many ones a row
+  holds when that is said. `Ahead(column, ahead, as)`, `target.ahead`, makes its answer from a column rows later
+  in the declared order: the price five days on, or the return on today's price by then. Reading ahead is held
+  to rules of its own: only an output may, below a split in time whose gap is at least as wide, the rows ordered
+  by that split's column alone; and a return stands above every step that changes the column it is made from.
+
+- **Every answer is handed over.** `Batch.AnswerNames` and `Batch.Answers` hold as many numbers a row as the
+  output names, in its order; `Labels` stays the one number a row for an output of one answer. Each answer is
+  refused for a gap or a value that is not finite, as a feature is, and each kind of output refuses a row its
+  answers could not be: shares that do not sum to one, a label that is neither nought nor one.
+
+- **A split in time can keep a gap.** `SplitByTime(column, train, validation, gap)` and the `gap` of
+  `split.byTime` set apart the last moments of every part, before each line and at the end, fitted on by nothing
+  and handed to nothing: `Part.Gap`. Without it, the last training rows of an answer read five days ahead learn
+  their answers from the rows a model is measured on. The fit writes down how many rows the gap held, and a file
+  without a gap is written exactly as before.
+
+- **The way back in your own units, for a part and for served rows.** `BackToOriginal(predictions, part)` puts
+  the predictions for a part back, and `BackToOriginal(predictions, served, rows)` the predictions for served
+  rows, each row found again by where it was handed in and checked by its key, `ServedBatch.Keys`, so rows
+  handed in again in another order are refused rather than answered with another row's numbers. A way back
+  that needs the row a number belongs to reads it as it was read: a share of a flock comes back as birds by the
+  flock's own size, a return as a price by the day's own price. For somebody writing a step of their own,
+  `IUndoesItself` can say which columns it undoes, what a column was made from, and read that row.
 
 - **Every package runs on .NET 8 as well as .NET 10.** Verso's browser editor runs on .NET 8 for as long as
   .NET 8 is installed, and a package built for .NET 10 alone does not load there. Each package now carries a
@@ -155,6 +188,15 @@ wrong with it at once, each at its line and column.
 
 - **A row can be served without the answer.** Serving refused a row that lacked the column being predicted,
   so a host had to invent an answer to ask the question.
+
+- **An answer made from another column comes back in the units that column was read in.** A logarithm taken
+  into a new column from a scaled fare came back in the scaled units — 0.014 where the fare was 7.25 — and the
+  run's check could not tell, because it compared with the answer as read and an answer a step made was never
+  read. The way back now goes on through whatever was done to the column the answer was made from, and the
+  check compares with that column as it was read.
+
+- **An answer that is a moment in time no longer stops the run.** The check of the way back read it as numbers
+  and refused the whole pipeline.
 
 - **Two things 0.2.0 said now hold.** A file naming a verb that is not registered is told whether the verb is
   unknown or belongs to a package that is not installed; 0.2.0 gave one message for both. And a declaration

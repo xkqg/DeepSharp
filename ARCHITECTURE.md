@@ -1,4 +1,4 @@
-# Architecture
+﻿# Architecture
 
 This file records the decisions that shape DeepSharp, and why each one was taken. A decision that is not
 written down here is not a decision, it is a habit.
@@ -398,7 +398,7 @@ nothing, and is fitted nowhere.
 
 Two decisions are made here rather than discovered later. What happens outside the learned range while the
 model is running — clip, pass through, or refuse — because a price meets a new high and min-max has no
-answer of its own. And whether the target is normalised, because if it is, the way back is part of the
+answer of its own. And whether the answer is normalised, because if it is, the way back is part of the
 saved pipeline; without it every error is reported in normalised units and every model looks excellent.
 
 ### The pipeline ends at the data, and the learner is a plug
@@ -512,7 +512,7 @@ corrupted: the leak arrived as a column.
 
 So `Declare` names which columns take part, and what happens to the rest is declared rather than assumed:
 dropped, passed through, or handled. Dropping is the default, because a column nobody thought about is a
-column nobody checked. A warning on a feature that predicts the target perfectly is worth having as well,
+column nobody checked. A warning on a feature that predicts the answer perfectly is worth having as well,
 but it is the second line of defence; the first is that unnamed means absent.
 
 ### A fill has a point beyond which it is invention
