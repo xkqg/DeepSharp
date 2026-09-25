@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <PackageId>DeepSharp.Pipelines.DataFrame</PackageId>
-    <Description>Reads a DeepSharp pipeline's rows out of a DataFrame, or out of anything that can fill one: a comma-separated file, a database query, rows somebody already had. One reader for the long tail of formats, so the pipeline itself needs none of them. An absent value stays absent rather than becoming a not-a-number, because never-there and arithmetic-went-wrong are different answers.</Description>
+    <Description>Reads a DeepSharp pipeline's rows out of Microsoft's DataFrame, Microsoft.Data.Analysis, or out of anything that can fill one: a comma-separated file, a database query, rows somebody already had. One reader for the long tail of formats, so the pipeline itself needs none of them. An absent value stays absent rather than becoming a not-a-number, because never-there and arithmetic-went-wrong are different answers.</Description>
     <PackageTags>machine-learning;pipeline;dataframe;data-preparation;etl;sql;csv;dotnet</PackageTags>
   </PropertyGroup>
 

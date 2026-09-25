@@ -31,7 +31,7 @@ Src/DeepSharp.Pipelines/          the data side
     Walk.cs Execution.cs Views.cs Fitting.cs Handover.cs
                                     the one walk every run is, the data after any step, what a fit learned, the handover
     Outputs.cs WayBack.cs           what a model is asked to predict, and how its answers come back into their units
-Src/DeepSharp.Pipelines.DataFrame/   a reader through MatPlotLibNet.DataFrame
+Src/DeepSharp.Pipelines.DataFrame/   a reader of Microsoft's DataFrame, through MatPlotLibNet.DataFrame
 Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
 Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
 Samples/                          runnable programs and the published data they read
@@ -146,8 +146,8 @@ Reading data is a solved problem with a long tail, and reproducing that tail is 
 pandas exposes nineteen readers. What ships here is the short head, chosen by where data actually arrives
 and by costing a thin adapter rather than an implementation:
 
-- **CSV** and **SQL** cost nothing at all: the DataFrame already loads both, the second through whichever
-  ADO.NET provider the caller brings.
+- **CSV** and **SQL** cost nothing at all: Microsoft's DataFrame — `Microsoft.Data.Analysis`, from the ML.NET
+  family — already loads both, the second through whichever ADO.NET provider the caller brings.
 - **Parquet** is where data of any size lives, **Excel** is how data arrives from people rather than
   systems, and **JSON** is what an API hands back. Each is an existing .NET library plus a few lines.
 - **Live sources** are their own family, fetched and landed rather than read during training.
@@ -435,7 +435,8 @@ saved pipeline; without it every error is reported in normalised units and every
 Everything up to and including normalising is the same whatever is going to learn from the result, so that
 is where the pipeline stops: a prepared, split dataset plus the declaration of what the run has to prove.
 What learns from it is chosen at that seam — a network built here, a trainer from an established .NET
-machine-learning library, or something a caller wrote — and each plugs in at the same point.
+machine-learning library such as ML.NET, Microsoft's own, or something a caller wrote — and each plugs in at the
+same point.
 
 That is worth more than the convenience. Two learners compared on the same prepared data and the same
 declared measures can honestly be compared; two learners each fed by their own preparation cannot, and that
@@ -482,7 +483,7 @@ DeepSharp.Learners.<Name>   something that learns from prepared data, behind the
 DeepSharp.Backends.<Name>   an engine behind ITensorBackend
 DeepSharp.Import.<Name>     reading weights or a model trained somewhere else
 DeepSharp.Charts            drawing, from the metrics the loop already keeps
-DeepSharp.<Host>.<Part>     a front end inside a host: DeepSharp.Verso.Notebooks
+DeepSharp.<Host>.<Part>     a front end inside a host: DeepSharp.Verso.Notebooks, .Serve, .Api
 ```
 
 Naming by role rather than by vendor is not tidiness. A package called after a framework implies that the
@@ -493,14 +494,16 @@ package named after it. What deserves a package of its own is reading what that 
 `DeepSharp.Import.<Name>` says exactly that and nothing more.
 
 The same test applies to the other two. An engine belongs under `Backends` because a model cannot tell
-which one is underneath; a trainer from an established .NET library belongs under `Learners` because it
-sits beside the model rather than below it. Both distinctions disappear the moment a package is named
+which one is underneath; a trainer from an established .NET library — ML.NET's, say — belongs under `Learners`
+because it sits beside the model rather than below it. Both distinctions disappear the moment a package is named
 after the logo instead.
 
 A front end is the one exception, by decision: it is named after its host first and after what it is there
 second — `DeepSharp.Verso.Notebooks`. It carries nothing of the host inside it, it plugs into it, and a person
 looks for it by the host's name, in the host's own list of extensions. Another part for the same host takes the
-same prefix. The package is not Verso's; it is DeepSharp's way into it.
+same prefix, and two are named: `DeepSharp.Verso.Serve` for the browser editor `verso serve` starts, and
+`DeepSharp.Verso.Api` for an application that hosts the notebook itself. The package is not Verso's; it is
+DeepSharp's way into it.
 
 A project is created when there is code to put in it. Six empty assemblies laid out in advance are a
 diagram that has to be maintained; the layout above is the decision, and each package appears the day its
@@ -905,6 +908,11 @@ code is one code for both: where .NET 10 had a shorter way to say something, the
 one used — a JSON writer's line ending among them, so a pipeline file is written with a line feed on every
 machine and runtime — and both suites run on both runtimes.
 
+Two packages are named to follow the notebook, one for each place it runs outside VS Code: `DeepSharp.Verso.Serve`
+for the browser editor, and `DeepSharp.Verso.Api` for an application of your own. Neither exists yet, because today
+one package serves all three places with the same code. Each appears the day it has code of its own, and what the
+three share is kept in one package beside them rather than written into each.
+
 The block's kernel answers Verso's question for the faults in a text, but no Verso editor asks it: they ask for
 completions and hover texts only. A fault is therefore shown where a block runs, on its card, each at its line.
 
@@ -919,7 +927,8 @@ toolbar's buttons — Run, Export and the take-over — a context of its own; an
 the cell types, so what the blocks show stays out of the file. An application that only wants the pipeline reads each
 block with `StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write
 the file with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds
-the steps and no fit, because nothing ran them there.
+the steps and no fit, because nothing ran them there. The drawing, the passing on and the toolbar's context are
+what `DeepSharp.Verso.Api` is named for: written once, beside the notebook, rather than by every application.
 
 ## Decisions
 

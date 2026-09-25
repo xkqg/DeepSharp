@@ -15,7 +15,8 @@ and the arithmetic runs on .NET's own vector maths out of the box or on a heavie
 between them does not change a line of your model. What it adds is everything around the engine: getting
 your data in, the layers, the training loop, the checkpoints and the pictures.
 
-**0.3.0 is the tensors, the data half, and a notebook to see the data in.** What learns from them is next;
+**0.3.0 is the tensors, the data half, and a notebook to see the data in and choose its columns.** What learns
+from them is next;
 the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says in which order, and the
 [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release added.
 
@@ -55,18 +56,21 @@ which read the rows in their order and so need that order said first, with `.Ord
 one block per step, each block the step's own JSON — edited as text, or field by field in Verso's properties
 panel. "Show the data here" on a block runs the pipeline down to it and shows the rows there, each column
 coloured over the training rows and every row marked with the part it lands in. A box on the grid leaves a
-column out — it turns black — or makes it a category, and the notebook writes the step that does it. "Choose the columns" lists every
-column of the source with its first values: tick it in or out, pick its kind, make it the answer and set the
-answer's own values — or tick a range, and seventy bands of a flock are taken in, or made the answer, with two
-ticks. What the blocks decide about their columns is saved beside the notebook, and the toolbar takes a saved file
-over again, listing every change before it makes one and every saved decision it cannot make. It also runs the
-whole pipeline and exports it as the same file the chain writes.
+column out — it turns black — or makes it a category, and the notebook writes the step that does it. "Choose the
+columns" lists every column of the source with its first values: tick it in or out, pick its kind, make it the
+answer and set the answer's own values — or tick a range, and seventy bands of a flock are taken in, or made the
+answer, with two ticks. What the blocks decide about their columns is saved beside the notebook, and the toolbar
+takes a saved file over again, listing every change before it makes one and every saved decision it cannot make.
+It also runs the whole pipeline and exports it as the same file the chain writes.
 
 Install it from Verso's Extensions panel. The same package runs in Verso's VS Code extension, in the browser
 editor `verso serve` opens, and inside an application of your own — the
-[Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook#where-it-runs) page says what each needs. A C# cell
-in the same notebook reads what the blocks declare, as text — it is there after "Show the data here" or the
-toolbar's run, and taken back whenever the blocks may no longer make it:
+[Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook#where-it-runs) page says what each needs. Two more
+packages are named to follow it, one for each place it runs outside VS Code: `DeepSharp.Verso.Serve` and
+`DeepSharp.Verso.Api`; the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says where they stand.
+
+A C# cell in the same notebook reads what the blocks declare, as text — it is there after "Show the data here" or
+the toolbar's run, and taken back whenever the blocks may no longer make it:
 
 ```csharp
 #r "nuget: DeepSharp.Pipelines.Indicators"
@@ -89,7 +93,7 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 | [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) | Every verb in the order you write it: readers, features, the split, gaps, scales, what a model is asked to predict, the handover. |
 | [Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook) | A pipeline written block by block in Verso, and the data at any block. |
 | [Architecture](https://github.com/xkqg/DeepSharp/wiki/Architecture) | The design decisions, and what was deliberately left out. |
-| [Next to TorchSharp and TensorFlow.NET](https://github.com/xkqg/DeepSharp/wiki#how-this-sits-next-to-torchsharp-and-tensorflownet) | What those give you, what they do not, and why the choice of engine stays a choice. |
+| [Next to TorchSharp, TensorFlow.NET and ML.NET](https://github.com/xkqg/DeepSharp/wiki#how-this-sits-next-to-torchsharp-tensorflownet-and-mlnet) | What those give you, what they do not, why the choice of engine stays a choice, and where a trainer from ML.NET fits. |
 | [Quality](https://github.com/xkqg/DeepSharp/wiki/Quality) | What has to be true before anything is allowed in. |
 | [Roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) | What is next, and in which order. |
 | [Contributing](https://github.com/xkqg/DeepSharp/blob/main/CONTRIBUTING.md) | A failing test first, no warnings, a coverage check that fails rather than reports. |
@@ -100,9 +104,11 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 | | |
 |---|---|
 | `DeepSharp` | The tensors, their shape, and the backend the arithmetic runs on. |
-| `DeepSharp.Pipelines` | The data half: readers, features, the split, gaps, scales, the answer in four kinds, the handover — saved as a file and replayed. |
-| `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand, through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
+| `DeepSharp.Pipelines` | The data half: readers, features, the split, gaps, scales, the answer in four kinds, the handover, and the column decisions saved on their own and taken over — saved as a file and replayed. |
+| `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
-| `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block. |
+| `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block, and its columns chosen from the grid or a list and saved beside it. It runs in Verso's VS Code extension, in `verso serve` and in an application of your own. |
 
-Runs on .NET 8 and .NET 10. MIT — see [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE).
+`DeepSharp.Verso.Serve` and `DeepSharp.Verso.Api` are named to follow the notebook, for `verso serve` and for an
+application of your own; they are on the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap), not yet
+released. Runs on .NET 8 and .NET 10. MIT — see [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE).

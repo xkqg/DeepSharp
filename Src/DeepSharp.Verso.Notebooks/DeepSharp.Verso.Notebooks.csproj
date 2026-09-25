@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <PackageId>DeepSharp.Verso.Notebooks</PackageId>
-    <Description>A DeepSharp pipeline written as a notebook in Verso, one block per step. Each block is the step's own JSON, edited as text or in Verso's properties panel, and shows the data at that point on request: a grid coloured per column over the training rows, a profile that names the step answering each alert, and a heatmap of the complete training rows. The notebook is the declaration — exported as the same pipeline file, and handed to C# cells as text.</Description>
+    <Description>A DeepSharp pipeline written as a notebook in Verso, one block per step. Each block is the step's own JSON, edited as text or in Verso's properties panel, and shows the data at that point on request: a grid coloured per column over the training rows, a profile that names the step answering each alert, and a heatmap of the complete training rows. Columns are chosen from the grid or from a list of the source's columns, and the decisions are saved beside the notebook and taken over again. The notebook is the declaration — exported as the same pipeline file, and handed to C# cells as text. It runs in Verso's VS Code extension, in verso serve and in an application of your own.</Description>
     <PackageTags>deepsharp;pipeline;pdd;machine-learning;data-preparation;verso;notebook;dotnet</PackageTags>
   </PropertyGroup>
 

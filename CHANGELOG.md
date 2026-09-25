@@ -8,7 +8,9 @@ as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 A pipeline you can look at: every step written as a block of a notebook, and the data at any block shown on
 request. Underneath it, the pipeline became strict where it was only polite. Every way of writing one keeps
 the same rules, a row is known by what it says rather than where it stands, and a file says everything that is
-wrong with it at once, each at its line and column.
+wrong with it at once, each at its line and column. A model can be asked for more than one answer — the shares
+of a whole, labels, a value some rows on — and its predictions come back in their own units; and the columns a
+pipeline decides about can be changed from the notebook, saved beside it and taken over again.
 
 ### Upgrading from 0.2
 
