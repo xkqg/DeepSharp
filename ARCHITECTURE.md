@@ -802,6 +802,18 @@ the kind select's rule: each value is one pick from the state its list was drawn
 else draws the list again — which is why a return picked and taken back leaves the output where it stood, rather than
 where the return put it.
 
+Seventy bands of a flock are two ticks, not seventy. The list ticks one column at a time, or a range — a pick that
+commits nothing — and in a range the first tick says where the range starts and changes nothing, and the second takes
+in every column between, in the source's order and whichever end comes first, in one change. A range carries one
+kind, picked beside it and nothing inferred from the values: a range taken in offers every kind, text first, as the
+source holds it; a range made the answer offers only the kinds the output reads. A column the schema already declares
+keeps its kind when taken in, but not when made the answer: bands taken in as text and then made a distribution
+become the range's kind in the same change, since the range asks for its answers as that kind and a distribution of
+text would otherwise need a kind picked for each band. A kind of output whose answer is many columns is always offered
+by the type select, because no single tick can start one; a range the rules refuse says so in their words, and keeps
+its start so another end can be ticked. On a flock of twenty thousand rows either range is one change well under a
+second, and seventy single ticks take seventy changes.
+
 What the blocks decide about their columns is saved beside the notebook, in a file named after it
 (`<notebook>.columns.json`): the schema with the columns it excludes and their kinds, the columns dropped, and the
 output — the same shape a preset has, written and read through the same door as a pipeline file. It is written after

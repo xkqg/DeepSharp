@@ -45,6 +45,61 @@ public class ColumnChoiceTests
             .Normalise("Volume")
             .Declaration;
 
+    // ---- several columns at once
+
+    [Fact]
+    public void SeveralColumnsTakenIn_AreEachTakenInAsOneIs_WithOneKind_AndThoseTakingPartAlreadyStayAsTheyAre()
+    {
+        var excluded = Then(Titanic().Excluding("pclass"));
+
+        var steps = excluded.Including(["pclass", "sex", "age", "sibsp"], ColumnKind.Integer, Header);
+
+        Assert.Equal(["survived", "pclass", "sex", "age", "sibsp", "fare"], Schema(steps).Taking.Select(column => column.Name));
+        Assert.Equal(ColumnKind.Integer, Declared(steps, "pclass").Kind);
+        Assert.Equal(ColumnKind.Integer, Declared(steps, "sex").Kind);
+        Assert.Equal(new ColumnDeclaration("age", ColumnKind.Number, Optional: true), Declared(steps, "age"));
+        Assert.Equal(ColumnKind.Integer, Declared(steps, "sibsp").Kind);
+
+        var titanic = Titanic();
+
+        Assert.Same(titanic.Steps, titanic.Including([], ColumnKind.Text, Header));
+        Assert.Equal(Titanic().Steps, Titanic().Including(["survived", "age_was_missing"], ColumnKind.Text, Header));
+    }
+
+    [Fact]
+    public void SeveralColumnsTakenIn_StopAtTheFirstThatBreaksARule_AndHandItsStepsBackForTheRulesToJudge()
+    {
+        // A step another package brings that refuses a column of text: taking sex in as text breaks it.
+        var declaration = Then([.. Titanic().Steps, new RefusesTextStep()]);
+
+        var steps = declaration.Including(["sex", "sibsp"], ColumnKind.Text, Header);
+
+        Assert.NotEmpty(PipelineDeclaration.FaultsIn(steps));
+        Assert.Contains(Schema(steps).Taking, column => column.Name == "sex");
+        Assert.DoesNotContain(Schema(steps).Taking, column => column.Name == "sibsp");
+    }
+
+    // A verb another package brings: it adds nothing it cannot, and refuses any column of text before it.
+    private sealed record RefusesTextStep : IPipelineStep<RefusesTextStep>, IAddsColumns, IDescribesColumns
+    {
+        public static string Name => "refuses.text";
+
+        public static string Purpose => "Refuses a column of text.";
+
+        public static StepParameters<RefusesTextStep> Parameters { get; } = new();
+
+        public string Verb => Name;
+
+        public static RefusesTextStep ReadFrom(System.Text.Json.JsonElement element) => new();
+
+        public void AddTo(Table table) => throw new NotSupportedException("Only declared here, never run.");
+
+        public ColumnState After(ColumnState before) => before;
+
+        public string? Refusal(ColumnState before) =>
+            before.Columns.Any(column => column.Kind == ColumnKind.Text) ? "a column of text is here." : null;
+    }
+
     // ---- the output
 
     [Fact]

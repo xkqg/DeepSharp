@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Globalization;
+using System.Text.Json.Nodes;
 using DeepSharp.Pipelines;
 using Verso.Abstractions;
 
@@ -34,10 +35,56 @@ internal enum ViewTrigger
 
 /// <summary>What a list of the source's columns is drawn with: the picks a person made on it, which commit nothing.</summary>
 /// <param name="Type">The kind of output the list's boxes make, when one was picked; nothing to draw the output's own.</param>
-internal sealed record ListPicks(string? Type)
+/// <param name="Range">Whether a tick takes in, or makes the answer of, a range of columns rather than one.</param>
+/// <param name="IncludeFrom">Where a range of columns to take in starts, once its first box is ticked.</param>
+/// <param name="OutputFrom">Where a range of the output's columns starts, once its first box is ticked.</param>
+/// <param name="IncludeKind">The kind a range takes its columns in with, when one was picked; text otherwise.</param>
+/// <param name="OutputKind">The kind a range of the output's columns takes them in with, when one was picked; else the first the output reads.</param>
+internal sealed record ListPicks(
+    string? Type, bool Range = false, string? IncludeFrom = null, string? OutputFrom = null, ColumnKind? IncludeKind = null, ColumnKind? OutputKind = null)
 {
     /// <summary>A list drawn with no picks.</summary>
     public static ListPicks None { get; } = new(Type: null);
+
+    /// <summary>The picks a list's control was drawn with, read back from what it carries.</summary>
+    /// <param name="action">The control's gesture and what it carries.</param>
+    /// <returns>The picks.</returns>
+    public static ListPicks Of(ControlAction action) => new(
+        action.Text(StepRenderer.TypeKey),
+        action.Text(StepRenderer.RangeKey) == "true",
+        action.Text(StepRenderer.IncludeFromKey),
+        action.Text(StepRenderer.OutputFromKey),
+        action.Text(StepRenderer.IncludeKindKey).AsKind(),
+        action.Text(StepRenderer.OutputKindKey).AsKind());
+
+    /// <summary>Writes the picks into what a list's control carries, so a list drawn again after it keeps them.</summary>
+    /// <param name="carried">What the control carries.</param>
+    /// <param name="verb">The kind of output the list makes.</param>
+    /// <returns>What the control carries, with the picks.</returns>
+    public JsonObject Into(JsonObject carried, string verb)
+    {
+        carried[StepRenderer.TypeKey] = verb;
+
+        if (Range)
+        {
+            carried[StepRenderer.RangeKey] = "true";
+        }
+
+        Set(carried, StepRenderer.IncludeFromKey, IncludeFrom);
+        Set(carried, StepRenderer.OutputFromKey, OutputFrom);
+        Set(carried, StepRenderer.IncludeKindKey, IncludeKind?.Word());
+        Set(carried, StepRenderer.OutputKindKey, OutputKind?.Word());
+
+        return carried;
+    }
+
+    private static void Set(JsonObject carried, string key, string? value)
+    {
+        if (value is not null)
+        {
+            carried[key] = value;
+        }
+    }
 }
 
 /// <summary>What a block's kernel is asked to show.</summary>

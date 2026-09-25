@@ -86,6 +86,19 @@ internal static partial class ListHtmlExtensions
             .Select(match => Select(match.Value))
             .ToDictionary(select => JsonNode.Parse(select.Action[(select.Action.IndexOf(' ', StringComparison.Ordinal) + 1)..])!["key"]!.GetValue<string>());
 
+    /// <summary>A select of the list, by the gesture it sends and, for a range's kind, what the range is of.</summary>
+    /// <param name="list">The list's page.</param>
+    /// <param name="gesture">The gesture its action names.</param>
+    /// <param name="of">For a range's kind, <c>include</c> or <c>output</c>; nothing for any other select.</param>
+    /// <returns>The select, or nothing when the list draws none.</returns>
+    public static DrawnSelect? SelectOf(this string list, string gesture, string? of = null) =>
+        SelectTag().Matches(list)
+            .Select(match => Select(match.Value))
+            .Where(select => select.Action.StartsWith($"{gesture} ", StringComparison.Ordinal)
+                && (of is null || JsonNode.Parse(select.Action[(gesture.Length + 1)..])!["for"]?.GetValue<string>() == of))
+            .Cast<DrawnSelect?>()
+            .FirstOrDefault();
+
     /// <summary>What the list says of the output's parameters it cannot set, as a person reads it.</summary>
     /// <param name="list">The list's page.</param>
     /// <returns>One line per such parameter.</returns>

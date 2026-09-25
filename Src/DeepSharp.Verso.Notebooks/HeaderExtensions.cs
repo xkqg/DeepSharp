@@ -22,4 +22,17 @@ internal static class HeaderExtensions
 
         return -1;
     }
+
+    /// <summary>The columns of a source from one to another, whichever stands first, both included.</summary>
+    /// <param name="header">The source's columns, in their order.</param>
+    /// <param name="from">Where a range was started.</param>
+    /// <param name="to">Where it was ended.</param>
+    /// <returns>The columns in the source's order; the one it was ended on alone when the source lacks either.</returns>
+    public static IReadOnlyList<string> Between(this IReadOnlyList<string> header, string from, string to)
+    {
+        var start = header.PlaceOf(from);
+        var end = header.PlaceOf(to);
+
+        return start < 0 || end < 0 ? [to] : [.. header.Skip(Math.Min(start, end)).Take(Math.Abs(end - start) + 1)];
+    }
 }

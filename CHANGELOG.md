@@ -102,7 +102,8 @@ wrong with it at once, each at its line and column.
   the kind it was. Above the rows a select picks the kind of output, and each row's output box puts its column into
   that output or takes it out, with a box of its own that takes the output away; the output's own values — rows
   ahead, a return, how many ones, what the shares are shares of — are selects offering only the values the rules keep.
-  What the blocks decide about
+  The list ticks one column or a range: two ticks take in seventy columns, or make them the answer, in one change
+  with one kind picked for the range. What the blocks decide about
   their columns is saved beside the notebook, as `<notebook>.columns.json`, after every change they accept and
   every run of the whole pipeline. An output block is a stage of
   its own, and its form swaps it for any other kind of output. A profile block names, for
@@ -154,19 +155,19 @@ wrong with it at once, each at its line and column.
   is written exactly as before and keeps its key. A schema that excludes every column it names and keeps none of
   the rest is refused, since no column would take part.
 
-- **What can be done to a column is said once.** `Including`, `Excluding` and `WithKind` on a declaration hand
-  back the steps a change to one column makes: a column taken back in as it was, or out of the drop that left it
-  out; a column no step reads excluded in the schema with its kind, and any other dropped below the last step that
-  reads it and the step that makes it; a category that remembers the kind it came from. Asked for what already is,
-  each hands back the steps it was given. `ChoicesFor(columns)` says how each column stands — taking part, excluded,
-  dropped, made by a step and which one, kept with the rest, or not declared, and whether the source may lack it —
-  and what can be done to it without
-  breaking a rule, and `KindsFor(column, header)` the kinds it can be given, so the answer is never
-  offered to be left out and a column a later step scales as a number is never offered to become a category. The
-  schema's own `WithColumn`, `WithColumnExcluded` and `WithColumnKind` change one block alone. `WithOutput` places
-  an output, in the place of the one standing or at the end, and a return directly after the split; `WithoutOutput`
-  takes it away; each row says what its column is to the output — an answer comes back to it, or the way back reads
-  it — and `ChoicesFor` names the output it asked about.
+- **What can be done to a column is said once.** `Including`, `Excluding` and `WithKind` on a declaration hand back
+  the steps a change to one column makes — `Including` takes several in at once too, with one kind: a column taken
+  back in as it was, or out of the drop that left it out; a column no step reads excluded in the schema with its
+  kind, and any other dropped below the last step that reads it and the step that makes it; a category that
+  remembers the kind it came from. Asked for what already is, each hands back the steps it was given.
+  `ChoicesFor(columns)` says how each column stands — taking part, excluded, dropped, made by a step and which one,
+  kept with the rest, or not declared, and whether the source may lack it — and what can be done to it without
+  breaking a rule, and `KindsFor(column, header)` the kinds it can be given, so the answer is never offered to be
+  left out and a column a later step scales as a number is never offered to become a category. The schema's own
+  `WithColumn`, `WithColumnExcluded` and `WithColumnKind` change one block alone. `WithOutput` places an output, in
+  the place of the one standing or at the end, and a return directly after the split; `WithoutOutput` takes it
+  away; each row says what its column is to the output — an answer comes back to it, or the way back reads it — and
+  `ChoicesFor` names the output it asked about.
 
 - **An output is made under its verb in one place.** `StepCatalog.Make(verb, stated, carrying)` makes a step from
   the verb's template, the values the step it replaces holds under the verb's keys, and the values said, which win;

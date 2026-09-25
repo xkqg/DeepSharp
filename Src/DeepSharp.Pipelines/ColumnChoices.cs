@@ -135,6 +135,36 @@ public static class ColumnChoiceExtensions
             : steps;
     }
 
+    /// <summary>The steps with several columns taken in, one after another, each as one column is taken in.</summary>
+    /// <param name="declaration">The pipeline.</param>
+    /// <param name="columns">The columns, in the order they are taken in.</param>
+    /// <param name="kind">The one kind each takes when the schema does not name it yet; a declared column keeps its own.</param>
+    /// <param name="header">The source's columns, in order: a new column stands where the source has it.</param>
+    /// <returns>
+    /// The steps with every column taking part; the steps as they are when every one takes part already. A column taken
+    /// in that breaks a rule stops the rest, and the steps it made are handed back, for the rules to judge.
+    /// </returns>
+    public static IReadOnlyList<IPipelineStep> Including(
+        this PipelineDeclaration declaration, IReadOnlyList<string> columns, ColumnKind kind, IReadOnlyList<string> header)
+    {
+        ArgumentNullException.ThrowIfNull(declaration);
+        ArgumentNullException.ThrowIfNull(columns);
+
+        var steps = declaration.Steps;
+
+        foreach (var column in columns)
+        {
+            steps = new PipelineDeclaration(steps).Including(column, kind, header);
+
+            if (PipelineDeclaration.FaultsIn(steps).Count > 0)
+            {
+                break;
+            }
+        }
+
+        return steps;
+    }
+
     /// <summary>The steps with a column left out.</summary>
     /// <param name="declaration">The pipeline.</param>
     /// <param name="column">The column.</param>
@@ -176,7 +206,7 @@ public static class ColumnChoiceExtensions
     /// <param name="column">The column.</param>
     /// <param name="kind">The kind.</param>
     /// <returns>The steps with the schema changed, as <see cref="DeclareStep.WithColumnKind"/> changes it.</returns>
-    /// <exception cref="ArgumentException">The schema does not name the column; taking one in is <see cref="Including"/>.</exception>
+    /// <exception cref="ArgumentException">The schema does not name the column; taking one in is <see cref="Including(PipelineDeclaration, string, ColumnKind, IReadOnlyList{string})"/>.</exception>
     public static IReadOnlyList<IPipelineStep> WithKind(this PipelineDeclaration declaration, string column, ColumnKind kind)
     {
         ArgumentNullException.ThrowIfNull(declaration);
@@ -239,7 +269,7 @@ public static class ColumnChoiceExtensions
     /// <param name="header">The source's columns, in order: where a column taken in stands.</param>
     /// <returns>
     /// In the order the kinds are named: for a column the schema names, its own kind and every other <see cref="WithKind"/>
-    /// gives it that the rules keep; for one it does not, every kind <see cref="Including"/> takes it in with that the rules
+    /// gives it that the rules keep; for one it does not, every kind <see cref="Including(PipelineDeclaration, string, ColumnKind, IReadOnlyList{string})"/> takes it in with that the rules
     /// keep; none for a column neither changes — one kept with the rest of the file, or one a step makes.
     /// </returns>
     /// <remarks>What a list offers a column's kind from: nothing it offers is refused.</remarks>

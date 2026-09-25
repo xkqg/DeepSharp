@@ -41,7 +41,10 @@ internal static class ColumnList
     /// <param name="fresh">The source's columns the saved file never showed, marked new.</param>
     /// <param name="stored">What the file beside the notebook holds, when it holds anything.</param>
     /// <param name="drawn">The key of the whole declaration the list is drawn for.</param>
-    /// <param name="picks">The picks the list is drawn with: the kind of output its boxes make.</param>
+    /// <param name="picks">
+    /// The picks the list is drawn with: the kind of output its boxes make, ticking one column or a range, where a range
+    /// starts, and the kind a range takes its columns in with.
+    /// </param>
     /// <param name="whole">Whether every block is in the declaration: an output is changed only then.</param>
     /// <returns>The list.</returns>
     public static CellOutput Of(
@@ -60,15 +63,20 @@ internal static class ColumnList
         // The kind of output the boxes make: the one picked, else the output's own, else the first a row can take.
         var verb = picks.Type is { } picked && verbs.Contains(picked, StringComparer.Ordinal) ? picked
             : declaration.Output?.Verb ?? verbs.FirstOrDefault(each => stopped[each] is null) ?? verbs[0];
+
+        // A range of an output of many takes the kinds its answer reads; an output of one column is ticked one at a time.
+        var reads = picks.Range ? OutputBox.RangeKinds(catalog, verb) : null;
+        var list = new ListDrawing(verb, drawn, source.Fingerprint, picks, whole);
         var html = new StringBuilder(Style).Append("<div class=\"deepsharp-list\">")
             .Append("<div class=\"deepsharp-head\">The source's columns, each as the pipeline takes it:</div>");
 
-        Output(html, declaration, verbs, stopped, verb, drawn, source.Fingerprint, whole);
+        Picks(html, list);
+        Output(html, declaration, verbs, stopped, list, reads);
 
         // The output's own values, while the list makes the kind of output that stands.
         if (declaration.Output is { } output && output.Verb == verb)
         {
-            Parameters(html, OutputParameters.Of(catalog, declaration, output, header), verb, drawn, source.Fingerprint, whole);
+            Parameters(html, OutputParameters.Of(catalog, declaration, output, header), list);
         }
 
         html.Append("<table><thead><tr><th>column</th><th>first values</th><th>in</th><th>kind</th><th>output</th><th></th></tr></thead><tbody>");
@@ -76,54 +84,100 @@ internal static class ColumnList
         foreach (var choice in rows)
         {
             var at = header.PlaceOf(choice.Name);
-            var mark = at < 0 ? "not in the source" : fresh.Contains(choice.Name, StringComparer.Ordinal) ? "new" : string.Empty;
+            var mark = string.Join(
+                "; ",
+                new[]
+                {
+                    at < 0 ? "not in the source" : fresh.Contains(choice.Name, StringComparer.Ordinal) ? "new" : null,
+                    choice.Name == picks.IncludeFrom || choice.Name == picks.OutputFrom ? "range from here" : null,
+                }.OfType<string>());
 
             html.Append("<tr data-column=\"").Append(Encoded(choice.Name)).Append("\">")
                 .Append("<td class=\"deepsharp-name\">").Append(Encoded(choice.Name)).Append("</td>")
                 .Append("<td class=\"deepsharp-values\">").Append(Encoded(at < 0 ? string.Empty : Values(first, at))).Append("</td>")
                 .Append("<td class=\"deepsharp-in\">");
-            Box(html, choice, kinds[choice.Name], verb, drawn, source.Fingerprint);
+            Box(html, choice, kinds[choice.Name], list);
             html.Append("</td><td class=\"deepsharp-kind\">");
-            Select(html, declaration, choice, declared.FirstOrDefault(column => column.Name == choice.Name)?.Kind, header, verb, drawn, source.Fingerprint);
+            Select(html, declaration, choice, declared.FirstOrDefault(column => column.Name == choice.Name)?.Kind, header, list);
             html.Append("</td><td class=\"deepsharp-answer\">");
-            Answer(html, catalog, declaration, choice, kinds[choice.Name], header, verb, drawn, source.Fingerprint, whole);
+            Answer(html, catalog, declaration, choice, kinds[choice.Name], header, list, reads is not null);
             html.Append("</td><td class=\"deepsharp-mark\">").Append(Encoded(mark)).Append("</td></tr>");
         }
 
         return CellOutput.Html(html.Append("</tbody></table></div>").ToString());
     }
 
-    // The output's section: the select that picks the kind of output the boxes make, each kind no row can take drawn
-    // disabled with the rule that stops it; and the box that takes the output away.
-    private static void Output(
-        StringBuilder html, PipelineDeclaration declaration, IReadOnlyList<string> verbs, IReadOnlyDictionary<string, string?> stopped, string verb,
-        string drawn, string fingerprint, bool whole)
+    // Above the rows: ticking one column or a range, and in a range the one kind it takes its columns in with — every
+    // kind a schema declares, text first, as the source holds it.
+    private static void Picks(StringBuilder html, ListDrawing list)
     {
-        var carried = new JsonObject { [StepRenderer.TypeKey] = verb, [StepRenderer.DrawnKey] = drawn, [StepRenderer.SourceKey] = fingerprint };
+        html.Append("<div class=\"deepsharp-picks\">tick <select data-action=\"")
+            .Append(Encoded(ControlAction.Of(StepRenderer.ListRange, list.Carried([])))).Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append("\">")
+            .Append("<option value=\"one\"").Append(list.Picks.Range ? string.Empty : " selected").Append(">one column</option>")
+            .Append("<option value=\"range\"").Append(list.Picks.Range ? " selected" : string.Empty).Append(">a range</option></select>");
 
+        if (list.Picks.Range)
+        {
+            html.Append(" taking them in as ");
+            Kinds(html, list, "include", [ColumnKind.Text, .. Enum.GetValues<ColumnKind>().Where(kind => kind != ColumnKind.Text)], list.Picks.IncludeKind ?? ColumnKind.Text);
+        }
+
+        html.Append("</div>");
+    }
+
+    // A range's kind: a pick, which says what the range is of.
+    private static void Kinds(StringBuilder html, ListDrawing list, string of, IReadOnlyList<ColumnKind> kinds, ColumnKind picked)
+    {
+        html.Append("<select data-action=\"")
+            .Append(Encoded(ControlAction.Of(StepRenderer.ListRangeKind, list.Carried(new JsonObject { [StepRenderer.ForKey] = of }))))
+            .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append("\">");
+
+        foreach (var kind in kinds)
+        {
+            html.Append("<option value=\"").Append(kind.Word()).Append('"').Append(kind == picked ? " selected" : string.Empty)
+                .Append('>').Append(kind.Word()).Append("</option>");
+        }
+
+        html.Append("</select>");
+    }
+
+    // The output's section: the select that picks the kind of output the boxes make, each kind no row can take drawn
+    // disabled with the rule that stops it; the box that takes the output away; and in a range of an output of many,
+    // the kind the range takes its columns in with — one the output reads, never text.
+    private static void Output(
+        StringBuilder html, PipelineDeclaration declaration, IReadOnlyList<string> verbs, IReadOnlyDictionary<string, string?> stopped, ListDrawing list,
+        IReadOnlyList<ColumnKind>? reads)
+    {
         html.Append("<div class=\"deepsharp-output\">the output: <select data-action=\"")
-            .Append(Encoded(ControlAction.Of(StepRenderer.ListType, carried))).Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append("\">");
+            .Append(Encoded(ControlAction.Of(StepRenderer.ListType, list.Carried([])))).Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append("\">");
 
         foreach (var each in verbs)
         {
             html.Append("<option value=\"").Append(Encoded(each)).Append('"')
-                .Append(each == verb ? " selected" : string.Empty)
+                .Append(each == list.Verb ? " selected" : string.Empty)
                 .Append(stopped[each] is null ? string.Empty : " disabled").Append('>').Append(Encoded(each))
                 .Append(stopped[each] is { } why ? Encoded($" — {why}") : string.Empty).Append("</option>");
         }
 
         html.Append("</select> <label><input type=\"checkbox\" data-action=\"")
-            .Append(Encoded(ControlAction.Of(StepRenderer.ListRemoveOutput, (JsonObject)carried.DeepClone())))
+            .Append(Encoded(ControlAction.Of(StepRenderer.ListRemoveOutput, list.Carried([]))))
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"')
-            .Append(declaration.Output is null || !whole ? " disabled" : string.Empty)
-            .Append("> remove the output</label></div>");
+            .Append(declaration.Output is null || !list.Whole ? " disabled" : string.Empty)
+            .Append("> remove the output</label>");
+
+        if (reads is not null)
+        {
+            html.Append(" answer columns as ");
+            Kinds(html, list, "output", reads, list.Picks.OutputKind ?? reads[0]);
+        }
+
+        html.Append("</div>");
     }
 
     // A select for each of the output's own values, offering what the rules keep, not said written as such; a value the
-    // list cannot offer is set in the output block's form. A select carries its key, the kind of output the list makes and
-    // what the list was drawn from, and the router sends the value it is at.
-    private static void Parameters(
-        StringBuilder html, IReadOnlyList<OutputParameter> parameters, string verb, string drawn, string fingerprint, bool whole)
+    // list cannot offer is set in the output block's form. A select carries its key and what the list was drawn from and
+    // with, and the router sends the value it is at.
+    private static void Parameters(StringBuilder html, IReadOnlyList<OutputParameter> parameters, ListDrawing list)
     {
         html.Append("<div class=\"deepsharp-parameters\">");
 
@@ -137,16 +191,10 @@ internal static class ColumnList
                 continue;
             }
 
-            var action = ControlAction.Of(StepRenderer.ListParameter, new JsonObject
-            {
-                [StepRenderer.ParameterKey] = parameter.Key,
-                [StepRenderer.TypeKey] = verb,
-                [StepRenderer.DrawnKey] = drawn,
-                [StepRenderer.SourceKey] = fingerprint,
-            });
+            var action = ControlAction.Of(StepRenderer.ListParameter, list.Carried(new JsonObject { [StepRenderer.ParameterKey] = parameter.Key }));
 
             html.Append("<label>").Append(Encoded(parameter.Key)).Append(" <select data-action=\"").Append(Encoded(action))
-                .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"').Append(whole ? string.Empty : " disabled").Append('>');
+                .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"').Append(list.Whole ? string.Empty : " disabled").Append('>');
 
             foreach (var option in options)
             {
@@ -160,11 +208,18 @@ internal static class ColumnList
         html.Append("</div>");
     }
 
-    // Why no row can make a kind of output: the first row's reason; nothing when some row can.
+    // Why no row can make a kind of output: the first row's reason; nothing when some row can. A kind whose answer is
+    // many columns is made by a range, which no single tick starts, so it is never stopped here: a range the rules refuse
+    // says so itself.
     private static string? Stopped(
         StepCatalog catalog, PipelineDeclaration declaration, IReadOnlyList<ColumnChoice> rows, IReadOnlyDictionary<string, ColumnKind> kinds,
         IReadOnlyList<string> header, string verb)
     {
+        if (OutputBox.AnswerOf(catalog, verb) is ColumnsParameter)
+        {
+            return null;
+        }
+
         string? first = null;
 
         foreach (var choice in rows)
@@ -183,21 +238,19 @@ internal static class ColumnList
     }
 
     // A row's output box: ticked when its column is an answer, clickable when the rules allow what the click asks for,
-    // carrying the kind of output it makes; and what the column is to the output.
+    // carrying the kind of output it makes; and what the column is to the output. In a range of an output of many a box
+    // not ticked starts or ends the range, and the range speaks for itself.
     private static void Answer(
         StringBuilder html, StepCatalog catalog, PipelineDeclaration declaration, ColumnChoice choice, ColumnKind kind, IReadOnlyList<string> header,
-        string verb, string drawn, string fingerprint, bool whole)
+        ListDrawing list, bool ranged)
     {
         var ticked = choice.Role == ColumnRole.Answer;
-        var enabled = whole && OutputBox.NotOffered(catalog, declaration, verb, choice.Name, kind, header, ticked) is null;
-        var action = ControlAction.Of(StepRenderer.ListOutput, new JsonObject
+        var enabled = list.Whole && ((ranged && !ticked) || OutputBox.NotOffered(catalog, declaration, list.Verb, choice.Name, kind, header, ticked) is null);
+        var action = ControlAction.Of(StepRenderer.ListOutput, list.Carried(new JsonObject
         {
             [StepRenderer.ColumnKey] = choice.Name,
-            [StepRenderer.TypeKey] = verb,
-            [StepRenderer.KindKey] = Word(kind),
-            [StepRenderer.DrawnKey] = drawn,
-            [StepRenderer.SourceKey] = fingerprint,
-        });
+            [StepRenderer.KindKey] = kind.Word(),
+        }));
 
         html.Append("<label><input type=\"checkbox\" data-action=\"").Append(Encoded(action))
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"')
@@ -211,16 +264,10 @@ internal static class ColumnList
     // A row's kind select: the kind the schema declares, or none for a column it does not name, then every kind the rules
     // let the column take. It carries its column and what the list was drawn from, and the router sends its value.
     private static void Select(
-        StringBuilder html, PipelineDeclaration declaration, ColumnChoice choice, ColumnKind? declared, IReadOnlyList<string> header, string verb, string drawn, string fingerprint)
+        StringBuilder html, PipelineDeclaration declaration, ColumnChoice choice, ColumnKind? declared, IReadOnlyList<string> header, ListDrawing list)
     {
         var kinds = declaration.KindsFor(choice.Name, header);
-        var action = ControlAction.Of(StepRenderer.ListKind, new JsonObject
-        {
-            [StepRenderer.ColumnKey] = choice.Name,
-            [StepRenderer.TypeKey] = verb,
-            [StepRenderer.DrawnKey] = drawn,
-            [StepRenderer.SourceKey] = fingerprint,
-        });
+        var action = ControlAction.Of(StepRenderer.ListKind, list.Carried(new JsonObject { [StepRenderer.ColumnKey] = choice.Name }));
 
         html.Append("<select data-action=\"").Append(Encoded(action))
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"')
@@ -235,25 +282,22 @@ internal static class ColumnList
 
         foreach (var kind in kinds)
         {
-            html.Append("<option value=\"").Append(Word(kind)).Append('"')
-                .Append(kind == declared ? " selected" : string.Empty).Append('>').Append(Word(kind)).Append("</option>");
+            html.Append("<option value=\"").Append(kind.Word()).Append('"')
+                .Append(kind == declared ? " selected" : string.Empty).Append('>').Append(kind.Word()).Append("</option>");
         }
 
         html.Append("</select>");
     }
 
-    // A row's box: the gesture, the column, the kind a tick takes it in with, and what the list was drawn from.
-    private static void Box(StringBuilder html, ColumnChoice choice, ColumnKind kind, string verb, string drawn, string fingerprint)
+    // A row's box: the gesture, the column, the kind a tick takes it in with, and what the list was drawn from and with.
+    private static void Box(StringBuilder html, ColumnChoice choice, ColumnKind kind, ListDrawing list)
     {
         var box = choice.IncludedBox();
-        var action = ControlAction.Of(StepRenderer.ListInclude, new JsonObject
+        var action = ControlAction.Of(StepRenderer.ListInclude, list.Carried(new JsonObject
         {
             [StepRenderer.ColumnKey] = choice.Name,
-            [StepRenderer.TypeKey] = verb,
-            [StepRenderer.KindKey] = Word(kind),
-            [StepRenderer.DrawnKey] = drawn,
-            [StepRenderer.SourceKey] = fingerprint,
-        });
+            [StepRenderer.KindKey] = kind.Word(),
+        }));
 
         html.Append("<label><input type=\"checkbox\" data-action=\"").Append(Encoded(action))
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"')
@@ -269,7 +313,26 @@ internal static class ColumnList
     private static string Values(IReadOnlyList<IReadOnlyList<string?>> rows, int at) =>
         string.Join(", ", rows.Select(row => row[at] is { Length: > 0 } value ? value : Blank));
 
-    private static string Word(ColumnKind kind) => kind.ToString().ToLowerInvariant();
-
     private static string Encoded(string text) => WebUtility.HtmlEncode(text);
+
+    /// <summary>What a list is drawn with, which each of its controls carries so a list drawn again keeps it.</summary>
+    /// <param name="Verb">The kind of output its boxes make.</param>
+    /// <param name="Key">The key of the whole declaration it is drawn for.</param>
+    /// <param name="Fingerprint">The fingerprint of the source's bytes it is drawn from.</param>
+    /// <param name="Picks">The picks it is drawn with.</param>
+    /// <param name="Whole">Whether every block is in the declaration: an output is changed only then.</param>
+    private readonly record struct ListDrawing(string Verb, string Key, string Fingerprint, ListPicks Picks, bool Whole)
+    {
+        /// <summary>What a control carries: its own values, then what the list was drawn with and from.</summary>
+        /// <param name="own">The control's own values.</param>
+        /// <returns>All it carries.</returns>
+        public JsonObject Carried(JsonObject own)
+        {
+            Picks.Into(own, Verb);
+            own[StepRenderer.DrawnKey] = Key;
+            own[StepRenderer.SourceKey] = Fingerprint;
+
+            return own;
+        }
+    }
 }

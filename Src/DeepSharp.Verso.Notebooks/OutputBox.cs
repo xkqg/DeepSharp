@@ -28,7 +28,9 @@ internal readonly record struct ListOutputChange(IReadOnlyList<IPipelineStep>? S
 /// many goes in after the nearest column the output holds before it in the source's order, first when none does, and
 /// comes out where it stands, so a tick never moves a column it does not touch. A tick on a column that does not reach
 /// the end takes it in first, in the same change. The verb's own rules refuse what they refuse, in its words; and an
-/// output of another kind than the one picked is not changed from here.
+/// output of another kind than the one picked is not changed from here. A range of an output of many puts every column
+/// of it in the same way, in one change, and takes them in with the range's one kind — a column the schema gives a kind
+/// the output does not read is made that kind, since the range asks for its answers as that kind.
 /// </remarks>
 internal static class OutputBox
 {
@@ -42,7 +44,26 @@ internal static class OutputBox
     /// <param name="ticked">Whether the box is ticked.</param>
     /// <returns>The steps, or why not.</returns>
     public static ListOutputChange Change(
-        StepCatalog catalog, PipelineDeclaration declaration, string verb, string column, ColumnKind kind, IReadOnlyList<string> header, bool ticked)
+        StepCatalog catalog, PipelineDeclaration declaration, string verb, string column, ColumnKind kind, IReadOnlyList<string> header, bool ticked) =>
+        Change(catalog, declaration, verb, [column], kind, header, ticked, reads: null);
+
+    /// <summary>What a range of an output of many asks for: every column of it put in, in one change.</summary>
+    /// <param name="catalog">The verbs the notebook knows.</param>
+    /// <param name="declaration">The declaration the blocks make.</param>
+    /// <param name="verb">The kind of output the list's boxes make; its answer is a list of columns.</param>
+    /// <param name="columns">The range's columns, in the source's order.</param>
+    /// <param name="kind">The range's kind.</param>
+    /// <param name="header">The source's columns, in their order.</param>
+    /// <returns>The steps, or why not.</returns>
+    public static ListOutputChange Ranged(
+        StepCatalog catalog, PipelineDeclaration declaration, string verb, IReadOnlyList<string> columns, ColumnKind kind, IReadOnlyList<string> header) =>
+        Change(catalog, declaration, verb, columns, kind, header, ticked: true, reads: ((ColumnsParameter)AnswerOf(catalog, verb)!).Accepts);
+
+    // Puts columns into the output, or takes them out; for a range, a column the schema gives a kind the output does not
+    // read is made the range's kind.
+    private static ListOutputChange Change(
+        StepCatalog catalog, PipelineDeclaration declaration, string verb, IReadOnlyList<string> columns, ColumnKind kind, IReadOnlyList<string> header,
+        bool ticked, IReadOnlyList<ColumnKind>? reads)
     {
         var output = declaration.Output;
 
@@ -57,15 +78,16 @@ internal static class OutputBox
         }
 
         var held = output is null ? [] : Held(output, answer);
+        string[] asked = [.. columns.Where(column => held.Contains(column, StringComparer.Ordinal) != ticked)];
 
-        if (held.Contains(column, StringComparer.Ordinal) == ticked)
+        if (asked.Length == 0)
         {
             return new ListOutputChange(declaration.Steps, []);
         }
 
         JsonNode stated = answer is ColumnsParameter
-            ? new JsonArray([.. (ticked ? Inserted(held, column, header) : [.. held.Where(each => each != column)]).Select(each => (JsonNode)each)])
-            : ticked ? column : string.Empty;
+            ? new JsonArray([.. (ticked ? asked.Aggregate(held, (each, column) => Inserted(each, column, header)) : [.. held.Except(asked)]).Select(each => (JsonNode)each)])
+            : ticked ? asked[0] : string.Empty;
 
         INamesTheAnswer made;
 
@@ -79,13 +101,41 @@ internal static class OutputBox
         }
 
         // A column the schema does not take is taken in first, in the same change.
-        var taken = ticked ? declaration.Including(column, kind, header) : declaration.Steps;
+        IReadOnlyList<IPipelineStep> taken;
+
+        try
+        {
+            taken = ticked ? TakenIn(declaration, asked, kind, header, reads) : declaration.Steps;
+        }
+        catch (DeclarationException refused)
+        {
+            return new ListOutputChange(null, [.. refused.Faults.Select(fault => fault.ToString())]);
+        }
+
         var faults = PipelineDeclaration.FaultsIn(taken);
 
         return faults.Count > 0
             ? new ListOutputChange(null, [.. faults.Select(fault => fault.ToString())])
             : new ListOutputChange(new PipelineDeclaration(taken).WithOutput(made), []);
     }
+
+    // The columns taken in with the kind given; for a range, one the schema then gives a kind the output does not read is
+    // made that kind. A column whose change breaks a rule stops the rest, and the rule is said.
+    private static IReadOnlyList<IPipelineStep> TakenIn(
+        PipelineDeclaration declaration, IReadOnlyList<string> columns, ColumnKind kind, IReadOnlyList<string> header, IReadOnlyList<ColumnKind>? reads) =>
+        reads is null
+            ? declaration.Including(columns, kind, header)
+            : columns.Aggregate(declaration.Including(columns, kind, header), (steps, column) =>
+                steps.OfType<DeclareStep>().First().Taking.FirstOrDefault(each => each.Name == column) is { } declared && !reads.Contains(declared.Kind)
+                    ? new PipelineDeclaration(steps).WithKind(column, kind)
+                    : steps);
+
+    /// <summary>The kinds a range of an output's columns can take them in with: those its answer reads, never text.</summary>
+    /// <param name="catalog">The verbs the notebook knows.</param>
+    /// <param name="verb">The kind of output.</param>
+    /// <returns>The kinds, in the order the answer names them; nothing for a kind of output whose answer is one column.</returns>
+    public static IReadOnlyList<ColumnKind>? RangeKinds(StepCatalog catalog, string verb) =>
+        AnswerOf(catalog, verb) is ColumnsParameter many ? [.. many.Accepts.Where(kind => kind != ColumnKind.Text)] : null;
 
     /// <summary>
     /// Whether a row's output box can be clicked, as the include box's offers are: what the click asks for changes the

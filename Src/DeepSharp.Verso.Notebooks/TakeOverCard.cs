@@ -124,7 +124,7 @@ internal static class TakeOverCard
 
     // What the schema says of a column it names: its kind, what a category was, and whether the source may lack it.
     private static string Declared(ColumnChoice column) =>
-        (column is { Kind: ColumnKind.Category, Was: { } was } ? $"category (was {Word(was)})" : Word(column.Kind!.Value))
+        (column is { Kind: ColumnKind.Category, Was: { } was } ? $"category (was {was.Word()})" : column.Kind!.Value.Word())
         + (column.Optional == true ? ", the source may lack it" : string.Empty);
 
     // Why a saved drop cannot be made, without naming a step: a column may come from more than one.
@@ -159,8 +159,6 @@ internal static class TakeOverCard
 
         html.Append("</ul>");
     }
-
-    private static string Word(ColumnKind kind) => kind.ToString().ToLowerInvariant();
 
     private static string Quoted(INamesTheAnswer? output) => output is null ? "none" : $"<code>{Encoded(output.AsLine())}</code>";
 
