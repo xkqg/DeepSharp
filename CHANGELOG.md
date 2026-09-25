@@ -172,7 +172,9 @@ wrong with it at once, each at its line and column.
   written. `preset.TakeOver(pipeline, header)` makes the steps the preset's decisions make of a pipeline and lists,
   before anything is applied, every column whose decision changes, the output before and after, the schema's order
   when that changes, and the source's columns the preset never showed; steps that would break a rule are refused
-  with every fault. `CsvRowSource.HeaderOf(path)` reads a file's header alone.
+  with every fault. `CsvRowSource.HeaderOf(path)` reads a file's header alone. In a chain,
+  `.Declare(preset, out declared)` takes the saved schema at the source and `.Output(preset, out taken)` the drops and
+  the output where the chain names its answer, each saying what it decides before anything runs.
 
 - **Every package runs on .NET 8 as well as .NET 10.** Verso's browser editor runs on .NET 8 for as long as
   .NET 8 is installed, and a package built for .NET 10 alone does not load there. Each package now carries a

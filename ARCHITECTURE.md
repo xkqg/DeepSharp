@@ -294,7 +294,11 @@ name stand in another. A column a step makes is never said to be missing from th
 preset never showed are named new. A take-over whose steps would break a rule is refused with every fault and
 applies nothing, and the same pipeline, preset and header give the same answer whoever asks: a notebook's list, its
 Apply, and code. A source's header is read on its own, by the same reading as the whole file, so a large file costs
-its first line.
+its first line. A chain written in code takes a preset over in two places, because it is written in order: the
+schema where it declares its columns, directly after the source, and the drops and the output where it names its
+answer, once the steps that read and make those columns stand. Each place lists what it decides before anything
+runs, the second is the one take-over every door makes, and together they list each decision once — there is no
+third, merged listing, since no door ever stands where the chain did before its schema.
 
 One thing does not survive being written down, and it decides the shape of the rest: an inline lambda. A
 custom step is therefore registered under a name and looked up while parsing, and a file naming a step that

@@ -80,6 +80,38 @@ public sealed class PipelineBuilder
         return Add(new DeclareStep(builder.Columns, remainder));
     }
 
+    /// <summary>Declares the columns saved decisions name, taking their schema whole, and says what that decides.</summary>
+    /// <param name="preset">The saved decisions.</param>
+    /// <param name="declared">
+    /// What taking the schema over decides, before anything runs: every column it names, from not declared to how it
+    /// stands; and the source's columns the saved decisions never showed, when the source's first line can be read now.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="DeclarationException">The schema cannot stand here: it comes directly after the source.</exception>
+    /// <exception cref="InvalidOperationException">This builder has already been split and is finished.</exception>
+    /// <remarks>
+    /// The schema only. The columns the decisions drop and the output they name are taken over by
+    /// <see cref="FittingBuilder.Output(PipelinePreset, out PresetTakeOver)"/>, once the steps that read and make those
+    /// columns are written.
+    /// </remarks>
+    public PipelineBuilder Declare(PipelinePreset preset, out PresetTakeOver declared)
+    {
+        ArgumentNullException.ThrowIfNull(preset);
+        ThrowIfSplit();
+
+        declared = preset.TakeOverOfTheSchema(Declaration, HeaderOf(_steps, _rows));
+
+        if (declared.Faults.Count > 0)
+        {
+            throw new DeclarationException(declared.Faults);
+        }
+
+        _steps.Clear();
+        _steps.AddRange(declared.Steps);
+
+        return this;
+    }
+
     /// <summary>Puts the rows in order by one or more columns, smallest first.</summary>
     /// <param name="columns">The columns to order by, the one that decides first first.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
@@ -289,6 +321,35 @@ public sealed class PipelineBuilder
         return new Pipeline(Declaration, _rows);
     }
 
+    /// <summary>The source's columns as a chain knows them before anything runs.</summary>
+    /// <param name="steps">The chain's steps.</param>
+    /// <param name="rows">The rows handed in, when they are.</param>
+    /// <returns>
+    /// The rows' columns; else the first line of the file the chain reads, from the working directory for a relative
+    /// path; nothing when there is no file to read yet, or it has no header.
+    /// </returns>
+    internal static IReadOnlyList<string>? HeaderOf(IReadOnlyList<IPipelineStep> steps, IRowSource? rows)
+    {
+        if (rows is not null)
+        {
+            return rows.ColumnNames;
+        }
+
+        if (steps is not [ReadCsvStep read, ..])
+        {
+            return null;
+        }
+
+        try
+        {
+            return CsvRowSource.HeaderOf(SourceFolder.WorkingDirectory.Resolve(read.Path));
+        }
+        catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException or FormatException)
+        {
+            return null;
+        }
+    }
+
     private FittingBuilder Split(ISplitStep step)
     {
         ThrowIfSplit();
@@ -487,6 +548,40 @@ public sealed class FittingBuilder
     /// alone; or it is a return on a column a step above it changes.
     /// </exception>
     public FittingBuilder Ahead(string column, int ahead, AheadAs @as = AheadAs.Value) => Add(new AheadStep(column, ahead, @as));
+
+    /// <summary>
+    /// Takes saved decisions over into the chain as it stands: their schema, the columns they drop and their output — and
+    /// says what that changes.
+    /// </summary>
+    /// <param name="preset">The saved decisions.</param>
+    /// <param name="taken">
+    /// What taking them over changes, before anything runs: every column whose decision changes, the output and the
+    /// schema's order when they change, and the source's columns the decisions never showed, when the source's first
+    /// line can be read now.
+    /// </param>
+    /// <returns>This builder, going on from the steps the take-over made.</returns>
+    /// <exception cref="DeclarationException">The steps the decisions would make break a rule; every fault is said.</exception>
+    /// <remarks>
+    /// The same take-over as a notebook's and the file door's, <see cref="PipelinePreset.TakeOver"/>: the schema whole,
+    /// each drop below the steps that read and make its column, and the output placed whole — a return directly after
+    /// the split. A chain that took the schema over at its source lists it here only when it changed since.
+    /// </remarks>
+    public FittingBuilder Output(PipelinePreset preset, out PresetTakeOver taken)
+    {
+        ArgumentNullException.ThrowIfNull(preset);
+
+        taken = preset.TakeOver(Declaration, PipelineBuilder.HeaderOf(_steps, _rows));
+
+        if (taken.Faults.Count > 0)
+        {
+            throw new DeclarationException(taken.Faults);
+        }
+
+        _steps.Clear();
+        _steps.AddRange(taken.Steps);
+
+        return this;
+    }
 
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>

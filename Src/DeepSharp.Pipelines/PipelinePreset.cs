@@ -77,8 +77,23 @@ public sealed record PipelinePreset
     {
         ArgumentNullException.ThrowIfNull(into);
 
+        return Listed(into, Taken(into), header);
+    }
+
+    /// <summary>Takes the schema alone over into a pipeline, listing what it decides.</summary>
+    /// <param name="into">The pipeline: a chain at its source, before the steps that read the drops are written.</param>
+    /// <param name="header">The source's columns as they are now, or nothing when they are not known.</param>
+    /// <returns>
+    /// The steps with this schema in place of the one there, or directly after the source; every column whose decision
+    /// that changes; and the source's columns the decisions — all of them, the drops and the output too — never showed.
+    /// </returns>
+    internal PresetTakeOver TakeOverOfTheSchema(PipelineDeclaration into, IReadOnlyList<string>? header) =>
+        Listed(into, WithSchema(into), header);
+
+    // What a take-over made of a pipeline, listed against how it stood: or every fault, and no steps.
+    private PresetTakeOver Listed(PipelineDeclaration into, TakenSteps taken, IReadOnlyList<string>? header)
+    {
         IReadOnlyList<string>? newColumns = header is null ? null : [.. header.Except(Source ?? Named(), StringComparer.Ordinal)];
-        var taken = Taken(into);
 
         if (taken.Result is not { } result)
         {
@@ -167,10 +182,7 @@ public sealed record PipelinePreset
             }
         }
 
-        var steps = taken.Result!.Steps;
-        var at = taken.Result.ColumnsAt;
-
-        taken = Kept(() => at >= 0 ? [.. steps.Take(at), Declare, .. steps.Skip(at + 1)] : [.. steps.Take(1), Declare, .. steps.Skip(1)]);
+        taken = WithSchema(taken.Result!);
 
         foreach (var column in Drop)
         {
@@ -185,6 +197,15 @@ public sealed record PipelinePreset
         return taken.Result is { } decided
             ? Kept(() => Output is { } output ? decided.WithOutput(output) : decided.WithoutOutput())
             : taken;
+    }
+
+    // This schema, in place of the one there or directly after the source.
+    private TakenSteps WithSchema(PipelineDeclaration into)
+    {
+        var steps = into.Steps;
+        var at = into.ColumnsAt;
+
+        return Kept(() => at >= 0 ? [.. steps.Take(at), Declare, .. steps.Skip(at + 1)] : [.. steps.Take(1), Declare, .. steps.Skip(1)]);
     }
 
     // The steps an operation makes as a declaration, or every rule they break; the schema's own refusal among them.

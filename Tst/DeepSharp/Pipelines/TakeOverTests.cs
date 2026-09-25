@@ -163,4 +163,129 @@ public class TakeOverTests
         Assert.Equal([source.Steps[0], schema], takenOver.Steps);
         Assert.Equal(["survived", "pclass", "age", "fare"], takenOver.Changes.Select(change => change.Column));
     }
+
+    // ---- the chain: the schema where the chain declares it, the drops and the output where it names its answer
+
+    // Saved from a pipeline that keeps the rest of the file and drops one column of it, and one a step makes.
+    private static PipelinePreset SavedWithDrops(string path) =>
+        PipelinePreset.Of(
+            Pdd.Create()
+                .ReadCsv(path)
+                .Declare(columns => columns.Integer("survived").Category("pclass").Optional("age", ColumnKind.Number).Number("fare"), Remainder.Keep)
+                .SplitStratified("survived", 0.70, 0.15)
+                .FillMissing("age", With.Median)
+                .Normalise("fare")
+                .Drop("sex", "age_was_missing")
+                .Target("survived")
+                .Declaration,
+            header: null);
+
+    // Two listings are the same when every part says the same.
+    private static void SameListing(PresetTakeOver expected, PresetTakeOver actual)
+    {
+        Assert.Equal(expected.Steps, actual.Steps);
+        Assert.Equal(expected.Faults, actual.Faults);
+        Assert.Equal(expected.NewColumns, actual.NewColumns);
+        Assert.Equal(expected.Changes, actual.Changes);
+        Assert.Equal(expected.Output, actual.Output);
+        Assert.Equal(expected.DeclareOrder?.Before, actual.DeclareOrder?.Before);
+        Assert.Equal(expected.DeclareOrder?.After, actual.DeclareOrder?.After);
+    }
+
+    [Fact]
+    public void AChain_TakesTheSavedSchemaAtItsSource_AndTheDropsAndOutputWhereItNamesItsAnswer_ListingEachDecisionOnce()
+    {
+        var path = Repository.Data("titanic.csv");
+        var header = CsvRowSource.HeaderOf(path);
+        var saved = SavedWithDrops(path);
+
+        var written = Pdd.Create()
+            .ReadCsv(path)
+            .Declare(saved, out var declared)
+            .SplitStratified("survived", 0.70, 0.15)
+            .FillMissing("age", With.Median)
+            .Normalise("fare");
+        var blocks = written.Declaration;
+
+        written.Output(saved, out var taken);
+
+        // The one door, over blocks equal to the chain where it names its answer; and over the source, the schema alone.
+        SameListing(saved.TakeOver(blocks, header), taken);
+
+        var atTheSource = new PipelinePreset(saved.Declare).TakeOver(new PipelineDeclaration([new ReadCsvStep(path)]), header);
+
+        Assert.Equal(atTheSource.Steps, declared.Steps);
+        Assert.Equal(atTheSource.Changes, declared.Changes);
+
+        // What is new in the source is said of the whole of the saved decisions, the columns they drop too.
+        Assert.Equal(taken.NewColumns, declared.NewColumns);
+        Assert.DoesNotContain("sex", declared.NewColumns!);
+        Assert.Contains("sex", atTheSource.NewColumns!);
+
+        // Each decision once: the schema's — its columns, and the rest it keeps — where it is taken; the drops and the
+        // output where they are placed.
+        Assert.Equal(header, declared.Changes.Select(change => change.Column));
+        Assert.Equal(ColumnStanding.Kept, declared.Changes.Single(change => change.Column == "sex").After.Standing);
+        Assert.Equal(["sex", "age_was_missing"], taken.Changes.Select(change => change.Column));
+        Assert.Null(declared.Output);
+        Assert.Equal(new OutputChange(null, new TargetStep("survived")), taken.Output);
+
+        // The chain goes on from the door's steps: its placement, not the pipeline the decisions were saved from.
+        Assert.Equal(taken.Steps, written.Declaration.Steps);
+    }
+
+    [Fact]
+    public void AChainWhoseSourceCannotBeReadYet_TakesTheSchemaOver_WithoutSayingWhatTheSourceHas()
+    {
+        var chain = Pdd.Create().ReadCsv(Path.Join(Path.GetTempPath(), "nowhere-yet.csv")).Declare(Saved(Blocks()), out var declared);
+
+        Assert.Null(declared.NewColumns);
+        Assert.All(declared.Changes, change => Assert.Null(change.InSource));
+        Assert.Equal(Blocks().Steps[1], chain.Declaration.Steps[1]);
+    }
+
+    [Fact]
+    public void AChainThatNamesNoSourceYet_TakesTheSchemaOver_KnowingNothingOfTheSourcesColumns()
+    {
+        var chain = Pdd.Create().Declare(Saved(Blocks()), out var declared);
+
+        Assert.Null(declared.NewColumns);
+        Assert.Equal([Blocks().Steps[1]], chain.Declaration.Steps);
+        Assert.Equal(["survived", "pclass", "age", "fare"], declared.Changes.Select(change => change.Column));
+    }
+
+    [Fact]
+    public void RowsHandedIn_AreTheSourcesColumns_ForTheChainsListing()
+    {
+        var rows = CsvRowSource.FromText("survived,pclass,sex,age,fare\n1,3,male,22,7.25\n", "passengers");
+
+        Pdd.Create().Read(rows, "passengers").Declare(Saved(Blocks()), out var declared);
+
+        Assert.Equal(["sex"], declared.NewColumns);
+        Assert.All(declared.Changes, change => Assert.True(change.InSource));
+    }
+
+    [Fact]
+    public void ADecisionTheChainCannotKeep_IsRefusedWithEveryFault_WhereItIsTakenOver_AndTheChainStaysAsItWas()
+    {
+        // The saved schema has neither age nor fare; one chain orders its rows by fare, the other fills age.
+        var narrow = Saved(Pdd.Create().ReadCsv("titanic.csv").Declare(columns => columns.Integer("survived", "pclass")).Declaration);
+        var ordered = Pdd.Create()
+            .ReadCsv("titanic.csv")
+            .Declare(columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Number("fare"))
+            .OrderBy("fare");
+        var filled = Pdd.Create()
+            .ReadCsv("titanic.csv")
+            .Declare(columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Number("fare"))
+            .SplitStratified("survived", 0.70, 0.15)
+            .FillMissing("age", With.Median);
+
+        var atTheSchema = Assert.Throws<DeclarationException>(() => ordered.Declare(narrow, out _));
+        var atTheOutput = Assert.Throws<DeclarationException>(() => filled.Output(narrow, out _));
+
+        Assert.Contains(atTheSchema.Faults, fault => fault.Message.Contains("'fare'", StringComparison.Ordinal));
+        Assert.Contains(atTheOutput.Faults, fault => fault.Message.Contains("'age'", StringComparison.Ordinal));
+        Assert.Equal(3, ordered.Declaration.Steps.Count);
+        Assert.Equal(4, filled.Declaration.Steps.Count);
+    }
 }
