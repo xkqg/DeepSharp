@@ -29,6 +29,9 @@ public enum Standing
 
     /// <summary>A row nothing divides, because the pipeline has no split.</summary>
     Undivided,
+
+    /// <summary>A row the split keeps apart at the end of its part: fitted on by nothing, handed to nothing.</summary>
+    Gap,
 }
 
 /// <summary>
@@ -81,6 +84,10 @@ public sealed class PipelineView
 /// </summary>
 internal static class Standings
 {
+    // Every part a split gives a row has the standing of the same name — a standing is a part, or a row dropped
+    // before the split reaches it — so the one follows from the other with no rule to forget for a new part.
+    private static readonly Standing[] OfPart = [.. Enum.GetValues<Part>().Select(part => Enum.Parse<Standing>(part.ToString()))];
+
     /// <summary>Where each row of a table stands, given the rows the split divided and the part each landed in.</summary>
     /// <param name="rows">The rows to place.</param>
     /// <param name="divided">The table the split divided, or nothing when no split was reached.</param>
@@ -97,13 +104,7 @@ internal static class Standings
 
         for (var row = 0; row < divided.RowCount; row++)
         {
-            landed[divided.Identities[row].ReadAt] = parts[row] switch
-            {
-                Part.Train => Standing.Train,
-                Part.Validation => Standing.Validation,
-                Part.Test => Standing.Test,
-                _ => Standing.Predict,
-            };
+            landed[divided.Identities[row].ReadAt] = OfPart[(int)parts[row]];
         }
 
         return [.. rows.Identities.Select(identity => landed.GetValueOrDefault(identity.ReadAt, Standing.Dropped))];

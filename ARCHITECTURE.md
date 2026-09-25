@@ -103,6 +103,13 @@ lists them in, and every copy of a repeated row lands where its first copy does.
 of repeated rows in the Titanic data had copies on both sides of the line. A split in time never divides a
 moment: every row of one moment lands on the side of the line its first row does.
 
+A split in time can also keep a gap: the last moments of every part — before each line, and at the end — are
+set apart, fitted on by nothing and handed to nothing, and the fit writes down how many rows the gap held. It is
+there for an answer read from later rows. Without it, the last training rows learn their answers from the rows a
+model is measured on: in the published price series, five days ahead, the last five training days read their
+answers from validation. The gap counts moments rather than rows, so it never divides a moment either, and a gap
+that would take every row a model learns from or is measured on is refused.
+
 So fitting on the whole set is not a mistake a caller can make and be warned about later: it is a method
 that does not exist yet at that point in the chain. A rule in a document is advice; a rule expressed as
 which methods are in scope is the only kind that cannot be skipped in a hurry.
@@ -614,7 +621,8 @@ keeps every copy of one in the same part.
 
 `ViewAt` gives the data as it stands after any number of steps, and it is what the grid under a notebook's
 block shows and what evidence at that place measures. Every row in it says where it stands: in the part the
-split puts it in, dropped before the split reaches it, or undivided when nothing divides it. The split is found
+split puts it in, in the gap it keeps apart, dropped before the split reaches it, or undivided when nothing
+divides it. The split is found
 wherever it is declared, below the view as much as above it, because a range or a profile drawn above the split
 over every row would let the rows a model is measured on shape what it is shown — a view with no split read all
 891 Titanic rows as training rows.

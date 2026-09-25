@@ -27,6 +27,14 @@ public enum Part
     /// is how a statistic over every row comes to look like one over the training rows alone.
     /// </remarks>
     Undivided,
+
+    /// <summary>The last moments of a part, kept apart by a split in time: fitted on by nothing, handed to nothing.</summary>
+    /// <remarks>
+    /// An answer read some rows ahead is read from later rows, so without these the last training rows would learn
+    /// their answers from the rows a model is measured on, and the last rows of all have no later row to answer
+    /// them.
+    /// </remarks>
+    Gap,
 }
 
 /// <summary>
@@ -396,6 +404,43 @@ internal static class SplitPlacement
             {
                 parts[ordered[at]] = parts[ordered[at - 1]];
             }
+        }
+    }
+
+    /// <summary>Keeps the last moments of every part apart: before each line, and at the end.</summary>
+    /// <param name="parts">The part of each row, by row; changed in place.</param>
+    /// <param name="ordered">The rows in the order the parts were handed out.</param>
+    /// <param name="gap">How many moments of each part are kept apart.</param>
+    /// <param name="together">Whether a row belongs with the one before it: the same moment.</param>
+    /// <remarks>Moments rather than rows, so a moment is kept apart whole, as a split keeps it whole.</remarks>
+    internal static void Gapped(this Part[] parts, int[] ordered, int gap, Func<int, int, bool> together)
+    {
+        var end = ordered.Length;
+
+        while (end > 0)
+        {
+            var part = parts[ordered[end - 1]];
+            var start = end - 1;
+
+            while (start > 0 && parts[ordered[start - 1]] == part)
+            {
+                start--;
+            }
+
+            var moments = 0;
+
+            for (var at = end - 1; at >= start && moments < gap; at--)
+            {
+                parts[ordered[at]] = Part.Gap;
+
+                // The row that begins its moment completes one moment kept apart.
+                if (at == start || !together(ordered[at - 1], ordered[at]))
+                {
+                    moments++;
+                }
+            }
+
+            end = start;
         }
     }
 

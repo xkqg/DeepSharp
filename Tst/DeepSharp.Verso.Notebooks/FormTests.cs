@@ -318,6 +318,26 @@ public sealed class FormTests : IDisposable
     }
 
     [Fact]
+    public async Task AWholeNumberAFileMayLeaveOut_ShowsWhatLeavingItOutMeans_AndIsLeftOutByClearingIt()
+    {
+        // A split in time writes no gap until it has one, so the texts written before it had the parameter stay as
+        // they were; the form still shows it, as the nought leaving it out means.
+        await using var notebook = await NotebookAsync(
+            """{"step": "split.byTime", "column": "when", "train": 0.7, "validation": 0.15, "test": 0.15, "predict": 0}""");
+        var split = notebook.Scaffold.Cells[0];
+
+        Assert.Equal("0", Field(await SectionAsync(notebook, split), "gap").CurrentValue);
+
+        await ChangeAsync(notebook, split, "gap", "3");
+        Assert.Equal(3, ((SplitByTimeStep)Step(split)).Gap);
+        Assert.Contains("\"gap\": 3", split.Source, StringComparison.Ordinal);
+
+        await ChangeAsync(notebook, split, "gap", "");
+        Assert.Equal(0, ((SplitByTimeStep)Step(split)).Gap);
+        Assert.DoesNotContain("gap", split.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheVerb_IsSwitchedWithinItsStage_KeepingEveryValueTheOtherVerbTakes()
     {
         await using var notebook = await NotebookAsync("""{"step": "split.atRandom", "train": 0.6, "validation": 0.2, "test": 0.2, "seed": 7}""");

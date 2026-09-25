@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
 using System.Text.Json;
 using DeepSharp.Pipelines;
 using Verso.Abstractions;
@@ -72,7 +73,9 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
 
     public IEnumerable<PropertyField> Visit(NumberParameter parameter) => [Text(parameter, Written(parameter.Key))];
 
-    public IEnumerable<PropertyField> Visit(WholeNumberParameter parameter) => [Text(parameter, Written(parameter.Key))];
+    // A whole number a file may leave out shows the value leaving it out means.
+    public IEnumerable<PropertyField> Visit(WholeNumberParameter parameter) =>
+        [Text(parameter, step.TryGetProperty(parameter.Key, out var written) ? written.GetRawText() : parameter.LeftOut?.ToString(CultureInfo.InvariantCulture))];
 
     public IEnumerable<PropertyField> Visit(TrueOrFalseParameter parameter) =>
         [new(parameter.Key, parameter.Key, PropertyFieldType.Toggle, parameter.Read(step), parameter.Description)];

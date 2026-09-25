@@ -458,9 +458,11 @@ Divides the rows by when they happened: the earliest to learn from, the latest t
 | `validation` | the share used while choosing between models: nought to one | `0.15` |
 | `test` | the share kept back until the end: above nought, at most one | `0.15` |
 | `predict` | the share held back to predict on: nought to one, and none when it is left out | `0` |
+| `gap` | a whole number, at least 0; left out, 0 | left out |
 
 - **`column`**: The column that says when a row happened.
 - **`train`**: How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.
+- **`gap`**: How many of the last moments of every part are kept apart, fitted on by nothing and handed to nothing: at least as many as the rows an answer reads ahead. Left out, none.
 
 Means what it says from version 2 of the file.
 

@@ -310,18 +310,15 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
         }
     }
 
+    // The part of each standing: the one of the same name, and none for a row dropped before the split reaches it.
+    private static readonly Part[] PartOf =
+        [.. Enum.GetValues<Standing>().Select(standing => Enum.TryParse<Part>(standing.ToString(), out var part) ? part : Part.Undivided)];
+
     // Among every row where it stands; across parts only where there are parts to be across.
     private static DuplicateRows Duplicates(PipelineView view) =>
         view.Measured == Standing.Undivided
             ? view.Table.Duplicates()
-            : view.Table.Duplicates([.. view.Standings.Select(standing => standing switch
-            {
-                Standing.Train => Part.Train,
-                Standing.Validation => Part.Validation,
-                Standing.Test => Part.Test,
-                Standing.Predict => Part.Predict,
-                _ => Part.Undivided,
-            })]);
+            : view.Table.Duplicates([.. view.Standings.Select(standing => PartOf[(int)standing])]);
 }
 
 /// <summary>

@@ -68,7 +68,9 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
 
     public bool Visit(NumberParameter parameter) => Set(parameter.Key, Number);
 
-    public bool Visit(WholeNumberParameter parameter) => Set(parameter.Key, Number);
+    // A whole number a file may leave out is left out when its field is emptied.
+    public bool Visit(WholeNumberParameter parameter) =>
+        Set(parameter.Key, () => parameter.LeftOut is not null && string.IsNullOrWhiteSpace(value.Text) ? null : Number());
 
     public bool Visit(TrueOrFalseParameter parameter) => Set(parameter.Key, () => Switch());
 

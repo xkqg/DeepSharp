@@ -132,6 +132,12 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
                 seen.Learned($"rows.{part.ToString().ToLowerInvariant()}", parts.Count(each => each == part));
             }
 
+            // Only a split that keeps rows apart says how many: every other one writes what it always wrote.
+            if (parts.Count(each => each == Part.Gap) is > 0 and var gap)
+            {
+                seen.Learned("rows.gap", gap);
+            }
+
             seen.Learned("digest", table.Digest());
             describe(table, parts, seen);
 

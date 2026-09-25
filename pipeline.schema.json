@@ -1467,6 +1467,12 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "gap": {
+          "description": "How many of the last moments of every part are kept apart, fitted on by nothing and handed to nothing: at least as many as the rows an answer reads ahead. Left out, none.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
         }
       },
       "required": [

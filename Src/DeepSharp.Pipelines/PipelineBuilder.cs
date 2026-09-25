@@ -233,6 +233,22 @@ public sealed class PipelineBuilder
     public FittingBuilder SplitByTime(string column, double train, double validation = 0) =>
         Split(new SplitByTimeStep(column, SplitShares.Of(train, validation, _predict)));
 
+    /// <summary>Splits the rows by where they sit in time, keeping the last moments of every part apart.</summary>
+    /// <param name="column">The column that says when a row happened.</param>
+    /// <param name="train">The share the model learns from.</param>
+    /// <param name="validation">The share used while choosing between models; nought for none.</param>
+    /// <param name="gap">How many of the last moments of every part are kept apart: at least as many as the rows an answer reads ahead.</param>
+    /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
+    /// <exception cref="ArgumentException">The column has no name, or the shares ask for more than there is.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A share is not a share, or the gap is below nought.</exception>
+    /// <exception cref="InvalidOperationException">This builder has already been split.</exception>
+    /// <remarks>
+    /// For an answer read from later rows: without a gap, the last training rows learn their answers from the rows a
+    /// model is measured on. The rows kept apart are fitted on by nothing and handed to nothing.
+    /// </remarks>
+    public FittingBuilder SplitByTime(string column, double train, double validation, int gap) =>
+        Split(new SplitByTimeStep(column, SplitShares.Of(train, validation, _predict), gap));
+
     /// <summary>Splits the rows at random, and opens the half of the chain that learns.</summary>
     /// <param name="train">The share the model learns from.</param>
     /// <param name="validation">The share used while choosing between models; none, unless you say.</param>

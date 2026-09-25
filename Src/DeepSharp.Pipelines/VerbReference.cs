@@ -121,9 +121,10 @@ internal static class VerbReference
                 : "a number")];
 
         public IReadOnlyList<Row> Visit(WholeNumberParameter parameter) =>
-            [new(parameter.Key, parameter.AtLeast is { } least
-                ? string.Create(CultureInfo.InvariantCulture, $"a whole number, at least {least}")
-                : "a whole number")];
+            [new(parameter.Key, string.Concat(
+                "a whole number",
+                parameter.AtLeast is { } least ? string.Create(CultureInfo.InvariantCulture, $", at least {least}") : string.Empty,
+                parameter.LeftOut is { } left ? string.Create(CultureInfo.InvariantCulture, $"; left out, {left}") : string.Empty))];
 
         public IReadOnlyList<Row> Visit(TrueOrFalseParameter parameter) => [new(parameter.Key, "`true` or `false`")];
 

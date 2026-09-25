@@ -61,12 +61,20 @@ public static class Handover
     /// <param name="prepared">The data as the pipeline left it.</param>
     /// <param name="part">Which part of it to hand over.</param>
     /// <returns>The rows of that split, and their answers when the pipeline named a target.</returns>
+    /// <exception cref="ArgumentException">The part asked for is the gap a split keeps apart.</exception>
     /// <exception cref="InvalidOperationException">
     /// A column still holds words, or the target column is not there.
     /// </exception>
     public static Batch Batch(this PreparedData prepared, Part part)
     {
         ArgumentNullException.ThrowIfNull(prepared);
+
+        if (part == Part.Gap)
+        {
+            throw new ArgumentException(
+                "The rows a split keeps apart are fitted on by nothing and handed to nothing: that is what keeps them apart.",
+                nameof(part));
+        }
 
         var rows = Enumerable.Range(0, prepared.Table.RowCount)
             .Where(row => prepared.Parts[row] == part)

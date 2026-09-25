@@ -306,21 +306,36 @@ public sealed class NumberParameter(string key, string description, double examp
 /// <param name="description">What it means.</param>
 /// <param name="example">The value a new block starts with.</param>
 /// <param name="atLeast">The smallest value it may hold, when there is one.</param>
-public sealed class WholeNumberParameter(string key, string description, int example, int? atLeast = null)
+/// <param name="leftOut">
+/// The value a file means by leaving the key out, when it may: that value is never written, so a step that gained
+/// the parameter writes itself as it did before, and keeps its keys.
+/// </param>
+public sealed class WholeNumberParameter(string key, string description, int example, int? atLeast = null, int? leftOut = null)
     : StepParameter<int>(key, description, example)
 {
     /// <summary>The smallest value it may hold, when there is one.</summary>
     public int? AtLeast { get; } = atLeast;
 
-    /// <inheritdoc />
-    public override int Read(JsonElement step) => step.RequiredWholeNumber(Key);
+    /// <summary>The value a file means by leaving the key out, or nothing when the key is required.</summary>
+    public int? LeftOut { get; } = leftOut;
 
     /// <inheritdoc />
+    public override IReadOnlyList<string> RequiredKeys => LeftOut is null ? Keys : [];
+
+    /// <inheritdoc />
+    public override int Read(JsonElement step) =>
+        LeftOut is { } left && !step.TryGetProperty(Key, out _) ? left : step.RequiredWholeNumber(Key);
+
+    /// <inheritdoc />
+    /// <remarks>Nothing is written for the value leaving the key out means.</remarks>
     public override void Write(Utf8JsonWriter writer, int value)
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        writer.WriteNumber(Key, value);
+        if (value != LeftOut)
+        {
+            writer.WriteNumber(Key, value);
+        }
     }
 
     /// <inheritdoc />

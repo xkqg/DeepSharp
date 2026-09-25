@@ -119,6 +119,11 @@ public sealed record ReadRowsStep : IPipelineStep<ReadRowsStep>, IOpensRows, IDe
 /// at one time is on one side of the line or the other. Rows are placed in the order of their time and then
 /// of their keys, so the same rows are divided the same way whatever order they arrive in.
 /// </para>
+/// <para>
+/// A gap keeps the last moments of every part apart — before each line and at the end — for an answer read
+/// from later rows: without one, the last training rows learn their answers from the rows a model is measured
+/// on. The rows in the gap are fitted on by nothing and handed to nothing.
+/// </para>
 /// </remarks>
 public sealed record SplitByTimeStep : ISplitStep, IPipelineStep<SplitByTimeStep>, IDescribesColumns
 {
@@ -127,27 +132,47 @@ public sealed record SplitByTimeStep : ISplitStep, IPipelineStep<SplitByTimeStep
 
     private static readonly SplitSharesParameter SharesKey = new();
 
+    private static readonly WholeNumberParameter GapKey = new(
+        "gap", "How many of the last moments of every part are kept apart, fitted on by nothing and handed to nothing: at least as many as the rows an answer reads ahead. Left out, none.",
+        0, atLeast: 0, leftOut: 0);
+
     /// <summary>Declares a split in time, by shares that together make a whole.</summary>
     /// <param name="column">The column that says when a row happened.</param>
     /// <param name="shares">How much goes to training, validation, test and predicting.</param>
     /// <exception cref="ArgumentException">The column has no name, or the shares do not make a whole.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A share is not a share: nothing, or more than everything.</exception>
     public SplitByTimeStep(string column, SplitShares shares)
+        : this(column, shares, 0)
+    {
+    }
+
+    /// <summary>Declares a split in time that keeps the last moments of every part apart.</summary>
+    /// <param name="column">The column that says when a row happened.</param>
+    /// <param name="shares">How much goes to training, validation, test and predicting.</param>
+    /// <param name="gap">How many of the last moments of every part are kept apart; none for no gap.</param>
+    /// <exception cref="ArgumentException">The column has no name, or the shares do not make a whole.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A share is not a share, or the gap is below nothing.</exception>
+    public SplitByTimeStep(string column, SplitShares shares, int gap)
     {
         Column = ColumnKey.Require(column);
         Shares = SharesKey.Require(shares);
+        Gap = GapKey.Require(gap);
     }
 
     /// <inheritdoc />
     public static StepParameters<SplitByTimeStep> Parameters { get; } = new StepParameters<SplitByTimeStep>()
         .With(ColumnKey, step => step.Column)
-        .With(SharesKey, step => step.Shares);
+        .With(SharesKey, step => step.Shares)
+        .With(GapKey, step => step.Gap);
 
     /// <summary>The column that says when a row happened.</summary>
     public string Column { get; }
 
     /// <summary>How much goes to training, validation, test and predicting.</summary>
     public SplitShares Shares { get; }
+
+    /// <summary>How many of the last moments of every part are kept apart.</summary>
+    public int Gap { get; }
 
     /// <inheritdoc />
     /// <exception cref="InvalidOperationException">A row has no time, or its time is not a number.</exception>
@@ -170,8 +195,24 @@ public sealed record SplitByTimeStep : ISplitStep, IPipelineStep<SplitByTimeStep
         var parts = Shares.Over(table.RowCount).Placed(order);
 
         parts.KeptTogether(order, (one, other) => when(one, other) == 0);
+        parts.Gapped(order, Gap, (one, other) => when(one, other) == 0);
+
+        // A gap wider than a part takes the whole of it, and a model with nothing to learn from, or nothing to be
+        // measured on, is a run that should stop rather than succeed.
+        ThrowIfTheGapTookAll(parts, Part.Train, "learn from");
+        ThrowIfTheGapTookAll(parts, Part.Test, "measure on");
 
         return parts;
+    }
+
+    private void ThrowIfTheGapTookAll(Part[] parts, Part part, string purpose)
+    {
+        if (Gap > 0 && !parts.Contains(part))
+        {
+            throw new InvalidOperationException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"A gap of {Gap} moments takes every row of {part.ToString().ToLowerInvariant()}, and leaves nothing to {purpose}. Keep fewer moments apart, or divide more rows."));
+        }
     }
 
     /// <inheritdoc />
@@ -226,7 +267,7 @@ public sealed record SplitByTimeStep : ISplitStep, IPipelineStep<SplitByTimeStep
     /// <returns>The step the file describes.</returns>
     /// <exception cref="FormatException">A parameter is missing or is of the wrong kind.</exception>
     public static SplitByTimeStep ReadFrom(JsonElement element) =>
-        new(ColumnKey.Read(element), SharesKey.Read(element));
+        new(ColumnKey.Read(element), SharesKey.Read(element), GapKey.Read(element));
 }
 
 /// <summary>
