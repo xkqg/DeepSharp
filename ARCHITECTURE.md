@@ -28,7 +28,7 @@ Src/DeepSharp.Pipelines/          the data side
                                     rows, where a path is read from, typed columns, who a row is, what a fit sees
     Walk.cs Execution.cs Views.cs Fitting.cs Handover.cs
                                     the one walk every run is, the data after any step, what a fit learned, the handover
-    Outputs.cs                      what a model is asked to predict: the output, and its kinds
+    Outputs.cs WayBack.cs           what a model is asked to predict, and how its answers come back into their units
 Src/DeepSharp.Pipelines.DataFrame/   a reader through MatPlotLibNet.DataFrame
 Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
 Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
@@ -578,6 +578,18 @@ served row is exactly such a row. Judged by its answer, a pipeline that left out
 it was asked about, and one that dropped the rows without an answer served none of them without a word. A fit
 still judges every column.
 
+Predictions come back into the units each answer was read in by the steps walked backwards, and the way back
+follows a column up them: a step that undoes it is undone, and the way back goes on with the column that step
+made it from. A logarithm taken into a new column from a scaled one comes back through the scaling too; undone
+alone, it came back in the scaled units, and the run's check could not tell, because it compared with the answer
+as read and an answer a step made was never read. A step whose way back needs more than the number reads the row
+the number belongs to, as it was read: a share of the birds in a row comes back as a count only by those birds.
+So predictions for a part come back with its rows, and predictions for served rows with the rows handed in, each
+found again by where it was handed in and checked by its key — rows handed in again in another order would
+otherwise be answered with another row's numbers. What is kept as it was read is what a way back names: the column
+each answer comes back to, and every column a step on the way reads. Against those values the run checks every
+answer's way back before anything is handed over.
+
 ### A step says what it does by what it implements
 
 `IPipelineStep` stays narrow — a verb, how to write itself down, and which columns it reads, which it says
@@ -613,9 +625,10 @@ where the steps as written give fifty-six.
 
 Every row carries who it is: where it stood among the rows as they were read, and a key made from what it says
 — every cell with the name of its column, whatever order the columns came in, digested with SHA-256 so the key
-is the same on every machine. The place is how one run finds a row again: the way back for a target, which
+is the same on every machine. The place is how one run finds a row again: the way back for an answer, which
 handed-in row a served one is. The key is how the same row is known across runs, when the same file arrives in
-another order, and it is what a split ranks rows by. It identifies a row and nothing more; no value reaches a fit
+another order or served rows are handed in again to put their predictions back, and it is what a split ranks
+rows by. It identifies a row and nothing more; no value reaches a fit
 or a model through it, so the rule that an undeclared column is not carried still holds.
 
 The same key finds the rows that are there more than once. A repeated row in training and in test is one a

@@ -56,6 +56,15 @@ public readonly record struct ServedBatch(
     IReadOnlyList<double[]> Features,
     IReadOnlyList<int> HandedInAt)
 {
+    /// <summary>
+    /// The key of each served row: a digest of the record it was read from, the answers it awaits counted as gaps.
+    /// </summary>
+    /// <remarks>
+    /// The same record has the same key in any hand-in, whatever the order, which is how a way back that needs the
+    /// rows finds each one again. Nothing, for a batch <see cref="Handover.Served"/> did not make.
+    /// </remarks>
+    public IReadOnlyList<RowKey>? Keys { get; init; }
+
     /// <summary>How many rows were served.</summary>
     public int RowCount => Features.Count;
 }
@@ -119,7 +128,10 @@ public static class Handover
         var all = Enumerable.Range(0, table.RowCount).ToArray();
         var batch = HandedOver(prepared, table, all, withAnswers: false);
 
-        return new ServedBatch(batch.FeatureNames, batch.Features, [.. all.Select(row => table.Identities[row].ReadAt)]);
+        return new ServedBatch(batch.FeatureNames, batch.Features, [.. all.Select(row => table.Identities[row].ReadAt)])
+        {
+            Keys = [.. all.Select(row => table.Identities[row].Key)],
+        };
     }
 
     private static Batch HandedOver(PreparedData prepared, Table table, int[] rows, bool withAnswers)

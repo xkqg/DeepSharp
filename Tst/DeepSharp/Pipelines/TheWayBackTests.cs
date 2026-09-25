@@ -92,6 +92,197 @@ public class TheWayBackTests
     }
 
     [Fact]
+    public void AnAnswerMadeFromAScaledColumn_ComesBackThroughTheScalingToo()
+    {
+        // A reshaping into a new column leaves the column it read behind, and the way back goes on there: undoing
+        // the logarithm alone came back in the scaled units, and the run could not tell, since the answer it would
+        // have compared with was never read.
+        var prepared = Pdd.Create()
+            .ReadCsv(Titanic)
+            .Declare(schema => schema.Number("fare"))
+            .SplitAtRandom(0.70, 0.15, seed: 4)
+            .Normalise("fare", Scale.MinMax)
+            .Add(new MathsStep("fare", Maths.Log1P, "shaped"))
+            .Drop("fare")
+            .Target("shaped")
+            .Build()
+            .Run();
+
+        var shaped = ((Column<double>)prepared.Table["shaped"])[0]!.Value;
+
+        Assert.Equal(7.25, prepared.BackToOriginal(shaped), 4);
+    }
+
+    [Fact]
+    public void ABrokenWayBackThroughAColumnMadeFromAnother_IsRefusedByTheRun()
+    {
+        // The run compares the way back with what was read, and for an answer made from another column that is
+        // the other column as read. The check looked for the answer among the columns read, found nothing, and
+        // let a way back through that doubles every fare.
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => Pdd.Create()
+                .ReadCsv(Titanic)
+                .Declare(schema => schema.Number("fare"))
+                .Add(new Doubled("fare"))
+                .Reshape("fare", Maths.Log1P, "shaped")
+                .SplitAtRandom(0.70, 0.15)
+                .Drop("fare")
+                .Target("shaped")
+                .Build()
+                .Run());
+
+        Assert.Contains("The way back for 'shaped' does not lead back", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("row 1 was 7.25", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnAnswerThatIsAMomentInTime_IsNotSomethingToComeBackFrom()
+    {
+        // The check read every answer that was not words as numbers, and a moment in time is neither.
+        var prepared = Pdd.Create()
+            .Read(new InMemoryRowSource(["Date", "close"], [["2026-01-01", "1"], ["2026-01-02", "2"], ["2026-01-03", "3"], ["2026-01-04", "4"]]), "four days")
+            .Declare(schema => schema.Timestamp("Date").Number("close"))
+            .SplitAtRandom(0.50, seed: 1)
+            .Target("Date")
+            .Build()
+            .Run();
+
+        Assert.Equal(4, prepared.Table.RowCount);
+    }
+
+    // As read: four flocks, how many of something each counted and how many birds it had.
+    private static readonly double[] Counts = [100, 300, 80, 90];
+
+    // The count is made a share per bird, so its way back needs the birds of its own row.
+    private static PreparedData PerBird(string? undoBy = null) =>
+        Pdd.Create()
+            .Read(new InMemoryRowSource(["count", "chicks"], [["100", "50"], ["300", "100"], ["80", "40"], ["90", "30"]]), "four flocks")
+            .Declare(schema => schema.Number("count", "chicks"))
+            .SplitAtRandom(0.50, seed: 1)
+            .Add(new Per("count", "chicks", undoBy))
+            .Target("count")
+            .Build()
+            .Run();
+
+    [Fact]
+    public void AWayBackThatNeedsTheRow_IsNotTakenWithoutIt()
+    {
+        var refused = Assert.Throws<InvalidOperationException>(() => PerBird().BackToOriginal(2.0));
+
+        Assert.Contains("only with the row", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void PredictionsForAPart_ComeBackWithTheRowsTheyWereMadeFor()
+    {
+        // A share per bird comes back as a count only by the birds of its own row: the number alone cannot say.
+        var prepared = PerBird();
+        var batch = prepared.Batch(Part.Test);
+
+        var back = prepared.BackToOriginal(batch.Answers!, Part.Test);
+
+        Assert.Equal(
+            prepared.Table.Identities.Where((_, row) => prepared.Parts[row] == Part.Test).Select(identity => Counts[identity.ReadAt]),
+            back.Select(answers => answers[0]));
+    }
+
+    [Fact]
+    public void AWayBackThatReadsTheWrongColumnOfTheRow_IsRefusedByTheRun()
+    {
+        var refused = Assert.Throws<InvalidOperationException>(() => PerBird(undoBy: "count"));
+
+        Assert.Contains("The way back for 'count' does not lead back", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AWayBackThatReadsAColumnItNeverNamed_IsToldTheColumnIsNotKept()
+    {
+        // A step reads from the row as it was read only what it names: that is all that is kept of it.
+        var refused = Assert.Throws<InvalidOperationException>(() => PerBird(undoBy: "weight"));
+
+        Assert.Contains("'weight'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("not kept", refused.Message, StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() => default(RowAsRead)["count"]);
+    }
+
+    [Fact]
+    public void EveryAnswerOfAnOutput_ComesBackInItsOwnUnits()
+    {
+        var prepared = new Pipeline(
+            new PipelineDeclaration(
+            [
+                new ReadRowsStep("three numbers"),
+                new DeclareStep([.. new[] { "a", "b", "c" }.Select(name => new ColumnDeclaration(name, ColumnKind.Number, Optional: false))]),
+                new SplitAtRandomStep(new SplitShares(0.50, 0, 0.50), 1),
+                new NormaliseStep("b"),
+                new NamesTheseAnswers("b", "c"),
+            ]),
+            new InMemoryRowSource(["a", "b", "c"], [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["10", "11", "12"]])).Run();
+
+        var batch = prepared.Batch(Part.Train);
+        var back = prepared.BackToOriginal(batch.Answers!, Part.Train);
+
+        // As read, every row's c is its b and one more; as handed over, b was scaled and c was not.
+        Assert.All(back, answers => Assert.Equal(answers[0] + 1, answers[1], 6));
+        Assert.All(batch.Answers!, answers => Assert.NotEqual(answers[0] + 1, answers[1], 6));
+    }
+
+    [Fact]
+    public void PredictionsThatDoNotFitTheRows_AreRefused()
+    {
+        var prepared = PerBird();
+        var rows = prepared.CountIn(Part.Test);
+
+        Assert.Throws<ArgumentException>(() => prepared.BackToOriginal([.. Enumerable.Repeat(new[] { 1.0 }, rows + 1)], Part.Test));
+        Assert.Throws<ArgumentException>(() => prepared.BackToOriginal([.. Enumerable.Repeat(new[] { 1.0, 2.0 }, rows)], Part.Test));
+        Assert.Throws<ArgumentNullException>(() => prepared.BackToOriginal(null!, Part.Test));
+    }
+
+    [Fact]
+    public void PredictionsForServedRows_ComeBackWithTheRowsThatWereHandedIn()
+    {
+        var prepared = PerBird();
+        var handedIn = new InMemoryRowSource(["chicks"], [["50"], ["20"]]);
+        var served = prepared.Served(handedIn);
+
+        var back = prepared.BackToOriginal([[2.0], [4.0]], served, handedIn);
+
+        Assert.Equal([100.0, 80.0], back.Select(answers => answers[0]));
+    }
+
+    [Fact]
+    public void ServedRowsHandedInAgainInAnotherOrder_AreRefusedRatherThanAnsweredForTheWrongRow()
+    {
+        var prepared = PerBird();
+        var served = prepared.Served(new InMemoryRowSource(["chicks"], [["50"], ["20"]]));
+
+        var reordered = Assert.Throws<InvalidOperationException>(
+            () => prepared.BackToOriginal([[2.0], [4.0]], served, new InMemoryRowSource(["chicks"], [["20"], ["50"]])));
+        var shorter = Assert.Throws<InvalidOperationException>(
+            () => prepared.BackToOriginal([[2.0], [4.0]], served, new InMemoryRowSource(["chicks"], [["50"]])));
+
+        Assert.Contains("Served row 1", reordered.Message, StringComparison.Ordinal);
+        Assert.Contains("Served row 2", shorter.Message, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(
+            () => prepared.BackToOriginal([[2.0], [4.0]], served with { Keys = null }, new InMemoryRowSource(["chicks"], [["50"], ["20"]])));
+        Assert.Throws<ArgumentException>(
+            () => prepared.BackToOriginal([[2.0], [4.0]], served with { Keys = [served.Keys![0]] }, new InMemoryRowSource(["chicks"], [["50"], ["20"]])));
+        Assert.Throws<ArgumentNullException>(() => prepared.BackToOriginal([[2.0], [4.0]], served, null!));
+    }
+
+    [Fact]
+    public void APipelineLoadedFromItsFile_PutsServedPredictionsBackToo()
+    {
+        var trained = Fares(fitting => fitting.Normalise("fare", Scale.Standard));
+        var loaded = PreparedData.FromJson(trained.ToJson(), StepCatalog.BuiltIn());
+        var handedIn = new InMemoryRowSource(["pclass"], [["3"], ["1"]]);
+
+        var back = loaded.BackToOriginal([[0.0], [1.0]], loaded.Served(handedIn), handedIn);
+
+        Assert.Equal(trained.BackToOriginal([0.0, 1.0]), back.Select(answers => answers[0]));
+    }
+
+    [Fact]
     public void ManyPredictionsComeBackAtOnce()
     {
         var prepared = Fares(fitting => fitting.Normalise("fare", Scale.Standard));
@@ -123,8 +314,10 @@ public class TheWayBackTests
             .Run();
 
         var refused = Assert.Throws<InvalidOperationException>(() => prepared.BackToOriginal(0.5));
+        var forAPart = Assert.Throws<InvalidOperationException>(() => prepared.BackToOriginal([], Part.Train));
 
         Assert.Contains("names no answer", refused.Message);
+        Assert.Contains("names no answer", forAPart.Message);
         Assert.Throws<ArgumentNullException>(() => prepared.BackToOriginal(null!));
     }
 
@@ -210,6 +403,31 @@ public class TheWayBackTests
             table.Put(new Column<double>(column, ColumnKind.Number, table.NumbersOf(column).Select(value => value * 2)));
 
         public double Undo(double value, FittedStepValues? fitted) => value;
+
+        public void WriteTo(System.Text.Json.Utf8JsonWriter writer) =>
+            throw new NotSupportedException("A test step is never written down.");
+    }
+
+    /// <summary>A count made a share of the birds in its row, whose way back needs that row as it was read.</summary>
+    private sealed class Per(string column, string by, string? undoBy) : IAddsColumns, IUndoesItself
+    {
+        public string Verb => "test.per";
+
+        public string Produces => column;
+
+        public IReadOnlyList<ColumnRead> ColumnsRead => [new(column, ColumnKinds.Numbers), new(by, ColumnKinds.Numbers)];
+
+        public void AddTo(Table table)
+        {
+            var birds = table.NumbersOf(by);
+
+            table.Put(new Column<double>(column, ColumnKind.Number, table.NumbersOf(column).Select((value, row) => value / birds[row])));
+        }
+
+        public double Undo(double value, FittedStepValues? fitted) =>
+            throw new InvalidOperationException($"'{column}' comes back only with the row it was made from: it was divided by '{by}' there.");
+
+        public double Undo(double value, FittedStepValues? fitted, RowAsRead row) => value * row[undoBy ?? by]!.Value;
 
         public void WriteTo(System.Text.Json.Utf8JsonWriter writer) =>
             throw new NotSupportedException("A test step is never written down.");

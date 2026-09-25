@@ -41,6 +41,22 @@ public class ServingTests
     }
 
     [Fact]
+    public void EachServedRow_CarriesTheKeyOfItsRecord_WhateverOrderTheRowsAreHandedIn()
+    {
+        // Which handed-in row a served one is holds within one hand-in; its key holds across hand-ins, so an answer
+        // can find its record again when the same rows arrive in another order.
+        var trained = Passengers();
+        IReadOnlyList<string?>[] rows = [["3", "female", "30"], ["1", "male", "40"]];
+
+        var served = trained.Served(new InMemoryRowSource(["pclass", "sex", "age"], rows));
+        var reversed = trained.Served(new InMemoryRowSource(["pclass", "sex", "age"], [rows[1], rows[0]]));
+
+        Assert.Equal(2, served.Keys!.Count);
+        Assert.NotEqual(served.Keys[0], served.Keys[1]);
+        Assert.Equal([served.Keys[1], served.Keys[0]], reversed.Keys!);
+    }
+
+    [Fact]
     public void AServedRow_SaysWhichHandedInRowItIs_AfterTheWarmUpIsDropped()
     {
         IReadOnlyList<IReadOnlyList<string?>> Days(int count) =>

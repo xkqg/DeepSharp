@@ -232,10 +232,15 @@ public sealed class FittedStepValues
 /// A step that can put a value back the way it found it.
 /// </summary>
 /// <remarks>
-/// For the target, and only really for the target. Scale what a model predicts and its predictions come
+/// For the answer, and only really for the answer. Scale what a model predicts and its predictions come
 /// back scaled: an error of 0.03 means nothing until it is 0.03 of something, and a report in scaled units
 /// flatters every model equally. So the way back is part of the saved pipeline rather than a sum somebody
 /// does by hand afterwards.
+/// <para>
+/// The way back follows a column up the steps: a step that undoes it is undone, and the way back goes on with
+/// the column the step made it from. Most steps change a column in place and need nothing but the number; a step
+/// that made a column from another says which, and a step that needs the row the number belongs to reads it.
+/// </para>
 /// </remarks>
 public interface IUndoesItself : IPipelineStep
 {
@@ -247,6 +252,30 @@ public interface IUndoesItself : IPipelineStep
     /// <param name="fitted">What this step learned, when it learned anything.</param>
     /// <returns>The value in the units of the column before this step touched it.</returns>
     double Undo(double value, FittedStepValues? fitted);
+
+    /// <summary>Whether undoing this step is on the way back of a column.</summary>
+    /// <param name="column">The column the way back follows.</param>
+    /// <returns><see langword="true"/> when this step left that column as it is: the column it produces, unless it says otherwise.</returns>
+    bool Undoes(string column) => column == Produces;
+
+    /// <summary>The column a value of a column this step undoes was made from, which the way back goes on to.</summary>
+    /// <param name="column">A column this step undoes.</param>
+    /// <returns>The same column, unless this step made it from another.</returns>
+    string From(string column) => column;
+
+    /// <summary>Puts one value back into the units this step found it in, with the row it belongs to as it was read.</summary>
+    /// <param name="value">The value as this step left it.</param>
+    /// <param name="fitted">What this step learned, when it learned anything.</param>
+    /// <param name="row">
+    /// The row the value belongs to, as it was read: the columns this step reads, and the column the answer comes
+    /// back to.
+    /// </param>
+    /// <returns>The value in the units of the column before this step touched it.</returns>
+    /// <remarks>
+    /// The same as without the row, for a step whose way back is the number alone. A step that needs its row — a
+    /// share of the birds in it, a return on the price in it — undoes here, and refuses without the row.
+    /// </remarks>
+    double Undo(double value, FittedStepValues? fitted, RowAsRead row) => Undo(value, fitted);
 }
 
 /// <summary>
@@ -404,6 +433,9 @@ public sealed class PreparedData
     /// </remarks>
     public IReadOnlyDictionary<int, FittedStepValues> Fitted { get; }
 
+    /// <summary>The columns the ways back need, as the rows were read: kept by a run, and by nothing else.</summary>
+    internal ColumnsAsRead AsRead { get; init; } = ColumnsAsRead.None;
+
     /// <summary>What each step that produces evidence produced when the pipeline was run, by its position.</summary>
     /// <remarks>
     /// Output, not the pipeline: it is kept with the run and never written into the pipeline's file, so a
@@ -440,9 +472,11 @@ public sealed class PreparedData
     /// The pipeline names no answer, or several, or a step on the way to it cannot be undone.
     /// </exception>
     /// <remarks>
-    /// The steps that touched the target are walked backwards, each undoing what it did. A step that
-    /// cannot be undone — one that clipped, or blanked, or threw information away — says so rather than
-    /// quietly handing back a number in the wrong units, which is the failure this exists to prevent.
+    /// The steps that touched the answer are walked backwards, each undoing what it did, and on through the
+    /// column an answer was made from. A step that cannot be undone — one that clipped, or blanked, or threw
+    /// information away — says so rather than quietly handing back a number in the wrong units, which is the
+    /// failure this exists to prevent. So does a step whose way back needs the row a number belongs to: hand the
+    /// rows over with the predictions.
     /// </remarks>
     public IReadOnlyList<double> BackToOriginal(IEnumerable<double> predictions)
     {
@@ -451,30 +485,135 @@ public sealed class PreparedData
         var target = Declaration.Output switch
         {
             { Answers: [var only] } => only,
-            null => throw new InvalidOperationException(
-                "This pipeline names no answer, so there is nothing to put back into any units."),
+            null => throw NothingToComeBackTo(),
             var output => throw new InvalidOperationException(string.Create(
                 CultureInfo.InvariantCulture,
                 $"This pipeline's output names {output.Answers.Count} answers, and one number goes back into the units of one of them.")),
         };
 
-        var undoing = new List<(IUndoesItself Step, FittedStepValues? Fitted)>();
+        var chain = UndoChain.For(Declaration, Fitted, target);
 
-        for (var at = Declaration.Steps.Count - 1; at >= 0; at--)
-        {
-            if (Declaration.Steps[at] is IUndoesItself step && step.Produces == target)
-            {
-                undoing.Add((step, Fitted.GetValueOrDefault(at)));
-            }
-        }
-
-        return [.. predictions.Select(value => undoing.Aggregate(value, (each, undo) => undo.Step.Undo(each, undo.Fitted)))];
+        return [.. predictions.Select(value => chain.Back(value))];
     }
 
     /// <summary>Puts one prediction back into the units the target was read in.</summary>
     /// <param name="prediction">What a model said.</param>
     /// <returns>The number in the units of the column the pipeline started from.</returns>
     public double BackToOriginal(double prediction) => BackToOriginal([prediction])[0];
+
+    /// <summary>Puts predictions for the rows of one part back into the units each answer was read in.</summary>
+    /// <param name="predictions">
+    /// What a model said for the rows of the part, in the order <see cref="Handover.Batch"/> hands them over: one
+    /// number for each answer the output names, in its order.
+    /// </param>
+    /// <param name="part">The part the predictions are for.</param>
+    /// <returns>The same numbers, each in the units of the column its answer comes back to.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The pipeline names no answer, or a step on the way back cannot be undone.
+    /// </exception>
+    /// <exception cref="ArgumentException">There is not one prediction per row, or not one number per answer.</exception>
+    /// <remarks>
+    /// Each prediction comes back with the row it was made for as it was read, so a way back that needs more than
+    /// the number — a share of the birds in the row, a return on its price — comes back too.
+    /// </remarks>
+    public IReadOnlyList<double[]> BackToOriginal(IReadOnlyList<double[]> predictions, Part part)
+    {
+        ArgumentNullException.ThrowIfNull(predictions);
+
+        RowAsRead[] rows =
+        [
+            .. Enumerable.Range(0, Table.RowCount)
+                .Where(row => Parts[row] == part)
+                .Select(row => new RowAsRead(AsRead, Table.Identities[row].ReadAt)),
+        ];
+
+        return Back(predictions, rows);
+    }
+
+    /// <summary>Puts predictions for served rows back into the units each answer was read in.</summary>
+    /// <param name="predictions">
+    /// What a model said for each served row, in the order they were served: one number for each answer the output
+    /// names, in its order.
+    /// </param>
+    /// <param name="served">What <see cref="Handover.Served"/> handed over for these rows.</param>
+    /// <param name="rows">The rows that were handed in to be served, in the order they were handed in.</param>
+    /// <returns>The same numbers, each in the units of the column its answer comes back to.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The rows handed in are not the rows that were served, the pipeline names no answer, or a step on the way back
+    /// cannot be undone.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// The served rows carry no keys, there is not one prediction per row, or not one number per answer.
+    /// </exception>
+    /// <remarks>
+    /// Each served row is found again among the rows handed in by where it was handed in, and its key is checked:
+    /// rows handed in again in another order would otherwise be answered with another row's numbers.
+    /// </remarks>
+    public IReadOnlyList<double[]> BackToOriginal(IReadOnlyList<double[]> predictions, ServedBatch served, IRowSource rows)
+    {
+        ArgumentNullException.ThrowIfNull(predictions);
+        ArgumentNullException.ThrowIfNull(rows);
+
+        if (served.Keys is not { } keys || keys.Count != served.HandedInAt.Count)
+        {
+            throw new ArgumentException("These served rows carry no keys to find them by: hand over what Served returned.", nameof(served));
+        }
+
+        // Read the way the replay read them, so each row is keyed as it was when it was served.
+        var read = new Walk(Declaration, new ReplayWhatWasFitted(Fitted), SourceFolder.WorkingDirectory).Bound(rows);
+        var asRead = ColumnsAsRead.Of(Declaration, read);
+        var found = new RowAsRead[keys.Count];
+
+        for (var at = 0; at < found.Length; at++)
+        {
+            var handedIn = served.HandedInAt[at];
+
+            if (handedIn >= read.RowCount || read.Identities[handedIn].Key != keys[at])
+            {
+                throw new InvalidOperationException(
+                    $"Served row {at + 1} was handed in as row {handedIn + 1}, and the rows handed in now hold something else "
+                    + "there. Hand in the rows that were served, in the order they were served.");
+            }
+
+            found[at] = new RowAsRead(asRead, handedIn);
+        }
+
+        return Back(predictions, found);
+    }
+
+    private IReadOnlyList<double[]> Back(IReadOnlyList<double[]> predictions, RowAsRead[] rows)
+    {
+        var answers = Declaration.Output?.Answers ?? throw NothingToComeBackTo();
+
+        if (predictions.Count != rows.Length)
+        {
+            throw new ArgumentException(
+                string.Create(CultureInfo.InvariantCulture, $"There are {predictions.Count} predictions for {rows.Length} rows, and each row has one."),
+                nameof(predictions));
+        }
+
+        UndoChain[] chains = [.. answers.Select(answer => UndoChain.For(Declaration, Fitted, answer))];
+        var back = new double[rows.Length][];
+
+        for (var row = 0; row < rows.Length; row++)
+        {
+            var said = predictions[row];
+
+            if (said.Length != chains.Length)
+            {
+                throw new ArgumentException(
+                    string.Create(CultureInfo.InvariantCulture, $"Row {row + 1} has {said.Length} predictions, and the output names {chains.Length} answers."),
+                    nameof(predictions));
+            }
+
+            back[row] = [.. chains.Select((chain, at) => chain.Back(said[at], rows[row]))];
+        }
+
+        return back;
+    }
+
+    private static InvalidOperationException NothingToComeBackTo() =>
+        new("This pipeline names no answer, so there is nothing to put back into any units.");
 
     /// <summary>Writes the whole pipeline: the version, what was declared, and what the fit learned.</summary>
     /// <returns>The pipeline as one JSON document.</returns>

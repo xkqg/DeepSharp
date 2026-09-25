@@ -164,51 +164,55 @@ public sealed class Pipeline
     {
         var fitting = new FitOnTheTrainingRows();
         var walked = new Walk(Declaration, fitting, Folder).Through(rows);
-        var prepared = new PreparedData(Declaration, walked.Table, walked.Parts, fitting.Fitted, walked.Evidence);
+        var prepared = new PreparedData(Declaration, walked.Table, walked.Parts, fitting.Fitted, walked.Evidence)
+        {
+            AsRead = fitting.AsRead,
+        };
 
         // Scale what a model predicts and the predictions come back scaled; the way back has to be real, and
         // the only way to know that is to try it on values whose answer is already known.
-        if (fitting.AnswerAsRead is { } asRead)
-        {
-            ThrowIfTheWayBackIsNotReal(prepared, asRead);
-        }
+        ThrowIfTheWayBackIsNotReal(prepared);
 
         return prepared;
     }
 
-    private static void ThrowIfTheWayBackIsNotReal(PreparedData prepared, double?[] asRead)
+    private static void ThrowIfTheWayBackIsNotReal(PreparedData prepared)
     {
-        // Asked only when the answer as read was kept, which is for an output of one answer.
-        var target = prepared.Declaration.Output!.Answers.Single();
-
-        if (!prepared.Declaration.Steps.OfType<IUndoesItself>().Any(step => step.Produces == target))
+        foreach (var answer in prepared.Declaration.Output?.Answers ?? [])
         {
-            return;
-        }
+            var chain = UndoChain.For(prepared.Declaration, prepared.Fitted, answer);
 
-        var now = prepared.Table.NumbersOf(target);
-
-        // Each row against the row it was read as, not against whatever row now sits at its place: rows
-        // dropped at the start used to shift every comparison onto a different row.
-        for (var row = 0; row < now.Length; row++)
-        {
-            var readAt = prepared.Table.Identities[row].ReadAt;
-
-            if (asRead[readAt] is not { } was || now[row] is not { } is_)
+            // A way back with nothing on it has nothing to check, and one that comes back to a column that was not
+            // numbers as read — words, a moment, a column a step made — has no values to check it against.
+            if (chain.Links.Count == 0 || !prepared.AsRead.Holds(chain.End))
             {
                 continue;
             }
 
-            var back = prepared.BackToOriginal(is_);
+            var now = prepared.Table.NumbersOf(answer);
 
-            if (Math.Abs(back - was) <= 1e-6 * Math.Max(1, Math.Abs(was)))
+            // Each row against the row it was read as, not against whatever row now sits at its place: rows
+            // dropped at the start used to shift every comparison onto a different row.
+            for (var row = 0; row < now.Length; row++)
             {
-                continue;
-            }
+                var readAt = prepared.Table.Identities[row].ReadAt;
 
-            throw new InvalidOperationException(string.Create(
-                CultureInfo.InvariantCulture,
-                $"The way back for '{target}' does not lead back: row {readAt + 1} was {was}, became {is_}, and comes back as {back}. A prediction from this pipeline would be in units nobody can name."));
+                if (prepared.AsRead.At(chain.End, readAt) is not { } was || now[row] is not { } is_)
+                {
+                    continue;
+                }
+
+                var back = chain.Back(is_, new RowAsRead(prepared.AsRead, readAt));
+
+                if (Math.Abs(back - was) <= 1e-6 * Math.Max(1, Math.Abs(was)))
+                {
+                    continue;
+                }
+
+                throw new InvalidOperationException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The way back for '{answer}' does not lead back: row {readAt + 1} was {was}, became {is_}, and comes back as {back}. A prediction from this pipeline would be in units nobody can name."));
+            }
         }
     }
 }

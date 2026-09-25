@@ -309,21 +309,11 @@ internal sealed class FitOnTheTrainingRows : WalkMode
     /// <summary>What each step learned, by its place in the declaration.</summary>
     public IReadOnlyDictionary<int, FittedStepValues> Fitted => _fitted;
 
-    /// <summary>The answer as it was read, when there is one to come back to: a number the pipeline may change.</summary>
-    public double?[]? AnswerAsRead { get; private set; }
+    /// <summary>The columns the ways back need, as the rows were read: nothing until they are.</summary>
+    public ColumnsAsRead AsRead { get; private set; } = ColumnsAsRead.None;
 
     /// <inheritdoc />
-    public override void Bound(PipelineDeclaration declaration, Table table)
-    {
-        // The way back is walked for an output of one answer, and only for an answer that is a number to begin
-        // with: an answer of words is predicted as a category and there is no arithmetic to come back through.
-        var target = declaration.Output?.Answers is [var only] ? only : null;
-
-        AnswerAsRead = target is not null && table.Has(target)
-                       && table[target].Kind is not (ColumnKind.Text or ColumnKind.Category)
-            ? table.NumbersOf(target)
-            : null;
-    }
+    public override void Bound(PipelineDeclaration declaration, Table table) => AsRead = ColumnsAsRead.Of(declaration, table);
 
     /// <inheritdoc />
     public override bool Divides => true;

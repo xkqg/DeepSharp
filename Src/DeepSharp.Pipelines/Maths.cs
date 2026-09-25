@@ -90,6 +90,13 @@ public sealed record MathsStep : IPipelineStep<MathsStep>, IAddsColumns, IUndoes
 
     /// <inheritdoc />
     /// <remarks>
+    /// The column it read: a reshaping into a new column leaves the column it was made from behind, and whatever was
+    /// done to that one before is undone next.
+    /// </remarks>
+    public string From(string column) => Column;
+
+    /// <inheritdoc />
+    /// <remarks>
     /// Undoing a bend is not free of consequence. A model trained on the logarithm of a price predicts the
     /// logarithm, and the exponent of that is nearer the middle value than the average one — the classic
     /// retransformation bias. What comes back here is the plain inverse and nothing more; correcting it
