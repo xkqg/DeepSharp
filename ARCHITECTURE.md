@@ -814,8 +814,12 @@ keeps its kind when taken in, but not when made the answer: bands taken in as te
 become the range's kind in the same change, since the range asks for its answers as that kind and a distribution of
 text would otherwise need a kind picked for each band. A kind of output whose answer is many columns is always offered
 by the type select, because no single tick can start one; a range the rules refuse says so in their words, and keeps
-its start so another end can be ticked. On a flock of twenty thousand rows either range is one change well under a
-second, and seventy single ticks take seventy changes.
+its start so another end can be ticked. A list drawn again because one of its controls was stale forgets where a
+range started, since the start was said on the list as it was: the echo of a range's second tick finds the blocks
+changed, and would otherwise bring the start back for the next tick to end. Picks are carried by the controls, not
+remembered, so a tick sent before a pick's redraw has arrived acts with the picks its list was drawn with. On a flock
+of twenty thousand rows either range is one change well under a second, and seventy single ticks take seventy
+changes.
 
 What the blocks decide about their columns is saved beside the notebook, in a file named after it
 (`<notebook>.columns.json`): the schema with the columns it excludes and their kinds, the columns dropped, and the
@@ -832,11 +836,10 @@ as they stand, and lists it at the schema's block — at the source's, for block
 would follow: every column whose decision would change, from how it stands to how it would stand, a column a step
 makes named by that step; the output, the schema's order and what the schema does with the columns it does not name,
 when they would change; every saved drop the blocks cannot make, with why, since the file forgets it the next time it
-is written; and the source's columns the file never showed. When the blocks already hold everything else, those drops
-are all the list says, and there is nothing to apply. Otherwise under the list is one box, and ticking it applies
-what the list showed. The box carries it — the
-file's text as it was read, and the key of the blocks it was listed for — so nothing is remembered between the two
-presses and what is applied is what was shown. Ticked over other blocks it is refused, with the words to take over
+is written; and the source's columns the file never showed. When the blocks already hold everything else, the list
+says so, names those drops and the new columns, and offers nothing to apply. Otherwise under the list is one box, and
+ticking it applies what the list showed. The box carries it — the file's text as it was read, and the key of the
+blocks it was listed for — so nothing is remembered between the two presses and what is applied is what was shown. Ticked over other blocks it is refused, with the words to take over
 again; while the blocks make no pipeline it is refused, naming the block that stops them; and a tick that finds the
 blocks holding it already, such as the echo of the click, does nothing. A take-over whose blocks would break a rule is
 listed with every rule and offers no box, and a file that cannot be read says so at the block. The button is offered
@@ -900,9 +903,9 @@ assembly beside the application that references Verso's abstractions; the notebo
 so. Verso's editor itself is not published for applications to reuse, so such an application does what the
 editor does: it draws a block's output, which is HTML; it hands a control's `data-action` and `data-extension-id`
 to the part the control names, with its `data-payload` — or, for a control that carries none, its state, as Verso's
-own router sends it: `true` or `false` for a box — and with the notebook's variables and operations; it draws again
-when a block's output is updated or a gesture says it changed the blocks; and it gives the toolbar's buttons — Run,
-Export and the take-over — a context of its own. An application that only wants the pipeline reads each block with
+own router sends it: `true` or `false` for a box, the value it is at for a select — and with the notebook's variables
+and operations; it draws again when a block's output is updated or a gesture says it changed the blocks; and it gives
+the toolbar's buttons — Run, Export and the take-over — a context of its own. An application that only wants the pipeline reads each block with
 `StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write the file
 with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds the
 steps and no fit, because nothing ran them there.
