@@ -32,6 +32,14 @@ internal enum ViewTrigger
     TakeOver,
 }
 
+/// <summary>What a list of the source's columns is drawn with: the picks a person made on it, which commit nothing.</summary>
+/// <remarks>None yet: the list draws every column as the blocks decide it.</remarks>
+internal sealed record ListPicks
+{
+    /// <summary>A list drawn with no picks.</summary>
+    public static ListPicks None { get; } = new();
+}
+
 /// <summary>What a block's kernel is asked to show.</summary>
 /// <param name="Declaration">The declaration to run, or nothing when the blocks down to this one do not make one.</param>
 /// <param name="Position">The block's place in it, counting from nought.</param>
@@ -46,13 +54,16 @@ internal enum ViewTrigger
 /// What the block shows in place of its data, drawn by what asked for it: the list of a take-over, which reads no rows
 /// and changes nothing. Nothing for every other request.
 /// </param>
+/// <param name="List">
+/// The list of the source's columns, drawn with these picks, in place of the grid; nothing for the grid.
+/// </param>
 /// <remarks>
 /// The whole pipeline is fitted only when the toolbar's run asks it of a notebook that makes one pipeline; every other
-/// request shows the data at its block, or the card it carries.
+/// request shows the data at its block, the list of the source's columns, or the card it carries.
 /// </remarks>
 internal readonly record struct ViewRequest(
     PipelineDeclaration? Declaration, int Position, int Page, IReadOnlyList<string> Faults, ViewTrigger Trigger, bool Whole,
-    IReadOnlyList<string> NotMade, CellOutput? Card = null)
+    IReadOnlyList<string> NotMade, CellOutput? Card = null, ListPicks? List = null)
 {
     /// <summary>Whether to run the whole pipeline, fitting every step, and hand what it learned over.</summary>
     public bool RunsTheWholePipeline => Trigger == ViewTrigger.Run && Whole;
@@ -100,6 +111,17 @@ internal sealed class NotebookPipeline
 
     /// <summary>Whether every block is in the declaration: the whole notebook makes one pipeline.</summary>
     public bool Whole => Readable.Steps.Count == _blocks.Length;
+
+    /// <summary>The block that declares the columns, when the blocks that make the pipeline hold one.</summary>
+    public Guid? SchemaBlock
+    {
+        get
+        {
+            var at = Readable.Steps.TakeWhile(step => step is not DeclareStep).Count();
+
+            return at < Readable.Steps.Count ? _blocks[at].Cell : null;
+        }
+    }
 
     /// <summary>Why the blocks do not make one pipeline: every fault of the first block at fault, each naming it.</summary>
     /// <remarks>None when they do.</remarks>

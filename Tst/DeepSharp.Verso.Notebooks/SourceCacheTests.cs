@@ -155,6 +155,7 @@ public sealed class SourceCacheTests : IDisposable
         var handedOut = typeof(SourceCache).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
             .Select(method => method.ReturnType)
             .Concat(typeof(SourceCache).GetProperties().Select(property => property.PropertyType))
+            .Select(type => Nullable.GetUnderlyingType(type) ?? type)
             .SelectMany(type => type == typeof(SourceRows) ? typeof(SourceRows).GetProperties().Select(property => property.PropertyType) : [type]);
 
         Assert.All(handedOut, type => Assert.True(

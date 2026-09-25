@@ -98,14 +98,18 @@ internal sealed class SourceCache
         }
     }
 
-    /// <summary>The names of the columns the rows kept for a read step have, in the source's order.</summary>
+    /// <summary>The rows kept for a read step, and the fingerprint of the bytes they were read from.</summary>
     /// <param name="read">The read step.</param>
-    /// <returns>The names, or nothing when no rows are kept for that step.</returns>
-    public IReadOnlyList<string>? ColumnNamesFor(ReadCsvStep read)
+    /// <returns>The rows and their fingerprint, one entry, or nothing when no rows are kept for that step.</returns>
+    /// <remarks>
+    /// What a gesture knows of the source: it is handed no file, so the rows this session read last are the source's
+    /// columns as the person saw them.
+    /// </remarks>
+    public SourceRows? KeptFor(ReadCsvStep read)
     {
         lock (_lock)
         {
-            return _kept is { } kept && kept.Read == read ? kept.Rows.ColumnNames : null;
+            return _kept is { } kept && kept.Read == read ? new SourceRows(kept.Rows, kept.Fingerprint) : null;
         }
     }
 

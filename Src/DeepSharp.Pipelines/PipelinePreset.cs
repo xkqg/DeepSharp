@@ -90,10 +90,23 @@ public sealed record PipelinePreset
     internal PresetTakeOver TakeOverOfTheSchema(PipelineDeclaration into, IReadOnlyList<string>? header) =>
         Listed(into, WithSchema(into), header);
 
+    /// <summary>The columns of a source these decisions never showed.</summary>
+    /// <param name="header">The source's columns as they are now.</param>
+    /// <returns>
+    /// Those the source's columns as last shown lack; when they were never shown, those the decisions do not name — in
+    /// the schema, excluded ones too, in a drop, or as the output's answer. In the source's order.
+    /// </returns>
+    public IReadOnlyList<string> NewColumns(IReadOnlyList<string> header)
+    {
+        ArgumentNullException.ThrowIfNull(header);
+
+        return [.. header.Except(Source ?? Named(), StringComparer.Ordinal)];
+    }
+
     // What a take-over made of a pipeline, listed against how it stood: or every fault, and no steps.
     private PresetTakeOver Listed(PipelineDeclaration into, TakenSteps taken, IReadOnlyList<string>? header)
     {
-        IReadOnlyList<string>? newColumns = header is null ? null : [.. header.Except(Source ?? Named(), StringComparer.Ordinal)];
+        var newColumns = header is null ? null : NewColumns(header);
 
         if (taken.Result is not { } result)
         {

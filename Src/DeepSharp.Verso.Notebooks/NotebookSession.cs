@@ -395,7 +395,18 @@ internal sealed class NotebookSession
     {
         lock (_lock)
         {
-            _shown[cell] = new ShownView(key, header);
+            _shown[cell] = new ShownGrid(key, header);
+        }
+    }
+
+    /// <summary>Remembers that a block shows the list of the source's columns, and the blocks it was drawn for.</summary>
+    /// <param name="cell">The block's cell.</param>
+    /// <param name="key">The key of the whole declaration the list was drawn for.</param>
+    public void Listing(Guid cell, string key)
+    {
+        lock (_lock)
+        {
+            _shown[cell] = new ShownList(key);
         }
     }
 
@@ -410,8 +421,8 @@ internal sealed class NotebookSession
     }
 
     /// <summary>
-    /// Forgets every view the blocks as they are now no longer show: its rows are worked out from other steps, or its
-    /// grid offers what no longer holds — and says which, for the caller to clear.
+    /// Forgets every view the blocks as they are now no longer show: its rows are worked out from other steps, its grid
+    /// offers what no longer holds, or its list was drawn for other blocks — and says which, for the caller to clear.
     /// </summary>
     /// <param name="now">The pipeline the blocks make now.</param>
     /// <param name="except">The block a gesture was made on, which that gesture shows again itself.</param>
@@ -425,8 +436,7 @@ internal sealed class NotebookSession
             Guid[] stale =
             [
                 .. _shown
-                    .Where(each => each.Key != except
-                                   && (now.ViewKeyOf(each.Key) != each.Value.Key || !each.Value.Header.StillHolds(now.Readable)))
+                    .Where(each => each.Key != except && !each.Value.StillHolds(now, each.Key))
                     .Select(each => each.Key),
             ];
 
@@ -456,10 +466,33 @@ internal sealed class NotebookSession
     /// <param name="View">The rows at the block, and where each stands.</param>
     private sealed record KeptView(string Key, string Fingerprint, PipelineView View);
 
-    /// <summary>What a block shows: the key its rows were worked out under, and what its grid offered.</summary>
+    /// <summary>What a block shows, under the key it was drawn for.</summary>
+    /// <param name="Key">The key.</param>
+    private abstract record ShownView(string Key)
+    {
+        /// <summary>Whether the blocks as they are now still show what this showed.</summary>
+        /// <param name="now">The pipeline the blocks make now.</param>
+        /// <param name="cell">The block it is shown on.</param>
+        /// <returns><see langword="true"/> while it says what holds.</returns>
+        public abstract bool StillHolds(NotebookPipeline now, Guid cell);
+    }
+
+    /// <summary>A grid: the key its rows were worked out under, and what its header offered.</summary>
     /// <param name="Key">The view's key.</param>
     /// <param name="Header">The grid's header.</param>
-    private sealed record ShownView(string Key, GridHeader Header);
+    private sealed record ShownGrid(string Key, GridHeader Header) : ShownView(Key)
+    {
+        /// <inheritdoc />
+        public override bool StillHolds(NotebookPipeline now, Guid cell) => now.ViewKeyOf(cell) == Key && Header.StillHolds(now.Readable);
+    }
+
+    /// <summary>The list of the source's columns: the key of the whole declaration it was drawn for.</summary>
+    /// <param name="Key">That key.</param>
+    private sealed record ShownList(string Key) : ShownView(Key)
+    {
+        /// <inheritdoc />
+        public override bool StillHolds(NotebookPipeline now, Guid cell) => KeyOf(now.Readable) == Key;
+    }
 
     /// <summary>What the notebook's own last run learned, and from which steps and bytes.</summary>
     /// <param name="Key">The key of the steps it ran.</param>

@@ -95,7 +95,9 @@ wrong with it at once, each at its line and column.
   pipeline down to that block and shows the rows there: fifty at a time, each column coloured over the
   training rows, with every row knowing the part the split below will put it in. On the grid every column has
   a box for whether it is in and, when the schema takes it, one for whether it is a category: unticking and
-  ticking again write the steps that do it and take them back, a column's kind kept. What the blocks decide about
+  ticking again write the steps that do it and take them back, a column's kind kept. "Choose the columns", on the
+  schema's block, lists every column of the source with its first values and a box that takes it in or leaves it
+  out, marking new the columns the saved file never showed. What the blocks decide about
   their columns is saved beside the notebook, as `<notebook>.columns.json`, after every change they accept and
   every run of the whole pipeline. An output block is a stage of
   its own, and its form swaps it for any other kind of output. A profile block names, for
@@ -172,7 +174,8 @@ wrong with it at once, each at its line and column.
   written. `preset.TakeOver(pipeline, header)` makes the steps the preset's decisions make of a pipeline and lists,
   before anything is applied, every column whose decision changes, the output before and after, the schema's order
   when that changes, and the source's columns the preset never showed; steps that would break a rule are refused
-  with every fault. `CsvRowSource.HeaderOf(path)` reads a file's header alone. In a chain,
+  with every fault. `preset.NewColumns(header)` names the source's columns the decisions never showed.
+  `CsvRowSource.HeaderOf(path)` reads a file's header alone. In a chain,
   `.Declare(preset, out declared)` takes the saved schema at the source and `.Output(preset, out taken)` the drops and
   the output where the chain names its answer, each saying what it decides before anything runs.
 

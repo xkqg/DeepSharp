@@ -150,10 +150,5 @@ public sealed class TakeOverAction : NotebookExtension, IToolbarAction
 
     // The schema's block, where a take-over is listed; blocks without a schema list it at their source, which the saved
     // schema would follow.
-    private static Guid ListedAt(NotebookPipeline assembled)
-    {
-        var schema = assembled.Readable.Steps.TakeWhile(step => step is not DeclareStep).Count();
-
-        return assembled.Blocks[schema < assembled.Readable.Steps.Count ? schema : 0].Cell;
-    }
+    private static Guid ListedAt(NotebookPipeline assembled) => assembled.SchemaBlock ?? assembled.Blocks[0].Cell;
 }

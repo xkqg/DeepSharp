@@ -86,8 +86,10 @@ internal static class StepCommit
     /// <param name="gesture">The gesture that asked for them.</param>
     /// <param name="assembled">The pipeline the blocks made when the gesture was made.</param>
     /// <param name="steps">The steps the blocks are to hold, from the first block on.</param>
+    /// <param name="list">The list of the source's columns to show afterwards, for a change made from it; nothing for the grid.</param>
     /// <returns><see langword="true"/> when blocks were written; <see langword="false"/> when nothing was.</returns>
-    internal static async Task<bool> CommitAsync(Gesture gesture, NotebookPipeline assembled, IReadOnlyList<IPipelineStep> steps)
+    internal static async Task<bool> CommitAsync(
+        Gesture gesture, NotebookPipeline assembled, IReadOnlyList<IPipelineStep> steps, ListPicks? list = null)
     {
         var changes = Changes(assembled.Readable.Steps, steps);
 
@@ -102,7 +104,7 @@ internal static class StepCommit
 
         if (notMade.Count > 0)
         {
-            await NotMadeAsync(gesture, assembled, notMade);
+            await NotMadeAsync(gesture, assembled, notMade, list);
 
             return false;
         }
@@ -127,7 +129,7 @@ internal static class StepCommit
             await gesture.Operations.ExecuteCellAsync(block);
         }
 
-        await ShowAsync(shown, now, ViewTrigger.Commit, page: 0);
+        await ShowAsync(shown, now, ViewTrigger.Commit, page: 0, list);
 
         return true;
     }
@@ -136,10 +138,11 @@ internal static class StepCommit
     /// <param name="gesture">The gesture.</param>
     /// <param name="assembled">The pipeline the blocks made when the gesture was made.</param>
     /// <param name="notMade">Why: each rule the change would break, or what it needs that is not there.</param>
+    /// <param name="list">The list of the source's columns to show under it, for a change asked from it; nothing for the grid.</param>
     /// <returns>A task that ends when the block has run.</returns>
-    internal static async Task NotMadeAsync(Gesture gesture, NotebookPipeline assembled, IReadOnlyList<string> notMade)
+    internal static async Task NotMadeAsync(Gesture gesture, NotebookPipeline assembled, IReadOnlyList<string> notMade, ListPicks? list = null)
     {
-        gesture.Session.Request(gesture.Cell, assembled.RequestFor(gesture.Cell, ViewTrigger.Commit, page: 0) with { NotMade = notMade });
+        gesture.Session.Request(gesture.Cell, assembled.RequestFor(gesture.Cell, ViewTrigger.Commit, page: 0) with { NotMade = notMade, List = list });
         await gesture.Operations.ExecuteCellAsync(gesture.Cell);
     }
 
@@ -148,8 +151,9 @@ internal static class StepCommit
     /// <param name="assembled">The pipeline the blocks make.</param>
     /// <param name="trigger">What asked for it.</param>
     /// <param name="page">Which page of rows, counting from nought.</param>
+    /// <param name="list">The list of the source's columns to show in place of the grid, with its picks; nothing for the grid.</param>
     /// <returns>Nothing; or why a cell that is not a block shows nothing.</returns>
-    internal static async Task<string?> ShowAsync(Gesture gesture, NotebookPipeline assembled, ViewTrigger trigger, int page)
+    internal static async Task<string?> ShowAsync(Gesture gesture, NotebookPipeline assembled, ViewTrigger trigger, int page, ListPicks? list = null)
     {
         if (assembled.PositionOf(gesture.Cell) < 0)
         {
@@ -159,7 +163,7 @@ internal static class StepCommit
         gesture.Session.Publish(assembled);
 
         gesture.Session.HandOver(gesture.Variables, assembled);
-        gesture.Session.Request(gesture.Cell, assembled.RequestFor(gesture.Cell, trigger, page));
+        gesture.Session.Request(gesture.Cell, assembled.RequestFor(gesture.Cell, trigger, page) with { List = list });
 
         await gesture.Operations.ExecuteCellAsync(gesture.Cell);
 

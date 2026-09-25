@@ -246,6 +246,27 @@ public sealed class TakeOverActionTests : IDisposable
     }
 
     [Fact]
+    public async Task ABoxCarryingSavedColumnsWhoseTakeOverBreaksARule_IsNotMade_WithEveryFault()
+    {
+        // No list draws such a box; one sent anyway is judged by the same rules.
+        await using var notebook = await NotebookAsync(Titanic);
+        var withoutAge = PipelinePreset.Of(
+            Pdd.Create().ReadCsv("titanic.csv").Declare(columns => columns.Integer("survived", "pclass").Number("fare")).Declaration, header: null);
+        var box = ControlAction.Of(StepRenderer.Apply, new()
+        {
+            [StepRenderer.PresetKey] = withoutAge.ToJson(),
+            [StepRenderer.DrawnKey] = NotebookSession.KeyOf(Blocks(notebook)),
+        });
+
+        var refused = await ApplyAsync(notebook, box, ticked: true);
+
+        Assert.False(refused.StateChanged);
+        Assert.Equal([.. Titanic.Select(text => NotebookVerbs.Catalog().ReadStep(text))], Steps(notebook));
+        Assert.Contains(notebook.Scaffold.Cells[1].Outputs, output => output.IsError
+            && WebUtility.HtmlDecode(output.Content).Contains("'age'", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task SavedColumnsTheBlocksAlreadyHold_ListNothingToApply_ButTheSourcesNewColumns()
     {
         await using var notebook = await NotebookAsync(Titanic);

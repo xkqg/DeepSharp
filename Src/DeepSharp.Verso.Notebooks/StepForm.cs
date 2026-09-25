@@ -189,7 +189,7 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
         var position = assembled.PositionOf(cell);
         var declaration = assembled.Readable;
         var columns = position >= 0 && position < declaration.Steps.Count ? declaration.ColumnsBefore(position).Columns : null;
-        var source = declaration.Steps.Count > 0 && declaration.Steps[0] is ReadCsvStep read ? session.Sources.ColumnNamesFor(read) : null;
+        var source = declaration.Steps.Count > 0 && declaration.Steps[0] is ReadCsvStep read ? session.Sources.KeptFor(read)?.Rows.ColumnNames : null;
 
         return new FormScope(columns, source);
     }

@@ -135,15 +135,8 @@ internal static class DataGrid
         HashSet<string> taken = [.. declaration.Steps.OfType<DeclareStep>().FirstOrDefault()?.Taking.Select(column => column.Name) ?? []];
 
         return new([.. declaration.ChoicesFor(columns).Rows.Select(choice => new HeaderColumn(
-            choice.Name,
-            Box(choice.Standing is ColumnStanding.Taking or ColumnStanding.Kept or ColumnStanding.Made, choice.Offers, ColumnOffers.Exclude, ColumnOffers.Include),
-            taken.Contains(choice.Name) ? Box(choice.Kind == ColumnKind.Category, choice.Offers, ColumnOffers.BackToWas, ColumnOffers.MakeCategory) : null))]);
+            choice.Name, choice.IncludedBox(), taken.Contains(choice.Name) ? choice.CategoryBox() : null))]);
     }
-
-    // A box, ticked or not, that can be clicked when the rules offer what the click asks for: unticking it when it is
-    // ticked, ticking it when it is not.
-    private static HeaderBox Box(bool ticked, ColumnOffers offers, ColumnOffers untick, ColumnOffers tick) =>
-        new(ticked, offers.HasFlag(ticked ? untick : tick));
 
     private static void Summary(StringBuilder html, PipelineView view)
     {

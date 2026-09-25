@@ -47,14 +47,32 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     /// </summary>
     internal const string Apply = "deepsharp.apply";
 
+    /// <summary>The gesture that lists every column of the source at the schema's block.</summary>
+    internal const string Columns = "deepsharp.columns";
+
+    /// <summary>
+    /// The gesture a row's box on the list sends, with its column, the kind the row shows, and what the list was drawn
+    /// from: ticked, the column is taken in; unticked, it is left out.
+    /// </summary>
+    internal const string ListInclude = "deepsharp.list.include";
+
     /// <summary>The key a box carries its column under.</summary>
     internal const string ColumnKey = "column";
 
     /// <summary>The key a take-over's list carries the saved columns under, as the file held them when it was listed.</summary>
     internal const string PresetKey = "preset";
 
-    /// <summary>The key a take-over's list carries the key of the blocks it was listed for under.</summary>
+    /// <summary>The key a take-over's list, or the list of the source's columns, carries the key of the blocks it was drawn for under.</summary>
     internal const string DrawnKey = "drawn";
+
+    /// <summary>The key a row of the list carries the kind it shows under: the one a tick takes the column in with.</summary>
+    internal const string KindKey = "kind";
+
+    /// <summary>The key a row of the list carries the fingerprint of the source's bytes it was drawn from under.</summary>
+    internal const string SourceKey = "source";
+
+    // Said at the list when a row is sent in a session that has not read the source the list was drawn from.
+    private const string ListSourceNotRead = "Choose the columns again — the source is not read in this session.";
 
     // Said at a block when the list of a take-over is applied to blocks that are no longer the ones it listed.
     private const string ListedForOtherBlocks = "the blocks changed since the list was shown — take over again";
@@ -145,20 +163,75 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             case Page:
                 return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Page, PageOf(context.Payload));
 
+            case Columns:
+                return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Show, page: 0, ListPicks.None);
+
             default:
                 if (ControlAction.Read(context.InteractionType) is not { } action || StateOf(context.Payload) is not { } ticked)
                 {
                     return null;
                 }
 
-                if (action.Gesture == Apply)
+                return action.Gesture switch
                 {
-                    return await AppliedAsync(gesture, assembled, context, action, ticked);
-                }
-
-                return action.Text(ColumnKey) is { } column ? await TickedAsync(gesture, assembled, context, action.Gesture, column, ticked) : null;
+                    Apply => await AppliedAsync(gesture, assembled, context, action, ticked),
+                    ListInclude => await ListedAsync(gesture, assembled, context, action, ticked),
+                    _ => action.Text(ColumnKey) is { } column ? await TickedAsync(gesture, assembled, context, action.Gesture, column, ticked) : null,
+                };
         }
     }
+
+    // A row's box on the list of the source's columns. The list is found by what the box carries — the schema's block the
+    // blocks hold now, whichever block the send names, since a change writes that block anew. A box sent in a session that
+    // has not read the source, or from a list drawn before the blocks or the source's bytes changed, draws the list again
+    // and changes nothing; otherwise ticked takes the column in with the kind its row showed, and unticked leaves it out.
+    private static async Task<string?> ListedAsync(
+        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    {
+        if (assembled.SchemaBlock is not { } schema || action.Text(ColumnKey) is not { } column)
+        {
+            return null;
+        }
+
+        var list = gesture with { Cell = schema };
+
+        if (assembled.Readable.Steps[0] is not ReadCsvStep read || gesture.Session.Sources.KeptFor(read) is not { } source)
+        {
+            await StepCommit.NotMadeAsync(list, assembled, [ListSourceNotRead], ListPicks.None);
+
+            return null;
+        }
+
+        if (action.Text(DrawnKey) != NotebookSession.KeyOf(assembled.Readable) || action.Text(SourceKey) != source.Fingerprint)
+        {
+            await StepCommit.ShowAsync(list, assembled, ViewTrigger.Show, page: 0, ListPicks.None);
+
+            return null;
+        }
+
+        IReadOnlyList<IPipelineStep> steps;
+
+        try
+        {
+            steps = ticked
+                ? assembled.Readable.Including(column, KindOf(action), source.Rows.ColumnNames)
+                : assembled.Readable.Excluding(column);
+        }
+        catch (DeclarationException refused)
+        {
+            await StepCommit.NotMadeAsync(list, assembled, [.. refused.Faults.Select(fault => fault.ToString())], ListPicks.None);
+
+            return null;
+        }
+
+        context.StateChanged = await StepCommit.CommitAsync(list, assembled, steps, ListPicks.None);
+
+        return null;
+    }
+
+    // The kind a row showed, which a tick takes an undeclared column in with; text when it says none the notebook knows.
+    private static ColumnKind KindOf(ControlAction action) =>
+        Enum.TryParse<ColumnKind>(action.Text(KindKey), ignoreCase: true, out var kind) && Enum.IsDefined(kind) ? kind : ColumnKind.Text;
 
     // A take-over's list, sent with the saved columns it listed and the key of the blocks it listed them for. Ticked,
     // what it listed is made, in one commit; asked again — the click's echo — the blocks hold it already, and nothing
@@ -257,7 +330,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     private static async Task<IReadOnlyList<IPipelineStep>?> TakenInAsync(Gesture gesture, NotebookPipeline assembled, string column)
     {
         var declaration = assembled.Readable;
-        var header = declaration.Steps[0] is ReadCsvStep read ? gesture.Session.Sources.ColumnNamesFor(read) : null;
+        var header = declaration.Steps[0] is ReadCsvStep read ? gesture.Session.Sources.KeptFor(read)?.Rows.ColumnNames : null;
 
         if (declaration.ChoicesFor([column]).Rows[0].Standing != ColumnStanding.NotDeclared)
         {

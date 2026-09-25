@@ -11,7 +11,8 @@ namespace DeepSharp.Verso.Notebooks;
 
 /// <summary>
 /// What a block shows about its own step: the stage it belongs to, the verb, what the verb does, and the gesture
-/// that shows the data there — or, when the block is not one step, every fault at its line and column.
+/// that shows the data there — and, on the schema's block, the one that lists the source's columns — or, when the block
+/// is not one step, every fault at its line and column.
 /// </summary>
 /// <remarks>
 /// Plain HTML with the theme's own colours inherited, so it sits in whatever theme the notebook has. Every word
@@ -38,9 +39,18 @@ internal static class StepCard
             .Append("<div class=\"deepsharp-head\"><span class=\"deepsharp-stage\">").Append(Encoded(step.Stage())).Append("</span>")
             .Append("<code class=\"deepsharp-verb\">").Append(Encoded(step.Verb)).Append("</code></div>")
             .Append("<div class=\"deepsharp-purpose\">").Append(Encoded(purpose)).Append("</div>")
-            .Append("<div class=\"deepsharp-actions\"><button type=\"button\" data-action=\"").Append(StepRenderer.Show)
-            .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append("\">Show the data here</button></div>")
-            .Append("</div>");
+            .Append("<div class=\"deepsharp-actions\">");
+
+        Button(html, StepRenderer.Show, "Show the data here");
+
+        // The schema lists every column of the source, and takes each in or leaves it out.
+        if (step is DeclareStep)
+        {
+            html.Append(' ');
+            Button(html, StepRenderer.Columns, "Choose the columns");
+        }
+
+        html.Append("</div></div>");
 
         return CellOutput.Html(html.ToString());
     }
@@ -117,6 +127,11 @@ internal static class StepCard
 
         return new CellOutput("text/html", html.ToString(), IsError: true);
     }
+
+    // A button carries its gesture and nothing else: the block it stands on is what it concerns.
+    private static void Button(StringBuilder html, string gesture, string label) =>
+        html.Append("<button type=\"button\" data-action=\"").Append(gesture)
+            .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append("\">").Append(label).Append("</button>");
 
     private static string Encoded(string text) => WebUtility.HtmlEncode(text);
 }

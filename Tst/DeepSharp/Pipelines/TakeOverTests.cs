@@ -153,6 +153,20 @@ public class TakeOverTests
     }
 
     [Fact]
+    public void TheColumnsNewToASource_AreThoseTheDecisionsLastShowedWithout_OrElseThoseTheyDoNotName()
+    {
+        string[] shown = ["survived", "pclass", "sex", "age", "fare"];
+        var dropped = Saved(Then(Blocks().Excluding("fare")));
+
+        Assert.Equal(["embarked"], Saved(Blocks(), shown).NewColumns(Header));
+        Assert.Equal(["sex", "embarked"], Saved(Blocks()).NewColumns(Header));
+
+        // A column the decisions drop is one they name.
+        Assert.Equal(["sex", "embarked"], dropped.NewColumns(Header));
+        Assert.Empty(Saved(Blocks(), Header).NewColumns(Header));
+    }
+
+    [Fact]
     public void BlocksWithoutASchema_TakeTheSavedOneDirectlyAfterTheSource()
     {
         var source = new PipelineDeclaration([new ReadCsvStep("titanic.csv")]);

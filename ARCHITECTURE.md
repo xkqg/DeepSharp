@@ -750,6 +750,18 @@ rewrites is written as a new block in the old one's place, and run, because Vers
 block whose text a part changed, and the next keystroke there would put the old text back; under a layout that
 cannot add a block the change is refused rather than half made.
 
+The schema's block also lists every column of the source as one row — its name, its first values, whether it is in,
+and its kind — so nothing left out ever disappears from sight. "Choose the columns" draws it from the rows as the
+source reads them; no step runs. A row's box is the grid's box, asked of the same column rules, and a column the
+schema does not name comes in with the kind its row shows: the saved file's kind for it, else text. A list finds its
+block by what it carries, never by the block it was drawn on, because a change writes that block anew while the next
+key of the same walk still names the old one. It also carries what it was drawn from — the key of the blocks and the
+fingerprint of the source's bytes — so a list drawn before either changed is drawn again rather than acted on. A
+gesture is handed no file, so the bytes it compares are the ones this session read; in a session that read none, the
+list is drawn again and says so. A list the blocks no longer match is cleared, as a grid is. It marks new the source's
+columns the saved file never showed and then writes into the file that it showed them, and a change made from it saves
+the header it showed.
+
 What the blocks decide about their columns is saved beside the notebook, in a file named after it
 (`<notebook>.columns.json`): the schema with the columns it excludes and their kinds, the columns dropped, and the
 output — the same shape a preset has, written and read through the same door as a pipeline file. It is written after

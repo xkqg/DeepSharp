@@ -184,6 +184,13 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
             return;
         }
 
+        if (request.List is not null)
+        {
+            await ListAsync(session, request, declaration, context);
+
+            return;
+        }
+
         // What the blocks decided is saved before the rows are read: a decision stands whatever the rows meet.
         if (request.SavesTheColumns && context.NotebookMetadata.ColumnsFilePath() is { } path && new ColumnsFile(path).Save(declaration) is { } notSaved)
         {
@@ -232,6 +239,53 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
         }
 
         session.Showing(context.CellId, key, grid.Header);
+    }
+
+    // Every column of the source as one row, from the rows as the source reads them — no step runs. The list marks new
+    // the columns the saved file never showed, then says in the file that it showed them; a change made from the list
+    // saves the decisions with the header it showed. A saved file that cannot be read is said to be so and never written.
+    private static async Task ListAsync(
+        NotebookSession session, ViewRequest request, PipelineDeclaration declaration, IExecutionContext context)
+    {
+        SourceRows source;
+
+        try
+        {
+            source = session.Sources.RowsFor(declaration, context.NotebookMetadata.SourceFolder());
+        }
+        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or FormatException or InvalidOperationException)
+        {
+            session.Hidden(context.CellId);
+            await context.WriteOutputAsync(StepCard.RowsRefused(refused.Message));
+
+            return;
+        }
+
+        var header = source.Rows.ColumnNames;
+        var file = context.NotebookMetadata.ColumnsFilePath() is { } path ? new ColumnsFile(path) : (ColumnsFile?)null;
+        var stored = file?.Stored() ?? default;
+        IReadOnlyList<string> fresh = stored.Preset is { } preset ? preset.NewColumns(header) : [];
+
+        if (stored.Unreadable is { } unreadable)
+        {
+            await context.WriteOutputAsync(unreadable);
+        }
+        else if (file is { } columns)
+        {
+            var notSaved = request.SavesTheColumns ? columns.Save(declaration, header)
+                : request.Trigger == ViewTrigger.Show ? columns.SaveSource(stored, header)
+                : null;
+
+            if (notSaved is { } card)
+            {
+                await context.WriteOutputAsync(card);
+            }
+        }
+
+        var drawn = NotebookSession.KeyOf(declaration);
+
+        await context.WriteOutputAsync(ColumnList.Of(declaration, source, fresh, stored.Preset, drawn));
+        session.Listing(context.CellId, drawn);
     }
 
     // What the notebook hands to C# cells once the rows were read. A run of the whole pipeline hands over what it

@@ -211,6 +211,24 @@ public sealed partial class HostContractTests : IDisposable
         Assert.Empty(await kernel.GetCompletionsAsync(column, column.Length));
     }
 
+    [Fact]
+    public async Task AGestureThatCameWithoutItsNotebook_SaysItHasNothingToActOn()
+    {
+        await using var notebook = await NotebookAsync();
+
+        var answer = await notebook.Handler.OnCellInteractionAsync(new CellInteractionContext
+        {
+            CellId = notebook.Scaffold.Cells[1].Id,
+            ExtensionId = StepRenderer.Id,
+            InteractionType = StepRenderer.Show,
+            Payload = string.Empty,
+            Region = CellRegion.Output,
+        });
+
+        Assert.Equal("This gesture came without the notebook it was made in, so there is nothing for it to act on.", answer);
+        Assert.Empty(notebook.Scaffold.Cells[1].Outputs);
+    }
+
     [Theory]
     [InlineData(StepRenderer.Show, "")]
     [InlineData(StepRenderer.Page, "1")]
@@ -221,6 +239,9 @@ public sealed partial class HostContractTests : IDisposable
     [InlineData(StepRenderer.Include + " {\"column\":\"sex\"}", "true")]
     [InlineData(StepRenderer.Apply + " {\"preset\":\"not saved columns\",\"drawn\":\"0\"}", "true")]
     [InlineData(StepRenderer.Apply + " {\"preset\":\"not saved columns\",\"drawn\":\"0\"}", "false")]
+    [InlineData(StepRenderer.Columns, "")]
+    [InlineData(StepRenderer.ListInclude + " {\"column\":\"sex\",\"kind\":\"text\",\"drawn\":\"0\",\"source\":\"0\"}", "true")]
+    [InlineData(StepRenderer.ListInclude + " {\"column\":\"pclass\",\"kind\":\"integer\",\"drawn\":\"0\",\"source\":\"0\"}", "false")]
     [InlineData("deepsharp.unknown", "")]
     public async Task EveryGesture_AnswersNothing_SoAHostThatAppliesAnswersLeavesTheBlockAsTheRunWroteIt(string interaction, string payload)
     {
