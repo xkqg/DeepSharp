@@ -143,12 +143,18 @@ internal sealed class UndoChain
         return new UndoChain(followed, links);
     }
 
+    /// <summary>The way back for one answer, by the steps alone.</summary>
+    /// <param name="declaration">The declaration.</param>
+    /// <param name="answer">The answer column.</param>
+    /// <returns>Its way back, with nothing learned.</returns>
+    public static UndoChain For(PipelineDeclaration declaration, string answer) => For(declaration, NothingLearned, answer);
+
     /// <summary>Every column the ways back of a declaration's answers need as it was read.</summary>
     /// <param name="declaration">The declaration.</param>
     /// <returns>The column each answer comes back to, and every column a step on the way reads, each once.</returns>
     public static IEnumerable<string> ReadBy(PipelineDeclaration declaration) =>
         (declaration.Output?.Answers ?? [])
-            .Select(answer => For(declaration, NothingLearned, answer))
+            .Select(answer => For(declaration, answer))
             .SelectMany(chain => chain.Links.SelectMany(link => link.Step.ColumnsRead.Select(read => read.Column)).Prepend(chain.End))
             .Distinct(StringComparer.Ordinal);
 

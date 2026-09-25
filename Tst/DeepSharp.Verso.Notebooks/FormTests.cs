@@ -117,6 +117,17 @@ public sealed class FormTests : IDisposable
     }
 
     [Fact]
+    public async Task SwappingAnOutputForAnotherKind_KeepsWhatBothTake_AndDropsWhatTheOtherDoesNotTake()
+    {
+        await using var notebook = await NotebookAsync("""{"step": "target.distribution", "columns": ["w500", "w550"], "scaleBy": "chicks"}""");
+        var output = notebook.Scaffold.Cells[0];
+
+        await ChangeAsync(notebook, output, "step", "target.labels");
+
+        Assert.Equal(new LabelsStep(["w500", "w550"]), Step(output));
+    }
+
+    [Fact]
     public async Task TheVerbField_OffersOnlyTheVerbsThatActAsItsStepActs()
     {
         // Leaving a column out and leaving rows out are both cleaning, and do different things: a block below the

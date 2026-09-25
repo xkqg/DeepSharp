@@ -409,7 +409,7 @@ internal sealed class AReturnIsMadeFromItsColumnAsRead : IDeclarationRule
     {
         for (var at = 0; at < steps.Count; at++)
         {
-            if (steps[at] is not AheadStep { As: AheadAs.Return } ahead)
+            if (steps[at] is not AheadStep { IsMadeFromItsColumnAsRead: true } ahead)
             {
                 continue;
             }

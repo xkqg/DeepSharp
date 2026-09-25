@@ -150,7 +150,15 @@ wrong with it at once, each at its line and column.
   it was given. `ChoicesFor(columns)` says how each column stands — taking part, excluded, dropped, made by a step,
   kept with the rest, or not declared — and what can be done to it without breaking a rule, so the answer is never
   offered to be left out and a column a later step scales as a number is never offered to become a category. The
-  schema's own `WithColumn`, `WithColumnExcluded` and `WithColumnKind` change one block alone.
+  schema's own `WithColumn`, `WithColumnExcluded` and `WithColumnKind` change one block alone. `WithOutput` places
+  an output, in the place of the one standing or at the end, and a return directly after the split; `WithoutOutput`
+  takes it away; each row says what its column is to the output — an answer comes back to it, or the way back reads
+  it — and `ChoicesFor` names the output it asked about.
+
+- **An output is made under its verb in one place.** `StepCatalog.Make(verb, stated, carrying)` makes a step from
+  the verb's template, the values the step it replaces holds under the verb's keys, and the values said, which win;
+  it is read as a file's step is, so the verb's own rules hold. The notebook's form swaps one kind of output for
+  another through it.
 
 - **What a pipeline decided about its columns can be saved on its own.** `PipelinePreset` holds the schema, the
   columns dropped after the steps that read them, the output, and the source's columns as they were last shown

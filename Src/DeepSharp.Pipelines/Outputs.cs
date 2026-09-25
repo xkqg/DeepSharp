@@ -425,6 +425,12 @@ public sealed record AheadStep : IPipelineStep<AheadStep>, IMakesTheAnswer, IRea
     /// <summary>Whether the answer is the value itself or the return on the row's own value.</summary>
     public AheadAs As { get; }
 
+    /// <summary>
+    /// Whether the answer is made from the column as it was read — a return is — so it stands above every step that
+    /// changes that column: said once, for the rule that holds it and for whatever places the step.
+    /// </summary>
+    internal bool IsMadeFromItsColumnAsRead => As == AheadAs.Return;
+
     /// <summary>The column the answer is made into: the column's name and how far ahead.</summary>
     public string Answer => string.Create(CultureInfo.InvariantCulture, $"{Column}.ahead{Ahead}");
 

@@ -4,6 +4,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace DeepSharp.Pipelines;
 
@@ -267,6 +268,49 @@ public sealed class StepCatalog
     /// placed by the same rule as a pipeline file's.
     /// </exception>
     public IPipelineStep ReadStep(string json) => ReadStep(json, PipelineDeclaration.Version);
+
+    /// <summary>
+    /// A step made under a verb: the verb's template, every value a step it replaces holds under a key the verb takes,
+    /// and on top of both every value said, which wins.
+    /// </summary>
+    /// <param name="verb">The verb.</param>
+    /// <param name="stated">The values said, under the verb's keys.</param>
+    /// <param name="carrying">The step the one made replaces, whose values under the verb's keys are kept; nothing for none.</param>
+    /// <returns>The step, read as a file's step is read, so the verb's own rules hold.</returns>
+    /// <exception cref="PipelineFileException">The verb is not known here, a key is not the verb's, or a value breaks its rules.</exception>
+    /// <remarks>
+    /// The one way a step is made under a verb from what a person picked: a form that swaps a step for another that does
+    /// what it does, and a list that picks an output's kind and its columns, make it here, so both keep the same values.
+    /// </remarks>
+    public IPipelineStep Make(string verb, JsonObject stated, IPipelineStep? carrying)
+    {
+        ArgumentNullException.ThrowIfNull(verb);
+        ArgumentNullException.ThrowIfNull(stated);
+
+        if (!Knows(verb))
+        {
+            // Refused in the reader's own words, as a file naming the verb is.
+            return ReadStep(new JsonObject { [StepKey] = verb }.ToJsonString());
+        }
+
+        var description = Describe(verb);
+        var made = JsonNode.Parse(description.Template)!.AsObject();
+
+        if (carrying is not null && JsonNode.Parse(carrying.Canonical()) is JsonObject carried)
+        {
+            foreach (var key in description.Keys.Where(carried.ContainsKey))
+            {
+                made[key] = carried[key]!.DeepClone();
+            }
+        }
+
+        foreach (var (key, value) in stated.Where(pair => pair.Key != StepKey))
+        {
+            made[key] = value?.DeepClone();
+        }
+
+        return ReadStep(made.ToJsonString());
+    }
 
     /// <summary>Reads one step written on its own, as text, against a given version of the pipeline file.</summary>
     /// <param name="json">The step, as the JSON object it was written as.</param>

@@ -596,6 +596,16 @@ rows, awaits nothing from the rows handed in. A return comes back as a price by 
 A package adds a kind the way it adds any verb, by implementing `INamesTheAnswer`, or `IMakesTheAnswer` for an
 answer the rows do not bring.
 
+An output is made under its verb in one place, `StepCatalog.Make`: the verb's template, every value the output it
+replaces holds under a key the verb takes, and on top every value picked, which wins — read as a file's step is, so
+the verb's own rules hold. A form that swaps one kind for another and a list that picks a kind and its columns both
+make it there, and keep the same values. Placing it is a separate thing that decides nothing about it: an output
+takes the place of the one standing, or goes at the end, and a return goes directly after the split, above every step
+that changes its column. Whether it is the same output as the one standing is decided by what it writes, not by its
+own equality, so a kind from another package that compares a list by reference is still the same when it writes the
+same. What each column is to the output is not stored anywhere: it is read off the way back, where the column an
+answer comes back to is an answer and every other column the way back reads — how many birds a flock has — scales it.
+
 Four things are refused there rather than passed on. A column still holding words, because turning one into a
 number quietly is how a category becomes an order nobody meant. A gap, because a model cannot be handed an
 absence, and a value that is not a finite number, which a model learns nothing from and says nothing about. An

@@ -45,17 +45,32 @@ public enum ColumnOffers
     BackToWas = 8,
 }
 
+/// <summary>What a column is to the output.</summary>
+public enum ColumnRole
+{
+    /// <summary>Nothing.</summary>
+    None,
+
+    /// <summary>An answer comes back to it.</summary>
+    Answer,
+
+    /// <summary>An answer's way back reads it.</summary>
+    Scale,
+}
+
 /// <summary>One column, as it stands and what can be done to it.</summary>
 /// <param name="Name">The column's name.</param>
 /// <param name="Standing">How it stands.</param>
 /// <param name="Kind">What it holds, when that is known: the kind the schema declares, or the kind a step made it with.</param>
 /// <param name="Was">The kind a category was before it became one, when it says.</param>
 /// <param name="Offers">What can be done to it without breaking a rule.</param>
-public readonly record struct ColumnChoice(string Name, ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, ColumnOffers Offers);
+/// <param name="Role">What it is to the output: a column an answer comes back to, one an answer's way back reads, or neither.</param>
+public readonly record struct ColumnChoice(string Name, ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, ColumnOffers Offers, ColumnRole Role);
 
 /// <summary>Every column asked about, as each stands.</summary>
 /// <param name="Rows">One row per column asked, in the order they were asked.</param>
-public sealed record ColumnChoices(IReadOnlyList<ColumnChoice> Rows);
+/// <param name="Output">The output the rows are what they are to, or nothing when the pipeline names no answer.</param>
+public sealed record ColumnChoices(IReadOnlyList<ColumnChoice> Rows, INamesTheAnswer? Output);
 
 /// <summary>
 /// What can be done to a pipeline's columns, and how each stands: the one set of rules every door that changes the
@@ -165,6 +180,53 @@ public static class ColumnChoiceExtensions
             : declaration.Steps;
     }
 
+    /// <summary>The steps with an output placed.</summary>
+    /// <param name="declaration">The pipeline.</param>
+    /// <param name="output">The output, made under its verb by <see cref="StepCatalog.Make"/>.</param>
+    /// <returns>
+    /// The steps with the output in the place of the one standing, or at the end when none stands; an answer made from
+    /// its column as it was read — a return — directly after the split, above every step that changes that column. The
+    /// steps as they are when the output standing writes what this one writes.
+    /// </returns>
+    /// <remarks>An output is the same output when it writes the same, whatever its own equality says.</remarks>
+    public static IReadOnlyList<IPipelineStep> WithOutput(this PipelineDeclaration declaration, INamesTheAnswer output)
+    {
+        ArgumentNullException.ThrowIfNull(declaration);
+        ArgumentNullException.ThrowIfNull(output);
+
+        var steps = declaration.Steps;
+        var at = declaration.OutputAt;
+
+        if (at >= 0 && steps[at].Canonical().AsSpan().SequenceEqual(output.Canonical()))
+        {
+            return steps;
+        }
+
+        if (output is AheadStep { IsMadeFromItsColumnAsRead: true } && declaration.SplitAt >= 0)
+        {
+            var split = steps[declaration.SplitAt];
+            List<IPipelineStep> placed = [.. steps.Where((_, place) => place != at)];
+
+            placed.Insert(placed.IndexOf(split) + 1, output);
+
+            return placed;
+        }
+
+        return at >= 0 ? [.. steps.Take(at), output, .. steps.Skip(at + 1)] : [.. steps, output];
+    }
+
+    /// <summary>The steps without their output.</summary>
+    /// <param name="declaration">The pipeline.</param>
+    /// <returns>The steps with the output taken away; the steps as they are when there is none.</returns>
+    public static IReadOnlyList<IPipelineStep> WithoutOutput(this PipelineDeclaration declaration)
+    {
+        ArgumentNullException.ThrowIfNull(declaration);
+
+        var at = declaration.OutputAt;
+
+        return at < 0 ? declaration.Steps : [.. declaration.Steps.Take(at), .. declaration.Steps.Skip(at + 1)];
+    }
+
     /// <summary>How each column asked about stands, and what can be done to it without breaking a rule.</summary>
     /// <param name="declaration">The pipeline.</param>
     /// <param name="columns">The columns, in the order the rows are wanted: the source's, or those a block shows.</param>
@@ -178,10 +240,32 @@ public static class ColumnChoiceExtensions
         ArgumentNullException.ThrowIfNull(declaration);
         ArgumentNullException.ThrowIfNull(columns);
 
-        return new([.. columns.Select(column => Choice(declaration, column, columns))]);
+        var roles = RolesOf(declaration);
+
+        return new([.. columns.Select(column => Choice(declaration, column, columns, roles.GetValueOrDefault(column)))], declaration.Output);
     }
 
-    private static ColumnChoice Choice(PipelineDeclaration declaration, string column, IReadOnlyList<string> header)
+    // What each column is to the output, by the way back of each answer: the column an answer comes back to is an
+    // answer, and every other column a step on that way reads is a scale.
+    private static Dictionary<string, ColumnRole> RolesOf(PipelineDeclaration declaration)
+    {
+        UndoChain[] ways = [.. (declaration.Output?.Answers ?? []).Select(answer => UndoChain.For(declaration, answer))];
+        var roles = new Dictionary<string, ColumnRole>(StringComparer.Ordinal);
+
+        foreach (var read in ways.SelectMany(way => way.Links).SelectMany(link => link.Step.ColumnsRead))
+        {
+            roles[read.Column] = ColumnRole.Scale;
+        }
+
+        foreach (var way in ways)
+        {
+            roles[way.End] = ColumnRole.Answer;
+        }
+
+        return roles;
+    }
+
+    private static ColumnChoice Choice(PipelineDeclaration declaration, string column, IReadOnlyList<string> header, ColumnRole role)
     {
         var declared = Schema(declaration)?.Columns.FirstOrDefault(each => each.Name == column);
         var offers = ColumnOffers.None;
@@ -206,7 +290,7 @@ public static class ColumnChoiceExtensions
             offers |= ColumnOffers.BackToWas;
         }
 
-        return new(column, Standing(declaration, declared, column), declared?.Kind ?? KnownKind(declaration, column), declared?.Was, offers);
+        return new(column, Standing(declaration, declared, column), declared?.Kind ?? KnownKind(declaration, column), declared?.Was, offers, role);
     }
 
     private static ColumnStanding Standing(PipelineDeclaration declaration, ColumnDeclaration? declared, string column)

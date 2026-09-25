@@ -35,6 +35,96 @@ public class ColumnChoiceTests
     private static ColumnChoice Row(PipelineDeclaration declaration, string column) =>
         Assert.Single(declaration.ChoicesFor([column]).Rows);
 
+    // A price series ordered in time and split with a gap of five rows, the volume scaled below the split.
+    private static PipelineDeclaration Trading() =>
+        Pdd.Create()
+            .ReadCsv("aapl.csv")
+            .Declare(schema => schema.Timestamp("Date").Number("Close", "Volume"))
+            .OrderBy("Date")
+            .SplitByTime("Date", 0.70, 0.15, gap: 5)
+            .Normalise("Volume")
+            .Declaration;
+
+    // ---- the output
+
+    [Fact]
+    public void AnOutput_WithNoneStanding_GoesAtTheEnd()
+    {
+        var steps = Titanic().WithOutput(new TargetStep("survived"));
+
+        Assert.Equal([.. Titanic().Steps, new TargetStep("survived")], steps);
+    }
+
+    [Fact]
+    public void AnOutput_TakesThePlaceOfTheOneStanding_SoTheStepsAboveKeepTheirKeys()
+    {
+        var answered = Then([.. Titanic().Steps.Take(3), new TargetStep("survived"), .. Titanic().Steps.Skip(3)]);
+
+        var replaced = Then(answered.WithOutput(new TargetStep("pclass")));
+
+        Assert.Equal(new TargetStep("pclass"), replaced.Steps[3]);
+        Assert.Equal(answered.KeyAt(2), replaced.KeyAt(2));
+        Assert.Equal(answered.Steps.Count, replaced.Steps.Count);
+    }
+
+    [Fact]
+    public void AReturn_GoesDirectlyAfterTheSplit_AboveEveryStepThatChangesItsColumn()
+    {
+        var ret = new AheadStep("Close", 5, AheadAs.Return);
+        var alone = Trading().WithOutput(ret);
+        var standing = Then([.. Trading().Steps, new AheadStep("Close", 1)]).WithOutput(ret);
+
+        Assert.Equal(["read.csv", "declare", "order.by", "split.byTime", "target.ahead", "normalise"], alone.Select(step => step.Verb));
+        Assert.Equal(ret, alone[4]);
+        Assert.Equal(alone, standing);
+        Assert.Empty(PipelineDeclaration.FaultsIn(alone));
+    }
+
+    [Fact]
+    public void TheSameOutputAgain_ChangesNothing_WhateverItsEqualitySays()
+    {
+        // An output is the same output when it writes the same: one of another package may compare its columns by
+        // reference, and a take-over or a tick would otherwise see a change where there is none.
+        var answered = Then([.. Titanic().Steps, new WrittenColumns("survived", "pclass")]);
+        var target = Then(Titanic().WithOutput(new TargetStep("survived")));
+
+        Assert.Same(answered.Steps, answered.WithOutput(new WrittenColumns("survived", "pclass")));
+        Assert.Same(target.Steps, target.WithOutput(new TargetStep("survived")));
+    }
+
+    [Fact]
+    public void TheOutput_IsTakenAway_AndWithNoneThereIsNothingToTake()
+    {
+        var answered = Then([.. Titanic().Steps, new TargetStep("survived")]);
+        var none = Titanic();
+
+        Assert.Equal(none.Steps, answered.WithoutOutput());
+        Assert.Same(none.Steps, none.WithoutOutput());
+    }
+
+    [Fact]
+    public void EachColumn_SaysWhatItIsToTheOutput_ByTheWayBack()
+    {
+        var target = Then([.. Titanic().Steps, new TargetStep("survived")]);
+        var flock = Pdd.Create()
+            .ReadCsv("flock.csv")
+            .Declare(schema => schema.Integer("chicks", "w500", "w550", "w600"))
+            .SplitAtRandom(0.70, 0.15)
+            .Distribution(["w500", "w550", "w600"], scaleBy: "chicks")
+            .Declaration;
+        var ahead = Then([.. Trading().Steps, new AheadStep("Close", 5)]);
+
+        Assert.Equal(ColumnRole.Answer, Row(target, "survived").Role);
+        Assert.Equal(ColumnRole.None, Row(target, "pclass").Role);
+        Assert.Equal(ColumnRole.Answer, Row(flock, "w550").Role);
+        Assert.Equal(ColumnRole.Scale, Row(flock, "chicks").Role);
+        Assert.Equal(ColumnRole.Answer, Row(ahead, "Close").Role);
+        Assert.Equal(ColumnRole.None, Row(ahead, "Close.ahead5").Role);
+        Assert.Equal(ColumnRole.None, Row(Titanic(), "survived").Role);
+        Assert.Equal(target.Output, target.ChoicesFor(["survived"]).Output);
+        Assert.Null(Titanic().ChoicesFor(["survived"]).Output);
+    }
+
     // ---- the schema's own operations
 
     [Fact]
@@ -296,7 +386,7 @@ public class ColumnChoiceTests
         Assert.Equal(unread.Steps, unread.Including("sex", ColumnKind.Text, Header));
         Assert.Equal(unread.Steps, unread.Excluding("sex"));
         Assert.Equal(unread.Steps, unread.WithKind("sex", ColumnKind.Category));
-        Assert.Equal(new ColumnChoice("sex", ColumnStanding.NotDeclared, null, null, ColumnOffers.None), Row(unread, "sex"));
+        Assert.Equal(new ColumnChoice("sex", ColumnStanding.NotDeclared, null, null, ColumnOffers.None, ColumnRole.None), Row(unread, "sex"));
     }
 
     // ---- how each column stands, and what it offers

@@ -130,7 +130,7 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
 
         if (field == StepCatalog.StepKey)
         {
-            return Switched(step, json, value.Text, catalog);
+            return Switched(step, value.Text, catalog);
         }
 
         var edit = new FormEdit(field, value, json, scope, step);
@@ -141,8 +141,8 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
     }
 
     // Another verb that acts as this one does — the capability D9 names, never the stage's name, which two
-    // capabilities can share — keeping every value the other verb takes under the same key.
-    private static IPipelineStep Switched(IPipelineStep step, JsonObject json, string? verb, StepCatalog catalog)
+    // capabilities can share — made by the catalog, keeping every value the other verb takes under the same key.
+    private static IPipelineStep Switched(IPipelineStep step, string? verb, StepCatalog catalog)
     {
         if (verb == step.Verb)
         {
@@ -154,14 +154,7 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
             throw new FormatException($"'{verb}' is not a step that does what '{step.Verb}' does.");
         }
 
-        var other = JsonNode.Parse(catalog.Describe(verb).Template)!.AsObject();
-
-        foreach (var key in catalog.Describe(verb).Keys.Where(json.ContainsKey))
-        {
-            other[key] = json[key]!.DeepClone();
-        }
-
-        return catalog.ReadStep(other.ToJsonString());
+        return catalog.Make(verb, [], step);
     }
 
     // Writes the step, and clears what was worked out from the block as it was: its own card, and every view shown
