@@ -22,7 +22,7 @@ public class GridTests
         var builder = Pdd.Create().Read(CsvRowSource.FromText(csv), "rows").Declare(schema);
         var declaration = more?.Invoke(builder) ?? builder.Declaration;
 
-        return DataGrid.Of(new Pipeline(declaration, CsvRowSource.FromText(csv)).ViewAt(steps), page, declaration).Content;
+        return DataGrid.Of(new Pipeline(declaration, CsvRowSource.FromText(csv)).ViewAt(steps), page, declaration).Output.Content;
     }
 
     private static string Fill(double fraction) => ColorMaps.Coolwarm.GetColor(fraction).ToHex();

@@ -195,6 +195,20 @@ public class ColumnChoiceTests
     }
 
     [Fact]
+    public void LeavingOutTheOnlyColumnTheSchemaTakes_IsRefusedAtTheSchema_AndNotOffered()
+    {
+        // A schema takes a column unless it keeps the rest, and refuses to be made into one that takes none.
+        var one = Pdd.Create().ReadCsv("titanic.csv").Declare(schema => schema.Integer("survived")).Declaration;
+
+        var refused = Assert.Throws<DeclarationException>(() => one.Excluding("survived"));
+
+        Assert.Equal(
+            [new DeclarationFault(1, "declare", "The schema excludes every column it names and keeps none of the rest, so no column would take part.")],
+            refused.Faults);
+        Assert.False(Row(one, "survived").Offers.HasFlag(ColumnOffers.Exclude));
+    }
+
+    [Fact]
     public void ExcludingTheAnswer_GivesStepsTheRulesRefuse()
     {
         var answered = Pdd.Create()

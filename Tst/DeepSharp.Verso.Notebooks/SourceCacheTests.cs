@@ -188,7 +188,7 @@ public sealed class SourceCacheTests : IDisposable
         for (var position = 0; position < blocks.Length; position++)
         {
             var cell = notebook.Scaffold.Cells[position];
-            var fresh = DataGrid.Of(new Pipeline(declaration, rows: null, SourceFolder.Of(_folder)).ViewAt(position + 1), 0, declaration).Content;
+            var fresh = DataGrid.Of(new Pipeline(declaration, rows: null, SourceFolder.Of(_folder)).ViewAt(position + 1), 0, declaration).Output.Content;
 
             await notebook.GestureAsync(cell, StepRenderer.Show);
 

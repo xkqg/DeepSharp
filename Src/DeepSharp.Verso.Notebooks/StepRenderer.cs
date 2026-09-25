@@ -12,15 +12,15 @@ namespace DeepSharp.Verso.Notebooks;
 /// </summary>
 /// <remarks>
 /// A block is edited as text and runs through its kernel, so drawing it is showing what it holds and what its run
-/// wrote, unchanged. The gestures on a block reach this part by its id — the id the block's buttons carry, written
-/// from the one constant here — and this part sees the whole notebook, which the block's own kernel does not. So a
+/// wrote, unchanged. The gestures on a block reach this part by its id — the id the block's buttons and boxes carry,
+/// written from the one constant here — and this part sees the whole notebook, which the block's own kernel does not. So a
 /// gesture assembles the pipeline from every block as the blocks stand now, leaves the block's kernel a request, and
 /// runs the block: what the kernel writes while it runs reaches the screen, where the answer to a gesture does not.
 /// </remarks>
 [VersoExtension]
 public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellInteractionHandler
 {
-    /// <summary>The renderer's id, which a block's buttons name so that a click reaches this part.</summary>
+    /// <summary>The renderer's id, which a block's buttons and boxes name so that a click reaches this part.</summary>
     public const string Id = "io.github.xkqg.deepsharp.notebooks.renderer";
 
     /// <summary>The gesture that shows the data at a block.</summary>
@@ -29,11 +29,25 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     /// <summary>The gesture that shows another page of the data at a block; it carries the page, counting from nought.</summary>
     internal const string Page = "deepsharp.page";
 
-    /// <summary>The gesture that excludes a column from the pipeline; it carries the column's name.</summary>
-    internal const string Drop = "deepsharp.drop";
+    /// <summary>
+    /// The gesture a grid's box for whether a column is in sends, with the column: ticked, the column is taken in;
+    /// unticked, it is left out.
+    /// </summary>
+    internal const string Include = "deepsharp.include";
 
-    /// <summary>The gesture that marks a declared column a category; it carries the column's name.</summary>
+    /// <summary>
+    /// The gesture a grid's box for whether a column the schema takes is a category sends, with the column: ticked, it
+    /// becomes one; unticked, it goes back to the kind it was.
+    /// </summary>
     internal const string Category = "deepsharp.category";
+
+    /// <summary>The key a box carries its column under.</summary>
+    internal const string ColumnKey = "column";
+
+    // Said at a block when a column the schema does not name is ticked before anything read the source in this session.
+    private const string SourceNotRead =
+        "The source is not read in this session, so where a column it has stands among its columns is not known yet: "
+        + "its data is shown here now, and ticking the column again takes it in where it stands.";
 
     /// <inheritdoc />
     public override string ExtensionId => Id;
@@ -116,83 +130,99 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             case Page:
                 return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Page, PageOf(context.Payload));
 
-            case Drop or Category when Change(assembled, gesture.Cell, context.InteractionType, context.Payload) is { } steps:
-                context.StateChanged = await StepCommit.CommitAsync(gesture, assembled, steps);
-
-                return null;
-
             default:
-                return null;
+                return ControlAction.Read(context.InteractionType) is { } action
+                       && action.Text(ColumnKey) is { } column
+                       && StateOf(context.Payload) is { } ticked
+                    ? await TickedAsync(gesture, assembled, context, action.Gesture, column, ticked)
+                    : null;
         }
     }
 
-    // The steps a grid gesture makes of the declaration, or nothing when the notebook already is what it asks for: the
-    // column does not reach the end, the column is a category, or the block shows no grid to have made it on.
-    private static IReadOnlyList<IPipelineStep>? Change(NotebookPipeline assembled, Guid cell, string interaction, string column)
+    // A grid's box, sent with the state it is in: the steps the column rules make of that state, written when they
+    // differ from the steps there are. A box asks for a state, so a change the rules refuse is said at the block, and
+    // one asked for again changes nothing.
+    private static async Task<string?> TickedAsync(
+        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, string name, string column, bool ticked)
     {
-        var position = assembled.PositionOf(cell);
         var declaration = assembled.Readable;
+        var position = assembled.PositionOf(gesture.Cell);
 
-        if (position < 0 || position >= declaration.Steps.Count || declaration.Steps.OfType<DeclareStep>().FirstOrDefault() is not { } declare)
+        // Only a block of the declaration shows a grid to have sent it.
+        if (position < 0 || position >= declaration.Steps.Count)
         {
             return null;
         }
 
-        List<IPipelineStep> steps = [.. declaration.Steps];
-        var declareAt = steps.IndexOf(declare);
-        var declared = declare.Columns.FirstOrDefault(each => each.Name == column);
+        IReadOnlyList<IPipelineStep>? steps;
 
-        if (interaction == Category)
+        try
         {
-            if (declared is not { Kind: not ColumnKind.Category })
+            steps = name switch
             {
-                return null;
-            }
-
-            steps[declareAt] = new DeclareStep(
-                [.. declare.Columns.Select(each => each == declared ? each with { Kind = ColumnKind.Category } : each)], declare.Remainder);
-
-            return steps;
+                Include when ticked => await TakenInAsync(gesture, assembled, column),
+                Include => declaration.Excluding(column),
+                Category => Kinded(declaration, column, ticked),
+                _ => null,
+            };
         }
-
-        // Left out by the schema, or taken away by a step below: the column is excluded already.
-        if (!declaration.ColumnsBefore(declaration.Steps.Count).Allows(column))
+        catch (DeclarationException refused)
         {
+            // What the schema refuses of itself is said at the block, as a rule the change would break is.
+            await StepCommit.NotMadeAsync(gesture, assembled, [.. refused.Faults.Select(fault => fault.ToString())]);
+
             return null;
         }
 
-        var readers = Enumerable.Range(0, declaration.Steps.Count)
-            .Where(at => declaration.Steps[at].ColumnsRead.Any(read => read.Column == column))
-            .ToArray();
-
-        // A column nobody reads, that the schema names and nothing else keeps, is taken out of the schema: a
-        // column nobody names is not there.
-        if (readers.Length == 0 && declared is not null && declare.Remainder == Remainder.Drop)
+        if (steps is not null)
         {
-            steps[declareAt] = new DeclareStep([.. declare.Columns.Where(each => each != declared)], declare.Remainder);
-
-            return steps;
+            context.StateChanged = await StepCommit.CommitAsync(gesture, assembled, steps);
         }
 
-        // Otherwise it is dropped after the last step that reads it, or after the step that made it; a drop that
-        // already stands there takes one more name.
-        var after = Math.Max(readers.DefaultIfEmpty(-1).Max(), MadeAt(declaration, column)) + 1;
-
-        if (after < steps.Count && steps[after] is DropColumnsStep drop)
-        {
-            steps[after] = new DropColumnsStep([.. drop.Columns, column]);
-        }
-        else
-        {
-            steps.Insert(after, new DropColumnsStep([column]));
-        }
-
-        return steps;
+        return null;
     }
 
-    // Where a column comes to be: the first step after which it is there.
-    private static int MadeAt(PipelineDeclaration declaration, string column) =>
-        Enumerable.Range(0, declaration.Steps.Count).First(at => declaration.ColumnsBefore(at + 1).Allows(column));
+    // A column taken in. One the schema does not name comes in as text where the source has it, which only the source's
+    // own header says: the rows this session read from it. Before anything read them the block shows the source, which
+    // reads them, and says so; and a column the source does not have was not ticked on its grid.
+    private static async Task<IReadOnlyList<IPipelineStep>?> TakenInAsync(Gesture gesture, NotebookPipeline assembled, string column)
+    {
+        var declaration = assembled.Readable;
+        var header = declaration.Steps[0] is ReadCsvStep read ? gesture.Session.Sources.ColumnNamesFor(read) : null;
+
+        if (declaration.ChoicesFor([column]).Rows[0].Standing != ColumnStanding.NotDeclared)
+        {
+            return declaration.Including(column, ColumnKind.Text, header ?? []);
+        }
+
+        if (header is null)
+        {
+            await StepCommit.NotMadeAsync(gesture, assembled, [SourceNotRead]);
+
+            return null;
+        }
+
+        return header.Contains(column, StringComparer.Ordinal) ? declaration.Including(column, ColumnKind.Text, header) : null;
+    }
+
+    // A column the schema takes made a category, or given back the kind it was; nothing for a column it does not take,
+    // nor for a category that does not say what it was.
+    private static IReadOnlyList<IPipelineStep>? Kinded(PipelineDeclaration declaration, string column, bool ticked) =>
+        declaration.Steps.OfType<DeclareStep>().FirstOrDefault()?.Taking.FirstOrDefault(each => each.Name == column) switch
+        {
+            null => null,
+            _ when ticked => declaration.WithKind(column, ColumnKind.Category),
+            { Kind: ColumnKind.Category, Was: { } was } => declaration.WithKind(column, was),
+            _ => null,
+        };
+
+    // A box sends whether it is ticked; anything else says nothing about the state it asks for.
+    private static bool? StateOf(string? payload) => payload switch
+    {
+        "true" => true,
+        "false" => false,
+        _ => null,
+    };
 
     private static int PageOf(string? payload) =>
         int.TryParse(payload, NumberStyles.None, CultureInfo.InvariantCulture, out var page) ? page : 0;

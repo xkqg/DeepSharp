@@ -92,8 +92,9 @@ wrong with it at once, each at its line and column.
   keys and columns offered as you type, or field by field in Verso's properties panel; both write the same
   text. Each block shows what its step is and does, or every fault at its line. "Show the data here" runs the
   pipeline down to that block and shows the rows there: fifty at a time, each column coloured over the
-  training rows, with every row knowing the part the split below will put it in. From the grid a column is
-  excluded or marked a category, and the notebook writes the step that does it. An output block is a stage of
+  training rows, with every row knowing the part the split below will put it in. On the grid every column has
+  a box for whether it is in and, when the schema takes it, one for whether it is a category: unticking and
+  ticking again write the steps that do it and take them back, a column's kind kept. An output block is a stage of
   its own, and its form swaps it for any other kind of output. A profile block names, for
   every problem it finds, the step that answers it, and a correlation block is drawn as a heatmap over the
   complete training rows. The toolbar runs the whole pipeline, fitting every step on the training rows, and

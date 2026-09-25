@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Text.Json;
 using DeepSharp.Verso.Notebooks;
 using Verso;
 using Verso.Abstractions;
@@ -103,6 +104,22 @@ internal sealed class Notebook : IAsyncDisposable
 
         return gesture;
     }
+
+    /// <summary>What a grid's box for a column carries in its <c>data-action</c>, as Verso's router hands it on.</summary>
+    /// <param name="gesture">The gesture the box makes.</param>
+    /// <param name="column">The column the box is about.</param>
+    /// <returns>The gesture's name, a space, and the column as JSON.</returns>
+    public static string BoxAction(string gesture, string column) =>
+        $"{gesture} {JsonSerializer.Serialize(new Dictionary<string, string> { ["column"] = column })}";
+
+    /// <summary>A grid's box for a column sent the way the router sends one: ticked or not, as it is after the key or click.</summary>
+    /// <param name="cell">The block the grid is under.</param>
+    /// <param name="gesture">The gesture the box makes.</param>
+    /// <param name="column">The column the box is about.</param>
+    /// <param name="ticked">Whether the box is ticked.</param>
+    /// <returns>The interaction after it was handled.</returns>
+    public Task<CellInteractionContext> TickAsync(CellModel cell, string gesture, string column, bool ticked) =>
+        GestureAsync(cell, BoxAction(gesture, column), ticked ? "true" : "false");
 
     public async ValueTask DisposeAsync()
     {

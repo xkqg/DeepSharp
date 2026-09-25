@@ -102,8 +102,7 @@ internal static class StepCommit
 
         if (notMade.Count > 0)
         {
-            gesture.Session.Request(gesture.Cell, assembled.RequestFor(gesture.Cell, ViewTrigger.Commit, page: 0) with { NotMade = notMade });
-            await gesture.Operations.ExecuteCellAsync(gesture.Cell);
+            await NotMadeAsync(gesture, assembled, notMade);
 
             return false;
         }
@@ -131,6 +130,17 @@ internal static class StepCommit
         await ShowAsync(shown, now, ViewTrigger.Commit, page: 0);
 
         return true;
+    }
+
+    /// <summary>Says at the block a gesture was made on why the change it asked for is not made, above its data as it was.</summary>
+    /// <param name="gesture">The gesture.</param>
+    /// <param name="assembled">The pipeline the blocks made when the gesture was made.</param>
+    /// <param name="notMade">Why: each rule the change would break, or what it needs that is not there.</param>
+    /// <returns>A task that ends when the block has run.</returns>
+    internal static async Task NotMadeAsync(Gesture gesture, NotebookPipeline assembled, IReadOnlyList<string> notMade)
+    {
+        gesture.Session.Request(gesture.Cell, assembled.RequestFor(gesture.Cell, ViewTrigger.Commit, page: 0) with { NotMade = notMade });
+        await gesture.Operations.ExecuteCellAsync(gesture.Cell);
     }
 
     /// <summary>Shows the data at the block a gesture was made on, by leaving its kernel a request and running it.</summary>

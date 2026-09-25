@@ -156,7 +156,7 @@ public sealed class ToolbarTests : IDisposable
         Assert.Equal(fitted, HandedOver(notebook));
 
         // Another step: what was learned belongs to steps the blocks no longer declare.
-        await notebook.GestureAsync(notebook.Scaffold.Cells[1], StepRenderer.Drop, "pclass");
+        await notebook.TickAsync(notebook.Scaffold.Cells[1], StepRenderer.Include, "pclass", ticked: false);
 
         Assert.NotEqual(fitted, HandedOver(notebook));
         Assert.DoesNotContain("\"fitted\"", HandedOver(notebook)!, StringComparison.Ordinal);

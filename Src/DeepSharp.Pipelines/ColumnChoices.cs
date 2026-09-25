@@ -63,9 +63,10 @@ public sealed record ColumnChoices(IReadOnlyList<ColumnChoice> Rows);
 /// </summary>
 /// <remarks>
 /// Each operation hands back the steps it would make and never judges them: the rules every declaration keeps do
-/// that, through <see cref="PipelineDeclaration.FaultsIn"/>, so the rules and what is offered cannot disagree. Asked
-/// for what already is, an operation hands back the steps it was given, so the same gesture twice does the same
-/// thing once. The schema's own operations — <see cref="DeclareStep.WithColumn"/>,
+/// that, through <see cref="PipelineDeclaration.FaultsIn"/>, so the rules and what is offered cannot disagree. The one
+/// thing a step refuses of itself — a schema taking no column while the rest is not kept — is refused as those rules
+/// refuse, a fault at the schema's place. Asked for what already is, an operation hands back the steps it was given,
+/// so the same gesture twice does the same thing once. The schema's own operations — <see cref="DeclareStep.WithColumn"/>,
 /// <see cref="DeclareStep.WithColumnExcluded"/>, <see cref="DeclareStep.WithColumnKind"/> — change one block; these
 /// change the pipeline, and leave a column out where the steps that read it allow.
 /// </remarks>
@@ -121,6 +122,9 @@ public static class ColumnChoiceExtensions
     /// dropped after the last step that reads it, or after the step that makes it, as another name in a drop standing
     /// there. The steps as they are when the column does not reach the end.
     /// </returns>
+    /// <exception cref="DeclarationException">
+    /// The column is the last one the schema takes, and the schema does not keep the rest: it would take no column.
+    /// </exception>
     public static IReadOnlyList<IPipelineStep> Excluding(this PipelineDeclaration declaration, string column)
     {
         ArgumentNullException.ThrowIfNull(declaration);
@@ -136,7 +140,7 @@ public static class ColumnChoiceExtensions
 
         if (readers.Length == 0 && declare.Columns.Any(each => each.Name == column))
         {
-            return Replaced(steps, declaration.ColumnsAt, declare.WithColumnExcluded(column));
+            return Replaced(steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnExcluded(column)));
         }
 
         var after = Math.Max(readers.DefaultIfEmpty(-1).Max(), MadeAt(declaration, column)) + 1;
@@ -182,22 +186,22 @@ public static class ColumnChoiceExtensions
         var declared = Schema(declaration)?.Columns.FirstOrDefault(each => each.Name == column);
         var offers = ColumnOffers.None;
 
-        if (Changes(declaration, declaration.Including(column, ColumnKind.Text, header)))
+        if (Changes(declaration, () => declaration.Including(column, ColumnKind.Text, header)))
         {
             offers |= ColumnOffers.Include;
         }
 
-        if (Changes(declaration, declaration.Excluding(column)))
+        if (Changes(declaration, () => declaration.Excluding(column)))
         {
             offers |= ColumnOffers.Exclude;
         }
 
-        if (declared is { Kind: not ColumnKind.Category } && Changes(declaration, declaration.WithKind(column, ColumnKind.Category)))
+        if (declared is { Kind: not ColumnKind.Category } && Changes(declaration, () => declaration.WithKind(column, ColumnKind.Category)))
         {
             offers |= ColumnOffers.MakeCategory;
         }
 
-        if (declared is { Kind: ColumnKind.Category, Was: { } was } && Changes(declaration, declaration.WithKind(column, was)))
+        if (declared is { Kind: ColumnKind.Category, Was: { } was } && Changes(declaration, () => declaration.WithKind(column, was)))
         {
             offers |= ColumnOffers.BackToWas;
         }
@@ -230,9 +234,34 @@ public static class ColumnChoiceExtensions
         return Reaches(declaration, column) ? ColumnStanding.Kept : ColumnStanding.NotDeclared;
     }
 
-    // Whether an operation changes the steps, and the rules keep what it makes.
-    private static bool Changes(PipelineDeclaration declaration, IReadOnlyList<IPipelineStep> made) =>
-        !made.SequenceEqual(declaration.Steps) && PipelineDeclaration.FaultsIn(made).Count == 0;
+    // Whether an operation changes the steps, and the rules keep what it makes; one the schema refuses does neither.
+    private static bool Changes(PipelineDeclaration declaration, Func<IReadOnlyList<IPipelineStep>> operation)
+    {
+        try
+        {
+            var made = operation();
+
+            return !made.SequenceEqual(declaration.Steps) && PipelineDeclaration.FaultsIn(made).Count == 0;
+        }
+        catch (DeclarationException)
+        {
+            return false;
+        }
+    }
+
+    // The schema as one of its own operations changes it; what the schema refuses of itself is a fault at its place, in
+    // the words a file shows, as the rules every declaration keeps give theirs.
+    private static DeclareStep Refusing(PipelineDeclaration declaration, DeclareStep declare, Func<DeclareStep> change)
+    {
+        try
+        {
+            return change();
+        }
+        catch (ArgumentException refused)
+        {
+            throw new DeclarationException([new DeclarationFault(declaration.ColumnsAt, declare.Verb, StepCatalog.InTheFilesWords(refused))]);
+        }
+    }
 
     private static DeclareStep? Schema(PipelineDeclaration declaration) => declaration.Steps.OfType<DeclareStep>().FirstOrDefault();
 

@@ -206,7 +206,9 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
             return;
         }
 
-        await context.WriteOutputAsync(DataGrid.Of(view, request.Page, declaration));
+        var grid = DataGrid.Of(view, request.Page, declaration);
+
+        await context.WriteOutputAsync(grid.Output);
 
         // A block that declares evidence shows what it measured under the rows it measured it on.
         if (view.Evidence.TryGetValue(request.Position, out var evidence))
@@ -214,7 +216,7 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
             await context.WriteOutputAsync(evidence.Accept(new EvidenceView()));
         }
 
-        session.Showing(context.CellId, key, DataGrid.HeaderOf(declaration, [.. view.Table.Columns.Select(column => column.Name)]));
+        session.Showing(context.CellId, key, grid.Header);
     }
 
     // What the notebook hands to C# cells once the rows were read. A run of the whole pipeline hands over what it

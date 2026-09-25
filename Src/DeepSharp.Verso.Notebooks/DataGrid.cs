@@ -4,22 +4,39 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.Json.Nodes;
 using DeepSharp.Pipelines;
 using MatPlotLibNet.Styling;
 using Verso.Abstractions;
 
 namespace DeepSharp.Verso.Notebooks;
 
-/// <summary>What a grid's header offered: the columns it showed, and for each what could be done from it.</summary>
-/// <param name="Columns">The columns, in the order the grid showed them.</param>
-/// <param name="Offers">For each column in that order, whether it could be excluded and whether it could be marked a category.</param>
-internal sealed record GridHeader(IReadOnlyList<string> Columns, string Offers)
+/// <summary>A box in a grid's header, as it is drawn.</summary>
+/// <param name="Ticked">Whether it is ticked.</param>
+/// <param name="Enabled">Whether it can be clicked: whether the rules allow what unticking it, or ticking it, asks for.</param>
+internal readonly record struct HeaderBox(bool Ticked, bool Enabled);
+
+/// <summary>What a grid's header draws for one column.</summary>
+/// <param name="Name">The column.</param>
+/// <param name="Included">Its box for whether it is in.</param>
+/// <param name="Category">Its box for whether it is a category, for a column the schema takes; nothing for any other.</param>
+internal readonly record struct HeaderColumn(string Name, HeaderBox Included, HeaderBox? Category);
+
+/// <summary>What a grid's header drew: each column's boxes, in the order the grid showed the columns.</summary>
+/// <param name="Columns">The columns.</param>
+internal sealed record GridHeader(IReadOnlyList<HeaderColumn> Columns)
 {
-    /// <summary>Whether a grid of these columns offers the same under the declaration as it is now.</summary>
+    /// <summary>Whether a grid of these columns draws the same under the declaration as it is now.</summary>
     /// <param name="now">The declaration now.</param>
-    /// <returns><see langword="true"/> while every button it drew still does what it says.</returns>
-    public bool StillHolds(PipelineDeclaration now) => DataGrid.HeaderOf(now, Columns).Offers == Offers;
+    /// <returns><see langword="true"/> while every box it drew still says what holds, and can be clicked as it could.</returns>
+    public bool StillHolds(PipelineDeclaration now) =>
+        DataGrid.HeaderOf(now, [.. Columns.Select(column => column.Name)]).Columns.SequenceEqual(Columns);
 }
+
+/// <summary>A grid as drawn: the page, and the header it drew.</summary>
+/// <param name="Output">The page.</param>
+/// <param name="Header">What its header drew, which is what the grid is later checked against.</param>
+internal readonly record struct DrawnGrid(CellOutput Output, GridHeader Header);
 
 /// <summary>
 /// The rows at a block, a page at a time, each number coloured by where it lies in its column.
@@ -48,17 +65,17 @@ internal static class DataGrid
     /// <summary>The page of the rows at a block.</summary>
     /// <param name="view">The rows there, and where each stands.</param>
     /// <param name="page">Which page, counting from nought; one beyond the last shows the last.</param>
-    /// <param name="declaration">The declaration the rows come from, whose schema says which columns may be marked a category.</param>
-    /// <returns>The grid.</returns>
+    /// <param name="declaration">The declaration the rows come from, which says what each column's boxes say.</param>
+    /// <returns>The grid, and the header it drew.</returns>
     /// <remarks>
-    /// Every column that reaches the end of the declaration can be excluded from its header — one the schema leaves
-    /// out, or a step below takes away, is excluded already — and every column the schema declares, and does not
-    /// already read as a category, can be marked one. The gestures write the declaration, never a value.
+    /// Every column has a box saying whether it is in, and every column the schema takes one saying whether it is a
+    /// category; a box that the rules would not let change is drawn but cannot be clicked. The boxes write the
+    /// declaration, never a value.
     /// </remarks>
-    public static CellOutput Of(PipelineView view, int page, PipelineDeclaration declaration)
+    public static DrawnGrid Of(PipelineView view, int page, PipelineDeclaration declaration)
     {
-        var offers = Offered.By(declaration);
         var table = view.Table;
+        var header = HeaderOf(declaration, [.. table.Columns.Select(column => column.Name)]);
         var pages = Math.Max(1, (table.RowCount + PageSize - 1) / PageSize);
         var shown = Math.Clamp(page, 0, pages - 1);
         var first = shown * PageSize;
@@ -70,18 +87,14 @@ internal static class DataGrid
 
         html.Append("<div class=\"deepsharp-scroll\"><table><thead><tr><th>#</th><th>part</th>");
 
-        foreach (var column in table.Columns)
+        foreach (var column in header.Columns)
         {
             html.Append("<th>").Append(Encoded(column.Name));
+            Box(html, StepRenderer.Include, column.Name, column.Included, "included");
 
-            if (offers.Excludes(column.Name))
+            if (column.Category is { } category)
             {
-                Action(html, StepRenderer.Drop, column.Name, "exclude");
-            }
-
-            if (offers.Marks(column.Name))
-            {
-                Action(html, StepRenderer.Category, column.Name, "category");
+                Box(html, StepRenderer.Category, column.Name, category, "category");
             }
 
             html.Append("</th>");
@@ -105,21 +118,32 @@ internal static class DataGrid
         html.Append("</tbody></table></div>");
         Pager(html, shown, pages, first, last, table.RowCount);
 
-        return CellOutput.Html(html.Append("</div>").ToString());
+        return new DrawnGrid(CellOutput.Html(html.Append("</div>").ToString()), header);
     }
 
-    /// <summary>What a grid of these columns offers in its header under a declaration: the rule the grid draws by.</summary>
+    /// <summary>What a grid of these columns draws in its header under a declaration: the rule the grid draws by.</summary>
     /// <param name="declaration">The declaration.</param>
     /// <param name="columns">The columns the grid shows.</param>
     /// <returns>The header.</returns>
+    /// <remarks>
+    /// Asked of the column rules, the one set every door that changes the columns goes through: a column is ticked in
+    /// when it takes part, is kept or is made, and a box can be clicked when the rules allow what the click asks for. A
+    /// category's box can be unticked only when the category says which kind it was.
+    /// </remarks>
     public static GridHeader HeaderOf(PipelineDeclaration declaration, IReadOnlyList<string> columns)
     {
-        var offers = Offered.By(declaration);
+        HashSet<string> taken = [.. declaration.Steps.OfType<DeclareStep>().FirstOrDefault()?.Taking.Select(column => column.Name) ?? []];
 
-        return new GridHeader(
-            columns,
-            string.Join('|', columns.Select(column => $"{(offers.Excludes(column) ? 'x' : '-')}{(offers.Marks(column) ? 'c' : '-')}")));
+        return new([.. declaration.ChoicesFor(columns).Rows.Select(choice => new HeaderColumn(
+            choice.Name,
+            Box(choice.Standing is ColumnStanding.Taking or ColumnStanding.Kept or ColumnStanding.Made, choice.Offers, ColumnOffers.Exclude, ColumnOffers.Include),
+            taken.Contains(choice.Name) ? Box(choice.Kind == ColumnKind.Category, choice.Offers, ColumnOffers.BackToWas, ColumnOffers.MakeCategory) : null))]);
     }
+
+    // A box, ticked or not, that can be clicked when the rules offer what the click asks for: unticking it when it is
+    // ticked, ticking it when it is not.
+    private static HeaderBox Box(bool ticked, ColumnOffers offers, ColumnOffers untick, ColumnOffers tick) =>
+        new(ticked, offers.HasFlag(ticked ? untick : tick));
 
     private static void Summary(StringBuilder html, PipelineView view)
     {
@@ -160,12 +184,17 @@ internal static class DataGrid
         html.Append("</div>");
     }
 
-    // Verso's router reads what a button carries from its data-payload; a value it reads only on a field.
-    private static void Action(StringBuilder html, string gesture, string column, string label) =>
-        html.Append(" <button type=\"button\" data-action=\"").Append(gesture)
-            .Append("\" data-extension-id=\"").Append(StepRenderer.Id)
-            .Append("\" data-payload=\"").Append(Encoded(column)).Append("\">").Append(label).Append("</button>");
+    // A box carries its gesture and its column in its data-action and no data-payload, so Verso's router sends the
+    // state it is in with them: whether it is ticked.
+    private static void Box(StringBuilder html, string gesture, string column, HeaderBox box, string label) =>
+        html.Append(" <label><input type=\"checkbox\" data-action=\"")
+            .Append(Encoded(ControlAction.Of(gesture, new JsonObject { [StepRenderer.ColumnKey] = column })))
+            .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"')
+            .Append(box.Ticked ? " checked" : string.Empty)
+            .Append(box.Enabled ? string.Empty : " disabled")
+            .Append("> ").Append(label).Append("</label>");
 
+    // Verso's router reads what a button carries from its data-payload.
     private static void Button(StringBuilder html, int page, string label) =>
         html.Append(" <button type=\"button\" data-action=\"").Append(StepRenderer.Page)
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id)
@@ -179,27 +208,6 @@ internal static class DataGrid
 
     /// <summary>How many rows stand one way.</summary>
     private readonly record struct StandingCount(Standing Standing, int Rows);
-
-    /// <summary>What a grid's header offers under a declaration, column by column.</summary>
-    /// <param name="reaching">The columns there at the end of the declaration.</param>
-    /// <param name="markable">The columns the schema takes, and not as categories.</param>
-    private sealed class Offered(ColumnState reaching, HashSet<string> markable)
-    {
-        public static Offered By(PipelineDeclaration declaration) =>
-            new(
-                declaration.ColumnsBefore(declaration.Steps.Count),
-                declaration.Steps.OfType<DeclareStep>()
-                    .SelectMany(declare => declare.Taking)
-                    .Where(column => column.Kind != ColumnKind.Category)
-                    .Select(column => column.Name)
-                    .ToHashSet(StringComparer.Ordinal));
-
-        // A column that reaches the end can be excluded; one the schema leaves out, or a step below takes away, is already.
-        public bool Excludes(string column) => reaching.Allows(column);
-
-        // A column the schema takes, and not as a category, can be marked one; one it excludes is not there to mark.
-        public bool Marks(string column) => markable.Contains(column);
-    }
 
     /// <summary>One column as the grid writes it: its values as text, and a colour for each number.</summary>
     private sealed class Colouring

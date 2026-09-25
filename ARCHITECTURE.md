@@ -707,13 +707,20 @@ assembled through the same constructor, afresh at every gesture from the blocks 
 inserted, moved, deleted or edited is always seen. The longest run of blocks from the top that makes a
 declaration is the pipeline, and a block below it says which block stops it.
 
-A gesture on the grid changes the declaration, never the data. Excluding a column takes it out of the schema
-when nothing reads it and the rest is dropped anyway, and otherwise writes a `drop.columns` block after the last
-step that reads it; marking one a category changes its kind in the schema. Every gesture carries the whole state
-it asks for, so the same gesture twice does the same thing once, and a change that would break a rule is
-refused at the block with the rule it breaks, above data that is as it was. A block the notebook rewrites is
-written as a new block in the old one's place, and run, because Verso tells a front end nothing about a block
-whose text a part changed, and the next keystroke there would put the old text back; under a layout that
+A box on the grid changes the declaration, never the data. Every column has a box saying whether it is in, and
+every column the schema takes a box saying whether it is a category, and both go through the one set of column
+rules every door that changes the columns uses. Unticking a column nothing reads excludes it in the schema, which
+keeps its kind; unticking one a step reads, or one a step made, writes a `drop.columns` block after the last step
+that reads it. Ticking either brings it back as it was, and a column the schema does not name comes in as text
+where the source has it — which only the source's own header says, so a tick made before anything read the source
+shows the source first and takes nothing in. Ticking a category remembers the kind the column was, and unticking
+gives that kind back. A box the rules would not let change is drawn but cannot be clicked: the answer cannot be
+left out, nor the last column a schema takes, and a category that does not say what it was keeps its box ticked. A
+box carries no payload, so Verso's router sends the state it is in — on a click, on a change and on every key — and
+the same state twice does the same thing once; a change the rules refuse, sent by a grid drawn before the blocks
+changed, is refused at the block with the rule it breaks, above data that is as it was. A block the notebook
+rewrites is written as a new block in the old one's place, and run, because Verso tells a front end nothing about a
+block whose text a part changed, and the next keystroke there would put the old text back; under a layout that
 cannot add a block the change is refused rather than half made.
 
 Whatever changes the blocks — one gesture, or a change to several at once — goes through one way of writing them,
@@ -730,7 +737,7 @@ the parsed rows took close to half off every show on files of five and eleven me
 Verso's own engine. The session is held by the block type Verso loaded, the one object every part of the
 notebook reaches — the block type's own kernel directly, every other part through the host that loaded it —
 and one gesture on it runs at a time. It is never static and never shared with another notebook. A grid whose
-view or whose offers the blocks no longer match is cleared, not worked out again: work runs when somebody asks
+view, or whose boxes, the blocks no longer match is cleared, not worked out again: work runs when somebody asks
 for it.
 
 C# cells in the same notebook are handed the pipeline as text — the declaration, with what the whole pipeline's
@@ -767,8 +774,9 @@ completions and hover texts only. A fault is therefore shown where a block runs,
 An application that embeds the engine gets the notebook's parts from Verso's own discovery, which reads every
 assembly beside the application that references Verso's abstractions; the notebook's own tests open it exactly
 so. Verso's editor itself is not published for applications to reuse, so such an application does what the
-editor does: it draws a block's output, which is HTML; it hands a button's `data-action`, `data-extension-id`
-and `data-payload` to the part the button names, with the notebook's variables and operations; it draws again
+editor does: it draws a block's output, which is HTML; it hands a control's `data-action` and `data-extension-id`
+to the part the control names, with its `data-payload` — or, for a control that carries none, its state, as Verso's
+own router sends it: `true` or `false` for a box — and with the notebook's variables and operations; it draws again
 when a block's output is updated or a gesture says it changed the blocks; and it gives the toolbar's Run and
 Export a context of its own. An application that only wants the pipeline reads each block with
 `StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write the file

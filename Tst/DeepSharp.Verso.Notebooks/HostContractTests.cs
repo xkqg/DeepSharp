@@ -51,6 +51,9 @@ public sealed partial class HostContractTests : IDisposable
     [GeneratedRegex("<button[^>]*>")]
     private static partial Regex Buttons();
 
+    [GeneratedRegex("<input[^>]*>")]
+    private static partial Regex Inputs();
+
     [Fact]
     public async Task EveryButtonWhoseGestureTakesAValue_CarriesItWhereVersosRouterReadsIt()
     {
@@ -59,16 +62,38 @@ public sealed partial class HostContractTests : IDisposable
 
         await notebook.GestureAsync(declare, StepRenderer.Show);
 
-        var buttons = declare.Outputs.SelectMany(output => Buttons().Matches(output.Content).Select(match => match.Value)).ToArray();
-        var carrying = buttons.Where(button => button.Contains($"data-action=\"{StepRenderer.Drop}\"", StringComparison.Ordinal)
-                                               || button.Contains($"data-action=\"{StepRenderer.Category}\"", StringComparison.Ordinal)
-                                               || button.Contains($"data-action=\"{StepRenderer.Page}\"", StringComparison.Ordinal)).ToArray();
+        var pages = declare.Outputs.SelectMany(output => Buttons().Matches(output.Content).Select(match => match.Value))
+            .Where(button => button.Contains($"data-action=\"{StepRenderer.Page}\"", StringComparison.Ordinal))
+            .ToArray();
 
-        Assert.NotEmpty(carrying);
-        Assert.Contains(carrying, button => button.Contains($"data-action=\"{StepRenderer.Page}\"", StringComparison.Ordinal));
-        Assert.All(carrying, button => Assert.Contains("data-payload=\"", button, StringComparison.Ordinal));
-        Assert.Contains(carrying, button => button.Contains("data-payload=\"pclass\"", StringComparison.Ordinal));
-        Assert.Contains(carrying, button => button.Contains("data-payload=\"1\"", StringComparison.Ordinal));
+        Assert.NotEmpty(pages);
+        Assert.All(pages, button => Assert.Contains("data-payload=\"", button, StringComparison.Ordinal));
+        Assert.Contains(pages, button => button.Contains("data-payload=\"1\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task EveryBox_CarriesItsGestureAndItsColumnInItsAction_AndNoPayload_SoTheRouterSendsTheStateItIsIn()
+    {
+        // The router sends a control's data-payload when it has one, and a box's state only when it has none.
+        await using var notebook = await NotebookAsync();
+        var declare = notebook.Scaffold.Cells[1];
+
+        await notebook.GestureAsync(declare, StepRenderer.Show);
+
+        var inputs = declare.Outputs.SelectMany(output => Inputs().Matches(output.Content).Select(match => match.Value)).ToArray();
+        var grid = declare.Outputs[1].Content;
+
+        Assert.NotEmpty(inputs);
+        Assert.All(inputs, input =>
+        {
+            Assert.Contains("type=\"checkbox\"", input, StringComparison.Ordinal);
+            Assert.Contains($"data-extension-id=\"{StepRenderer.Id}\"", input, StringComparison.Ordinal);
+            Assert.DoesNotContain("data-payload", input, StringComparison.Ordinal);
+        });
+        Assert.All(grid.Boxes(), box => Assert.True(
+            box.Action.StartsWith($"{StepRenderer.Include} ", StringComparison.Ordinal) || box.Action.StartsWith($"{StepRenderer.Category} ", StringComparison.Ordinal)));
+        Assert.Equal(Notebook.BoxAction(StepRenderer.Include, "pclass"), grid.Box(StepRenderer.Include, "pclass")!.Value.Action);
+        Assert.Equal(Notebook.BoxAction(StepRenderer.Category, "pclass"), grid.Box(StepRenderer.Category, "pclass")!.Value.Action);
     }
 
     // The package as an install lays it out: the notebook's assembly and the ones it brings, in one folder.
@@ -189,8 +214,11 @@ public sealed partial class HostContractTests : IDisposable
     [Theory]
     [InlineData(StepRenderer.Show, "")]
     [InlineData(StepRenderer.Page, "1")]
-    [InlineData(StepRenderer.Drop, "pclass")]
-    [InlineData(StepRenderer.Category, "pclass")]
+    [InlineData(StepRenderer.Include + " {\"column\":\"pclass\"}", "false")]
+    [InlineData(StepRenderer.Include + " {\"column\":\"pclass\"}", "true")]
+    [InlineData(StepRenderer.Category + " {\"column\":\"pclass\"}", "true")]
+    [InlineData(StepRenderer.Category + " {\"column\":\"pclass\"}", "false")]
+    [InlineData(StepRenderer.Include + " {\"column\":\"sex\"}", "true")]
     [InlineData("deepsharp.unknown", "")]
     public async Task EveryGesture_AnswersNothing_SoAHostThatAppliesAnswersLeavesTheBlockAsTheRunWroteIt(string interaction, string payload)
     {
