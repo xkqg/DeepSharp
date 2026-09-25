@@ -14,6 +14,11 @@ internal sealed class NamesTheseAnswers(params string[] answers) : INamesTheAnsw
 
     public IReadOnlyList<string> Answers => answers;
 
+    /// <summary>What this output says against a row's answers, when it says anything.</summary>
+    public Func<IReadOnlyList<double>, string?>? Refuses { get; init; }
+
+    public string? Refusal(IReadOnlyList<double> answers) => Refuses?.Invoke(answers);
+
     public ColumnState After(ColumnState before) => before;
 
     public void WriteTo(Utf8JsonWriter writer) => throw new NotSupportedException("A test step is never written down.");

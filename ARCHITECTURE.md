@@ -547,14 +547,18 @@ differently on the day the network does.
 ### The pipeline ends at a handover, and the same one serves
 
 `Batch(part)` is where the pipeline stops: rows of numbers, their column names in a fixed order, and the
-answer handed over separately when the pipeline names one. A network built here, a trainer from an established
-.NET library and a caller's own learner all take that same handover, which is the only reason two of them
-can honestly be compared.
+answers handed over separately when the pipeline names an output — as many numbers a row as the output names,
+in the order it names them, seventy for a histogram of weights. An output of one answer hands it over as one
+label a row as well. A network built here, a trainer from an established .NET library and a caller's own
+learner all take that same handover, which is the only reason two of them can honestly be compared.
 
-Three things are refused there rather than passed on. A column still holding words, because turning one
-into a number quietly is how a category becomes an order nobody meant. A gap, because a model cannot be
-handed an absence. And an answer that no longer exists, which is what encoding the answer column does to a
-pipeline that also predicts it.
+Four things are refused there rather than passed on. A column still holding words, because turning one into a
+number quietly is how a category becomes an order nobody meant. A gap, because a model cannot be handed an
+absence, and a value that is not a finite number, which a model learns nothing from and says nothing about. An
+answer that no longer exists, which is what encoding the answer column does to a pipeline that also predicts
+it. And a row whose answers its output could not have meant: each kind of output says what its answers must
+be — a distribution that sums to one, labels that are nought or one — and the handover asks it of every row it
+hands over.
 
 `Replay` is the same declaration over rows nobody had seen, with the numbers the training rows produced and
 nothing fitted again. That is what serving is, and `PreparedData.FromJson` loads both halves back from the
@@ -582,8 +586,9 @@ through its parameters — because most of what a step might do applies to only 
 `IOrdersRows` for an order, `IAddsColumns` for arithmetic on a row, `IDropsRows` and `IDropsColumns` for taking
 something away, `ISplitStep` for dividing the rows, `IFittedStep` for learning and replaying, and
 `IProducesEvidence` for proof. An output that only names the answer acts on nothing, because it names the answer
-rather than changing the data; `INamesTheAnswer` says it is an output, whichever kind, and a pipeline has one. What every step has belongs to its type — its name, its purpose, its parameters — and a step
-without one of those does not compile.
+rather than changing the data; `INamesTheAnswer` says it is an output, whichever kind, and a pipeline has one.
+What every step has belongs to its type — its name, its purpose, its parameters — and a step without one of
+those does not compile.
 
 The run does not ask each step what it can do. Every capability says what doing it means, in terms of what
 the walk holds — the rows, the table, the parts, what was learned — and the walk hands each step to itself.

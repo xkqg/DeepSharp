@@ -22,6 +22,17 @@ public interface INamesTheAnswer : IPipelineStep
 {
     /// <summary>The columns that hold the answer, in their order, as they stand after this step.</summary>
     IReadOnlyList<string> Answers { get; }
+
+    /// <summary>Why a row's answers cannot be handed over as this output's answers, when they cannot.</summary>
+    /// <param name="answers">One row's answers, in the order <see cref="Answers"/> names them, each a finite number.</param>
+    /// <returns>The reason, or nothing when the row may be handed over.</returns>
+    /// <remarks>
+    /// Nothing, for an output that takes any number as its answer. A kind of output that promises more — a
+    /// distribution that sums to one, labels that are nought or one — says so here, and the handover asks it of
+    /// every row it hands over: a model trained towards an answer its output could not have meant learns the
+    /// wrong thing, and says nothing about it.
+    /// </remarks>
+    string? Refusal(IReadOnlyList<double> answers) => null;
 }
 
 /// <summary>

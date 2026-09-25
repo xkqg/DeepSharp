@@ -62,25 +62,83 @@ public class HandoverTests
         Assert.Equal(891, counted);
     }
 
-    [Fact]
-    public void EveryAnswerAnOutputNames_IsLeftOutOfTheNumbersAModelIsShown()
-    {
-        // An output may name several answers. Leaving out only one of them hands the others to a model as
-        // features: the answer among the inputs, with nothing going red.
-        var prepared = new Pipeline(
+    // Three numbers a row, four rows unless others are given; the output names the answers among them.
+    private static PreparedData Answering(NamesTheseAnswers output, IReadOnlyList<IReadOnlyList<string?>>? rows = null) =>
+        new Pipeline(
             new PipelineDeclaration(
             [
                 new ReadRowsStep("three numbers"),
                 new DeclareStep([.. new[] { "a", "b", "c" }.Select(name => new ColumnDeclaration(name, ColumnKind.Number, Optional: false))]),
                 new SplitAtRandomStep(new SplitShares(0.50, 0, 0.50), 1),
-                new NamesTheseAnswers("b", "c"),
+                output,
             ]),
-            new InMemoryRowSource(["a", "b", "c"], [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["10", "11", "12"]])).Run();
+            new InMemoryRowSource(["a", "b", "c"], rows ?? [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["10", "11", "12"]])).Run();
 
-        var batch = prepared.Batch(Part.Train);
+    [Fact]
+    public void EveryAnswerAnOutputNames_IsLeftOutOfTheNumbersAModelIsShown()
+    {
+        // An output may name several answers. Leaving out only one of them hands the others to a model as
+        // features: the answer among the inputs, with nothing going red.
+        var batch = Answering(new NamesTheseAnswers("b", "c")).Batch(Part.Train);
 
         Assert.Equal(["a"], batch.FeatureNames);
         Assert.Null(batch.Labels);
+    }
+
+    [Fact]
+    public void SeveralAnswers_AreHandedOverAsNumbersPerRow_InTheOrderTheOutputNamesThem()
+    {
+        // A histogram of weights is seventy numbers a row; the order is part of the answer, as the order of the
+        // features is part of the question.
+        var batch = Answering(new NamesTheseAnswers("c", "b")).Batch(Part.Train);
+
+        Assert.Equal(["c", "b"], batch.AnswerNames);
+        Assert.Equal(batch.RowCount, batch.Answers!.Count);
+        Assert.All(batch.Answers, answers => Assert.Equal(answers[0], answers[1] + 1));
+    }
+
+    [Fact]
+    public void OneAnswer_IsHandedOverBothWays_AsTheLabelsAndAsTheAnswers()
+    {
+        var batch = Passengers().Batch(Part.Train);
+
+        Assert.Equal(["survived"], batch.AnswerNames);
+        Assert.Equal(batch.Labels, batch.Answers!.Select(answers => answers[0]));
+    }
+
+    [Fact]
+    public void AGapInAnyOfTheAnswers_IsRefusedAtTheHandover_NamingThatAnswer()
+    {
+        // Every answer is handed over, so every one is refused for what one answer alone would be — the second as
+        // much as the first.
+        var prepared = Answering(
+            new NamesTheseAnswers("b", "c"),
+            [["1", "2", "3"], ["4", "5", null], ["7", "8", "9"], ["10", "11", "12"]]);
+
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => new[] { Part.Train, Part.Test }.Select(part => prepared.Batch(part)).ToArray());
+
+        Assert.Contains("Row 2 of 'c' is still a gap", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARowTheOutputRefuses_IsRefusedAtTheHandover_NamingTheRowAndTheOutput()
+    {
+        // Each kind of output says what its answers must be — a distribution that sums to one, labels that are
+        // nought or one — and the handover asks it of every row it hands over.
+        var prepared = Answering(new NamesTheseAnswers("b", "c") { Refuses = answers => answers[0] > 4 ? "b is above four" : null });
+
+        var refused = Assert.Throws<InvalidOperationException>(() =>
+        {
+            foreach (var part in new[] { Part.Train, Part.Test })
+            {
+                prepared.Batch(part);
+            }
+        });
+
+        Assert.Contains("b is above four", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("'test.answers'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Row ", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -94,6 +152,8 @@ public class HandoverTests
             .Run();
 
         Assert.Null(prepared.Batch(Part.Train).Labels);
+        Assert.Null(prepared.Batch(Part.Train).AnswerNames);
+        Assert.Null(prepared.Batch(Part.Train).Answers);
     }
 
     [Fact]

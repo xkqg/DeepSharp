@@ -10,16 +10,30 @@ namespace DeepSharp.Pipelines;
 /// </summary>
 /// <param name="FeatureNames">The columns, in the order every row lists them.</param>
 /// <param name="Features">One row of numbers per row of data.</param>
-/// <param name="Labels">The answer for each row, when the pipeline named one.</param>
+/// <param name="Labels">The answer for each row, when the pipeline's output names exactly one.</param>
 /// <remarks>
 /// The column order is part of the handover, not an accident of iteration: a model fed the same numbers in
 /// a different order is quietly a different model, and nothing about the numbers themselves would say so.
+/// <para>
+/// The answers are handed over as rows of numbers too, as many a row as the output names — seventy for a
+/// histogram of weights — and in the order it names them, for the same reason. An output of one answer hands
+/// it over both ways: as the labels, one number a row, and as the answers.
+/// </para>
 /// </remarks>
 public readonly record struct Batch(
     IReadOnlyList<string> FeatureNames,
     IReadOnlyList<double[]> Features,
     IReadOnlyList<double>? Labels)
 {
+    /// <summary>
+    /// The columns that hold the answer, in the order each row of <see cref="Answers"/> lists them; nothing when no
+    /// answer is handed over.
+    /// </summary>
+    public IReadOnlyList<string>? AnswerNames { get; init; }
+
+    /// <summary>The answers of each row, as many numbers as <see cref="AnswerNames"/> names; nothing when no answer is handed over.</summary>
+    public IReadOnlyList<double[]>? Answers { get; init; }
+
     /// <summary>How many rows this batch holds.</summary>
     public int RowCount => Features.Count;
 
@@ -51,19 +65,20 @@ public readonly record struct ServedBatch(
 /// </summary>
 /// <remarks>
 /// This is where the pipeline stops. Everything up to here is the same whatever is going to learn from the
-/// result, so what comes out is the same too: rows of numbers, their column names, and the answer when one
-/// was named. A network written here, a trainer from an established .NET library and something a caller
-/// wrote all take the same handover — which is the only reason two of them can honestly be compared.
+/// result, so what comes out is the same too: rows of numbers, their column names, and the answers when the
+/// pipeline names an output. A network written here, a trainer from an established .NET library and something
+/// a caller wrote all take the same handover — which is the only reason two of them can honestly be compared.
 /// </remarks>
 public static class Handover
 {
     /// <summary>The numbers of one part, ready for something that learns.</summary>
     /// <param name="prepared">The data as the pipeline left it.</param>
     /// <param name="part">Which part of it to hand over.</param>
-    /// <returns>The rows of that split, and their answers when the pipeline named a target.</returns>
+    /// <returns>The rows of that split, and their answers when the pipeline names an output.</returns>
     /// <exception cref="ArgumentException">The part asked for is the gap a split keeps apart.</exception>
     /// <exception cref="InvalidOperationException">
-    /// A column still holds words, or the target column is not there.
+    /// A column still holds words, an answer column is not there, a value is a gap or not a finite number, or the
+    /// output refuses a row's answers.
     /// </exception>
     public static Batch Batch(this PreparedData prepared, Part part)
     {
@@ -134,11 +149,11 @@ public static class Handover
         }
 
         var values = features.Select(column => table.NumbersOf(column.Name)).ToArray();
-        // The labels are one number per row, so they carry an output of one answer.
-        var target = withAnswers && answers is [var only] ? only : null;
-        var known = target is null ? null : table.NumbersOf(target);
+        // A served row is the question, so it has no answers to hand over.
+        var output = withAnswers ? prepared.Declaration.Output : null;
+        var known = output is null ? [] : answers.Select(answer => table.NumbersOf(answer)).ToArray();
         var batch = new List<double[]>(rows.Length);
-        var labels = known is null ? null : new List<double>(rows.Length);
+        var answered = new List<double[]>(output is null ? 0 : rows.Length);
 
         foreach (var row in rows)
         {
@@ -152,10 +167,37 @@ public static class Handover
             }
 
             batch.Add(line);
-            labels?.Add(Handed(known![row], target!, readAt));
+
+            if (output is null)
+            {
+                continue;
+            }
+
+            var rowAnswers = new double[answers.Count];
+
+            for (var at = 0; at < answers.Count; at++)
+            {
+                rowAnswers[at] = Handed(known[at][row], answers[at], readAt);
+            }
+
+            if (output.Refusal(rowAnswers) is { } refusal)
+            {
+                throw new InvalidOperationException($"Row {readAt + 1} is refused by the output '{output.Verb}': {refusal}");
+            }
+
+            answered.Add(rowAnswers);
         }
 
-        return new Batch([.. features.Select(column => column.Name)], batch, labels);
+        IReadOnlyList<string> names = [.. features.Select(column => column.Name)];
+
+        return output is null
+            ? new Batch(names, batch, null)
+            // The labels are one number a row, so they carry an output of one answer.
+            : new Batch(names, batch, answers.Count == 1 ? [.. answered.Select(each => each[0])] : null)
+            {
+                AnswerNames = [.. answers],
+                Answers = answered,
+            };
     }
 
     /// <summary>A value as it may be handed to something that learns, or the reason it may not.</summary>
