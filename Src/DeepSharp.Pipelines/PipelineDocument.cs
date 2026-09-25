@@ -16,7 +16,8 @@ namespace DeepSharp.Pipelines;
 internal readonly record struct SavedPipeline(PipelineDeclaration Declaration, IReadOnlyDictionary<int, FittedStepValues> Fitted);
 
 /// <summary>
-/// The file a pipeline is saved as, written and read in this one place.
+/// The file a pipeline is saved as, written and read in this one place — and the file of saved columns beside a
+/// notebook, <c>{"version": 2, "source": [...], "declare": {...}, "drop": [...], "output": {...}}</c>, with the same care.
 /// </summary>
 /// <remarks>
 /// <code>{"version": 2, "declaration": [ ... ], "fitted": [ {"step": ..., "prefix": ..., "learned": { ... }} ]}</code>
@@ -37,8 +38,13 @@ internal sealed class PipelineDocument
     private const string VersionKey = "version";
     private const string DeclarationKey = "declaration";
     private const string FittedKey = "fitted";
+    private const string SourceKey = "source";
+    private const string DeclareKey = "declare";
+    private const string DropKey = "drop";
+    private const string OutputKey = "output";
 
     private static readonly string[] RootKeys = [VersionKey, DeclarationKey, FittedKey];
+    private static readonly string[] PresetKeys = [VersionKey, SourceKey, DeclareKey, DropKey, OutputKey];
     private static readonly IReadOnlyDictionary<int, FittedStepValues> NothingFitted = new Dictionary<int, FittedStepValues>();
 
     private readonly byte[] _text;
@@ -94,6 +100,173 @@ internal sealed class PipelineDocument
 
         // A writer ends its lines the way the machine does on some runtimes; a file is the same file everywhere.
         return Encoding.UTF8.GetString(buffer.WrittenSpan).ReplaceLineEndings("\n");
+    }
+
+    /// <summary>Writes a preset: the version, then what it holds; a part it does not hold is not written.</summary>
+    /// <param name="preset">The preset.</param>
+    /// <returns>The file, indented, with a line feed between lines on every system.</returns>
+    public static string Write(PipelinePreset preset)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
+        {
+            writer.WriteStartObject();
+            writer.WriteNumber(VersionKey, PipelineDeclaration.Version);
+            WriteNames(writer, SourceKey, preset.Source);
+            writer.WritePropertyName(DeclareKey);
+            ((IPipelineStep)preset.Declare).WriteTo(writer);
+            WriteNames(writer, DropKey, preset.Drop.Count > 0 ? preset.Drop : null);
+
+            if (preset.Output is { } output)
+            {
+                writer.WritePropertyName(OutputKey);
+                output.WriteTo(writer);
+            }
+
+            writer.WriteEndObject();
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan).ReplaceLineEndings("\n");
+    }
+
+    /// <summary>Reads a preset, its schema and output through the catalog.</summary>
+    /// <param name="json">The file.</param>
+    /// <param name="catalog">The verbs its schema and output may use.</param>
+    /// <returns>The preset.</returns>
+    /// <exception cref="PipelineFileException">Anything in the file is wrong; every fault is named.</exception>
+    public static PipelinePreset ReadPreset(string json, StepCatalog catalog) => new PipelineDocument(json).Preset(catalog);
+
+    private static void WriteNames(Utf8JsonWriter writer, string key, IReadOnlyList<string>? names)
+    {
+        if (names is null)
+        {
+            return;
+        }
+
+        writer.WriteStartArray(key);
+
+        foreach (var name in names)
+        {
+            writer.WriteStringValue(name);
+        }
+
+        writer.WriteEndArray();
+    }
+
+    private PipelinePreset Preset(StepCatalog catalog)
+    {
+        var places = Survey();
+
+        ThrowIfFaulty();
+
+        using var document = JsonDocument.Parse(_text);
+        var root = document.RootElement;
+
+        if (root.ValueKind != JsonValueKind.Object)
+        {
+            Add(places.Root, "A file of saved columns is one JSON object, holding its schema under 'declare' and whatever else was decided.");
+
+            throw Refused();
+        }
+
+        // No preset was written before the second version, and its output may be a word only the second has: one that
+        // names no version is not read as the first, as a pipeline file is.
+        var version = root.TryGetProperty(VersionKey, out _) ? VersionOf(root, places) : NoVersion(places);
+
+        foreach (var property in root.EnumerateObject().Where(property => !PresetKeys.Contains(property.Name)))
+        {
+            Add(places.Keys[property.Name], $"A file of saved columns has no '{property.Name}'. It holds: {string.Join(", ", PresetKeys)}.");
+        }
+
+        var source = NamesUnder(root, SourceKey, places);
+        var drop = NamesUnder(root, DropKey, places);
+        var declare = StepUnder(root, DeclareKey, "its schema", version, catalog, places);
+        var output = StepUnder(root, OutputKey, "its output", version, catalog, places);
+
+        if (!root.TryGetProperty(DeclareKey, out _))
+        {
+            Add(places.Root, $"A file of saved columns holds its schema under '{DeclareKey}'.");
+        }
+
+        if (declare is not (null or DeclareStep))
+        {
+            Add(places.Keys[DeclareKey], $"'{DeclareKey}' holds a '{declare.Verb}', and a schema is a 'declare'.");
+        }
+
+        if (output is not (null or INamesTheAnswer))
+        {
+            Add(places.Keys[OutputKey], $"'{OutputKey}' holds a '{output.Verb}', which names no answer.");
+        }
+
+        if (drop is not null)
+        {
+            try
+            {
+                PipelinePreset.NamedOnce(drop);
+            }
+            catch (ArgumentException twice)
+            {
+                Add(places.Keys[DropKey], $"'{DropKey}': {StepCatalog.InTheFilesWords(twice)}");
+            }
+        }
+
+        ThrowIfFaulty();
+
+        return new PipelinePreset((DeclareStep)declare!, drop, output as INamesTheAnswer, source);
+    }
+
+    private int NoVersion(Places places)
+    {
+        Add(places.Root, $"A file of saved columns names the version of the pipeline file it was written against, under '{VersionKey}'.");
+
+        return PipelineDeclaration.Version;
+    }
+
+    /// <summary>A list of column names under a key, or nothing when the key is not there or holds something else.</summary>
+    private string[]? NamesUnder(JsonElement root, string key, Places places)
+    {
+        if (!root.TryGetProperty(key, out var list))
+        {
+            return null;
+        }
+
+        if (list.ValueKind != JsonValueKind.Array
+            || list.EnumerateArray().Any(each => each.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(each.GetString())))
+        {
+            Add(places.Keys[key], $"'{key}' is a list of column names.");
+
+            return null;
+        }
+
+        return [.. list.EnumerateArray().Select(each => each.GetString()!)];
+    }
+
+    /// <summary>A step written under a key, read through the catalog; nothing when the key is not there or it cannot be read.</summary>
+    private IPipelineStep? StepUnder(JsonElement root, string key, string what, int version, StepCatalog catalog, Places places)
+    {
+        if (!root.TryGetProperty(key, out var written))
+        {
+            return null;
+        }
+
+        if (written.ValueKind != JsonValueKind.Object)
+        {
+            Add(places.Keys[key], $"A file of saved columns holds {what} under '{key}', as the step's own JSON object.");
+
+            return null;
+        }
+
+        try
+        {
+            return catalog.Read(written, version);
+        }
+        catch (Exception fault) when (fault is FormatException or NotSupportedException)
+        {
+            Add(places.Keys[key], $"'{key}': {fault.Message}");
+
+            return null;
+        }
     }
 
     /// <summary>Reads the steps a file declares, leaving what a fit learned to the fit.</summary>

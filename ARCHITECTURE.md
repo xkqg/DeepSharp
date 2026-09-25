@@ -16,6 +16,7 @@ Src/DeepSharp.Pipelines/          the data side
                                     the steps in order, the rules every declaration keeps, the keys of its prefixes
     PipelineDocument.cs PipelineFileException.cs PipelineFileSchema.cs VerbReference.cs
                                     the file: its envelope, every fault at its line and column, the schema, the reference
+    PipelinePreset.cs               what a pipeline decided about its columns, saved on its own
     ColumnState.cs                  which columns there are at each step, followed from the schema down
     ColumnChoices.cs                what can be done to a column, and how each stands
     Steps.cs Schema.cs Splits.cs RowOrder.cs
@@ -276,6 +277,13 @@ is a front end that produces it: JSON for machines, because it diffs and travels
 it carries comments and loses the punctuation; a spreadsheet or a generated form, for the same reason and at
 the same cost, which is a parser rather than a redesign. The same seam as the readers. JSON is written today,
 and a notebook — block by block, or field by field in a generated form — is the second front end.
+
+What a pipeline decided about its columns can also be saved on its own, as a preset: the schema, the columns
+dropped after the steps that read them, the output, and the source's columns as they were last shown. It holds no
+fit and no rows, only decisions, so a pipeline written again over new rows can take it over. It goes through the
+same door as the pipeline file — read with a catalog, every fault at its line and column, a newer version refused
+whole — because a second reader of the same steps would be a second set of rules. A preset names its version
+without exception: none was written before the second, and its output may be a word only the second has.
 
 One thing does not survive being written down, and it decides the shape of the rest: an inline lambda. A
 custom step is therefore registered under a name and looked up while parsing, and a file naming a step that

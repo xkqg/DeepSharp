@@ -354,7 +354,7 @@ public sealed class StepCatalog
     // and a file has keys rather than parameters — "Train" is not the "train" it holds — so the name is left off,
     // with the value it may add after it, which the runtime writes in the culture of the machine. The words it
     // names a parameter in are asked of the runtime itself, so they are whatever it says.
-    private static string InTheFilesWords(Exception fault) =>
+    internal static string InTheFilesWords(Exception fault) =>
         fault is ArgumentException { ParamName: { } parameter }
             ? fault.Message.Split(new ArgumentException(string.Empty, parameter).Message, 2)[0]
             : fault.Message;

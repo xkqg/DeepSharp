@@ -148,6 +148,14 @@ wrong with it at once, each at its line and column.
   offered to be left out and a column a later step scales as a number is never offered to become a category. The
   schema's own `WithColumn`, `WithColumnExcluded` and `WithColumnKind` change one block alone.
 
+- **What a pipeline decided about its columns can be saved on its own.** `PipelinePreset` holds the schema, the
+  columns dropped after the steps that read them, the output, and the source's columns as they were last shown
+  — nothing fitted and no rows, so a pipeline written again next month over new rows can take it over.
+  `PipelinePreset.Of(declaration, header)` takes it from a pipeline, `ToJson()` writes it, and
+  `PipelinePreset.FromJson(text, catalog)` reads it back through the same door as a pipeline file: every fault at
+  once at its line and column, and a file from a newer version refused whole. A part it does not hold is not
+  written.
+
 - **Every package runs on .NET 8 as well as .NET 10.** Verso's browser editor runs on .NET 8 for as long as
   .NET 8 is installed, and a package built for .NET 10 alone does not load there. Each package now carries a
   build for both, a host takes the one for the runtime it is on, and every test runs on both.
