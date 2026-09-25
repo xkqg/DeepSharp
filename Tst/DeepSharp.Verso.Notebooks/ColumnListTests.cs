@@ -94,8 +94,9 @@ public sealed class ColumnListTests : IDisposable
         Assert.Equal(Header, list.Rows().Select(row => row.Column));
         Assert.Equal("0, 1, 1, 1, 0, 0, 0, 0, 1, 1", list.Row("survived").Values);
         Assert.Equal("22.0, 38.0, 26.0, 35.0, 35.0, ∅, 54.0, 2.0, 27.0, 14.0", list.Row("age").Values);
-        Assert.Equal("integer", list.Row("survived").Kind);
-        Assert.Equal("text", list.Row("sex").Kind);
+        Assert.Equal("integer", list.Row("survived").Kind.Value);
+        Assert.Equal(string.Empty, list.Row("sex").Kind.Value);
+        Assert.Equal("text", list.Row("sex").ShownKind);
         Assert.True(list.Row("survived").Included is { Ticked: true, Enabled: true, CarriesAPayload: false });
         Assert.True(list.Row("sex").Included is { Ticked: false, Enabled: true });
         Assert.Equal([.. Titanic.Select(text => NotebookVerbs.Catalog().ReadStep(text))], Steps(notebook));
@@ -159,7 +160,7 @@ public sealed class ColumnListTests : IDisposable
 
         Assert.False(stale.StateChanged);
         Assert.Equal(changed, Steps(notebook));
-        Assert.Equal("category", List(notebook).Row("pclass").Kind);
+        Assert.Equal("category", List(notebook).Row("pclass").Kind.Value);
     }
 
     [Fact]
@@ -281,7 +282,7 @@ public sealed class ColumnListTests : IDisposable
         await File.WriteAllTextAsync(ColumnsFile, PipelinePreset.Of(withSex, Header).ToJson(), TestContext.Current.CancellationToken);
         await ChooseAsync(notebook);
 
-        Assert.Equal("category", List(notebook).Row("sex").Kind);
+        Assert.Equal("category", List(notebook).Row("sex").ShownKind);
 
         await TickAsync(notebook, Schema(notebook), "sex", ticked: true);
 

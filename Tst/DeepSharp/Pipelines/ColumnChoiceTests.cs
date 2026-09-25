@@ -435,6 +435,22 @@ public class ColumnChoiceTests
     }
 
     [Fact]
+    public void TheKindsAColumnCanTake_AreThoseTheRulesKeep_ADeclaredColumnsOwnAmongThem()
+    {
+        var category = Then(Titanic().WithKind("pclass", ColumnKind.Category));
+
+        // Nothing reads pclass; normalise reads fare as what reads as a number; sex is taken in with whichever kind is picked.
+        Assert.Equal(Enum.GetValues<ColumnKind>(), Titanic().KindsFor("pclass", Header));
+        Assert.Equal(ColumnKinds.Numbers, Titanic().KindsFor("fare", Header));
+        Assert.Equal(Enum.GetValues<ColumnKind>(), Titanic().KindsFor("sex", Header));
+        Assert.Equal(Enum.GetValues<ColumnKind>(), category.KindsFor("pclass", Header));
+
+        // A column kept with the rest, or one a step makes, is given a kind by nothing here.
+        Assert.Empty(Titanic(Remainder.Keep).KindsFor("sex", Header));
+        Assert.Empty(Titanic().KindsFor("age_was_missing", Header));
+    }
+
+    [Fact]
     public void AColumnThatTakesPart_OffersToBeExcluded_AndMadeACategory()
     {
         var pclass = Row(Titanic(), "pclass");

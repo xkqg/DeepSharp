@@ -232,6 +232,31 @@ public static class ColumnChoiceExtensions
         return at < 0 ? declaration.Steps : [.. declaration.Steps.Take(at), .. declaration.Steps.Skip(at + 1)];
     }
 
+    /// <summary>The kinds a column can be given without breaking a rule.</summary>
+    /// <param name="declaration">The pipeline.</param>
+    /// <param name="column">The column.</param>
+    /// <param name="header">The source's columns, in order: where a column taken in stands.</param>
+    /// <returns>
+    /// In the order the kinds are named: for a column the schema names, its own kind and every other <see cref="WithKind"/>
+    /// gives it that the rules keep; for one it does not, every kind <see cref="Including"/> takes it in with that the rules
+    /// keep; none for a column neither changes — one kept with the rest of the file, or one a step makes.
+    /// </returns>
+    /// <remarks>What a list offers a column's kind from: nothing it offers is refused.</remarks>
+    public static IReadOnlyList<ColumnKind> KindsFor(this PipelineDeclaration declaration, string column, IReadOnlyList<string> header)
+    {
+        ArgumentNullException.ThrowIfNull(declaration);
+        ArgumentNullException.ThrowIfNull(header);
+
+        var declared = Schema(declaration)?.Columns.FirstOrDefault(each => each.Name == column);
+
+        return
+        [
+            .. Enum.GetValues<ColumnKind>().Where(kind => declared is not null
+                ? kind == declared.Kind || Changes(declaration, () => declaration.WithKind(column, kind))
+                : Changes(declaration, () => declaration.Including(column, kind, header))),
+        ];
+    }
+
     /// <summary>How each column asked about stands, and what can be done to it without breaking a rule.</summary>
     /// <param name="declaration">The pipeline.</param>
     /// <param name="columns">The columns, in the order the rows are wanted: the source's, or those a block shows.</param>

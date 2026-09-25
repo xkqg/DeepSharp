@@ -63,11 +63,45 @@ internal static class ColumnList
                 .Append("<td class=\"deepsharp-values\">").Append(Encoded(at < 0 ? string.Empty : Values(first, at))).Append("</td>")
                 .Append("<td class=\"deepsharp-in\">");
             Box(html, choice, kind, drawn, source.Fingerprint);
-            html.Append("</td><td class=\"deepsharp-kind\">").Append(Word(kind)).Append("</td>")
-                .Append("<td class=\"deepsharp-mark\">").Append(Encoded(mark)).Append("</td></tr>");
+            html.Append("</td><td class=\"deepsharp-kind\">");
+            Select(html, declaration, choice, declared.FirstOrDefault(column => column.Name == choice.Name)?.Kind, header, drawn, source.Fingerprint);
+            html.Append("</td><td class=\"deepsharp-mark\">").Append(Encoded(mark)).Append("</td></tr>");
         }
 
         return CellOutput.Html(html.Append("</tbody></table></div>").ToString());
+    }
+
+    // A row's kind select: the kind the schema declares, or none for a column it does not name, then every kind the rules
+    // let the column take. It carries its column and what the list was drawn from, and the router sends its value.
+    private static void Select(
+        StringBuilder html, PipelineDeclaration declaration, ColumnChoice choice, ColumnKind? declared, IReadOnlyList<string> header, string drawn, string fingerprint)
+    {
+        var kinds = declaration.KindsFor(choice.Name, header);
+        var action = ControlAction.Of(StepRenderer.ListKind, new JsonObject
+        {
+            [StepRenderer.ColumnKey] = choice.Name,
+            [StepRenderer.DrawnKey] = drawn,
+            [StepRenderer.SourceKey] = fingerprint,
+        });
+
+        html.Append("<select data-action=\"").Append(Encoded(action))
+            .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"')
+            .Append(kinds.Count == 0 ? " disabled" : string.Empty).Append('>');
+
+        // A column the schema does not name picks no kind yet: sent again, as a click or a key sends it, it changes nothing.
+        if (declared is null)
+        {
+            html.Append("<option value=\"\" selected>")
+                .Append(choice.Standing == ColumnStanding.Kept ? "kept as text" : "not taken").Append("</option>");
+        }
+
+        foreach (var kind in kinds)
+        {
+            html.Append("<option value=\"").Append(Word(kind)).Append('"')
+                .Append(kind == declared ? " selected" : string.Empty).Append('>').Append(Word(kind)).Append("</option>");
+        }
+
+        html.Append("</select>");
     }
 
     // A row's box: the gesture, the column, the kind a tick takes it in with, and what the list was drawn from.

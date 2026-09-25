@@ -56,6 +56,12 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     /// </summary>
     internal const string ListInclude = "deepsharp.list.include";
 
+    /// <summary>
+    /// The gesture a row's kind select on the list sends, with its column and what the list was drawn from; the router
+    /// sends the value it is at: a kind, or none.
+    /// </summary>
+    internal const string ListKind = "deepsharp.list.kind";
+
     /// <summary>The key a box carries its column under.</summary>
     internal const string ColumnKey = "column";
 
@@ -167,7 +173,18 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
                 return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Show, page: 0, ListPicks.None);
 
             default:
-                if (ControlAction.Read(context.InteractionType) is not { } action || StateOf(context.Payload) is not { } ticked)
+                if (ControlAction.Read(context.InteractionType) is not { } action)
+                {
+                    return null;
+                }
+
+                // A select sends the value it is at; a box, whether it is ticked.
+                if (action.Gesture == ListKind)
+                {
+                    return await KindPickedAsync(gesture, assembled, context, action);
+                }
+
+                if (StateOf(context.Payload) is not { } ticked)
                 {
                     return null;
                 }
@@ -181,12 +198,108 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         }
     }
 
-    // A row's box on the list of the source's columns. The list is found by what the box carries — the schema's block the
-    // blocks hold now, whichever block the send names, since a change writes that block anew. A box sent in a session that
-    // has not read the source, or from a list drawn before the blocks or the source's bytes changed, draws the list again
-    // and changes nothing; otherwise ticked takes the column in with the kind its row showed, and unticked leaves it out.
+    // A row's box on the list of the source's columns. A box from a list drawn before the blocks or the source's bytes
+    // changed draws the list again and changes nothing; otherwise ticked takes the column in with the kind its row showed,
+    // and unticked leaves it out.
     private static async Task<string?> ListedAsync(
         Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    {
+        if (await RowOfAsync(gesture, assembled, action) is not { } row)
+        {
+            return null;
+        }
+
+        if (!DrawnOver(action, assembled, row.Source))
+        {
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, ListPicks.None);
+
+            return null;
+        }
+
+        IReadOnlyList<IPipelineStep> steps;
+
+        try
+        {
+            steps = ticked
+                ? assembled.Readable.Including(row.Column, KindNamed(action.Text(KindKey)) ?? ColumnKind.Text, row.Source.Rows.ColumnNames)
+                : assembled.Readable.Excluding(row.Column);
+        }
+        catch (DeclarationException refused)
+        {
+            await StepCommit.NotMadeAsync(row.List, assembled, [.. refused.Faults.Select(fault => fault.ToString())], ListPicks.None);
+
+            return null;
+        }
+
+        context.StateChanged = await StepCommit.CommitAsync(row.List, assembled, steps, ListPicks.None);
+
+        return null;
+    }
+
+    // A row's kind select on the list. Verso's router sends its value on every key and every change, with no end to a
+    // walk, so each value is one pick from the state the list was drawn in, replacing what the walk committed before:
+    // a send is fresh when the list still says what holds, and goes on from the select's own last change when nothing
+    // else changed since; anything else is stale, draws the list again and changes nothing, an echo included. The select
+    // commits the value it ends on, and a category walked away from and back to still remembers the kind it was.
+    private static async Task<string?> KindPickedAsync(Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action)
+    {
+        if (await RowOfAsync(gesture, assembled, action) is not { } row)
+        {
+            return null;
+        }
+
+        var now = assembled.Readable;
+        var drawn = DrawnOver(action, assembled, row.Source)
+            ? now.Steps
+            : gesture.Session.ContinuationOf(context.InteractionType, NotebookSession.KeyOf(now), row.Source.Fingerprint);
+
+        if (drawn is null)
+        {
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, ListPicks.None);
+
+            return null;
+        }
+
+        // Asked for what already holds — the value it is at, sent again — it changes nothing.
+        if (Picked(new PipelineDeclaration(drawn), row.Column, context.Payload, row.Source.Rows.ColumnNames) is not { } steps || steps.SequenceEqual(now.Steps))
+        {
+            return null;
+        }
+
+        if (await StepCommit.CommitAsync(row.List, assembled, steps, ListPicks.None))
+        {
+            gesture.Session.SelectCommitted(context.InteractionType, drawn, NotebookSession.KeyOf(new PipelineDeclaration(steps)), row.Source.Fingerprint);
+            context.StateChanged = true;
+        }
+
+        return null;
+    }
+
+    // The one pick a select's value makes from the state its list was drawn in: for a column the schema names, that kind;
+    // for one it does not, taking it in with that kind; for none, the state as it was drawn. Nothing for a value that
+    // names no kind.
+    private static IReadOnlyList<IPipelineStep>? Picked(PipelineDeclaration drawn, string column, string? value, IReadOnlyList<string> header)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return drawn.Steps;
+        }
+
+        if (KindNamed(value) is not { } kind)
+        {
+            return null;
+        }
+
+        return drawn.Steps.OfType<DeclareStep>().FirstOrDefault()?.Columns.Any(each => each.Name == column) == true
+            ? drawn.WithKind(column, kind)
+            : drawn.Including(column, kind, header);
+    }
+
+    // The row a list's control is about, and the list's block: the schema's block the blocks hold now — found by what the
+    // control carries, whichever block the send names, since a change writes that block anew — with the rows this session
+    // read the source as. Nothing when the blocks hold no schema or the control names no column; the list drawn again,
+    // saying why, in a session that has not read the source.
+    private static async Task<ListRow?> RowOfAsync(Gesture gesture, NotebookPipeline assembled, ControlAction action)
     {
         if (assembled.SchemaBlock is not { } schema || action.Text(ColumnKey) is not { } column)
         {
@@ -202,36 +315,16 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return null;
         }
 
-        if (action.Text(DrawnKey) != NotebookSession.KeyOf(assembled.Readable) || action.Text(SourceKey) != source.Fingerprint)
-        {
-            await StepCommit.ShowAsync(list, assembled, ViewTrigger.Show, page: 0, ListPicks.None);
-
-            return null;
-        }
-
-        IReadOnlyList<IPipelineStep> steps;
-
-        try
-        {
-            steps = ticked
-                ? assembled.Readable.Including(column, KindOf(action), source.Rows.ColumnNames)
-                : assembled.Readable.Excluding(column);
-        }
-        catch (DeclarationException refused)
-        {
-            await StepCommit.NotMadeAsync(list, assembled, [.. refused.Faults.Select(fault => fault.ToString())], ListPicks.None);
-
-            return null;
-        }
-
-        context.StateChanged = await StepCommit.CommitAsync(list, assembled, steps, ListPicks.None);
-
-        return null;
+        return new ListRow(list, column, source);
     }
 
-    // The kind a row showed, which a tick takes an undeclared column in with; text when it says none the notebook knows.
-    private static ColumnKind KindOf(ControlAction action) =>
-        Enum.TryParse<ColumnKind>(action.Text(KindKey), ignoreCase: true, out var kind) && Enum.IsDefined(kind) ? kind : ColumnKind.Text;
+    // Whether a list's control was drawn over the blocks and the source's bytes as they are now.
+    private static bool DrawnOver(ControlAction action, NotebookPipeline assembled, SourceRows source) =>
+        action.Text(DrawnKey) == NotebookSession.KeyOf(assembled.Readable) && action.Text(SourceKey) == source.Fingerprint;
+
+    // A kind by its word; nothing for a word that names none.
+    private static ColumnKind? KindNamed(string? word) =>
+        Enum.TryParse<ColumnKind>(word, ignoreCase: true, out var kind) && Enum.IsDefined(kind) ? kind : null;
 
     // A take-over's list, sent with the saved columns it listed and the key of the blocks it listed them for. Ticked,
     // what it listed is made, in one commit; asked again — the click's echo — the blocks hold it already, and nothing
@@ -368,4 +461,10 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
     private static int PageOf(string? payload) =>
         int.TryParse(payload, NumberStyles.None, CultureInfo.InvariantCulture, out var page) ? page : 0;
+
+    /// <summary>The row a list's control is about.</summary>
+    /// <param name="List">The gesture, at the list's block.</param>
+    /// <param name="Column">The row's column.</param>
+    /// <param name="Source">The rows this session read the source as, and their fingerprint.</param>
+    private readonly record struct ListRow(Gesture List, string Column, SourceRows Source);
 }

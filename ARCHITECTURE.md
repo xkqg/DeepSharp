@@ -762,6 +762,17 @@ list is drawn again and says so. A list the blocks no longer match is cleared, a
 columns the saved file never showed and then writes into the file that it showed them, and a change made from it saves
 the header it showed.
 
+Each row also has a kind select, and a select is harder than a box. Verso's router sends a select's value on every key
+and every change, with no end to a keyboard walk, so a select commits the value it ends on as one pick of that value
+from the state its list was drawn in: each value picks again from that state and replaces what the walk committed
+before. The session keeps one record — the last change a select made, the steps its walk started from, and the blocks
+and bytes that change left — and a send is fresh while its list still says what holds, goes on from that record while
+nothing else changed, and is stale otherwise, drawing the list again and changing nothing, an echo included. So a
+category walked away from and back to still remembers the kind it was, and what the grid or another select changed in
+between is never written over. A redraw ends a walk: the keys after it land nowhere, and the select it draws is a new
+one. The options are the kinds the rules let the column take, so no value a walk passes is refused; a column the
+schema does not name starts at none, and picking a kind takes it in with that kind.
+
 What the blocks decide about their columns is saved beside the notebook, in a file named after it
 (`<notebook>.columns.json`): the schema with the columns it excludes and their kinds, the columns dropped, and the
 output — the same shape a preset has, written and read through the same door as a pipeline file. It is written after

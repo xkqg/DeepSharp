@@ -56,6 +56,7 @@ internal sealed class NotebookSession
     private readonly Dictionary<Guid, ShownView> _shown = [];
     private readonly Dictionary<Guid, Refusal> _refusals = [];
     private NotebookPipeline? _assembled;
+    private SelectCommit? _select;
     private KeptView? _view;
     private RunStamp? _run;
     private int _viewsRun;
@@ -337,6 +338,38 @@ internal sealed class NotebookSession
         }
     }
 
+    /// <summary>
+    /// Remembers the last change a select that commits made: which select, the steps its walk started from, and the
+    /// blocks and bytes the change left. One, and only in memory: it replaces the one before.
+    /// </summary>
+    /// <param name="control">The select: its gesture and what it carries, as it was drawn.</param>
+    /// <param name="drawn">The steps its list was drawn over, which every value of its walk picks from.</param>
+    /// <param name="keyLeft">The key of the whole declaration the change left.</param>
+    /// <param name="fingerprintLeft">The fingerprint of the source's bytes the change was made over.</param>
+    public void SelectCommitted(string control, IReadOnlyList<IPipelineStep> drawn, string keyLeft, string fingerprintLeft)
+    {
+        lock (_lock)
+        {
+            _select = new SelectCommit(control, drawn, keyLeft, fingerprintLeft);
+        }
+    }
+
+    /// <summary>
+    /// The steps a select's walk started from, when a send goes on from the last change that select made: the same
+    /// select, over the blocks and bytes that change left.
+    /// </summary>
+    /// <param name="control">The select that sent it.</param>
+    /// <param name="key">The key of the whole declaration now.</param>
+    /// <param name="fingerprint">The fingerprint of the source's bytes now, as this session read them.</param>
+    /// <returns>The steps, or nothing when the send goes on from no change of its own: something else changed since.</returns>
+    public IReadOnlyList<IPipelineStep>? ContinuationOf(string control, string key, string fingerprint)
+    {
+        lock (_lock)
+        {
+            return _select is { } last && last.Control == control && last.KeyLeft == key && last.FingerprintLeft == fingerprint ? last.Drawn : null;
+        }
+    }
+
     /// <summary>Asks a block to show something the next time it runs.</summary>
     /// <param name="cell">The block's cell.</param>
     /// <param name="request">What to show.</param>
@@ -493,6 +526,13 @@ internal sealed class NotebookSession
         /// <inheritdoc />
         public override bool StillHolds(NotebookPipeline now, Guid cell) => KeyOf(now.Readable) == Key;
     }
+
+    /// <summary>The last change a select that commits made.</summary>
+    /// <param name="Control">The select, as it was drawn.</param>
+    /// <param name="Drawn">The steps its walk started from.</param>
+    /// <param name="KeyLeft">The key of the whole declaration the change left.</param>
+    /// <param name="FingerprintLeft">The fingerprint of the bytes it was made over.</param>
+    private sealed record SelectCommit(string Control, IReadOnlyList<IPipelineStep> Drawn, string KeyLeft, string FingerprintLeft);
 
     /// <summary>What the notebook's own last run learned, and from which steps and bytes.</summary>
     /// <param name="Key">The key of the steps it ran.</param>

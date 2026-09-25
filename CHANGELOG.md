@@ -97,7 +97,9 @@ wrong with it at once, each at its line and column.
   a box for whether it is in and, when the schema takes it, one for whether it is a category: unticking and
   ticking again write the steps that do it and take them back, a column's kind kept. "Choose the columns", on the
   schema's block, lists every column of the source with its first values and a box that takes it in or leaves it
-  out, marking new the columns the saved file never showed. What the blocks decide about
+  out, marking new the columns the saved file never showed; each row's kind select commits the kind a keyboard walk
+  ends on, as one pick from the state the list was drawn in, so a category walked away from and back to remembers
+  the kind it was. What the blocks decide about
   their columns is saved beside the notebook, as `<notebook>.columns.json`, after every change they accept and
   every run of the whole pipeline. An output block is a stage of
   its own, and its form swaps it for any other kind of output. A profile block names, for
@@ -153,7 +155,7 @@ wrong with it at once, each at its line and column.
   reads it and the step that makes it; a category that remembers the kind it came from. Asked for what already is,
   each hands back the steps it was given. `ChoicesFor(columns)` says how each column stands — taking part, excluded,
   dropped, made by a step and which one, kept with the rest, or not declared — and what can be done to it without
-  breaking a rule, so the answer is never
+  breaking a rule, and `KindsFor(column, header)` the kinds it can be given, so the answer is never
   offered to be left out and a column a later step scales as a number is never offered to become a category. The
   schema's own `WithColumn`, `WithColumnExcluded` and `WithColumnKind` change one block alone. `WithOutput` places
   an output, in the place of the one standing or at the end, and a return directly after the split; `WithoutOutput`
