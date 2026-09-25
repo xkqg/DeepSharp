@@ -162,6 +162,17 @@ public sealed class KindSelectTests : IDisposable
     }
 
     [Fact]
+    public async Task AValueThatNamesNoKind_ChangesNothing()
+    {
+        await using var notebook = await TitanicAsync(Integer);
+        var list = await ChooseAsync(notebook);
+
+        Assert.Equal(0, await WalkAsync(notebook, list.On, list.Html.Row("pclass").Kind.Action, "purple"));
+        Assert.Equal(new ColumnDeclaration("pclass", ColumnKind.Integer, Optional: false), Column(notebook, "pclass"));
+        Assert.DoesNotContain(SchemaBlock(notebook).Outputs, output => output.IsError);
+    }
+
+    [Fact]
     public async Task AnEchoOrATab_OnACardThatStillHolds_ChangesNothing()
     {
         await using var notebook = await TitanicAsync(Integer);

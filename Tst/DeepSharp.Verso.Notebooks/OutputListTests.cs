@@ -141,6 +141,83 @@ public sealed class OutputListTests : IDisposable
     }
 
     [Fact]
+    public async Task ARemovalBoxFromAListDrawnBeforeTheBlocksChanged_DrawsTheListAgain_AndTakesNothingAway()
+    {
+        await using var notebook = await NotebookAsync([.. Titanic, """{"step": "target", "column": "survived"}"""]);
+
+        await ChooseAsync(notebook);
+        var removal = List(notebook).RemovalBox().Action;
+
+        await notebook.GestureAsync(Schema(notebook), List(notebook).Row("sex").Included.Action, "true");
+        var stale = await notebook.GestureAsync(Schema(notebook), removal, "true");
+
+        Assert.False(stale.StateChanged);
+        Assert.Equal(new TargetStep("survived"), Output(notebook));
+        Assert.True(List(notebook).RemovalBox().Enabled);
+    }
+
+    [Fact]
+    public async Task ARemovalBoxSentInASessionThatHasNotReadTheSource_SaysToChooseTheColumnsAgain()
+    {
+        await using var notebook = await NotebookAsync([.. Titanic, """{"step": "target", "column": "survived"}"""]);
+
+        await ChooseAsync(notebook);
+        var removal = List(notebook).RemovalBox().Action;
+
+        await using var reopened = await Notebook.OpenAsync(Path.Join(_folder, "reopened.verso"));
+
+        foreach (var cell in notebook.Scaffold.Cells)
+        {
+            reopened.AddBlock(cell.Source);
+        }
+
+        var sent = await reopened.GestureAsync(Schema(reopened), removal, "true");
+
+        Assert.False(sent.StateChanged);
+        Assert.Equal(new TargetStep("survived"), Output(reopened));
+        Assert.True(SaysNotMade(reopened, "Choose the columns again — the source is not read in this session."));
+    }
+
+    [Fact]
+    public async Task AnOutputBoxThatCarriesNoKindOfOutput_IsRefusedWithWords_AndOneThatCarriesNoKind_TakesItsColumnInAsText()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+
+        await ChooseAsync(notebook);
+        var box = List(notebook).Row("sex").Output.Action;
+
+        var typeless = await notebook.GestureAsync(Schema(notebook), box.Replace("\"type\":\"target\",", string.Empty, StringComparison.Ordinal), "true");
+
+        Assert.False(typeless.StateChanged);
+        Assert.True(SaysNotMade(notebook, "'' is not a kind of output the list can make."));
+
+        var kindless = await notebook.GestureAsync(Schema(notebook), box.Replace("\"kind\":\"text\",", string.Empty, StringComparison.Ordinal), "true");
+
+        Assert.True(kindless.StateChanged);
+        Assert.Contains(((DeclareStep)Steps(notebook)[1]).Taking, column => column is { Name: "sex", Kind: ColumnKind.Text });
+    }
+
+    [Fact]
+    public async Task ATypePickWithoutAValue_OrOnBlocksThatNoLongerHoldASchema_ChangesNothing()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+
+        await ChooseAsync(notebook);
+        var pick = List(notebook).TypeSelect().Action;
+        var drawn = List(notebook);
+
+        Assert.False((await notebook.GestureAsync(Schema(notebook), pick, string.Empty)).StateChanged);
+        Assert.Equal(drawn, List(notebook));
+
+        await using var bare = await Notebook.OpenAsync(Path.Join(_folder, "bare.verso"));
+
+        bare.AddBlock(Titanic[0]);
+
+        Assert.False((await bare.GestureAsync(bare.Scaffold.Cells[0], pick, "target.distribution")).StateChanged);
+        Assert.Empty(bare.Scaffold.Cells[0].Outputs);
+    }
+
+    [Fact]
     public async Task OutputGestures_WhileTheBlocksMakeNoPipeline_AreRefused_SayingWhichBlockStopsThem()
     {
         await using var notebook = await NotebookAsync([.. Titanic, """{"step": "target", "column": "survived"}"""]);

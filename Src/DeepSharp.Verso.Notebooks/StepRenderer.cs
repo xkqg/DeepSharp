@@ -287,33 +287,33 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     }
 
     // The list's box that takes the output away. Ticked with no output there — the click's echo — it changes nothing;
-    // otherwise it needs blocks that make one pipeline and a list that still says what holds.
+    // otherwise it needs a session that read the source, blocks that make one pipeline, and a list that still says what
+    // holds.
     private static async Task<string?> RemovedAsync(
         Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
     {
-        if (!ticked || assembled.SchemaBlock is not { } schema || assembled.Readable.Output is null)
+        if (!ticked || assembled.Readable.Output is null || await ListOfAsync(gesture, assembled) is not { } list)
         {
             return null;
         }
 
-        var list = gesture with { Cell = schema };
         var picks = PicksOf(action);
 
         if (!assembled.Whole)
         {
-            await StepCommit.NotMadeAsync(list, assembled, [NotWhole(assembled)], picks);
+            await StepCommit.NotMadeAsync(list.On, assembled, [NotWhole(assembled)], picks);
 
             return null;
         }
 
-        if (assembled.Readable.Steps[0] is not ReadCsvStep read || gesture.Session.Sources.KeptFor(read) is not { } source || !DrawnOver(action, assembled, source))
+        if (!DrawnOver(action, assembled, list.Source))
         {
-            await StepCommit.ShowAsync(list, assembled, ViewTrigger.Show, page: 0, picks);
+            await StepCommit.ShowAsync(list.On, assembled, ViewTrigger.Show, page: 0, picks);
 
             return null;
         }
 
-        context.StateChanged = await StepCommit.CommitAsync(list, assembled, assembled.Readable.WithoutOutput(), picks);
+        context.StateChanged = await StepCommit.CommitAsync(list.On, assembled, assembled.Readable.WithoutOutput(), picks);
 
         return null;
     }
@@ -477,7 +477,8 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return null;
         }
 
-        return drawn.Steps.OfType<DeclareStep>().FirstOrDefault()?.Columns.Any(each => each.Name == column) == true
+        // A list is drawn only over blocks that hold a schema.
+        return drawn.Steps.OfType<DeclareStep>().First().Columns.Any(each => each.Name == column)
             ? drawn.WithKind(column, kind)
             : drawn.Including(column, kind, header);
     }
@@ -609,18 +610,24 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
     // A column taken in. One the schema does not name comes in as text where the source has it, which only the source's
     // own header says: the rows this session read from it. Before anything read them the block shows the source, which
-    // reads them, and says so; and a column the source does not have was not ticked on its grid.
+    // reads them, and says so; a column the source does not have was not ticked on its grid, nor was a column of rows
+    // handed in, which no grid shows.
     private static async Task<IReadOnlyList<IPipelineStep>?> TakenInAsync(Gesture gesture, NotebookPipeline assembled, string column)
     {
         var declaration = assembled.Readable;
-        var header = declaration.Steps[0] is ReadCsvStep read ? gesture.Session.Sources.KeptFor(read)?.Rows.ColumnNames : null;
 
+        // One the schema names, or a drop leaves out, is taken back where it stands already.
         if (declaration.ChoicesFor([column]).Rows[0].Standing != ColumnStanding.NotDeclared)
         {
-            return declaration.Including(column, ColumnKind.Text, header ?? []);
+            return declaration.Including(column, ColumnKind.Text, []);
         }
 
-        if (header is null)
+        if (declaration.Steps[0] is not ReadCsvStep read)
+        {
+            return null;
+        }
+
+        if (gesture.Session.Sources.KeptFor(read)?.Rows.ColumnNames is not { } header)
         {
             await StepCommit.NotMadeAsync(gesture, assembled, [SourceNotRead]);
 

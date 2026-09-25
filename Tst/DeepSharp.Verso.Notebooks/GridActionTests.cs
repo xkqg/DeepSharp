@@ -58,6 +58,30 @@ public sealed class GridActionTests : IDisposable
     private static CellModel Declare(Notebook notebook) => notebook.Scaffold.Cells[1];
 
     [Fact]
+    public async Task ACategoryTickOnBlocksWithoutASchema_ChangesNothing()
+    {
+        // No grid over blocks without a schema draws the box; one sent anyway finds no column the schema takes.
+        await using var notebook = await NotebookAsync(Titanic[0]);
+
+        var gesture = await notebook.TickAsync(notebook.Scaffold.Cells[0], StepRenderer.Category, "pclass", ticked: true);
+
+        Assert.False(gesture.StateChanged);
+        Assert.Equal([Titanic[0]], notebook.Scaffold.Cells.Select(cell => cell.Source));
+    }
+
+    [Fact]
+    public async Task ATickTakingInAColumnOfRowsHandedIn_ChangesNothing_SinceNoGridShowsThem()
+    {
+        await using var notebook = await NotebookAsync("""{"step": "read.rows", "description": "passengers"}""", Titanic[1]);
+
+        var gesture = await notebook.TickAsync(Declare(notebook), StepRenderer.Include, "sex", ticked: true);
+
+        Assert.False(gesture.StateChanged);
+        Assert.DoesNotContain("sex", Names(notebook));
+        Assert.DoesNotContain(Declare(notebook).Outputs, output => output.IsError);
+    }
+
+    [Fact]
     public async Task UntickingAColumnNoStepReads_ExcludesItInTheSchemaWithItsKind_MarksTheNotebookChanged_AndShowsTheResult()
     {
         await using var notebook = await NotebookAsync(Titanic);
