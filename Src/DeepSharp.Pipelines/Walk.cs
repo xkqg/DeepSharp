@@ -157,6 +157,14 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
     /// <param name="keep">One answer per row: whether it stays.</param>
     public void Keep(IReadOnlyList<bool> keep) => _table = Table.Keep(keep);
 
+    /// <summary>The rows as a step that drops rows judges them: every column, less the answers this walk awaits.</summary>
+    /// <remarks>
+    /// A served row is the question, so its answers arrive as gaps, and a gap there is no reason to drop the row or
+    /// to count a warm-up. A fit awaits nothing and judges every column: a training row without its answer cannot
+    /// be learned from.
+    /// </remarks>
+    public Table Judged => mode.Awaited(declaration) is { Count: > 0 } awaited ? Table.Without(awaited) : Table;
+
     /// <summary>Takes note of the rows here, for evidence produced once the walk knows where every row lands.</summary>
     /// <param name="produce">How the step produces its evidence from the rows and their standings.</param>
     /// <remarks>
@@ -273,6 +281,11 @@ internal abstract class WalkMode
     /// <summary>Whether the rows are divided at the split, which fitting does and replaying does not.</summary>
     public abstract bool Divides { get; }
 
+    /// <summary>The answers this walk awaits rather than reads: none when fitting, every one the output names when replaying.</summary>
+    /// <param name="declaration">The declaration being walked.</param>
+    /// <returns>The answer columns, in the output's order.</returns>
+    public virtual IReadOnlyList<string> Awaited(PipelineDeclaration declaration) => [];
+
     /// <summary>What a step that learns applies, at its place in the walk.</summary>
     /// <param name="at">The step's place in the declaration.</param>
     /// <param name="fit">How the step learns, when this walk fits.</param>
@@ -333,10 +346,13 @@ internal sealed class ReplayWhatWasFitted(IReadOnlyDictionary<int, FittedStepVal
     /// </remarks>
     public override IRowSource Prepare(PipelineDeclaration declaration, IRowSource source)
     {
-        string[] awaited = [.. (declaration.Output?.Answers ?? []).Where(answer => !source.ColumnNames.Contains(answer, StringComparer.Ordinal))];
+        string[] lacking = [.. Awaited(declaration).Where(answer => !source.ColumnNames.Contains(answer, StringComparer.Ordinal))];
 
-        return awaited.Length == 0 ? source : new RowsAwaitingAnAnswer(source, awaited);
+        return lacking.Length == 0 ? source : new RowsAwaitingAnAnswer(source, lacking);
     }
+
+    /// <inheritdoc />
+    public override IReadOnlyList<string> Awaited(PipelineDeclaration declaration) => declaration.Output?.Answers ?? [];
 
     /// <inheritdoc />
     public override bool Divides => false;

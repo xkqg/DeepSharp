@@ -561,6 +561,12 @@ warm-up rows too; the same sixty rows used to come out as fifty-six from a run a
 with which of the handed-in rows each served row is, since the replay may have dropped some and reordered the
 rest, and a prediction has to find its way back to the row it was made for.
 
+The answers a served row lacks arrive as gaps, one for every answer the output names, and a step that drops rows
+does not see them: dropping the rows without an answer is how training rows without one are left out, and a
+served row is exactly such a row. Judged by its answer, a pipeline that left out its warm-up refused every row
+it was asked about, and one that dropped the rows without an answer served none of them without a word. A fit
+still judges every column.
+
 ### A step says what it does by what it implements
 
 `IPipelineStep` stays narrow — a verb, how to write itself down, and which columns it reads, which it says

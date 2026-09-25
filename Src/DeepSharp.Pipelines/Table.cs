@@ -366,6 +366,12 @@ public sealed class Table
     /// <returns>The copy.</returns>
     internal Table Snapshot() => Picked([.. Enumerable.Range(0, RowCount)]);
 
+    /// <summary>The same rows without some of the columns, for a step that only looks at them.</summary>
+    /// <param name="names">The columns to leave out; a name the table does not have is passed over.</param>
+    /// <returns>A table of the other columns — the same column objects, not copies — and the rows' identities.</returns>
+    internal Table Without(IReadOnlyCollection<string> names) =>
+        Owning([.. _columns.Where(column => !names.Contains(column.Name))], [.. _identities]);
+
     private Table Picked(IReadOnlyList<int> rows)
     {
         var identities = new RowIdentity[rows.Count];

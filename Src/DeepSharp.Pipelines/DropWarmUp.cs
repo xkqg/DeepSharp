@@ -12,16 +12,20 @@ namespace DeepSharp.Pipelines;
 /// Rows are what a split divides and what a fit counts, so dropping some of them is making a different
 /// dataset. It happens before the split for exactly that reason: a row nobody can use should never land in
 /// one, and certainly not in the part a model is measured on.
+/// <para>
+/// When a replay serves rows, the answers they await are not among the columns a step judges: a served row is
+/// the question, and the gap its answer leaves is no reason to drop it.
+/// </para>
 /// </remarks>
 public interface IDropsRows : IActsInAWalk
 {
     /// <summary>Which rows stay.</summary>
-    /// <param name="table">The data as it stands.</param>
+    /// <param name="table">The data as it stands, without the answers a replay awaits.</param>
     /// <returns>One answer per row: whether it stays.</returns>
     IReadOnlyList<bool> RowsToKeep(Table table);
 
     /// <inheritdoc />
-    void IActsInAWalk.ActOn(Walk walk) => walk.Keep(RowsToKeep(walk.Table));
+    void IActsInAWalk.ActOn(Walk walk) => walk.Keep(RowsToKeep(walk.Judged));
 }
 
 /// <summary>
@@ -85,11 +89,12 @@ public sealed record DropGapsStep : IPipelineStep<DropGapsStep>, IDropsRows, IDe
     }
 
     /// <inheritdoc />
+    /// <remarks>A column it names that a served row awaits is not judged: the gap there is the question.</remarks>
     public IReadOnlyList<bool> RowsToKeep(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        var columns = Columns.Select(column => table[column]).ToArray();
+        var columns = Columns.Where(table.Has).Select(column => table[column]).ToArray();
 
         return [.. Enumerable.Range(0, table.RowCount).Select(row => !columns.Any(column => column.IsMissing(row)))];
     }
