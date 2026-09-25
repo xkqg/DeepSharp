@@ -12,10 +12,17 @@ namespace DeepSharp.Tests.Notebooks;
 /// A pipeline notebook is saved as .verso, which keeps what kind of cell each one is. Jupyter's format keeps a cell's
 /// text and loses its kind, so a block saved that way would come back as code: saving one is refused, and so is
 /// opening a Jupyter file whose code cells turn out to be steps. Verso's own converter between formats runs no such
-/// guard; that is written down, not trusted.
+/// guard; that is written down, not trusted. What a block shows is left out of the file by the serializer each of
+/// Verso's editors saves with.
 /// </summary>
-public class PersistenceTests
+public sealed class PersistenceTests : IDisposable
 {
+    private readonly string _folder = Directory.CreateTempSubdirectory("deepsharp-persistence-").FullName;
+
+    public PersistenceTests() => File.Copy(Repository.Data("titanic.csv"), Path.Join(_folder, "titanic.csv"));
+
+    public void Dispose() => Directory.Delete(_folder, recursive: true);
+
     private static readonly string[] Titanic =
     [
         """{"step": "read.csv", "path": "titanic.csv"}""",
@@ -98,5 +105,45 @@ public class PersistenceTests
             NotebookPipeline.Of(notebook.Scaffold.Notebook.Cells).Readable,
             NotebookPipeline.Of(back.Cells).Readable);
         Assert.Equal(Titanic.Length, NotebookPipeline.Of(back.Cells).Readable.Steps.Count);
+    }
+
+    [Fact]
+    public async Task WhatABlockShows_IsLeftOutOfTheFile_ByTheSerializerEachEditorSavesWith()
+    {
+        await using var notebook = await Notebook.OpenAsync(Path.Join(_folder, "titanic.verso"));
+
+        foreach (var block in Titanic)
+        {
+            notebook.AddBlock(block);
+        }
+
+        var read = notebook.Scaffold.Cells[0];
+
+        await notebook.GestureAsync(read, StepRenderer.Show);
+
+        // The block shows its card and a page of the data, with the grid's boxes.
+        Assert.Contains(read.Outputs, output => output.Content.Contains(StepRenderer.Include, StringComparison.Ordinal));
+
+        // VS Code's host saves through the serializer the extension host holds for the format, and the browser editor
+        // through one handed the host's cell types; both know what a block's type says of its outputs.
+        INotebookSerializer[] editors =
+        [
+            notebook.Host.GetSerializers().Single(serializer => serializer.FormatId == "verso"),
+            new VersoSerializer(notebook.Host.GetCellTypes()),
+        ];
+
+        foreach (var serializer in editors)
+        {
+            var back = await serializer.DeserializeAsync(await serializer.SerializeAsync(notebook.Scaffold.Notebook));
+
+            Assert.All(back.Cells, cell => Assert.Empty(cell.Outputs));
+            Assert.Equal(NotebookPipeline.Of(notebook.Scaffold.Notebook.Cells).Readable, NotebookPipeline.Of(back.Cells).Readable);
+        }
+
+        // A serializer that knows no cell type cannot tell a block from any other cell, and keeps what it shows.
+        var blind = new VersoSerializer();
+        var kept = await blind.DeserializeAsync(await blind.SerializeAsync(notebook.Scaffold.Notebook));
+
+        Assert.NotEmpty(kept.Cells[0].Outputs);
     }
 }

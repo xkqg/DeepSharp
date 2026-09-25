@@ -732,7 +732,10 @@ the same view.
 `DeepSharp.Verso.Notebooks` writes a pipeline as a Verso notebook: one block per step, each block the step's
 own JSON, and the blocks, in the order they stand, are the steps in the order they run. The notebook is the
 declaration; saving it saves the steps, and what a block shows is never saved, because it is worked out from
-somebody's own data each time it is asked for. The steps are read through a catalog as a file's are, and
+somebody's own data each time it is asked for. The block type says so to Verso — its outputs are no part of the
+document — and the serializer each of Verso's editors saves with leaves them out: the one the engine holds for the
+format, or one handed the host's cell types. A serializer made without them cannot tell a block from any other cell,
+and keeps what it shows. The steps are read through a catalog as a file's are, and
 assembled through the same constructor, afresh at every gesture from the blocks as they are, so a block
 inserted, moved, deleted or edited is always seen. The longest run of blocks from the top that makes a
 declaration is the pipeline, and a block below it says which block stops it.
@@ -904,11 +907,12 @@ so. Verso's editor itself is not published for applications to reuse, so such an
 editor does: it draws a block's output, which is HTML; it hands a control's `data-action` and `data-extension-id`
 to the part the control names, with its `data-payload` — or, for a control that carries none, its state, as Verso's
 own router sends it: `true` or `false` for a box, the value it is at for a select — and with the notebook's variables
-and operations; it draws again when a block's output is updated or a gesture says it changed the blocks; and it gives
-the toolbar's buttons — Run, Export and the take-over — a context of its own. An application that only wants the pipeline reads each block with
-`StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write the file
-with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds the
-steps and no fit, because nothing ran them there.
+and operations; it draws again when a block's output is updated or a gesture says it changed the blocks; it gives the
+toolbar's buttons — Run, Export and the take-over — a context of its own; and it saves through a serializer that knows
+the cell types, so what the blocks show stays out of the file. An application that only wants the pipeline reads each
+block with `StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write
+the file with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds
+the steps and no fit, because nothing ran them there.
 
 ## Decisions
 

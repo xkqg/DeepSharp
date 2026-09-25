@@ -113,7 +113,8 @@ wrong with it at once, each at its line and column.
   block, every column whose decision taking the saved ones over would change — whether the source may lack it too, and
   what becomes of the columns the schema does not name — with every saved drop the blocks cannot make and why, and
   changes nothing until the list's own box is ticked. C# cells in the same notebook are handed the
-  pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. It is
+  pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. Saving the
+  notebook keeps the steps and leaves out what the blocks show, the data included. It is
   installed from Verso's Extensions panel and runs in Verso's VS Code extension, in the browser editor
   `verso serve` opens, and inside an application that takes Verso's engine as a dependency.
 
