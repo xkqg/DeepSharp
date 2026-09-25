@@ -133,7 +133,7 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
             return Switched(step, json, value.Text, catalog);
         }
 
-        var edit = new FormEdit(field, value, json, scope);
+        var edit = new FormEdit(field, value, json, scope, step);
 
         return catalog.Describe(step.Verb).Parameters.Any(parameter => parameter.Accept(edit))
             ? catalog.ReadStep(json.ToJsonString())

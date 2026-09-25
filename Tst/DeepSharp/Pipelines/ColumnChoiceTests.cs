@@ -100,6 +100,16 @@ public class ColumnChoiceTests
     }
 
     [Fact]
+    public void ExcludingTheOnlyColumnASchemaTakes_IsRefused_InTheWordsAFileShows()
+    {
+        var schema = new DeclareStep([new ColumnDeclaration("a", ColumnKind.Number, false)]);
+
+        var refused = Assert.Throws<ArgumentException>(() => schema.WithColumnExcluded("a"));
+
+        Assert.Equal("The schema excludes every column it names and keeps none of the rest, so no column would take part.", refused.Message);
+    }
+
+    [Fact]
     public void AKindChange_RemembersTheKindACategoryCameFrom_AndGoesBackToIt()
     {
         var schema = new DeclareStep([new ColumnDeclaration("pclass", ColumnKind.Integer, false)]);

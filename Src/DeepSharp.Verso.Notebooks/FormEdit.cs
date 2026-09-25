@@ -15,13 +15,14 @@ namespace DeepSharp.Verso.Notebooks;
 /// <param name="value">What it was set to.</param>
 /// <param name="step">The step's JSON, changed in place.</param>
 /// <param name="scope">The columns known around the block.</param>
+/// <param name="read">The step as it reads, before the change.</param>
 /// <remarks>
 /// Each kind says whether the field is one of its own and writes the value the way a pipeline file holds it; the
 /// step is then read back through the catalog, which holds it to every rule the text is held to. A value that
 /// cannot be one of the kind — a word where a number goes, a number with a decimal comma — is refused here, in the
 /// words the form shows, and nothing is written.
 /// </remarks>
-internal sealed class FormEdit(string field, FieldValue value, JsonObject step, FormScope scope) : IStepParameterVisitor<bool>
+internal sealed class FormEdit(string field, FieldValue value, JsonObject step, FormScope scope, IPipelineStep read) : IStepParameterVisitor<bool>
 {
     public bool Visit(TextParameter parameter) => Set(parameter.Key, () => Words());
 
@@ -129,41 +130,35 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
         return true;
     }
 
-    // A column the schema takes is written in the order the source has it; one left out is not written at all.
+    // A column's kind, or "not taken", is the schema's own operation on the step as it reads, and the columns are
+    // written back as the schema writes itself: a column not taken stays in it, excluded with its kind, and a step
+    // below that reads it says so at its own block. Whether a taken column may be absent is written into it.
     public bool Visit(ColumnDeclarationsParameter parameter)
     {
-        var declared = step[parameter.Key]!.AsArray();
+        if (read is not DeclareStep declare)
+        {
+            return false;
+        }
 
         if (FormVocabulary.IsKind(field, parameter.Key, out var name))
         {
             var kind = Words();
-            var taken = declared.OfType<JsonObject>().FirstOrDefault(column => Named(parameter, column) == name);
 
-            if (kind == FormVocabulary.NotTaken)
-            {
-                declared.Remove(taken);
-            }
-            else if (taken is not null)
-            {
-                taken[parameter.Kind.Key] = kind;
-            }
-            else
-            {
-                declared.Insert(InSourceOrder(parameter, declared, name), new JsonObject
-                {
-                    [parameter.Name.Key] = name,
-                    [parameter.Kind.Key] = kind,
-                    [parameter.Optional.Key] = false,
-                });
-            }
+            Declared(parameter, kind == FormVocabulary.NotTaken
+                ? () => declare.WithColumnExcluded(name)
+                : () => Kinded(declare, name, KindOf(parameter, kind)));
 
             return true;
         }
 
         if (FormVocabulary.IsAbsent(field, parameter.Key, out var absent))
         {
-            var taken = declared.OfType<JsonObject>().FirstOrDefault(column => Named(parameter, column) == absent)
-                ?? throw new FormatException($"'{absent}' is not taken, so whether it may be absent says nothing.");
+            if (declare.Taking.All(column => column.Name != absent))
+            {
+                throw new FormatException($"'{absent}' is not taken, so whether it may be absent says nothing.");
+            }
+
+            var taken = step[parameter.Key]!.AsArray().OfType<JsonObject>().First(column => Named(parameter, column) == absent);
 
             taken[parameter.Optional.Key] = Switch();
 
@@ -173,35 +168,35 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
         return false;
     }
 
-    // Where a column goes among those taken: before the first one the source has after it; last when the source is
-    // not known, or has neither.
-    private int InSourceOrder(ColumnDeclarationsParameter parameter, JsonArray declared, string name)
+    // The schema as one of its own operations changes it, written back into the step as the schema writes itself; what
+    // the schema refuses is said in the form, and nothing is written.
+    private void Declared(ColumnDeclarationsParameter parameter, Func<DeclareStep> change)
     {
-        var source = scope.Source ?? [];
-        var at = IndexIn(source, name);
+        DeclareStep changed;
 
-        for (var place = 0; place < declared.Count; place++)
+        try
         {
-            if (at >= 0 && IndexIn(source, Named(parameter, (JsonObject)declared[place]!)) > at)
-            {
-                return place;
-            }
+            changed = change();
+        }
+        catch (ArgumentException refused)
+        {
+            throw new FormatException(refused.Message, refused);
         }
 
-        return declared.Count;
+        step[parameter.Key] = JsonNode.Parse(changed.AsBlockText())![parameter.Key]!.DeepClone();
     }
 
-    private static int IndexIn(IReadOnlyList<string> names, string name)
-    {
-        for (var at = 0; at < names.Count; at++)
-        {
-            if (names[at] == name)
-            {
-                return at;
-            }
-        }
+    // A kind picked for a column: given to it when the schema takes it; otherwise the column is taken in with that kind,
+    // back where the schema names it or where the source has it.
+    private DeclareStep Kinded(DeclareStep declare, string name, ColumnKind kind) =>
+        (declare.Taking.Any(column => column.Name == name) ? declare : declare.WithColumn(name, kind, scope.Source ?? [])).WithColumnKind(name, kind);
 
-        return -1;
+    // A kind's word read by the kind's own reader, so a word it does not know is refused in its words.
+    private static ColumnKind KindOf(ColumnDeclarationsParameter parameter, string word)
+    {
+        using var written = JsonDocument.Parse(new JsonObject { [parameter.Kind.Key] = word }.ToJsonString());
+
+        return parameter.Kind.Read(written.RootElement);
     }
 
     private static string Named(ColumnDeclarationsParameter parameter, JsonObject column) =>

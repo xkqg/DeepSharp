@@ -116,18 +116,21 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
     // taken may be absent from the rows.
     public IEnumerable<PropertyField> Visit(ColumnDeclarationsParameter parameter)
     {
-        // The kind of each taken column as the step wrote it, so the words are the reader's own.
-        var declared = step.GetProperty(parameter.Key).EnumerateArray()
+        // The columns as the schema reads them: one it excludes is not taken, and keeps its kind for when it is again.
+        // Each taken column's kind is as the step wrote it, so the words are the reader's own.
+        var declared = parameter.Read(step);
+        var taking = step.GetProperty(parameter.Key).EnumerateArray().Zip(declared)
+            .Where(column => !column.Second.Excluded)
             .ToDictionary(
-                column => column.GetProperty(parameter.Name.Key).GetString()!,
-                column => new Taken(column.GetProperty(parameter.Kind.Key).GetString()!, column.GetProperty(parameter.Optional.Key).GetBoolean()),
+                column => column.Second.Name,
+                column => new Taken(column.First.GetProperty(parameter.Kind.Key).GetString()!, column.Second.Optional),
                 StringComparer.Ordinal);
-        var names = (scope.Source ?? []).Concat(declared.Keys).Distinct(StringComparer.Ordinal);
+        var names = (scope.Source ?? []).Concat(declared.Select(column => column.Name)).Distinct(StringComparer.Ordinal);
         var fields = new List<PropertyField>();
 
         foreach (var name in names)
         {
-            var taken = declared.GetValueOrDefault(name);
+            var taken = taking.GetValueOrDefault(name);
 
             fields.Add(Choose(
                 FormVocabulary.Kind(parameter.Key, name), name, parameter.Kind.Description, taken?.Kind ?? FormVocabulary.NotTaken,

@@ -723,6 +723,11 @@ rewrites is written as a new block in the old one's place, and run, because Vers
 block whose text a part changed, and the next keystroke there would put the old text back; under a layout that
 cannot add a block the change is refused rather than half made.
 
+The schema block's form changes the schema alone, through the schema's own operations. A column set "not taken"
+stays in the schema, excluded with its kind, and a step below that reads it says so at its own block rather than
+being rewritten; picking a kind for a column not taken takes it in with that kind, where the source has it. The grid
+changes the pipeline, the form one block: that is the whole difference between them, and both keep a column's kind.
+
 Whatever changes the blocks — one gesture, or a change to several at once — goes through one way of writing them,
 and it writes only the blocks whose steps changed. The steps both lists start and end with are left alone; between
 them a step is matched with the one of the same verb in the same order, so it is written again where it stood and

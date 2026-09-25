@@ -90,7 +90,8 @@ wrong with it at once, each at its line and column.
   [Verso](https://www.versonotebooks.com/) in which every block is one step, written as the step's own
   JSON, and the blocks in the order they stand are the pipeline. A block is edited as text, with the verbs,
   keys and columns offered as you type, or field by field in Verso's properties panel; both write the same
-  text. Each block shows what its step is and does, or every fault at its line. "Show the data here" runs the
+  text. In the schema's form a column set "not taken" stays named, excluded with its kind. Each block shows
+  what its step is and does, or every fault at its line. "Show the data here" runs the
   pipeline down to that block and shows the rows there: fifty at a time, each column coloured over the
   training rows, with every row knowing the part the split below will put it in. On the grid every column has
   a box for whether it is in and, when the schema takes it, one for whether it is a category: unticking and

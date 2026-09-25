@@ -233,12 +233,15 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
 
         var place = InSourceOrder(name, header);
 
-        return new([.. Columns.Take(place), new ColumnDeclaration(name, kind, Optional: false), .. Columns.Skip(place)], Remainder);
+        return Made([.. Columns.Take(place), new ColumnDeclaration(name, kind, Optional: false), .. Columns.Skip(place)]);
     }
 
     /// <summary>This schema with a column excluded: still named, with its kind, and read by nothing.</summary>
     /// <param name="name">The column.</param>
     /// <returns>The schema with the column excluded; this schema when it is excluded already or not named at all.</returns>
+    /// <exception cref="ArgumentException">
+    /// The column is the last one the schema takes, and the schema does not keep the rest: it would take no column.
+    /// </exception>
     public DeclareStep WithColumnExcluded(string name)
     {
         var at = IndexOf(name);
@@ -283,8 +286,20 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
         return -1;
     }
 
-    private DeclareStep Replaced(int at, ColumnDeclaration column) =>
-        new([.. Columns.Take(at), column, .. Columns.Skip(at + 1)], Remainder);
+    private DeclareStep Replaced(int at, ColumnDeclaration column) => Made([.. Columns.Take(at), column, .. Columns.Skip(at + 1)]);
+
+    // A schema one of this schema's operations makes, refusing what a schema cannot be in the words a file shows.
+    private DeclareStep Made(IEnumerable<ColumnDeclaration> columns)
+    {
+        try
+        {
+            return new(columns, Remainder);
+        }
+        catch (ArgumentException refused)
+        {
+            throw new ArgumentException(StepCatalog.InTheFilesWords(refused), refused);
+        }
+    }
 
     // Where a new column goes: before the first declared column the source has after it; last when the source does not
     // have it, or has none after it.

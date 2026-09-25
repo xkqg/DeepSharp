@@ -108,7 +108,7 @@ public sealed class FormTests : IDisposable
                 if (field.Name != "step")
                 {
                     var json = System.Text.Json.Nodes.JsonNode.Parse(cell.Source)!.AsObject();
-                    var edit = new FormEdit(field.Name, FieldValue.Of(field.CurrentValue), json, FormScope.Unknown);
+                    var edit = new FormEdit(field.Name, FieldValue.Of(field.CurrentValue), json, FormScope.Unknown, Step(cell));
 
                     Assert.True(description.Parameters.Any(parameter => parameter.Accept(edit)), $"{description.Verb}.{field.Name} is claimed by no kind");
                 }
@@ -398,14 +398,102 @@ public sealed class FormTests : IDisposable
 
         var schema = (DeclareStep)Step(declare);
 
-        Assert.Equal(["survived", "sex", "age", "fare"], schema.Columns.Select(column => column.Name));
-        Assert.Equal(ColumnKind.Category, schema.Columns[1].Kind);
-        Assert.True(schema.Columns[3].Optional);
+        // A column not taken stays in the schema, excluded with its kind, so taking it in again brings it back as it was.
+        Assert.Equal(["survived", "sex", "age", "fare"], schema.Taking.Select(column => column.Name));
+        Assert.Equal(new ColumnDeclaration("pclass", ColumnKind.Integer, Optional: false) { Excluded = true }, schema.Columns[1]);
+        Assert.Equal(ColumnKind.Category, schema.Taking.Single(column => column.Name == "sex").Kind);
+        Assert.True(schema.Taking.Single(column => column.Name == "fare").Optional);
+        Assert.Equal(FormVocabulary.NotTaken, Field(await SectionAsync(notebook, declare), "columns/kind/pclass").CurrentValue);
 
         // A column the source does not have goes last.
         await ChangeAsync(notebook, declare, "columns/kind/extra", "number");
 
         Assert.Equal("extra", ((DeclareStep)Step(declare)).Columns[^1].Name);
+    }
+
+    [Fact]
+    public async Task TheSchemasForm_ShowsAnExcludedColumnAsNotTaken_AndAKindPickTakesItInAgainWithThatKind()
+    {
+        await using var notebook = await NotebookAsync(
+            Titanic[0],
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "pclass", "kind": "integer", "optional": false, "excluded": true}, {"name": "age", "kind": "number", "optional": true}, {"name": "fare", "kind": "number", "optional": false}]}""",
+            Titanic[2],
+            Titanic[3],
+            Titanic[4]);
+        var declare = notebook.Scaffold.Cells[1];
+        var section = await SectionAsync(notebook, declare);
+
+        Assert.Equal(FormVocabulary.NotTaken, Field(section, "columns/kind/pclass").CurrentValue);
+        Assert.DoesNotContain(section.Fields, field => field.Name == "columns/optional/pclass");
+
+        await ChangeAsync(notebook, declare, "columns/kind/pclass", "number");
+
+        Assert.Equal(new ColumnDeclaration("pclass", ColumnKind.Number, Optional: false), ((DeclareStep)Step(declare)).Columns[1]);
+    }
+
+    [Fact]
+    public async Task NotTakenOnAColumnAStepReads_ExcludesIt_AndTheStepThatReadsItSaysSo()
+    {
+        // The form changes the schema alone: the step below that reads the column is not rewritten, and says that what
+        // it reads is no longer there.
+        await using var notebook = await NotebookAsync(Titanic);
+        var declare = notebook.Scaffold.Cells[1];
+
+        await ChangeAsync(notebook, declare, "columns/kind/age", FormVocabulary.NotTaken);
+
+        Assert.True(((DeclareStep)Step(declare)).Columns.Single(column => column.Name == "age").Excluded);
+        Assert.Contains(
+            NotebookPipeline.Of(notebook.Scaffold.Cells).Blocks[3].Faults,
+            fault => fault.Contains("which the schema excludes", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AKindPickOnACategoryThatSaysWhatItWas_GivesItThatKind_AndForgetsWhatItWas()
+    {
+        await using var notebook = await NotebookAsync(
+            Titanic[0],
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "pclass", "kind": "category", "optional": false, "was": "integer"}, {"name": "age", "kind": "number", "optional": true}, {"name": "fare", "kind": "number", "optional": false}]}""",
+            Titanic[2],
+            Titanic[3],
+            Titanic[4]);
+        var declare = notebook.Scaffold.Cells[1];
+
+        await ChangeAsync(notebook, declare, "columns/kind/pclass", "number");
+
+        Assert.Equal(new ColumnDeclaration("pclass", ColumnKind.Number, Optional: false), ((DeclareStep)Step(declare)).Columns[1]);
+        Assert.DoesNotContain("not made", (await SectionAsync(notebook, declare)).Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task NotTakenOnTheOnlyColumnASchemaTakes_IsRefused_InTheSchemasOwnWords()
+    {
+        await using var notebook = await NotebookAsync(
+            Titanic[0], """{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}]}""");
+        var declare = notebook.Scaffold.Cells[1];
+        var before = declare.Source;
+
+        await ChangeAsync(notebook, declare, "columns/kind/survived", FormVocabulary.NotTaken);
+
+        var description = (await SectionAsync(notebook, declare)).Description;
+
+        Assert.Equal(before, declare.Source);
+        Assert.Contains("so no column would take part.", description, StringComparison.Ordinal);
+        Assert.DoesNotContain("(Parameter", description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WhetherAColumnNotTakenMayBeAbsent_SaysNothing_EvenWhenTheSchemaNamesIt()
+    {
+        await using var notebook = await NotebookAsync(
+            Titanic[0],
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "pclass", "kind": "integer", "optional": false, "excluded": true}]}""");
+        var declare = notebook.Scaffold.Cells[1];
+        var before = declare.Source;
+
+        await ChangeAsync(notebook, declare, "columns/optional/pclass", true);
+
+        Assert.Equal(before, declare.Source);
+        Assert.Contains("is not taken", (await SectionAsync(notebook, declare)).Description, StringComparison.Ordinal);
     }
 
     [Fact]
