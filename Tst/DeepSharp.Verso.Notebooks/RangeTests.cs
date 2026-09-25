@@ -161,6 +161,21 @@ public sealed class RangeTests : IDisposable
     }
 
     [Fact]
+    public async Task TheEchoOfARangesSecondTick_DoesNotBringItsStartBack()
+    {
+        // The router sends a box's state again on the change after the click: that send finds the blocks changed.
+        await using var notebook = await InRangeModeAsync();
+
+        await TickAsync(notebook, Bands[0]);
+        var second = List(notebook).Row(Bands[2]).Included.Action;
+
+        Assert.True((await notebook.GestureAsync(SchemaBlock(notebook), second, "true")).StateChanged);
+        Assert.False((await notebook.GestureAsync(SchemaBlock(notebook), second, "true")).StateChanged);
+        Assert.DoesNotContain("range from here", List(notebook), StringComparison.Ordinal);
+        Assert.Equal("range", List(notebook).SelectOf(StepRenderer.ListRange)!.Value.Value);
+    }
+
+    [Fact]
     public async Task ARange_LeavesTheColumnsAlreadyInAsTheSchemaHasThem()
     {
         await using var notebook = await InRangeModeAsync();

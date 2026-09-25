@@ -57,6 +57,13 @@ internal sealed record ListPicks(
         action.Text(StepRenderer.IncludeKindKey).AsKind(),
         action.Text(StepRenderer.OutputKindKey).AsKind());
 
+    /// <summary>
+    /// The picks a list keeps when a control drawn before the blocks changed draws it again: where a range started was
+    /// said on the list as it was, and is forgotten — the echo of a range's second tick would otherwise bring it back.
+    /// </summary>
+    /// <returns>The picks, with no range started.</returns>
+    public ListPicks Afresh() => this with { IncludeFrom = null, OutputFrom = null };
+
     /// <summary>Writes the picks into what a list's control carries, so a list drawn again after it keeps them.</summary>
     /// <param name="carried">What the control carries.</param>
     /// <param name="verb">The kind of output the list makes.</param>

@@ -322,7 +322,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         if (!DrawnOver(action, assembled, row.Source))
         {
-            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, picks);
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, picks.Afresh());
 
             return null;
         }
@@ -377,7 +377,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         if (!DrawnOver(action, assembled, list.Source))
         {
-            await StepCommit.ShowAsync(list.On, assembled, ViewTrigger.Show, page: 0, picks);
+            await StepCommit.ShowAsync(list.On, assembled, ViewTrigger.Show, page: 0, picks.Afresh());
 
             return null;
         }
@@ -409,7 +409,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         if (!DrawnOver(action, assembled, row.Source))
         {
-            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, picks);
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, picks.Afresh());
 
             return null;
         }
@@ -461,7 +461,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         if (drawn is null)
         {
-            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, PicksOf(action));
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, PicksOf(action).Afresh());
 
             return null;
         }
@@ -509,7 +509,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         if (drawn is null)
         {
-            await StepCommit.ShowAsync(list.On, assembled, ViewTrigger.Show, page: 0, picks);
+            await StepCommit.ShowAsync(list.On, assembled, ViewTrigger.Show, page: 0, picks.Afresh());
 
             return null;
         }
