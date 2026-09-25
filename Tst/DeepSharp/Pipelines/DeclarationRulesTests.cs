@@ -64,7 +64,35 @@ public class DeclarationRulesTests
             new ReadCsvStep("a.csv"), Schema("fare", "survived"), new SplitAtRandomStep(Shares, 1),
             new TargetStep("fare"), new TargetStep("survived"));
 
-        Assert.Equal(4, Assert.Single(refused.Faults).At);
+        var fault = Assert.Single(refused.Faults);
+
+        Assert.Equal(4, fault.At);
+        Assert.Contains("one output", fault.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ASecondOutputOfAnotherKind_IsRefusedAsWell()
+    {
+        // The rule asks what a step is — an output — not which output it is. Asked of the one kind there was,
+        // a second output of another kind passed, and one of the two answers reached the model as a feature.
+        var refused = Refused(
+            new ReadCsvStep("a.csv"), Schema("a", "b", "c"), new SplitAtRandomStep(Shares, 1),
+            new TargetStep("a"), new NamesTheseAnswers("b", "c"));
+
+        var fault = Assert.Single(refused.Faults);
+
+        Assert.Equal(4, fault.At);
+        Assert.Contains("one output", fault.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheOutput_IsTheOneStepThatNamesTheAnswer()
+    {
+        var target = new TargetStep("a");
+
+        Assert.Same(target, new PipelineDeclaration([new ReadCsvStep("a.csv"), Schema("a"), target]).Output);
+        Assert.Equal(["a"], target.Answers);
+        Assert.Null(new PipelineDeclaration([new ReadCsvStep("a.csv"), Schema("a")]).Output);
     }
 
     [Fact]
@@ -142,9 +170,13 @@ public class DeclarationRulesTests
     }
 
     [Fact]
-    public void TheTarget_IsTheOneStepThatActsOnNothing()
+    public void AnOutputThatOnlyNamesItsAnswers_ActsOnNothing()
     {
+        // It names the answer rather than changing the data, so it is the one kind of step the run does not act
+        // on — whichever output it is.
         Assert.Empty(PipelineDeclaration.FaultsIn([new ReadCsvStep("a.csv"), Schema("a"), new TargetStep("a")]));
+        Assert.Empty(PipelineDeclaration.FaultsIn([new ReadCsvStep("a.csv"), Schema("a", "b"), new NamesTheseAnswers("a", "b")]));
+        Assert.True(typeof(INamesTheAnswer).IsAssignableFrom(typeof(TargetStep)));
         Assert.False(typeof(IActsInAWalk).IsAssignableFrom(typeof(TargetStep)));
     }
 
@@ -152,7 +184,8 @@ public class DeclarationRulesTests
     public void EveryStepThisLibraryShips_DoesExactlyOneThing()
     {
         // Two capabilities on one step cannot compile outside this library — the run would not know which of
-        // them the step is — so what is left to pin is that every step here has one, the target aside.
+        // them the step is — so what is left to pin is that every step here has one, an output that only names
+        // its answers aside.
         var steps = new[] { typeof(Pdd).Assembly, typeof(AddIndicatorStep).Assembly }
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type => type is { IsClass: true, IsAbstract: false } && typeof(IPipelineStep).IsAssignableFrom(type))
@@ -164,7 +197,9 @@ public class DeclarationRulesTests
         {
             var acts = step.GetInterfaces().Count(face => face != typeof(IActsInAWalk) && typeof(IActsInAWalk).IsAssignableFrom(face));
 
-            Assert.True(step == typeof(TargetStep) ? acts == 0 : acts == 1, $"{step.Name} does {acts} things.");
+            var onlyNames = typeof(INamesTheAnswer).IsAssignableFrom(step) && !typeof(IActsInAWalk).IsAssignableFrom(step);
+
+            Assert.True(onlyNames ? acts == 0 : acts == 1, $"{step.Name} does {acts} things.");
         }
     }
 

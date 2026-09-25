@@ -219,7 +219,7 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
         {
             ThrowIfAColumnItReadsIsGone(declaration.Steps[_at]);
 
-            // The target names the answer and acts on nothing; every other step does exactly one thing.
+            // An output that names the answer acts on nothing; every other step does exactly one thing.
             if (declaration.Steps[_at] is IActsInAWalk acting)
             {
                 acting.ActOn(this);
@@ -296,10 +296,10 @@ internal sealed class FitOnTheTrainingRows : WalkMode
     /// <inheritdoc />
     public override void Bound(PipelineDeclaration declaration, Table table)
     {
-        var target = declaration.Steps.OfType<TargetStep>().SingleOrDefault()?.Column;
+        // The way back is walked for an output of one answer, and only for an answer that is a number to begin
+        // with: an answer of words is predicted as a category and there is no arithmetic to come back through.
+        var target = declaration.Output?.Answers is [var only] ? only : null;
 
-        // Only for a target that is a number to begin with. A target of words is predicted as a category
-        // and there is no arithmetic to come back through.
         AnswerAsRead = target is not null && table.Has(target)
                        && table[target].Kind is not (ColumnKind.Text or ColumnKind.Category)
             ? table.NumbersOf(target)
@@ -328,16 +328,14 @@ internal sealed class ReplayWhatWasFitted(IReadOnlyDictionary<int, FittedStepVal
 {
     /// <inheritdoc />
     /// <remarks>
-    /// A row served to a model has no answer yet — that is why it is asked. When the rows lack the column
-    /// the pipeline predicts, it arrives as a gap in every row, which is what it is.
+    /// A row served to a model has no answer yet — that is why it is asked. Every answer the output names that the
+    /// rows lack arrives as a gap in every row, which is what it is.
     /// </remarks>
     public override IRowSource Prepare(PipelineDeclaration declaration, IRowSource source)
     {
-        var target = declaration.Steps.OfType<TargetStep>().SingleOrDefault()?.Column;
+        string[] awaited = [.. (declaration.Output?.Answers ?? []).Where(answer => !source.ColumnNames.Contains(answer, StringComparer.Ordinal))];
 
-        return target is null || source.ColumnNames.Contains(target, StringComparer.Ordinal)
-            ? source
-            : new RowsAwaitingAnAnswer(source, target);
+        return awaited.Length == 0 ? source : new RowsAwaitingAnAnswer(source, awaited);
     }
 
     /// <inheritdoc />
@@ -349,16 +347,16 @@ internal sealed class ReplayWhatWasFitted(IReadOnlyDictionary<int, FittedStepVal
 }
 
 /// <summary>
-/// Rows handed in without the column a model predicts, read as if it were there and empty.
+/// Rows handed in without the columns a model predicts, read as if they were there and empty.
 /// </summary>
 /// <param name="rows">The rows as they were handed in.</param>
-/// <param name="answer">The column they lack.</param>
-internal sealed class RowsAwaitingAnAnswer(IRowSource rows, string answer) : IRowSource
+/// <param name="answers">The columns they lack.</param>
+internal sealed class RowsAwaitingAnAnswer(IRowSource rows, IReadOnlyList<string> answers) : IRowSource
 {
     /// <inheritdoc />
-    public IReadOnlyList<string> ColumnNames { get; } = [.. rows.ColumnNames, answer];
+    public IReadOnlyList<string> ColumnNames { get; } = [.. rows.ColumnNames, .. answers];
 
     /// <inheritdoc />
     public IEnumerable<IReadOnlyList<string?>> Rows =>
-        rows.Rows.Select(row => (IReadOnlyList<string?>)[.. row, null]);
+        rows.Rows.Select(row => (IReadOnlyList<string?>)[.. row, .. answers.Select(_ => (string?)null)]);
 }

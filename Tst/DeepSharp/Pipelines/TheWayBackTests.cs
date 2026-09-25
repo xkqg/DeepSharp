@@ -124,8 +124,28 @@ public class TheWayBackTests
 
         var refused = Assert.Throws<InvalidOperationException>(() => prepared.BackToOriginal(0.5));
 
-        Assert.Contains("names no target", refused.Message);
+        Assert.Contains("names no answer", refused.Message);
         Assert.Throws<ArgumentNullException>(() => prepared.BackToOriginal(null!));
+    }
+
+    [Fact]
+    public void AnOutputOfSeveralAnswers_IsNotPutBackOneNumberAtATime()
+    {
+        // One number goes back into the units of one column; which of several it belongs to is not something to
+        // guess.
+        var prepared = new Pipeline(
+            new PipelineDeclaration(
+            [
+                new ReadRowsStep("three numbers"),
+                new DeclareStep([.. new[] { "a", "b", "c" }.Select(name => new ColumnDeclaration(name, ColumnKind.Number, Optional: false))]),
+                new SplitAtRandomStep(new SplitShares(0.50, 0, 0.50), 1),
+                new NamesTheseAnswers("b", "c"),
+            ]),
+            new InMemoryRowSource(["a", "b", "c"], [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["10", "11", "12"]])).Run();
+
+        var refused = Assert.Throws<InvalidOperationException>(() => prepared.BackToOriginal(0.5));
+
+        Assert.Contains("2 answers", refused.Message, StringComparison.Ordinal);
     }
 
     [Theory]

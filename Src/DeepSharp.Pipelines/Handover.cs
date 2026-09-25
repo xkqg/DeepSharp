@@ -2,53 +2,8 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Globalization;
-using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
-
-/// <summary>
-/// Names the column a model is being asked to predict.
-/// </summary>
-/// <remarks>
-/// The answer is not a feature, so it is taken out of what a model is shown and handed over separately. A
-/// pipeline that left it among the inputs would produce a model that scores perfectly and knows nothing —
-/// and the same mistake wears a quieter costume when a column merely restates the answer, which is what
-/// declaring the columns is for.
-/// </remarks>
-public sealed record TargetStep : IPipelineStep<TargetStep>, IDescribesColumns
-{
-    private static readonly ColumnParameter ColumnKey = new(
-        "column", "The column a model is asked to predict, handed over apart from the numbers it is shown.", "answer", ColumnKinds.Any);
-
-    /// <summary>Declares which column holds the answer.</summary>
-    /// <param name="column">The column being predicted.</param>
-    /// <exception cref="ArgumentException">The column has no name.</exception>
-    public TargetStep(string column) => Column = ColumnKey.Require(column);
-
-    /// <summary>The column being predicted.</summary>
-    public string Column { get; }
-
-    /// <inheritdoc />
-    public static string Name => "target";
-
-    /// <inheritdoc />
-    public static string Purpose => "Names the column a model is asked to predict, which is handed over apart from the numbers it is shown.";
-
-    /// <inheritdoc />
-    public static StepParameters<TargetStep> Parameters { get; } =
-        new StepParameters<TargetStep>().With(ColumnKey, step => step.Column);
-
-    /// <inheritdoc />
-    public string Verb => Name;
-
-    /// <inheritdoc />
-    public ColumnState After(ColumnState before) => before;
-
-    /// <summary>Reads this step back out of a file.</summary>
-    /// <param name="element">The JSON object the step was written as.</param>
-    /// <returns>The step the file describes.</returns>
-    public static TargetStep ReadFrom(JsonElement element) => new(ColumnKey.Read(element));
-}
 
 /// <summary>
 /// The numbers of one split, in the shape anything that learns can take them.
@@ -117,7 +72,7 @@ public static class Handover
             .Where(row => prepared.Parts[row] == part)
             .ToArray();
 
-        return HandedOver(prepared, prepared.Table, rows, answers: true);
+        return HandedOver(prepared, prepared.Table, rows, withAnswers: true);
     }
 
     /// <summary>Rows that arrived after training, replayed and handed over in the shape the training rows were.</summary>
@@ -139,23 +94,25 @@ public static class Handover
 
         var table = prepared.Replay(rows);
         var all = Enumerable.Range(0, table.RowCount).ToArray();
-        var batch = HandedOver(prepared, table, all, answers: false);
+        var batch = HandedOver(prepared, table, all, withAnswers: false);
 
         return new ServedBatch(batch.FeatureNames, batch.Features, [.. all.Select(row => table.Identities[row].ReadAt)]);
     }
 
-    private static Batch HandedOver(PreparedData prepared, Table table, int[] rows, bool answers)
+    private static Batch HandedOver(PreparedData prepared, Table table, int[] rows, bool withAnswers)
     {
-        var target = prepared.Declaration.Steps.OfType<TargetStep>().LastOrDefault()?.Column;
+        var answers = prepared.Declaration.Output?.Answers ?? [];
 
-        if (target is not null && !table.Has(target))
+        if (answers.FirstOrDefault(answer => !table.Has(answer)) is { } vanished)
         {
             throw new InvalidOperationException(
-                $"This pipeline predicts '{target}', and no column of that name reached the end of it.");
+                $"This pipeline predicts '{vanished}', and no column of that name reached the end of it.");
         }
 
+        // Every answer the output names is left out of what a model is shown, not only the first: the others would
+        // reach it as features.
         var features = table.Columns
-            .Where(column => column.Name != target)
+            .Where(column => !answers.Contains(column.Name, StringComparer.Ordinal))
             .ToArray();
 
         var words = features.FirstOrDefault(column => column is TextColumn);
@@ -169,7 +126,9 @@ public static class Handover
         }
 
         var values = features.Select(column => table.NumbersOf(column.Name)).ToArray();
-        var known = target is null || !answers ? null : table.NumbersOf(target);
+        // The labels are one number per row, so they carry an output of one answer.
+        var target = withAnswers && answers is [var only] ? only : null;
+        var known = target is null ? null : table.NumbersOf(target);
         var batch = new List<double[]>(rows.Length);
         var labels = known is null ? null : new List<double>(rows.Length);
 

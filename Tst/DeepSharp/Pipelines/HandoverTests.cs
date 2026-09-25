@@ -63,6 +63,27 @@ public class HandoverTests
     }
 
     [Fact]
+    public void EveryAnswerAnOutputNames_IsLeftOutOfTheNumbersAModelIsShown()
+    {
+        // An output may name several answers. Leaving out only one of them hands the others to a model as
+        // features: the answer among the inputs, with nothing going red.
+        var prepared = new Pipeline(
+            new PipelineDeclaration(
+            [
+                new ReadRowsStep("three numbers"),
+                new DeclareStep([.. new[] { "a", "b", "c" }.Select(name => new ColumnDeclaration(name, ColumnKind.Number, Optional: false))]),
+                new SplitAtRandomStep(new SplitShares(0.50, 0, 0.50), 1),
+                new NamesTheseAnswers("b", "c"),
+            ]),
+            new InMemoryRowSource(["a", "b", "c"], [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["10", "11", "12"]])).Run();
+
+        var batch = prepared.Batch(Part.Train);
+
+        Assert.Equal(["a"], batch.FeatureNames);
+        Assert.Null(batch.Labels);
+    }
+
+    [Fact]
     public void APipelineWithNoTargetHandsOverNoAnswers()
     {
         var prepared = Pdd.Create()

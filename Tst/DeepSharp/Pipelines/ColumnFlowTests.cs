@@ -222,7 +222,27 @@ public class ColumnFlowTests
         var fault = RefusedAt(() => Passengers().SplitStratified("survived", 0.70, 0.15).Target("survived").Drop("survived"));
 
         Assert.Equal("drop.columns", fault.Verb);
-        Assert.Contains("target", fault.Message, StringComparison.Ordinal);
+        Assert.Contains("'survived'", fault.Message, StringComparison.Ordinal);
+        Assert.Contains("output", fault.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NothingAfterTheOutput_TakesAnyOfItsAnswersAway()
+    {
+        // An output may name several answers — the bins of a histogram — and taking away any one of them leaves a
+        // model asked for an answer that is no longer there.
+        IPipelineStep[] steps =
+        [
+            new ReadRowsStep("rows"),
+            new DeclareStep([.. new[] { "a", "b", "c" }.Select(name => new ColumnDeclaration(name, ColumnKind.Number, Optional: false))]),
+            new NamesTheseAnswers("b", "c"),
+            new DropColumnsStep(["c"]),
+        ];
+
+        var fault = Assert.Single(PipelineDeclaration.FaultsIn(steps));
+
+        Assert.Equal(3, fault.At);
+        Assert.Contains("'c'", fault.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -17,7 +17,7 @@ namespace DeepSharp.Pipelines;
 /// <para>
 /// It is also where the rules live. A declaration is the single thing the chain, the extension point, a
 /// hand-written file and a notebook all become, so refusing a step that learns before the data has been
-/// split — or a second source, schema, split or target, or rows dropped after the split — is done here once
+/// split — or a second source, schema, split or output, or rows dropped after the split — is done here once
 /// rather than in four places that would have to agree.
 /// </para>
 /// </remarks>
@@ -37,7 +37,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         new RowsAreSettledBeforeTheSplit(),
         new AtMostOne<IOrdersRows>("order"),
         new RowOrderIsDeclaredBeforeItIsRead(),
-        new AtMostOne<TargetStep>("target"),
+        new AtMostOne<INamesTheAnswer>("output"),
         new ColumnsAreThereWhereTheyAreRead(),
     ];
 
@@ -66,6 +66,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
 
         ColumnsAt = Array.FindIndex(_steps, step => step is IBindsColumns);
         SplitAt = Array.FindIndex(_steps, step => step is ISplitStep);
+        OutputAt = Array.FindIndex(_steps, step => step is INamesTheAnswer);
     }
 
     /// <summary>Everything wrong with these steps as a declaration, without refusing them.</summary>
@@ -184,6 +185,16 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
 
     /// <summary>Where the split stands, or -1 when nothing divides the rows.</summary>
     internal int SplitAt { get; }
+
+    /// <summary>Where the output stands, or -1 when the pipeline names no answer.</summary>
+    internal int OutputAt { get; }
+
+    /// <summary>The step that names what a model is asked to predict, or nothing when the pipeline names no answer.</summary>
+    /// <remarks>
+    /// A declaration has at most one, so this is the one place every part that needs the answer asks — the handover,
+    /// a replay, the way back — whichever kind of output it is.
+    /// </remarks>
+    public INamesTheAnswer? Output => OutputAt < 0 ? null : (INamesTheAnswer)_steps[OutputAt];
 
     /// <summary>The columns there are before a step: the ones a block standing there can pick from.</summary>
     /// <param name="position">The step's place, counting from nought; the number of steps for after the last.</param>

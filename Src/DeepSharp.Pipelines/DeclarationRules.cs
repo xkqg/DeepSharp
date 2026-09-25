@@ -54,7 +54,7 @@ internal interface IDeclarationRule
 }
 
 /// <summary>
-/// A declaration has at most one step of a kind: one source, one schema, one split, one target.
+/// A declaration has at most one step of a kind: one source, one schema, one split, one output.
 /// </summary>
 /// <typeparam name="TStep">The kind there may be only one of.</typeparam>
 /// <param name="what">What the kind is called, for the message.</param>
@@ -91,7 +91,7 @@ internal sealed class AtMostOne<TStep>(string what) : IDeclarationRule
 }
 
 /// <summary>
-/// Every step does something the run acts on, except the target, which names the answer.
+/// Every step does something the run acts on, except an output that only names the answer.
 /// </summary>
 /// <remarks>
 /// A step with no acting capability used to be carried along and ignored: it was in the file and in the
@@ -104,7 +104,7 @@ internal sealed class EveryStepActs : IDeclarationRule
     {
         for (var at = 0; at < steps.Count; at++)
         {
-            if (steps[at] is not (IActsInAWalk or TargetStep))
+            if (steps[at] is not (IActsInAWalk or INamesTheAnswer))
             {
                 yield return new DeclarationFault(
                     at, steps[at].Verb,
@@ -234,7 +234,7 @@ internal sealed class NothingLearnsBeforeTheSplit : IDeclarationRule
 /// The columns are followed from the schema down, each step saying what it leaves behind. A column the schema
 /// left out, or a step above took away, used to fail a whole run later as a column nobody could find; it is
 /// refused where it is read, naming the step. The same walk refuses what only the columns can decide — an
-/// encoder with no category to encode, a step after the target that takes the target's column away.
+/// encoder with no category to encode, a step after the output that takes one of its answers away.
 /// </remarks>
 internal sealed class ColumnsAreThereWhereTheyAreRead : IDeclarationRule
 {

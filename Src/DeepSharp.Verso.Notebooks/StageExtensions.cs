@@ -33,12 +33,18 @@ internal static class StageExtensions
 
     /// <summary>The capability this step acts through: the one thing it does in a run.</summary>
     /// <param name="step">The step.</param>
-    /// <returns>The capability; the step's own type for the target, which acts on nothing and only names the answer.</returns>
+    /// <returns>
+    /// The capability; for an output, the family of outputs, whichever of them acts, since an output is swapped for
+    /// another output; the step's own type for a step that does nothing the run knows.
+    /// </returns>
     public static Type ActingCapability(this IPipelineStep step) =>
-        Stages.Keys.FirstOrDefault(capability => capability.IsInstanceOfType(step)) ?? step.GetType();
+        step is INamesTheAnswer
+            ? typeof(INamesTheAnswer)
+            : Stages.Keys.FirstOrDefault(capability => capability.IsInstanceOfType(step)) ?? step.GetType();
 
     /// <summary>The stage this step belongs to.</summary>
     /// <param name="step">The step.</param>
     /// <returns>Its stage, in a word or a few.</returns>
-    public static string Stage(this IPipelineStep step) => Stages.GetValueOrDefault(step.ActingCapability(), "target");
+    public static string Stage(this IPipelineStep step) =>
+        step is INamesTheAnswer ? "output" : Stages.GetValueOrDefault(step.ActingCapability(), "step");
 }

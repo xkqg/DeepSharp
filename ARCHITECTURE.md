@@ -28,6 +28,7 @@ Src/DeepSharp.Pipelines/          the data side
                                     rows, where a path is read from, typed columns, who a row is, what a fit sees
     Walk.cs Execution.cs Views.cs Fitting.cs Handover.cs
                                     the one walk every run is, the data after any step, what a fit learned, the handover
+    Outputs.cs                      what a model is asked to predict: the output, and its kinds
 Src/DeepSharp.Pipelines.DataFrame/   a reader through MatPlotLibNet.DataFrame
 Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
 Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
@@ -82,7 +83,7 @@ these are the only way to be either kind.
 
 The constructor keeps the other rules a declaration has to keep, whichever door it came through — the chain,
 the extension point, a hand-written file, a notebook. One source, one schema, one split, one order and one
-target: a second one used to be ignored, so a file said one thing and the numbers came from another. The
+output: a second one used to be ignored, so a file said one thing and the numbers came from another. The
 schema comes directly after the source, since everything else works on columns. Rows are dropped and put in
 order before the split, never after it, because the split divides the rows it is given once. A step that reads
 the rows in their order stands below the step that says what that order is. Every step does something the run
@@ -539,13 +540,13 @@ differently on the day the network does.
 ### The pipeline ends at a handover, and the same one serves
 
 `Batch(part)` is where the pipeline stops: rows of numbers, their column names in a fixed order, and the
-answer handed over separately when a target was named. A network built here, a trainer from an established
+answer handed over separately when the pipeline names one. A network built here, a trainer from an established
 .NET library and a caller's own learner all take that same handover, which is the only reason two of them
 can honestly be compared.
 
 Three things are refused there rather than passed on. A column still holding words, because turning one
 into a number quietly is how a category becomes an order nobody meant. A gap, because a model cannot be
-handed an absence. And a target that no longer exists, which is what encoding the answer column does to a
+handed an absence. And an answer that no longer exists, which is what encoding the answer column does to a
 pipeline that also predicts it.
 
 `Replay` is the same declaration over rows nobody had seen, with the numbers the training rows produced and
@@ -567,8 +568,8 @@ through its parameters — because most of what a step might do applies to only 
 *do* is said by the one capability it implements: `IOpensRows` for a source, `IBindsColumns` for a schema,
 `IOrdersRows` for an order, `IAddsColumns` for arithmetic on a row, `IDropsRows` and `IDropsColumns` for taking
 something away, `ISplitStep` for dividing the rows, `IFittedStep` for learning and replaying, and
-`IProducesEvidence` for proof. The target alone acts on nothing, because it names the answer rather than
-changing the data. What every step has belongs to its type — its name, its purpose, its parameters — and a step
+`IProducesEvidence` for proof. An output that only names the answer acts on nothing, because it names the answer
+rather than changing the data; `INamesTheAnswer` says it is an output, whichever kind, and a pipeline has one. What every step has belongs to its type — its name, its purpose, its parameters — and a step
 without one of those does not compile.
 
 The run does not ask each step what it can do. Every capability says what doing it means, in terms of what

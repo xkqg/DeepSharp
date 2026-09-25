@@ -87,8 +87,8 @@ public interface IPipelineStep<TSelf> : IPipelineStep
 /// learns from them.
 /// </summary>
 /// <remarks>
-/// Every step does exactly one of those, and says which by the capability it implements; the target alone
-/// acts on nothing, because it names the answer rather than changing the data. Each capability tells the walk
+/// Every step does exactly one of those, and says which by the capability it implements; an output that only
+/// names the answer acts on nothing, because it names the answer rather than changing the data. Each capability tells the walk
 /// what doing it means, so the walk hands every step to itself and asks nothing — a walk that asked each step
 /// what it could do was a list that every new capability had to be added to, and a list that had to agree
 /// with the rules about which steps act. A step cannot implement two of them: it would be one step the run

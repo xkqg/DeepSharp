@@ -131,7 +131,7 @@ public class BlockTests
     [InlineData("split.stratified", "split")]
     [InlineData("normalise", "learned from the training rows")]
     [InlineData("evidence.profile", "evidence")]
-    [InlineData("target", "target")]
+    [InlineData("target", "output")]
     public async Task TheStageABlockBelongsTo_FollowsWhatItsStepDoes(string verb, string stage)
     {
         // Worked out from the capability the step acts through, never stored beside it, so it cannot drift from
@@ -155,15 +155,34 @@ public class BlockTests
     [InlineData("split.stratified", typeof(ISplitStep))]
     [InlineData("normalise", typeof(IFittedStep))]
     [InlineData("evidence.profile", typeof(IProducesEvidence))]
-    [InlineData("target", typeof(TargetStep))]
+    [InlineData("target", typeof(INamesTheAnswer))]
     public void EveryStep_ActsThroughOneCapability_ThatItsStageIsNamedAfter(string verb, Type capability)
     {
         // The capability decides what a step can be swapped for; the stage is only its name, and two capabilities
-        // may share one — leaving out rows and leaving out a column are both cleaning.
+        // may share one — leaving out rows and leaving out a column are both cleaning. An output is swapped for
+        // another output, whichever of them acts.
         var step = Verbs().ReadStep(Verbs().Describe(verb).Template);
 
         Assert.Equal(capability, step.ActingCapability());
         Assert.False(string.IsNullOrWhiteSpace(step.Stage()));
+    }
+
+    [Fact]
+    public void AStepThatActsThroughNothingKnown_StillHasAStage()
+    {
+        // No verb in the catalog is such a step, and a declaration refuses one; the stage is still a word, whatever
+        // step it is asked of.
+        var step = new DoesNothing();
+
+        Assert.Equal(typeof(DoesNothing), step.ActingCapability());
+        Assert.Equal("step", step.Stage());
+    }
+
+    private sealed class DoesNothing : IPipelineStep
+    {
+        public string Verb => "test.nothing";
+
+        public void WriteTo(System.Text.Json.Utf8JsonWriter writer) => throw new NotSupportedException("A test step is never written down.");
     }
 
     [Fact]

@@ -243,7 +243,7 @@ internal static class ColumnFlow
     {
         var faults = new List<DeclarationFault>();
         var state = start;
-        string? target = null;
+        IReadOnlyList<string> answers = [];
 
         for (var at = from; at < until; at++)
         {
@@ -269,14 +269,14 @@ internal static class ColumnFlow
 
             var after = step is IDescribesColumns said ? said.After(state) : state.Opened();
 
-            if (target is not null && state.Allows(target) && !after.Allows(target))
+            foreach (var answer in answers.Where(answer => state.Allows(answer) && !after.Allows(answer)))
             {
                 faults.Add(new DeclarationFault(
                     at, step.Verb,
-                    $"takes away '{target}', the column the target above it names; nothing after the target may."));
+                    $"takes away '{answer}', an answer the output above it names; nothing after the output may take one away."));
             }
 
-            target = step is TargetStep named ? named.Column : target;
+            answers = step is INamesTheAnswer named ? named.Answers : answers;
             state = after;
         }
 

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
@@ -436,7 +437,7 @@ public sealed class PreparedData
     /// <param name="predictions">What a model said, in the units it was trained on.</param>
     /// <returns>The same numbers, in the units of the column the pipeline started from.</returns>
     /// <exception cref="InvalidOperationException">
-    /// The pipeline names no target, or a step on the way to it cannot be undone.
+    /// The pipeline names no answer, or several, or a step on the way to it cannot be undone.
     /// </exception>
     /// <remarks>
     /// The steps that touched the target are walked backwards, each undoing what it did. A step that
@@ -447,9 +448,15 @@ public sealed class PreparedData
     {
         ArgumentNullException.ThrowIfNull(predictions);
 
-        var target = Declaration.Steps.OfType<TargetStep>().LastOrDefault()?.Column
-            ?? throw new InvalidOperationException(
-                "This pipeline names no target, so there is nothing to put back into any units.");
+        var target = Declaration.Output switch
+        {
+            { Answers: [var only] } => only,
+            null => throw new InvalidOperationException(
+                "This pipeline names no answer, so there is nothing to put back into any units."),
+            var output => throw new InvalidOperationException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"This pipeline's output names {output.Answers.Count} answers, and one number goes back into the units of one of them.")),
+        };
 
         var undoing = new List<(IUndoesItself Step, FittedStepValues? Fitted)>();
 

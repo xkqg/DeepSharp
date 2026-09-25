@@ -178,7 +178,8 @@ public sealed class Pipeline
 
     private static void ThrowIfTheWayBackIsNotReal(PreparedData prepared, double?[] asRead)
     {
-        var target = prepared.Declaration.Steps.OfType<TargetStep>().Single().Column;
+        // Asked only when the answer as read was kept, which is for an output of one answer.
+        var target = prepared.Declaration.Output!.Answers.Single();
 
         if (!prepared.Declaration.Steps.OfType<IUndoesItself>().Any(step => step.Produces == target))
         {

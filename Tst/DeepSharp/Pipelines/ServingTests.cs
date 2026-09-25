@@ -70,6 +70,27 @@ public class ServingTests
     }
 
     [Fact]
+    public void AServedRow_AwaitsEveryAnswerItsOutputNames()
+    {
+        // A served row is the question, so every answer is what it lacks — not only the first one: a row without
+        // the second answer used to be refused at the door for a column it cannot have.
+        var trained = new Pipeline(
+            new PipelineDeclaration(
+            [
+                new ReadRowsStep("three numbers"),
+                new DeclareStep([.. new[] { "a", "b", "c" }.Select(name => new ColumnDeclaration(name, ColumnKind.Number, Optional: false))]),
+                new SplitAtRandomStep(new SplitShares(0.50, 0, 0.50), 1),
+                new NamesTheseAnswers("b", "c"),
+            ]),
+            new InMemoryRowSource(["a", "b", "c"], [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["10", "11", "12"]])).Run();
+
+        var served = trained.Served(new InMemoryRowSource(["a"], [["13"]]));
+
+        Assert.Equal(["a"], served.FeatureNames);
+        Assert.Equal([0], served.HandedInAt);
+    }
+
+    [Fact]
     public void AServedRowWithAGap_IsRefusedAsATrainingRowWouldBe()
     {
         var trained = Pdd.Create()
