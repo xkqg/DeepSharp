@@ -13,17 +13,43 @@ namespace DeepSharp.Verso.Notebooks;
 /// <param name="Faults">What is wrong with the block: its text, or a rule it breaks where it stands.</param>
 internal readonly record struct Block(Guid Cell, IPipelineStep? Step, IReadOnlyList<string> Faults);
 
+/// <summary>What asked a block's kernel to show something.</summary>
+internal enum ViewTrigger
+{
+    /// <summary>"Show the data here", on a block.</summary>
+    Show,
+
+    /// <summary>Another page of the data a block shows.</summary>
+    Page,
+
+    /// <summary>A change a gesture made to the blocks, or asked for and did not get.</summary>
+    Commit,
+
+    /// <summary>The toolbar's run of the whole pipeline.</summary>
+    Run,
+}
+
 /// <summary>What a block's kernel is asked to show.</summary>
 /// <param name="Declaration">The declaration to run, or nothing when the blocks down to this one do not make one.</param>
 /// <param name="Position">The block's place in it, counting from nought.</param>
 /// <param name="Page">Which page of rows to show, counting from nought.</param>
 /// <param name="Faults">Why nothing can be shown, when nothing can.</param>
-/// <param name="Run">Whether to run the whole pipeline, fitting every step, and hand what it learned over.</param>
+/// <param name="Trigger">What asked for it.</param>
+/// <param name="Whole">Whether every block is in the declaration: the whole notebook makes one pipeline.</param>
 /// <param name="NotMade">
 /// A change a gesture asked for and that is not made, each rule it would break: said above the data, which is as it was.
 /// </param>
+/// <remarks>
+/// The whole pipeline is fitted only when the toolbar's run asks it of a notebook that makes one pipeline; every other
+/// request shows the data at its block.
+/// </remarks>
 internal readonly record struct ViewRequest(
-    PipelineDeclaration? Declaration, int Position, int Page, IReadOnlyList<string> Faults, bool Run, IReadOnlyList<string> NotMade);
+    PipelineDeclaration? Declaration, int Position, int Page, IReadOnlyList<string> Faults, ViewTrigger Trigger, bool Whole,
+    IReadOnlyList<string> NotMade)
+{
+    /// <summary>Whether to run the whole pipeline, fitting every step, and hand what it learned over.</summary>
+    public bool RunsTheWholePipeline => Trigger == ViewTrigger.Run && Whole;
+}
 
 /// <summary>
 /// The pipeline a notebook's blocks declare, read in the order the blocks stand, the way a file is read.
@@ -152,19 +178,16 @@ internal sealed class NotebookPipeline
 
     /// <summary>What a block's kernel is to show: the data there, or why there is none.</summary>
     /// <param name="cell">The block's cell.</param>
+    /// <param name="trigger">What asks for it.</param>
     /// <param name="page">Which page of rows, counting from nought.</param>
-    /// <param name="run">Whether the whole pipeline is to be run and handed over.</param>
-    /// <returns>The request.</returns>
-    public ViewRequest RequestFor(Guid cell, int page, bool run)
+    /// <returns>The request, saying what asked for it and whether the blocks make one pipeline.</returns>
+    public ViewRequest RequestFor(Guid cell, ViewTrigger trigger, int page)
     {
         var position = PositionOf(cell);
 
-        if (position >= 0 && position < Readable.Steps.Count)
-        {
-            return new ViewRequest(Readable, position, page, [], run && Whole, []);
-        }
-
-        // The first block at or above this one that is at fault is what stops it.
-        return new ViewRequest(null, position, page, Stopping, run, []);
+        // The first block at or above one below the declaration that is at fault is what stops it.
+        return position >= 0 && position < Readable.Steps.Count
+            ? new ViewRequest(Readable, position, page, [], trigger, Whole, [])
+            : new ViewRequest(null, position, page, Stopping, trigger, Whole, []);
     }
 }

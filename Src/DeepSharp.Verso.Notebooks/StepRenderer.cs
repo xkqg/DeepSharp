@@ -106,16 +106,18 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
     private static async Task<string?> HandleAsync(Gesture gesture, CellInteractionContext context)
     {
+        var assembled = NotebookPipeline.Of(gesture.Notebook.Cells);
+
         switch (context.InteractionType)
         {
             case Show:
-                return await ShowAsync(gesture, page: 0, NotebookPipeline.Of(gesture.Notebook.Cells));
+                return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Show, page: 0);
 
             case Page:
-                return await ShowAsync(gesture, PageOf(context.Payload), NotebookPipeline.Of(gesture.Notebook.Cells));
+                return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Page, PageOf(context.Payload));
 
-            case Drop or Category when Change(gesture, context.InteractionType, context.Payload) is { } change:
-                context.StateChanged = await CommitAsync(gesture, change);
+            case Drop or Category when Change(assembled, gesture.Cell, context.InteractionType, context.Payload) is { } steps:
+                context.StateChanged = await StepCommit.CommitAsync(gesture, assembled, steps);
 
                 return null;
 
@@ -124,12 +126,11 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         }
     }
 
-    // What a grid gesture changes in the declaration, or nothing when the notebook already is what it asks for:
-    // the column does not reach the end, the column is a category, or the block shows no grid to have made it on.
-    private static Edit? Change(Gesture gesture, string interaction, string column)
+    // The steps a grid gesture makes of the declaration, or nothing when the notebook already is what it asks for: the
+    // column does not reach the end, the column is a category, or the block shows no grid to have made it on.
+    private static IReadOnlyList<IPipelineStep>? Change(NotebookPipeline assembled, Guid cell, string interaction, string column)
     {
-        var assembled = NotebookPipeline.Of(gesture.Notebook.Cells);
-        var position = assembled.PositionOf(gesture.Cell);
+        var position = assembled.PositionOf(cell);
         var declaration = assembled.Readable;
 
         if (position < 0 || position >= declaration.Steps.Count || declaration.Steps.OfType<DeclareStep>().FirstOrDefault() is not { } declare)
@@ -137,15 +138,21 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return null;
         }
 
-        var declareAt = declaration.Steps.ToList().IndexOf(declare);
+        List<IPipelineStep> steps = [.. declaration.Steps];
+        var declareAt = steps.IndexOf(declare);
         var declared = declare.Columns.FirstOrDefault(each => each.Name == column);
 
         if (interaction == Category)
         {
-            return declared is { Kind: not ColumnKind.Category }
-                ? new Edit(assembled, declareAt, new DeclareStep(
-                    [.. declare.Columns.Select(each => each == declared ? each with { Kind = ColumnKind.Category } : each)], declare.Remainder), Inserted: false)
-                : null;
+            if (declared is not { Kind: not ColumnKind.Category })
+            {
+                return null;
+            }
+
+            steps[declareAt] = new DeclareStep(
+                [.. declare.Columns.Select(each => each == declared ? each with { Kind = ColumnKind.Category } : each)], declare.Remainder);
+
+            return steps;
         }
 
         // Left out by the schema, or taken away by a step below: the column is excluded already.
@@ -162,157 +169,31 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         // column nobody names is not there.
         if (readers.Length == 0 && declared is not null && declare.Remainder == Remainder.Drop)
         {
-            return new Edit(assembled, declareAt, new DeclareStep([.. declare.Columns.Where(each => each != declared)], declare.Remainder), Inserted: false);
+            steps[declareAt] = new DeclareStep([.. declare.Columns.Where(each => each != declared)], declare.Remainder);
+
+            return steps;
         }
 
         // Otherwise it is dropped after the last step that reads it, or after the step that made it; a drop that
         // already stands there takes one more name.
-        var after = Math.Max(readers.DefaultIfEmpty(-1).Max(), MadeAt(declaration, column));
+        var after = Math.Max(readers.DefaultIfEmpty(-1).Max(), MadeAt(declaration, column)) + 1;
 
-        return after + 1 < declaration.Steps.Count && declaration.Steps[after + 1] is DropColumnsStep drop
-            ? new Edit(assembled, after + 1, new DropColumnsStep([.. drop.Columns, column]), Inserted: false)
-            : new Edit(assembled, after + 1, new DropColumnsStep([column]), Inserted: true);
+        if (after < steps.Count && steps[after] is DropColumnsStep drop)
+        {
+            steps[after] = new DropColumnsStep([.. drop.Columns, column]);
+        }
+        else
+        {
+            steps.Insert(after, new DropColumnsStep([column]));
+        }
+
+        return steps;
     }
 
     // Where a column comes to be: the first step after which it is there.
     private static int MadeAt(PipelineDeclaration declaration, string column) =>
         Enumerable.Range(0, declaration.Steps.Count).First(at => declaration.ColumnsBefore(at + 1).Allows(column));
 
-    // Makes the change, once, unless it would break a step or the layout cannot hold it; either way the block shows
-    // what came of it. A change makes stale every view worked out from the steps it changed, and every grid whose
-    // offers it changed, and those are cleared rather than left showing what is no longer so.
-    private static async Task<bool> CommitAsync(Gesture gesture, Edit edit)
-    {
-        List<IPipelineStep> steps = [.. edit.Assembled.Readable.Steps];
-
-        if (edit.Inserted)
-        {
-            steps.Insert(edit.At, edit.Step);
-        }
-        else
-        {
-            steps[edit.At] = edit.Step;
-        }
-
-        IReadOnlyList<string> notMade = !gesture.MayAddAndRemove
-            ? ["the layout this notebook is shown in cannot add or remove a block; show it in the notebook layout to change the pipeline from the grid."]
-            : [.. PipelineDeclaration.FaultsIn(steps).Select(fault => fault.ToString())];
-
-        if (notMade.Count > 0)
-        {
-            gesture.Session.Request(
-                gesture.Cell, edit.Assembled.RequestFor(gesture.Cell, page: 0, run: false) with { NotMade = notMade });
-            await gesture.Operations.ExecuteCellAsync(gesture.Cell);
-
-            return false;
-        }
-
-        var written = await WriteAsync(gesture, edit);
-        var now = NotebookPipeline.Of(gesture.Notebook.Cells);
-        var shown = gesture with { Cell = written.Gesture };
-
-        foreach (var cell in gesture.Session.ForgetStale(now, except: shown.Cell))
-        {
-            // A block deleted since it was shown has nothing left to clear.
-            if (gesture.Notebook.Cells.Any(each => each.Id == cell))
-            {
-                await gesture.Operations.ClearOutputAsync(cell);
-            }
-        }
-
-        // The block written is one a front end has never seen, and its run is what makes a front end read the
-        // notebook again; when it is the block the gesture was made on, showing the result runs it.
-        if (written.Block != shown.Cell)
-        {
-            await gesture.Operations.ExecuteCellAsync(written.Block);
-        }
-
-        await ShowAsync(shown, page: 0, now);
-
-        return true;
-    }
-
-    // Writes the change as a block no front end has seen: a new block after the step it follows, or a new block in
-    // the place of the one rewritten. Verso tells a front end nothing of a block whose text a part changed, and the
-    // next keystroke there would put the old text back.
-    private static async Task<Written> WriteAsync(Gesture gesture, Edit edit)
-    {
-        var blocks = edit.Assembled.Blocks;
-        var text = edit.Step.AsBlockText();
-
-        if (edit.Inserted)
-        {
-            var after = gesture.Notebook.Cells.FindIndex(cell => cell.Id == blocks[edit.At - 1].Cell) + 1;
-            var inserted = await InsertAsync(gesture, after, text);
-
-            return new Written(inserted.Id, gesture.Cell);
-        }
-
-        var old = gesture.Notebook.Cells.Single(cell => cell.Id == blocks[edit.At].Cell);
-        var replacing = await InsertAsync(gesture, gesture.Notebook.Cells.IndexOf(old), text);
-
-        foreach (var (key, value) in old.Metadata)
-        {
-            replacing.Metadata[key] = value;
-        }
-
-        await gesture.Operations.RemoveCellAsync(old.Id);
-        gesture.Session.Hidden(old.Id);
-        gesture.Session.Accepted(old.Id);
-
-        return new Written(replacing.Id, old.Id == gesture.Cell ? replacing.Id : gesture.Cell);
-    }
-
-    private static async Task<CellModel> InsertAsync(Gesture gesture, int at, string text)
-    {
-        var id = Guid.Parse(await gesture.Operations.InsertCellAsync(at, StepCellType.StepType, StepKernel.Language));
-        var cell = gesture.Notebook.Cells.Single(each => each.Id == id);
-
-        cell.Source = text;
-
-        return cell;
-    }
-
-    private static async Task<string?> ShowAsync(Gesture gesture, int page, NotebookPipeline assembled)
-    {
-        if (assembled.PositionOf(gesture.Cell) < 0)
-        {
-            return "This cell is not a block of the pipeline.";
-        }
-
-        gesture.Session.Publish(assembled);
-
-        gesture.Session.HandOver(gesture.Variables, assembled);
-        gesture.Session.Request(gesture.Cell, assembled.RequestFor(gesture.Cell, page, run: false));
-
-        await gesture.Operations.ExecuteCellAsync(gesture.Cell);
-
-        return null;
-    }
-
     private static int PageOf(string? payload) =>
         int.TryParse(payload, NumberStyles.None, CultureInfo.InvariantCulture, out var page) ? page : 0;
-
-    /// <summary>A gesture, with the notebook it was made in.</summary>
-    /// <param name="Session">The notebook's session, which the block's kernel reads.</param>
-    /// <param name="Notebook">The notebook, every cell of it.</param>
-    /// <param name="Operations">What can be done to the notebook: running a cell, clearing one.</param>
-    /// <param name="Variables">The values the notebook's cells share.</param>
-    /// <param name="Cell">The block the gesture was made on.</param>
-    /// <param name="MayAddAndRemove">Whether the layout the notebook is shown in lets a part add and remove blocks.</param>
-    private readonly record struct Gesture(
-        NotebookSession Session, NotebookModel Notebook, INotebookOperations Operations, IVariableStore Variables, Guid Cell,
-        bool MayAddAndRemove);
-
-    /// <summary>One change a grid gesture makes to the declaration.</summary>
-    /// <param name="Assembled">The pipeline the blocks made when the gesture was made.</param>
-    /// <param name="At">The block the change is written into, or the place a new block goes.</param>
-    /// <param name="Step">The step that block holds after the change.</param>
-    /// <param name="Inserted">Whether the step is a new block rather than a block rewritten.</param>
-    private sealed record Edit(NotebookPipeline Assembled, int At, IPipelineStep Step, bool Inserted);
-
-    /// <summary>What a commit wrote: the new block, and the block the gesture now stands on.</summary>
-    /// <param name="Block">The block written.</param>
-    /// <param name="Gesture">The block the gesture was made on, or the new block in its place when it was the one rewritten.</param>
-    private readonly record struct Written(Guid Block, Guid Gesture);
 }

@@ -223,7 +223,7 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
     private static void HandOverOnceRead(
         NotebookSession session, ViewRequest request, Pipeline pipeline, string fingerprint, IVariableStore variables)
     {
-        if (!request.Run)
+        if (!request.RunsTheWholePipeline)
         {
             if (session.Assembled is { } assembled)
             {

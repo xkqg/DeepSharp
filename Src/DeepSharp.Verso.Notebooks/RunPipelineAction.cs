@@ -85,7 +85,7 @@ public sealed class RunPipelineAction : NotebookExtension, IToolbarAction
             // The whole pipeline runs at its last block; one the blocks do not make is refused at the block that stops it.
             var at = assembled.Whole ? assembled.Blocks[^1].Cell : assembled.Blocks.First(block => block.Faults.Count > 0).Cell;
 
-            session.Request(at, assembled.RequestFor(at, page: 0, run: true));
+            session.Request(at, assembled.RequestFor(at, ViewTrigger.Run, page: 0));
             await context.Notebook.ExecuteCellAsync(at);
 
             return true;

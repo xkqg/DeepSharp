@@ -139,7 +139,7 @@ public sealed class SessionTests : IDisposable
 
         notebook.Scaffold.Cells[3].Source = """{"step": "fill.missing", "column": "age", "with": "mean"}""";
         session.Publish(NotebookPipeline.Of(notebook.Scaffold.Cells));
-        session.Request(last.Id, asked.RequestFor(last.Id, page: 0, run: true));
+        session.Request(last.Id, asked.RequestFor(last.Id, ViewTrigger.Run, page: 0));
 
         await notebook.RunAsync(last);
 

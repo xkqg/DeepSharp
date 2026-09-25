@@ -716,6 +716,13 @@ written as a new block in the old one's place, and run, because Verso tells a fr
 whose text a part changed, and the next keystroke there would put the old text back; under a layout that
 cannot add a block the change is refused rather than half made.
 
+Whatever changes the blocks — one gesture, or a change to several at once — goes through one way of writing them,
+and it writes only the blocks whose steps changed. The steps both lists start and end with are left alone; between
+them a step is matched with the one of the same verb in the same order, so it is written again where it stood and
+keeps what the notebook holds about that block, or left alone, view and all, when it did not change. A step added
+goes after the block before it, and one taken away is removed. So a change to the schema and to the output leaves
+every step between them as it was, rather than writing them all again and clearing what they showed.
+
 What lives between gestures is a session per notebook: which block shows which view, what a gesture asked a
 block for, one view kept under its key and the bytes it was read from, and the rows the source opened last,
 keyed by the read step, the path and a SHA-256 of the bytes, which are read and hashed on every use. Keeping
