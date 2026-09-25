@@ -216,6 +216,14 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
     private static async Task<string?> HandleAsync(Gesture gesture, CellInteractionContext context)
     {
+        // A gesture that can change the blocks waits for what a front end may still be sending, and reads the blocks only
+        // then: a change written over a block before a held keystroke lands would lose the keystroke. A view or a pick
+        // changes nothing, and does not wait.
+        if (ControlAction.Read(context.InteractionType) is { Gesture: not (ListType or ListRange or ListRangeKind) })
+        {
+            await gesture.Session.Settle();
+        }
+
         var assembled = NotebookPipeline.Of(gesture.Notebook.Cells);
 
         switch (context.InteractionType)

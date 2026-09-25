@@ -68,6 +68,15 @@ internal sealed class NotebookSession
     /// <summary>The rows the notebook's source opened last, kept for the next view.</summary>
     public SourceCache Sources { get; } = new();
 
+    /// <summary>
+    /// How long a gesture that can change the blocks waits before it reads them: longer than the quarter of a second VS
+    /// Code holds a keystroke before it sends it, which nothing tells the host is on its way.
+    /// </summary>
+    public static TimeSpan SettleTime { get; } = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>The wait itself, before a gesture that can change the blocks reads them; a test may stand in for it.</summary>
+    internal Func<Task> Settle { get; set; } = () => Task.Delay(SettleTime);
+
     /// <summary>The pipeline the blocks made at the last gesture, when there was one.</summary>
     public NotebookPipeline? Assembled
     {

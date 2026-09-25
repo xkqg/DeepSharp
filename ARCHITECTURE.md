@@ -753,7 +753,10 @@ the same state twice does the same thing once; a change the rules refuse, sent b
 changed, is refused at the block with the rule it breaks, above data that is as it was. A block the notebook
 rewrites is written as a new block in the old one's place, and run, because Verso tells a front end nothing about a
 block whose text a part changed, and the next keystroke there would put the old text back; under a layout that
-cannot add a block the change is refused rather than half made.
+cannot add a block the change is refused rather than half made. A gesture that can change the blocks first waits three
+tenths of a second and reads them only then: VS Code sends a keystroke a quarter of a second after it lands, nothing
+tells the host one is on its way, and a change written before it arrives would lose it. A view or a pick changes
+nothing and does not wait.
 
 The schema's block also lists every column of the source as one row — its name, its first values, whether it is in,
 and its kind — so nothing left out ever disappears from sight. "Choose the columns" draws it from the rows as the

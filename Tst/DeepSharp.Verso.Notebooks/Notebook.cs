@@ -51,6 +51,9 @@ internal sealed class Notebook : IAsyncDisposable
         var scaffold = new Scaffold(new NotebookModel(), host, filePath);
         scaffold.InitializeSubsystems();
 
+        // Nothing in a test holds a keystroke back, so a gesture has nothing to wait for; SettleTests measure the wait.
+        host.GetCellTypes().OfType<StepCellType>().Single().Session.Settle = () => Task.CompletedTask;
+
         return new Notebook(host, scaffold);
     }
 
