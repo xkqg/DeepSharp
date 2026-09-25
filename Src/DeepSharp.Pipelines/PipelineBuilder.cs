@@ -455,6 +455,18 @@ public sealed class FittingBuilder
     /// <remarks>The answer is handed over separately, never among the numbers a model is shown.</remarks>
     public FittingBuilder Target(string column) => Add(new TargetStep(column));
 
+    /// <summary>Names the columns a model is asked to predict as one answer: how a whole is divided among them.</summary>
+    /// <param name="columns">The columns, in their order: at least two.</param>
+    /// <param name="scaleBy">
+    /// The column saying how many the shares are shares of, so predictions come back as how many fell in each; nothing
+    /// to have them come back as shares.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">There are fewer than two columns, one has no name, or one is named twice.</exception>
+    /// <remarks>Every row's shares sum to one: divide each row by its sum above this, with <see cref="NormaliseRow"/> and L1.</remarks>
+    public FittingBuilder Distribution(IEnumerable<string> columns, string? scaleBy = null) =>
+        Add(new DistributionStep(columns, scaleBy));
+
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
     public Pipeline Build() => new(Declaration, _rows);

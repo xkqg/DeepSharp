@@ -57,7 +57,8 @@
             "split.atRandom",
             "split.byTime",
             "split.stratified",
-            "target"
+            "target",
+            "target.distribution"
           ]
         }
       },
@@ -438,6 +439,21 @@
           },
           "then": {
             "$ref": "#/$defs/target"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "target.distribution"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/target.distribution"
           }
         }
       ]
@@ -1555,6 +1571,35 @@
         "column"
       ],
       "additionalProperties": false
+    },
+    "target.distribution": {
+      "description": "Names the columns a model is asked to predict as one answer: how a whole is divided among them, in their order.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "target.distribution"
+        },
+        "columns": {
+          "description": "The columns the answer is divided among, in their order: at least two.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        },
+        "scaleBy": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column saying how many the shares are shares of, so predictions come back as how many fell in each; left out, they come back as shares."
+        }
+      },
+      "required": [
+        "step",
+        "columns"
+      ],
+      "additionalProperties": false
     }
   },
   "allOf": [
@@ -1583,7 +1628,8 @@
                       "order.by",
                       "split.atRandom",
                       "split.byTime",
-                      "split.stratified"
+                      "split.stratified",
+                      "target.distribution"
                     ]
                   }
                 }

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
@@ -80,4 +81,148 @@ public sealed record TargetStep : IPipelineStep<TargetStep>, INamesTheAnswer, ID
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     public static TargetStep ReadFrom(JsonElement element) => new(ColumnKey.Read(element));
+}
+
+/// <summary>
+/// Names several columns that together hold one answer: how a whole is divided among them.
+/// </summary>
+/// <remarks>
+/// A flock weighed in bands of fifty grams is one answer of seventy numbers, the share of its birds in each band, and
+/// the order of the bands is part of it. Every row's shares are at least nought and sum to one, which the handover
+/// asks of each row it hands over: a row that does not was counted rather than divided, and dividing each row by its
+/// sum above this — <c>normalise.row</c> with L1 — makes it one.
+/// <para>
+/// Named with the column that says how many there were, the shares come back as how many fell in each part: each
+/// share times that column, as its row was read. A served row cannot divide its own counts back, since the counts
+/// are what it asks for, but it does know how many birds its flock has. The run tries the way back on every row it
+/// was fitted on, so bands that do not add up to their flock are refused there.
+/// </para>
+/// </remarks>
+public sealed record DistributionStep : IPipelineStep<DistributionStep>, INamesTheAnswer, IUndoesItself, IDescribesColumns
+{
+    private static readonly ColumnsParameter ColumnsKey = new(
+        "columns", "The columns the answer is divided among, in their order: at least two.", ["share1", "share2"], ColumnKinds.Numbers);
+
+    private static readonly ColumnParameter ScaleByKey = new(
+        "scaleBy",
+        "The column saying how many the shares are shares of, so predictions come back as how many fell in each; left out, they come back as shares.",
+        "count",
+        ColumnKinds.Numbers,
+        optional: true);
+
+    /// <summary>Declares the columns an answer is divided among.</summary>
+    /// <param name="columns">The columns, in their order.</param>
+    /// <param name="scaleBy">The column saying how many the shares are shares of, or nothing to have shares come back as shares.</param>
+    /// <exception cref="ArgumentException">There are fewer than two columns, one has no name, or one is named twice.</exception>
+    public DistributionStep(IEnumerable<string> columns, string? scaleBy = null)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        Columns = ColumnsKey.Require([.. columns]);
+
+        if (Columns.Count < 2)
+        {
+            throw new ArgumentException(
+                $"'{ColumnsKey.Key}' names at least two columns: an answer held in one column is a target.", nameof(columns));
+        }
+
+        ScaleBy = ScaleByKey.Require(scaleBy ?? string.Empty) is { Length: > 0 } named ? named : null;
+    }
+
+    /// <summary>The columns the answer is divided among, in their order.</summary>
+    public IReadOnlyList<string> Columns { get; }
+
+    /// <summary>The column saying how many the shares are shares of, when there is one.</summary>
+    public string? ScaleBy { get; }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> Answers => Columns;
+
+    /// <inheritdoc />
+    /// <remarks>The first of the columns; a way back asks <see cref="Undoes"/> of each of them.</remarks>
+    public string Produces => Columns[0];
+
+    /// <inheritdoc />
+    public static string Name => "target.distribution";
+
+    /// <inheritdoc />
+    public static string Purpose =>
+        "Names the columns a model is asked to predict as one answer: how a whole is divided among them, in their order.";
+
+    /// <inheritdoc />
+    public static int Since => 2;
+
+    /// <inheritdoc />
+    public static StepParameters<DistributionStep> Parameters { get; } = new StepParameters<DistributionStep>()
+        .With(ColumnsKey, step => step.Columns)
+        .With(ScaleByKey, step => step.ScaleBy ?? string.Empty);
+
+    /// <inheritdoc />
+    public string Verb => Name;
+
+    /// <inheritdoc />
+    public string? Refusal(IReadOnlyList<double> answers)
+    {
+        ArgumentNullException.ThrowIfNull(answers);
+
+        if (answers.FirstOrDefault(share => share < 0) is var below and < 0)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"a share of {below} is below nought, and a share of a whole never is.");
+        }
+
+        var sum = answers.Sum();
+
+        return Math.Abs(sum - 1) <= 1e-9 * answers.Count
+            ? null
+            : string.Create(
+                CultureInfo.InvariantCulture,
+                $"its shares sum to {sum}, not to one. Divide each row by its sum above this: normalise.row with L1.");
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Every one of its columns, when it names what the shares are shares of; none otherwise.</remarks>
+    public bool Undoes(string column) => ScaleBy is not null && Columns.Contains(column, StringComparer.Ordinal);
+
+    /// <inheritdoc />
+    /// <remarks>How many a share stands for depends on its row, so this refuses: hand the rows over with the predictions.</remarks>
+    public double Undo(double value, FittedStepValues? fitted) =>
+        ScaleBy is null
+            ? value
+            : throw new InvalidOperationException(
+                $"A share comes back as how many it stands for only with the row it belongs to, which says how many '{ScaleBy}' there were. "
+                + "Hand the rows over with the predictions.");
+
+    /// <inheritdoc />
+    public double Undo(double value, FittedStepValues? fitted, RowAsRead row) =>
+        ScaleBy is null
+            ? value
+            : value * (row[ScaleBy] ?? throw new InvalidOperationException(
+                $"Row {row.ReadAt + 1} has no '{ScaleBy}', so its shares cannot come back as how many fell in each."));
+
+    /// <inheritdoc />
+    public ColumnState After(ColumnState before) => before;
+
+    /// <inheritdoc />
+    public bool Equals(DistributionStep? other) =>
+        other is not null && ScaleBy == other.ScaleBy && Columns.SequenceEqual(other.Columns, StringComparer.Ordinal);
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+
+        hash.Add(ScaleBy);
+
+        foreach (var column in Columns)
+        {
+            hash.Add(column);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    /// <summary>Reads this step back out of a file.</summary>
+    /// <param name="element">The JSON object the step was written as.</param>
+    /// <returns>The step the file describes.</returns>
+    public static DistributionStep ReadFrom(JsonElement element) => new(ColumnsKey.Read(element), ScaleByKey.Read(element));
 }

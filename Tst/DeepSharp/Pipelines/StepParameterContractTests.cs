@@ -169,6 +169,7 @@ public class StepParameterContractTests
             ["split.byTime"] = 2,
             ["split.stratified"] = 2,
             ["drop.warmup"] = 2,
+            ["target.distribution"] = 2,
         };
 
         Assert.All(since, each => Assert.Equal(newer.GetValueOrDefault(each.Key, 1), each.Value));

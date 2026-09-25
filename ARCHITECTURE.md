@@ -552,6 +552,12 @@ in the order it names them, seventy for a histogram of weights. An output of one
 label a row as well. A network built here, a trainer from an established .NET library and a caller's own
 learner all take that same handover, which is the only reason two of them can honestly be compared.
 
+Which answers there are is the output's to say, and each kind of output is a verb of its own. `target` names one
+column. `target.distribution` names the columns a whole is divided among — a flock weighed in seventy bands of
+fifty grams — whose shares are at least nought and sum to one on every row; named with the column saying how many
+there were, its shares come back as how many fell in each band, since a served flock knows how many birds it has
+and not how they fall. A package adds a kind the way it adds any verb, by implementing `INamesTheAnswer`.
+
 Four things are refused there rather than passed on. A column still holding words, because turning one into a
 number quietly is how a category becomes an order nobody meant. A gap, because a model cannot be handed an
 absence, and a value that is not a finite number, which a model learns nothing from and says nothing about. An

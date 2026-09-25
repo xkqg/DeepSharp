@@ -105,6 +105,26 @@ public class ParameterKindTests
     }
 
     [Fact]
+    public void AnOptionalColumnLeftOut_IsNoColumn_NeitherRequiredNorWritten()
+    {
+        // A column a step can do without — what a distribution's shares are shares of — is left out of a file as
+        // nothing at all: no name, which no column can have, so it never stands for one.
+        var scale = new ColumnParameter("scaleBy", "What the shares are shares of.", "count", ColumnKinds.Numbers, optional: true);
+        var column = new ColumnParameter("column", "What it reads.", "column", ColumnKinds.Any);
+
+        Assert.True(scale.Optional);
+        Assert.False(column.Optional);
+        Assert.Empty(scale.RequiredKeys);
+        Assert.Equal(["column"], column.RequiredKeys);
+        Assert.Equal(string.Empty, scale.Read(Step("""{"step":"x"}""")));
+        Assert.Equal("birds", scale.Read(Step("""{"step":"x","scaleBy":"birds"}""")));
+        Assert.Equal("{}", Written(scale, string.Empty));
+        Assert.Equal("""{"scaleBy":"birds"}""", Written(scale, "birds"));
+        Assert.Equal(string.Empty, scale.Require(" "));
+        Assert.Throws<ArgumentException>(() => column.Require(" "));
+    }
+
+    [Fact]
     public void SeveralOfAKind_ReadsEveryOneAndRefusesAWordNobodyDefined()
     {
         var parts = new SeveralOfParameter<TimePart>("parts", "Which pieces.", [TimePart.Month]);

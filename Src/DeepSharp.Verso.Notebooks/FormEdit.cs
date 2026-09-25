@@ -27,7 +27,8 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
 
     public bool Visit(FilePathParameter parameter) => Set(parameter.Key, () => Words());
 
-    public bool Visit(ColumnParameter parameter) => Set(parameter.Key, () => Words());
+    public bool Visit(ColumnParameter parameter) =>
+        Set(parameter.Key, () => parameter.Optional && string.IsNullOrWhiteSpace(value.Text) ? null : Words());
 
     public bool Visit(NewColumnParameter parameter) =>
         Set(parameter.Key, () => parameter.Optional && string.IsNullOrWhiteSpace(value.Text) ? null : Words());

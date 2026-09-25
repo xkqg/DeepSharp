@@ -338,6 +338,22 @@ public sealed class FormTests : IDisposable
     }
 
     [Fact]
+    public async Task AColumnAStepCanDoWithout_IsLeftOutByClearingIt()
+    {
+        // What a distribution's shares are shares of may be left out, and clearing it leaves it out: the text then
+        // says nothing about it, as a text that never had one does.
+        await using var notebook = await NotebookAsync(
+            """{"step": "target.distribution", "columns": ["w500", "w550"], "scaleBy": "chicks"}""");
+        var output = notebook.Scaffold.Cells[0];
+
+        Assert.Equal("chicks", Field(await SectionAsync(notebook, output), "scaleBy").CurrentValue);
+
+        await ChangeAsync(notebook, output, "scaleBy", "");
+        Assert.Null(((DistributionStep)Step(output)).ScaleBy);
+        Assert.DoesNotContain("scaleBy", output.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task TheVerb_IsSwitchedWithinItsStage_KeepingEveryValueTheOtherVerbTakes()
     {
         await using var notebook = await NotebookAsync("""{"step": "split.atRandom", "train": 0.6, "validation": 0.2, "test": 0.2, "seed": 7}""");

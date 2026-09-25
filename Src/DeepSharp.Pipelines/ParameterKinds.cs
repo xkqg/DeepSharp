@@ -74,29 +74,48 @@ public sealed class FilePathParameter(string key, string description, string exa
 /// <param name="description">What it means.</param>
 /// <param name="example">The value a new block starts with.</param>
 /// <param name="accepts">The kinds of column the step can work on.</param>
+/// <param name="optional">
+/// Whether the step can do without it. Left out, it names no column: the empty name, which no column can have, so it
+/// never stands for one. Nothing is written for it, and nothing is read.
+/// </param>
 /// <remarks>
 /// A name, said to be a column so that a form can offer the columns there are rather than an empty box,
 /// and so that a column the source does not have is found before anything runs.
 /// </remarks>
-public sealed class ColumnParameter(string key, string description, string example, IReadOnlyList<ColumnKind> accepts)
-    : StepParameter<string>(key, description, example)
+public sealed class ColumnParameter(string key, string description, string example, IReadOnlyList<ColumnKind> accepts, bool optional = false)
+    : StepParameter<string>(key, description, optional ? string.Empty : example)
 {
     /// <summary>The kinds of column the step can work on.</summary>
     public IReadOnlyList<ColumnKind> Accepts { get; } = accepts;
 
-    /// <inheritdoc />
-    public override string Read(JsonElement step) => step.RequiredString(Key);
+    /// <summary>Whether the step can do without it.</summary>
+    public bool Optional { get; } = optional;
 
     /// <inheritdoc />
+    public override IReadOnlyList<string> RequiredKeys => Optional ? [] : Keys;
+
+    /// <inheritdoc />
+    public override string Read(JsonElement step) =>
+        Optional && !step.TryGetProperty(Key, out _) ? string.Empty : step.RequiredString(Key);
+
+    /// <inheritdoc />
+    /// <remarks>Nothing is written for no column.</remarks>
     public override void Write(Utf8JsonWriter writer, string value)
     {
         ArgumentNullException.ThrowIfNull(writer);
+
+        if (Optional && string.IsNullOrEmpty(value))
+        {
+            return;
+        }
 
         writer.WriteString(Key, value);
     }
 
     /// <inheritdoc />
-    public override string Require(string value) => Required(value);
+    /// <remarks>An optional column left empty is no column, which is what leaving it out of a file means too.</remarks>
+    public override string Require(string value) =>
+        Optional && string.IsNullOrWhiteSpace(value) ? string.Empty : Required(value);
 
     /// <inheritdoc />
     public override TResult Accept<TResult>(IStepParameterVisitor<TResult> visitor)
@@ -107,7 +126,8 @@ public sealed class ColumnParameter(string key, string description, string examp
     }
 
     /// <inheritdoc />
-    internal override IEnumerable<ColumnRead> ReadsIn(string value) => [new ColumnRead(value, Accepts)];
+    internal override IEnumerable<ColumnRead> ReadsIn(string value) =>
+        string.IsNullOrEmpty(value) ? [] : [new ColumnRead(value, Accepts)];
 }
 
 /// <summary>A parameter naming a column the step makes.</summary>

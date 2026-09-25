@@ -44,6 +44,7 @@ public sealed class StepCatalog
         catalog.Register<NormaliseRowStep>();
         catalog.Register<EncodeStep>();
         catalog.Register<TargetStep>();
+        catalog.Register<DistributionStep>();
         catalog.Register<FillNaNStep>();
         catalog.Register<DropWarmUpStep>();
         catalog.Register<TimePartsStep>();

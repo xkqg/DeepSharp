@@ -33,6 +33,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`split.byTime`](#splitbytime) | Divides the rows by when they happened: the earliest to learn from, the latest to be measured on. |
 | [`split.stratified`](#splitstratified) | Divides the rows at random while keeping the mixture of one column the same in every part. |
 | [`target`](#target) | Names the column a model is asked to predict, which is handed over apart from the numbers it is shown. |
+| [`target.distribution`](#targetdistribution) | Names the columns a model is asked to predict as one answer: how a whole is divided among them, in their order. |
 
 ## `declare`
 
@@ -504,3 +505,21 @@ Names the column a model is asked to predict, which is handed over apart from th
 - **`column`**: The column a model is asked to predict, handed over apart from the numbers it is shown.
 
 Means what it says from version 1 of the file.
+
+## `target.distribution`
+
+Names the columns a model is asked to predict as one answer: how a whole is divided among them, in their order.
+
+```json
+{"step":"target.distribution","columns":["share1","share2"]}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `columns` | a list of the names of columns holding a number, a whole number or true or false, each named once | `["share1","share2"]` |
+| `scaleBy` | the name of a column holding a number, a whole number or true or false; may be left out | left out |
+
+- **`columns`**: The columns the answer is divided among, in their order: at least two.
+- **`scaleBy`**: The column saying how many the shares are shares of, so predictions come back as how many fell in each; left out, they come back as shares.
+
+Means what it says from version 2 of the file.

@@ -105,7 +105,7 @@ internal static class VerbReference
             [new(parameter.Key, "the path of a file; a relative one is read from the pipeline's folder")];
 
         public IReadOnlyList<Row> Visit(ColumnParameter parameter) =>
-            [new(parameter.Key, $"the name of a column holding {Kinds(parameter.Accepts)}")];
+            [new(parameter.Key, $"the name of a column holding {Kinds(parameter.Accepts)}{(parameter.Optional ? "; may be left out" : string.Empty)}")];
 
         public IReadOnlyList<Row> Visit(NewColumnParameter parameter) =>
             [new(parameter.Key, parameter.Optional
