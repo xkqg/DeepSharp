@@ -212,6 +212,110 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
     /// <remarks>These are read from the source, and required of it unless they may be absent.</remarks>
     public IReadOnlyList<ColumnDeclaration> Taking { get; }
 
+    /// <summary>This schema with a column taken in.</summary>
+    /// <param name="name">The column.</param>
+    /// <param name="kind">The kind it takes when the schema does not name it yet.</param>
+    /// <param name="header">The source's columns, in their order: a new column stands where the source has it.</param>
+    /// <returns>
+    /// The schema with the column taking part: an excluded one brought back with the kind it had, a new one before the
+    /// first declared column the source has after it, or last; this schema when the column takes part already.
+    /// </returns>
+    public DeclareStep WithColumn(string name, ColumnKind kind, IReadOnlyList<string> header)
+    {
+        ArgumentNullException.ThrowIfNull(header);
+
+        var at = IndexOf(name);
+
+        if (at >= 0)
+        {
+            return Columns[at].Excluded ? Replaced(at, Columns[at] with { Excluded = false }) : this;
+        }
+
+        var place = InSourceOrder(name, header);
+
+        return new([.. Columns.Take(place), new ColumnDeclaration(name, kind, Optional: false), .. Columns.Skip(place)], Remainder);
+    }
+
+    /// <summary>This schema with a column excluded: still named, with its kind, and read by nothing.</summary>
+    /// <param name="name">The column.</param>
+    /// <returns>The schema with the column excluded; this schema when it is excluded already or not named at all.</returns>
+    public DeclareStep WithColumnExcluded(string name)
+    {
+        var at = IndexOf(name);
+
+        return at < 0 || Columns[at].Excluded ? this : Replaced(at, Columns[at] with { Excluded = true });
+    }
+
+    /// <summary>This schema with a column of another kind.</summary>
+    /// <param name="name">The column.</param>
+    /// <param name="kind">The kind.</param>
+    /// <returns>
+    /// The schema with the column of that kind: made a category, it remembers the kind it was; given any other kind,
+    /// it forgets it. This schema when the column is of that kind already.
+    /// </returns>
+    /// <exception cref="ArgumentException">The schema does not name the column; taking one in is <see cref="WithColumn"/>.</exception>
+    public DeclareStep WithColumnKind(string name, ColumnKind kind)
+    {
+        var at = IndexOf(name);
+
+        if (at < 0)
+        {
+            throw new ArgumentException($"The schema does not name '{name}'; a column is taken in with its kind, not given one.", nameof(name));
+        }
+
+        var column = Columns[at];
+
+        return column.Kind == kind
+            ? this
+            : Replaced(at, kind == ColumnKind.Category ? column with { Kind = kind, Was = column.Kind } : column with { Kind = kind, Was = null });
+    }
+
+    private int IndexOf(string name)
+    {
+        for (var at = 0; at < Columns.Count; at++)
+        {
+            if (Columns[at].Name == name)
+            {
+                return at;
+            }
+        }
+
+        return -1;
+    }
+
+    private DeclareStep Replaced(int at, ColumnDeclaration column) =>
+        new([.. Columns.Take(at), column, .. Columns.Skip(at + 1)], Remainder);
+
+    // Where a new column goes: before the first declared column the source has after it; last when the source does not
+    // have it, or has none after it.
+    private int InSourceOrder(string name, IReadOnlyList<string> header)
+    {
+        var at = IndexIn(header, name);
+
+        for (var place = 0; at >= 0 && place < Columns.Count; place++)
+        {
+            if (IndexIn(header, Columns[place].Name) > at)
+            {
+                return place;
+            }
+        }
+
+        return Columns.Count;
+    }
+
+    private static int IndexIn(IReadOnlyList<string> names, string name)
+    {
+        for (var at = 0; at < names.Count; at++)
+        {
+            if (names[at] == name)
+            {
+                return at;
+            }
+        }
+
+        return -1;
+    }
+
     /// <summary>The columns taking part that are declared as standing for a group rather than for themselves.</summary>
     public IEnumerable<string> Categories =>
         Taking.Where(column => column.Kind == ColumnKind.Category).Select(column => column.Name);

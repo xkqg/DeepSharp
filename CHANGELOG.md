@@ -139,6 +139,15 @@ wrong with it at once, each at its line and column.
   is written exactly as before and keeps its key. A schema that excludes every column it names and keeps none of
   the rest is refused, since no column would take part.
 
+- **What can be done to a column is said once.** `Including`, `Excluding` and `WithKind` on a declaration hand
+  back the steps a change to one column makes: a column taken back in as it was, or out of the drop that left it
+  out; a column no step reads excluded in the schema with its kind, and any other dropped after the last step that
+  reads it; a category that remembers the kind it came from. Asked for what already is, each hands back the steps
+  it was given. `ChoicesFor(columns)` says how each column stands — taking part, excluded, dropped, made by a step,
+  kept with the rest, or not declared — and what can be done to it without breaking a rule, so the answer is never
+  offered to be left out and a column a later step scales as a number is never offered to become a category. The
+  schema's own `WithColumn`, `WithColumnExcluded` and `WithColumnKind` change one block alone.
+
 - **Every package runs on .NET 8 as well as .NET 10.** Verso's browser editor runs on .NET 8 for as long as
   .NET 8 is installed, and a package built for .NET 10 alone does not load there. Each package now carries a
   build for both, a host takes the one for the runtime it is on, and every test runs on both.

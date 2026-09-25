@@ -17,6 +17,7 @@ Src/DeepSharp.Pipelines/          the data side
     PipelineDocument.cs PipelineFileException.cs PipelineFileSchema.cs VerbReference.cs
                                     the file: its envelope, every fault at its line and column, the schema, the reference
     ColumnState.cs                  which columns there are at each step, followed from the schema down
+    ColumnChoices.cs                what can be done to a column, and how each stands
     Steps.cs Schema.cs Splits.cs RowOrder.cs
                                     reading, declaring, putting in order, dividing
     Features.cs TimeParts.cs Maths.cs
@@ -521,6 +522,15 @@ away rather than remembering what the column was. A category says which kind it 
 without it, making a column a category overwrites the only record of what it held before. Leaving a column out
 this way is a decision about the columns, so it lives where the columns are declared; and since neither word is
 written where it says nothing, a schema that uses neither is the same bytes, and the same key, as before.
+
+What can be done to a column is said once, for every door that changes the columns. Taking one in, leaving it
+out and changing its kind each hand back the steps they would make, and never judge them: the rules every
+declaration keeps do that, so what is offered and what is allowed cannot drift apart. A column no step reads is
+left out in the schema; one a step reads, or a step made, is dropped after the last step that reads it, since
+excluding it from the schema would leave that step reading nothing. How a column stands is said without where a
+drop happens to stand, because that follows from the steps rather than from anything a person decided. Asked for
+what already is, an operation hands back the steps it was given, and that is how the same gesture twice does the
+same thing once.
 
 ### A fill has a point beyond which it is invention
 
