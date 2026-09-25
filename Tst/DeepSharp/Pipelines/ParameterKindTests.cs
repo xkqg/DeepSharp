@@ -191,7 +191,19 @@ public class ParameterKindTests
             () => declared.Read(Step("""{"columns":[{"name":"a","kind":"number","optional":false,"colour":"red"}]}""")));
 
         Assert.Contains("'colour'", refused.Message, StringComparison.Ordinal);
-        Assert.Equal(["name", "kind", "optional"], declared.ColumnKeys);
+        Assert.Contains("name, kind, optional, excluded, was", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ADeclaredColumnIsWrittenWithItsParts_ThreeOfThemRequired()
+    {
+        // Excluded and what a category was are left out unless they say something, so every column written
+        // before them is written exactly as it was, and keeps its key.
+        var declared = new ColumnDeclarationsParameter("columns", "The columns.", [new ColumnDeclaration("a", ColumnKind.Number, false)]);
+
+        Assert.Equal(["name", "kind", "optional", "excluded", "was"], declared.Parts.Select(part => part.Parameter.Key));
+        Assert.Equal(["name", "kind", "optional"], declared.RequiredColumnKeys);
+        Assert.Equal([true, true, true, false, false], declared.Parts.Select(part => part.Required));
     }
 
     [Fact]

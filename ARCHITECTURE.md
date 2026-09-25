@@ -515,6 +515,13 @@ dropped, passed through, or handled. Dropping is the default, because a column n
 column nobody checked. A warning on a feature that predicts the answer perfectly is worth having as well,
 but it is the second line of defence; the first is that unnamed means absent.
 
+A column can also be named and left out. `excluded` keeps it in the schema with its kind while nothing reads it,
+the source is not asked for it and the rest of the file does not reach it, so bringing it back is taking a word
+away rather than remembering what the column was. A category says which kind it `was` for the same reason:
+without it, making a column a category overwrites the only record of what it held before. Leaving a column out
+this way is a decision about the columns, so it lives where the columns are declared; and since neither word is
+written where it says nothing, a schema that uses neither is the same bytes, and the same key, as before.
+
 ### A fill has a point beyond which it is invention
 
 Measured on the same dataset: `deck` is empty in 688 of 891 rows, 77 per cent, and 77.7 per cent within

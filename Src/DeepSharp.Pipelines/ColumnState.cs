@@ -41,15 +41,18 @@ public sealed class ColumnState
     private readonly KnownColumn[] _columns;
     private readonly string[] _families;
     private readonly string[] _gone;
+    private readonly string[] _excluded;
     private readonly Dictionary<string, string> _conditions;
 
-    private ColumnState(KnownColumn[] columns, string[] families, string[] gone, bool open, Dictionary<string, string>? conditions = null)
+    private ColumnState(
+        KnownColumn[] columns, string[] families, string[] gone, bool open, Dictionary<string, string>? conditions = null, string[]? excluded = null)
     {
         _columns = columns;
         _families = families;
         _gone = gone;
         Open = open;
         _conditions = conditions ?? new Dictionary<string, string>(StringComparer.Ordinal);
+        _excluded = excluded ?? [];
     }
 
     /// <summary>Nothing known, and nothing else there: the state before the columns are declared.</summary>
@@ -104,6 +107,11 @@ public sealed class ColumnState
     public bool Allows(string name) =>
         Find(name) is not null || (!_gone.Contains(name, StringComparer.Ordinal) && (InAFamily(name) || Open));
 
+    /// <summary>Whether the schema names a column of that name and excludes it, and no step since has made one.</summary>
+    /// <param name="name">The column's name.</param>
+    /// <returns><see langword="true"/> when the schema excludes it.</returns>
+    public bool Excludes(string name) => _excluded.Contains(name, StringComparer.Ordinal);
+
     /// <summary>Whether a name belongs to one of the families, and was not taken away by name.</summary>
     /// <param name="name">The column's name.</param>
     /// <returns><see langword="true"/> when it is a member nobody dropped.</returns>
@@ -123,7 +131,7 @@ public sealed class ColumnState
             ? [.. _columns, new KnownColumn(name, kind, Surely: true)]
             : [.. _columns[..at], _columns[at] with { Kind = kind }, .. _columns[(at + 1)..]];
 
-        return new(columns, _families, [.. _gone.Where(each => each != name)], Open, _conditions);
+        return new(columns, _families, [.. _gone.Where(each => each != name)], Open, _conditions, [.. _excluded.Where(each => each != name)]);
     }
 
     /// <summary>The same columns, with one added as a half of a signed value split by its sign.</summary>
@@ -143,14 +151,14 @@ public sealed class ColumnState
 
         return new(
             [.. state._columns.Select(column => column.Name == name ? column with { HalfOf = of } : column)],
-            state._families, state._gone, state.Open, state._conditions);
+            state._families, state._gone, state.Open, state._conditions, state._excluded);
     }
 
     /// <summary>The same columns without one, remembered as gone: no family and no open set brings it back.</summary>
     /// <param name="name">The column's name.</param>
     /// <returns>The state without the column.</returns>
     public ColumnState Without(string name) =>
-        new([.. _columns.Where(column => column.Name != name)], _families, [.. _gone, name], Open, Except(name));
+        new([.. _columns.Where(column => column.Name != name)], _families, [.. _gone, name], Open, Except(name), _excluded);
 
     /// <summary>The same columns, one of them no longer surely there, and why.</summary>
     /// <param name="name">The column's name.</param>
@@ -166,33 +174,38 @@ public sealed class ColumnState
 
         var conditions = new Dictionary<string, string>(_conditions, StringComparer.Ordinal) { [name] = why };
 
-        return new([.. _columns.Select(column => column.Name == name ? column with { Surely = false } : column)], _families, _gone, Open, conditions);
+        return new([.. _columns.Select(column => column.Name == name ? column with { Surely = false } : column)], _families, _gone, Open, conditions, _excluded);
     }
 
     /// <summary>The same columns, and a family whose members are known by the start of their names.</summary>
     /// <param name="start">The start every member's name has.</param>
     /// <returns>The state with the family.</returns>
-    public ColumnState WithFamily(string start) => new(_columns, [.. _families, start], _gone, Open, _conditions);
+    public ColumnState WithFamily(string start) => new(_columns, [.. _families, start], _gone, Open, _conditions, _excluded);
 
     /// <summary>The same columns, with others nobody named allowed beside them.</summary>
     /// <returns>The state, open.</returns>
-    public ColumnState Opened() => new(_columns, _families, _gone, open: true, _conditions);
+    public ColumnState Opened() => new(_columns, _families, _gone, open: true, _conditions, _excluded);
 
     /// <summary>The columns a schema declares, with the rest kept or not.</summary>
-    /// <param name="columns">The declared columns.</param>
+    /// <param name="columns">The declared columns, those it excludes included.</param>
     /// <param name="remainder">What becomes of the columns the schema does not name.</param>
-    /// <returns>The state after the schema.</returns>
+    /// <returns>
+    /// The state after the schema: the columns taking part; and every column it excludes gone, so that nothing below
+    /// may read it even where the rest of the file comes along.
+    /// </returns>
     internal static ColumnState Declared(IEnumerable<ColumnDeclaration> columns, Remainder remainder)
     {
-        ColumnDeclaration[] declared = [.. columns];
+        ColumnDeclaration[] taking = [.. columns.Where(column => !column.Excluded)];
+        string[] excluded = [.. columns.Where(column => column.Excluded).Select(column => column.Name)];
 
         return new(
-            [.. declared.Select(column => new KnownColumn(column.Name, column.Kind, !column.Optional))],
+            [.. taking.Select(column => new KnownColumn(column.Name, column.Kind, !column.Optional))],
             [],
-            [],
+            excluded,
             remainder == Remainder.Keep,
-            declared.Where(column => column.Optional).ToDictionary(
-                column => column.Name, _ => "the schema allows the rows not to have it", StringComparer.Ordinal));
+            taking.Where(column => column.Optional).ToDictionary(
+                column => column.Name, _ => "the schema allows the rows not to have it", StringComparer.Ordinal),
+            excluded);
     }
 
     private Dictionary<string, string> Except(string name) =>
@@ -300,7 +313,12 @@ internal static class ColumnFlow
                 continue;
             }
 
-            if (!state.Allows(read.Column))
+            if (state.Excludes(read.Column))
+            {
+                yield return new DeclarationFault(
+                    at, step.Verb, $"reads '{read.Column}', which the schema excludes: take it in again, or read another column.");
+            }
+            else if (!state.Allows(read.Column))
             {
                 yield return new DeclarationFault(
                     at, step.Verb,

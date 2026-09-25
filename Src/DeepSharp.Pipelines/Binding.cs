@@ -31,7 +31,7 @@ public static class SchemaBinding
         var positions = Positions(schema, source);
         var columns = new List<IColumn>();
 
-        foreach (var declared in schema.Columns)
+        foreach (var declared in schema.Taking)
         {
             if (!positions.TryGetValue(declared.Name, out var at))
             {
@@ -47,6 +47,7 @@ public static class SchemaBinding
             {
                 var name = source.ColumnNames[at];
 
+                // A column the schema names, one it excludes too, is not the rest of the file.
                 if (schema.Columns.All(column => column.Name != name))
                 {
                     columns.Add(Read(new ColumnDeclaration(name, ColumnKind.Text, Optional: true), rows, at));
@@ -76,7 +77,8 @@ public static class SchemaBinding
             positions[source.ColumnNames[at]] = at;
         }
 
-        var absent = schema.Columns
+        // A column the schema excludes is named and not taken: not asked of the source, and not the rest of the file.
+        var absent = schema.Taking
             .Where(column => !column.Optional && !positions.ContainsKey(column.Name))
             .Select(column => column.Name)
             .ToArray();

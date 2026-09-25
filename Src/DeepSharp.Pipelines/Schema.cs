@@ -50,7 +50,17 @@ public enum Remainder
 /// <param name="Name">The column's name in the source.</param>
 /// <param name="Kind">What it holds.</param>
 /// <param name="Optional">Whether the source is allowed not to have it at all.</param>
-public sealed record ColumnDeclaration(string Name, ColumnKind Kind, bool Optional);
+public sealed record ColumnDeclaration(string Name, ColumnKind Kind, bool Optional)
+{
+    /// <summary>
+    /// Whether the schema leaves the column out while it keeps what the column holds: named, read by nothing, and
+    /// taken in again as it was by clearing this.
+    /// </summary>
+    public bool Excluded { get; init; }
+
+    /// <summary>The kind a category column held before it was made one, so it can go back to it; nothing otherwise.</summary>
+    public ColumnKind? Was { get; init; }
+}
 
 /// <summary>
 /// Names the columns that take part, and says what they hold.
@@ -166,15 +176,25 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
         [new ColumnDeclaration("column", ColumnKind.Number, false)]);
 
     /// <summary>Declares the columns and the policy for everything else.</summary>
-    /// <param name="columns">The columns that take part, in the order they were written.</param>
+    /// <param name="columns">The columns the schema names, in the order they were written: those that take part, and those it excludes.</param>
     /// <param name="remainder">What becomes of the columns not named here.</param>
-    /// <exception cref="ArgumentException">There are no columns, or one is declared twice.</exception>
+    /// <exception cref="ArgumentException">
+    /// There are no columns, one is declared twice, a column says which kind it was without being a category, or every
+    /// column is excluded while the rest is not kept, so none would take part.
+    /// </exception>
     public DeclareStep(IEnumerable<ColumnDeclaration> columns, Remainder remainder = Remainder.Drop)
     {
         ArgumentNullException.ThrowIfNull(columns);
 
         Columns = ColumnsKey.Require([.. columns]);
         Remainder = RemainderKey.Require(remainder);
+        Taking = [.. Columns.Where(column => !column.Excluded)];
+
+        if (Taking.Count == 0 && Remainder != Remainder.Keep)
+        {
+            throw new ArgumentException(
+                "The schema excludes every column it names and keeps none of the rest, so no column would take part.", nameof(columns));
+        }
     }
 
     /// <inheritdoc />
@@ -182,12 +202,19 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
         .With(RemainderKey, step => step.Remainder)
         .With(ColumnsKey, step => step.Columns);
 
-    /// <summary>The columns that take part, in the order they were written.</summary>
+    /// <summary>
+    /// Every column the schema names, in the order they were written: those that take part, and those it excludes,
+    /// each with its kind. This is what the schema is written as, and what two schemas are compared by.
+    /// </summary>
     public IReadOnlyList<ColumnDeclaration> Columns { get; }
 
-    /// <summary>The columns declared as standing for a group rather than for themselves.</summary>
+    /// <summary>The columns that take part: every one the schema names, except those it excludes.</summary>
+    /// <remarks>These are read from the source, and required of it unless they may be absent.</remarks>
+    public IReadOnlyList<ColumnDeclaration> Taking { get; }
+
+    /// <summary>The columns taking part that are declared as standing for a group rather than for themselves.</summary>
     public IEnumerable<string> Categories =>
-        Columns.Where(column => column.Kind == ColumnKind.Category).Select(column => column.Name);
+        Taking.Where(column => column.Kind == ColumnKind.Category).Select(column => column.Name);
 
     /// <summary>What becomes of the columns the schema does not name.</summary>
     public Remainder Remainder { get; }
@@ -205,7 +232,10 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
     public Table Bind(IRowSource source) => SchemaBinding.Bind(this, source);
 
     /// <inheritdoc />
-    /// <remarks>The declared columns, whatever there was before; a schema that keeps the rest leaves any other possible.</remarks>
+    /// <remarks>
+    /// The columns taking part, whatever there was before; a schema that keeps the rest leaves any other possible, except
+    /// a column it excludes, which nothing below may read.
+    /// </remarks>
     public ColumnState After(ColumnState before) => ColumnState.Declared(Columns, Remainder);
 
     /// <inheritdoc />

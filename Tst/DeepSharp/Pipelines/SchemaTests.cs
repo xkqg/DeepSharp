@@ -153,4 +153,154 @@ public class SchemaTests
         Assert.False(drops.Equals(null));
         Assert.Equal(drops, new DeclareStep(columns));
     }
+
+    // A schema that names a column and excludes it: its kind is kept, so taking it in again brings it back as it was.
+    private static DeclareStep WithAnExcludedColumn(Remainder remainder = Remainder.Drop) => new(
+    [
+        new ColumnDeclaration("a", ColumnKind.Number, false),
+        new ColumnDeclaration("b", ColumnKind.Integer, false) { Excluded = true },
+    ], remainder);
+
+    private static string Written(IPipelineStep step)
+    {
+        var buffer = new MemoryStream();
+
+        using (var writer = new System.Text.Json.Utf8JsonWriter(buffer))
+        {
+            step.WriteTo(writer);
+        }
+
+        return System.Text.Encoding.UTF8.GetString(buffer.ToArray());
+    }
+
+    [Fact]
+    public void AnExcludedColumn_IsNamedByTheSchema_WithItsKind_AndTakesNoPart()
+    {
+        var schema = WithAnExcludedColumn();
+
+        Assert.Equal(["a", "b"], schema.Columns.Select(column => column.Name));
+        Assert.Equal(["a"], schema.Taking.Select(column => column.Name));
+        Assert.Equal(ColumnKind.Integer, schema.Columns[1].Kind);
+        Assert.True(schema.Columns[1].Excluded);
+    }
+
+    [Theory]
+    [InlineData(Remainder.Drop)]
+    [InlineData(Remainder.Keep)]
+    [InlineData(Remainder.Refuse)]
+    public void AnExcludedColumn_IsNotRead_NotKeptWithTheRest_AndNotUnexpected(Remainder remainder)
+    {
+        // Named, so what becomes of the rest of the file does not reach it; excluded, so nothing reads it.
+        var table = WithAnExcludedColumn(remainder).Bind(new InMemoryRowSource(["a", "b"], [["1.5", "7"], ["2", "8"]]));
+
+        Assert.Equal(["a"], table.Columns.Select(column => column.Name));
+    }
+
+    [Fact]
+    public void AnExcludedColumn_MayBeAbsentFromTheSource()
+    {
+        var table = WithAnExcludedColumn().Bind(new InMemoryRowSource(["a"], [["1.5"]]));
+
+        Assert.Equal(["a"], table.Columns.Select(column => column.Name));
+    }
+
+    [Theory]
+    [InlineData(Remainder.Drop)]
+    [InlineData(Remainder.Refuse)]
+    public void ASchemaThatTakesNoColumn_IsRefused(Remainder remainder)
+    {
+        var refused = Assert.Throws<ArgumentException>(
+            () => new DeclareStep([new ColumnDeclaration("a", ColumnKind.Number, false) { Excluded = true }], remainder));
+
+        Assert.Contains("excludes every column", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ASchemaThatExcludesEveryColumnItNames_AndKeepsTheRest_TakesTheRest()
+    {
+        var schema = new DeclareStep([new ColumnDeclaration("a", ColumnKind.Number, false) { Excluded = true }], Remainder.Keep);
+
+        Assert.Empty(schema.Taking);
+        Assert.Equal(["c"], schema.Bind(new InMemoryRowSource(["a", "c"], [["1", "x"]])).Columns.Select(column => column.Name));
+    }
+
+    [Fact]
+    public void AnExcludedCategory_IsNoCategoryToEncode()
+    {
+        var schema = new DeclareStep([
+            new ColumnDeclaration("sex", ColumnKind.Category, false),
+            new ColumnDeclaration("embarked", ColumnKind.Category, false) { Excluded = true },
+        ]);
+
+        Assert.Equal(["sex"], schema.Categories);
+    }
+
+    [Fact]
+    public void ACategory_RemembersTheKindItWas()
+    {
+        var schema = new DeclareStep([new ColumnDeclaration("pclass", ColumnKind.Category, false) { Was = ColumnKind.Integer }]);
+
+        Assert.Equal(ColumnKind.Integer, schema.Columns[0].Was);
+    }
+
+    [Theory]
+    // Only a category was something else before; and a category never was one before it became one.
+    [InlineData(ColumnKind.Number, ColumnKind.Integer)]
+    [InlineData(ColumnKind.Category, ColumnKind.Category)]
+    public void AKindItWas_IsRefused_UnlessACategorySaysWhatItWasBefore(ColumnKind kind, ColumnKind was)
+    {
+        var refused = Assert.Throws<ArgumentException>(
+            () => new DeclareStep([new ColumnDeclaration("pclass", kind, false) { Was = was }]));
+
+        Assert.Contains("'pclass'", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AKindItWas_ThatIsNoKind_IsRefused()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => new DeclareStep([new ColumnDeclaration("pclass", ColumnKind.Category, false) { Was = (ColumnKind)7 }]));
+    }
+
+    [Fact]
+    public void ExcludedAndWhatACategoryWas_SurviveTheFile_WrittenOnlyWhereTheySaySomething()
+    {
+        var declaration = new PipelineDeclaration([
+            new ReadCsvStep("x.csv"),
+            new DeclareStep([
+                new ColumnDeclaration("a", ColumnKind.Number, false),
+                new ColumnDeclaration("b", ColumnKind.Integer, true) { Excluded = true },
+                new ColumnDeclaration("c", ColumnKind.Category, false) { Was = ColumnKind.Integer },
+            ]),
+        ]);
+
+        Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()));
+        Assert.Equal(
+            """{"step":"declare","remainder":"drop","columns":[{"name":"a","kind":"number","optional":false},"""
+            + """{"name":"b","kind":"integer","optional":true,"excluded":true},{"name":"c","kind":"category","optional":false,"was":"integer"}]}""",
+            Written(declaration.Steps[1]));
+    }
+
+    [Fact]
+    public void AColumnThatSaysItIsNotExcluded_IsWrittenBackAsAnyColumnIs()
+    {
+        var read = (DeclareStep)StepCatalog.BuiltIn().ReadStep(
+            """{"step":"declare","remainder":"drop","columns":[{"name":"a","kind":"number","optional":false,"excluded":false}]}""");
+
+        Assert.False(read.Columns[0].Excluded);
+        Assert.Null(read.Columns[0].Was);
+        Assert.Equal("""{"step":"declare","remainder":"drop","columns":[{"name":"a","kind":"number","optional":false}]}""", Written(read));
+    }
+
+    [Fact]
+    public void TwoSchemasThatDifferOnlyInWhatTheyExclude_OrInWhatACategoryWas_AreTwoSchemas()
+    {
+        ColumnDeclaration a = new("a", ColumnKind.Number, false);
+        ColumnDeclaration b = new("b", ColumnKind.Category, false);
+
+        Assert.NotEqual(new DeclareStep([a, b]), new DeclareStep([a, b with { Excluded = true }]));
+        Assert.NotEqual(new DeclareStep([a, b]), new DeclareStep([a, b with { Was = ColumnKind.Text }]));
+        Assert.NotEqual(new DeclareStep([a, b]).GetHashCode(), new DeclareStep([a, b with { Excluded = true }]).GetHashCode());
+        Assert.Equal(new DeclareStep([a, b with { Was = ColumnKind.Text }]), new DeclareStep([a, b with { Was = ColumnKind.Text }]));
+    }
 }

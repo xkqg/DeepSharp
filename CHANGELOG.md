@@ -30,6 +30,11 @@ wrong with it at once, each at its line and column.
   and every other step stands below it. A step written above the schema used to fail a whole run later, as a
   column nobody could find.
 
+- **`DeclareStep.Columns` is every column the schema names; `DeclareStep.Taking` is the ones that take part.** A
+  schema can now name a column and exclude it, so the two can differ. Code that reads `Columns` to learn which
+  columns a pipeline carries should read `Taking`. A schema written with 0.2 excludes nothing, and there the two
+  are the same.
+
 - **The rules hold wherever a step comes from.** A pipeline has one source, one schema, one split, one order
   and one output. Every step does something the run acts on. Rows are dropped and put in order before the
   split, never after it. A column is read only where it exists, and only by a step that can work on its kind.
@@ -125,6 +130,14 @@ wrong with it at once, each at its line and column.
   that needs the row a number belongs to reads it as it was read: a share of a flock comes back as birds by the
   flock's own size, a return as a price by the day's own price. For somebody writing a step of their own,
   `IUndoesItself` can say which columns it undoes, what a column was made from, and read that row.
+
+- **A column can be left out and brought back as it was.** A declared column can say it is `excluded`: the schema
+  still names it, with its kind, but nothing reads it and the source is not asked for it, and a step that reads it
+  is refused at that step, in the words "which the schema excludes". Taking it in again is clearing the word, and
+  the column comes back with the kind it had. A category can say which kind it `was` before it became one, so it
+  can go back to it. Both are written into the file only where they say something, so a schema that uses neither
+  is written exactly as before and keeps its key. A schema that excludes every column it names and keeps none of
+  the rest is refused, since no column would take part.
 
 - **Every package runs on .NET 8 as well as .NET 10.** Verso's browser editor runs on .NET 8 for as long as
   .NET 8 is installed, and a package built for .NET 10 alone does not load there. Each package now carries a

@@ -182,14 +182,14 @@ internal static class DataGrid
 
     /// <summary>What a grid's header offers under a declaration, column by column.</summary>
     /// <param name="reaching">The columns there at the end of the declaration.</param>
-    /// <param name="markable">The columns the schema declares and not as categories.</param>
+    /// <param name="markable">The columns the schema takes, and not as categories.</param>
     private sealed class Offered(ColumnState reaching, HashSet<string> markable)
     {
         public static Offered By(PipelineDeclaration declaration) =>
             new(
                 declaration.ColumnsBefore(declaration.Steps.Count),
                 declaration.Steps.OfType<DeclareStep>()
-                    .SelectMany(declare => declare.Columns)
+                    .SelectMany(declare => declare.Taking)
                     .Where(column => column.Kind != ColumnKind.Category)
                     .Select(column => column.Name)
                     .ToHashSet(StringComparer.Ordinal));
@@ -197,7 +197,7 @@ internal static class DataGrid
         // A column that reaches the end can be excluded; one the schema leaves out, or a step below takes away, is already.
         public bool Excludes(string column) => reaching.Allows(column);
 
-        // A column the schema declares, and not as a category, can be marked one.
+        // A column the schema takes, and not as a category, can be marked one; one it excludes is not there to mark.
         public bool Marks(string column) => markable.Contains(column);
     }
 

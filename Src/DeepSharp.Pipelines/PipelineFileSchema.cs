@@ -346,8 +346,7 @@ internal static class PipelineFileSchema
         {
             var column = new JsonObject();
 
-            foreach (var property in new StepParameter[] { parameter.Name, parameter.Kind, parameter.Optional }
-                         .SelectMany(each => each.Accept(this)))
+            foreach (var property in parameter.Parts.SelectMany(part => part.Parameter.Accept(this)))
             {
                 column[property.Key] = property.Schema;
             }
@@ -363,7 +362,7 @@ internal static class PipelineFileSchema
                     {
                         ["type"] = "object",
                         ["properties"] = column,
-                        ["required"] = new JsonArray([.. parameter.ColumnKeys.Select(key => (JsonNode)key)]),
+                        ["required"] = new JsonArray([.. parameter.RequiredColumnKeys.Select(key => (JsonNode)key)]),
                         ["additionalProperties"] = false,
                     },
                 }),

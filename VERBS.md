@@ -48,7 +48,7 @@ Names the columns that take part, says what each holds, and decides what becomes
 | key | holds | a new block starts with |
 |---|---|---|
 | `remainder` | one of `drop`, `keep` or `refuse` | `"drop"` |
-| `columns` | a list of columns, each with a `name`, a `kind` that is one of `text`, `number`, `integer`, `boolean`, `timestamp` or `category`, and whether it is `optional` | `[{"name":"column","kind":"number","optional":false}]` |
+| `columns` | a list of columns, each with a `name`, a `kind` that is one of `text`, `number`, `integer`, `boolean`, `timestamp` or `category`, and whether it is `optional`; a column may say it is `excluded` — named, its kind kept, and read by nothing — and a category may say which kind it `was` before it became one | `[{"name":"column","kind":"number","optional":false}]` |
 
 - **`remainder`**: What becomes of the columns the schema does not name: dropped, kept as text, or refused.
 - **`columns`**: The columns that take part, what each holds, and whether the source may lack it.

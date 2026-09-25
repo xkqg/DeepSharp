@@ -318,8 +318,15 @@ public class StepParameterContractTests
             new() { ["train"] = 0.5, ["validation"] = 0.2, ["test"] = 0.2, ["predict"] = 0.1 },
         ];
 
+        // A column excluded beside one that takes part, since a schema that takes nothing is refused.
         public IEnumerable<Dictionary<string, JsonNode?>> Visit(ColumnDeclarationsParameter parameter) =>
-            One(parameter.Key, new JsonArray(new JsonObject { ["name"] = "other", ["kind"] = "text", ["optional"] = true }));
+        [
+            .. One(parameter.Key, new JsonArray(new JsonObject { ["name"] = "other", ["kind"] = "text", ["optional"] = true })),
+            .. One(parameter.Key, new JsonArray(
+                new JsonObject { ["name"] = "other", ["kind"] = "text", ["optional"] = false },
+                new JsonObject { ["name"] = "gone", ["kind"] = "number", ["optional"] = false, ["excluded"] = true })),
+            .. One(parameter.Key, new JsonArray(new JsonObject { ["name"] = "other", ["kind"] = "category", ["optional"] = false, ["was"] = "integer" })),
+        ];
     }
 
     [Fact]

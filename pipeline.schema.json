@@ -596,6 +596,29 @@
               "optional": {
                 "description": "Whether the source is allowed not to have the column at all.",
                 "type": "boolean"
+              },
+              "excluded": {
+                "description": "Whether the column is left out while its kind is kept, so it can be taken in again as it was. Left out, the column takes part.",
+                "type": "boolean"
+              },
+              "was": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "text",
+                      "number",
+                      "integer",
+                      "boolean",
+                      "timestamp",
+                      "category"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "pattern": "^(?:[Tt][Ee][Xx][Tt]|[Nn][Uu][Mm][Bb][Ee][Rr]|[Ii][Nn][Tt][Ee][Gg][Ee][Rr]|[Bb][Oo][Oo][Ll][Ee][Aa][Nn]|[Tt][Ii][Mm][Ee][Ss][Tt][Aa][Mm][Pp]|[Cc][Aa][Tt][Ee][Gg][Oo][Rr][Yy])$"
+                  }
+                ],
+                "description": "The kind a category column held before it was made one, so it can go back to it. Left out, there is none."
               }
             },
             "required": [

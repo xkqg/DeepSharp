@@ -66,6 +66,25 @@ public class ProjectionTests
     }
 
     [Fact]
+    public void TheSchema_AcceptsAColumnThatIsExcluded_OrSaysWhatItWas_AndStillAsksForItsNameKindAndOptional()
+    {
+        Assert.True(Valid("""
+            {"version":2,"declaration":[{"step":"declare","remainder":"drop","columns":[
+                {"name":"a","kind":"number","optional":false},
+                {"name":"b","kind":"integer","optional":false,"excluded":true},
+                {"name":"c","kind":"category","optional":false,"was":"integer"}]}]}
+            """));
+        Assert.False(Valid("""
+            {"version":2,"declaration":[{"step":"declare","remainder":"drop","columns":[
+                {"name":"a","kind":"number","excluded":true}]}]}
+            """));
+        Assert.False(Valid("""
+            {"version":2,"declaration":[{"step":"declare","remainder":"drop","columns":[
+                {"name":"a","kind":"number","optional":false,"colour":"red"}]}]}
+            """));
+    }
+
+    [Fact]
     public void TheSchema_AcceptsAWholePipelineTheLibraryWrote_WithWhatItLearned()
     {
         var prepared = Pdd.Create()

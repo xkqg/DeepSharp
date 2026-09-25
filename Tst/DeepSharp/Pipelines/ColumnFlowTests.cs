@@ -36,6 +36,30 @@ public class ColumnFlowTests
         Assert.Contains("'fare'", fault.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(Remainder.Drop)]
+    [InlineData(Remainder.Keep)]
+    public void AColumnTheSchemaExcludes_IsRefusedWhereItIsRead_SayingSo(Remainder remainder)
+    {
+        // Excluded is not the same as never declared: the schema still names the column, with its kind, and a step
+        // that reads it is told which of the two it is — even where the rest of the file comes along.
+        IPipelineStep[] steps =
+        [
+            new ReadRowsStep("rows"),
+            new DeclareStep([
+                new ColumnDeclaration("survived", ColumnKind.Integer, false),
+                new ColumnDeclaration("fare", ColumnKind.Number, false) { Excluded = true },
+            ], remainder),
+            new SplitAtRandomStep(SplitShares.Of(0.7, 0.15), 1),
+            new NormaliseStep("fare"),
+        ];
+
+        var fault = Assert.Single(PipelineDeclaration.FaultsIn(steps));
+
+        Assert.Equal("normalise", fault.Verb);
+        Assert.Contains("'fare', which the schema excludes", fault.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AColumnAnIndicatorReadsInEveryPlace_IsOneRead_AndSoOneFault()
     {

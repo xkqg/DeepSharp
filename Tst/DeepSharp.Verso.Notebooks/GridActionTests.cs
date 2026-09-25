@@ -329,6 +329,29 @@ public sealed class GridActionTests : IDisposable
     }
 
     [Fact]
+    public async Task TheSourcesGrid_OffersNoCategory_ForAColumnTheSchemaExcludes()
+    {
+        // At the source every column of the file is there, an excluded one too. The schema names it and takes no
+        // part of it, so there is nothing about it to mark.
+        await using var notebook = await NotebookAsync(
+            Titanic[0],
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "pclass", "kind": "integer", "optional": false, "excluded": true}, {"name": "age", "kind": "number", "optional": true}, {"name": "fare", "kind": "number", "optional": false}]}""",
+            Titanic[2],
+            Titanic[3],
+            Titanic[4]);
+        var read = notebook.Scaffold.Cells[0];
+
+        await notebook.GestureAsync(read, StepRenderer.Show);
+
+        var grid = read.Outputs[1].Content;
+
+        Assert.True(grid.Heads("pclass"));
+        Assert.DoesNotContain(Marking("pclass"), grid, StringComparison.Ordinal);
+        Assert.DoesNotContain(Excluding("pclass"), grid, StringComparison.Ordinal);
+        Assert.Contains(Marking("survived"), grid, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ExcludingADeclaredColumnFromTheSourcesGrid_TakesItOutOfTheSchema_AsFromAnyOther()
     {
         await using var notebook = await NotebookAsync(Titanic);

@@ -724,7 +724,10 @@ public sealed class SplitSharesParameter() : StepParameter<SplitShares>(
     }
 }
 
-/// <summary>A parameter holding the columns a schema declares: each one's name, kind, and whether it may be absent.</summary>
+/// <summary>
+/// A parameter holding the columns a schema declares: each one's name, kind, whether it may be absent, whether it is
+/// excluded, and what a category was before.
+/// </summary>
 /// <param name="key">The key it is written under.</param>
 /// <param name="description">What it means.</param>
 /// <param name="example">The value a new block starts with.</param>
@@ -741,8 +744,30 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
     public TrueOrFalseParameter Optional { get; } = new(
         "optional", "Whether the source is allowed not to have the column at all.", false);
 
-    /// <summary>The keys each declared column is written with.</summary>
-    public IReadOnlyList<string> ColumnKeys => [Name.Key, Kind.Key, Optional.Key];
+    /// <summary>Whether one declared column is excluded, as it is written inside the list.</summary>
+    public TrueOrFalseParameter Excluded { get; } = new(
+        "excluded", "Whether the column is left out while its kind is kept, so it can be taken in again as it was. Left out, the column takes part.", false);
+
+    /// <summary>The kind one declared category held before it was made one, as it is written inside the list.</summary>
+    public OneOfParameter<ColumnKind> Was { get; } = new(
+        "was", "The kind a category column held before it was made one, so it can go back to it. Left out, there is none.", ColumnKind.Integer);
+
+    /// <summary>The parts one declared column is written with, in the order they are written, each saying whether a file has to hold it.</summary>
+    /// <remarks>
+    /// Whether it is excluded and what a category was are left out unless they say something, so a column written
+    /// before either existed is written exactly as it was, and keeps its key.
+    /// </remarks>
+    public IReadOnlyList<ColumnPart> Parts =>
+    [
+        new(Name, Required: true),
+        new(Kind, Required: true),
+        new(Optional, Required: true),
+        new(Excluded, Required: false),
+        new(Was, Required: false),
+    ];
+
+    /// <summary>The keys a file has to hold for every declared column.</summary>
+    public IReadOnlyList<string> RequiredColumnKeys => [.. Parts.Where(part => part.Required).Select(part => part.Parameter.Key)];
 
     /// <inheritdoc />
     public override IReadOnlyList<ColumnDeclaration> Read(JsonElement step)
@@ -752,24 +777,30 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
             throw new FormatException($"A declare step holds a '{Key}' list.");
         }
 
+        var keys = string.Join(", ", Parts.Select(part => part.Parameter.Key));
+
         return [.. columns.EnumerateArray().Select(column =>
         {
             if (column.ValueKind != JsonValueKind.Object)
             {
-                throw new FormatException($"Every entry in '{Key}' is a column: {string.Join(", ", ColumnKeys)}.");
+                throw new FormatException($"Every entry in '{Key}' is a column: {keys}.");
             }
 
-            foreach (var property in column.EnumerateObject().Where(property => !ColumnKeys.Contains(property.Name)))
+            foreach (var property in column.EnumerateObject().Where(property => Parts.All(part => part.Parameter.Key != property.Name)))
             {
-                throw new FormatException(
-                    $"A declared column has no '{property.Name}'. It takes: {string.Join(", ", ColumnKeys)}.");
+                throw new FormatException($"A declared column has no '{property.Name}'. It takes: {keys}.");
             }
 
-            return new ColumnDeclaration(Name.Read(column), Kind.Read(column), Optional.Read(column));
+            return new ColumnDeclaration(Name.Read(column), Kind.Read(column), Optional.Read(column))
+            {
+                Excluded = column.TryGetProperty(Excluded.Key, out _) && Excluded.Read(column),
+                Was = column.TryGetProperty(Was.Key, out _) ? Was.Read(column) : null,
+            };
         })];
     }
 
     /// <inheritdoc />
+    /// <remarks>Excluded and what a category was are written only where they say something.</remarks>
     public override void Write(Utf8JsonWriter writer, IReadOnlyList<ColumnDeclaration> value)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -783,6 +814,17 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
             Name.Write(writer, column.Name);
             Kind.Write(writer, column.Kind);
             Optional.Write(writer, column.Optional);
+
+            if (column.Excluded)
+            {
+                Excluded.Write(writer, column.Excluded);
+            }
+
+            if (column.Was is { } was)
+            {
+                Was.Write(writer, was);
+            }
+
             writer.WriteEndObject();
         }
 
@@ -807,6 +849,14 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
         {
             Name.Require(column.Name);
             Kind.Require(column.Kind);
+
+            // Only a category was another kind before, and the kind it goes back to is not a category.
+            if (column.Was is { } was && (Was.Require(was) == ColumnKind.Category || column.Kind != ColumnKind.Category))
+            {
+                throw new ArgumentException(
+                    $"'{column.Name}' says it was {Vocabulary<ColumnKind>.WordFor(was, Was.Key)}: only a category says which other kind it was before it became one.",
+                    Key);
+            }
         }
 
         var duplicate = value.GroupBy(column => column.Name).FirstOrDefault(group => group.Count() > 1);
@@ -828,6 +878,11 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
     private protected override bool Same(IReadOnlyList<ColumnDeclaration> one, IReadOnlyList<ColumnDeclaration> other) =>
         one.SequenceEqual(other);
 }
+
+/// <summary>One part a declared column is written with, and whether a file has to hold it.</summary>
+/// <param name="Parameter">The part, as the kind of value it holds.</param>
+/// <param name="Required">Whether every declared column is written with it; a part a file may leave out means something by its absence.</param>
+public readonly record struct ColumnPart(StepParameter Parameter, bool Required);
 
 /// <summary>The kinds of column a step can work on, in the groups the steps share.</summary>
 public static class ColumnKinds
