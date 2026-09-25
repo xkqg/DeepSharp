@@ -1,4 +1,4 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Collections.Concurrent;
@@ -45,6 +45,7 @@ public sealed class StepCatalog
         catalog.Register<EncodeStep>();
         catalog.Register<TargetStep>();
         catalog.Register<DistributionStep>();
+        catalog.Register<LabelsStep>();
         catalog.Register<FillNaNStep>();
         catalog.Register<DropWarmUpStep>();
         catalog.Register<TimePartsStep>();

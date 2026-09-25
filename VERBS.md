@@ -34,6 +34,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`split.stratified`](#splitstratified) | Divides the rows at random while keeping the mixture of one column the same in every part. |
 | [`target`](#target) | Names the column a model is asked to predict, which is handed over apart from the numbers it is shown. |
 | [`target.distribution`](#targetdistribution) | Names the columns a model is asked to predict as one answer: how a whole is divided among them, in their order. |
+| [`target.labels`](#targetlabels) | Names the columns a model is asked to predict as one answer of labels, each nought or one on every row. |
 
 ## `declare`
 
@@ -521,5 +522,23 @@ Names the columns a model is asked to predict as one answer: how a whole is divi
 
 - **`columns`**: The columns the answer is divided among, in their order: at least two.
 - **`scaleBy`**: The column saying how many the shares are shares of, so predictions come back as how many fell in each; left out, they come back as shares.
+
+Means what it says from version 2 of the file.
+
+## `target.labels`
+
+Names the columns a model is asked to predict as one answer of labels, each nought or one on every row.
+
+```json
+{"step":"target.labels","columns":["label1","label2"]}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `columns` | a list of the names of columns holding a number, a whole number or true or false, each named once | `["label1","label2"]` |
+| `ones` | a whole number, at least 0; left out, 0 | left out |
+
+- **`columns`**: The columns holding the labels, each nought or one on every row: at least two.
+- **`ones`**: How many of the columns hold a one on every row: one when a row is exactly one of its things; left out, any number.
 
 Means what it says from version 2 of the file.

@@ -556,7 +556,9 @@ Which answers there are is the output's to say, and each kind of output is a ver
 column. `target.distribution` names the columns a whole is divided among — a flock weighed in seventy bands of
 fifty grams — whose shares are at least nought and sum to one on every row; named with the column saying how many
 there were, its shares come back as how many fell in each band, since a served flock knows how many birds it has
-and not how they fall. A package adds a kind the way it adds any verb, by implementing `INamesTheAnswer`.
+and not how they fall. `target.labels` names columns that are each nought or one on every row — one of them when a
+row is exactly one of its things, any number when it is not. A package adds a kind the way it adds any verb, by
+implementing `INamesTheAnswer`.
 
 Four things are refused there rather than passed on. A column still holding words, because turning one into a
 number quietly is how a category becomes an order nobody meant. A gap, because a model cannot be handed an

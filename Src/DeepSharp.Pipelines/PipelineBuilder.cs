@@ -467,6 +467,14 @@ public sealed class FittingBuilder
     public FittingBuilder Distribution(IEnumerable<string> columns, string? scaleBy = null) =>
         Add(new DistributionStep(columns, scaleBy));
 
+    /// <summary>Names the columns a model is asked to predict as one answer of labels, each nought or one.</summary>
+    /// <param name="columns">The columns, in their order: at least two.</param>
+    /// <param name="ones">How many of them hold a one on every row: one when a row is exactly one of its things; nought for any number.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">There are fewer than two columns, one has no name, or one is named twice.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The number of ones is below nought.</exception>
+    public FittingBuilder Labels(IEnumerable<string> columns, int ones = 0) => Add(new LabelsStep(columns, ones));
+
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
     public Pipeline Build() => new(Declaration, _rows);

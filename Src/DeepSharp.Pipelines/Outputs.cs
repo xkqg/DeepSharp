@@ -226,3 +226,116 @@ public sealed record DistributionStep : IPipelineStep<DistributionStep>, INamesT
     /// <returns>The step the file describes.</returns>
     public static DistributionStep ReadFrom(JsonElement element) => new(ColumnsKey.Read(element), ScaleByKey.Read(element));
 }
+
+/// <summary>
+/// Names several columns that together hold one answer: labels, each nought or one on every row.
+/// </summary>
+/// <remarks>
+/// Which of several things a row is, or which of several things hold for it: a row holds one label when its things
+/// exclude each other, and any number of them when they do not, and the output says which it means. The handover
+/// refuses a row with a label that is neither nought nor one, or with more or fewer ones than the output says a row
+/// holds. Labels are in their own units, so they come back as they were handed over.
+/// </remarks>
+public sealed record LabelsStep : IPipelineStep<LabelsStep>, INamesTheAnswer, IDescribesColumns
+{
+    private static readonly ColumnsParameter ColumnsKey = new(
+        "columns", "The columns holding the labels, each nought or one on every row: at least two.", ["label1", "label2"], ColumnKinds.Numbers);
+
+    private static readonly WholeNumberParameter OnesKey = new(
+        "ones",
+        "How many of the columns hold a one on every row: one when a row is exactly one of its things; left out, any number.",
+        0,
+        atLeast: 0,
+        leftOut: 0);
+
+    /// <summary>Declares the columns holding an answer of labels.</summary>
+    /// <param name="columns">The columns, in their order.</param>
+    /// <param name="ones">How many of them hold a one on every row, or nought for any number.</param>
+    /// <exception cref="ArgumentException">There are fewer than two columns, one has no name, or one is named twice.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The number of ones is below nought.</exception>
+    public LabelsStep(IEnumerable<string> columns, int ones = 0)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        Columns = ColumnsKey.Require([.. columns]);
+
+        if (Columns.Count < 2)
+        {
+            throw new ArgumentException(
+                $"'{ColumnsKey.Key}' names at least two columns: an answer held in one column is a target.", nameof(columns));
+        }
+
+        Ones = OnesKey.Require(ones);
+    }
+
+    /// <summary>The columns holding the labels, in their order.</summary>
+    public IReadOnlyList<string> Columns { get; }
+
+    /// <summary>How many of the columns hold a one on every row; nought for any number.</summary>
+    public int Ones { get; }
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> Answers => Columns;
+
+    /// <inheritdoc />
+    public static string Name => "target.labels";
+
+    /// <inheritdoc />
+    public static string Purpose =>
+        "Names the columns a model is asked to predict as one answer of labels, each nought or one on every row.";
+
+    /// <inheritdoc />
+    public static int Since => 2;
+
+    /// <inheritdoc />
+    public static StepParameters<LabelsStep> Parameters { get; } = new StepParameters<LabelsStep>()
+        .With(ColumnsKey, step => step.Columns)
+        .With(OnesKey, step => step.Ones);
+
+    /// <inheritdoc />
+    public string Verb => Name;
+
+    /// <inheritdoc />
+    public string? Refusal(IReadOnlyList<double> answers)
+    {
+        ArgumentNullException.ThrowIfNull(answers);
+
+        if (answers.FirstOrDefault(label => label is not (0 or 1), 0) is var odd and not 0)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"a label of {odd} is neither nought nor one.");
+        }
+
+        var held = answers.Count(label => label == 1);
+
+        return Ones > 0 && held != Ones
+            ? string.Create(CultureInfo.InvariantCulture, $"it holds {held} ones, and a row holds {Ones} of these labels.")
+            : null;
+    }
+
+    /// <inheritdoc />
+    public ColumnState After(ColumnState before) => before;
+
+    /// <inheritdoc />
+    public bool Equals(LabelsStep? other) =>
+        other is not null && Ones == other.Ones && Columns.SequenceEqual(other.Columns, StringComparer.Ordinal);
+
+    /// <inheritdoc />
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+
+        hash.Add(Ones);
+
+        foreach (var column in Columns)
+        {
+            hash.Add(column);
+        }
+
+        return hash.ToHashCode();
+    }
+
+    /// <summary>Reads this step back out of a file.</summary>
+    /// <param name="element">The JSON object the step was written as.</param>
+    /// <returns>The step the file describes.</returns>
+    public static LabelsStep ReadFrom(JsonElement element) => new(ColumnsKey.Read(element), OnesKey.Read(element));
+}
