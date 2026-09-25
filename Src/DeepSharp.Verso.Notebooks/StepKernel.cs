@@ -284,7 +284,7 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
 
         var drawn = NotebookSession.KeyOf(declaration);
 
-        await context.WriteOutputAsync(ColumnList.Of(declaration, source, fresh, stored.Preset, drawn, picks, request.Whole));
+        await context.WriteOutputAsync(ColumnList.Of(NotebookVerbs.Catalog(), declaration, source, fresh, stored.Preset, drawn, picks, request.Whole));
         session.Listing(context.CellId, drawn);
     }
 

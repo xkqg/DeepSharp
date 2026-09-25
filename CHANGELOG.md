@@ -100,7 +100,9 @@ wrong with it at once, each at its line and column.
   out, marking new the columns the saved file never showed; each row's kind select commits the kind a keyboard walk
   ends on, as one pick from the state the list was drawn in, so a category walked away from and back to remembers
   the kind it was. Above the rows a select picks the kind of output, and each row's output box puts its column into
-  that output or takes it out, with a box of its own that takes the output away. What the blocks decide about
+  that output or takes it out, with a box of its own that takes the output away; the output's own values — rows
+  ahead, a return, how many ones, what the shares are shares of — are selects offering only the values the rules keep.
+  What the blocks decide about
   their columns is saved beside the notebook, as `<notebook>.columns.json`, after every change they accept and
   every run of the whole pipeline. An output block is a stage of
   its own, and its form swaps it for any other kind of output. A profile block names, for
@@ -117,12 +119,13 @@ wrong with it at once, each at its line and column.
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock
   weighed in seventy bands of fifty grams — whose shares are at least nought and sum to one on every row; named
-  with the column saying how many there were, the shares come back as how many fell in each band.
-  `Labels(columns, ones)`, `target.labels`, names columns that are each nought or one, with how many ones a row
-  holds when that is said. `Ahead(column, ahead, as)`, `target.ahead`, makes its answer from a column rows later
-  in the declared order: the price five days on, or the return on today's price by then. Reading ahead is held
-  to rules of its own: only an output may, below a split in time whose gap is at least as wide, the rows ordered
-  by that split's column alone; and a return stands above every step that changes the column it is made from.
+  with the column saying how many there were, which is none of the shares, the shares come back as how many fell in
+  each band. `Labels(columns, ones)`, `target.labels`, names columns that are each nought or one, with how many ones
+  a row holds when that is said, never more than there are labels. `Ahead(column, ahead, as)`, `target.ahead`,
+  makes its answer from a column rows later in the declared order: the price five days on, or the return on today's
+  price by then. Reading ahead is held to rules of its own: only an output may, below a split in time whose gap is
+  at least as wide, the rows ordered by that split's column alone; and a return stands above every step that
+  changes the column it is made from.
 
 - **Every answer is handed over.** `Batch.AnswerNames` and `Batch.Answers` hold as many numbers a row as the
   output names, in its order; `Labels` stays the one number a row for an output of one answer. Each answer is

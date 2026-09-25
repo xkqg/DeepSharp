@@ -4,6 +4,7 @@
 using System.Net;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Verso.Abstractions;
 
 namespace DeepSharp.Tests.Notebooks;
 
@@ -25,6 +26,11 @@ internal readonly record struct DrawnSelect(string Action, string Value, IReadOn
 /// <param name="Role">What it is to the output, as the row says it: an answer, read by an answer's way back, or nothing.</param>
 internal readonly record struct ListedRow(
     string Column, string Values, DrawnSelect Kind, string ShownKind, string Mark, DrawnBox Included, DrawnBox Output, string Role);
+
+/// <summary>A list as drawn: the block it was drawn on, and its page.</summary>
+/// <param name="On">The block.</param>
+/// <param name="Html">The page.</param>
+internal readonly record struct DrawnList(CellModel On, string Html);
 
 /// <summary>What a test reads off the list of a source's columns.</summary>
 internal static partial class ListHtmlExtensions
@@ -72,6 +78,20 @@ internal static partial class ListHtmlExtensions
     /// <returns>The box.</returns>
     public static DrawnBox RemovalBox(this string list) => Section().Match(list).Groups[1].Value.Boxes().Single();
 
+    /// <summary>The selects that set the output's parameters, by the parameter each sets.</summary>
+    /// <param name="list">The list's page.</param>
+    /// <returns>Each select, under its parameter's key; none when the list draws no parameters.</returns>
+    public static IReadOnlyDictionary<string, DrawnSelect> ParameterSelects(this string list) =>
+        SelectTag().Matches(Parameters().Match(list).Groups[1].Value)
+            .Select(match => Select(match.Value))
+            .ToDictionary(select => JsonNode.Parse(select.Action[(select.Action.IndexOf(' ', StringComparison.Ordinal) + 1)..])!["key"]!.GetValue<string>());
+
+    /// <summary>What the list says of the output's parameters it cannot set, as a person reads it.</summary>
+    /// <param name="list">The list's page.</param>
+    /// <returns>One line per such parameter.</returns>
+    public static IReadOnlyList<string> ParametersSetElsewhere(this string list) =>
+        [.. ParameterNote().Matches(Parameters().Match(list).Groups[1].Value).Select(note => WebUtility.HtmlDecode(note.Groups[1].Value))];
+
     private static string Cell(string row, string name) =>
         WebUtility.HtmlDecode(Regex.Match(row, $"<td class=\"deepsharp-{name}\">(.*?)</td>", RegexOptions.Singleline).Groups[1].Value);
 
@@ -106,4 +126,10 @@ internal static partial class ListHtmlExtensions
 
     [GeneratedRegex("<div class=\"deepsharp-output\">(.*?)</div>", RegexOptions.Singleline)]
     private static partial Regex Section();
+
+    [GeneratedRegex("<div class=\"deepsharp-parameters\">(.*?)</div>", RegexOptions.Singleline)]
+    private static partial Regex Parameters();
+
+    [GeneratedRegex("<span class=\"deepsharp-parameter\">(.*?)</span>", RegexOptions.Singleline)]
+    private static partial Regex ParameterNote();
 }

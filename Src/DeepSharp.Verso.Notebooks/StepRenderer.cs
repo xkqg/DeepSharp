@@ -77,6 +77,15 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     /// <summary>The gesture the list's box that takes the output away sends, with what the list was drawn from.</summary>
     internal const string ListRemoveOutput = "deepsharp.list.removeOutput";
 
+    /// <summary>
+    /// The gesture a select setting one of the output's own values sends, with the value's key, the kind of output the
+    /// list makes, and what the list was drawn from; the router sends the value it is at.
+    /// </summary>
+    internal const string ListParameter = "deepsharp.list.parameter";
+
+    /// <summary>The key a select setting one of the output's own values carries that value's key under.</summary>
+    internal const string ParameterKey = "key";
+
     /// <summary>The key a list's control carries the kind of output the list makes under.</summary>
     internal const string TypeKey = "type";
 
@@ -205,6 +214,11 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
                 if (action.Gesture == ListType)
                 {
                     return await TypePickedAsync(gesture, assembled, context);
+                }
+
+                if (action.Gesture == ListParameter)
+                {
+                    return await ParameterPickedAsync(gesture, assembled, context, action);
                 }
 
                 if (StateOf(context.Payload) is not { } ticked)
@@ -387,6 +401,67 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         return null;
     }
 
+    // A select setting one of the output's own values, under the rule a row's kind select keeps: a send is fresh while its
+    // list still says what holds, goes on from the select's own last change when nothing else changed since, and is
+    // stale otherwise, drawing the list again and changing nothing, an echo included. The value is read into the output
+    // as its block's form reads it, from the state the list was drawn in, and the output placed as the column rules place
+    // one. It needs blocks that make one pipeline.
+    private static async Task<string?> ParameterPickedAsync(Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action)
+    {
+        if (await ListOfAsync(gesture, assembled) is not { } list)
+        {
+            return null;
+        }
+
+        var picks = PicksOf(action);
+
+        if (!assembled.Whole)
+        {
+            await StepCommit.NotMadeAsync(list.On, assembled, [NotWhole(assembled)], picks);
+
+            return null;
+        }
+
+        var now = assembled.Readable;
+        var drawn = DrawnOver(action, assembled, list.Source)
+            ? now.Steps
+            : gesture.Session.ContinuationOf(context.InteractionType, NotebookSession.KeyOf(now), list.Source.Fingerprint);
+
+        if (drawn is null)
+        {
+            await StepCommit.ShowAsync(list.On, assembled, ViewTrigger.Show, page: 0, picks);
+
+            return null;
+        }
+
+        var pick = OutputParameters.Picked(
+            NotebookVerbs.Catalog(), new PipelineDeclaration(drawn), action.Text(ParameterKey) ?? string.Empty, context.Payload, list.Source.Rows.ColumnNames);
+
+        if (pick.Steps is not { } steps)
+        {
+            if (pick.NotMade.Count > 0)
+            {
+                await StepCommit.NotMadeAsync(list.On, assembled, pick.NotMade, picks);
+            }
+
+            return null;
+        }
+
+        // Asked for what already holds — the value it is at, sent again — it changes nothing.
+        if (steps.SequenceEqual(now.Steps))
+        {
+            return null;
+        }
+
+        if (await StepCommit.CommitAsync(list.On, assembled, steps, picks))
+        {
+            gesture.Session.SelectCommitted(context.InteractionType, drawn, NotebookSession.KeyOf(new PipelineDeclaration(steps)), list.Source.Fingerprint);
+            context.StateChanged = true;
+        }
+
+        return null;
+    }
+
     // The one pick a select's value makes from the state its list was drawn in: for a column the schema names, that kind;
     // for one it does not, taking it in with that kind; for none, the state as it was drawn. Nothing for a value that
     // names no kind.
@@ -407,13 +482,16 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             : drawn.Including(column, kind, header);
     }
 
-    // The row a list's control is about, and the list's block: the schema's block the blocks hold now — found by what the
-    // control carries, whichever block the send names, since a change writes that block anew — with the rows this session
-    // read the source as. Nothing when the blocks hold no schema or the control names no column; the list drawn again,
-    // saying why, in a session that has not read the source.
-    private static async Task<ListRow?> RowOfAsync(Gesture gesture, NotebookPipeline assembled, ControlAction action)
+    // The row a list's control is about: nothing when the control names no column.
+    private static async Task<ListRow?> RowOfAsync(Gesture gesture, NotebookPipeline assembled, ControlAction action) =>
+        action.Text(ColumnKey) is { } column && await ListOfAsync(gesture, assembled) is { } list ? new ListRow(list.On, column, list.Source) : null;
+
+    // The list a control is on: the schema's block the blocks hold now — found by what the control carries, whichever
+    // block the send names, since a change writes that block anew — with the rows this session read the source as.
+    // Nothing when the blocks hold no schema; the list drawn again, saying why, in a session that has not read the source.
+    private static async Task<ListOn?> ListOfAsync(Gesture gesture, NotebookPipeline assembled)
     {
-        if (assembled.SchemaBlock is not { } schema || action.Text(ColumnKey) is not { } column)
+        if (assembled.SchemaBlock is not { } schema)
         {
             return null;
         }
@@ -427,7 +505,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return null;
         }
 
-        return new ListRow(list, column, source);
+        return new ListOn(list, source);
     }
 
     // Whether a list's control was drawn over the blocks and the source's bytes as they are now.
@@ -579,4 +657,9 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     /// <param name="Column">The row's column.</param>
     /// <param name="Source">The rows this session read the source as, and their fingerprint.</param>
     private readonly record struct ListRow(Gesture List, string Column, SourceRows Source);
+
+    /// <summary>The list a control is on.</summary>
+    /// <param name="On">The gesture, at the list's block.</param>
+    /// <param name="Source">The rows this session read the source as, and their fingerprint.</param>
+    private readonly record struct ListOn(Gesture On, SourceRows Source);
 }

@@ -298,9 +298,4 @@ public sealed class KindSelectTests : IDisposable
         Assert.Equal([string.Empty, "text", "number", "integer", "boolean", "timestamp", "category"], list.Row("sex").Kind.Options);
         Assert.True(kept.Row("sex").Kind is { Value: "", Enabled: false });
     }
-
-    /// <summary>A list as drawn: the block it was drawn on, and its page.</summary>
-    /// <param name="On">The block.</param>
-    /// <param name="Html">The page.</param>
-    private readonly record struct DrawnList(CellModel On, string Html);
 }

@@ -791,6 +791,17 @@ makes. So the answer of an output of one is moved or taken away rather than unti
 made from cannot be unticked either, since the output does not name it. The output is changed only while the blocks
 make one pipeline, and an output of another kind than the one picked is not changed from the list.
 
+The output's own values beside its answer — how many rows ahead, whether a return, how many ones a row holds, what the
+shares are shares of — are selects under the type select, drawn while the list makes the kind of output that stands.
+Nothing is typed: a select offers the form's own choices for the value, or every whole number from the least it may
+be, and keeps only those the output, placed as the column rules place one, leaves a pipeline that keeps every rule —
+so rows ahead run to the split's gap. A value a file may leave out is offered as not said, and not said is not written.
+The value is read into the output by the form's own rule, so the list and the form never differ in what it means; one
+neither bounds is set in the output block's form. A select sends every value a keyboard walk passes, so it commits by
+the kind select's rule: each value is one pick from the state its list was drawn in, and a send made stale by anything
+else draws the list again — which is why a return picked and taken back leaves the output where it stood, rather than
+where the return put it.
+
 What the blocks decide about their columns is saved beside the notebook, in a file named after it
 (`<notebook>.columns.json`): the schema with the columns it excludes and their kinds, the columns dropped, and the
 output — the same shape a preset has, written and read through the same door as a pipeline file. It is written after

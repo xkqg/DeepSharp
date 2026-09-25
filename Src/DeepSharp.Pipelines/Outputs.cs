@@ -151,7 +151,10 @@ public sealed record DistributionStep : IPipelineStep<DistributionStep>, INamesT
     /// <summary>Declares the columns an answer is divided among.</summary>
     /// <param name="columns">The columns, in their order.</param>
     /// <param name="scaleBy">The column saying how many the shares are shares of, or nothing to have shares come back as shares.</param>
-    /// <exception cref="ArgumentException">There are fewer than two columns, one has no name, or one is named twice.</exception>
+    /// <exception cref="ArgumentException">
+    /// There are fewer than two columns, one has no name, or one is named twice; or the column the shares are shares of
+    /// is one of them.
+    /// </exception>
     public DistributionStep(IEnumerable<string> columns, string? scaleBy = null)
     {
         ArgumentNullException.ThrowIfNull(columns);
@@ -165,6 +168,12 @@ public sealed record DistributionStep : IPipelineStep<DistributionStep>, INamesT
         }
 
         ScaleBy = ScaleByKey.Require(scaleBy ?? string.Empty) is { Length: > 0 } named ? named : null;
+
+        if (ScaleBy is not null && Columns.Contains(ScaleBy, StringComparer.Ordinal))
+        {
+            throw new ArgumentException(
+                $"'{ScaleByKey.Key}' says how many the shares are shares of, and '{ScaleBy}' is one of the shares.", nameof(scaleBy));
+        }
     }
 
     /// <summary>The columns the answer is divided among, in their order.</summary>
@@ -290,7 +299,9 @@ public sealed record LabelsStep : IPipelineStep<LabelsStep>, INamesTheAnswer, ID
     /// <param name="columns">The columns, in their order.</param>
     /// <param name="ones">How many of them hold a one on every row, or nought for any number.</param>
     /// <exception cref="ArgumentException">There are fewer than two columns, one has no name, or one is named twice.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">The number of ones is below nought.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The number of ones is below nought, or above the number of columns: a row cannot hold more ones than it has labels.
+    /// </exception>
     public LabelsStep(IEnumerable<string> columns, int ones = 0)
     {
         ArgumentNullException.ThrowIfNull(columns);
@@ -304,6 +315,13 @@ public sealed record LabelsStep : IPipelineStep<LabelsStep>, INamesTheAnswer, ID
         }
 
         Ones = OnesKey.Require(ones);
+
+        if (Ones > Columns.Count)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(ones), ones,
+                string.Create(CultureInfo.InvariantCulture, $"'{OnesKey.Key}' says a row holds {Ones} ones, and there are only {Columns.Count} labels."));
+        }
     }
 
     /// <summary>The columns holding the labels, in their order.</summary>

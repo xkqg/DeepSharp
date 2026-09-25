@@ -163,6 +163,17 @@ public class DistributionTests
     }
 
     [Fact]
+    public void WhatTheSharesAreSharesOf_IsNoneOfTheShares_InCodeAndInAFile()
+    {
+        var refused = Assert.Throws<ArgumentException>(() => new DistributionStep(["w500", "w550"], scaleBy: "w550"));
+        var inAFile = Assert.Throws<PipelineFileException>(() =>
+            StepCatalog.BuiltIn().ReadStep("""{"step": "target.distribution", "columns": ["w500", "w550"], "scaleBy": "w500"}"""));
+
+        Assert.Contains("'w550' is one of the shares", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("'w500' is one of the shares", inAFile.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ADistributionIsWrittenDown_WithWhatItsSharesAreSharesOf_OnlyWhenThereIsSuch()
     {
         var shares = new DistributionStep(["w500", "w550"]);

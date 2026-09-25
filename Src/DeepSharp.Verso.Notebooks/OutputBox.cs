@@ -6,10 +6,16 @@ using DeepSharp.Pipelines;
 
 namespace DeepSharp.Verso.Notebooks;
 
-/// <summary>What ticking or unticking a row's output box asks for: the steps it makes, or why it is not made.</summary>
-/// <param name="Steps">The steps, when the change can be made; the steps as they are when it asks for what already holds.</param>
+/// <summary>
+/// What a control of the list's output section asks for — a row's output box, or a select setting one of the output's
+/// values: the steps it makes, or why it is not made.
+/// </summary>
+/// <param name="Steps">
+/// The steps, when the change can be made; the steps as they are when it asks for what already holds; nothing when it is
+/// not made, or asks for nothing the output holds.
+/// </param>
 /// <param name="NotMade">Why it is not made; none when it is.</param>
-internal readonly record struct OutputBoxChange(IReadOnlyList<IPipelineStep>? Steps, IReadOnlyList<string> NotMade);
+internal readonly record struct ListOutputChange(IReadOnlyList<IPipelineStep>? Steps, IReadOnlyList<string> NotMade);
 
 /// <summary>
 /// A row's box for whether its column is an answer of the output: the one rule the list draws the box by and acts on,
@@ -35,26 +41,26 @@ internal static class OutputBox
     /// <param name="header">The source's columns, in their order.</param>
     /// <param name="ticked">Whether the box is ticked.</param>
     /// <returns>The steps, or why not.</returns>
-    public static OutputBoxChange Change(
+    public static ListOutputChange Change(
         StepCatalog catalog, PipelineDeclaration declaration, string verb, string column, ColumnKind kind, IReadOnlyList<string> header, bool ticked)
     {
         var output = declaration.Output;
 
         if (output is not null && output.Verb != verb)
         {
-            return new OutputBoxChange(null, [$"the output is '{output.Verb}': pick it above to change its columns, or take it away first."]);
+            return new ListOutputChange(null, [$"the output is '{output.Verb}': pick it above to change its columns, or take it away first."]);
         }
 
         if (AnswerOf(catalog, verb) is not { } answer)
         {
-            return new OutputBoxChange(null, [$"'{verb}' is not a kind of output the list can make."]);
+            return new ListOutputChange(null, [$"'{verb}' is not a kind of output the list can make."]);
         }
 
         var held = output is null ? [] : Held(output, answer);
 
         if (held.Contains(column, StringComparer.Ordinal) == ticked)
         {
-            return new OutputBoxChange(declaration.Steps, []);
+            return new ListOutputChange(declaration.Steps, []);
         }
 
         JsonNode stated = answer is ColumnsParameter
@@ -69,7 +75,7 @@ internal static class OutputBox
         }
         catch (PipelineFileException refused)
         {
-            return new OutputBoxChange(null, [.. refused.Faults.Select(fault => fault.Message)]);
+            return new ListOutputChange(null, [.. refused.Faults.Select(fault => fault.Message)]);
         }
 
         // A column the schema does not take is taken in first, in the same change.
@@ -77,8 +83,8 @@ internal static class OutputBox
         var faults = PipelineDeclaration.FaultsIn(taken);
 
         return faults.Count > 0
-            ? new OutputBoxChange(null, [.. faults.Select(fault => fault.ToString())])
-            : new OutputBoxChange(new PipelineDeclaration(taken).WithOutput(made), []);
+            ? new ListOutputChange(null, [.. faults.Select(fault => fault.ToString())])
+            : new ListOutputChange(new PipelineDeclaration(taken).WithOutput(made), []);
     }
 
     /// <summary>
@@ -114,10 +120,14 @@ internal static class OutputBox
     public static IReadOnlyList<string> Verbs(StepCatalog catalog) =>
         [.. catalog.Descriptions.Where(description => AnswerOf(catalog, description.Verb) is not null).Select(description => description.Verb)];
 
-    // Where a kind of output the list can make names its answer: its first column, or list of columns, it cannot do
-    // without. Nothing for a verb the catalog does not know, or one that makes no output: the one rule the list's type
-    // select is drawn by and its boxes act by.
-    private static StepParameter? AnswerOf(StepCatalog catalog, string verb) =>
+    /// <summary>
+    /// Where a kind of output the list can make names its answer: its first column, or list of columns, it cannot do
+    /// without. The one rule the list's type select is drawn by, its boxes act by, and its value selects leave alone.
+    /// </summary>
+    /// <param name="catalog">The verbs the notebook knows.</param>
+    /// <param name="verb">The kind of output.</param>
+    /// <returns>The parameter; nothing for a verb the catalog does not know, or one that makes no output.</returns>
+    internal static StepParameter? AnswerOf(StepCatalog catalog, string verb) =>
         catalog.Knows(verb) && catalog.Describe(verb) is var description && catalog.ReadStep(description.Template) is INamesTheAnswer
             ? description.Parameters.FirstOrDefault(parameter => parameter is ColumnParameter { Optional: false } or ColumnsParameter { Optional: false })
             : null;

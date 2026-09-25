@@ -124,7 +124,7 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
     }
 
     // The step as the field changes it, read back through the catalog; nothing when the field is none of the step's.
-    private static IPipelineStep? Edited(IPipelineStep step, string field, FieldValue value, FormScope scope, StepCatalog catalog)
+    internal static IPipelineStep? Edited(IPipelineStep step, string field, FieldValue value, FormScope scope, StepCatalog catalog)
     {
         var json = JsonNode.Parse(step.AsBlockText())!.AsObject();
 

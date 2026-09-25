@@ -35,6 +35,7 @@ internal static class ColumnList
     private const string Blank = "∅";
 
     /// <summary>The list of a source's columns under a declaration.</summary>
+    /// <param name="catalog">The verbs the notebook knows.</param>
     /// <param name="declaration">The declaration the blocks make.</param>
     /// <param name="source">The rows as the source reads them, and the fingerprint of their bytes.</param>
     /// <param name="fresh">The source's columns the saved file never showed, marked new.</param>
@@ -44,9 +45,9 @@ internal static class ColumnList
     /// <param name="whole">Whether every block is in the declaration: an output is changed only then.</param>
     /// <returns>The list.</returns>
     public static CellOutput Of(
-        PipelineDeclaration declaration, SourceRows source, IReadOnlyList<string> fresh, PipelinePreset? stored, string drawn, ListPicks picks, bool whole)
+        StepCatalog catalog, PipelineDeclaration declaration, SourceRows source, IReadOnlyList<string> fresh, PipelinePreset? stored, string drawn,
+        ListPicks picks, bool whole)
     {
-        var catalog = NotebookVerbs.Catalog();
         var header = source.Rows.ColumnNames;
         var declared = declaration.Steps.OfType<DeclareStep>().FirstOrDefault()?.Columns ?? [];
         IReadOnlyList<string> columns = [.. header.Concat(declared.Select(column => column.Name).Where(name => !header.Contains(name, StringComparer.Ordinal)))];
@@ -63,6 +64,13 @@ internal static class ColumnList
             .Append("<div class=\"deepsharp-head\">The source's columns, each as the pipeline takes it:</div>");
 
         Output(html, declaration, verbs, stopped, verb, drawn, source.Fingerprint, whole);
+
+        // The output's own values, while the list makes the kind of output that stands.
+        if (declaration.Output is { } output && output.Verb == verb)
+        {
+            Parameters(html, OutputParameters.Of(catalog, declaration, output, header), verb, drawn, source.Fingerprint, whole);
+        }
+
         html.Append("<table><thead><tr><th>column</th><th>first values</th><th>in</th><th>kind</th><th>output</th><th></th></tr></thead><tbody>");
 
         foreach (var choice in rows)
@@ -109,6 +117,47 @@ internal static class ColumnList
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"')
             .Append(declaration.Output is null || !whole ? " disabled" : string.Empty)
             .Append("> remove the output</label></div>");
+    }
+
+    // A select for each of the output's own values, offering what the rules keep, not said written as such; a value the
+    // list cannot offer is set in the output block's form. A select carries its key, the kind of output the list makes and
+    // what the list was drawn from, and the router sends the value it is at.
+    private static void Parameters(
+        StringBuilder html, IReadOnlyList<OutputParameter> parameters, string verb, string drawn, string fingerprint, bool whole)
+    {
+        html.Append("<div class=\"deepsharp-parameters\">");
+
+        foreach (var parameter in parameters)
+        {
+            if (parameter.Options is not { } options)
+            {
+                html.Append("<span class=\"deepsharp-parameter\">")
+                    .Append(Encoded($"{parameter.Key}: {parameter.Current} — set in the output block's form")).Append("</span> ");
+
+                continue;
+            }
+
+            var action = ControlAction.Of(StepRenderer.ListParameter, new JsonObject
+            {
+                [StepRenderer.ParameterKey] = parameter.Key,
+                [StepRenderer.TypeKey] = verb,
+                [StepRenderer.DrawnKey] = drawn,
+                [StepRenderer.SourceKey] = fingerprint,
+            });
+
+            html.Append("<label>").Append(Encoded(parameter.Key)).Append(" <select data-action=\"").Append(Encoded(action))
+                .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"').Append(whole ? string.Empty : " disabled").Append('>');
+
+            foreach (var option in options)
+            {
+                html.Append("<option value=\"").Append(Encoded(option)).Append('"').Append(option == parameter.Current ? " selected" : string.Empty)
+                    .Append('>').Append(option.Length == 0 ? "not said" : Encoded(option)).Append("</option>");
+            }
+
+            html.Append("</select></label> ");
+        }
+
+        html.Append("</div>");
     }
 
     // Why no row can make a kind of output: the first row's reason; nothing when some row can.

@@ -89,6 +89,18 @@ public class LabelsTests
     }
 
     [Fact]
+    public void ARowHoldsNoMoreOnesThanThereAreLabels_InCodeAndInAFile()
+    {
+        var refused = Assert.Throws<ArgumentOutOfRangeException>(() => new LabelsStep(Animals, Animals.Length + 1));
+        var inAFile = Assert.Throws<PipelineFileException>(() =>
+            StepCatalog.BuiltIn().ReadStep("""{"step": "target.labels", "columns": ["cat", "dog", "bird"], "ones": 4}"""));
+
+        Assert.Contains("only 3 labels", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("only 3 labels", inAFile.Message, StringComparison.Ordinal);
+        Assert.Equal(Animals.Length, new LabelsStep(Animals, Animals.Length).Ones);
+    }
+
+    [Fact]
     public void LabelsAreWrittenDown_WithHowManyOnesARowHolds_OnlyWhenThatIsSaid()
     {
         var any = new LabelsStep(Animals);

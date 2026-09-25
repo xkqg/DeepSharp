@@ -343,7 +343,7 @@ public sealed class ColumnListTests : IDisposable
     {
         var source = new SourceRows(CsvRowSource.FromText("a,b\n1,\n"), "fingerprint");
 
-        var list = ColumnList.Of(new PipelineDeclaration([new ReadCsvStep("rows.csv")]), source, [], stored: null, "key", ListPicks.None, whole: true).Content;
+        var list = ColumnList.Of(NotebookVerbs.Catalog(), new PipelineDeclaration([new ReadCsvStep("rows.csv")]), source, [], stored: null, "key", ListPicks.None, whole: true).Content;
 
         Assert.Equal(["a", "b"], list.Rows().Select(row => row.Column));
         Assert.Equal("∅", WebUtility.HtmlDecode(list.Row("b").Values));

@@ -246,6 +246,7 @@ public sealed partial class HostContractTests : IDisposable
     [InlineData(StepRenderer.ListType + " {\"drawn\":\"0\",\"source\":\"0\"}", "target.distribution")]
     [InlineData(StepRenderer.ListOutput + " {\"column\":\"survived\",\"type\":\"target\",\"kind\":\"integer\",\"drawn\":\"0\",\"source\":\"0\"}", "true")]
     [InlineData(StepRenderer.ListRemoveOutput + " {\"drawn\":\"0\",\"source\":\"0\"}", "true")]
+    [InlineData(StepRenderer.ListParameter + " {\"key\":\"ahead\",\"type\":\"target.ahead\",\"drawn\":\"0\",\"source\":\"0\"}", "10")]
     [InlineData("deepsharp.unknown", "")]
     public async Task EveryGesture_AnswersNothing_SoAHostThatAppliesAnswersLeavesTheBlockAsTheRunWroteIt(string interaction, string payload)
     {
