@@ -505,8 +505,9 @@ public sealed class NotebookHost
     }
 
     // Everything done to the notebook: refused once it closes, and otherwise one at a time, in the order it came, each
-    // ending with the notebook published as it then stands. What was asked before a close and waited behind it is
-    // refused when its turn comes, since the engine it asked of is closed by then.
+    // ending with the notebook published as it then stands. A close waits only for what is under way: whatever else was
+    // asked before it and still waits its turn is refused when that turn comes, since a close discards what has not
+    // begun, as it discards what is not saved.
     private Task<T> TurnAsync<T>(Func<Task<T>> change)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _audience).Closed, this);

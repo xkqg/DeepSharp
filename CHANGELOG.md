@@ -161,7 +161,7 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   of its own, as Jupyter's own reader does. Given a grace, a notebook closes by itself once no view has shown it for that
   long, nothing runs or waits in it, and nothing in it differs from the file it was last saved to — what a block shows
   never counts, as it is never saved; one with changes not yet saved stays open until it is saved. An application can
-  close one notebook at once, and what waited behind a close is refused.
+  close one notebook at once: what is under way finishes, and whatever still waits its turn is refused.
 
 - **`DeepSharp.Verso.Serve` — DeepSharp's own server.** The tool `deepsharp-serve`, installed with
   `dotnet tool install --global DeepSharp.Verso.Serve` and run beside a notebook or a folder of them, built on

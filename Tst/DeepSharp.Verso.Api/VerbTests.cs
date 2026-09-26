@@ -297,13 +297,17 @@ public sealed partial class VerbTests : IDisposable
         var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
         var read = host.Cells[0].Id;
         var grid = await ShownAsync(host, read);
+        Task? closing = null;
 
-        // The tick waits three tenths of a second before it reads the blocks; the close comes first.
-        var ticking = host.GestureAsync(new HostedGesture(read, StepRenderer.Id, IncludeBoxOf(grid, "deck"), "true"));
+        // The close is asked as the tick runs the first block it wrote: the tick is under way then, whatever the run before
+        // it left in the line.
+        host.Scaffold.OnCellExecuting += _ => closing ??= notebooks.DisposeAsync().AsTask();
 
-        await notebooks.DisposeAsync();
+        var ticked = await host.GestureAsync(new HostedGesture(read, StepRenderer.Id, IncludeBoxOf(grid, "deck"), "true"));
 
-        Assert.True((await ticking).StateChanged);
+        await closing!;
+
+        Assert.True(ticked.StateChanged);
         await Assert.ThrowsAsync<ObjectDisposedException>(() => host.RunAsync(read));
     }
 }

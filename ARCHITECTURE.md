@@ -1004,8 +1004,9 @@ notebooks finds it, told which cells never save what they show, so a block's vie
 count: a page that stops reading ends its view, and nothing else says a notebook is in use. A notebook with changes not
 yet saved stays open until it is saved, or until the application closes it, which it can do for one notebook at once;
 without a grace, notebooks stay open until they are closed, so an application that uses one without a view is never
-left holding a closed one. Whatever was asked of a notebook before it closed and waited behind the close is refused
-when its turn comes, since the engine it asked of is closed by then.
+left holding a closed one. A close waits only for what is under way: whatever else was asked before it and still
+waits its turn is refused when that turn comes, since a close discards what has not begun, as it discards what is not
+saved.
 
 `DeepSharp.Verso.Serve` is the tool `deepsharp-serve`, run beside a notebook or a folder of them. The notebook it serves
 runs code as the person who started it, so the server is shut to everyone else. It listens on this computer alone,
