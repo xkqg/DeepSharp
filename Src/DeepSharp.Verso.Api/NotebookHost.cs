@@ -373,6 +373,11 @@ public sealed class NotebookHost
 
     /// <summary>Every toolbar button the engine has — Verso's own and DeepSharp's — each saying whether it can be pressed now.</summary>
     /// <returns>The buttons, by place and then in their order.</returns>
+    /// <remarks>
+    /// A button of the notebook as a whole is asked once, with no cell chosen. One on a cell's toolbar or in its menu is
+    /// asked for every cell, as Verso's editors ask it for the cell it is drawn on, so a page can draw it pressable where
+    /// it is — running a cell wherever the layout lets cells run, clearing one once it shows something.
+    /// </remarks>
     public Task<IReadOnlyList<HostedToolbarAction>> ToolbarAsync() => TurnAsync(async () =>
     {
         var context = new ToolbarContext(Scaffold, []);
@@ -380,6 +385,20 @@ public sealed class NotebookHost
 
         foreach (var action in Extensions.GetToolbarActions())
         {
+            var place = Enum.Parse<ToolbarPlace>(action.Placement.ToString());
+            var cells = new List<Guid>();
+
+            if (place is ToolbarPlace.CellToolbar or ToolbarPlace.ContextMenu)
+            {
+                foreach (var cell in Scaffold.Cells)
+                {
+                    if (await action.IsEnabledAsync(new ToolbarContext(Scaffold, [cell.Id])))
+                    {
+                        cells.Add(cell.Id);
+                    }
+                }
+            }
+
             buttons.Add(new HostedToolbarAction(
                 action.ActionId,
                 action.DisplayName,
@@ -387,9 +406,10 @@ public sealed class NotebookHost
                 action.IconOnly,
                 action.IsPrimary,
                 action.ConfirmationPrompt,
-                Enum.Parse<ToolbarPlace>(action.Placement.ToString()),
+                place,
                 action.Order,
-                await action.IsEnabledAsync(context)));
+                await action.IsEnabledAsync(context),
+                cells));
         }
 
         return (IReadOnlyList<HostedToolbarAction>)[.. buttons.OrderBy(button => button.Place).ThenBy(button => button.Order)];

@@ -71,6 +71,36 @@ public sealed class ToolbarTests : IDisposable
     }
 
     [Fact]
+    public async Task AButtonOnACellsToolbar_SaysWhichCellsItCanBePressedFor_AskedForEachCellAsVersosEditorAsksIt()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "cells.verso", CSharp("1 + 1"), CSharp("2 + 2"));
+        var (shown, silent) = (host.Cells[0].Id, host.Cells[1].Id);
+
+        await host.RunAsync(shown);
+
+        var buttons = await host.ToolbarAsync();
+
+        // Running a cell asks only that the layout lets cells run; clearing one, that it shows something.
+        Assert.Equal([shown, silent], buttons.Single(button => button.Id == "verso.action.run-cell").EnabledFor);
+        Assert.Equal([shown], buttons.Single(button => button.Id == "verso.action.clear-cell-output").EnabledFor);
+        Assert.Empty(buttons.Single(button => button.Id == "verso.action.run-all").EnabledFor);
+    }
+
+    [Fact]
+    public void TwoLooksAtAButton_AreEqual_WhileTheyHoldTheSame()
+    {
+        var cell = Guid.NewGuid();
+        var button = new HostedToolbarAction("id", "Label", null, IconOnly: false, IsPrimary: false, null, ToolbarPlace.CellToolbar, 1, IsEnabled: true, [cell]);
+
+        Assert.Equal(button, button with { EnabledFor = [cell] });
+        Assert.Equal(button.GetHashCode(), (button with { EnabledFor = [cell] }).GetHashCode());
+        Assert.NotEqual(button, button with { EnabledFor = [] });
+        Assert.NotEqual(button, button with { IsEnabled = false });
+        Assert.NotEqual(button, button with { Label = "Other" });
+    }
+
+    [Fact]
     public async Task AFileAButtonHandsOver_GoesToWhoeverPressedIt_AndNothingIsWrittenBesideTheNotebook()
     {
         await using var notebooks = new OpenNotebooks();

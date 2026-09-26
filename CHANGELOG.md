@@ -156,7 +156,8 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   notebook is told first: what the run left behind writes nothing more — no grid, and no pipeline handed to C# cells —
   and the notebook takes its next change at once. C# runs take their turn across the whole process, so none prints
   into another. The toolbar is
-  every button the engine has, each saying whether it can be pressed; a file a button hands over goes to whoever
+  every button the engine has, each saying whether it can be pressed — a button on a cell's toolbar for each cell, as
+  Verso's editors ask it, so a page can run a cell or clear it from its bar; a file a button hands over goes to whoever
   pressed it, and nothing is written beside the notebook. A cell's properties panel is a section from every part that
   has one for it, and a changed field is made by that part. A notebook is saved the way Verso's editors save it — what
   a block shows left out, written whole before it takes the file's place — and saved under another name it is that file
@@ -190,10 +191,11 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   person does the way Verso's own router means to: a button on its click, a box or a select on its change, never on a
   key, one at a time, the typing first; a dropped stream reconnects and reads the whole notebook again. A cell is added
   after another or at the end, of any kind the notebook has, taken away once the person says yes, moved or turned into
-  another kind, each only where the notebook's layout allows it; a cell shown rendered shows its text while it is
+  another kind, each only where the notebook's layout allows it; Verso's own buttons on a cell's bar run it and clear
+  what it shows, each where it can be pressed for that cell; a cell shown rendered shows its text while it is
   selected, as in Verso's editor; the parameters form draws itself and its controls reach Verso's parameters part as
   Verso's own script sends them; as a cell's text is typed, what its kernel offers is listed under it — on Ctrl+Space,
-  and after a dot or a quote — and a line says what the word at the cursor means; a change asked for while a cell runs
+  and after a dot or a quote — and a line says what the word at the cursor means until the text is left; a change asked for while a cell runs
   says it waits; a refusal is said in the server's
   own words; and a folder's list, shown even when it holds one notebook, makes a new one. It carries a
   build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8 is gone.

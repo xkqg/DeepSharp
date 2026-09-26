@@ -646,6 +646,8 @@
     source.addEventListener('blur', () => {
       flushTyping();
       closeOffer();
+      clearTimeout(meaningTimer);
+      section.querySelector('.hover-line').textContent = '';
 
       // A cell shown rendered is rendered again from what was written into it.
       if (['markdown', 'mermaid', 'html'].includes(state.cells.get(id())?.type) && allowed(Allows.Execute)) {
@@ -816,7 +818,8 @@
         // A meaning the kernel could not give is simply not said.
       }
 
-      if (source.value === code && source.selectionStart === position) {
+      // Said only while the person is still at that place in that text.
+      if (document.activeElement === source && source.value === code && source.selectionStart === position) {
         section.querySelector('.hover-line').textContent = said?.content ?? '';
       }
     }, 400);
@@ -1100,7 +1103,9 @@
 
     element.type = 'button';
     element.dataset.button = button.id;
-    element.disabled = !button.isEnabled;
+
+    // A button on a cell's bar can be pressed where the host says it can be for that cell, as Verso's editor asks it.
+    element.disabled = cells.length > 0 ? !(button.enabledFor ?? []).includes(cells[0]) : !button.isEnabled;
     element.title = button.label;
 
     if (button.icon?.trimStart().startsWith('<svg')) {

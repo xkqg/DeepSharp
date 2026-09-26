@@ -979,9 +979,11 @@ notebook takes its next change at once. Typing tells the notebook too, at once, 
 it was is taken back before anything else is asked of it. C# runs take their
 turn across the whole process, because a C# kernel takes over the process's console while it runs: two at once printed
 into each other, in two notebooks and under two separate holders of notebooks alike. The toolbar is every button the
-engine has, Verso's own and DeepSharp's, each saying whether it can be pressed; a press takes its turn like anything
-else, and the C# turn too, since a button may run cells. A file a button hands over goes to whoever pressed it, and
-nothing is written beside the notebook. A cell's properties panel is a section from every part that has one for the
+engine has, Verso's own and DeepSharp's, each saying whether it can be pressed, and a button on a cell's toolbar is
+asked for every cell, as Verso's editors ask it for the cell it is drawn on — asked with no cell chosen, running a cell
+and clearing one could never be pressed; a press takes its turn like anything else, and the C# turn too, since a
+button may run cells. A file a button hands over goes to whoever pressed it, and nothing is written beside the
+notebook. A cell's properties panel is a section from every part that has one for the
 cell — DeepSharp's form for a block, Verso's own for how any cell is shown — and a change to a field is made by the
 part its section came from. Saving is Verso's own: the serializer for the notebook's format, which leaves out what a
 block shows and keeps what a C# cell printed, past the guards that run before writing, and the file written whole
@@ -1080,7 +1082,8 @@ The page writes a notebook as Verso's editor does. Under the last cell is a butt
 as, and the same row opens under the selected cell, so a cell goes after it; the new cell is selected with its text
 open. A cell's bar changes its kind through a list of the kinds, moves it past the neighbour it is drawn beside, and
 deletes it — after asking, which Verso's editor does not, because a delete takes the cell away from every page that
-shows the notebook. Each is offered only where the notebook's layout allows it, read from every version, so the
+shows the notebook. Verso's own buttons for a cell are on its bar too — running it, clearing what it shows — each
+pressable where the host says it can be pressed for that cell. Each is offered only where the notebook's layout allows it, read from every version, so the
 dashboard offers running and nothing else, and a cell's text cannot be written there. A cell shown rendered — Markdown,
 Mermaid, HTML — shows its text while it has none, has no output, or is selected, as Verso's editor decides; a kind
 nobody writes, the parameters form, shows none, and is run once when it is drawn with nothing to show, as Verso's
@@ -1089,9 +1092,9 @@ own script does: its row for a new parameter opens and closes in the page alone,
 on Enter, or on its change — and a parameter taken away go to Verso's parameters part as that script sends them. As
 a cell's text is typed, the page asks its kernel what may come next — on Ctrl+Space, and after a dot or a quote — and
 lists it under the text; the arrows walk the list, Enter, Tab or a click takes one in place of the part of it already
-typed, and Escape closes it. A line under the text says what the word at the cursor means once the cursor rests there.
-An answer that comes back after the text moved on is for text nobody has any more, and is dropped. A change asked for while a cell runs says it waits for the run, and a
-refusal is said in the server's own words, a cell another page took away among them. A folder is listed, even when it
+typed, and Escape closes it. A line under the text says what the word at the cursor means once the cursor rests there,
+and goes when the text is left. An answer that comes back after the text moved on is for text nobody has any more, and
+is dropped. A change asked for while a cell runs says it waits for the run, and a refusal is said in the server's own words, a cell another page took away among them. A folder is listed, even when it
 holds one notebook, with a way to make a new one; a server beside one notebook opens it at once.
 
 ## Decisions
