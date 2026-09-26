@@ -1083,7 +1083,10 @@ deletes it — after asking, which Verso's editor does not, because a delete tak
 shows the notebook. Each is offered only where the notebook's layout allows it, read from every version, so the
 dashboard offers running and nothing else, and a cell's text cannot be written there. A cell shown rendered — Markdown,
 Mermaid, HTML — shows its text while it has none, has no output, or is selected, as Verso's editor decides; a kind
-nobody writes, the parameters form, shows none. A change asked for while a cell runs says it waits for the run, and a
+nobody writes, the parameters form, shows none, and is run once when it is drawn with nothing to show, as Verso's
+editor runs it, so the form draws itself. The form's controls name no part, so the page does for them what Verso's
+own script does: its row for a new parameter opens and closes in the page alone, and a parameter added, a value set —
+on Enter, or on its change — and a parameter taken away go to Verso's parameters part as that script sends them. A change asked for while a cell runs says it waits for the run, and a
 refusal is said in the server's own words, a cell another page took away among them. A folder is listed, even when it
 holds one notebook, with a way to make a new one; a server beside one notebook opens it at once.
 

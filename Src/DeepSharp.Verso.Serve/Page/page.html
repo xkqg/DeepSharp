@@ -112,7 +112,7 @@
   // What the notebook's layout lets a person do to its cells, as the server's versions say it.
   const Allows = { Insert: 1, Delete: 2, Reorder: 4, Edit: 8, Execute: 32 };
 
-  const state = { name: null, cells: new Map(), running: null, selected: null, buttons: [], kinds: [], allows: 255, focus: null };
+  const state = { name: null, cells: new Map(), running: null, selected: null, buttons: [], kinds: [], allows: 255, focus: null, drawn: new Set() };
 
   const allowed = flag => (state.allows & flag) === flag;
 
@@ -449,6 +449,15 @@
 
     source.hidden = !written || metadata(cell, 'verso:ui.inputCollapsed') === true || rendered;
 
+    // As Verso's editors do: a cell nobody writes that shows nothing yet is run once, so it draws itself — the
+    // parameters form among them; once it shows something, clearing it draws it again.
+    if (cell.outputs.length > 0) {
+      state.drawn.delete(cell.id);
+    } else if (!written && !state.drawn.has(cell.id) && state.running?.cell !== cell.id && allowed(Allows.Execute)) {
+      state.drawn.add(cell.id);
+      runCell(cell.id);
+    }
+
     if (state.focus === cell.id && !source.hidden) {
       state.focus = null;
       requestAnimationFrame(() => source.focus());
@@ -733,6 +742,147 @@
       body: { cell: cell.dataset.cellId, extensionId: part.getAttribute('data-extension-id'), action: control.getAttribute('data-action'), payload },
     }));
   }
+
+  // ---- Verso's parameters form ----------------------------------------------------------------------------------
+
+  // Its controls name no part, so the page does for them what Verso's own script does: the add row opens and closes
+  // here, and what changes a parameter goes to Verso's parameters part as the JSON that script sends.
+  const Parameters = 'verso.renderer.parameters';
+
+  const parameterControl = target => {
+    const control = target.closest?.('[data-action^="parameter-"]');
+
+    return control && control.closest('.outputs') && !control.closest('[data-extension-id]') ? control : null;
+  };
+
+  function sendParameters(control, action, payload) {
+    const cell = control.closest('[data-cell-id]')?.dataset.cellId;
+
+    if (!cell) {
+      return;
+    }
+
+    flushTyping();
+    enqueue(() => api(notebookPath('/gestures'), {
+      method: 'POST',
+      body: { cell, extensionId: Parameters, action, payload: JSON.stringify(payload) },
+    }));
+  }
+
+  function openAddRow(control, open) {
+    const form = control.closest('[data-cell-id]');
+    const row = form?.querySelector('.verso-parameter-add-row');
+    const add = form?.querySelector('[data-action="parameter-add"]');
+
+    if (!row) {
+      return;
+    }
+
+    if (open) {
+      const table = row.closest('table');
+
+      if (table) {
+        table.style.display = '';
+      }
+
+      row.style.display = '';
+      row.querySelector('.verso-add-name')?.focus();
+    } else {
+      row.style.display = 'none';
+
+      for (const field of row.querySelectorAll('input[type=text]')) {
+        field.value = '';
+      }
+
+      const required = row.querySelector('.verso-add-required');
+      const type = row.querySelector('.verso-add-type');
+
+      if (required) {
+        required.checked = false;
+      }
+
+      if (type) {
+        type.value = 'string';
+      }
+    }
+
+    if (add) {
+      add.style.display = open ? 'none' : '';
+    }
+  }
+
+  document.addEventListener('click', event => {
+    const control = parameterControl(event.target);
+
+    if (!control) {
+      return;
+    }
+
+    const row = control.closest('.verso-parameter-add-row');
+
+    switch (control.getAttribute('data-action')) {
+      case 'parameter-remove':
+        sendParameters(control, 'parameter-remove', { name: control.getAttribute('data-param') });
+        break;
+      case 'parameter-add':
+        openAddRow(control, true);
+        break;
+      case 'parameter-cancel-add':
+        openAddRow(control, false);
+        break;
+      case 'parameter-confirm-add': {
+        const name = (row?.querySelector('.verso-add-name')?.value ?? '').trim();
+
+        if (!name) {
+          row?.querySelector('.verso-add-name')?.focus();
+          break;
+        }
+
+        sendParameters(control, 'parameter-add', {
+          name,
+          type: row.querySelector('.verso-add-type')?.value ?? 'string',
+          description: row.querySelector('.verso-add-description')?.value ?? '',
+          defaultValue: row.querySelector('.verso-add-default')?.value ?? '',
+          required: row.querySelector('.verso-add-required')?.checked ?? false,
+        });
+        break;
+      }
+    }
+  });
+
+  // Enter in the new parameter's name adds it; Enter in a parameter's value sets it, as Verso's script lets it.
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter') {
+      return;
+    }
+
+    const name = event.target.closest?.('.verso-parameter-add-row .verso-add-name');
+
+    if (name && name.closest('.outputs')) {
+      name.closest('.verso-parameter-add-row').querySelector('[data-action="parameter-confirm-add"]')?.click();
+
+      return;
+    }
+
+    const control = parameterControl(event.target);
+
+    if (control?.getAttribute('data-action') === 'parameter-update' && control.type !== 'checkbox') {
+      event.preventDefault();
+      sendParameters(control, 'parameter-update', { name: control.getAttribute('data-param'), value: control.value });
+    }
+  });
+
+  document.addEventListener('change', event => {
+    const control = parameterControl(event.target);
+    const action = control?.getAttribute('data-action');
+
+    if (action === 'parameter-update' || action === 'parameter-toggle-required') {
+      sendParameters(control, action, {
+        name: control.getAttribute('data-param'),
+        value: control.type === 'checkbox' ? String(control.checked) : control.value,
+      });
+    }
+  });
 
   // ---- The toolbar -------------------------------------------------------------------------------------------------
 
