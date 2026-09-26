@@ -37,12 +37,8 @@ internal static class NotebookEndpoints
         notebooks.MapPost(
             "/{name}/cells/{cell:guid}/run",
             (string name, Guid cell, HttpContext context) => WithAsync(name, context, async host => Results.Ok(await host.RunAsync(cell))));
-        notebooks.MapPost("/{name}/stop", (string name, HttpContext context) => WithAsync(name, context, host =>
-        {
-            host.Stop();
-
-            return Task.FromResult(Results.NoContent());
-        }));
+        notebooks.MapPost("/{name}/stop", (string name, Stopping stopping, HttpContext context) => WithAsync(name, context, host =>
+            Task.FromResult(Results.Ok(new { stopped = host.Stop(stopping.Run) }))));
         notebooks.MapPost(
             "/{name}/gestures",
             (string name, HostedGesture gesture, HttpContext context) => WithAsync(name, context, async host => Results.Ok(await host.GestureAsync(gesture))));
@@ -195,6 +191,9 @@ internal static class NotebookEndpoints
 
     // A cell's text as the person has it, and where the cursor stands in it.
     internal readonly record struct Asking(string Code, int Position);
+
+    // The run a stop means, by its number.
+    internal readonly record struct Stopping(long Run);
 
     // The name a new notebook is to have.
     internal readonly record struct Naming(string Name);

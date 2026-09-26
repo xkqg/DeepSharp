@@ -57,6 +57,8 @@
   .hover-line:empty { display: none; }
   .cell-bar .status { margin-left: auto; color: var(--quiet); font-size: .85em; }
   section.cell.running .cell-bar .status::before { content: "running… "; color: var(--run); }
+  section.cell.waiting { border-color: var(--run); border-style: dashed; }
+  section.cell.waiting .cell-bar .status::before { content: "waits for another notebook's C# run to end… "; color: var(--run); }
   textarea.source { display: block; width: 100%; border: 0; border-bottom: 1px solid var(--line); padding: .5rem; font: 13px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; background: transparent; color: inherit; resize: vertical; }
   textarea.source[hidden] { display: none; }
   .outputs { padding: .5rem; overflow: auto; }
@@ -167,6 +169,9 @@
   let chain = Promise.resolve();
 
   const Waiting = 'Waits for the run under way to end…';
+
+  // What a button's run says while it waits for another notebook's C# run: it names no cell yet.
+  const WaitsForCSharp = "Waits for another notebook's C# run to end…";
 
   function enqueue(work) {
     // A change asked for while a cell runs is made once the run ends, and says so meanwhile.
@@ -415,7 +420,7 @@
     section.dataset.cellId = cell.id;
     section.dataset.type = cell.type;
     section.classList.toggle('selected', state.selected === cell.id);
-    section.classList.toggle('running', state.running?.cell === cell.id);
+    markRun(section);
 
     let bar = section.querySelector('.cell-bar');
     let source = section.querySelector('textarea.source');
@@ -490,7 +495,11 @@
     const drawn = [];
 
     if (allowed(Allows.Execute)) {
-      drawn.push(barButton('run', '▶', 'Run the cell (Shift+Enter)', () => runCell(cell.id)));
+      const run = barButton('run', '▶', 'Run the cell (Shift+Enter)', () => runCell(cell.id));
+
+      // As Verso's editor offers it: not while a run is under way, which a cell's run would only queue behind.
+      run.disabled = state.running !== null;
+      drawn.push(run);
     }
 
     drawn.push(allowed(Allows.Edit) ? kindSelect(cell) : kindName(cell));
@@ -696,7 +705,10 @@
 
       if (event.key === 'Enter' && event.shiftKey) {
         event.preventDefault();
-        runCell(id());
+
+        if (state.running === null) {
+          runCell(id());
+        }
       }
     });
 
@@ -878,12 +890,32 @@
     stopButton.hidden = state.running === null;
 
     for (const section of main.querySelectorAll('section.cell')) {
-      section.classList.toggle('running', state.running?.cell === section.dataset.cellId);
+      markRun(section);
+    }
+
+    for (const run of main.querySelectorAll('.cell-bar button.run')) {
+      run.disabled = state.running !== null;
+    }
+
+    if (state.running?.waits && state.running.cell === null) {
+      say(WaitsForCSharp);
+    } else if (statusLine.textContent === WaitsForCSharp) {
+      say('');
     }
   }
 
+  // A cell the run under way runs, or waits to run until another notebook's C# run ends.
+  function markRun(section) {
+    const mine = state.running !== null && state.running.cell === section.dataset.cellId;
+
+    section.classList.toggle('running', mine && !state.running.waits);
+    section.classList.toggle('waiting', mine && state.running.waits);
+  }
+
   // A stop goes past everything waiting: what waits may be waiting for the very run it stops.
-  stopButton.addEventListener('click', () => api(notebookPath('/stop'), { method: 'POST' }).catch(error => say(error.message, true)));
+  // A stop names the run it means, so one sent again after that run ended stops no other.
+  stopButton.addEventListener('click', () => api(notebookPath('/stop'), { method: 'POST', body: { run: state.running?.number ?? 0 } })
+    .catch(error => say(error.message, true)));
 
   // ---- What a block's controls send, the way Verso's own router means it ---------------------------------------
 

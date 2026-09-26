@@ -255,7 +255,10 @@ public sealed partial class NotebookEndpointTests : IDisposable
     {
         await using var served = await StartAsync();
 
-        Assert.Equal(HttpStatusCode.NoContent, (await served.Client.PostAsync("/api/notebooks/titanic.verso/stop", null, TestContext.Current.CancellationToken)).StatusCode);
+        var answer = await served.Client.PostAsJsonAsync("/api/notebooks/titanic.verso/stop", new { run = 1 }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
+        Assert.False((await answer.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("stopped").GetBoolean());
     }
 
     [Fact]

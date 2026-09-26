@@ -238,7 +238,7 @@ public sealed class ToolbarTests : IDisposable
             await Task.Delay(20, TestContext.Current.CancellationToken);
         }
 
-        host.Stop();
+        Assert.True(host.Stop(host.Running!.Value.Number));
 
         Assert.Null(await pressing);
     }

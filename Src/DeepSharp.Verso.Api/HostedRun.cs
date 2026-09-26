@@ -3,7 +3,13 @@
 
 namespace DeepSharp.Verso.Api;
 
-/// <summary>A run under way: the cell that runs, and since when, so a view that begins while it runs can offer to stop it.</summary>
-/// <param name="Cell">The cell that runs.</param>
-/// <param name="Since">When it began.</param>
-public readonly record struct HostedRun(Guid Cell, DateTimeOffset Since);
+/// <summary>
+/// A run under way — a cell's, or a toolbar button's — so a view can say what runs, or waits to, and offer to stop it.
+/// </summary>
+/// <param name="Number">Which run it is, counted from one for each open notebook: what a stop names.</param>
+/// <param name="Cell">The cell that runs, or waits to; nothing for a button that runs no cell yet.</param>
+/// <param name="Since">When that cell began, or when the run was asked while it waits.</param>
+/// <param name="Waits">
+/// Whether it waits for a C# run of another notebook to end, since C# runs take their turn across the process.
+/// </param>
+public readonly record struct HostedRun(long Number, Guid? Cell, DateTimeOffset Since, bool Waits);

@@ -152,10 +152,13 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   offers what may come next and says what a word means, as Verso's editors ask it: a block's verbs, keys and columns,
   C#'s members. A new notebook is made as one block that reads a CSV file, as a `.verso` file written whole before it
   appears, and never over a file that is there already. Typing into a block tells the notebook at once, so what was
-  worked out from the block as it was is taken back. A run that never ends is stopped by a fresh kernel, and the
-  notebook is told first: what the run left behind writes nothing more — no grid, and no pipeline handed to C# cells —
-  and the notebook takes its next change at once. C# runs take their turn across the whole process, so none prints
-  into another. The toolbar is every button the engine has, each saying whether it can be pressed — a button on a
+  worked out from the block as it was is taken back. A run exists from the moment it is asked, numbered, and a stop
+  names the run it means. A run that never ends is stopped by a fresh kernel — of the cell's language, else the
+  notebook's default kernel — and the notebook is told first: what the run left behind writes nothing more — no grid,
+  and no pipeline handed to C# cells — and the notebook takes its next change at once. C# runs take their turn across
+  the whole process, so none prints into another; a C# run waiting for its turn is told on every version, and a stop
+  ends the wait, so it never runs. The toolbar is every button the engine has, each saying whether it can be pressed — a
+  button on a
   cell's toolbar for each cell, as Verso's editors ask it, so a page draws a cell's buttons where they can be pressed;
   a file a button hands over goes to whoever pressed it, and nothing is written beside the notebook.
   A cell's properties panel is a section from every part that has one for it, and a changed field is made by that
@@ -166,8 +169,9 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   the cells that came or changed as they now stand, and every id in order when cells came, went or moved, whatever made
   the change, a clear and a form included, of which the engine says nothing. A cell carries what Verso's editors draw it
   with: how it is shown, how many times it ran, how its last run ended and how long it took. What a C# cell displays
-  while it runs reaches a view before the run ends, and a view that begins meanwhile is told which cell runs and since
-  when. A view that reads slowly holds one change, the latest look at each cell, and never holds the notebook up. A
+  while it runs reaches a view before the run ends, and every version says which run is under way — the cell that runs
+  or waits, since when, and the number a stop names. A view that reads slowly holds one change, the latest look at
+  each cell, and never holds the notebook up. A
   request about a cell that is gone says from which version on. A file that repeats a cell's id gives each repeat an id
   of its own, as Jupyter's own reader does. Given a grace, a notebook closes by itself once no view has shown it for that
   long, nothing runs or waits in it, and nothing in it differs from the file it was last saved to — what a block shows
@@ -182,7 +186,8 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   a page from any port of this computer, and answers only under a name of this computer, and serves its own page and nothing
   from the folder it runs in. It says where it is once, then nothing; `--port` names the port, `--no-browser` opens
   none, and a port already taken stops it before it says anything. A page keeps a stream of a notebook open — the
-  notebook as it stands, then each change, numbered — and sends typing, runs, a stop and clicks on a block's controls,
+  notebook as it stands, then each change, numbered — and sends typing, runs, a stop naming the run it means and
+  clicks on a block's controls,
   adds, takes away, moves and turns cells into another kind, and asks what a cell's kernel offers as it is typed; in a
   folder, it makes a new notebook under the bare name of a `.verso` file, never over a file that is there;
   a cell a change replaced answers the version it is gone from, and a stream ends when the server stops, when the page
@@ -196,8 +201,11 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   engine's buttons that can be pressed there, as in Verso's editor; a cell shown rendered shows its text while it is
   selected, as in Verso's editor; the parameters form draws itself and its controls reach Verso's parameters part as
   Verso's own script sends them; as a cell's text is typed, what its kernel offers is listed under it — on Ctrl+Space,
-  and after a dot or a quote — and a line says what the word at the cursor means until the text is left; a change
-  asked for while a cell runs says it waits; a refusal is said in the server's own words; and a folder's list, shown
+  and after a dot or a quote — and a line says what the word at the cursor means until the text is left; a run is
+  offered only while none is under way, as in Verso's editor, and a run that waits for another notebook's C# run says
+  so, on its cell or on the page's own line; a change asked for while a cell runs says it waits; a refusal is said in
+  the server's own words; and a
+  folder's list, shown
   even when it holds one notebook, makes a new one. It carries a
   build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8 is gone.
 

@@ -333,7 +333,7 @@ public sealed partial class FeedTests : IDisposable
         var a = new HostedCell(Guid.NewGuid(), "code", "csharp", "a", [], new Dictionary<string, string>(), null, null, null);
         var b = a with { Id = Guid.NewGuid(), Source = "b" };
         var c = a with { Id = Guid.NewGuid(), Source = "c" };
-        var run = new HostedRun(a.Id, DateTimeOffset.UnixEpoch);
+        var run = new HostedRun(1, a.Id, DateTimeOffset.UnixEpoch, Waits: false);
 
         var both = new NotebookChange(1, [a.Id, b.Id], [a, b], null, InTheNotebook).Then(new NotebookChange(2, null, [a with { Source = "a2" }], run, InTheNotebook));
 
@@ -436,7 +436,7 @@ public sealed partial class FeedTests : IDisposable
     public void TwoLooksAtAVersionOrAChange_AreEqual_WhileTheyHoldTheSame()
     {
         var cell = new HostedCell(Guid.NewGuid(), "code", "csharp", "1 + 1", [new HostedOutput("text/plain", "2", IsError: false)], new Dictionary<string, string>(), 1, "Success", TimeSpan.FromMilliseconds(5));
-        var run = new HostedRun(cell.Id, DateTimeOffset.UnixEpoch);
+        var run = new HostedRun(1, cell.Id, DateTimeOffset.UnixEpoch, Waits: false);
         var version = new NotebookVersion(3, [cell], run, InTheNotebook);
         var change = new NotebookChange(3, [cell.Id], [cell], run, InTheNotebook);
 

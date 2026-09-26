@@ -256,11 +256,13 @@ public sealed class AuthoringTests : IDisposable
         var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
         var before = host.Current.Version;
 
-        // Verso's own button, which goes on to the next layout the engine has: the presentation, after the notebook.
+        // Verso's own button, which goes on to the next layout the engine has: the presentation, after the notebook. A press
+        // takes its turn among the process's C# runs, and while another notebook's C# run holds that turn every view is told
+        // the press waits — a version of its own — so the versions move on at least once.
         await host.RunToolbarAsync("verso.switchLayout");
 
         Assert.Equal(new HostedLayout("presentation", LayoutAllows.None), host.Current.Layout);
-        Assert.Equal(before + 1, host.Current.Version);
+        Assert.True(host.Current.Version > before);
     }
 
     [Fact]

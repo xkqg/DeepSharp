@@ -321,7 +321,7 @@ public sealed class CatchUpTests : IDisposable
         {
             if (cell == last.Id)
             {
-                notebook.Opened.Stop();
+                notebook.Opened.Stop(notebook.Opened.Running!.Value.Number);
             }
         };
         notebook.Scaffold.OnCellExecuted += cell =>

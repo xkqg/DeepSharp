@@ -220,7 +220,7 @@ public sealed partial class VerbTests : IDisposable
             await Task.Delay(20, TestContext.Current.CancellationToken);
         }
 
-        host.Stop();
+        Assert.True(host.Stop(host.Running!.Value.Number));
         await running;
 
         Assert.Contains("2", string.Concat((await host.RunAsync(host.Cells[1].Id)).Outputs.Select(output => output.Content)), StringComparison.Ordinal);
@@ -233,7 +233,7 @@ public sealed partial class VerbTests : IDisposable
         var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
         var before = host.Cells;
 
-        host.Stop();
+        Assert.False(host.Stop(1));
 
         Assert.Equal(before, host.Cells);
         Assert.False(Assert.Single((await host.RunAsync(host.Cells[0].Id)).Outputs).IsError);

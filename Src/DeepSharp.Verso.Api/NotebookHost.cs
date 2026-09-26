@@ -49,6 +49,9 @@ public sealed class NotebookHost
     private readonly Lane _turns = new();
     private Run? _running;
 
+    // The number the last run was given: each run of the notebook is counted, so a stop names the run it means.
+    private long _runs;
+
     // Who views the notebook, since when nobody has, and whether it is closed: one value, swapped whole, so no view begins
     // as the notebook closes.
     private Audience _audience = Audience.Opened();
@@ -291,28 +294,43 @@ public sealed class NotebookHost
     /// <returns>The cell as it stands after the run, or after <see cref="Stop"/> ended it.</returns>
     /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
     /// <remarks>
-    /// A C# run takes its turn among every C# run in the process, because a C# kernel takes over the process's console
-    /// while it runs, and two at once would print into each other.
+    /// The cell runs in its language's kernel, else the notebook's default kernel, as the engine decides. A C# run takes
+    /// its turn among every C# run in the process, because a C# kernel takes over the process's console while it runs,
+    /// and two at once would print into each other; while it waits for that turn it is the run under way all the same,
+    /// told to every view and stopped like any other.
     /// </remarks>
     public Task<HostedCell> RunAsync(Guid cell) => TurnAsync(async () =>
     {
         var running = Standing(cell);
+        var kernel = KernelOf(running);
 
-        await (string.Equals(running.Language, CSharp, StringComparison.OrdinalIgnoreCase)
-            ? CSharpRuns.TakeTurnAsync(() => RunUntilStoppedAsync(() => Scaffold.ExecuteCellAsync(running.Id), running.Language))
-            : RunUntilStoppedAsync(() => Scaffold.ExecuteCellAsync(running.Id), running.Language));
+        await RunUntilStoppedAsync(
+            new Run(Interlocked.Increment(ref _runs), running.Id, takesTheCSharpTurn: string.Equals(kernel, CSharp, StringComparison.OrdinalIgnoreCase)),
+            () => Scaffold.ExecuteCellAsync(running.Id),
+            kernel);
 
         return EndTurn().Cells.First(each => each.Id == cell);
     });
 
     /// <summary>
-    /// Stops the run under way — a cell's, or a toolbar button's — if there is one: the only way Verso's engine stops a
-    /// run that does not end is a fresh kernel, so the run's kernel is restarted, and what that kernel held — the
-    /// notebook's variables, the pipeline handed to C# cells among them — is gone. The notebook is told first, so what
-    /// the run left behind asks for from then on writes nothing, and the notebook takes its next change at once. A run
-    /// that never ends goes on in the background until the application does.
+    /// Stops a run — a cell's, or a toolbar button's — whether it still waits for another notebook's C# run or runs. One
+    /// that waits never runs: its wait ends, and when the C# turn it waited for comes, nothing starts. One that runs is
+    /// stopped the only way Verso's engine stops a run that does not end, with a fresh kernel — the kernel of the cell
+    /// that runs — so what that kernel held, the notebook's variables and the pipeline handed to C# cells among them, is
+    /// gone. The notebook is told first, so what the run left behind asks for from then on writes nothing, and the
+    /// notebook takes its next change at once; a run that never ends goes on in the background until the application does.
     /// </summary>
-    public void Stop() => Volatile.Read(ref _running)?.Stop();
+    /// <param name="run">The run, by its number — so a stop sent again after that run ended stops no other.</param>
+    /// <returns>Whether it stopped that run; nothing is stopped when no run of that number is under way.</returns>
+    public bool Stop(long run) => Volatile.Read(ref _running) is { } under && under.Number == run && under.Stop();
+
+    /// <summary>
+    /// The run under way as it stands now — the cell that runs or waits, since when, and the number a stop names — or
+    /// nothing; every view is told it with each version.
+    /// </summary>
+    public HostedRun? Running => Volatile.Read(ref _running) is { Waits: true } waiting
+        ? new HostedRun(waiting.Number, waiting.Cell, waiting.Asked, Waits: true)
+        : Volatile.Read(ref _executing)?.Value;
 
     /// <summary>
     /// Begins a view of the notebook: the notebook as it stands, then each change after it. It never waits for anything
@@ -424,17 +442,17 @@ public sealed class NotebookHost
     /// A button may run cells, C# among them, so a press takes its turn among the process's C# runs as a C# run does. A file is
     /// never written beside the notebook: where it is saved is for whoever pressed the button to say.
     /// </remarks>
-    public Task<HostedFile?> RunToolbarAsync(string id, params Guid[] cells) => TurnAsync(() => CSharpRuns.TakeTurnAsync(async () =>
+    public Task<HostedFile?> RunToolbarAsync(string id, params Guid[] cells) => TurnAsync(async () =>
     {
         var action = Extensions.GetToolbarActions().FirstOrDefault(each => each.ActionId == id)
             ?? throw new InvalidOperationException($"The notebook has no toolbar button '{id}'.");
         var context = new ToolbarContext(Scaffold, cells);
 
-        // A button that runs the cells can meet one that never ends, and only the notebook's own kernel runs away.
-        await RunUntilStoppedAsync(() => action.ExecuteAsync(context), Scaffold.DefaultKernelId);
+        // A button that runs the cells can meet one that never ends; a stop starts afresh the kernel of the cell it runs.
+        await RunUntilStoppedAsync(new Run(Interlocked.Increment(ref _runs), cell: null, takesTheCSharpTurn: true), () => action.ExecuteAsync(context), Scaffold.DefaultKernelId);
 
         return context.Handed;
-    }));
+    });
 
     /// <summary>A cell's properties panel: a section from every part that has one for the cell, in their order.</summary>
     /// <param name="cell">The cell.</param>
@@ -740,7 +758,7 @@ public sealed class NotebookHost
         HostedCell[] cells = [.. Scaffold.Cells.Select(cell => cell.Hosted(before.TryGetValue(cell.Id, out var was) ? was.Outputs : []))];
         HostedCell[] changed = [.. cells.Where(cell => !before.TryGetValue(cell.Id, out var was) || was != cell)];
         var order = cells.Select(cell => cell.Id).SequenceEqual(last.Cells.Select(cell => cell.Id)) ? null : cells.Select(cell => cell.Id).ToArray();
-        var running = Volatile.Read(ref _executing)?.Value;
+        var running = Running;
         var layout = Layout;
 
         if (order is null && changed.Length == 0 && running == last.Running && layout == last.Layout)
@@ -763,7 +781,7 @@ public sealed class NotebookHost
     // The engine says a cell began: it is the run under way, since now.
     private void Began(Guid cell)
     {
-        Volatile.Write(ref _executing, new StrongBox<HostedRun>(new HostedRun(cell, DateTimeOffset.UtcNow)));
+        Volatile.Write(ref _executing, new StrongBox<HostedRun>(new HostedRun(Volatile.Read(ref _running)?.Number ?? 0, cell, DateTimeOffset.UtcNow, Waits: false)));
         Said(cell);
     }
 
@@ -904,49 +922,80 @@ public sealed class NotebookHost
         _saved = await ReadAsync(Extensions, serializer, text, path);
     }
 
-    // Runs a cell until it ends, or until Stop. A run is not asked to stop, since one that does not end does not listen
-    // either (measured: a C# loop that awaits goes on with its token cancelled); a fresh kernel ends the turn, and the
-    // run is left behind. Only the run under way can be stopped, so the slot holds one, and a Stop after it ended
-    // meets a run nobody waits for any more. While it runs, what the engine says it shows is gathered for a moment and
-    // published, so a view sees it before the run ends.
-    private async Task<bool> RunUntilStoppedAsync(Func<Task> start, string? kernel)
+    // Runs until it ends, or until Stop. The run is under way from here, so a Stop finds it even while it waits: a C#
+    // run first waits its turn among the process's C# runs, and when that turn is not free every view is told the run
+    // waits. A Stop then ends the wait at once, and the turn, when it comes, starts nothing. Only the run under way can
+    // be stopped, so the slot holds one, and a Stop after it ended meets a run nobody waits for any more.
+    private async Task<bool> RunUntilStoppedAsync(Run run, Func<Task> start, string? kernel)
     {
-        var run = new Run();
-
         Volatile.Write(ref _running, run);
 
         try
         {
-            var said = Listen();
-            var ran = start();
-            var ended = Task.WhenAny(ran, run.Stopped);
-
-            while (await Task.WhenAny(ended, said) == said)
+            if (!run.Waits)
             {
-                said = Listen();
-                await Task.WhenAny(ended, Task.Delay(Gathering));
+                return await GoAsync(run, start, kernel);
+            }
+
+            var turned = CSharpRuns.TakeTurnAsync(() => run.Starts() ? GoAsync(run, start, kernel) : Task.FromResult(false));
+
+            // The turn was free when it began at once; otherwise the run waits, and every view is told.
+            if (run.Waits)
+            {
                 Publish();
             }
 
-            if (await ended == ran)
-            {
-                await ran;
-            }
-            else
-            {
-                // The notebook is told first, so what the run left behind asks for from now on writes nothing, and the
-                // notebook takes its next change at once.
-                Blocks.Stopped();
-                await Scaffold.RestartKernelAsync(kernel);
-            }
+            await Task.WhenAny(turned, run.Stopped);
 
-            return true;
+            return !run.StoppedBeforeItRan && await turned;
         }
         finally
         {
             Volatile.Write(ref _running, null);
         }
     }
+
+    // A run under way, until it ends or a stop ends it. It is not asked to stop, since one that does not end does not
+    // listen either (measured: a C# loop that awaits goes on with its token cancelled); a fresh kernel — the kernel of
+    // the cell that runs — ends the turn, and the run is left behind. While it runs, what the engine says it shows is
+    // gathered for a moment and published, so a view sees it before the run ends.
+    private async Task<bool> GoAsync(Run run, Func<Task> start, string? kernel)
+    {
+        var said = Listen();
+        var ran = start();
+        var ended = Task.WhenAny(ran, run.Stopped);
+
+        while (await Task.WhenAny(ended, said) == said)
+        {
+            said = Listen();
+            await Task.WhenAny(ended, Task.Delay(Gathering));
+            Publish();
+        }
+
+        if (await ended == ran)
+        {
+            await ran;
+        }
+        else
+        {
+            // The notebook is told first, so what the run left behind asks for from now on writes nothing, and the
+            // notebook takes its next change at once.
+            Blocks.Stopped();
+            await Scaffold.RestartKernelAsync(KernelNow() ?? kernel);
+        }
+
+        return true;
+    }
+
+    // Which kernel runs a cell: its language, else the notebook's default kernel — the engine's own rule, so a run takes
+    // the C# turn, and a stop starts a kernel afresh, by the kernel that really runs the cell.
+    private string? KernelOf(CellModel cell) => cell.Language ?? Scaffold.DefaultKernelId;
+
+    // The kernel of the cell the engine runs now, if one has begun and still stands.
+    private string? KernelNow() =>
+        Volatile.Read(ref _executing)?.Value.Cell is { } cell && Scaffold.Cells.FirstOrDefault(each => each.Id == cell) is { } running
+            ? KernelOf(running)
+            : null;
 
     // Who views the notebook, since when nobody has, and whether it is closed.
     private sealed class Audience(ImmutableArray<NotebookSubscription> views, bool closed, long aloneSince)
@@ -973,13 +1022,41 @@ public sealed class NotebookHost
         }
     }
 
-    // A run under way, and the way to stop it.
-    private sealed class Run
+    // A run, from the moment it is asked: its number, the cell it runs, and whether it still waits for the C# turn, runs,
+    // or was stopped before it ran. Each change of that is one exchange, so a stop and the C# turn that arrive together
+    // agree on which came first.
+    private sealed class Run(long number, Guid? cell, bool takesTheCSharpTurn)
     {
+        private const int Waiting = 0;
+        private const int Going = 1;
+        private const int StoppedFirst = 2;
+
         private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int _state = takesTheCSharpTurn ? Waiting : Going;
+
+        public long Number => number;
+
+        public Guid? Cell => cell;
+
+        public DateTimeOffset Asked { get; } = DateTimeOffset.UtcNow;
 
         public Task Stopped => _stopped.Task;
 
-        public void Stop() => _stopped.TrySetResult();
+        // Whether it still waits for the C# turn.
+        public bool Waits => Volatile.Read(ref _state) == Waiting;
+
+        // Whether a stop came before it ran: then it never runs.
+        public bool StoppedBeforeItRan => Volatile.Read(ref _state) == StoppedFirst;
+
+        // Its C# turn came: it runs, unless a stop came first.
+        public bool Starts() => Interlocked.CompareExchange(ref _state, Going, Waiting) == Waiting;
+
+        // Stops it: a run that waits never runs; one that runs is ended by whoever runs it. Whether this stop was the first.
+        public bool Stop()
+        {
+            Interlocked.CompareExchange(ref _state, StoppedFirst, Waiting);
+
+            return _stopped.TrySetResult();
+        }
     }
 }

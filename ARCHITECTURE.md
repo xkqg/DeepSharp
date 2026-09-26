@@ -971,14 +971,20 @@ started then, as those editors start it, and never in the background. A new note
 that reads a CSV file — the one place a block starts with text, since Verso's engine and editors never ask a cell type
 for it — written whole under a name of its own and moved into its place by the file system in one step that never
 replaces a file, so nothing meets half a notebook and a file already there is left as it was. It is a `.verso` file,
-the one format that keeps a block, and a name an open notebook holds is refused, even when its file has gone. A run that never ends is stopped the only way the engine can stop one, with a fresh kernel —
-its token cancelled, a C# loop that waits goes on — so stopping clears the notebook's variables, the pipeline handed
-to C# cells among them, and the run itself goes on in the background until the application ends. The notebook is told
-of the stop before the kernel restarts, so what the run left behind asks for from then on writes nothing, and the
-notebook takes its next change at once. Typing tells the notebook too, at once, so what was worked out from a block as
-it was is taken back before anything else is asked of it. C# runs take their
-turn across the whole process, because a C# kernel takes over the process's console while it runs: two at once printed
-into each other, in two notebooks and under two separate holders of notebooks alike. The toolbar is every button the
+the one format that keeps a block, and a name an open notebook holds is refused, even when its file has gone.
+
+A run exists from the moment it is asked, numbered for each open notebook, and a stop names the run it means, so a
+stop sent again after that run ended stops no other. A run that never ends is stopped the only way the engine can stop
+one, with a fresh kernel — its token cancelled, a C# loop that waits goes on — so stopping clears the notebook's
+variables, the pipeline handed to C# cells among them, and the run itself goes on in the background until the
+application ends. The kernel started afresh is the one that runs the cell: its language, else the notebook's default
+kernel — the engine's own rule, which also decides whether the run takes the C# turn. The notebook is told of the stop
+before the kernel restarts, so what the run left behind asks for from then on writes nothing, and the notebook takes its
+next change at once. Typing tells the notebook too, at once, so what was worked out from a block as it was is taken back
+before anything else is asked of it. C# runs take their turn across the whole process, because a C# kernel takes over
+the process's console while it runs: two at once printed into each other, in two notebooks and under two separate
+holders of notebooks alike. A run that waits for that turn is the run under way all the same: every view is told it
+waits, and a stop ends the wait, so the turn, when it comes, starts nothing. The toolbar is every button the
 engine has, Verso's own and DeepSharp's, each saying whether it can be pressed, and a button on a cell's toolbar is
 asked for every cell, as Verso's editors ask it for the cell it is drawn on — asked with no cell chosen, running a cell
 and clearing one could never be pressed; a press takes its turn like anything else, and the C# turn too, since a
@@ -1011,8 +1017,9 @@ does not pass on what the engine says: it compares the notebook with its last ve
 it. What the engine does say — a cell began, ended or showed something — only wakes it to compare, because the engine
 says it from inside the run, and a view doing its own work there held a click twice as long. What a C# cell displays
 while it runs reaches a view before the run ends, gathered for a moment first, as Verso's browser editor gathers it;
-what it prints comes whole at the end, as the engine hands it over. A view that begins while a cell runs is told which
-cell runs and since when, so it can offer to stop it. A view never holds the notebook up: one that reads slower than
+what it prints comes whole at the end, as the engine hands it over. Every version says which run is under way — the
+cell that runs or waits for the C# turn, since when, and the number a stop names — so a view can say so and offer to
+stop it. A view never holds the notebook up: one that reads slower than
 the notebook changes is kept one change behind, the latest look at each cell, and never holds more than the notebook
 itself. The outputs a run is adding to are copied whole or not at all, as the engine copies them itself: a copy taken
 while the list grows its storage fails, and one can hold a place the list has counted and not yet filled, so a cell
@@ -1053,7 +1060,8 @@ nothing running and nothing unsaved, closes. The notebooks it serves are the one
 of its folder that Verso's engine says it reads — asked of the engine, so a format it learns is served without a word
 here — and a page names one by its file name alone: any other name, a path among them, is not found. A page keeps a
 stream of a notebook open — the notebook as it stands, then each change, numbered by version, written by one writer
-on both runtimes — and sends what a person does: typing, running, stopping, a click on a block's control. A cell a
+on both runtimes — and sends what a person does: typing, running, stopping the run it names, a click on a block's
+control. A cell a
 change replaced answers the version it is gone from, so the page knows what to wait for; a refusal says why. A stream
 ends when the server stops, rather than holding the stop up, when the page goes away, so the notebook it showed can
 close, and when a person closes the notebook without saving it. The toolbar is the engine's, and a file a button hands
@@ -1100,8 +1108,12 @@ a cell's text is typed, the page asks its kernel what may come next — on Ctrl+
 lists it under the text; the arrows walk the list, Enter, Tab or a click takes one in place of the part of it already
 typed, and Escape closes it. A line under the text says what the word at the cursor means once the cursor rests there,
 and goes when the text is left. An answer that comes back after the text moved on is for text nobody has any more, and
-is dropped. A change asked for while a cell runs says it waits for the run, and a refusal is said in the server's own words, a cell another page took away among them. A folder is listed, even when it
-holds one notebook, with a way to make a new one; a server beside one notebook opens it at once.
+is dropped. A run is offered as Verso's editor offers one: not while a run is under way, since what a cell's run
+button or Shift+Enter asked then would only wait behind it and run after its Stop; a run that waits for a C# run in
+another notebook says so — on its cell, or on the page's own line for a button that runs no cell yet — and Stop ends
+the wait. A change asked for while a cell runs says it waits for the
+run, and a refusal is said in the server's own words, a cell another page took away among them. A folder is listed,
+even when it holds one notebook, with a way to make a new one; a server beside one notebook opens it at once.
 
 ## Decisions
 
