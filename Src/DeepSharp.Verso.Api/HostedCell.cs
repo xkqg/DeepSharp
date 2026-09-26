@@ -9,4 +9,13 @@ namespace DeepSharp.Verso.Api;
 /// <param name="Language">The language its text is written in, when it has one.</param>
 /// <param name="Source">Its text.</param>
 /// <param name="Outputs">What it shows, in order.</param>
-public readonly record struct HostedCell(Guid Id, string Type, string? Language, string Source, IReadOnlyList<HostedOutput> Outputs);
+/// <remarks>Two looks at a cell are equal while it holds and shows the same, whichever list each output came in.</remarks>
+public readonly record struct HostedCell(Guid Id, string Type, string? Language, string Source, IReadOnlyList<HostedOutput> Outputs)
+{
+    /// <inheritdoc />
+    public bool Equals(HostedCell other) =>
+        Id == other.Id && Type == other.Type && Language == other.Language && Source == other.Source && Outputs.SequenceEqual(other.Outputs);
+
+    /// <inheritdoc />
+    public override int GetHashCode() => HashCode.Combine(Id, Type, Language, Source, Outputs.Count);
+}

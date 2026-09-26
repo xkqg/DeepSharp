@@ -932,7 +932,17 @@ Verso's own editors do: through the serializer for its format, past the guards t
 cells that are only ever shown rendered drawn. An extension a notebook asks for is refused rather than fetched. One
 file is one notebook however many views show it: the file is known by its full path, compared as the file system
 compares names, it is opened once however many callers ask at the same moment, and an open that fails is forgotten
-and closes what it built. Verso's editor itself is not published for applications to reuse, so such an application does what the
+and closes what it built. What is done to an open notebook — typing a cell's text, running a cell, a click on a control
+a block drew — takes its turn at the host, one at a time and in the order it came, because the engine serves one
+caller at a time: two callers at once broke its count of runs, and a change made while another was under way acted
+on blocks that were going away. The host's turns are its own and never the notebook's session's, since a change
+handed on from inside that one would wait for the one it is inside and never run. A request about a cell a change
+before it rewrote or took away is refused, because nothing it meant still stands; what a part answers a click with is
+what the cell shows next. A run that never ends is stopped the only way the engine can stop one, with a fresh kernel —
+its token cancelled, a C# loop that waits goes on — so stopping clears the notebook's variables, the pipeline handed
+to C# cells among them, and the run itself goes on in the background until the application ends. C# runs take their
+turn across every notebook the application has open, because a C# kernel takes over the process's console while it
+runs, and two at once printed into each other. Verso's editor itself is not published for applications to reuse, so such an application does what the
 editor does: it draws a block's output, which is HTML; it hands a control's `data-action` and `data-extension-id`
 to the part the control names, with its `data-payload` — or, for a control that carries none, its state, as Verso's
 own router sends it: `true` or `false` for a box, the value it is at for a select — and with the notebook's variables
@@ -943,7 +953,8 @@ block with `StepCatalog.ReadStep` and builds the declaration through its constru
 the file with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds
 the steps and no fit, because nothing ran them there. The drawing, the passing on and the toolbar's context are
 what `DeepSharp.Verso.Api` is named for, written once beside the notebook rather than by every application; it opens
-the notebook today, and the rest is still to come.
+the notebook and passes a click on today, and the toolbar's context, the properties panel, saving and the news of what
+changed are still to come.
 
 ## Decisions
 

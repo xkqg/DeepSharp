@@ -132,7 +132,10 @@ your own can host the notebook, too.
   single file, with nothing beside it for Verso to find, still has them. One file is one notebook, however many views
   show it: the same path twice, or two spellings of one path, hand back the same host, and a notebook that cannot be
   opened leaves nothing open behind it. An extension a notebook asks for is refused rather than fetched. Its cells,
-  and what they show, are handed over as plain values.
+  and what they show, are handed over as plain values. Typing a cell's text, running a cell and a click on a control a
+  block drew take their turn one at a time, in the order they came; a request about a cell a change before it rewrote
+  is refused, and what a part answers a click with is what the cell shows next. A run that never ends is stopped by a
+  fresh kernel, and C# runs take their turn across every open notebook, so none prints into another.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock
