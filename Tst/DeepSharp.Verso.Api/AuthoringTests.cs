@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Pipelines;
 using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
 using Verso.Abstractions;
@@ -14,7 +15,8 @@ namespace DeepSharp.Tests.Api;
 /// away, moved past the neighbour it passes, or turned into another kind in one step. Every such change goes through the
 /// port the notebook's layout guards, so a layout that does not let cells be added, taken away, moved or typed into
 /// refuses it, and every version says what the layout allows. Each change tells the notebook, so what was worked out
-/// from the blocks as they were is taken back.
+/// from the blocks as they were is taken back. And as a cell's text is typed, its kernel offers what may come next and
+/// says what a word means, as Verso's editors ask it.
 /// </summary>
 public sealed class AuthoringTests : IDisposable
 {
@@ -362,5 +364,66 @@ public sealed class AuthoringTests : IDisposable
 
         Assert.Contains(".verso", refused.Message, StringComparison.Ordinal);
         Assert.Equal("# Notes\n", await File.ReadAllTextAsync(path, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task ABlocksKernel_OffersTheVerbsAfterTheStepKey_AndSaysWhatAStepDoes()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
+        var fill = host.Cells[3].Id;
+        const string typed = """{"step": "fill.""";
+
+        var offered = await host.CompletionsAsync(fill, typed, typed.Length);
+        var hover = await host.HoverAsync(fill, Titanic[3], Titanic[3].IndexOf("fill.missing", StringComparison.Ordinal) + 3);
+
+        Assert.Contains(offered, completion => completion.Text == "fill.missing");
+        Assert.Equal(StepCatalog.BuiltIn().Describe("fill.missing").Purpose, hover?.Content);
+        Assert.Null(hover?.Range);
+    }
+
+    [Fact]
+    public async Task ACSharpCell_IsOfferedWhatTheCSharpKernelOffers_AndItsHoverSaysWhereTheWordStands()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "code.verso", CSharp(""));
+        var code = host.Cells[0].Id;
+        const string typed = "System.Console.";
+        const string written = "System.Console.WriteLine(1);";
+
+        var offered = await host.CompletionsAsync(code, typed, typed.Length);
+        var hover = await host.HoverAsync(code, written, written.IndexOf("WriteLine", StringComparison.Ordinal) + 2);
+
+        Assert.Contains(offered, completion => completion.Text == "WriteLine");
+        Assert.Contains("WriteLine", hover?.Content, StringComparison.Ordinal);
+        Assert.NotNull(hover?.Range);
+    }
+
+    [Fact]
+    public async Task ACellWithNoKernelForItsText_IsOfferedNothing_AndAWordInItMeansNothing()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "empty.verso");
+        var markdown = await host.AddAsync(Kind(host, "markdown"));
+        var html = await host.AddAsync(Kind(host, "html"));
+
+        Assert.Empty(await host.CompletionsAsync(markdown.Id, "# Notes", 3));
+        Assert.Null(await host.HoverAsync(markdown.Id, "# Notes", 3));
+        Assert.Empty(await host.CompletionsAsync(html.Id, "<p>", 2));
+    }
+
+    [Fact]
+    public async Task ABlockWithNothingUnderTheCursor_SaysNothing_AndACellThatWentIsGone()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
+        var normalise = host.Cells[4].Id;
+
+        Assert.Null(await host.HoverAsync(normalise, Titanic[4], 0));
+
+        await host.RemoveAsync(normalise);
+
+        await Assert.ThrowsAsync<CellGoneException>(() => host.CompletionsAsync(normalise, Titanic[4], 0));
+        await Assert.ThrowsAsync<CellGoneException>(() => host.HoverAsync(normalise, Titanic[4], 0));
     }
 }

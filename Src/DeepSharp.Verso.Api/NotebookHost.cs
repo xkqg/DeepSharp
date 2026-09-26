@@ -234,6 +234,58 @@ public sealed class NotebookHost
         return EndTurn().Cells.First(each => each.Id == cell);
     });
 
+    /// <summary>
+    /// What a cell's kernel offers to write next where the cursor stands, as Verso's editors ask it while a person types.
+    /// </summary>
+    /// <param name="cell">The cell.</param>
+    /// <param name="code">Its text as the person has it, which may be ahead of what was sent.</param>
+    /// <param name="position">Where the cursor stands in it, counted in characters.</param>
+    /// <returns>What is offered; nothing for a cell whose text no kernel reads.</returns>
+    /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
+    /// <remarks>
+    /// The kernel is started first when it has not been, as Verso's editors start it, rather than in the background, so
+    /// the first thing offered may take the time a kernel takes to start.
+    /// </remarks>
+    public Task<IReadOnlyList<HostedCompletion>> CompletionsAsync(Guid cell, string code, int position)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+
+        return TurnAsync(async () =>
+        {
+            if (await KernelOfAsync(Standing(cell)) is not { } kernel)
+            {
+                return (IReadOnlyList<HostedCompletion>)[];
+            }
+
+            return [.. (await kernel.GetCompletionsAsync(code, position))
+                .Select(offered => new HostedCompletion(offered.DisplayText, offered.InsertText, offered.Kind, offered.Description, offered.SortText))];
+        });
+    }
+
+    /// <summary>What a word in a cell's text means, as Verso's editors ask it when the cursor rests on the word.</summary>
+    /// <param name="cell">The cell.</param>
+    /// <param name="code">Its text as the person has it.</param>
+    /// <param name="position">Where the cursor rests in it, counted in characters.</param>
+    /// <returns>What the word means; nothing where the kernel says nothing, or for a cell whose text no kernel reads.</returns>
+    /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
+    public Task<HostedHover?> HoverAsync(Guid cell, string code, int position)
+    {
+        ArgumentNullException.ThrowIfNull(code);
+
+        return TurnAsync(async () =>
+        {
+            if (await KernelOfAsync(Standing(cell)) is not { } kernel || await kernel.GetHoverInfoAsync(code, position) is not { } said)
+            {
+                return (HostedHover?)null;
+            }
+
+            return new HostedHover(
+                said.Content,
+                said.MimeType,
+                said.Range is { } range ? new HostedRange(range.StartLine, range.StartColumn, range.EndLine, range.EndColumn) : null);
+        });
+    }
+
     /// <summary>Runs a cell, as pressing its run button does.</summary>
     /// <param name="cell">The cell.</param>
     /// <returns>The cell as it stands after the run, or after <see cref="Stop"/> ended it.</returns>
@@ -788,6 +840,20 @@ public sealed class NotebookHost
         {
             throw new LayoutCapabilityException(LayoutCapabilities.CellEdit);
         }
+    }
+
+    // The kernel a cell's text is written for, started first as Verso's editors start it before they ask it anything;
+    // none for a cell whose language no kernel the engine has reads.
+    private async Task<ILanguageKernel?> KernelOfAsync(CellModel cell)
+    {
+        if (cell.Language is not { } language || Scaffold.GetKernel(language) is not { } kernel)
+        {
+            return null;
+        }
+
+        await Scaffold.WarmUpKernelAsync(language);
+
+        return kernel;
     }
 
     // Tells the notebook its cells changed, so what was worked out from the blocks as they were is taken back.

@@ -147,7 +147,9 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   engine has — code in a language it runs, Markdown, a pipeline block and the rest — and starts empty; it is taken
   away, moved past the neighbour it passes, or turned into another kind in one step, keeping its text. Each goes
   through the port the notebook's layout guards, so a layout that does not allow it refuses it, typing included, and
-  every version says which layout the notebook is shown in and what it allows. Typing into a block tells the notebook at once, so what was
+  every version says which layout the notebook is shown in and what it allows. As a cell's text is typed, its kernel
+  offers what may come next and says what a word means, as Verso's editors ask it: a block's verbs, keys and columns,
+  C#'s members. Typing into a block tells the notebook at once, so what was
   worked out from the block as it was is taken back. A run that never ends is stopped by a fresh kernel, and the
   notebook is told first: what the run left behind writes nothing more — no grid, and no pipeline handed to C# cells —
   and the notebook takes its next change at once. C# runs take their turn across the whole process, so none prints

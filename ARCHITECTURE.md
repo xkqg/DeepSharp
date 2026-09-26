@@ -965,7 +965,9 @@ index, or turned into another kind in one step, keeping its text and losing what
 the notebook's layout guards, the engine's own, so the dashboard, which lets cells be run and resized and nothing
 else, refuses them, and typing and a change of kind ask the same layout whether a cell may be edited. Every version
 says which layout the notebook is shown in and what it allows, so a page offers what Verso's editors offer there, and
-each change tells the notebook, as typing does. A run that never ends is stopped the only way the engine can stop one, with a fresh kernel —
+each change tells the notebook, as typing does. As a person types, the cell's kernel is asked what may come next and
+what a word means, as Verso's editors ask it, in the notebook's turn like anything else; a kernel not yet started is
+started then, as those editors start it, and never in the background. A run that never ends is stopped the only way the engine can stop one, with a fresh kernel —
 its token cancelled, a C# loop that waits goes on — so stopping clears the notebook's variables, the pipeline handed
 to C# cells among them, and the run itself goes on in the background until the application ends. The notebook is told
 of the stop before the kernel restarts, so what the run left behind asks for from then on writes nothing, and the
