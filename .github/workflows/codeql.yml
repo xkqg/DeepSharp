@@ -35,7 +35,9 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: csharp
+          # C#, and the script of deepsharp-serve's page, which runs in the browser of whoever serves a notebook. The
+          # script needs no build: it is read as it is written.
+          languages: csharp, javascript-typescript
           # security-and-quality adds the maintainability rules on top of the security ones: an unused
           # parameter, a comparison that is always true, a disposable that escapes.
           queries: security-and-quality

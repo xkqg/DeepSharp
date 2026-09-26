@@ -18,6 +18,9 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="xunit.v3" Version="4.*" />
+    <!-- The page is tested in a real browser: the installed Edge on Windows, the Chromium the workflow installs
+         elsewhere. -->
+    <PackageReference Include="Microsoft.Playwright" Version="1.63.0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">

@@ -1018,7 +1018,19 @@ close, and when a person closes the notebook without saving it. The toolbar is t
 over goes to the page that pressed it, as a download under its own name, never through the stream and never written
 beside the notebook. A cell's panel is its parts' sections, and a field's new value goes to its part as the page sent
 it, as JSON, the way Verso's own editors hand it on — each part reads it, so the server holds no rule of its own about
-what a field may hold. Saving writes the notebook to its file. The server does not save a notebook under another name: a page names a notebook by its file, and a name
+what a field may hold. Saving writes the notebook to its file.
+
+The page is one file the tool carries — its markup, its style and its script, with no framework and nothing fetched
+from anywhere else — and it draws a notebook as Verso's editors draw one: a block's output as the HTML its part wrote,
+text and faults as text, the cells shown rendered rendered until their text is opened, and each cell folded or cut
+short as its properties say. It sends what a person does the way Verso's own router means to, and not the way that
+router does it: a button on its click, a box or a select on its change, and nothing on a key — Verso's router sends
+on the click, the change and every key alike, so a tick went twice and a Tab on a focused button sent its gesture
+again (measured: six of twelve clauses failed, and none with the router the page carries). One send is in flight at a
+time, in the order they came, and typing is sent before whatever came after it, so a click acts on the text as the
+person left it. A stream that drops reconnects by itself and begins with the whole notebook again. The address loses
+the token once the cookie carries it. The page is tested in a real browser against the real server, a test for each of
+these promises; its script is not counted in the coverage, which stays C#'s. The server does not save a notebook under another name: a page names a notebook by its file, and a name
 changed under the pages that show it would send their clicks to another notebook.
 
 ## Decisions

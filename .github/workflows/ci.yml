@@ -38,6 +38,12 @@ jobs:
       - name: Build
         run: dotnet build DeepSharp.slnx --no-restore --configuration Release
 
+      # deepsharp-serve's page is tested in a real browser. On this runner that is Chromium, which Playwright installs
+      # together with what it needs from the system; on Windows the tests use the Edge that is already there.
+      - name: Install the browser the page is tested in
+        shell: pwsh
+        run: ./Tst/DeepSharp.Verso.Serve/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+
       # The test project is an executable: xunit v3 runs its suite from its own entry point, and `dotnet test`
       # starts a runner that finds nothing to do and exits cleanly having run zero tests. Measured on the first
       # commit here: 0% coverage over 0 executed tests. So the executable is run and the collector is wrapped

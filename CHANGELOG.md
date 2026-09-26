@@ -164,7 +164,9 @@ your own can host the notebook, too.
   a cell a change replaced answers the version it is gone from, and a stream ends when the server stops, when the page
   goes away, or when the notebook is closed without saving. The toolbar, a cell's properties panel and saving are
   there too; a file a button hands over arrives as a download in the page that pressed it, under its own name, and
-  nothing is written beside the notebook.
+  nothing is written beside the notebook. The page draws the notebook as Verso's editors draw one and sends what a
+  person does the way Verso's own router means to: a button on its click, a box or a select on its change, never on a
+  key, one at a time, the typing first; a dropped stream reconnects and reads the whole notebook again.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

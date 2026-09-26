@@ -50,6 +50,12 @@ jobs:
       - name: Build
         run: dotnet build DeepSharp.slnx --no-restore --configuration Release
 
+      # deepsharp-serve's page is tested in a real browser. On this runner that is Chromium, which Playwright installs
+      # together with what it needs from the system; on Windows the tests use the Edge that is already there.
+      - name: Install the browser the page is tested in
+        shell: pwsh
+        run: ./Tst/DeepSharp.Verso.Serve/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
+
       # Every suite runs on the exact commit being published. A release is the one moment where "it was green
       # yesterday" is not an answer. The suites are found by the name every suite has, so one added later is
       # never left out.

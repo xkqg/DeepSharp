@@ -4,8 +4,794 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DeepSharp</title>
+<style>
+  :root {
+    --ground: #fbfbfa; --paper: #ffffff; --ink: #1d1d1b; --quiet: #6b6b66; --line: #deddd8;
+    --accent: #2458a6; --wrong: #b3261e; --run: #2e7d32; --pick: #eef3fb;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ground: #151514; --paper: #1d1d1b; --ink: #ecebe6; --quiet: #a3a29c; --line: #34332f; --accent: #8ab4f8; --wrong: #f2b8b5; --run: #81c995; --pick: #1f2a3a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--ground); color: var(--ink); }
+  header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .5rem 1rem; background: var(--paper); border-bottom: 1px solid var(--line); }
+  header h1 { font-size: 1rem; margin: 0 1rem 0 0; }
+  header .spacer { flex: 1; }
+  button { font: inherit; color: inherit; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: .2rem .6rem; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button svg { width: 1em; height: 1em; vertical-align: -.125em; }
+  details { position: relative; }
+  details > summary { list-style: none; cursor: pointer; border: 1px solid var(--line); border-radius: 4px; padding: .2rem .6rem; }
+  details > div { position: absolute; right: 0; top: 2rem; display: flex; flex-direction: column; gap: .25rem; padding: .5rem; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; min-width: 14rem; }
+  #status { color: var(--quiet); }
+  #status.wrong { color: var(--wrong); }
+  .layout { display: flex; align-items: flex-start; }
+  main { flex: 1; min-width: 0; padding: 1rem; display: flex; flex-direction: column; gap: .75rem; }
+  aside#panel { width: 22rem; max-width: 40vw; position: sticky; top: 3rem; max-height: calc(100vh - 3rem); overflow: auto; padding: 1rem; border-left: 1px solid var(--line); }
+  aside#panel:empty { display: none; }
+  aside#panel h3 { font-size: .95rem; margin: .75rem 0 .25rem; }
+  aside#panel label { display: block; margin: .5rem 0 .15rem; color: var(--quiet); }
+  aside#panel input[type=text], aside#panel input[type=number], aside#panel select { width: 100%; }
+  section.cell { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; }
+  section.cell.selected { border-color: var(--accent); }
+  section.cell.running { border-color: var(--run); }
+  .cell-bar { display: flex; gap: .4rem; align-items: center; padding: .3rem .5rem; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .cell-bar .kind { color: var(--quiet); font-size: .85em; }
+  .cell-bar .status { margin-left: auto; color: var(--quiet); font-size: .85em; }
+  section.cell.running .cell-bar .status::before { content: "running… "; color: var(--run); }
+  textarea.source { display: block; width: 100%; border: 0; border-bottom: 1px solid var(--line); padding: .5rem; font: 13px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; background: transparent; color: inherit; resize: vertical; }
+  textarea.source[hidden] { display: none; }
+  .outputs { padding: .5rem; overflow: auto; }
+  .outputs:empty { display: none; }
+  .outputs.preview { max-height: calc(var(--lines, 5) * 1.45em + 1rem); }
+  .outputs pre { margin: 0; white-space: pre-wrap; font: 13px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  .outputs pre.wrong { color: var(--wrong); }
+  #notebooks { list-style: none; padding: 0; margin: 2rem auto; max-width: 40rem; }
+  #notebooks li { padding: .4rem 0; border-bottom: 1px solid var(--line); }
+  #notebooks a { color: var(--accent); text-decoration: none; }
+</style>
 </head>
 <body>
-<main id="notebook"></main>
+<header>
+  <h1 id="notebook-name">DeepSharp</h1>
+  <span id="toolbar"></span>
+  <details id="export" hidden><summary>Export</summary><div></div></details>
+  <button id="stop" hidden title="Stop the run under way: its kernel starts afresh">Stop</button>
+  <span class="spacer"></span>
+  <span id="status" role="status" aria-live="polite"></span>
+  <button id="save" hidden title="Save the notebook to its file (Ctrl+S)">Save</button>
+  <button id="close" hidden title="Close the notebook without saving it">Close</button>
+</header>
+<div class="layout">
+  <main id="notebook"></main>
+  <aside id="panel" aria-label="Properties"></aside>
+</div>
+<script>
+'use strict';
+(() => {
+  // What the address said: the token is in the cookie the server set with this page, so the address loses it.
+  const address = new URLSearchParams(location.search);
+
+  if (address.has('token')) {
+    address.delete('token');
+    history.replaceState(null, '', location.pathname + (address.toString() ? `?${address}` : ''));
+  }
+
+  const main = document.getElementById('notebook');
+  const panel = document.getElementById('panel');
+  const statusLine = document.getElementById('status');
+  const stopButton = document.getElementById('stop');
+  const saveButton = document.getElementById('save');
+  const closeButton = document.getElementById('close');
+  const exportMenu = document.getElementById('export');
+  const toolbar = document.getElementById('toolbar');
+
+  // What a toolbar button's place and a panel field's kind are called in the server's answers.
+  const Place = { Main: 0, Cell: 1, Menu: 2, Export: 3 };
+  const Kind = { Text: 0, Number: 1, Toggle: 2, Select: 3, Several: 4, Colour: 5, Words: 6 };
+
+  const state = { name: null, cells: new Map(), running: null, selected: null, buttons: [] };
+
+  function say(message, wrong = false) {
+    statusLine.textContent = message;
+    statusLine.classList.toggle('wrong', wrong);
+  }
+
+  const notebookPath = (tail = '') => `/api/notebooks/${encodeURIComponent(state.name)}${tail}`;
+
+  // Everything asked of the server: a refusal comes back as what it says.
+  async function api(path, options = {}) {
+    const init = { method: options.method ?? 'GET', headers: {} };
+
+    if (options.body !== undefined) {
+      init.headers['Content-Type'] = 'application/json';
+      init.body = JSON.stringify(options.body);
+    }
+
+    const response = await fetch(path, init);
+
+    if (response.status === 409) {
+      throw new Error('A change before this one rewrote that cell; it is drawn again as it stands.');
+    }
+
+    if (!response.ok) {
+      let message = `${response.status} ${response.statusText}`;
+
+      try {
+        message = (await response.json()).message ?? message;
+      } catch {
+        // The answer had no words of its own.
+      }
+
+      throw new Error(message);
+    }
+
+    return response;
+  }
+
+  const json = async (path, options) => (await api(path, options)).json();
+
+  // One send at a time, in the order they came: each waits for the one before it.
+  let chain = Promise.resolve();
+
+  function enqueue(work) {
+    const next = chain.then(work).catch(error => say(error.message, true));
+
+    chain = next;
+
+    return next;
+  }
+
+  // Typing is sent before anything that comes after it, so a click acts on the text as the person left it.
+  const typed = new Map();
+  let typingTimer = 0;
+
+  function flushTyping() {
+    clearTimeout(typingTimer);
+
+    for (const [id, source] of typed) {
+      typed.delete(id);
+      enqueue(() => api(notebookPath(`/cells/${id}/source`), { method: 'POST', body: { source } }));
+    }
+  }
+
+  // ---- The notebooks of a folder --------------------------------------------------------------------------------
+
+  async function list() {
+    const names = await json('/api/notebooks');
+
+    if (names.length === 1) {
+      location.search = `?notebook=${encodeURIComponent(names[0])}`;
+
+      return;
+    }
+
+    const items = document.createElement('ul');
+
+    items.id = 'notebooks';
+
+    for (const name of names) {
+      const item = document.createElement('li');
+      const link = document.createElement('a');
+
+      link.href = `?notebook=${encodeURIComponent(name)}`;
+      link.textContent = name;
+      item.append(link);
+      items.append(item);
+    }
+
+    main.replaceChildren(items);
+    say(names.length === 0 ? 'There is no notebook here.' : '');
+  }
+
+  // ---- A notebook ------------------------------------------------------------------------------------------------
+
+  function open(name) {
+    state.name = name;
+    document.title = `${name} — DeepSharp`;
+    document.getElementById('notebook-name').textContent = name;
+    saveButton.hidden = false;
+    closeButton.hidden = false;
+
+    const stream = new EventSource(notebookPath('/updates'));
+
+    stream.addEventListener('snapshot', event => drawAll(JSON.parse(event.data)));
+    stream.addEventListener('change', event => apply(JSON.parse(event.data)));
+    stream.onopen = () => say('');
+    stream.onerror = () => say(stream.readyState === EventSource.CLOSED ? 'The server is gone.' : 'Reconnecting…', true);
+
+    loadToolbar();
+  }
+
+  function drawAll(version) {
+    state.cells.clear();
+    main.replaceChildren();
+
+    for (const cell of version.cells) {
+      state.cells.set(cell.id, cell);
+      main.append(fill(document.createElement('section'), cell));
+    }
+
+    showRunning(version.running);
+    refreshSoon();
+  }
+
+  function apply(change) {
+    for (const cell of change.cells) {
+      state.cells.set(cell.id, cell);
+    }
+
+    if (change.order) {
+      arrange(change.order);
+    }
+
+    for (const cell of change.cells) {
+      const section = sectionOf(cell.id);
+
+      if (section) {
+        fill(section, cell);
+      }
+    }
+
+    showRunning(change.running);
+    refreshSoon();
+  }
+
+  const sectionOf = id => main.querySelector(`section.cell[data-cell-id="${CSS.escape(id)}"]`);
+
+  // The cells in the order the notebook holds them: a cell that went is taken away, one that came is drawn in its place.
+  function arrange(order) {
+    const drawn = new Map([...main.querySelectorAll('section.cell')].map(section => [section.dataset.cellId, section]));
+
+    for (const [id, section] of drawn) {
+      if (!order.includes(id)) {
+        section.remove();
+        state.cells.delete(id);
+      }
+    }
+
+    let before = null;
+
+    for (const id of order) {
+      const section = drawn.get(id) ?? fill(document.createElement('section'), state.cells.get(id));
+
+      if (before) {
+        before.after(section);
+      } else {
+        main.prepend(section);
+      }
+
+      before = section;
+    }
+  }
+
+  // What a part keeps with a cell, written as JSON; a value JSON could not write is kept as its text.
+  const metadata = (cell, key) => {
+    const written = cell.metadata?.[key];
+
+    if (written === undefined) {
+      return undefined;
+    }
+
+    try {
+      return JSON.parse(written);
+    } catch {
+      return written;
+    }
+  };
+
+  // A cell drawn as Verso's editors draw one: its text, what it shows, how it last ran.
+  function fill(section, cell) {
+    section.className = 'cell';
+    section.dataset.cellId = cell.id;
+    section.dataset.type = cell.type;
+    section.classList.toggle('selected', state.selected === cell.id);
+    section.classList.toggle('running', state.running?.cell === cell.id);
+
+    let bar = section.querySelector('.cell-bar');
+    let source = section.querySelector('textarea.source');
+    let outputs = section.querySelector('.outputs');
+
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.className = 'cell-bar';
+      source = document.createElement('textarea');
+      source.className = 'source';
+      source.spellcheck = false;
+      outputs = document.createElement('div');
+      outputs.className = 'outputs';
+      section.replaceChildren(bar, source, outputs);
+      listenTo(section, source);
+    }
+
+    drawBar(bar, cell);
+
+    // Text the person is typing is theirs until it is sent.
+    if (!typed.has(cell.id) && source.value !== cell.source) {
+      source.value = cell.source;
+    }
+
+    source.rows = Math.min(20, Math.max(2, cell.source.split('\n').length));
+
+    const shownRendered = cell.type === 'markdown' || cell.type === 'parameters' || cell.type === 'mermaid' || cell.type === 'html';
+
+    source.hidden = metadata(cell, 'verso:ui.inputCollapsed') === true || (shownRendered && !section.classList.contains('editing'));
+
+    const visibility = metadata(cell, 'verso:ui.outputVisibility');
+
+    outputs.hidden = visibility === 'hidden';
+    outputs.classList.toggle('preview', visibility === 'preview');
+    outputs.style.setProperty('--lines', String(metadata(cell, 'verso:ui.outputPreviewLineCount') ?? 5));
+    outputs.replaceChildren(...cell.outputs.map(drawOutput));
+
+    return section;
+  }
+
+  function drawBar(bar, cell) {
+    const run = document.createElement('button');
+
+    run.className = 'run';
+    run.type = 'button';
+    run.title = 'Run the cell (Shift+Enter)';
+    run.textContent = '▶';
+    run.addEventListener('click', event => {
+      event.stopPropagation();
+      runCell(cell.id);
+    });
+
+    const kind = document.createElement('span');
+
+    kind.className = 'kind';
+    kind.textContent = cell.language ?? cell.type;
+
+    const buttons = state.buttons.filter(button => button.place === Place.Cell).map(button => drawButton(button, [cell.id]));
+    const status = document.createElement('span');
+
+    status.className = 'status';
+    status.textContent = describeRun(cell);
+    bar.replaceChildren(run, kind, ...buttons, status);
+  }
+
+  function describeRun(cell) {
+    if (cell.executionCount == null) {
+      return '';
+    }
+
+    const mark = cell.outputs.some(output => output.isError) || cell.lastStatus === 'Failed' ? '✘'
+      : cell.lastStatus === 'Cancelled' ? '—' : '✔';
+
+    return `${mark} ${seconds(cell.lastElapsed)} [${cell.executionCount}]`;
+  }
+
+  // A run's time as the server writes it — hours:minutes:seconds — said in seconds.
+  function seconds(elapsed) {
+    if (!elapsed) {
+      return '';
+    }
+
+    const [hours, minutes, rest] = elapsed.split(':');
+    const total = (Number(hours) * 3600) + (Number(minutes) * 60) + Number(rest);
+
+    return total < 60 ? `${total.toFixed(1)}s` : `${(total / 60).toFixed(1)}m`;
+  }
+
+  // What a cell shows, by what it is: HTML as the notebook's parts wrote it, text and faults as text, an image as one.
+  function drawOutput(output) {
+    if (output.isError || !output.contentType.startsWith('text/html') && !output.contentType.startsWith('image/')) {
+      const text = document.createElement('pre');
+
+      text.textContent = output.contentType === 'application/json' ? pretty(output.content) : output.content;
+      text.classList.toggle('wrong', output.isError);
+
+      return text;
+    }
+
+    if (output.contentType.startsWith('image/') && output.contentType !== 'image/svg+xml') {
+      const image = document.createElement('img');
+
+      image.src = `data:${output.contentType};base64,${output.content}`;
+      image.alt = '';
+
+      return image;
+    }
+
+    const html = document.createElement('div');
+
+    html.innerHTML = output.content;
+
+    return html;
+  }
+
+  function pretty(text) {
+    try {
+      return JSON.stringify(JSON.parse(text), null, 2);
+    } catch {
+      return text;
+    }
+  }
+
+  function listenTo(section, source) {
+    const id = () => section.dataset.cellId;
+
+    source.addEventListener('input', () => {
+      typed.set(id(), source.value);
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(flushTyping, 500);
+    });
+    source.addEventListener('blur', () => {
+      flushTyping();
+
+      if (section.classList.contains('editing')) {
+        section.classList.remove('editing');
+        runCell(id());
+      }
+    });
+    source.addEventListener('keydown', event => {
+      if (event.key === 'Enter' && event.shiftKey) {
+        event.preventDefault();
+        runCell(id());
+      }
+    });
+
+    // A cell shown rendered is written in by opening its text.
+    section.querySelector('.outputs').addEventListener('dblclick', () => {
+      const cell = state.cells.get(id());
+
+      if (cell && ['markdown', 'mermaid', 'html'].includes(cell.type)) {
+        section.classList.add('editing');
+        source.hidden = false;
+        source.focus();
+      }
+    });
+    section.querySelector('.cell-bar').addEventListener('click', () => select(id()));
+  }
+
+  function runCell(id) {
+    flushTyping();
+    enqueue(() => api(notebookPath(`/cells/${id}/run`), { method: 'POST' }));
+  }
+
+  function showRunning(running) {
+    state.running = running ?? null;
+    stopButton.hidden = state.running === null;
+
+    for (const section of main.querySelectorAll('section.cell')) {
+      section.classList.toggle('running', state.running?.cell === section.dataset.cellId);
+    }
+  }
+
+  // A stop goes past everything waiting: what waits may be waiting for the very run it stops.
+  stopButton.addEventListener('click', () => api(notebookPath('/stop'), { method: 'POST' }).catch(error => say(error.message, true)));
+
+  // ---- What a block's controls send, the way Verso's own router means it ---------------------------------------
+
+  // A button, or anything that carries its payload, on its click; a box, a select or a field on its change; never on a
+  // key, since a key on a focused button would send its gesture again.
+  document.addEventListener('click', event => {
+    const control = event.target.closest?.('[data-action]');
+
+    if (control && control.closest('.outputs') && (control.tagName === 'BUTTON' || control.hasAttribute('data-payload'))) {
+      send(control);
+    }
+  });
+
+  document.addEventListener('change', event => {
+    const control = event.target.closest?.('[data-action]');
+
+    if (control && control.closest('.outputs') && ['INPUT', 'SELECT', 'TEXTAREA'].includes(control.tagName)) {
+      send(control);
+    }
+  });
+
+  function send(control) {
+    const cell = control.closest('[data-cell-id]');
+    const part = control.closest('[data-extension-id]');
+
+    if (!cell || !part) {
+      return;
+    }
+
+    const payload = control.getAttribute('data-payload')
+      ?? (control.type === 'checkbox' || control.type === 'radio' ? String(control.checked) : String(control.value ?? ''));
+
+    flushTyping();
+    enqueue(() => api(notebookPath('/gestures'), {
+      method: 'POST',
+      body: { cell: cell.dataset.cellId, extensionId: part.getAttribute('data-extension-id'), action: control.getAttribute('data-action'), payload },
+    }));
+  }
+
+  // ---- The toolbar -------------------------------------------------------------------------------------------------
+
+  let refreshTimer = 0;
+
+  // The buttons say whether they can be pressed, and a change can change that: asked again once changes settle.
+  function refreshSoon() {
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      loadToolbar();
+
+      if (state.selected && state.cells.has(state.selected)) {
+        loadPanel(state.selected);
+      }
+    }, 300);
+  }
+
+  async function loadToolbar() {
+    try {
+      state.buttons = await json(notebookPath('/toolbar'));
+    } catch (error) {
+      say(error.message, true);
+
+      return;
+    }
+
+    toolbar.replaceChildren(...state.buttons.filter(button => button.place === Place.Main).map(button => drawButton(button, [])));
+
+    const exports = state.buttons.filter(button => button.place === Place.Export);
+
+    exportMenu.hidden = exports.length === 0;
+    exportMenu.querySelector('div').replaceChildren(...exports.map(button => drawButton(button, [])));
+
+    for (const section of main.querySelectorAll('section.cell')) {
+      const cell = state.cells.get(section.dataset.cellId);
+
+      if (cell) {
+        drawBar(section.querySelector('.cell-bar'), cell);
+      }
+    }
+  }
+
+  function drawButton(button, cells) {
+    const element = document.createElement('button');
+
+    element.type = 'button';
+    element.dataset.button = button.id;
+    element.disabled = !button.isEnabled;
+    element.title = button.label;
+
+    if (button.icon?.trimStart().startsWith('<svg')) {
+      element.innerHTML = button.icon;
+
+      if (!button.iconOnly) {
+        element.append(` ${button.label}`);
+      }
+    } else {
+      element.textContent = button.label;
+    }
+
+    element.addEventListener('click', event => {
+      event.stopPropagation();
+      press(button, cells);
+    });
+
+    return element;
+  }
+
+  function press(button, cells) {
+    if (button.confirmation && !confirm(button.confirmation)) {
+      return;
+    }
+
+    exportMenu.open = false;
+    flushTyping();
+    enqueue(async () => {
+      const response = await api(notebookPath(`/toolbar/${encodeURIComponent(button.id)}`), { method: 'POST', body: { cells } });
+
+      if (response.status === 200) {
+        await download(response);
+      }
+    });
+  }
+
+  // A file a button handed over is saved by this page alone, under the name it came with.
+  async function download(response) {
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = fileName(response.headers.get('Content-Disposition')) ?? 'download';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function fileName(disposition) {
+    const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition ?? '');
+
+    if (encoded) {
+      return decodeURIComponent(encoded[1]);
+    }
+
+    const plain = /filename="?([^";]+)"?/i.exec(disposition ?? '');
+
+    return plain ? plain[1] : null;
+  }
+
+  // ---- The properties panel ----------------------------------------------------------------------------------------
+
+  function select(id) {
+    state.selected = id;
+
+    for (const section of main.querySelectorAll('section.cell')) {
+      section.classList.toggle('selected', section.dataset.cellId === id);
+    }
+
+    loadPanel(id);
+  }
+
+  async function loadPanel(id) {
+    let sections;
+
+    try {
+      sections = await json(notebookPath(`/cells/${id}/properties`));
+    } catch (error) {
+      say(error.message, true);
+
+      return;
+    }
+
+    if (state.selected !== id) {
+      return;
+    }
+
+    panel.replaceChildren(...sections.flatMap(section => drawSection(id, section)));
+  }
+
+  function drawSection(id, section) {
+    const title = document.createElement('h3');
+
+    title.textContent = section.title;
+
+    const drawn = [title];
+
+    if (section.description) {
+      const words = document.createElement('p');
+
+      words.textContent = section.description;
+      drawn.push(words);
+    }
+
+    for (const field of section.fields) {
+      const label = document.createElement('label');
+
+      label.textContent = field.label;
+      label.title = field.description ?? '';
+      drawn.push(label, drawField(id, section.part, field));
+    }
+
+    return drawn;
+  }
+
+  function drawField(id, part, field) {
+    let input;
+
+    switch (field.kind) {
+      case Kind.Toggle:
+        input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = field.value === true;
+        break;
+      case Kind.Select:
+        input = document.createElement('select');
+        input.append(...field.options.map(option => new Option(option.label, option.value, false, option.value === field.value)));
+        break;
+      case Kind.Several:
+        return drawSeveral(id, part, field);
+      case Kind.Number:
+        input = document.createElement('input');
+        input.type = 'number';
+        input.value = field.value ?? '';
+        break;
+      case Kind.Colour:
+        input = document.createElement('input');
+        input.type = 'color';
+        input.value = field.value ?? '#000000';
+        break;
+      default:
+        input = document.createElement('input');
+        input.type = 'text';
+        input.value = Array.isArray(field.value) ? field.value.join(', ') : (field.value ?? '');
+        break;
+    }
+
+    input.dataset.part = part;
+    input.dataset.field = field.name;
+    input.disabled = field.isReadOnly;
+    input.addEventListener('change', () => change(id, part, field.name, valueOf(field.kind, input)));
+
+    return input;
+  }
+
+  // Several choices: a box for each, sent as the list of those ticked.
+  function drawSeveral(id, part, field) {
+    const chosen = Array.isArray(field.value) ? field.value : String(field.value ?? '').split(',').filter(value => value);
+    const group = document.createElement('div');
+
+    group.dataset.part = part;
+    group.dataset.field = field.name;
+
+    for (const option of field.options) {
+      const label = document.createElement('label');
+      const box = document.createElement('input');
+
+      box.type = 'checkbox';
+      box.value = option.value;
+      box.checked = chosen.includes(option.value);
+      box.disabled = field.isReadOnly;
+      box.addEventListener('change', () => change(id, part, field.name, [...group.querySelectorAll('input:checked')].map(ticked => ticked.value)));
+      label.append(box, ` ${option.label}`);
+      group.append(label);
+    }
+
+    return group;
+  }
+
+  // A field's value in the form its kind has in JSON, which the part reads as Verso's own editors hand it on.
+  function valueOf(kind, input) {
+    switch (kind) {
+      case Kind.Toggle:
+        return input.checked;
+      case Kind.Number:
+        return input.value === '' ? null : Number(input.value);
+      case Kind.Words:
+        return input.value.split(',').map(word => word.trim()).filter(word => word);
+      default:
+        return input.value;
+    }
+  }
+
+  function change(id, part, field, value) {
+    flushTyping();
+    enqueue(async () => {
+      await api(notebookPath(`/cells/${id}/properties`), { method: 'POST', body: { part, field, value } });
+      await loadPanel(id);
+    });
+  }
+
+  // ---- Saving and closing ------------------------------------------------------------------------------------------
+
+  function save() {
+    flushTyping();
+    enqueue(async () => {
+      await api(notebookPath('/save'), { method: 'POST' });
+      say('Saved.');
+    });
+  }
+
+  saveButton.addEventListener('click', save);
+  document.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key === 's' && state.name) {
+      event.preventDefault();
+      save();
+    }
+  });
+
+  closeButton.addEventListener('click', () => {
+    if (!confirm('Close the notebook without saving it? What is not saved is lost.')) {
+      return;
+    }
+
+    enqueue(async () => {
+      await api(notebookPath('/close'), { method: 'POST' });
+      location.search = '';
+    });
+  });
+
+  // ---- Begin -------------------------------------------------------------------------------------------------------
+
+  const named = address.get('notebook');
+
+  if (named) {
+    open(named);
+  } else {
+    list().catch(error => say(error.message, true));
+  }
+})();
+</script>
 </body>
 </html>
