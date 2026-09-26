@@ -1086,7 +1086,11 @@ Mermaid, HTML — shows its text while it has none, has no output, or is selecte
 nobody writes, the parameters form, shows none, and is run once when it is drawn with nothing to show, as Verso's
 editor runs it, so the form draws itself. The form's controls name no part, so the page does for them what Verso's
 own script does: its row for a new parameter opens and closes in the page alone, and a parameter added, a value set —
-on Enter, or on its change — and a parameter taken away go to Verso's parameters part as that script sends them. A change asked for while a cell runs says it waits for the run, and a
+on Enter, or on its change — and a parameter taken away go to Verso's parameters part as that script sends them. As
+a cell's text is typed, the page asks its kernel what may come next — on Ctrl+Space, and after a dot or a quote — and
+lists it under the text; the arrows walk the list, Enter, Tab or a click takes one in place of the part of it already
+typed, and Escape closes it. A line under the text says what the word at the cursor means once the cursor rests there.
+An answer that comes back after the text moved on is for text nobody has any more, and is dropped. A change asked for while a cell runs says it waits for the run, and a
 refusal is said in the server's own words, a cell another page took away among them. A folder is listed, even when it
 holds one notebook, with a way to make a new one; a server beside one notebook opens it at once.
 

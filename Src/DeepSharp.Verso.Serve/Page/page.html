@@ -50,6 +50,11 @@
   .add-row { padding: 0 1rem 1rem; }
   .add-row[hidden] { display: none; }
   textarea.source[readonly] { color: var(--quiet); }
+  ul.completions { list-style: none; margin: 0; padding: .2rem 0; max-height: 12rem; overflow: auto; border-bottom: 1px solid var(--line); font: 13px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; }
+  ul.completions li { padding: .1rem .6rem; cursor: pointer; }
+  ul.completions li.active { background: var(--pick); }
+  .hover-line { padding: .2rem .5rem; color: var(--quiet); font-size: .85em; border-bottom: 1px solid var(--line); }
+  .hover-line:empty { display: none; }
   .cell-bar .status { margin-left: auto; color: var(--quiet); font-size: .85em; }
   section.cell.running .cell-bar .status::before { content: "running… "; color: var(--run); }
   textarea.source { display: block; width: 100%; border: 0; border-bottom: 1px solid var(--line); padding: .5rem; font: 13px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; background: transparent; color: inherit; resize: vertical; }
@@ -424,7 +429,12 @@
       outputs.className = 'outputs';
       inserting = document.createElement('div');
       inserting.className = 'insert-row';
-      section.replaceChildren(bar, source, outputs, inserting);
+
+      const meaning = document.createElement('div');
+
+      meaning.className = 'hover-line';
+      meaning.setAttribute('aria-live', 'polite');
+      section.replaceChildren(bar, source, meaning, outputs, inserting);
       listenTo(section, source);
     }
 
@@ -615,13 +625,27 @@
   function listenTo(section, source) {
     const id = () => section.dataset.cellId;
 
-    source.addEventListener('input', () => {
+    source.addEventListener('input', event => {
       typed.set(id(), source.value);
       clearTimeout(typingTimer);
       typingTimer = setTimeout(flushTyping, 500);
+
+      // A dot or a quote asks what may come next; anything else typed while a list is open asks again.
+      if (Asks.has(event.data) || offering?.source === source) {
+        offer(section, source);
+      }
+
+      meanSoon(section, source);
     });
+    source.addEventListener('keyup', event => {
+      if (event.key.startsWith('Arrow') || event.key === 'Home' || event.key === 'End') {
+        meanSoon(section, source);
+      }
+    });
+    source.addEventListener('click', () => meanSoon(section, source));
     source.addEventListener('blur', () => {
       flushTyping();
+      closeOffer();
 
       // A cell shown rendered is rendered again from what was written into it.
       if (['markdown', 'mermaid', 'html'].includes(state.cells.get(id())?.type) && allowed(Allows.Execute)) {
@@ -629,6 +653,38 @@
       }
     });
     source.addEventListener('keydown', event => {
+      // While something is offered, the arrows walk it, Enter or Tab takes it, and Escape closes it.
+      if (offering?.source === source) {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          offering.active = (offering.active + (event.key === 'ArrowDown' ? 1 : offering.items.length - 1)) % offering.items.length;
+          markOffered();
+
+          return;
+        }
+
+        if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+          event.preventDefault();
+          take(offering.items[offering.active]);
+
+          return;
+        }
+
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          closeOffer();
+
+          return;
+        }
+      }
+
+      if (event.key === ' ' && event.ctrlKey) {
+        event.preventDefault();
+        offer(section, source);
+
+        return;
+      }
+
       if (event.key === 'Enter' && event.shiftKey) {
         event.preventDefault();
         runCell(id());
@@ -650,6 +706,120 @@
   function runCell(id) {
     flushTyping();
     enqueue(() => api(notebookPath(`/cells/${id}/run`), { method: 'POST' }));
+  }
+
+  // ---- What a cell's kernel offers as its text is typed, and what a word means ----------------------------------
+
+  // The characters after which the kernel is asked what may come next, as well as on Ctrl+Space.
+  const Asks = new Set(['.', '"']);
+
+  // The list under the text that is open, if one is: the cell, its text, what is offered, and which one is marked.
+  let offering = null;
+
+  function closeOffer() {
+    offering?.list.remove();
+    offering = null;
+  }
+
+  // Asks the cell's kernel what may come next where the cursor stands, for the text as the person has it; an answer
+  // that comes back after the text moved on is for text nobody has any more.
+  async function offer(section, source) {
+    const code = source.value;
+    const position = source.selectionStart;
+    let offered;
+
+    try {
+      offered = await json(notebookPath(`/cells/${section.dataset.cellId}/completions`), { method: 'POST', body: { code, position } });
+    } catch (error) {
+      say(error.message, true);
+
+      return;
+    }
+
+    if (source.value !== code || source.selectionStart !== position || document.activeElement !== source) {
+      return;
+    }
+
+    closeOffer();
+
+    if (offered.length === 0) {
+      return;
+    }
+
+    const list = document.createElement('ul');
+
+    list.className = 'completions';
+    list.setAttribute('role', 'listbox');
+
+    for (const completion of offered) {
+      const item = document.createElement('li');
+
+      item.textContent = completion.text;
+      item.title = completion.description ?? '';
+      item.setAttribute('role', 'option');
+
+      // Taken on the press, before the text would lose the cursor to the list.
+      item.addEventListener('mousedown', event => {
+        event.preventDefault();
+        take(completion);
+      });
+      list.append(item);
+    }
+
+    source.after(list);
+    offering = { source, list, items: offered, active: 0 };
+    markOffered();
+  }
+
+  function markOffered() {
+    [...offering.list.children].forEach((item, index) => item.classList.toggle('active', index === offering.active));
+    offering.list.children[offering.active]?.scrollIntoView({ block: 'nearest' });
+  }
+
+  // What is taken is written in place of the part of it already typed: the longest end of the text before the cursor
+  // that it begins with, as an editor replaces the word being typed.
+  function take(completion) {
+    const source = offering.source;
+    const before = source.value.slice(0, source.selectionStart);
+    const after = source.value.slice(source.selectionEnd);
+    const insert = completion.insert.toLowerCase();
+    let typedOfIt = Math.min(before.length, completion.insert.length);
+
+    while (typedOfIt > 0 && !insert.startsWith(before.slice(before.length - typedOfIt).toLowerCase())) {
+      typedOfIt--;
+    }
+
+    const cursor = before.length - typedOfIt + completion.insert.length;
+
+    source.value = before.slice(0, before.length - typedOfIt) + completion.insert + after;
+    source.setSelectionRange(cursor, cursor);
+    closeOffer();
+    source.focus();
+    source.dispatchEvent(new Event('input'));
+  }
+
+  // The line under the text says what the word at the cursor means, asked once the cursor rests there.
+  let meaningTimer = 0;
+
+  function meanSoon(section, source) {
+    clearTimeout(meaningTimer);
+    meaningTimer = setTimeout(async () => {
+      const code = source.value;
+      const position = source.selectionStart;
+      let said = null;
+
+      try {
+        const response = await api(notebookPath(`/cells/${section.dataset.cellId}/hover`), { method: 'POST', body: { code, position } });
+
+        said = response.status === 200 ? await response.json() : null;
+      } catch {
+        // A meaning the kernel could not give is simply not said.
+      }
+
+      if (source.value === code && source.selectionStart === position) {
+        section.querySelector('.hover-line').textContent = said?.content ?? '';
+      }
+    }, 400);
   }
 
   // ---- Writing the notebook: a cell added, taken away, moved or turned into another kind -------------------------

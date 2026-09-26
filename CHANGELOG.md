@@ -192,7 +192,9 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   after another or at the end, of any kind the notebook has, taken away once the person says yes, moved or turned into
   another kind, each only where the notebook's layout allows it; a cell shown rendered shows its text while it is
   selected, as in Verso's editor; the parameters form draws itself and its controls reach Verso's parameters part as
-  Verso's own script sends them; a change asked for while a cell runs says it waits; a refusal is said in the server's
+  Verso's own script sends them; as a cell's text is typed, what its kernel offers is listed under it — on Ctrl+Space,
+  and after a dot or a quote — and a line says what the word at the cursor means; a change asked for while a cell runs
+  says it waits; a refusal is said in the server's
   own words; and a folder's list, shown even when it holds one notebook, makes a new one. It carries a
   build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8 is gone.
 
