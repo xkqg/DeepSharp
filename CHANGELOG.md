@@ -135,7 +135,9 @@ your own can host the notebook, too.
   and what they show, are handed over as plain values. Typing a cell's text, running a cell and a click on a control a
   block drew take their turn one at a time, in the order they came; a request about a cell a change before it rewrote
   is refused, and what a part answers a click with is what the cell shows next. A run that never ends is stopped by a
-  fresh kernel, and C# runs take their turn across every open notebook, so none prints into another.
+  fresh kernel, and C# runs take their turn across the whole process, so none prints into another. The toolbar is
+  every button the engine has, each saying whether it can be pressed; a file a button hands over goes to whoever
+  pressed it, and nothing is written beside the notebook.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

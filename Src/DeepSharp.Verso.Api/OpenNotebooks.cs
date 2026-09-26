@@ -18,7 +18,6 @@ public sealed class OpenNotebooks : IAsyncDisposable
     private readonly ConcurrentDictionary<string, Lazy<Task<NotebookHost>>> _open =
         new(FileNames(ignoringCase: OperatingSystem.IsWindows() | OperatingSystem.IsMacOS()));
 
-    private readonly Lane _csharp = new();
     private int _closed;
 
     /// <summary>How file names are compared on a file system that does, or does not, ignore case.</summary>
@@ -79,7 +78,7 @@ public sealed class OpenNotebooks : IAsyncDisposable
     {
         try
         {
-            var host = await NotebookHost.OpenAsync(file, new ExtensionHost(), _csharp, CancellationToken.None);
+            var host = await NotebookHost.OpenAsync(file, new ExtensionHost(), CancellationToken.None);
 
             if (Volatile.Read(ref _closed) == 0)
             {

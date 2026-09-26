@@ -941,8 +941,11 @@ before it rewrote or took away is refused, because nothing it meant still stands
 what the cell shows next. A run that never ends is stopped the only way the engine can stop one, with a fresh kernel —
 its token cancelled, a C# loop that waits goes on — so stopping clears the notebook's variables, the pipeline handed
 to C# cells among them, and the run itself goes on in the background until the application ends. C# runs take their
-turn across every notebook the application has open, because a C# kernel takes over the process's console while it
-runs, and two at once printed into each other. Verso's editor itself is not published for applications to reuse, so such an application does what the
+turn across the whole process, because a C# kernel takes over the process's console while it runs: two at once printed
+into each other, in two notebooks and under two separate holders of notebooks alike. The toolbar is every button the
+engine has, Verso's own and DeepSharp's, each saying whether it can be pressed; a press takes its turn like anything
+else, and the C# turn too, since a button may run cells. A file a button hands over goes to whoever pressed it, and
+nothing is written beside the notebook. Verso's editor itself is not published for applications to reuse, so such an application does what the
 editor does: it draws a block's output, which is HTML; it hands a control's `data-action` and `data-extension-id`
 to the part the control names, with its `data-payload` — or, for a control that carries none, its state, as Verso's
 own router sends it: `true` or `false` for a box, the value it is at for a select — and with the notebook's variables
@@ -953,8 +956,8 @@ block with `StepCatalog.ReadStep` and builds the declaration through its constru
 the file with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds
 the steps and no fit, because nothing ran them there. The drawing, the passing on and the toolbar's context are
 what `DeepSharp.Verso.Api` is named for, written once beside the notebook rather than by every application; it opens
-the notebook and passes a click on today, and the toolbar's context, the properties panel, saving and the news of what
-changed are still to come.
+the notebook, passes a click on and gives the toolbar its context today, and the properties panel, saving and the news
+of what changed are still to come.
 
 ## Decisions
 
@@ -1051,7 +1054,9 @@ borrowing a result.
 
 - **A global backend, context or session.** Nothing reaches for a shared instance. The notebook keeps a
   session, and it is the notebook's own: held by the block type Verso loaded for that notebook, handed to
-  every part through the host that loaded it, never static and never shared.
+  every part through the host that loaded it, never static and never shared. One thing is as wide as the process,
+  because what it guards already is: the turn C# runs take in `DeepSharp.Verso.Api`. Verso's C# kernel takes over the
+  process's console while it runs, so a turn held any narrower let two runs print into each other.
 - **A graph that is not a model.** The declarative front door will produce the same object the imperative
   one does. Two representations of one network means two engines to keep in step, and they diverge on the
   first unusual model.

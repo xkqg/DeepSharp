@@ -5,8 +5,8 @@ namespace DeepSharp.Verso.Api;
 
 /// <summary>One thing at a time, each after every one that came before it.</summary>
 /// <remarks>
-/// Two own one: a notebook's host, for everything done to that notebook, and the notebooks an application has open,
-/// for the C# runs of all of them. A thing handed on from inside another on the same lane would wait for the one it is
+/// Each notebook's host owns one, for everything done to that notebook, and the process owns one for its C# runs,
+/// because a C# kernel takes over the process's console. A thing handed on from inside another on the same lane would wait for the one it is
 /// inside, so nothing is. Taking a place in the line is one exchange of its end, so the order is the order they came.
 /// </remarks>
 internal sealed class Lane

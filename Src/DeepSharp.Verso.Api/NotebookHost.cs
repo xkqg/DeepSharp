@@ -28,17 +28,20 @@ public sealed class NotebookHost
 {
     private const string CSharp = "csharp";
 
+    // The one thing in this package as wide as the process, because what it guards is: a C# kernel takes over the
+    // process's console while it runs (Console.SetOut in Verso's C# kernel), so two C# runs anywhere in the process —
+    // in two notebooks, or under two holders of notebooks — print into each other (measured). Each run takes its turn.
+    private static readonly Lane CSharpRuns = new();
+
     private readonly Lane _turns = new();
-    private readonly Lane _csharp;
     private Run? _running;
     private int _closed;
 
-    private NotebookHost(string filePath, ExtensionHost extensions, Scaffold scaffold, Lane csharp)
+    private NotebookHost(string filePath, ExtensionHost extensions, Scaffold scaffold)
     {
         FilePath = filePath;
         Extensions = extensions;
         Scaffold = scaffold;
-        _csharp = csharp;
     }
 
     /// <summary>The file the notebook is saved in, as a full path.</summary>
@@ -76,24 +79,25 @@ public sealed class NotebookHost
     /// <returns>The cell as it stands after the run, or after <see cref="Stop"/> ended it.</returns>
     /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
     /// <remarks>
-    /// A C# run takes its turn among the C# runs of every notebook the application has open, because a C# kernel takes
-    /// over the process's console while it runs, and two at once would print into each other.
+    /// A C# run takes its turn among every C# run in the process, because a C# kernel takes over the process's console
+    /// while it runs, and two at once would print into each other.
     /// </remarks>
     public Task<HostedCell> RunAsync(Guid cell) => TurnAsync(async () =>
     {
         var running = Standing(cell);
 
         await (string.Equals(running.Language, CSharp, StringComparison.OrdinalIgnoreCase)
-            ? _csharp.TakeTurnAsync(() => RunUntilStoppedAsync(running))
-            : RunUntilStoppedAsync(running));
+            ? CSharpRuns.TakeTurnAsync(() => RunUntilStoppedAsync(() => Scaffold.ExecuteCellAsync(running.Id), running.Language))
+            : RunUntilStoppedAsync(() => Scaffold.ExecuteCellAsync(running.Id), running.Language));
 
         return running.Hosted();
     });
 
     /// <summary>
-    /// Stops the run under way, if there is one: the only way Verso's engine stops a run that does not end is a fresh
-    /// kernel, so the run's kernel is restarted, and what that kernel held — the notebook's variables, the pipeline handed
-    /// to C# cells among them — is gone. A run that never ends goes on in the background until the application does.
+    /// Stops the run under way — a cell's, or a toolbar button's — if there is one: the only way Verso's engine stops a
+    /// run that does not end is a fresh kernel, so the run's kernel is restarted, and what that kernel held — the
+    /// notebook's variables, the pipeline handed to C# cells among them — is gone. A run that never ends goes on in the
+    /// background until the application does.
     /// </summary>
     public void Stop() => Volatile.Read(ref _running)?.Stop();
 
@@ -135,6 +139,51 @@ public sealed class NotebookHost
         return new GestureResult(context.StateChanged, answer);
     });
 
+    /// <summary>Every toolbar button the engine has — Verso's own and DeepSharp's — each saying whether it can be pressed now.</summary>
+    /// <returns>The buttons, by place and then in their order.</returns>
+    public Task<IReadOnlyList<HostedToolbarAction>> ToolbarAsync() => TurnAsync(async () =>
+    {
+        var context = new ToolbarContext(Scaffold, []);
+        var buttons = new List<HostedToolbarAction>();
+
+        foreach (var action in Extensions.GetToolbarActions())
+        {
+            buttons.Add(new HostedToolbarAction(
+                action.ActionId,
+                action.DisplayName,
+                action.Icon,
+                action.IconOnly,
+                action.IsPrimary,
+                action.ConfirmationPrompt,
+                Enum.Parse<ToolbarPlace>(action.Placement.ToString()),
+                action.Order,
+                await action.IsEnabledAsync(context)));
+        }
+
+        return (IReadOnlyList<HostedToolbarAction>)[.. buttons.OrderBy(button => button.Place).ThenBy(button => button.Order)];
+    });
+
+    /// <summary>Presses a toolbar button.</summary>
+    /// <param name="id">The button.</param>
+    /// <param name="cells">The cells it is pressed for, for a button on a cell's toolbar.</param>
+    /// <returns>The file it handed over, for whoever pressed it; nothing when it handed none.</returns>
+    /// <exception cref="InvalidOperationException">The engine has no button of that name.</exception>
+    /// <remarks>
+    /// A button may run cells, C# among them, so a press takes its turn among the process's C# runs as a C# run does. A file is
+    /// never written beside the notebook: where it is saved is for whoever pressed the button to say.
+    /// </remarks>
+    public Task<HostedFile?> RunToolbarAsync(string id, params Guid[] cells) => TurnAsync(() => CSharpRuns.TakeTurnAsync(async () =>
+    {
+        var action = Extensions.GetToolbarActions().FirstOrDefault(each => each.ActionId == id)
+            ?? throw new InvalidOperationException($"The notebook has no toolbar button '{id}'.");
+        var context = new ToolbarContext(Scaffold, cells);
+
+        // A button that runs the cells can meet one that never ends, and only the notebook's own kernel runs away.
+        await RunUntilStoppedAsync(() => action.ExecuteAsync(context), Scaffold.DefaultKernelId);
+
+        return context.Handed;
+    }));
+
     /// <summary>Registers DeepSharp's parts with an engine, before it looks for any beside the application.</summary>
     /// <param name="extensions">The engine.</param>
     /// <returns>When they are registered.</returns>
@@ -167,11 +216,10 @@ public sealed class NotebookHost
     /// <summary>Opens the notebook a file holds on an engine, and closes the engine when it cannot be opened.</summary>
     /// <param name="filePath">The notebook's file, as a full path.</param>
     /// <param name="extensions">The engine to open it on; closed when the notebook cannot be opened.</param>
-    /// <param name="csharp">The turns the C# runs of every open notebook take.</param>
     /// <param name="cancellationToken">Stops the open.</param>
     /// <returns>The host.</returns>
     /// <exception cref="NotSupportedException">No format Verso knows reads the file.</exception>
-    internal static async Task<NotebookHost> OpenAsync(string filePath, ExtensionHost extensions, Lane csharp, CancellationToken cancellationToken)
+    internal static async Task<NotebookHost> OpenAsync(string filePath, ExtensionHost extensions, CancellationToken cancellationToken)
     {
         Scaffold? scaffold = null;
 
@@ -200,7 +248,7 @@ public sealed class NotebookHost
             scaffold.InitializeSubsystems();
             await scaffold.RenderTransientCellsAsync(cancellationToken);
 
-            return new NotebookHost(filePath, extensions, scaffold, csharp);
+            return new NotebookHost(filePath, extensions, scaffold);
         }
         catch
         {
@@ -244,7 +292,7 @@ public sealed class NotebookHost
     // either (measured: a C# loop that awaits goes on with its token cancelled); a fresh kernel ends the turn, and the
     // run is left behind. Only the run under way can be stopped, so the slot holds one, and a Stop after it ended
     // meets a run nobody waits for any more.
-    private async Task<bool> RunUntilStoppedAsync(CellModel cell)
+    private async Task<bool> RunUntilStoppedAsync(Func<Task> start, string? kernel)
     {
         var run = new Run();
 
@@ -252,11 +300,15 @@ public sealed class NotebookHost
 
         try
         {
-            var ran = Scaffold.ExecuteCellAsync(cell.Id);
+            var ran = start();
 
-            if (await Task.WhenAny(ran, run.Stopped) != ran)
+            if (await Task.WhenAny(ran, run.Stopped) == ran)
             {
-                await Scaffold.RestartKernelAsync(cell.Language);
+                await ran;
+            }
+            else
+            {
+                await Scaffold.RestartKernelAsync(kernel);
             }
 
             return true;

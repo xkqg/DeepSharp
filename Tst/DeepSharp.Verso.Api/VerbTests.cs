@@ -249,6 +249,26 @@ public sealed partial class VerbTests : IDisposable
     }
 
     [Fact]
+    public async Task CSharpRunsOfTwoSeparateNotebookHolders_TakeTheirTurnsToo_SinceTheConsoleIsTheWholeProcesss()
+    {
+        const string printing = """for (var i = 0; i < 20; i++) { System.Console.Write("{0}"); await System.Threading.Tasks.Task.Delay(5); }""";
+
+        await using var these = new OpenNotebooks();
+        await using var those = new OpenNotebooks();
+        var a = await OpenAsync(these, "a.verso", CSharp(printing.Replace("{0}", "A", StringComparison.Ordinal)));
+        var b = await OpenAsync(those, "b.verso", CSharp(printing.Replace("{0}", "B", StringComparison.Ordinal)));
+
+        var ran = await Task.WhenAll(a.RunAsync(a.Cells[0].Id), b.RunAsync(b.Cells[0].Id));
+        var printedByA = string.Concat(ran[0].Outputs.Select(output => output.Content));
+        var printedByB = string.Concat(ran[1].Outputs.Select(output => output.Content));
+
+        Assert.Equal(20, printedByA.Count(letter => letter == 'A'));
+        Assert.DoesNotContain("B", printedByA, StringComparison.Ordinal);
+        Assert.Equal(20, printedByB.Count(letter => letter == 'B'));
+        Assert.DoesNotContain("A", printedByB, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ClosingTheNotebooks_LetsTheChangeUnderWayFinish_AndRefusesTheNext()
     {
         var notebooks = new OpenNotebooks();
