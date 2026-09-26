@@ -43,6 +43,29 @@ internal static class NotebookEndpoints
             "/{name}/gestures",
             (string name, HostedGesture gesture, HttpContext context) => WithAsync(name, context, async host => Results.Ok(await host.GestureAsync(gesture))));
 
+        notebooks.MapGet("/{name}/toolbar", (string name, HttpContext context) => WithAsync(name, context, async host => Results.Ok(await host.ToolbarAsync())));
+
+        // A file a button hands over goes to the page that pressed it, under its own name, and never beside the notebook.
+        notebooks.MapPost("/{name}/toolbar/{button}", (string name, string button, Pressed pressed, HttpContext context) => WithAsync(name, context, async host =>
+            await host.RunToolbarAsync(button, [.. pressed.Cells]) is { } file ? Results.File(file.Bytes, file.ContentType, file.Name) : Results.NoContent()));
+        notebooks.MapGet(
+            "/{name}/cells/{cell:guid}/properties",
+            (string name, Guid cell, HttpContext context) => WithAsync(name, context, async host => Results.Ok(await host.PropertiesAsync(cell))));
+
+        // The value is handed to the part as it came, as JSON, the way Verso's own editors hand it on: each part reads it.
+        notebooks.MapPost("/{name}/cells/{cell:guid}/properties", (string name, Guid cell, Changed changed, HttpContext context) => WithAsync(name, context, async host =>
+        {
+            await host.SetPropertyAsync(cell, changed.Part, changed.Field, changed.Value);
+
+            return Results.NoContent();
+        }));
+        notebooks.MapPost("/{name}/save", (string name, HttpContext context) => WithAsync(name, context, async host =>
+        {
+            await host.SaveAsync();
+
+            return Results.NoContent();
+        }));
+
         // Closes it now, whatever it holds unsaved — what a person asks for who discards the changes; its views end.
         notebooks.MapPost("/{name}/close", (string name, HttpContext context) => WithAsync(name, context, async host =>
         {
@@ -76,6 +99,12 @@ internal static class NotebookEndpoints
 
     // A cell's new text, as a page sends it.
     internal readonly record struct Typed(string Source);
+
+    // The cells a toolbar button is pressed for; none for a button of the notebook as a whole.
+    internal readonly record struct Pressed(IReadOnlyList<Guid> Cells);
+
+    // A field of a cell's properties panel, changed: the part its section came from, the field, and what it now holds.
+    internal readonly record struct Changed(string Part, string Field, object? Value);
 
     // A notebook's stream: the notebook as it stands, then each change after it, until the page goes away, the server
     // stops, or the notebook closes. The page's view ends with it.

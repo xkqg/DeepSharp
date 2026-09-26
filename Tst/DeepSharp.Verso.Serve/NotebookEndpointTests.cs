@@ -352,6 +352,97 @@ public sealed partial class NotebookEndpointTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task TheToolbar_IsEveryButtonTheEngineHas_EachSayingWhetherItCanBePressedNow()
+    {
+        await using var served = await StartAsync();
+
+        var buttons = await served.Client.GetFromJsonAsync<HostedToolbarAction[]>("/api/notebooks/titanic.verso/toolbar", TestContext.Current.CancellationToken);
+
+        Assert.True(buttons!.Single(button => button.Id == ExportPipelineAction.Id).IsEnabled);
+        Assert.Contains(buttons!, button => button.Id == "verso.action.run-all");
+    }
+
+    [Fact]
+    public async Task AFileAButtonHandsOver_GoesToThePageThatPressedIt_UnderItsOwnName_AndNothingIsWrittenBesideTheNotebook()
+    {
+        await using var served = await StartAsync();
+
+        var pressed = await served.Client.PostAsJsonAsync($"/api/notebooks/titanic.verso/toolbar/{ExportPipelineAction.Id}", new { cells = Array.Empty<Guid>() }, TestContext.Current.CancellationToken);
+        var disposition = pressed.Content.Headers.ContentDisposition!;
+
+        Assert.Equal(HttpStatusCode.OK, pressed.StatusCode);
+        Assert.Equal("application/json", pressed.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("attachment", disposition.DispositionType);
+        Assert.Equal("titanic.pipeline.json", disposition.FileNameStar);
+        Assert.Contains("\"normalise\"", await pressed.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        Assert.False(File.Exists(At("titanic.pipeline.json")));
+    }
+
+    [Fact]
+    public async Task AButtonThatHandsNothingOver_IsAnsweredWithNothing_AndOneTheEngineDoesNotHave_IsRefused()
+    {
+        await using var served = await StartAsync();
+
+        Assert.Equal(
+            HttpStatusCode.NoContent,
+            (await served.Client.PostAsJsonAsync($"/api/notebooks/titanic.verso/toolbar/{RunPipelineAction.Id}", new { cells = Array.Empty<Guid>() }, TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(
+            HttpStatusCode.UnprocessableEntity,
+            (await served.Client.PostAsJsonAsync("/api/notebooks/titanic.verso/toolbar/no.such.button", new { cells = Array.Empty<Guid>() }, TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task ACellsPanel_IsTheSectionsOfItsParts_AndAFieldIsChangedByItsPart_WithTheValueAsThePageSentIt()
+    {
+        var notebook = new NotebookModel();
+
+        foreach (var step in Titanic)
+        {
+            notebook.Cells.Add(new CellModel { Type = StepCellType.StepType, Language = StepKernel.Language, Source = step });
+        }
+
+        notebook.Cells.Add(new CellModel { Type = "code", Language = "csharp", Source = "1 + 1" });
+        File.WriteAllText(At("panel.verso"), await new VersoSerializer().SerializeAsync(notebook));
+
+        await using var served = await StartAsync();
+        var cells = (await served.Client.GetFromJsonAsync<NotebookVersion>("/api/notebooks/panel.verso", TestContext.Current.CancellationToken)).Cells;
+        var normalise = cells[4].Id;
+        var code = cells[5].Id;
+
+        var sections = await served.Client.GetFromJsonAsync<JsonElement[]>($"/api/notebooks/panel.verso/cells/{normalise}/properties", TestContext.Current.CancellationToken);
+
+        Assert.Contains(sections!, section => section.GetProperty("part").GetString() == StepForm.Id);
+
+        async Task ChangeAsync(Guid cell, string part, string field, object value) =>
+            Assert.Equal(
+                HttpStatusCode.NoContent,
+                (await served.Client.PostAsJsonAsync($"/api/notebooks/panel.verso/cells/{cell}/properties", new { part, field, value }, TestContext.Current.CancellationToken)).StatusCode);
+
+        await ChangeAsync(normalise, StepForm.Id, "scale", "minmax");
+        await ChangeAsync(code, "verso.propertyprovider.display", "inputCollapsed", true);
+        await ChangeAsync(code, "verso.propertyprovider.display", "outputPreviewLineCount", 8);
+
+        var after = (await served.Client.GetFromJsonAsync<NotebookVersion>("/api/notebooks/panel.verso", TestContext.Current.CancellationToken)).Cells;
+
+        Assert.Contains("\"minmax\"", after[4].Source, StringComparison.Ordinal);
+        Assert.Equal("true", after[5].Metadata["verso:ui.inputCollapsed"]);
+        Assert.Equal("8", after[5].Metadata["verso:ui.outputPreviewLineCount"]);
+    }
+
+    [Fact]
+    public async Task Saving_WritesTheNotebookToItsFile()
+    {
+        await using var served = await StartAsync();
+        var fill = (await served.Client.GetFromJsonAsync<NotebookVersion>("/api/notebooks/titanic.verso", TestContext.Current.CancellationToken)).Cells[3].Id;
+        var mean = Titanic[3].Replace("median", "mean", StringComparison.Ordinal);
+
+        await served.Client.PostAsJsonAsync($"/api/notebooks/titanic.verso/cells/{fill}/source", new { source = mean }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NoContent, (await served.Client.PostAsync("/api/notebooks/titanic.verso/save", null, TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Contains("mean", (await new VersoSerializer().DeserializeAsync(await File.ReadAllTextAsync(At("titanic.verso"), TestContext.Current.CancellationToken))).Cells[3].Source, StringComparison.Ordinal);
+    }
+
     // A page's stream: the answer it arrives in, closed with the view, as a tab closing closes its connection.
     private sealed class View(HttpResponseMessage answer, IAsyncEnumerator<SseItem<string>> events) : IAsyncDisposable
     {

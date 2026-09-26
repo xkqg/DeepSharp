@@ -162,7 +162,9 @@ your own can host the notebook, too.
   none, and a port already taken stops it before it says anything. A page keeps a stream of a notebook open — the
   notebook as it stands, then each change, numbered — and sends typing, runs, a stop and clicks on a block's controls;
   a cell a change replaced answers the version it is gone from, and a stream ends when the server stops, when the page
-  goes away, or when the notebook is closed without saving.
+  goes away, or when the notebook is closed without saving. The toolbar, a cell's properties panel and saving are
+  there too; a file a button hands over arrives as a download in the page that pressed it, under its own name, and
+  nothing is written beside the notebook.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

@@ -1014,7 +1014,11 @@ stream of a notebook open — the notebook as it stands, then each change, numbe
 on both runtimes — and sends what a person does: typing, running, stopping, a click on a block's control. A cell a
 change replaced answers the version it is gone from, so the page knows what to wait for; a refusal says why. A stream
 ends when the server stops, rather than holding the stop up, when the page goes away, so the notebook it showed can
-close, and when a person closes the notebook without saving it. The server does not save a notebook under another name: a page names a notebook by its file, and a name
+close, and when a person closes the notebook without saving it. The toolbar is the engine's, and a file a button hands
+over goes to the page that pressed it, as a download under its own name, never through the stream and never written
+beside the notebook. A cell's panel is its parts' sections, and a field's new value goes to its part as the page sent
+it, as JSON, the way Verso's own editors hand it on — each part reads it, so the server holds no rule of its own about
+what a field may hold. Saving writes the notebook to its file. The server does not save a notebook under another name: a page names a notebook by its file, and a name
 changed under the pages that show it would send their clicks to another notebook.
 
 ## Decisions
