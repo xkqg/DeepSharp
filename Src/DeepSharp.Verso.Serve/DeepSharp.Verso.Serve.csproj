@@ -1,0 +1,38 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <PackageId>DeepSharp.Verso.Serve</PackageId>
+    <Description>DeepSharp's own server: the notebook in your browser, on Verso's engine, with nothing else to install. Run deepsharp-serve beside a notebook; it listens on this computer alone and asks for the token it prints.</Description>
+    <PackageTags>deepsharp;pipeline;pdd;machine-learning;data-preparation;verso;notebook;server;browser;dotnet-tool</PackageTags>
+    <!-- The web SDK packs nothing unless told to, and says so only in a warning: the pack succeeds and writes no
+         package (measured). -->
+    <IsPackable>true</IsPackable>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>deepsharp-serve</ToolCommandName>
+    <!-- Installed for .NET 8, it keeps starting on the newer runtime once .NET 8 is gone, as Verso's own command-line
+         tool does. -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp.Verso.Api\DeepSharp.Verso.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The page travels inside the tool: nothing is ever served from the folder the tool runs in. -->
+    <EmbeddedResource Include="Page\page.html" LogicalName="page.html" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DeepSharp.Verso.Serve.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

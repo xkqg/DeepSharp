@@ -91,11 +91,14 @@ public class ReleaseContractTests
     public void TheCoverageGate_MeasuresEverySuite_FoundByItsName()
     {
         // A suite the gate never ran leaves its package measured by nothing, while the total still says PASS.
-        // So the gate finds the suites the way the workflow does, measures each, and judges them together.
+        // So the gate finds the suites the way the workflow does, measures each, and judges them together — pooling
+        // their reports itself, since the coverage tool's merge of the same reports came out differently from one run
+        // to the next, once losing most of a class's branches.
         string gate = Read("tools", "coverage", "run.ps1");
 
         Assert.Contains("*.Tests.csproj", gate, StringComparison.Ordinal);
-        Assert.Contains("dotnet-coverage merge", gate, StringComparison.Ordinal);
+        Assert.Contains("foreach ($part in $parts)", gate, StringComparison.Ordinal);
+        Assert.DoesNotContain("dotnet-coverage merge", gate, StringComparison.Ordinal);
         Assert.All(TestSuites(), suite => Assert.DoesNotContain(Path.GetFileName(suite), gate, StringComparison.Ordinal));
     }
 

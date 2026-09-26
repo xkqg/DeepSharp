@@ -21,7 +21,6 @@ $ErrorActionPreference = 'Stop'
 $root = Resolve-Path (Join-Path $PSScriptRoot '..\..')
 $settings = Join-Path $PSScriptRoot 'coverage.runsettings'
 $outputDir = Join-Path $root 'out\coverage'
-$report = Join-Path $outputDir 'coverage.cobertura.xml'
 
 if (-not (Get-Command dotnet-coverage -ErrorAction SilentlyContinue)) {
     Write-Host '==> Installing dotnet-coverage'
@@ -36,7 +35,7 @@ Get-ChildItem $outputDir -Filter '*.cobertura.xml' | Remove-Item
 
 # Every suite, found by the name every suite has rather than listed: a suite the gate never ran would leave its
 # package measured by nothing while the total still said PASS. Each is collected on its own and the results are
-# merged, so a class two suites both reach is judged on everything that reached it.
+# pooled below, so a class two suites both reach is judged on everything that reached it.
 $suites = @(Get-ChildItem (Join-Path $root 'Tst') -Recurse -Filter '*.Tests.csproj' |
     Where-Object { $_.FullName -notmatch '[\\/]obj[\\/]' })
 if ($suites.Count -eq 0) { throw 'There is no suite under Tst to measure' }
@@ -72,39 +71,62 @@ foreach ($suite in $suites) {
     }
 }
 
-Write-Host '==> Merging'
-& dotnet-coverage merge @parts --output $report --output-format cobertura
-if ($LASTEXITCODE -ne 0) { throw 'Merging the coverage failed' }
+# The suites' reports are pooled here rather than merged by dotnet-coverage, whose merge is not the same from one
+# run to the next: of two merges of the same four reports, one kept every branch of a class and the next lost most
+# of them, so the gate passed or failed by chance; and a report merged from its own format keeps no branches at all,
+# so every class would read as fully branched. A report says per line only how many of its branches were taken,
+# never which, so a line counts as reached when any suite reached it, and its branches as the most that any one
+# suite covered -- which never says more was covered than was.
+Write-Host '==> Pooling the suites'
+$lines = @{}
 
-[xml]$cobertura = Get-Content $report
-$lineRate = [double]$cobertura.coverage.'line-rate' * 100
-$branchRate = [double]$cobertura.coverage.'branch-rate' * 100
+foreach ($part in $parts) {
+    [xml]$measured = Get-Content $part
+
+    foreach ($class in $measured.SelectNodes('//class')) {
+        foreach ($line in $class.SelectNodes('lines/line')) {
+            $key = "$($class.name)|$($class.filename)|$($line.number)"
+            $seen = $lines[$key]
+
+            if ($null -eq $seen) {
+                $seen = [pscustomobject]@{ Class = $class.name; Hit = $false; Covered = 0; Branches = 0 }
+                $lines[$key] = $seen
+            }
+
+            if ([int]$line.hits -gt 0) { $seen.Hit = $true }
+
+            if ($line.branch -eq 'True' -and $line.'condition-coverage' -match '\((\d+)/(\d+)\)') {
+                $seen.Covered = [math]::Max($seen.Covered, [int]$Matches[1])
+                $seen.Branches = [math]::Max($seen.Branches, [int]$Matches[2])
+            }
+        }
+    }
+}
 
 # Per class, not only over everything. A big denominator hides a small class: a hundred well-tested classes
 # carry an untested one to a passing total, and the gap only becomes visible the day somebody edits it. The
 # compiler's own types -- a lambda's closure, an iterator's state machine -- are pooled into the class they
 # were generated for, because that is the class a person wrote and the granularity the rule is about.
 $pool = @{}
+$everything = [pscustomobject]@{ Lines = 0; LinesHit = 0; Branches = 0; BranchesHit = 0 }
 
-foreach ($class in $cobertura.SelectNodes('//class')) {
-    $owner = $class.name -replace '\.<[^>]*>[a-z]__[A-Za-z0-9_|]*', '' -replace '\.<>c(__DisplayClass[0-9_]*)?', ''
+foreach ($seen in $lines.Values) {
+    $owner = $seen.Class -replace '\.<[^>]*>[a-z]__[A-Za-z0-9_|]*', '' -replace '\.<>c(__DisplayClass[0-9_]*)?', ''
 
     if (-not $pool.ContainsKey($owner)) {
         $pool[$owner] = [pscustomobject]@{ Lines = 0; LinesHit = 0; Branches = 0; BranchesHit = 0 }
     }
 
-    $counts = $pool[$owner]
-
-    foreach ($line in $class.SelectNodes('lines/line')) {
+    foreach ($counts in $pool[$owner], $everything) {
         $counts.Lines++
-        if ([int]$line.hits -gt 0) { $counts.LinesHit++ }
-
-        if ($line.branch -eq 'True' -and $line.'condition-coverage' -match '\((\d+)/(\d+)\)') {
-            $counts.BranchesHit += [int]$Matches[1]
-            $counts.Branches += [int]$Matches[2]
-        }
+        if ($seen.Hit) { $counts.LinesHit++ }
+        $counts.Branches += $seen.Branches
+        $counts.BranchesHit += $seen.Covered
     }
 }
+
+$lineRate = $everything.LinesHit / $everything.Lines * 100
+$branchRate = $everything.BranchesHit / $everything.Branches * 100
 
 $thin = @()
 foreach ($owner in $pool.Keys | Sort-Object) {

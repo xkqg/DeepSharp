@@ -1,0 +1,152 @@
+// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
+using System.Diagnostics;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
+using DeepSharp.Verso.Api;
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.AspNetCore.Http.Features;
+
+namespace DeepSharp.Verso.Serve;
+
+/// <summary>DeepSharp's server: the notebook in a browser, on this computer alone.</summary>
+/// <remarks>
+/// A notebook runs code, so the server is shut to everyone but the person who started it: it listens on this computer
+/// alone; it answers only a request that carries the token it said when it started — in the address, or in the cookie
+/// its first page sets — so no other page can drive it; and it answers only under a name of this computer, so a site
+/// that makes its own name point here cannot reach it through the browser either. It serves its own page, which it
+/// carries, and nothing from the folder it runs in. It writes nothing to the console once it has said where it is,
+/// since a C# cell takes the console over while it runs.
+/// </remarks>
+public static class NotebookServer
+{
+    // A browser keeps a cookie for a computer whatever its port, so each server names its own after the port.
+    private const string CookiePrefix = "deepsharp-serve-";
+
+    // How long a notebook no page shows stays open: longer than a page takes to load again.
+    private static readonly TimeSpan Grace = TimeSpan.FromMinutes(1);
+
+    /// <summary>Builds the server for what a command line said.</summary>
+    /// <param name="options">What the command line said.</param>
+    /// <param name="token">What every request must carry.</param>
+    /// <param name="said">Where the one line said at the start goes.</param>
+    /// <returns>The server, not yet started.</returns>
+    public static WebApplication Build(ServeOptions options, string token, TextWriter said)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(token);
+        ArgumentNullException.ThrowIfNull(said);
+
+        // The tool's own folder, never the one it runs in: nothing there is served.
+        var builder = WebApplication.CreateSlimBuilder(new WebApplicationOptions { ContentRootPath = AppContext.BaseDirectory });
+
+        builder.Logging.ClearProviders();
+        builder.WebHost.ConfigureKestrel(kestrel => kestrel.Listen(IPAddress.Loopback, options.Port));
+        builder.Services.AddHostFiltering(filtering => filtering.AllowedHosts = ["localhost", "127.0.0.1", "[::1]"]);
+        // Made by the container, so the container closes it — and every notebook it holds — when the server stops; one
+        // handed to it would be left open.
+        builder.Services.AddSingleton(_ => new OpenNotebooks(Grace));
+
+        var app = builder.Build();
+
+        app.UseHostFiltering();
+        app.Use((context, next) => Carries(context, token) ? next(context) : Refused(context));
+        app.MapGet("/", () => Results.Stream(typeof(NotebookServer).Assembly.GetManifestResourceStream("page.html")!, "text/html; charset=utf-8"));
+        app.Lifetime.ApplicationStarted.Register(() => Started(app, options, token, said));
+
+        return app;
+    }
+
+    /// <summary>Runs <c>deepsharp-serve</c> with a command line, until it is stopped.</summary>
+    /// <param name="args">The command line's words.</param>
+    /// <param name="said">Where the one line said at the start goes, and the usage when it is asked for.</param>
+    /// <param name="errors">Where what went wrong goes.</param>
+    /// <param name="stop">Stops it; Ctrl+C does too.</param>
+    /// <returns>0 once it stopped, or said its usage; 1 when it could not listen; 2 when its command line was refused.</returns>
+    public static async Task<int> RunAsync(IReadOnlyList<string> args, TextWriter said, TextWriter errors, CancellationToken stop)
+    {
+        ArgumentNullException.ThrowIfNull(said);
+        ArgumentNullException.ThrowIfNull(errors);
+
+        ServeOptions options;
+
+        try
+        {
+            options = ServeOptions.Parse(args, Environment.CurrentDirectory);
+        }
+        catch (ArgumentException refused)
+        {
+            await errors.WriteLineAsync(refused.Message);
+            await errors.WriteLineAsync(ServeOptions.Usage);
+
+            return 2;
+        }
+
+        if (options.Help)
+        {
+            await said.WriteLineAsync(ServeOptions.Usage);
+
+            return 0;
+        }
+
+        await using var app = Build(options, RandomNumberGenerator.GetHexString(48, lowercase: true), said);
+
+        try
+        {
+            await app.StartAsync(stop);
+        }
+        catch (IOException taken)
+        {
+            await errors.WriteLineAsync(taken.Message);
+
+            return 1;
+        }
+
+        await app.WaitForShutdownAsync(stop);
+
+        return 0;
+    }
+
+    // A request carries the token in its address, as the tool said it, or in the cookie the first page set.
+    private static bool Carries(HttpContext context, string token)
+    {
+        var cookie = $"{CookiePrefix}{context.Connection.LocalPort}";
+
+        if (Same(context.Request.Query["token"], token))
+        {
+            context.Response.Cookies.Append(cookie, token, new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Strict, Path = "/" });
+
+            return true;
+        }
+
+        return Same(context.Request.Cookies[cookie], token);
+    }
+
+    // Compared in the same time whatever the guess, so the time a refusal takes says nothing of the token.
+    private static bool Same(string? given, string token) =>
+        given is not null && CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(given), Encoding.UTF8.GetBytes(token));
+
+    private static Task Refused(HttpContext context)
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+
+        return context.Response.WriteAsync("This server answers only the address it said when it started.");
+    }
+
+    // Once it listens: where, on the address it really bound — a port already taken stops it before it gets here — and a
+    // browser on that address, unless it was told to open none.
+    private static void Started(WebApplication app, ServeOptions options, string token, TextWriter said)
+    {
+        var bound = app.Services.GetRequiredService<IServer>().Features.GetRequiredFeature<IServerAddressesFeature>().Addresses.Single();
+        var address = $"{bound}/?token={token}";
+
+        said.WriteLine($"DeepSharp serves {options.Path} at {address}");
+
+        if (options.OpenBrowser)
+        {
+            Process.Start(new ProcessStartInfo(address) { UseShellExecute = true });
+        }
+    }
+}

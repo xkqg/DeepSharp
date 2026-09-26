@@ -154,6 +154,13 @@ your own can host the notebook, too.
   never counts, as it is never saved; one with changes not yet saved stays open until it is saved. An application can
   close one notebook at once, and what waited behind a close is refused.
 
+- **`DeepSharp.Verso.Serve` — DeepSharp's own server.** The tool `deepsharp-serve`, run beside a notebook or a folder
+  of them, built on `DeepSharp.Verso.Api` and needing nothing else installed. The notebook it serves runs code, so it
+  listens on this computer alone, answers only a request carrying the token it said when it started — in the address,
+  or in the cookie its first page sets — and only under a name of this computer, and serves its own page and nothing
+  from the folder it runs in. It says where it is once, then nothing; `--port` names the port, `--no-browser` opens
+  none, and a port already taken stops it before it says anything.
+
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock
   weighed in seventy bands of fifty grams — whose shares are at least nought and sum to one on every row; named

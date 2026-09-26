@@ -35,22 +35,27 @@ Src/DeepSharp.Pipelines.DataFrame/   a reader of Microsoft's DataFrame, through 
 Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
 Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
 Src/DeepSharp.Verso.Api/             an application of your own that hosts the notebook
-Src/DeepSharp.Verso.Serve/           to come: DeepSharp's own server, the notebook in a browser
+Src/DeepSharp.Verso.Serve/           DeepSharp's own server, the notebook in a browser
 Samples/                          runnable programs and the published data they read
 Tst/DeepSharp/                    the tests of the libraries
 Tst/DeepSharp.Verso.Notebooks/    the notebook's tests, run in the host an application of your own uses
 Tst/DeepSharp.Verso.Api/          the host's tests, run on Verso's own engine the way an application runs it
+Tst/DeepSharp.Verso.Serve/        the server's tests, run against the server started for real
 ```
 
 The tensor library and the pipeline library do not reference each other, and a test reads their assembly
 references to keep it that way.
 
-The notebook's tests are a suite of their own because Verso's engine and the validator the core's tests hold
-the pipeline schema to each need a different version of the C# compiler, and one test program can load only
-one. The coverage check and the release both run every suite they find, by the name every suite has, on every
-runtime the suite is built for. The check measures on the newest and runs the others: the two builds of one
-assembly, measured together, merge as one module and most of its branches lose their counts, so every class
-read as fully covered. The code is one code on both runtimes, so one measurement covers it.
+The notebook's tests, the host's and the server's are suites of their own because Verso's engine and the
+validator the core's tests hold the pipeline schema to each need a different version of the C# compiler, and one
+test program can load only one. The coverage check and the release both run every suite they find, by the name
+every suite has, on every runtime the suite is built for. The check measures on the newest and runs the others:
+the two builds of one assembly, measured together, merge as one module and most of its branches lose their counts,
+so every class read as fully covered. The code is one code on both runtimes, so one measurement covers it. The
+suites' measurements are pooled by the check itself rather than merged by the coverage tool, whose merge of the
+same reports came out differently from one run to the next — once keeping every branch of a class, once losing
+most of them: a line counts as reached when any suite reached it, and its branches as the most any one suite
+covered, since a report says how many of a line's branches were taken but never which.
 
 ## The design language: PDD, pipeline-driven design
 
@@ -505,8 +510,8 @@ A front end is the one exception, by decision: it is named after its host first 
 second — `DeepSharp.Verso.Notebooks`. It carries nothing of the host inside it, it plugs into it, and a person
 looks for it by the host's name, in the host's own list of extensions. Another package for the same host takes the
 same prefix: `DeepSharp.Verso.Api`, with which an application of your own hosts the notebook — it carries Verso's
-engine rather than plugging into it — and, to come, `DeepSharp.Verso.Serve`, DeepSharp's own server that shows the
-notebook in a browser, built on it. The packages are not Verso's; they are DeepSharp's way into it.
+engine rather than plugging into it — and `DeepSharp.Verso.Serve`, DeepSharp's own server that shows the notebook in
+a browser, built on it. The packages are not Verso's; they are DeepSharp's way into it.
 
 A project is created when there is code to put in it. Six empty assemblies laid out in advance are a
 diagram that has to be maintained; the layout above is the decision, and each package appears the day its
@@ -914,8 +919,8 @@ code is one code for both: where .NET 10 had a shorter way to say something, the
 one used — a JSON writer's line ending among them, so a pipeline file is written with a line feed on every
 machine and runtime — and every suite runs on both runtimes.
 
-Two packages follow the notebook: `DeepSharp.Verso.Api`, with which an application of your own hosts it, and, to
-come, `DeepSharp.Verso.Serve`, DeepSharp's own server that shows it in a browser, built on Api. The notebook package
+Two packages follow the notebook: `DeepSharp.Verso.Api`, with which an application of your own hosts it, and
+`DeepSharp.Verso.Serve`, DeepSharp's own server that shows it in a browser, built on Api. The notebook package
 stays the same code in every place, and a host's work lives in the host's package. What two of them would share is
 kept in one package beside them rather than written into each, and that package appears with the first type both
 sides compile against; none does yet.
@@ -989,6 +994,20 @@ yet saved stays open until it is saved, or until the application closes it, whic
 without a grace, notebooks stay open until they are closed, so an application that uses one without a view is never
 left holding a closed one. Whatever was asked of a notebook before it closed and waited behind the close is refused
 when its turn comes, since the engine it asked of is closed by then.
+
+`DeepSharp.Verso.Serve` is the tool `deepsharp-serve`, run beside a notebook or a folder of them. The notebook it serves
+runs code as the person who started it, so the server is shut to everyone else. It listens on this computer alone,
+on a port the system picks unless one is named. It answers only a request that carries the token it said when it
+started — in the address, or in the cookie its first page sets, named after the port, because a browser keeps a
+cookie for a computer whatever its port and two servers would overwrite each other's. It answers only under a name
+of this computer, because a site can make its own name point here and a browser would then carry the site's page to
+the server. And it serves its own page, which it carries, and nothing from the folder it runs in: a server that
+served its folder answered a private file lying beside the notebook. It says where it is once, on the address it
+really bound, and then nothing, because a C# cell takes the console over while it runs; a port already taken stops
+it before it says anything or opens a browser. It is packed as a .NET tool for .NET 8 and .NET 10 — told to pack at
+all, since the web SDK otherwise packs nothing and says so only in a warning — and told to keep starting on the newer
+runtime once .NET 8 is gone, as Verso's own command-line tool is. A notebook no page has shown for a minute, with
+nothing running and nothing unsaved, closes.
 
 ## Decisions
 

@@ -53,12 +53,13 @@ dotnet build DeepSharp.slnx -c Release          # ends at zero warnings, or it f
 dotnet run --project Tst/DeepSharp/DeepSharp.Tests.csproj -c Release -f net10.0
 dotnet run --project Tst/DeepSharp.Verso.Notebooks/DeepSharp.Verso.Notebooks.Tests.csproj -c Release -f net10.0
 dotnet run --project Tst/DeepSharp.Verso.Api/DeepSharp.Verso.Api.Tests.csproj -c Release -f net10.0
+dotnet run --project Tst/DeepSharp.Verso.Serve/DeepSharp.Verso.Serve.Tests.csproj -c Release -f net10.0
 ./tools/coverage/run.ps1 -Check                  # every suite, 90/90 per class, as CI runs it
 ```
 
-There are three suites: the notebook's runs in the host an application of your own uses, `DeepSharp.Verso.Api`,
-and the host's own beside it, both on Verso's engine, which needs another version of the C# compiler than the core
-suite's schema validator. Every package and every suite is built for .NET 8 and .NET 10, so `dotnet run` is told which with `-f net8.0` or `-f net10.0`; without it, it refuses to start. The
+There are four suites: the notebook's runs in the host an application of your own uses, `DeepSharp.Verso.Api`, the
+host's own beside it, and the server's, which starts DeepSharp's server for real — all on Verso's engine, which needs
+another version of the C# compiler than the core suite's schema validator. Every package and every suite is built for .NET 8 and .NET 10, so `dotnet run` is told which with `-f net8.0` or `-f net10.0`; without it, it refuses to start. The
 gate measures on .NET 10 and runs every suite on .NET 8 as well. Each test project is an executable — xunit v3 runs
 in-process, so `dotnet test` is not how a suite is run here. Pass `-- -class <full name>` or
 `-- -method <full name>` to run one: a single dash, because the runner refuses `--class` as an unknown option.

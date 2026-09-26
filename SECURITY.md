@@ -12,7 +12,8 @@ credited in the release notes unless you would rather not be.
 
 ## What is in scope
 
-DeepSharp runs the model you give it, inside your own process. That makes three things worth reporting:
+DeepSharp runs the model you give it, inside your own process. That makes three things worth reporting, and a
+fourth for `deepsharp-serve`, the one part of DeepSharp that listens on a port:
 
 - **A model file or checkpoint that takes over the process when it is loaded.** Reading a file must never be
   able to run code. If a crafted file leads to execution, arbitrary file access, or a crash that a caller
@@ -21,6 +22,11 @@ DeepSharp runs the model you give it, inside your own process. That makes three 
   handed over precisely so that a wrong shape is a refusal and never a stray write.
 - **A dependency of this package with a known advisory.** Report it even if you are not sure it is reachable
   from here; deciding that is our job.
+- **A way past `deepsharp-serve`'s boundary.** The notebook it serves runs code as the person who started it, so
+  the server listens on that computer alone, answers only a request carrying the token it printed, answers only
+  under a name of that computer, and serves nothing from the folder it runs in. A request that reaches a notebook
+  from another computer, from a page that does not hold the token, or under another name, or that reads a file from
+  that folder, is a vulnerability.
 
 ## What is not
 
