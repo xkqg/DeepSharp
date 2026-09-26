@@ -335,6 +335,38 @@ public sealed class ToolbarTests : IDisposable
     }
 
     [Fact]
+    public async Task ExportPressedWhileAGestureHoldsTheNotebook_WaitsForIt_AndExportsTheBlocksItLeft()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var gesture = new ToolbarGesture(notebook, NotebookPath);
+        var session = notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session;
+        var mayFinish = new TaskCompletionSource();
+        var holding = session.OneAtATimeAsync(async () =>
+        {
+            await mayFinish.Task;
+
+            // What the gesture ahead writes lands only as it ends.
+            notebook.Scaffold.Cells[3].Source = """{"step": "fill.missing", "column": "age", "with": "mean"}""";
+
+            return true;
+        });
+
+        var exporting = Action<ExportPipelineAction>(notebook).ExecuteAsync(gesture);
+
+        Assert.False(exporting.IsCompleted);
+        Assert.Empty(gesture.Downloads);
+
+        mayFinish.SetResult();
+        await holding;
+        await exporting;
+
+        var saved = Encoding.UTF8.GetString(Assert.Single(gesture.Downloads).Data);
+
+        Assert.Equal(NotebookPipelineText(notebook), saved);
+        Assert.Contains("mean", saved, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task ACSharpCell_SeesTheDeclarationWrittenAfterItsFirstRun()
     {
         // Verso declares a C# variable for every value a cell can name, once; the hand-over's key is no C# name, so a

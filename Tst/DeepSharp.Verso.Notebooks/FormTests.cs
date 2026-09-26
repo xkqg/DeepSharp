@@ -840,4 +840,60 @@ public sealed class FormTests : IDisposable
         await RefusedAsync("step", "no.such.verb");
         await RefusedAsync("column", " ");
     }
+
+    [Fact]
+    public async Task AChangeMadeWhileAGestureHoldsTheNotebook_WaitsForIt_BeforeTouchingTheBlock()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var normalise = notebook.Scaffold.Cells[4];
+        var session = notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session;
+        var mayFinish = new TaskCompletionSource();
+        var holding = session.OneAtATimeAsync(async () =>
+        {
+            await mayFinish.Task;
+
+            return true;
+        });
+
+        var changing = ChangeAsync(notebook, normalise, "scale", "minmax");
+
+        Assert.False(changing.IsCompleted);
+        Assert.Contains("\"standard\"", normalise.Source, StringComparison.Ordinal);
+
+        mayFinish.SetResult();
+        await holding;
+        await changing;
+
+        Assert.Contains("\"minmax\"", normalise.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AChangeToABlockAGestureRewroteWhileTheChangeWaited_IsNotMade_AsAHostFindingNoSuchBlockWouldNotMakeIt()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var declare = notebook.Scaffold.Cells[1];
+
+        await notebook.GestureAsync(declare, StepRenderer.Columns);
+
+        var tick = declare.Outputs.Single(output => output.Content.Contains("<tr data-column=", StringComparison.Ordinal)).Content.Row("sex").Included.Action;
+        Task? change = null;
+
+        // The form's change arrives while the tick waits for what the editor still holds, so it queues behind the tick.
+        notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session.Settle = () =>
+        {
+            change = ChangeAsync(notebook, declare, "remainder", "keep");
+
+            return Task.CompletedTask;
+        };
+
+        await notebook.GestureAsync(declare, tick, "true");
+        await change!;
+
+        var standing = notebook.Scaffold.Cells[1];
+
+        Assert.NotEqual(declare.Id, standing.Id);
+        Assert.Contains("\"sex\"", standing.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("keep", standing.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("keep", declare.Source, StringComparison.Ordinal);
+    }
 }

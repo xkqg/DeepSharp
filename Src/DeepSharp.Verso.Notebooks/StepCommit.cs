@@ -289,8 +289,7 @@ internal static class StepCommit
     private static async Task RemoveAsync(Gesture gesture, Guid cell)
     {
         await gesture.Operations.RemoveCellAsync(cell);
-        gesture.Session.Hidden(cell);
-        gesture.Session.Accepted(cell);
+        gesture.Session.Removed(cell);
     }
 
     /// <summary>What a commit wrote: every block written, and the block that shows what came of the gesture.</summary>

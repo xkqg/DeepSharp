@@ -116,7 +116,10 @@ pipeline decides about can be changed from the notebook, saved beside it and tak
   exports it as the same pipeline file the chain writes. Its "Take over the saved columns" lists, at the schema's
   block, every column whose decision taking the saved ones over would change — whether the source may lack it too, and
   what becomes of the columns the schema does not name — with every saved drop the blocks cannot make and why, and
-  changes nothing until the list's own box is ticked. C# cells in the same notebook are handed the
+  changes nothing until the list's own box is ticked. Every change to a notebook takes its turn — a gesture on the
+  grid or a list, a change in the form, the toolbar's run, export and take-over — so a host that hands them over side
+  by side still changes the blocks one at a time, and a change still on its way to a block the change before it
+  rewrote is not made. C# cells in the same notebook are handed the
   pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. Saving the
   notebook keeps the steps and leaves out what the blocks show, the data included. It is
   installed from Verso's Extensions panel and runs in Verso's VS Code extension, in the browser editor

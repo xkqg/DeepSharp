@@ -87,7 +87,10 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
 
     /// <inheritdoc />
     /// <remarks>
-    /// Written into the step's text only when the catalog reads the step back; the same value twice writes once.
+    /// Written into the step's text only when the catalog reads the step back; the same value twice writes once. A
+    /// change is one change to the notebook, so it waits for a gesture already on it, and is made only on a block that
+    /// still stands then: one the gesture rewrote or took away is left alone, as a host that looks the block up by its id
+    /// and finds none leaves it.
     /// </remarks>
     public Task OnPropertyChangedAsync(CellModel cell, string propertyName, object? value, ICellRenderContext context)
     {
@@ -96,23 +99,32 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
         ArgumentNullException.ThrowIfNull(context);
 
         var session = RequiredSession;
+
+        return session.OneAtATimeAsync(() => Task.FromResult(Changed(session, cell, propertyName, value, context.Variables)));
+    }
+
+    // Makes the change on a block that stands; says whether the field was one of the step's.
+    private static bool Changed(NotebookSession session, CellModel cell, string field, object? value, IVariableStore variables)
+    {
         var catalog = NotebookVerbs.Catalog();
 
-        if (catalog.TryReadStep(cell.Source) is not { } step)
+        if (!session.Stands(cell.Id) || catalog.TryReadStep(cell.Source) is not { } step)
         {
-            return Task.CompletedTask;
+            return false;
         }
 
         try
         {
-            if (Edited(step, propertyName, FieldValue.Of(value), ScopeOf(session, cell.Id), catalog) is { } edited)
+            if (Edited(step, field, FieldValue.Of(value), ScopeOf(session, cell.Id), catalog) is not { } edited)
             {
-                session.Accepted(cell.Id);
+                return false;
+            }
 
-                if (!edited.Equals(step))
-                {
-                    Write(session, context.Variables, cell, edited, catalog);
-                }
+            session.Accepted(cell.Id);
+
+            if (!edited.Equals(step))
+            {
+                Write(session, variables, cell, edited, catalog);
             }
         }
         catch (FormatException refused)
@@ -120,7 +132,7 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
             session.Refused(cell.Id, cell.Source, refused.Message);
         }
 
-        return Task.CompletedTask;
+        return true;
     }
 
     // The step as the field changes it, read back through the catalog; nothing when the field is none of the step's.

@@ -878,7 +878,10 @@ keyed by the read step, the path and a SHA-256 of the bytes, which are read and 
 the parsed rows took close to half off every show on files of five and eleven megabytes, measured inside
 Verso's own engine. The session is held by the block type Verso loaded, the one object every part of the
 notebook reaches — the block type's own kernel directly, every other part through the host that loaded it —
-and one gesture on it runs at a time. It is never static and never shared with another notebook. A grid whose
+and one change on it runs at a time: a gesture, a change in a block's form, the toolbar's run, export and take-over
+each wait for the one before them, in the order they came, since one host hands them over one at a time and another
+side by side. A change still on its way to a block the change before it rewrote or took away is not made, as a host
+that looks a block up by its id and finds none makes none. It is never static and never shared with another notebook. A grid whose
 view, or whose boxes, the blocks no longer match is cleared, not worked out again: work runs when somebody asks
 for it.
 

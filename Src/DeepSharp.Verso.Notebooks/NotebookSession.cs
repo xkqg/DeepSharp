@@ -30,7 +30,7 @@ internal readonly record struct SourceBytes(bool Known, string? Fingerprint)
 
 /// <summary>
 /// What only holds between the calls on one notebook: which block shows what, what a gesture asked a block for, what
-/// the notebook hands to C# cells, and that one gesture on it runs at a time.
+/// the notebook hands to C# cells, and that one change on it runs at a time.
 /// </summary>
 /// <remarks>
 /// Kept by the block type Verso loaded, the one object every part of a notebook reaches; nothing here is saved, and
@@ -55,6 +55,7 @@ internal sealed class NotebookSession
     private readonly Dictionary<Guid, ViewRequest> _requests = [];
     private readonly Dictionary<Guid, ShownView> _shown = [];
     private readonly Dictionary<Guid, Refusal> _refusals = [];
+    private readonly HashSet<Guid> _gone = [];
     private NotebookPipeline? _assembled;
     private SelectCommit? _select;
     private KeptView? _view;
@@ -62,7 +63,7 @@ internal sealed class NotebookSession
     private int _viewsRun;
     private int _runsFitted;
 
-    // The last gesture's turn: the next one waits for it, so they take the lane in the order they came.
+    // The last change's turn: the next one waits for it, so they take the lane in the order they came.
     private Task _lane = Task.CompletedTask;
 
     /// <summary>The rows the notebook's source opened last, kept for the next view.</summary>
@@ -125,15 +126,20 @@ internal sealed class NotebookSession
         }
     }
 
-    /// <summary>Runs one gesture on the notebook once every gesture made before it has finished.</summary>
-    /// <typeparam name="T">What the gesture answers.</typeparam>
-    /// <param name="gesture">The gesture: it may ask a block for something and run the block.</param>
+    /// <summary>
+    /// Runs one change on the notebook — a gesture, a change in a block's form, a toolbar button — once every change made
+    /// before it has finished.
+    /// </summary>
+    /// <typeparam name="T">What the change answers.</typeparam>
+    /// <param name="change">The change: a gesture may ask a block for something and run the block.</param>
     /// <returns>Its answer.</returns>
     /// <remarks>
     /// A gesture leaves a request and then runs the block that takes it; two gestures that interleave would each take
-    /// the other's. One host sends one request at a time, another runs them side by side, and this holds for both.
+    /// the other's, and a change in a form written while a gesture rewrites the blocks lands on a block that is going
+    /// away. One host sends one request at a time, another runs them side by side, and this holds for both. A change
+    /// handed on from inside another never runs: it waits for the one it is inside.
     /// </remarks>
-    public async Task<T> OneAtATimeAsync<T>(Func<Task<T>> gesture)
+    public async Task<T> OneAtATimeAsync<T>(Func<Task<T>> change)
     {
         var mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Task before;
@@ -148,7 +154,7 @@ internal sealed class NotebookSession
 
         try
         {
-            return await gesture();
+            return await change();
         }
         finally
         {
@@ -449,6 +455,32 @@ internal sealed class NotebookSession
         lock (_lock)
         {
             _shown[cell] = new ShownList(key);
+        }
+    }
+
+    /// <summary>
+    /// Forgets a block a change took away — what it showed, and why a change in its form was not made — and remembers
+    /// that it is gone, rewritten as another block or taken out, so a change still on its way to it is not made.
+    /// </summary>
+    /// <param name="cell">The block's cell.</param>
+    public void Removed(Guid cell)
+    {
+        lock (_lock)
+        {
+            _shown.Remove(cell);
+            _refusals.Remove(cell);
+            _gone.Add(cell);
+        }
+    }
+
+    /// <summary>Whether a block still stands: no change took it away.</summary>
+    /// <param name="cell">The block's cell.</param>
+    /// <returns><see langword="true"/> unless a change took the block away.</returns>
+    public bool Stands(Guid cell)
+    {
+        lock (_lock)
+        {
+            return !_gone.Contains(cell);
         }
     }
 

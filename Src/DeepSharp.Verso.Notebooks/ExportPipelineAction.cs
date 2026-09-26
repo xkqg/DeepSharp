@@ -68,22 +68,33 @@ public sealed class ExportPipelineAction : NotebookExtension, IToolbarAction
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// It waits for a gesture already on the notebook and exports the blocks as that gesture left them, never a notebook
+    /// half rewritten.
+    /// </remarks>
     public Task ExecuteAsync(IToolbarActionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var assembled = NotebookPipeline.Of(context.NotebookCells);
+        var session = RequiredSession;
 
-        if (!assembled.Whole)
+        return session.OneAtATimeAsync(async () =>
         {
-            throw new InvalidOperationException(
-                $"The blocks do not make a pipeline yet, so there is none to export: {string.Join("; ", assembled.Stopping)}");
-        }
+            var assembled = NotebookPipeline.Of(context.NotebookCells);
 
-        var bytes = SourceCache.BytesOf(assembled.Readable, context.NotebookMetadata.SourceFolder());
-        var file = RequiredSession.EnvelopeFor(context.Variables, assembled, bytes)!;
+            if (!assembled.Whole)
+            {
+                throw new InvalidOperationException(
+                    $"The blocks do not make a pipeline yet, so there is none to export: {string.Join("; ", assembled.Stopping)}");
+            }
 
-        // Named after the notebook; a relative source path in it is read from wherever the file is saved.
-        return context.RequestFileDownloadAsync(context.NotebookMetadata.PipelineFileName(), "application/json", Encoding.UTF8.GetBytes(file));
+            var bytes = SourceCache.BytesOf(assembled.Readable, context.NotebookMetadata.SourceFolder());
+            var file = session.EnvelopeFor(context.Variables, assembled, bytes)!;
+
+            // Named after the notebook; a relative source path in it is read from wherever the file is saved.
+            await context.RequestFileDownloadAsync(context.NotebookMetadata.PipelineFileName(), "application/json", Encoding.UTF8.GetBytes(file));
+
+            return true;
+        });
     }
 }

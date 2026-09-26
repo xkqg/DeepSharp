@@ -60,6 +60,27 @@ public sealed class SessionTests : IDisposable
     }
 
     [Fact]
+    public void ABlockAChangeTookAway_NoLongerStands_AndWhatTheSessionKnewOfItIsForgotten()
+    {
+        CellModel[] cells = [.. Titanic.Select(Block)];
+        var assembled = NotebookPipeline.Of(cells);
+        var session = new NotebookSession();
+        var gone = cells[1];
+
+        session.Showing(gone.Id, assembled.ViewKeyOf(gone.Id)!, DataGrid.HeaderOf(assembled.Readable, []));
+        session.Refused(gone.Id, gone.Source, "the value is not one the step takes");
+
+        Assert.True(session.Stands(gone.Id));
+
+        session.Removed(gone.Id);
+
+        Assert.False(session.Stands(gone.Id));
+        Assert.True(session.Stands(cells[0].Id));
+        Assert.DoesNotContain(gone.Id, session.Shown.Keys);
+        Assert.Null(session.RefusalFor(gone.Id, gone.Source));
+    }
+
+    [Fact]
     public async Task GesturesOnOneNotebook_RunOneAtATime_InTheOrderTheyCame()
     {
         var session = new NotebookSession();
