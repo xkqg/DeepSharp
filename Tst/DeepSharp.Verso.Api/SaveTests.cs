@@ -128,6 +128,23 @@ public sealed class SaveTests : IDisposable
         Assert.NotSame(host, await OpenOtherAsync(notebooks));
     }
 
+    [Theory]
+    [InlineData("titanic.dib")]
+    [InlineData("titanic.md")]
+    public async Task SavingBlocksAsDibOrMarkdown_IsRefusedByTheGuard_AndNothingIsWritten(string name)
+    {
+        // Markdown keeps a block's text and loses that it was a block, bringing it back as text; .dib is not written by
+        // Verso at all, and a notebook of blocks is refused before the format is asked, in words that say why.
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
+
+        var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => notebooks.SaveAsAsync(host, At(name)));
+
+        Assert.Contains(".verso", refused.Message, StringComparison.Ordinal);
+        Assert.False(File.Exists(At(name)));
+        Assert.Equal(At("titanic.verso"), host.FilePath);
+    }
+
     [Fact]
     public async Task AFormatNoSerializerWrites_IsRefused()
     {

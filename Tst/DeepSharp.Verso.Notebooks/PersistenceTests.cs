@@ -9,11 +9,11 @@ using Verso.Serializers;
 namespace DeepSharp.Tests.Notebooks;
 
 /// <summary>
-/// A pipeline notebook is saved as .verso, which keeps what kind of cell each one is. Jupyter's format keeps a cell's
-/// text and loses its kind, so a block saved that way would come back as code: saving one is refused, and so is
-/// opening a Jupyter file whose code cells turn out to be steps. Verso's own converter between formats runs no such
-/// guard; that is written down, not trusted. What a block shows is left out of the file by the serializer each of
-/// Verso's editors saves with.
+/// A pipeline notebook is saved as .verso, the one format of Verso's that keeps what kind of cell each one is. Every
+/// other keeps a cell's text and loses its kind — Jupyter and .dib bring a block back as code, Markdown as text — so
+/// saving a block in any of them is refused, and so is opening such a file whose code cells turn out to be steps.
+/// Verso's own converter between formats runs no such guard; that is written down, not trusted. What a block shows is
+/// left out of the file by the serializer each of Verso's editors saves with.
 /// </summary>
 public sealed class PersistenceTests : IDisposable
 {
@@ -43,25 +43,63 @@ public sealed class PersistenceTests : IDisposable
         $$"""{"cells": [{"cell_type": "code", "execution_count": null, "metadata": {}, "outputs": [], "source": [{{JsonSerializer.Serialize(source)}}]}], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}""";
 
     [Fact]
-    public async Task TheGuard_IsAPartVersoLoads_ForJupyterAlone()
+    public async Task OfTheEnginesFormats_OnlyVersoKeepsABlock_WrittenAndReadBack()
+    {
+        // What the guard stands on, measured on Verso's own serializers rather than assumed: a Verso whose other
+        // formats learn to keep a cell's kind fails this, and the guard can let that format through then.
+        await using var notebook = await Notebook.OpenAsync();
+        var formats = new HashSet<string>();
+        var keeping = new List<string>();
+        var neverWritten = new List<string>();
+
+        foreach (var serializer in notebook.Host.GetSerializers())
+        {
+            formats.Add(serializer.FormatId);
+            string written;
+
+            try
+            {
+                written = await serializer.SerializeAsync(Holding(StepCellType.StepType, Titanic[0]));
+            }
+            catch (NotSupportedException)
+            {
+                neverWritten.Add(serializer.FormatId);
+
+                continue;
+            }
+
+            if ((await serializer.DeserializeAsync(written)).Cells.Any(cell => cell.Type == StepCellType.StepType))
+            {
+                keeping.Add(serializer.FormatId);
+            }
+        }
+
+        Assert.Superset(new HashSet<string> { "verso", "jupyter", "dib", "markdown" }, formats);
+        Assert.Equal(["verso"], keeping);
+
+        // .dib is read and never written by this Verso: a file of it can hold blocks only as something else.
+        Assert.Equal(["dib"], neverWritten);
+    }
+
+    [Fact]
+    public async Task TheGuard_IsAPartVersoLoads_ForEveryFormatButVersosOwn()
     {
         await using var notebook = await Notebook.OpenAsync();
-        var guard = notebook.Host.GetPostProcessors().OfType<JupyterGuard>().Single();
+        var guard = notebook.Host.GetPostProcessors().OfType<FormatGuard>().Single();
 
-        Assert.Equal(JupyterGuard.Id, guard.ExtensionId);
+        Assert.Equal(FormatGuard.Id, guard.ExtensionId);
         Assert.False(string.IsNullOrWhiteSpace(guard.Name));
         Assert.False(string.IsNullOrWhiteSpace(guard.Description));
-        Assert.True(guard.CanProcess(null, "jupyter"));
+        Assert.All(notebook.Host.GetSerializers(), serializer => Assert.Equal(serializer.FormatId != "verso", guard.CanProcess(null, serializer.FormatId)));
         Assert.True(guard.CanProcess("old.IPYNB", "whatever"));
         Assert.False(guard.CanProcess("new.verso", "verso"));
-        Assert.False(guard.CanProcess(null, "verso"));
         Assert.Equal(0, guard.Priority);
     }
 
     [Fact]
-    public async Task APipelineNotebook_IsRefusedWhenSavedAsJupyter()
+    public async Task APipelineNotebook_IsRefusedWhenSavedInAFormatThatCannotKeepABlock()
     {
-        var guard = new JupyterGuard();
+        var guard = new FormatGuard();
 
         var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => guard.PreSerializeAsync(Holding(StepCellType.StepType, Titanic[0]), null));
 
@@ -75,7 +113,7 @@ public sealed class PersistenceTests : IDisposable
     [Fact]
     public async Task AJupyterFileWhoseCodeCellsAreSteps_IsRefusedWhenOpened()
     {
-        var guard = new JupyterGuard();
+        var guard = new FormatGuard();
         var saved = await new JupyterSerializer().DeserializeAsync(Ipynb(Titanic[0]));
 
         var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => guard.PostDeserializeAsync(saved, "old.ipynb"));

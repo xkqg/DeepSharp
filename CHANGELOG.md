@@ -127,7 +127,9 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   with `StepCellType.BlocksChangedAsync`, and tells it of a stop with `StepCellType.Stopped`, after which what the
   stopped run asks for writes nothing. C# cells in the same notebook are handed the
   pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. Saving the
-  notebook keeps the steps and leaves out what the blocks show, the data included. It is
+  notebook keeps the steps and leaves out what the blocks show, the data included. It is saved as `.verso`, the one
+  format that keeps a block a block: saving it as Jupyter or Markdown, which keep a cell's text and lose its kind, is
+  refused, and so is opening a file of another format whose code cells are steps. It is
   installed from Verso's Extensions panel and runs in Verso's VS Code extension, in the browser editor
   `verso serve` opens, and inside an application that takes Verso's engine as a dependency, DeepSharp's own server
   among them.

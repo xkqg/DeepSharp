@@ -907,12 +907,16 @@ longer make is cleared, and the pipeline is taken back unless they still make it
 kind keeps what it shows, since that is its own. Verso's editors tell a part nothing of such a change, so the notebook
 hears of it at the next gesture; a host that changes cells itself tells it at once.
 
-A notebook of blocks is saved as a `.verso` file. Saving one as Jupyter is refused, because a Jupyter file has
-no place for a block type and would keep the steps as code cells; opening a Jupyter file whose code cells read
-as steps is refused too. Two ways around that are written down rather than trusted: `verso convert` writes
-Jupyter without asking any extension, and a package installed from Verso's Extensions panel is loaded only after
-a Jupyter file has been opened, so the refusal on the way in holds only for an install at the top of Verso's
-extensions folder. A test pins the order Verso opens things in, so a Verso that changes it is noticed.
+A notebook of blocks is saved as a `.verso` file, the one format of Verso's that keeps a block a block. Saving one
+in any other is refused: Jupyter and Markdown keep a cell's text and lose what kind of cell it is — Jupyter brings a
+block back as code, Markdown as text — and `.dib` is read by Verso and never written. The guard takes every format
+but Verso's own, so one it does not know is refused a block rather than trusted with one, and a test writes a block
+through every format the engine has and reads it back, so a Verso whose other formats learn to keep a cell's kind is
+noticed. Opening a file of another format whose code cells read as steps is refused too. Two ways around that are
+written down rather than trusted: `verso convert` writes Jupyter without asking any extension, and a package
+installed from Verso's Extensions panel is loaded only after a file of another format has been opened, so the
+refusal on the way in holds only for an install at the top of Verso's extensions folder. A test pins the order Verso
+opens things in, so a Verso that changes it is noticed.
 
 The same package runs wherever Verso does, and it is the same code in each: Verso's VS Code extension, the
 browser editor `verso serve` starts, and an application that takes Verso's engine as an ordinary dependency,

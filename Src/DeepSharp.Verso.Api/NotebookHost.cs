@@ -362,7 +362,7 @@ public sealed class NotebookHost
         new RunPipelineAction(),
         new ExportPipelineAction(),
         new TakeOverAction(),
-        new JupyterGuard(),
+        new FormatGuard(),
     ];
 
     /// <summary>Opens the notebook a file holds on an engine, and closes the engine when it cannot be opened.</summary>

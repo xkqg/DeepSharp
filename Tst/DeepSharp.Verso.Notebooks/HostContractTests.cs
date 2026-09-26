@@ -159,10 +159,10 @@ public sealed partial class HostContractTests : IDisposable
     [Fact]
     public async Task AnInstallTheScanFindsBeforeANotebookOpens_IsTheOnlyOneThatGuardsTheOpening()
     {
-        // Opening a Jupyter file, Verso scans the top of its extensions folder, then reads and post-processes the
-        // file, then loads the packages the file asks for — and a Jupyter file asks for none. So the guard runs on
-        // the way in only for a package at the top of that folder; one installed in its own folder is loaded too
-        // late. That is written down as a limit; this pins the order, so a Verso that changes it is noticed.
+        // Opening a file of another format than .verso, Verso scans the top of its extensions folder, then reads and
+        // post-processes the file, then loads the packages the file asks for — and only a .verso file asks for any. So
+        // the guard runs on the way in only for a package at the top of that folder; one installed in its own folder is
+        // loaded too late. That is written down as a limit; this pins the order, so a Verso that changes it is noticed.
         var top = Path.Join(Installs, "top");
         var managed = Path.Join(Installs, "managed");
         var version = typeof(StepRenderer).Assembly.GetName().Version!.ToString(3);
@@ -179,8 +179,8 @@ public sealed partial class HostContractTests : IDisposable
         await scanningTop.LoadFromDirectoryAsync(top);
         await scanningManaged.LoadFromDirectoryAsync(managed);
 
-        Assert.Contains(scanningTop.GetPostProcessors(), processor => processor.ExtensionId == JupyterGuard.Id);
-        Assert.DoesNotContain(scanningManaged.GetPostProcessors(), processor => processor.ExtensionId == JupyterGuard.Id);
+        Assert.Contains(scanningTop.GetPostProcessors(), processor => processor.ExtensionId == FormatGuard.Id);
+        Assert.DoesNotContain(scanningManaged.GetPostProcessors(), processor => processor.ExtensionId == FormatGuard.Id);
     }
 
     [Fact]
