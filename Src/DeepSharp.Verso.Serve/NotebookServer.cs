@@ -26,9 +26,6 @@ public static class NotebookServer
     // A browser keeps a cookie for a computer whatever its port, so each server names its own after the port.
     private const string CookiePrefix = "deepsharp-serve-";
 
-    // How long a notebook no page shows stays open: longer than a page takes to load again.
-    private static readonly TimeSpan Grace = TimeSpan.FromMinutes(1);
-
     /// <summary>Builds the server for what a command line said.</summary>
     /// <param name="options">What the command line said.</param>
     /// <param name="token">What every request must carry.</param>
@@ -47,13 +44,15 @@ public static class NotebookServer
         builder.Services.AddHostFiltering(filtering => filtering.AllowedHosts = ["localhost", "127.0.0.1", "[::1]"]);
         // Made by the container, so the container closes it — and every notebook it holds — when the server stops; one
         // handed to it would be left open.
-        builder.Services.AddSingleton(_ => new OpenNotebooks(Grace));
+        builder.Services.AddSingleton(_ => new OpenNotebooks(options.Grace));
+        builder.Services.AddSingleton(_ => new ServedNotebooks(options));
 
         var app = builder.Build();
 
         app.UseHostFiltering();
         app.Use((context, next) => Carries(context, token) ? next(context) : Refused(context));
         app.MapGet("/", () => Results.Stream(typeof(NotebookServer).Assembly.GetManifestResourceStream("page.html")!, "text/html; charset=utf-8"));
+        NotebookEndpoints.Map(app);
         app.Lifetime.ApplicationStarted.Register(() => Started(app, options, token, said));
 
         return app;

@@ -1007,7 +1007,15 @@ really bound, and then nothing, because a C# cell takes the console over while i
 it before it says anything or opens a browser. It is packed as a .NET tool for .NET 8 and .NET 10 — told to pack at
 all, since the web SDK otherwise packs nothing and says so only in a warning — and told to keep starting on the newer
 runtime once .NET 8 is gone, as Verso's own command-line tool is. A notebook no page has shown for a minute, with
-nothing running and nothing unsaved, closes.
+nothing running and nothing unsaved, closes. The notebooks it serves are the one it was started beside, or the files
+of its folder that Verso's engine says it reads — asked of the engine, so a format it learns is served without a word
+here — and a page names one by its file name alone: any other name, a path among them, is not found. A page keeps a
+stream of a notebook open — the notebook as it stands, then each change, numbered by version, written by one writer
+on both runtimes — and sends what a person does: typing, running, stopping, a click on a block's control. A cell a
+change replaced answers the version it is gone from, so the page knows what to wait for; a refusal says why. A stream
+ends when the server stops, rather than holding the stop up, when the page goes away, so the notebook it showed can
+close, and when a person closes the notebook without saving it. The server does not save a notebook under another name: a page names a notebook by its file, and a name
+changed under the pages that show it would send their clicks to another notebook.
 
 ## Decisions
 

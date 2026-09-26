@@ -22,6 +22,12 @@ public readonly record struct ServeOptions(string Path, int Port, bool OpenBrows
           --help              say this
         """;
 
+    /// <summary>
+    /// How long a notebook no page has shown stays open, when nothing runs in it and nothing in it is unsaved: longer
+    /// than a page takes to load again. A minute, unless an application that builds the server says otherwise.
+    /// </summary>
+    public TimeSpan Grace { get; init; } = TimeSpan.FromMinutes(1);
+
     /// <summary>Reads a command line.</summary>
     /// <param name="args">The command line's words.</param>
     /// <param name="workingDirectory">The folder the tool runs in, which a path is read from.</param>
