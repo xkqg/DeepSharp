@@ -28,8 +28,9 @@ public sealed partial class NotebookEndpointTests
         using var snapshot = JsonDocument.Parse(await served.Client.GetStringAsync("/api/notebooks/titanic.verso", TestContext.Current.CancellationToken));
         var layout = snapshot.RootElement.GetProperty("layout");
 
-        Assert.Contains(new HostedKind(StepCellType.StepType, StepKernel.Language, "Pipeline step"), kinds!);
-        Assert.Contains(new HostedKind("code", "csharp", "C# (Roslyn)"), kinds!);
+        Assert.Contains(new HostedKind(StepCellType.StepType, StepKernel.Language, "Pipeline step", Editable: true), kinds!);
+        Assert.Contains(new HostedKind("code", "csharp", "C# (Roslyn)", Editable: true), kinds!);
+        Assert.Contains(new HostedKind("parameters", null, "Parameters", Editable: false), kinds!);
         Assert.Equal("notebook", layout.GetProperty("id").GetString());
         Assert.Equal(255, layout.GetProperty("allows").GetInt32());
     }

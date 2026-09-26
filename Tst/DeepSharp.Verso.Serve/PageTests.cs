@@ -24,7 +24,7 @@ namespace DeepSharp.Tests.Serve;
 /// notebook again when its stream comes back. Its toolbar downloads what a button hands over, its panel changes a field
 /// through its part, and it saves.
 /// </summary>
-public sealed class PageTests(Browsers browsers) : IClassFixture<Browsers>, IDisposable
+public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browsers>, IDisposable
 {
     private const string Token = "00112233445566778899aabbccddeeff";
 

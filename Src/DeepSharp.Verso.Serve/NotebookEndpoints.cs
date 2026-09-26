@@ -52,8 +52,8 @@ internal static class NotebookEndpoints
         // A cell added after the one the page names, or at the end when it names none; it starts empty.
         notebooks.MapPost("/{name}/cells", (string name, Adding adding, HttpContext context) => WithAsync(name, context, async host =>
             Results.Ok(adding.After is { } after
-                ? await host.InsertAsync(after, new HostedKind(adding.Type, adding.Language, adding.Type))
-                : await host.AddAsync(new HostedKind(adding.Type, adding.Language, adding.Type)))));
+                ? await host.InsertAsync(after, KindOf(adding.Type, adding.Language))
+                : await host.AddAsync(KindOf(adding.Type, adding.Language)))));
         notebooks.MapPost("/{name}/cells/{cell:guid}/remove", (string name, Guid cell, HttpContext context) => WithAsync(name, context, async host =>
         {
             await host.RemoveAsync(cell);
@@ -83,7 +83,7 @@ internal static class NotebookEndpoints
         notebooks.MapPost(
             "/{name}/cells/{cell:guid}/kind",
             (string name, Guid cell, Kind kind, HttpContext context) => WithAsync(name, context, async host =>
-                Results.Ok(await host.ChangeKindAsync(cell, new HostedKind(kind.Type, kind.Language, kind.Type)))));
+                Results.Ok(await host.ChangeKindAsync(cell, KindOf(kind.Type, kind.Language)))));
         notebooks.MapPost(
             "/{name}/cells/{cell:guid}/completions",
             (string name, Guid cell, Asking asking, HttpContext context) => WithAsync(name, context, async host =>
@@ -155,6 +155,9 @@ internal static class NotebookEndpoints
 
         return Results.Created($"/api/notebooks/{Uri.EscapeDataString(naming.Name)}", new { name = naming.Name });
     }
+
+    // A kind as a page names it, by its type and language: the host finds it among the notebook's kinds by those alone.
+    private static HostedKind KindOf(string type, string? language) => new(type, language, type, Editable: true);
 
     // Something asked of a notebook the server serves, and what came of it.
     private static async Task<IResult> WithAsync(string name, HttpContext context, Func<NotebookHost, Task<IResult>> asked)

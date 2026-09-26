@@ -78,12 +78,14 @@ public sealed class AuthoringTests : IDisposable
 
         Assert.Equal(
             [
-                new HostedKind("code", "csharp", "C# (Roslyn)"),
-                new HostedKind("markdown", null, "Markdown"),
-                new HostedKind(StepCellType.StepType, StepKernel.Language, "Pipeline step"),
-                new HostedKind("html", "html", "HTML"),
-                new HostedKind("mermaid", "mermaid", "Mermaid"),
-                new HostedKind("parameters", null, "Parameters"),
+                new HostedKind("code", "csharp", "C# (Roslyn)", Editable: true),
+                new HostedKind("markdown", null, "Markdown", Editable: true),
+                new HostedKind(StepCellType.StepType, StepKernel.Language, "Pipeline step", Editable: true),
+                new HostedKind("html", "html", "HTML", Editable: true),
+                new HostedKind("mermaid", "mermaid", "Mermaid", Editable: true),
+
+                // The parameters form is drawn from the notebook's parameters, and nobody writes its text.
+                new HostedKind("parameters", null, "Parameters", Editable: false),
             ],
             host.Kinds);
     }
@@ -205,7 +207,7 @@ public sealed class AuthoringTests : IDisposable
     {
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
-        var withheld = new HostedKind("code", StepKernel.Language, "Pipeline step");
+        var withheld = new HostedKind("code", StepKernel.Language, "Pipeline step", Editable: true);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => host.AddAsync(withheld));
         await Assert.ThrowsAsync<InvalidOperationException>(() => host.ChangeKindAsync(host.Cells[0].Id, withheld));

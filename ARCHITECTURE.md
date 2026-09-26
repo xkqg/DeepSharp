@@ -1076,6 +1076,17 @@ these promises; its script is not counted in the coverage, which stays C#'s, and
 reads the C#. The server does not save a notebook under another name: a page names a notebook by its file, and a name
 changed under the pages that show it would send their clicks to another notebook.
 
+The page writes a notebook as Verso's editor does. Under the last cell is a button for every kind a cell can be added
+as, and the same row opens under the selected cell, so a cell goes after it; the new cell is selected with its text
+open. A cell's bar changes its kind through a list of the kinds, moves it past the neighbour it is drawn beside, and
+deletes it — after asking, which Verso's editor does not, because a delete takes the cell away from every page that
+shows the notebook. Each is offered only where the notebook's layout allows it, read from every version, so the
+dashboard offers running and nothing else, and a cell's text cannot be written there. A cell shown rendered — Markdown,
+Mermaid, HTML — shows its text while it has none, has no output, or is selected, as Verso's editor decides; a kind
+nobody writes, the parameters form, shows none. A change asked for while a cell runs says it waits for the run, and a
+refusal is said in the server's own words, a cell another page took away among them. A folder is listed, even when it
+holds one notebook, with a way to make a new one; a server beside one notebook opens it at once.
+
 ## Decisions
 
 ### A tensor knows nothing about arithmetic

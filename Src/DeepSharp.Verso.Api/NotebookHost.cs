@@ -785,11 +785,11 @@ public sealed class NotebookHost
     [
         .. extensions.GetKernels()
             .Where(kernel => !Same(kernel.LanguageId, StepKernel.Language))
-            .Select(kernel => new HostedKind("code", kernel.LanguageId, kernel.DisplayName)),
+            .Select(kernel => new HostedKind("code", kernel.LanguageId, kernel.DisplayName, Editable: true)),
         .. extensions.GetCellTypes()
             .Where(type => !Same(type.CellTypeId, "code"))
             .OrderBy(type => Same(type.CellTypeId, "markdown") ? 0 : 1)
-            .Select(type => new HostedKind(type.CellTypeId, type.Kernel?.LanguageId, type.DisplayName)),
+            .Select(type => new HostedKind(type.CellTypeId, type.Kernel?.LanguageId, type.DisplayName, type.IsEditable)),
     ];
 
     private static bool Same(string? one, string? other) => string.Equals(one, other, StringComparison.OrdinalIgnoreCase);

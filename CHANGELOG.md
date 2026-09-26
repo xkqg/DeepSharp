@@ -144,7 +144,8 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   block drew take their turn one at a time, in the order they came; typing or running a cell a change before it
   rewrote is refused, while a click from its card still reaches the part, which knows the block it became, and what a
   part answers a click with is what the cell shows next. A cell is added after another or at the end, of any kind the
-  engine has — code in a language it runs, Markdown, a pipeline block and the rest — and starts empty; it is taken
+  engine has — code in a language it runs, Markdown, a pipeline block and the rest, each saying whether a person writes
+  its text — and starts empty; it is taken
   away, moved past the neighbour it passes, or turned into another kind in one step, keeping its text. Each goes
   through the port the notebook's layout guards, so a layout that does not allow it refuses it, typing included, and
   every version says which layout the notebook is shown in and what it allows. As a cell's text is typed, its kernel
@@ -187,7 +188,11 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   there too; a file a button hands over arrives as a download in the page that pressed it, under its own name, and
   nothing is written beside the notebook. The page draws the notebook as Verso's editors draw one and sends what a
   person does the way Verso's own router means to: a button on its click, a box or a select on its change, never on a
-  key, one at a time, the typing first; a dropped stream reconnects and reads the whole notebook again. It carries a
+  key, one at a time, the typing first; a dropped stream reconnects and reads the whole notebook again. A cell is added
+  after another or at the end, of any kind the notebook has, taken away once the person says yes, moved or turned into
+  another kind, each only where the notebook's layout allows it; a cell shown rendered shows its text while it is
+  selected, as in Verso's editor; a change asked for while a cell runs says it waits; a refusal is said in the server's
+  own words; and a folder's list, shown even when it holds one notebook, makes a new one. It carries a
   build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8 is gone.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.

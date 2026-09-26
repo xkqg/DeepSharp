@@ -28,7 +28,8 @@
   #status { color: var(--quiet); }
   #status.wrong { color: var(--wrong); }
   .layout { display: flex; align-items: flex-start; }
-  main { flex: 1; min-width: 0; padding: 1rem; display: flex; flex-direction: column; gap: .75rem; }
+  .column { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  main { padding: 1rem; display: flex; flex-direction: column; gap: .75rem; }
   aside#panel { width: 22rem; max-width: 40vw; position: sticky; top: 3rem; max-height: calc(100vh - 3rem); overflow: auto; padding: 1rem; border-left: 1px solid var(--line); }
   aside#panel:empty { display: none; }
   aside#panel h3 { font-size: .95rem; margin: .75rem 0 .25rem; }
@@ -39,6 +40,16 @@
   section.cell.running { border-color: var(--run); }
   .cell-bar { display: flex; gap: .4rem; align-items: center; padding: .3rem .5rem; border-bottom: 1px solid var(--line); cursor: pointer; }
   .cell-bar .kind { color: var(--quiet); font-size: .85em; }
+  .cell-bar select.kind { font: inherit; font-size: .85em; color: inherit; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; }
+  .cell-bar button.delete:hover:not(:disabled) { border-color: var(--wrong); color: var(--wrong); }
+  .insert-row, .add-row { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
+  .insert-row { display: none; padding: .3rem .5rem; border-top: 1px dashed var(--line); }
+  section.cell.selected .insert-row { display: flex; }
+  section.cell:last-of-type .insert-row { display: none; }
+  section.cell:first-of-type .cell-bar button.up, section.cell:last-of-type .cell-bar button.down { visibility: hidden; }
+  .add-row { padding: 0 1rem 1rem; }
+  .add-row[hidden] { display: none; }
+  textarea.source[readonly] { color: var(--quiet); }
   .cell-bar .status { margin-left: auto; color: var(--quiet); font-size: .85em; }
   section.cell.running .cell-bar .status::before { content: "running… "; color: var(--run); }
   textarea.source { display: block; width: 100%; border: 0; border-bottom: 1px solid var(--line); padding: .5rem; font: 13px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; background: transparent; color: inherit; resize: vertical; }
@@ -51,6 +62,8 @@
   #notebooks { list-style: none; padding: 0; margin: 2rem auto; max-width: 40rem; }
   #notebooks li { padding: .4rem 0; border-bottom: 1px solid var(--line); }
   #notebooks a { color: var(--accent); text-decoration: none; }
+  #new { display: flex; gap: .5rem; max-width: 40rem; margin: 0 auto; }
+  #new input { flex: 1; font: inherit; }
 </style>
 </head>
 <body>
@@ -65,7 +78,10 @@
   <button id="close" hidden title="Close the notebook without saving it">Close</button>
 </header>
 <div class="layout">
-  <main id="notebook"></main>
+  <div class="column">
+    <main id="notebook"></main>
+    <div id="adding" class="add-row" hidden></div>
+  </div>
   <aside id="panel" aria-label="Properties"></aside>
 </div>
 <script>
@@ -87,12 +103,22 @@
   const closeButton = document.getElementById('close');
   const exportMenu = document.getElementById('export');
   const toolbar = document.getElementById('toolbar');
+  const adding = document.getElementById('adding');
 
   // What a toolbar button's place and a panel field's kind are called in the server's answers.
   const Place = { Main: 0, Cell: 1, Menu: 2, Export: 3 };
   const Kind = { Text: 0, Number: 1, Toggle: 2, Select: 3, Several: 4, Colour: 5, Words: 6 };
 
-  const state = { name: null, cells: new Map(), running: null, selected: null, buttons: [] };
+  // What the notebook's layout lets a person do to its cells, as the server's versions say it.
+  const Allows = { Insert: 1, Delete: 2, Reorder: 4, Edit: 8, Execute: 32 };
+
+  const state = { name: null, cells: new Map(), running: null, selected: null, buttons: [], kinds: [], allows: 255, focus: null };
+
+  const allowed = flag => (state.allows & flag) === flag;
+
+  // The kinds a cell can be, as the notebook lists them; a cell of a kind it does not list is written as it is.
+  const kindKey = (type, language) => `${type}|${language ?? ''}`;
+  const kindOf = cell => state.kinds.find(kind => kindKey(kind.type, kind.language) === kindKey(cell.type, cell.language));
 
   function say(message, wrong = false) {
     statusLine.textContent = message;
@@ -111,10 +137,6 @@
     }
 
     const response = await fetch(path, init);
-
-    if (response.status === 409) {
-      throw new Error('A change before this one rewrote that cell; it is drawn again as it stands.');
-    }
 
     if (!response.ok) {
       let message = `${response.status} ${response.statusText}`;
@@ -136,8 +158,24 @@
   // One send at a time, in the order they came: each waits for the one before it.
   let chain = Promise.resolve();
 
+  const Waiting = 'Waits for the run under way to end…';
+
   function enqueue(work) {
-    const next = chain.then(work).catch(error => say(error.message, true));
+    // A change asked for while a cell runs is made once the run ends, and says so meanwhile.
+    const waits = state.running !== null;
+
+    if (waits) {
+      say(Waiting);
+    }
+
+    const next = chain
+      .then(work)
+      .then(() => {
+        if (waits && statusLine.textContent === Waiting) {
+          say('');
+        }
+      })
+      .catch(error => say(error.message, true));
 
     chain = next;
 
@@ -160,9 +198,10 @@
   // ---- The notebooks of a folder --------------------------------------------------------------------------------
 
   async function list() {
-    const names = await json('/api/notebooks');
+    const [names, served] = await Promise.all([json('/api/notebooks'), json('/api/served')]);
 
-    if (names.length === 1) {
+    // A server beside one notebook shows it at once; a folder is listed even when it holds one, so a new one can be made.
+    if (!served.folder && names.length === 1) {
       location.search = `?notebook=${encodeURIComponent(names[0])}`;
 
       return;
@@ -182,18 +221,54 @@
       items.append(item);
     }
 
-    main.replaceChildren(items);
-    say(names.length === 0 ? 'There is no notebook here.' : '');
+    main.replaceChildren(items, ...(served.folder ? [newForm()] : []));
+    say(names.length === 0 ? 'There is no notebook here yet.' : '');
+  }
+
+  // A new notebook in the folder served, under the name of a .verso file; the server says why a name will not do.
+  function newForm() {
+    const form = document.createElement('form');
+    const name = document.createElement('input');
+    const make = document.createElement('button');
+
+    form.id = 'new';
+    name.name = 'name';
+    name.placeholder = 'new.verso';
+    name.required = true;
+    make.type = 'submit';
+    make.textContent = 'New notebook';
+    form.append(name, make);
+    form.addEventListener('submit', event => {
+      event.preventDefault();
+
+      const named = name.value.trim();
+
+      enqueue(async () => {
+        await api('/api/notebooks', { method: 'POST', body: { name: named } });
+        location.search = `?notebook=${encodeURIComponent(named)}`;
+      });
+    });
+
+    return form;
   }
 
   // ---- A notebook ------------------------------------------------------------------------------------------------
 
-  function open(name) {
+  async function open(name) {
     state.name = name;
     document.title = `${name} — DeepSharp`;
     document.getElementById('notebook-name').textContent = name;
     saveButton.hidden = false;
     closeButton.hidden = false;
+
+    // The kinds a cell can be, before the first cell is drawn: they say which cells a person writes.
+    try {
+      state.kinds = await json(notebookPath('/kinds'));
+    } catch (error) {
+      say(error.message, true);
+
+      return;
+    }
 
     const stream = new EventSource(notebookPath('/updates'));
 
@@ -207,7 +282,9 @@
 
   function drawAll(version) {
     state.cells.clear();
+    state.allows = version.layout?.allows ?? 255;
     main.replaceChildren();
+    drawAdding();
 
     for (const cell of version.cells) {
       state.cells.set(cell.id, cell);
@@ -235,8 +312,50 @@
       }
     }
 
+    layoutIs(change.layout);
     showRunning(change.running);
     refreshSoon();
+  }
+
+  // A layout switched while the page shows the notebook: every cell offers again what the new one allows.
+  function layoutIs(layout) {
+    const allows = layout?.allows ?? 255;
+
+    if (allows === state.allows) {
+      return;
+    }
+
+    state.allows = allows;
+    drawAdding();
+
+    for (const section of main.querySelectorAll('section.cell')) {
+      const cell = state.cells.get(section.dataset.cellId);
+
+      if (cell) {
+        fill(section, cell);
+      }
+    }
+  }
+
+  // The row under the last cell, a button for every kind a cell can be added as, where the layout lets one be added.
+  function drawAdding() {
+    adding.hidden = !state.name || !allowed(Allows.Insert);
+    adding.replaceChildren(...(adding.hidden ? [] : state.kinds.map(kind => kindButton(kind, `+ ${kind.name}`, () => addCell(null, kind)))));
+  }
+
+  function kindButton(kind, label, pressed) {
+    const button = document.createElement('button');
+
+    button.type = 'button';
+    button.dataset.type = kind.type;
+    button.dataset.language = kind.language ?? '';
+    button.textContent = label;
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      pressed();
+    });
+
+    return button;
   }
 
   const sectionOf = id => main.querySelector(`section.cell[data-cell-id="${CSS.escape(id)}"]`);
@@ -293,6 +412,7 @@
     let bar = section.querySelector('.cell-bar');
     let source = section.querySelector('textarea.source');
     let outputs = section.querySelector('.outputs');
+    let inserting = section.querySelector('.insert-row');
 
     if (!bar) {
       bar = document.createElement('div');
@@ -302,11 +422,16 @@
       source.spellcheck = false;
       outputs = document.createElement('div');
       outputs.className = 'outputs';
-      section.replaceChildren(bar, source, outputs);
+      inserting = document.createElement('div');
+      inserting.className = 'insert-row';
+      section.replaceChildren(bar, source, outputs, inserting);
       listenTo(section, source);
     }
 
     drawBar(bar, cell);
+
+    // Between this cell and the next, for the cell selected: a button for every kind a cell can be added as.
+    inserting.replaceChildren(...(allowed(Allows.Insert) ? state.kinds.map(kind => kindButton(kind, `+ ${kind.name}`, () => addCell(cell.id, kind))) : []));
 
     // Text the person is typing is theirs until it is sent.
     if (!typed.has(cell.id) && source.value !== cell.source) {
@@ -314,10 +439,20 @@
     }
 
     source.rows = Math.min(20, Math.max(2, cell.source.split('\n').length));
+    source.readOnly = !allowed(Allows.Edit);
 
-    const shownRendered = cell.type === 'markdown' || cell.type === 'parameters' || cell.type === 'mermaid' || cell.type === 'html';
+    // As Verso's editors show a cell: a kind nobody writes shows no text; one shown rendered shows its text only while
+    // it has none, has no output, or is selected.
+    const written = kindOf(cell)?.editable ?? true;
+    const rendered = ['markdown', 'mermaid', 'html'].includes(cell.type)
+      && cell.outputs.length > 0 && cell.source.trim() !== '' && state.selected !== cell.id;
 
-    source.hidden = metadata(cell, 'verso:ui.inputCollapsed') === true || (shownRendered && !section.classList.contains('editing'));
+    source.hidden = !written || metadata(cell, 'verso:ui.inputCollapsed') === true || rendered;
+
+    if (state.focus === cell.id && !source.hidden) {
+      state.focus = null;
+      requestAnimationFrame(() => source.focus());
+    }
 
     const visibility = metadata(cell, 'verso:ui.outputVisibility');
 
@@ -330,28 +465,84 @@
   }
 
   function drawBar(bar, cell) {
-    const run = document.createElement('button');
+    const drawn = [];
 
-    run.className = 'run';
-    run.type = 'button';
-    run.title = 'Run the cell (Shift+Enter)';
-    run.textContent = '▶';
-    run.addEventListener('click', event => {
-      event.stopPropagation();
-      runCell(cell.id);
-    });
+    if (allowed(Allows.Execute)) {
+      drawn.push(barButton('run', '▶', 'Run the cell (Shift+Enter)', () => runCell(cell.id)));
+    }
 
-    const kind = document.createElement('span');
+    drawn.push(allowed(Allows.Edit) ? kindSelect(cell) : kindName(cell));
+    drawn.push(...state.buttons.filter(button => button.place === Place.Cell).map(button => drawButton(button, [cell.id])));
 
-    kind.className = 'kind';
-    kind.textContent = cell.language ?? cell.type;
-
-    const buttons = state.buttons.filter(button => button.place === Place.Cell).map(button => drawButton(button, [cell.id]));
     const status = document.createElement('span');
 
     status.className = 'status';
     status.textContent = describeRun(cell);
-    bar.replaceChildren(run, kind, ...buttons, status);
+    drawn.push(status);
+
+    // As Verso's editors draw them: up for any but the first, down for any but the last, and delete.
+    if (allowed(Allows.Reorder)) {
+      drawn.push(barButton('up', '▲', 'Move the cell up, past the cell above it', () => moveCell(cell.id, true)));
+      drawn.push(barButton('down', '▼', 'Move the cell down, past the cell below it', () => moveCell(cell.id, false)));
+    }
+
+    if (allowed(Allows.Delete)) {
+      drawn.push(barButton('delete', '✕', 'Delete the cell', () => removeCell(cell.id)));
+    }
+
+    bar.replaceChildren(...drawn);
+  }
+
+  function barButton(name, mark, title, pressed) {
+    const button = document.createElement('button');
+
+    button.className = name;
+    button.type = 'button';
+    button.title = title;
+    button.textContent = mark;
+    button.addEventListener('click', event => {
+      event.stopPropagation();
+      pressed();
+    });
+
+    return button;
+  }
+
+  function kindName(cell) {
+    const kind = document.createElement('span');
+
+    kind.className = 'kind';
+    kind.textContent = kindOf(cell)?.name ?? cell.language ?? cell.type;
+
+    return kind;
+  }
+
+  // The cell's kind, and every kind it can be turned into; a kind the notebook does not list is shown as it is.
+  function kindSelect(cell) {
+    const select = document.createElement('select');
+    const current = kindKey(cell.type, cell.language);
+
+    select.className = 'kind';
+    select.title = 'The kind of cell this is';
+    select.append(...state.kinds.map(kind => new Option(kind.name, kindKey(kind.type, kind.language), false, kindKey(kind.type, kind.language) === current)));
+
+    if (!kindOf(cell)) {
+      const unlisted = new Option(cell.language ? `${cell.type} (${cell.language})` : cell.type, current, true, true);
+
+      unlisted.disabled = true;
+      select.prepend(unlisted);
+    }
+
+    select.addEventListener('click', event => event.stopPropagation());
+    select.addEventListener('change', () => {
+      const kind = state.kinds.find(each => kindKey(each.type, each.language) === select.value);
+
+      if (kind) {
+        changeKind(cell.id, kind);
+      }
+    });
+
+    return select;
   }
 
   function describeRun(cell) {
@@ -423,8 +614,8 @@
     source.addEventListener('blur', () => {
       flushTyping();
 
-      if (section.classList.contains('editing')) {
-        section.classList.remove('editing');
+      // A cell shown rendered is rendered again from what was written into it.
+      if (['markdown', 'mermaid', 'html'].includes(state.cells.get(id())?.type) && allowed(Allows.Execute)) {
         runCell(id());
       }
     });
@@ -435,14 +626,13 @@
       }
     });
 
-    // A cell shown rendered is written in by opening its text.
+    // A cell shown rendered is written in by selecting it, which shows its text.
     section.querySelector('.outputs').addEventListener('dblclick', () => {
       const cell = state.cells.get(id());
 
       if (cell && ['markdown', 'mermaid', 'html'].includes(cell.type)) {
-        section.classList.add('editing');
-        source.hidden = false;
-        source.focus();
+        state.focus = cell.id;
+        select(cell.id);
       }
     });
     section.querySelector('.cell-bar').addEventListener('click', () => select(id()));
@@ -451,6 +641,47 @@
   function runCell(id) {
     flushTyping();
     enqueue(() => api(notebookPath(`/cells/${id}/run`), { method: 'POST' }));
+  }
+
+  // ---- Writing the notebook: a cell added, taken away, moved or turned into another kind -------------------------
+
+  // A cell added after another, or at the end with none; it is selected, with its text open, once it is drawn.
+  function addCell(after, kind) {
+    flushTyping();
+    enqueue(async () => {
+      const cell = await json(notebookPath('/cells'), { method: 'POST', body: { after, type: kind.type, language: kind.language } });
+
+      state.focus = cell.id;
+      select(cell.id);
+    });
+  }
+
+  // A delete takes the cell out of the notebook for every page that shows it, so it is asked first.
+  function removeCell(id) {
+    if (!confirm('Delete this cell? It is taken out of the notebook, for every page that shows it.')) {
+      return;
+    }
+
+    flushTyping();
+    enqueue(() => api(notebookPath(`/cells/${id}/remove`), { method: 'POST' }));
+  }
+
+  // A move names the neighbour it passes, as this page shows the cells: another page may have moved them meanwhile.
+  function moveCell(id, up) {
+    const order = [...main.querySelectorAll('section.cell')].map(section => section.dataset.cellId);
+    const neighbour = order[order.indexOf(id) + (up ? -1 : 1)];
+
+    if (!neighbour) {
+      return;
+    }
+
+    flushTyping();
+    enqueue(() => api(notebookPath(`/cells/${id}/move`), { method: 'POST', body: up ? { before: neighbour } : { after: neighbour } }));
+  }
+
+  function changeKind(id, kind) {
+    flushTyping();
+    enqueue(() => api(notebookPath(`/cells/${id}/kind`), { method: 'POST', body: { type: kind.type, language: kind.language } }));
   }
 
   function showRunning(running) {
@@ -615,10 +846,16 @@
   // ---- The properties panel ----------------------------------------------------------------------------------------
 
   function select(id) {
+    const before = state.selected;
+
     state.selected = id;
 
     for (const section of main.querySelectorAll('section.cell')) {
-      section.classList.toggle('selected', section.dataset.cellId === id);
+      const cell = state.cells.get(section.dataset.cellId);
+
+      if (cell && (cell.id === before || cell.id === id)) {
+        fill(section, cell);
+      }
     }
 
     loadPanel(id);
