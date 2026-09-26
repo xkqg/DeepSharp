@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <PackageId>DeepSharp.Verso.Api</PackageId>
-    <Description>An application of your own that hosts DeepSharp's notebook: Verso's engine with the notebook's parts registered by the package itself, one open notebook for each file however many views show it, and its cells and what they show as plain values.</Description>
+    <Description>An application of your own that hosts DeepSharp's notebook: Verso's engine with the notebook's parts registered by the package itself, one open notebook for each file however many views show it, every view told what changed, and its cells and what they show as plain values.</Description>
     <PackageTags>deepsharp;pipeline;pdd;machine-learning;data-preparation;verso;notebook;hosting;dotnet</PackageTags>
   </PropertyGroup>
 
