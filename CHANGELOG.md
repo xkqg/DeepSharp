@@ -148,7 +148,10 @@ your own can host the notebook, too.
   while it runs reaches a view before the run ends, and a view that begins meanwhile is told which cell runs and since
   when. A view that reads slowly holds one change, the latest look at each cell, and never holds the notebook up. A
   request about a cell that is gone says from which version on. A file that repeats a cell's id gives each repeat an id
-  of its own, as Jupyter's own reader does.
+  of its own, as Jupyter's own reader does. Given a grace, a notebook closes by itself once no view has shown it for that
+  long, nothing runs or waits in it, and nothing in it differs from the file it was last saved to — what a block shows
+  never counts, as it is never saved; one with changes not yet saved stays open until it is saved. An application can
+  close one notebook at once, and what waited behind a close is refused.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

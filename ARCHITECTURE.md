@@ -979,6 +979,14 @@ itself. The outputs a run is adding to are copied whole or not at all, as the en
 while the list grows its storage fails, and one can hold a place the list has counted and not yet filled, so a cell
 caught that way keeps what it showed until the run says more. A file that repeats a cell's id gives each repeat an id
 of its own when it opens, as Jupyter's own reader repairs repeated ids, because nothing else tells such cells apart.
+Given a grace, the holder of the notebooks closes one by itself once no view has shown it for that long, nothing runs
+or waits in it, and nothing in it differs from the file it was last saved to — as Verso's own comparison of two
+notebooks finds it, told which cells never save what they show, so a block's view never counts. The views are the only
+count: a page that stops reading ends its view, and nothing else says a notebook is in use. A notebook with changes not
+yet saved stays open until it is saved, or until the application closes it, which it can do for one notebook at once;
+without a grace, notebooks stay open until they are closed, so an application that uses one without a view is never
+left holding a closed one. Whatever was asked of a notebook before it closed and waited behind the close is refused
+when its turn comes, since the engine it asked of is closed by then.
 
 ## Decisions
 

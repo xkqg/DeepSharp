@@ -6,6 +6,7 @@ using System.Runtime.CompilerServices;
 using DeepSharp.Verso.Notebooks;
 using Verso;
 using Verso.Abstractions;
+using Verso.Diffing;
 using Verso.Extensions;
 
 namespace DeepSharp.Verso.Api;
@@ -47,8 +48,16 @@ public sealed class NotebookHost
     private readonly Lane _turns = new();
     private Run? _running;
 
-    // Who views the notebook, and whether it is closed: one value, swapped whole, so no view begins as the notebook closes.
-    private Audience _audience = Audience.Open;
+    // Who views the notebook, since when nobody has, and whether it is closed: one value, swapped whole, so no view begins
+    // as the notebook closes.
+    private Audience _audience = Audience.Opened();
+
+    // How many things asked of the notebook are not done yet, the one under way among them.
+    private int _pending;
+
+    // The notebook as the file it was last saved to holds it, read the way it is read when it opens; what is unsaved is
+    // what differs from it.
+    private NotebookModel _saved;
 
     // The notebook as of its last version. Only whoever holds the notebook's turn publishes the next, so versions follow
     // one another without anything else to keep them in order.
@@ -63,11 +72,12 @@ public sealed class NotebookHost
     // Whether a turn that publishes what the engine said outside any turn is queued already.
     private int _telling;
 
-    private NotebookHost(string filePath, ExtensionHost extensions, Scaffold scaffold)
+    private NotebookHost(string filePath, ExtensionHost extensions, Scaffold scaffold, NotebookModel saved)
     {
         FilePath = filePath;
         Extensions = extensions;
         Scaffold = scaffold;
+        _saved = saved;
         _published = new(new NotebookVersion(0, [.. scaffold.Cells.Select(cell => cell.Hosted([]))], null));
         scaffold.OnCellExecuting += Began;
         scaffold.OnCellExecuted += Said;
@@ -145,9 +155,7 @@ public sealed class NotebookHost
         var view = new NotebookSubscription(this);
 
         // The view joins first and takes the notebook as it stands after, so no change falls between the two.
-        ImmutableInterlocked.Update(
-            ref _audience,
-            audience => audience.Closed ? throw new ObjectDisposedException(GetType().FullName) : new Audience(audience.Views.Add(view), closed: false));
+        ImmutableInterlocked.Update(ref _audience, audience => audience.Closed ? throw new ObjectDisposedException(GetType().FullName) : audience.With(view));
         view.Snapshot = Current;
 
         return view;
@@ -363,12 +371,8 @@ public sealed class NotebookHost
 
             var serializer = extensions.GetSerializers().FirstOrDefault(each => each.CanImport(filePath))
                 ?? throw new NotSupportedException($"No format Verso knows reads '{Path.GetFileName(filePath)}'.");
-            var notebook = await serializer.DeserializeAsync(content);
-
-            foreach (var guard in extensions.GetPostProcessors().Where(each => each.CanProcess(filePath, serializer.FormatId)).OrderBy(each => each.Priority))
-            {
-                notebook = await guard.PostDeserializeAsync(notebook, filePath);
-            }
+            var notebook = await ReadAsync(extensions, serializer, content, filePath);
+            var saved = await ReadAsync(extensions, serializer, content, filePath);
 
             // A file can repeat a cell's id — cells copied by hand, or by a tool — and nothing tells such cells apart by it,
             // so each repeat is given an id of its own, as Jupyter's own reader repairs repeated cell ids.
@@ -382,15 +386,11 @@ public sealed class NotebookHost
                 }
             }
 
-            // As Verso's own editors leave a notebook that names neither.
-            notebook.DefaultKernelId ??= CSharp;
-            notebook.ActiveLayout ??= LayoutDefaults.Reference;
-
             scaffold = new Scaffold(notebook, extensions, filePath);
             scaffold.InitializeSubsystems();
             await scaffold.RenderTransientCellsAsync(cancellationToken);
 
-            return new NotebookHost(filePath, extensions, scaffold);
+            return new NotebookHost(filePath, extensions, scaffold, saved);
         }
         catch
         {
@@ -407,8 +407,42 @@ public sealed class NotebookHost
 
     /// <summary>Ends a view: it is told nothing more.</summary>
     /// <param name="view">The view.</param>
-    internal void Leave(NotebookSubscription view) =>
-        ImmutableInterlocked.Update(ref _audience, audience => new Audience(audience.Views.Remove(view), audience.Closed));
+    internal void Leave(NotebookSubscription view) => ImmutableInterlocked.Update(ref _audience, audience => audience.Without(view));
+
+    /// <summary>
+    /// Closes the notebook, when no view has shown it for the grace, nothing runs or waits, and nothing in it differs from
+    /// the file it was last saved to; otherwise leaves it open.
+    /// </summary>
+    /// <param name="grace">How long no view must have shown it.</param>
+    /// <param name="forget">Lets its holder forget it, before its engine closes.</param>
+    /// <returns>Whether it is still open.</returns>
+    /// <remarks>
+    /// It takes its turn, so nothing runs while it looks. What differs from the file is what Verso's own comparison of two
+    /// notebooks finds, told which cells' outputs are never saved: what a block shows never counts.
+    /// </remarks>
+    internal Task<bool> StaysOpenAsync(TimeSpan grace, Action forget) => _turns.TakeTurnAsync(async () =>
+    {
+        if (Volatile.Read(ref _audience).Closed)
+        {
+            return false;
+        }
+
+        if (Volatile.Read(ref _pending) > 0 || IsUnsaved())
+        {
+            return true;
+        }
+
+        // One swap decides it, so a view that begins meanwhile keeps the notebook open.
+        if (!ImmutableInterlocked.Update(ref _audience, audience => audience.Views.IsEmpty && audience.AloneFor >= grace ? Audience.Gone : audience))
+        {
+            return true;
+        }
+
+        forget();
+        await CloseEngineAsync();
+
+        return false;
+    });
 
     /// <summary>
     /// Closes the notebook: every view ends and anything asked from now on is refused; what is under way finishes, and then
@@ -424,33 +458,74 @@ public sealed class NotebookHost
 
         await _turns.TakeTurnAsync(async () =>
         {
-            Scaffold.OnCellExecuting -= Began;
-            Scaffold.OnCellExecuted -= Said;
-            Scaffold.OnCellOutputUpdated -= Said;
-            await Scaffold.DisposeAsync();
-            await Extensions.DisposeAsync();
+            await CloseEngineAsync();
 
             return true;
         });
     }
 
+    // Reads a notebook the way Verso's own editors read one: through its format's serializer, past the guards that run
+    // after reading, and naming the kernel and the layout the editors name for a notebook that names neither.
+    private static async Task<NotebookModel> ReadAsync(ExtensionHost extensions, INotebookSerializer serializer, string content, string path)
+    {
+        var notebook = await serializer.DeserializeAsync(content);
+
+        foreach (var guard in extensions.GetPostProcessors().Where(each => each.CanProcess(path, serializer.FormatId)).OrderBy(each => each.Priority))
+        {
+            notebook = await guard.PostDeserializeAsync(notebook, path);
+        }
+
+        notebook.DefaultKernelId ??= CSharp;
+        notebook.ActiveLayout ??= LayoutDefaults.Reference;
+
+        return notebook;
+    }
+
+    private async Task CloseEngineAsync()
+    {
+        Scaffold.OnCellExecuting -= Began;
+        Scaffold.OnCellExecuted -= Said;
+        Scaffold.OnCellOutputUpdated -= Said;
+        await Scaffold.DisposeAsync();
+        await Extensions.DisposeAsync();
+    }
+
     // Everything done to the notebook: refused once it closes, and otherwise one at a time, in the order it came, each
-    // ending with the notebook published as it then stands.
+    // ending with the notebook published as it then stands. What was asked before a close and waited behind it is
+    // refused when its turn comes, since the engine it asked of is closed by then.
     private Task<T> TurnAsync<T>(Func<Task<T>> change)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _audience).Closed, this);
+        Interlocked.Increment(ref _pending);
 
         return _turns.TakeTurnAsync(async () =>
         {
             try
             {
-                return await change();
+                ObjectDisposedException.ThrowIf(Volatile.Read(ref _audience).Closed, this);
+
+                try
+                {
+                    return await change();
+                }
+                finally
+                {
+                    EndTurn();
+                }
             }
             finally
             {
-                EndTurn();
+                Interlocked.Decrement(ref _pending);
             }
         });
+    }
+
+    // What in the notebook differs from the file it was last saved to, as Verso's own comparison of two notebooks finds it.
+    private bool IsUnsaved()
+    {
+        var diff = NotebookDiffEngine.Compute(_saved, Scaffold.Notebook, FilePath, Extensions.GetCellTypes());
+
+        return diff.Summary.Added + diff.Summary.Removed + diff.Summary.Modified + diff.Summary.Moved + diff.MetadataChanges.Count > 0;
     }
 
     // The end of a turn: nothing runs any more, and the notebook is published as it stands.
@@ -545,9 +620,13 @@ public sealed class NotebookHost
         }
 
         var whole = Path.Join(Path.GetDirectoryName(path), $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+        var text = await serializer.SerializeAsync(notebook);
 
-        await File.WriteAllTextAsync(whole, await serializer.SerializeAsync(notebook));
+        await File.WriteAllTextAsync(whole, text);
         File.Move(whole, path, overwrite: true);
+
+        // From now on, what is unsaved is what differs from what this file holds.
+        _saved = await ReadAsync(Extensions, serializer, text, path);
     }
 
     // Runs a cell until it ends, or until Stop. A run is not asked to stop, since one that does not end does not listen
@@ -591,16 +670,29 @@ public sealed class NotebookHost
         }
     }
 
-    // Who views the notebook, and whether it is closed.
-    private sealed class Audience(ImmutableArray<NotebookSubscription> views, bool closed)
+    // Who views the notebook, since when nobody has, and whether it is closed.
+    private sealed class Audience(ImmutableArray<NotebookSubscription> views, bool closed, long aloneSince)
     {
-        public static readonly Audience Open = new([], closed: false);
-
-        public static readonly Audience Gone = new([], closed: true);
+        public static readonly Audience Gone = new([], closed: true, aloneSince: 0);
 
         public ImmutableArray<NotebookSubscription> Views => views;
 
         public bool Closed => closed;
+
+        // How long nobody has viewed the notebook; the first view begins after it opens.
+        public TimeSpan AloneFor => TimeSpan.FromMilliseconds(Environment.TickCount64 - aloneSince);
+
+        public static Audience Opened() => new([], closed: false, Environment.TickCount64);
+
+        public Audience With(NotebookSubscription view) => new(views.Add(view), closed, aloneSince);
+
+        // The view that leaves last leaves the notebook alone from now on.
+        public Audience Without(NotebookSubscription view)
+        {
+            var left = views.Remove(view);
+
+            return new Audience(left, closed, left.IsEmpty && !views.IsEmpty ? Environment.TickCount64 : aloneSince);
+        }
     }
 
     // A run under way, and the way to stop it.
