@@ -70,6 +70,12 @@ jobs:
       - name: Pack
         run: dotnet pack DeepSharp.slnx --no-build --configuration Release --output nupkgs
 
+      # What a person runs is the package, not the build every suite ran: deepsharp-serve is installed from the package
+      # about to be pushed and started in a folder of its own, in each way a person comes to run it.
+      - name: Start deepsharp-serve from its package
+        timeout-minutes: 10
+        run: bash tools/serve/check.sh nupkgs
+
       # The key this returns is valid for one hour, so it is asked for here rather than at the top of the job.
       # `user` is the nuget.org profile name that owns the trusted-publishing policy — not an email address,
       # and not a secret.
@@ -81,12 +87,15 @@ jobs:
 
       # Count first, then push, and check each push where it happens. A loop that pushes nothing exits just
       # as happily as one that pushed everything -- measured on the sister repository, where a green publish
-      # step and a missing package looked identical from the outside.
+      # step and a missing package looked identical from the outside. And more than none is not enough: every
+      # project in Src is a package, and a pack that skipped one -- the web SDK packs nothing unless told to --
+      # still pushes the others.
       - name: Push to NuGet
         run: |
           count=$(ls nupkgs/*.nupkg 2>/dev/null | wc -l)
-          echo "Pushing $count package(s)"
-          test "$count" -gt 0 || { echo "Pack reported success and produced no package"; exit 1; }
+          expected=$(ls Src/*/*.csproj | wc -l)
+          echo "Pushing $count package(s), one for each of the $expected projects in Src"
+          test "$count" -eq "$expected" || { echo "Pack made $count package(s) for $expected projects in Src"; exit 1; }
           for pkg in nupkgs/*.nupkg; do
             dotnet nuget push "$pkg" \
               --api-key "${{ steps.login.outputs.NUGET_API_KEY }}" \

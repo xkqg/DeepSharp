@@ -11,7 +11,7 @@ the same rules, a row is known by what it says rather than where it stands, and 
 wrong with it at once, each at its line and column. A model can be asked for more than one answer — the shares
 of a whole, labels, a value some rows on — and its predictions come back in their own units; and the columns a
 pipeline decides about can be changed from the notebook, saved beside it and taken over again. An application of
-your own can host the notebook, too.
+your own can host the notebook, too, and DeepSharp's own server shows it in a browser with nothing else installed.
 
 ### Upgrading from 0.2
 
@@ -124,7 +124,8 @@ your own can host the notebook, too.
   pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. Saving the
   notebook keeps the steps and leaves out what the blocks show, the data included. It is
   installed from Verso's Extensions panel and runs in Verso's VS Code extension, in the browser editor
-  `verso serve` opens, and inside an application that takes Verso's engine as a dependency.
+  `verso serve` opens, and inside an application that takes Verso's engine as a dependency, DeepSharp's own server
+  among them.
 
 - **`DeepSharp.Verso.Api` — the notebook in an application of your own.** It opens a notebook the way Verso's own
   editors open one — through the serializer for its format, past the guards that run after reading, with the cells
@@ -154,8 +155,9 @@ your own can host the notebook, too.
   never counts, as it is never saved; one with changes not yet saved stays open until it is saved. An application can
   close one notebook at once, and what waited behind a close is refused.
 
-- **`DeepSharp.Verso.Serve` — DeepSharp's own server.** The tool `deepsharp-serve`, run beside a notebook or a folder
-  of them, built on `DeepSharp.Verso.Api` and needing nothing else installed. The notebook it serves runs code, so it
+- **`DeepSharp.Verso.Serve` — DeepSharp's own server.** The tool `deepsharp-serve`, installed with
+  `dotnet tool install --global DeepSharp.Verso.Serve` and run beside a notebook or a folder of them, built on
+  `DeepSharp.Verso.Api` and needing nothing else installed. The notebook it serves runs code, so it
   listens on this computer alone, answers only a request carrying the token it said when it started — in the address,
   or in the cookie its first page sets — and only under a name of this computer, and serves its own page and nothing
   from the folder it runs in. It says where it is once, then nothing; `--port` names the port, `--no-browser` opens
@@ -166,7 +168,8 @@ your own can host the notebook, too.
   there too; a file a button hands over arrives as a download in the page that pressed it, under its own name, and
   nothing is written beside the notebook. The page draws the notebook as Verso's editors draw one and sends what a
   person does the way Verso's own router means to: a button on its click, a box or a select on its change, never on a
-  key, one at a time, the typing first; a dropped stream reconnects and reads the whole notebook again.
+  key, one at a time, the typing first; a dropped stream reconnects and reads the whole notebook again. It carries a
+  build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8 is gone.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

@@ -185,6 +185,83 @@ public class ReleaseContractTests
             .Select(file => Path.GetRelativePath(Root, file).Replace(Path.DirectorySeparatorChar, '/'));
 
     [Fact]
+    public void EveryProjectOnTheWebSdk_SaysItPacks()
+    {
+        // The web SDK packs nothing unless a project says it may, and says so only in a warning: the pack succeeds and
+        // writes no package, and the release goes out without it (measured on the server's own project).
+        var silent = Directory.EnumerateFiles(Path.Join(Root, "Src"), "*.csproj", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Select(file => XDocument.Load(file))
+            .Where(project => project.Root!.Attribute("Sdk")?.Value == "Microsoft.NET.Sdk.Web")
+            .Where(project => project.Descendants("IsPackable").All(packable => !string.Equals(packable.Value.Trim(), "true", StringComparison.OrdinalIgnoreCase)))
+            .Select(project => project.Descendants("PackageId").Single().Value)
+            .ToArray();
+
+        Assert.True(silent.Length == 0, $"On the web SDK without saying they pack: {string.Join(", ", silent)}");
+    }
+
+    [Fact]
+    public void TheSolution_HoldsEveryProjectAndEverySuite()
+    {
+        // The workflows pack and build the solution, so a project missing from it is neither packed nor tested, and
+        // nothing says so.
+        var solution = Read("DeepSharp.slnx");
+        var missing = Directory.EnumerateFiles(Path.Join(Root, "Src"), "*.csproj", SearchOption.AllDirectories)
+            .Concat(Directory.EnumerateFiles(Path.Join(Root, "Tst"), "*.Tests.csproj", SearchOption.AllDirectories))
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .Select(file => Path.GetRelativePath(Root, file).Replace(Path.DirectorySeparatorChar, '/'))
+            .Where(project => !solution.Contains($"Path=\"{project}\"", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.True(missing.Length == 0, $"Not in the solution: {string.Join(", ", missing)}");
+    }
+
+    [Fact]
+    public void ThePublishWorkflow_PushesAPackageForEveryProjectInSrc_OrNone()
+    {
+        // More than none is not enough: a pack that quietly skipped one project still pushes the others, and the
+        // release notes describe a package that is not on the feed.
+        string workflow = Read(".github", "workflows", "publish.yml");
+
+        Assert.Contains("expected=$(ls Src/*/*.csproj | wc -l)", workflow, StringComparison.Ordinal);
+        Assert.Contains("test \"$count\" -eq \"$expected\"", workflow, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("ci.yml")]
+    [InlineData("publish.yml")]
+    public void TheServer_IsStartedFromThePackageJustMade_BeforeAnyPackageLeavesTheRun(string file)
+    {
+        // What a person runs is the package, and a package can lack what the build had while every suite, which runs the
+        // build, stays green: a file left out, or the build for one runtime finding a dependency only on the other. So the
+        // package just made is installed and started, after the pack and before anything is pushed — and from those
+        // packages alone, since with the feed as a second source a version already published would install as well.
+        string workflow = Read(".github", "workflows", file);
+        var check = workflow.IndexOf("bash tools/serve/check.sh nupkgs", StringComparison.Ordinal);
+        var push = workflow.IndexOf("dotnet nuget push", StringComparison.Ordinal);
+
+        Assert.True(check > workflow.IndexOf("dotnet pack DeepSharp.slnx", StringComparison.Ordinal), $"{file} does not start the server from the package it made");
+        Assert.True(push < 0 || check < push, $"{file} pushes the packages before it starts the server from one");
+        Assert.Contains("dotnet tool install DeepSharp.Verso.Serve --tool-path \"$work/tool\" --source \"$packages\"", Read("tools", "serve", "check.sh"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryScriptBashRuns_IsCheckedOutWithTheLineEndingsBashReads()
+    {
+        // Git on Windows checks text out with a carriage return ending each line unless it is told otherwise. The bash that
+        // comes with Git forgives that (measured); bash on Linux reads the return as part of each command, so the script the
+        // workflows run would fail in WSL, or in a container handed a checkout made on Windows.
+        var scripts = Directory.EnumerateFiles(Path.Join(Root, "tools"), "*.sh", SearchOption.AllDirectories).ToArray();
+        var returns = scripts
+            .Where(script => File.ReadAllText(script).Contains('\r'))
+            .Select(script => Path.GetRelativePath(Root, script))
+            .ToArray();
+
+        Assert.NotEmpty(scripts);
+        Assert.True(returns.Length == 0, $"Checked out with carriage returns: {string.Join(", ", returns)}");
+    }
+
+    [Fact]
     public void EveryPackage_ShipsABuildForEachRuntimeAVersoSurfaceRuns()
     {
         // Verso's browser host stays on .NET 8 for as long as that runtime is installed, its VS Code host takes the

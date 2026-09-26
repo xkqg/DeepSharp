@@ -18,8 +18,8 @@ your data in, the layers, the training loop, the checkpoints and the pictures. A
 better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
-**0.3.0 is the tensors, the data half, and a notebook to see the data in and choose its columns.** What learns
-from them is next;
+**0.3.0 is the tensors, the data half, and a notebook to see the data in and choose its columns — in Verso, in an
+application of your own, or in your browser from DeepSharp's own server.** What learns from them is next;
 the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says in which order, and the
 [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release added.
 
@@ -67,11 +67,16 @@ takes a saved file over again, listing every change before it makes one and ever
 It also runs the whole pipeline and exports it as the same file the chain writes.
 
 Install it from Verso's Extensions panel. The same package runs in Verso's VS Code extension, in the browser
-editor `verso serve` opens, and inside an application of your own — the
-[Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook#where-it-runs) page says what each needs. Two more
-packages follow it: `DeepSharp.Verso.Api`, with which an application of your own hosts the notebook, and, to come,
-`DeepSharp.Verso.Serve`, DeepSharp's own server that shows it in a browser; the
-[roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says where they stand.
+editor `verso serve` opens, and inside an application of your own, through `DeepSharp.Verso.Api` — the
+[Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook#where-it-runs) page says what each needs. Or let
+DeepSharp's own server show it in your browser, with nothing else to install:
+
+```
+dotnet tool install --global DeepSharp.Verso.Serve
+deepsharp-serve titanic.verso
+```
+
+It listens on this computer alone and answers only the address it prints, token and all.
 
 A C# cell in the same notebook reads what the blocks declare, as text — it is there after "Show the data here" or
 the toolbar's run, and taken back whenever the blocks may no longer make it:
@@ -111,8 +116,8 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 | `DeepSharp.Pipelines` | The data half: readers, features, the split, gaps, scales, the answer in four kinds, the handover, and the column decisions saved on their own and taken over — saved as a file and replayed. |
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
-| `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block, and its columns chosen from the grid or a list and saved beside it. It runs in Verso's VS Code extension, in `verso serve` and in an application of your own. |
+| `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block, and its columns chosen from the grid or a list and saved beside it. It runs in Verso's VS Code extension, in `verso serve`, in DeepSharp's own server and in an application of your own. |
 | `DeepSharp.Verso.Api` | An application of your own hosting the notebook: one open notebook for each file, however many views show it, with the notebook's parts registered by the package itself — so a program published as a single file has them too. Typing, running, a click on a block's controls and the toolbar's buttons take their turn one at a time, a run that never ends can be stopped, a file a button hands over goes to whoever pressed it, the properties panel comes back field by field, the notebook saves as Verso's editors save it, every view is told what changed, version by version, a notebook no view shows can close by itself when nothing in it is unsaved, and the cells, and what they show, come back as plain values. |
-| `DeepSharp.Verso.Serve` | To come: DeepSharp's own server that shows the notebook in a browser, on Verso's engine and built on `DeepSharp.Verso.Api`, with nothing else to install. On the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap), not yet released. |
+| `DeepSharp.Verso.Serve` | DeepSharp's own server: `deepsharp-serve`, a .NET tool, shows a notebook or a folder of them in your browser, on Verso's engine and built on `DeepSharp.Verso.Api`, with nothing else to install. It listens on this computer alone and answers only the address it prints; its page draws the blocks as Verso's editors do, and a file a button hands over arrives as a download. |
 
 Runs on .NET 8 and .NET 10. MIT — see [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE).

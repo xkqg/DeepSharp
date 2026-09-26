@@ -1,0 +1,3 @@
+# bash on Linux reads a carriage return as part of the command, so a script it runs keeps the line endings it was written
+# with on every computer, whatever Git would check text out with there otherwise.
+*.sh text eol=lf

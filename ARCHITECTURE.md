@@ -907,7 +907,8 @@ a Jupyter file has been opened, so the refusal on the way in holds only for an i
 extensions folder. A test pins the order Verso opens things in, so a Verso that changes it is noticed.
 
 The same package runs wherever Verso does, and it is the same code in each: Verso's VS Code extension, the
-browser editor `verso serve` starts, and an application that takes Verso's engine as an ordinary dependency. They
+browser editor `verso serve` starts, and an application that takes Verso's engine as an ordinary dependency,
+DeepSharp's own server among them. They
 drive a part through the same interfaces and differ in what surrounds it — how the package is loaded, and who
 draws the output and passes a click on. What does differ is the runtime, and not the way one would guess: the
 VS Code host takes the newest .NET installed, while the browser host stays on .NET 8 for as long as .NET 8 is
@@ -929,9 +930,8 @@ The block's kernel answers Verso's question for the faults in a text, but no Ver
 completions and hover texts only. A fault is therefore shown where a block runs, on its card, each at its line.
 
 An application that embeds the engine can get the notebook's parts from Verso's own discovery, which reads every
-assembly beside the application that references Verso's abstractions; the notebook's own tests open it exactly
-so. A program published as a single file has no assemblies beside it, and discovery then finds none, without a
-word. `DeepSharp.Verso.Api` therefore registers the parts itself, before discovery runs — a part discovery meets
+assembly beside the application that references Verso's abstractions. A program published as a single file has no
+assemblies beside it, and discovery then finds none, without a word. `DeepSharp.Verso.Api` therefore registers the parts itself, before discovery runs — a part discovery meets
 again is passed over, while one registered after it would be refused as a second — and opens a notebook the way
 Verso's own editors do: through the serializer for its format, past the guards that run after reading, with the
 cells that are only ever shown rendered drawn. An extension a notebook asks for is refused rather than fetched. One
@@ -968,10 +968,11 @@ toolbar's buttons — Run, Export and the take-over — a context of its own; an
 the cell types, so what the blocks show stays out of the file. An application that only wants the pipeline reads each
 block with `StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write
 the file with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds
-the steps and no fit, because nothing ran them there. The drawing, the passing on and the toolbar's context are
-what `DeepSharp.Verso.Api` is named for, written once beside the notebook rather than by every application; it opens
-the notebook, passes a click on, gives the toolbar and the properties panel their context, saves the notebook, and tells
-every view of it what changed. Each change makes the notebook's next version, and a view is told the cells that came or
+the steps and no fit, because nothing ran them there. The passing on, the toolbar's context and the rest are what
+`DeepSharp.Verso.Api` is named for, written once beside the notebook rather than by every application: it opens the
+notebook, passes a click on, gives the toolbar and the properties panel their context, saves the notebook, and tells
+every view of it what changed. The drawing stays the application's own, since only the application knows what it draws
+with, and it is handed every cell and what the cell shows as plain values to draw from. Each change makes the notebook's next version, and a view is told the cells that came or
 changed, as they now stand, with every id in order whenever cells came, went or moved; a click that rewrites a block
 puts a new cell, under a new id, in the old one's place, since a cell is known by its id and by nothing else. The
 engine says nothing when a cell is cleared, inserted or taken away, nor when a form changes a block's text, so the host
@@ -1006,7 +1007,12 @@ served its folder answered a private file lying beside the notebook. It says whe
 really bound, and then nothing, because a C# cell takes the console over while it runs; a port already taken stops
 it before it says anything or opens a browser. It is packed as a .NET tool for .NET 8 and .NET 10 — told to pack at
 all, since the web SDK otherwise packs nothing and says so only in a warning — and told to keep starting on the newer
-runtime once .NET 8 is gone, as Verso's own command-line tool is. A notebook no page has shown for a minute, with
+runtime once .NET 8 is gone, as Verso's own command-line tool is. Before a package leaves a run of the workflows, the
+one just made is installed as a person installs it and started in a folder of its own — its newest build, its build
+for .NET 8 on .NET 8, and that build on the newest runtime — and asked what a browser would, because a package can lack
+what the build had while every suite, which runs the build, stays green: the build for .NET 8 carries two libraries of
+its own that the newer runtime has built in, and a package without one of them refused the stream on .NET 8 while its
+build for .NET 10 served it. A notebook no page has shown for a minute, with
 nothing running and nothing unsaved, closes. The notebooks it serves are the one it was started beside, or the files
 of its folder that Verso's engine says it reads — asked of the engine, so a format it learns is served without a word
 here — and a page names one by its file name alone: any other name, a path among them, is not found. A page keeps a
@@ -1030,7 +1036,8 @@ again (measured: six of twelve clauses failed, and none with the router the page
 time, in the order they came, and typing is sent before whatever came after it, so a click acts on the text as the
 person left it. A stream that drops reconnects by itself and begins with the whole notebook again. The address loses
 the token once the cookie carries it. The page is tested in a real browser against the real server, a test for each of
-these promises; its script is not counted in the coverage, which stays C#'s. The server does not save a notebook under another name: a page names a notebook by its file, and a name
+these promises; its script is not counted in the coverage, which stays C#'s, and the code scanning reads it as it
+reads the C#. The server does not save a notebook under another name: a page names a notebook by its file, and a name
 changed under the pages that show it would send their clicks to another notebook.
 
 ## Decisions

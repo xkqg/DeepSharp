@@ -65,3 +65,10 @@ jobs:
           name: nupkg
           path: nupkgs/*.nupkg
           if-no-files-found: error
+
+      # What a person runs is the package, not the build every suite ran: deepsharp-serve is installed from the package
+      # just made and started in a folder of its own, in each way a person comes to run it. After the upload, so a
+      # package this refuses can still be taken apart.
+      - name: Start deepsharp-serve from its package
+        timeout-minutes: 10
+        run: bash tools/serve/check.sh nupkgs
