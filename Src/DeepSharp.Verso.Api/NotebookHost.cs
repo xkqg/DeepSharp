@@ -1,6 +1,8 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Collections.Immutable;
+using System.Runtime.CompilerServices;
 using DeepSharp.Verso.Notebooks;
 using Verso;
 using Verso.Abstractions;
@@ -23,6 +25,11 @@ namespace DeepSharp.Verso.Api;
 /// one caller at a time and a change made while another is under way would act on blocks that are going away. A
 /// request about a cell a change before it rewrote or took away is refused with <see cref="CellGoneException"/>.
 /// </para>
+/// <para>
+/// Each change makes the next version of the notebook, and every view of it is told, cell by cell — whatever made the
+/// change, a click, a clear or a form, for none of which the engine says a word. What a cell shows while it runs is told
+/// as it comes. A view never holds the notebook up: one that reads slower than it changes is kept one change behind.
+/// </para>
 /// </remarks>
 public sealed class NotebookHost
 {
@@ -33,22 +40,48 @@ public sealed class NotebookHost
     // in two notebooks, or under two holders of notebooks — print into each other (measured). Each run takes its turn.
     private static readonly Lane CSharpRuns = new();
 
+    // How long what a run shows is gathered before it is published, as Verso's browser editor gathers a burst of output
+    // before it draws (32 ms in its ServerNotebookService), so a cell that shows a thousand things is not a thousand versions.
+    private static readonly TimeSpan Gathering = TimeSpan.FromMilliseconds(32);
+
     private readonly Lane _turns = new();
     private Run? _running;
-    private int _closed;
+
+    // Who views the notebook, and whether it is closed: one value, swapped whole, so no view begins as the notebook closes.
+    private Audience _audience = Audience.Open;
+
+    // The notebook as of its last version. Only whoever holds the notebook's turn publishes the next, so versions follow
+    // one another without anything else to keep them in order.
+    private StrongBox<NotebookVersion> _published;
+
+    // The run under way, as the engine last said one began; the end of every turn clears it.
+    private StrongBox<HostedRun>? _executing;
+
+    // Set when the engine says a cell began, ended or showed something; a run's turn waits on it to publish what it shows.
+    private TaskCompletionSource _said = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    // Whether a turn that publishes what the engine said outside any turn is queued already.
+    private int _telling;
 
     private NotebookHost(string filePath, ExtensionHost extensions, Scaffold scaffold)
     {
         FilePath = filePath;
         Extensions = extensions;
         Scaffold = scaffold;
+        _published = new(new NotebookVersion(0, [.. scaffold.Cells.Select(cell => cell.Hosted([]))], null));
+        scaffold.OnCellExecuting += Began;
+        scaffold.OnCellExecuted += Said;
+        scaffold.OnCellOutputUpdated += Said;
     }
 
     /// <summary>The file the notebook is saved in, as a full path.</summary>
     public string FilePath { get; private set; }
 
+    /// <summary>The notebook as of its last version: every cell in order, and the run under way.</summary>
+    public NotebookVersion Current => Volatile.Read(ref _published).Value;
+
     /// <summary>The notebook's cells as they stand, in order.</summary>
-    public IReadOnlyList<HostedCell> Cells => [.. Scaffold.Cells.Select(cell => cell.Hosted())];
+    public IReadOnlyList<HostedCell> Cells => Current.Cells;
 
     /// <summary>The engine's extensions: Verso's own and DeepSharp's.</summary>
     internal ExtensionHost Extensions { get; }
@@ -70,7 +103,7 @@ public sealed class NotebookHost
             Standing(cell);
             Scaffold.UpdateCellSource(cell, source);
 
-            return Task.FromResult(Standing(cell).Hosted());
+            return Task.FromResult(EndTurn().Cells.First(each => each.Id == cell));
         });
     }
 
@@ -90,7 +123,7 @@ public sealed class NotebookHost
             ? CSharpRuns.TakeTurnAsync(() => RunUntilStoppedAsync(() => Scaffold.ExecuteCellAsync(running.Id), running.Language))
             : RunUntilStoppedAsync(() => Scaffold.ExecuteCellAsync(running.Id), running.Language));
 
-        return running.Hosted();
+        return EndTurn().Cells.First(each => each.Id == cell);
     });
 
     /// <summary>
@@ -100,6 +133,25 @@ public sealed class NotebookHost
     /// background until the application does.
     /// </summary>
     public void Stop() => Volatile.Read(ref _running)?.Stop();
+
+    /// <summary>
+    /// Begins a view of the notebook: the notebook as it stands, then each change after it. It never waits for anything
+    /// done to the notebook, so a view that begins while a cell runs is told at once which cell runs, and since when.
+    /// </summary>
+    /// <returns>The view; disposing it ends it.</returns>
+    /// <exception cref="ObjectDisposedException">The notebook was closed.</exception>
+    public NotebookSubscription Subscribe()
+    {
+        var view = new NotebookSubscription(this);
+
+        // The view joins first and takes the notebook as it stands after, so no change falls between the two.
+        ImmutableInterlocked.Update(
+            ref _audience,
+            audience => audience.Closed ? throw new ObjectDisposedException(GetType().FullName) : new Audience(audience.Views.Add(view), closed: false));
+        view.Snapshot = Current;
+
+        return view;
+    }
 
     /// <summary>Hands a click on a control a cell drew to the part the control names.</summary>
     /// <param name="gesture">The click.</param>
@@ -318,6 +370,18 @@ public sealed class NotebookHost
                 notebook = await guard.PostDeserializeAsync(notebook, filePath);
             }
 
+            // A file can repeat a cell's id — cells copied by hand, or by a tool — and nothing tells such cells apart by it,
+            // so each repeat is given an id of its own, as Jupyter's own reader repairs repeated cell ids.
+            var ids = new HashSet<Guid>();
+
+            foreach (var cell in notebook.Cells)
+            {
+                if (!ids.Add(cell.Id))
+                {
+                    cell.Id = Guid.NewGuid();
+                }
+            }
+
             // As Verso's own editors leave a notebook that names neither.
             notebook.DefaultKernelId ??= CSharp;
             notebook.ActiveLayout ??= LayoutDefaults.Reference;
@@ -341,14 +405,28 @@ public sealed class NotebookHost
         }
     }
 
-    /// <summary>Closes the notebook once what is under way is done, refusing anything asked after; then its engine.</summary>
-    /// <returns>When both are closed.</returns>
+    /// <summary>Ends a view: it is told nothing more.</summary>
+    /// <param name="view">The view.</param>
+    internal void Leave(NotebookSubscription view) =>
+        ImmutableInterlocked.Update(ref _audience, audience => new Audience(audience.Views.Remove(view), audience.Closed));
+
+    /// <summary>
+    /// Closes the notebook: every view ends and anything asked from now on is refused; what is under way finishes, and then
+    /// the engine closes.
+    /// </summary>
+    /// <returns>When it is closed.</returns>
     internal async ValueTask CloseAsync()
     {
-        Interlocked.Exchange(ref _closed, 1);
+        foreach (var view in Interlocked.Exchange(ref _audience, Audience.Gone).Views)
+        {
+            view.End();
+        }
 
         await _turns.TakeTurnAsync(async () =>
         {
+            Scaffold.OnCellExecuting -= Began;
+            Scaffold.OnCellExecuted -= Said;
+            Scaffold.OnCellOutputUpdated -= Said;
             await Scaffold.DisposeAsync();
             await Extensions.DisposeAsync();
 
@@ -356,15 +434,100 @@ public sealed class NotebookHost
         });
     }
 
-    // Everything done to the notebook: refused once it closes, and otherwise one at a time, in the order it came.
+    // Everything done to the notebook: refused once it closes, and otherwise one at a time, in the order it came, each
+    // ending with the notebook published as it then stands.
     private Task<T> TurnAsync<T>(Func<Task<T>> change)
     {
-        ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed) != 0, this);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _audience).Closed, this);
 
-        return _turns.TakeTurnAsync(change);
+        return _turns.TakeTurnAsync(async () =>
+        {
+            try
+            {
+                return await change();
+            }
+            finally
+            {
+                EndTurn();
+            }
+        });
     }
 
-    private CellModel Standing(Guid cell) => Scaffold.GetCell(cell) ?? throw new CellGoneException(cell);
+    // The end of a turn: nothing runs any more, and the notebook is published as it stands.
+    private NotebookVersion EndTurn()
+    {
+        Volatile.Write(ref _executing, null);
+
+        return Publish();
+    }
+
+    // Publishes the notebook as it stands as the next version, unless it is the last one again: as the current version,
+    // and to every view, each told the cells that came or changed. A cell caught half written by a run keeps what it
+    // showed at the last version; the run's next word about it, or the end of its turn, publishes the rest.
+    private NotebookVersion Publish()
+    {
+        var last = Current;
+        var before = last.Cells.ToDictionary(cell => cell.Id);
+
+        HostedCell[] cells = [.. Scaffold.Cells.Select(cell => cell.Hosted(before.TryGetValue(cell.Id, out var was) ? was.Outputs : []))];
+        HostedCell[] changed = [.. cells.Where(cell => !before.TryGetValue(cell.Id, out var was) || was != cell)];
+        var order = cells.Select(cell => cell.Id).SequenceEqual(last.Cells.Select(cell => cell.Id)) ? null : cells.Select(cell => cell.Id).ToArray();
+        var running = Volatile.Read(ref _executing)?.Value;
+
+        if (order is null && changed.Length == 0 && running == last.Running)
+        {
+            return last;
+        }
+
+        var next = new NotebookVersion(last.Version + 1, cells, running);
+
+        Volatile.Write(ref _published, new StrongBox<NotebookVersion>(next));
+
+        foreach (var view in Volatile.Read(ref _audience).Views)
+        {
+            view.Offer(new NotebookChange(next.Version, order, changed, running));
+        }
+
+        return next;
+    }
+
+    // The engine says a cell began: it is the run under way, since now.
+    private void Began(Guid cell)
+    {
+        Volatile.Write(ref _executing, new StrongBox<HostedRun>(new HostedRun(cell, DateTimeOffset.UtcNow)));
+        Said(cell);
+    }
+
+    // The engine says a cell began, ended or showed something. It says so from inside the run, and the run waits for what
+    // it calls — a view doing its own work here held a click twice as long (measured) — so nothing is done here but
+    // asking for it to be published: a run's turn is woken to publish it, and when no turn to tell it is queued already,
+    // one is, for what the engine says outside any turn, such as a cell's background task showing more after its run.
+    private void Said(Guid cell)
+    {
+        Volatile.Read(ref _said).TrySetResult();
+
+        if (Interlocked.Exchange(ref _telling, 1) == 0)
+        {
+            _ = Task.Run(() => _turns.TakeTurnAsync(() =>
+            {
+                Volatile.Write(ref _telling, 0);
+
+                return Task.FromResult(Publish());
+            }));
+        }
+    }
+
+    // A fresh wait for the engine's next word.
+    private Task Listen()
+    {
+        var said = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        Volatile.Write(ref _said, said);
+
+        return said.Task;
+    }
+
+    private CellModel Standing(Guid cell) => Scaffold.GetCell(cell) ?? throw new CellGoneException(cell, Current.Version);
 
     private async Task SaveToAsync(string path)
     {
@@ -390,7 +553,8 @@ public sealed class NotebookHost
     // Runs a cell until it ends, or until Stop. A run is not asked to stop, since one that does not end does not listen
     // either (measured: a C# loop that awaits goes on with its token cancelled); a fresh kernel ends the turn, and the
     // run is left behind. Only the run under way can be stopped, so the slot holds one, and a Stop after it ended
-    // meets a run nobody waits for any more.
+    // meets a run nobody waits for any more. While it runs, what the engine says it shows is gathered for a moment and
+    // published, so a view sees it before the run ends.
     private async Task<bool> RunUntilStoppedAsync(Func<Task> start, string? kernel)
     {
         var run = new Run();
@@ -399,9 +563,18 @@ public sealed class NotebookHost
 
         try
         {
+            var said = Listen();
             var ran = start();
+            var ended = Task.WhenAny(ran, run.Stopped);
 
-            if (await Task.WhenAny(ran, run.Stopped) == ran)
+            while (await Task.WhenAny(ended, said) == said)
+            {
+                said = Listen();
+                await Task.WhenAny(ended, Task.Delay(Gathering));
+                Publish();
+            }
+
+            if (await ended == ran)
             {
                 await ran;
             }
@@ -416,6 +589,18 @@ public sealed class NotebookHost
         {
             Volatile.Write(ref _running, null);
         }
+    }
+
+    // Who views the notebook, and whether it is closed.
+    private sealed class Audience(ImmutableArray<NotebookSubscription> views, bool closed)
+    {
+        public static readonly Audience Open = new([], closed: false);
+
+        public static readonly Audience Gone = new([], closed: true);
+
+        public ImmutableArray<NotebookSubscription> Views => views;
+
+        public bool Closed => closed;
     }
 
     // A run under way, and the way to stop it.

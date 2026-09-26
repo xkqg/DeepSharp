@@ -140,7 +140,15 @@ your own can host the notebook, too.
   pressed it, and nothing is written beside the notebook. A cell's properties panel is a section from every part that
   has one for it, and a changed field is made by that part. A notebook is saved the way Verso's editors save it — what
   a block shows left out, written whole before it takes the file's place — and saved under another name it is that file
-  from then on, what DeepSharp names after it following; a name another open notebook holds is refused.
+  from then on, what DeepSharp names after it following; a name another open notebook holds is refused. Every view of a
+  notebook is told what changed: the notebook as it stands when the view begins, then each change after it, numbered —
+  the cells that came or changed as they now stand, and every id in order when cells came, went or moved, whatever made
+  the change, a clear and a form included, of which the engine says nothing. A cell carries what Verso's editors draw it
+  with: how it is shown, how many times it ran, how its last run ended and how long it took. What a C# cell displays
+  while it runs reaches a view before the run ends, and a view that begins meanwhile is told which cell runs and since
+  when. A view that reads slowly holds one change, the latest look at each cell, and never holds the notebook up. A
+  request about a cell that is gone says from which version on. A file that repeats a cell's id gives each repeat an id
+  of its own, as Jupyter's own reader does.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

@@ -963,8 +963,22 @@ block with `StepCatalog.ReadStep` and builds the declaration through its constru
 the file with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds
 the steps and no fit, because nothing ran them there. The drawing, the passing on and the toolbar's context are
 what `DeepSharp.Verso.Api` is named for, written once beside the notebook rather than by every application; it opens
-the notebook, passes a click on, gives the toolbar and the properties panel their context and saves the notebook today,
-and the news of what changed is still to come.
+the notebook, passes a click on, gives the toolbar and the properties panel their context, saves the notebook, and tells
+every view of it what changed. Each change makes the notebook's next version, and a view is told the cells that came or
+changed, as they now stand, with every id in order whenever cells came, went or moved; a click that rewrites a block
+puts a new cell, under a new id, in the old one's place, since a cell is known by its id and by nothing else. The
+engine says nothing when a cell is cleared, inserted or taken away, nor when a form changes a block's text, so the host
+does not pass on what the engine says: it compares the notebook with its last version at the end of everything done to
+it. What the engine does say — a cell began, ended or showed something — only wakes it to compare, because the engine
+says it from inside the run, and a view doing its own work there held a click twice as long. What a C# cell displays
+while it runs reaches a view before the run ends, gathered for a moment first, as Verso's browser editor gathers it;
+what it prints comes whole at the end, as the engine hands it over. A view that begins while a cell runs is told which
+cell runs and since when, so it can offer to stop it. A view never holds the notebook up: one that reads slower than
+the notebook changes is kept one change behind, the latest look at each cell, and never holds more than the notebook
+itself. The outputs a run is adding to are copied whole or not at all, as the engine copies them itself: a copy taken
+while the list grows its storage fails, and one can hold a place the list has counted and not yet filled, so a cell
+caught that way keeps what it showed until the run says more. A file that repeats a cell's id gives each repeat an id
+of its own when it opens, as Jupyter's own reader repairs repeated ids, because nothing else tells such cells apart.
 
 ## Decisions
 

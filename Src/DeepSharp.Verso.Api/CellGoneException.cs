@@ -9,12 +9,19 @@ namespace DeepSharp.Verso.Api;
 /// </summary>
 public sealed class CellGoneException : KeyNotFoundException
 {
-    /// <summary>Says which cell is gone.</summary>
+    /// <summary>Says which cell is gone, and from which version of the notebook on.</summary>
     /// <param name="cell">The cell's id.</param>
-    public CellGoneException(Guid cell)
-        : base($"The cell {cell} no longer stands in the notebook: a change before this one rewrote it or took it away.") =>
+    /// <param name="version">The version of the notebook the cell is not in.</param>
+    public CellGoneException(Guid cell, long version)
+        : base($"The cell {cell} no longer stands in the notebook as of its version {version}: a change before this one rewrote it or took it away.")
+    {
         Cell = cell;
+        Version = version;
+    }
 
     /// <summary>The cell that is gone.</summary>
     public Guid Cell { get; }
+
+    /// <summary>The version of the notebook the cell is not in; a view that has it knows the cell is gone.</summary>
+    public long Version { get; }
 }

@@ -151,6 +151,8 @@ public sealed partial class VerbTests : IDisposable
         var gone = await Assert.ThrowsAsync<CellGoneException>(() => host.GestureAsync(new HostedGesture(declare, StepRenderer.Id, "deepsharp.show", "")));
 
         Assert.Equal(declare, gone.Cell);
+        Assert.Equal(host.Current.Version, gone.Version);
+        Assert.DoesNotContain(host.Current.Cells, cell => cell.Id == declare);
         await Assert.ThrowsAsync<CellGoneException>(() => host.EditAsync(declare, Titanic[1]));
         await Assert.ThrowsAsync<CellGoneException>(() => host.RunAsync(declare));
         Assert.Equal(standing, host.Cells.Select(cell => (cell.Id, cell.Source)));
