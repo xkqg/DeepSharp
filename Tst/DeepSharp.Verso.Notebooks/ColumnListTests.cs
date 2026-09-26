@@ -1,8 +1,9 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Net;
 using DeepSharp.Pipelines;
+using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
 using Verso.Abstractions;
 
@@ -63,10 +64,10 @@ public sealed class ColumnListTests : IDisposable
     private static string List(Notebook notebook) =>
         Schema(notebook).Outputs.Single(output => output.Content.Contains("<tr data-column=", StringComparison.Ordinal)).Content;
 
-    private static Task<CellInteractionContext> ChooseAsync(Notebook notebook) => notebook.GestureAsync(Schema(notebook), StepRenderer.Columns);
+    private static Task<GestureResult> ChooseAsync(Notebook notebook) => notebook.GestureAsync(Schema(notebook), StepRenderer.Columns);
 
     // A row's box, sent the way the router sends it: its own action, ticked or not.
-    private static Task<CellInteractionContext> TickAsync(Notebook notebook, CellModel cell, string column, bool ticked) =>
+    private static Task<GestureResult> TickAsync(Notebook notebook, CellModel cell, string column, bool ticked) =>
         notebook.GestureAsync(cell, List(notebook).Row(column).Included.Action, ticked ? "true" : "false");
 
     [Fact]

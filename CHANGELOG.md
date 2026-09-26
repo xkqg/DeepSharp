@@ -133,8 +133,9 @@ your own can host the notebook, too.
   show it: the same path twice, or two spellings of one path, hand back the same host, and a notebook that cannot be
   opened leaves nothing open behind it. An extension a notebook asks for is refused rather than fetched. Its cells,
   and what they show, are handed over as plain values. Typing a cell's text, running a cell and a click on a control a
-  block drew take their turn one at a time, in the order they came; a request about a cell a change before it rewrote
-  is refused, and what a part answers a click with is what the cell shows next. A run that never ends is stopped by a
+  block drew take their turn one at a time, in the order they came; typing or running a cell a change before it
+  rewrote is refused, while a click from its card still reaches the part, which knows the block it became, and what a
+  part answers a click with is what the cell shows next. A run that never ends is stopped by a
   fresh kernel, and C# runs take their turn across the whole process, so none prints into another. The toolbar is
   every button the engine has, each saying whether it can be pressed; a file a button hands over goes to whoever
   pressed it, and nothing is written beside the notebook. A cell's properties panel is a section from every part that

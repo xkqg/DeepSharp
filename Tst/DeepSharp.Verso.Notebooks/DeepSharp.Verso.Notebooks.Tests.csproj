@@ -26,6 +26,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Src\DeepSharp.Verso.Notebooks\DeepSharp.Verso.Notebooks.csproj" />
+    <!-- The notebook is tested in the host an application of your own uses, rather than one written for the tests:
+         its contexts, its turns, and a click settling as long as it does anywhere else. -->
+    <ProjectReference Include="..\..\Src\DeepSharp.Verso.Api\DeepSharp.Verso.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

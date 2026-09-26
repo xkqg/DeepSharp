@@ -1,4 +1,4 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Net;
@@ -13,8 +13,9 @@ namespace DeepSharp.Tests.Api;
 
 /// <summary>
 /// What a person does to an open notebook reaches it through its host, one thing at a time and in the order it came:
-/// typing a cell's text, running a cell, a click on a control a block drew, stopping a run. A click on a cell that a
-/// change before it replaced is refused, since nothing it meant stands any more. What a part answers a click with is
+/// typing a cell's text, running a cell, a click on a control a block drew, stopping a run. Typing or running a cell a
+/// change before it replaced is refused, since nothing it meant stands any more; a click from its card still reaches
+/// the part, which knows the block it became. What a part answers a click with is
 /// shown by the cell the click was made on. A C# run that never ends is stopped the only way the engine can stop it,
 /// by restarting its kernel. And C# runs take their turn one at a time across every notebook the application has
 /// open, because a C# kernel takes over the process's console while it runs.
@@ -137,7 +138,7 @@ public sealed partial class VerbTests : IDisposable
     }
 
     [Fact]
-    public async Task ACellAChangeBeforeItReplaced_IsGone_AndAVerbOnItChangesNothing()
+    public async Task ACellAChangeBeforeItReplaced_IsGoneForTypingAndRunning_AndAVerbOnItChangesNothing()
     {
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
@@ -148,13 +149,32 @@ public sealed partial class VerbTests : IDisposable
         await host.GestureAsync(new HostedGesture(read, StepRenderer.Id, IncludeBoxOf(grid, "deck"), "true"));
 
         var standing = host.Cells.Select(cell => (cell.Id, cell.Source)).ToArray();
-        var gone = await Assert.ThrowsAsync<CellGoneException>(() => host.GestureAsync(new HostedGesture(declare, StepRenderer.Id, "deepsharp.show", "")));
+        var gone = await Assert.ThrowsAsync<CellGoneException>(() => host.EditAsync(declare, Titanic[1]));
 
         Assert.Equal(declare, gone.Cell);
         Assert.Equal(host.Current.Version, gone.Version);
         Assert.DoesNotContain(host.Current.Cells, cell => cell.Id == declare);
-        await Assert.ThrowsAsync<CellGoneException>(() => host.EditAsync(declare, Titanic[1]));
         await Assert.ThrowsAsync<CellGoneException>(() => host.RunAsync(declare));
+        Assert.Equal(standing, host.Cells.Select(cell => (cell.Id, cell.Source)));
+    }
+
+    [Fact]
+    public async Task AClickFromACardAChangeReplaced_StillReachesThePart_AsVersosOwnEditorsPassEveryClickOn()
+    {
+        // A page sends a click from the card it shows until it draws again, and a change may have rewritten that card's
+        // block meanwhile. The part knows the block it became; Verso's editors hand every click on without looking.
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
+        var read = host.Cells[0].Id;
+        var declare = host.Cells[1].Id;
+        var grid = await ShownAsync(host, read);
+
+        await host.GestureAsync(new HostedGesture(read, StepRenderer.Id, IncludeBoxOf(grid, "deck"), "true"));
+
+        var standing = host.Cells.Select(cell => (cell.Id, cell.Source)).ToArray();
+        var clicked = await host.GestureAsync(new HostedGesture(declare, StepRenderer.Id, "deepsharp.show", ""));
+
+        Assert.False(clicked.StateChanged);
         Assert.Equal(standing, host.Cells.Select(cell => (cell.Id, cell.Source)));
     }
 

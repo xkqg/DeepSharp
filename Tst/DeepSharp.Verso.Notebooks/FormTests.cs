@@ -1,4 +1,4 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Globalization;
@@ -49,10 +49,10 @@ public sealed class FormTests : IDisposable
     private static StepForm Form(Notebook notebook) => notebook.Host.GetPropertyProviders().OfType<StepForm>().Single();
 
     private static Task<PropertySection> SectionAsync(Notebook notebook, CellModel cell) =>
-        Form(notebook).GetPropertiesSectionAsync(cell, new RenderGesture(notebook, cell));
+        Form(notebook).GetPropertiesSectionAsync(cell, notebook.RenderContext(cell));
 
     private static Task ChangeAsync(Notebook notebook, CellModel cell, string field, object? value) =>
-        Form(notebook).OnPropertyChangedAsync(cell, field, value, new RenderGesture(notebook, cell));
+        Form(notebook).OnPropertyChangedAsync(cell, field, value, notebook.RenderContext(cell));
 
     private static PropertyField Field(PropertySection section, string name) => section.Fields.Single(field => field.Name == name);
 
@@ -719,10 +719,10 @@ public sealed class FormTests : IDisposable
         // A form with no notebook knows no columns, and has no notebook to change a block of.
         var alone = new StepForm();
 
-        Assert.Equal(PropertyFieldType.Text, Field(await alone.GetPropertiesSectionAsync(normalise, new RenderGesture(notebook, normalise)), "column").FieldType);
+        Assert.Equal(PropertyFieldType.Text, Field(await alone.GetPropertiesSectionAsync(normalise, notebook.RenderContext(normalise)), "column").FieldType);
 
         var refused = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => alone.OnPropertyChangedAsync(normalise, "scale", "minmax", new RenderGesture(notebook, normalise)));
+            () => alone.OnPropertyChangedAsync(normalise, "scale", "minmax", notebook.RenderContext(normalise)));
 
         Assert.Contains("not loaded by Verso", refused.Message, StringComparison.Ordinal);
         Assert.Equal(before, normalise.Source);
@@ -876,18 +876,17 @@ public sealed class FormTests : IDisposable
         await notebook.GestureAsync(declare, StepRenderer.Columns);
 
         var tick = declare.Outputs.Single(output => output.Content.Contains("<tr data-column=", StringComparison.Ordinal)).Content.Row("sex").Included.Action;
-        Task? change = null;
 
-        // The form's change arrives while the tick waits for what the editor still holds, so it queues behind the tick.
-        notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session.Settle = () =>
-        {
-            change = ChangeAsync(notebook, declare, "remainder", "keep");
+        // The form's change arrives while the tick waits for what the editor still holds, so it queues behind the tick:
+        // the panel hands it straight to the form, as VS Code's does, past any order a host keeps.
+        var ticking = notebook.GestureAsync(declare, tick, "true");
 
-            return Task.CompletedTask;
-        };
+        await Task.Delay(NotebookSession.SettleTime / 6, TestContext.Current.CancellationToken);
 
-        await notebook.GestureAsync(declare, tick, "true");
-        await change!;
+        var change = ChangeAsync(notebook, declare, "remainder", "keep");
+
+        await ticking;
+        await change;
 
         var standing = notebook.Scaffold.Cells[1];
 

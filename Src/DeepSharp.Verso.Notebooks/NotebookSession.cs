@@ -75,9 +75,6 @@ internal sealed class NotebookSession
     /// </summary>
     public static TimeSpan SettleTime { get; } = TimeSpan.FromMilliseconds(300);
 
-    /// <summary>The wait itself, before a gesture that can change the blocks reads them; a test may stand in for it.</summary>
-    internal Func<Task> Settle { get; set; } = () => Task.Delay(SettleTime);
-
     /// <summary>The pipeline the blocks made at the last gesture, when there was one.</summary>
     public NotebookPipeline? Assembled
     {

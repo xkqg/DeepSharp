@@ -23,8 +23,9 @@ namespace DeepSharp.Verso.Api;
 /// </para>
 /// <para>
 /// Everything done to the notebook takes its turn, one at a time and in the order it came, because the engine serves
-/// one caller at a time and a change made while another is under way would act on blocks that are going away. A
-/// request about a cell a change before it rewrote or took away is refused with <see cref="CellGoneException"/>.
+/// one caller at a time and a change made while another is under way would act on blocks that are going away. Typing,
+/// running or opening the panel of a cell a change before it rewrote or took away is refused with
+/// <see cref="CellGoneException"/>; a click from its card is not, since the part it names knows the block it became.
 /// </para>
 /// <para>
 /// Each change makes the next version of the notebook, and every view of it is told, cell by cell — whatever made the
@@ -164,12 +165,14 @@ public sealed class NotebookHost
     /// <summary>Hands a click on a control a cell drew to the part the control names.</summary>
     /// <param name="gesture">The click.</param>
     /// <returns>Whether it changed the cells, and what the part answered, which the cell then shows.</returns>
-    /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
     /// <exception cref="InvalidOperationException">No part of that name answers a click.</exception>
+    /// <remarks>
+    /// A page sends a click from the card it shows until it draws again, and a change may have rewritten the card's block
+    /// meanwhile; the click is handed on all the same, as Verso's own editors hand every click on, because the part knows
+    /// the block it became. What the part answers is shown only by a cell that still stands.
+    /// </remarks>
     public Task<GestureResult> GestureAsync(HostedGesture gesture) => TurnAsync(async () =>
     {
-        Standing(gesture.Cell);
-
         var part = Extensions.GetInteractionHandler(gesture.ExtensionId)
             ?? throw new InvalidOperationException($"No part named '{gesture.ExtensionId}' answers a click.");
         var context = new CellInteractionContext

@@ -1,4 +1,4 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using DeepSharp.Pipelines;
@@ -49,8 +49,7 @@ public sealed class ColumnsFileTests : IDisposable
 
     private PipelinePreset Saved() => PipelinePreset.FromJson(File.ReadAllText(ColumnsFile), StepCatalog.BuiltIn());
 
-    private static Task RunAsync(Notebook notebook, string? path) =>
-        notebook.Host.GetToolbarActions().OfType<RunPipelineAction>().Single().ExecuteAsync(new ToolbarGesture(notebook, path));
+    private static Task RunAsync(Notebook notebook) => notebook.PressAsync(RunPipelineAction.Id);
 
     [Fact]
     public async Task AChangeTheBlocksAccept_IsSavedBesideTheNotebook_AsTheBlocksHoldIt()
@@ -102,7 +101,7 @@ public sealed class ColumnsFileTests : IDisposable
     {
         await using var notebook = await NotebookAsync(Titanic);
 
-        await RunAsync(notebook, NotebookPath);
+        await RunAsync(notebook);
 
         Assert.Equal(Declared(notebook), Saved().Declare);
     }
@@ -186,9 +185,9 @@ public sealed class ColumnsFileTests : IDisposable
         await using var notebook = await NotebookAsync(Titanic);
         var longAgo = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        await RunAsync(notebook, NotebookPath);
+        await RunAsync(notebook);
         File.SetLastWriteTimeUtc(ColumnsFile, longAgo);
-        await RunAsync(notebook, NotebookPath);
+        await RunAsync(notebook);
 
         Assert.Equal(longAgo, File.GetLastWriteTimeUtc(ColumnsFile));
     }
@@ -198,7 +197,7 @@ public sealed class ColumnsFileTests : IDisposable
     {
         await using var notebook = await NotebookAsync(Titanic[0]);
 
-        await RunAsync(notebook, NotebookPath);
+        await RunAsync(notebook);
 
         Assert.False(File.Exists(ColumnsFile));
     }
@@ -207,10 +206,11 @@ public sealed class ColumnsFileTests : IDisposable
     public async Task TheFilesBesideANotebook_AreNamedAfterIt_AndANotebookNeverSavedHasNone()
     {
         await using var notebook = await NotebookAsync(Titanic);
+        await using var untitled = await Notebook.OpenAsync();
 
-        Assert.Equal(ColumnsFile, new ToolbarGesture(notebook, NotebookPath).ColumnsFilePath());
-        Assert.Null(new ToolbarGesture(notebook, null).ColumnsFilePath());
-        Assert.Equal("titanic.pipeline.json", new ToolbarGesture(notebook, NotebookPath).PipelineFileName());
-        Assert.Equal("pipeline.json", new ToolbarGesture(notebook, null).PipelineFileName());
+        Assert.Equal(ColumnsFile, notebook.Scaffold.Metadata.ColumnsFilePath());
+        Assert.Null(untitled.Scaffold.Metadata.ColumnsFilePath());
+        Assert.Equal("titanic.pipeline.json", notebook.Scaffold.Metadata.PipelineFileName());
+        Assert.Equal("pipeline.json", untitled.Scaffold.Metadata.PipelineFileName());
     }
 }

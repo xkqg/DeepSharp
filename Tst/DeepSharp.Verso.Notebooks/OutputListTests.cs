@@ -1,8 +1,9 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Net;
 using DeepSharp.Pipelines;
+using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
 using Verso.Abstractions;
 
@@ -60,10 +61,10 @@ public sealed class OutputListTests : IDisposable
 
     private static async Task ChooseAsync(Notebook notebook) => await notebook.GestureAsync(Schema(notebook), StepRenderer.Columns);
 
-    private static Task<CellInteractionContext> PickAsync(Notebook notebook, string verb) =>
+    private static Task<GestureResult> PickAsync(Notebook notebook, string verb) =>
         notebook.GestureAsync(Schema(notebook), List(notebook).TypeSelect().Action, verb);
 
-    private static Task<CellInteractionContext> OutputAsync(Notebook notebook, string column, bool ticked) =>
+    private static Task<GestureResult> OutputAsync(Notebook notebook, string column, bool ticked) =>
         notebook.GestureAsync(Schema(notebook), List(notebook).Row(column).Output.Action, ticked ? "true" : "false");
 
     private static bool SaysNotMade(Notebook notebook, string words) =>

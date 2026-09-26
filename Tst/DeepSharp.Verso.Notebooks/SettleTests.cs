@@ -1,4 +1,4 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Diagnostics;
@@ -39,12 +39,20 @@ public sealed class SettleTests : IDisposable
         return notebook;
     }
 
-    private static NotebookSession Session(Notebook notebook) => notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session;
-
     private static CellModel SchemaBlock(Notebook notebook) => notebook.Scaffold.Cells[1];
 
     private static string List(Notebook notebook) =>
         SchemaBlock(notebook).Outputs.Single(output => output.Content.Contains("<tr data-column=", StringComparison.Ordinal)).Content;
+
+    // How long a gesture takes, made through the host as an application of your own makes it.
+    private static async Task<TimeSpan> ClockedAsync(Notebook notebook, string interaction, string payload = "")
+    {
+        var clock = Stopwatch.StartNew();
+
+        await notebook.GestureAsync(SchemaBlock(notebook), interaction, payload);
+
+        return clock.Elapsed;
+    }
 
     [Fact]
     public async Task AGestureThatCanChangeTheBlocks_ReadsThemOnlyOnceWhatWasOnItsWayHasLanded()
@@ -56,15 +64,14 @@ public sealed class SettleTests : IDisposable
         var typed = SchemaBlock(notebook).Source.Replace(
             "{\"name\": \"fare\"", "{\"name\": \"embarked\", \"kind\": \"text\", \"optional\": false}, {\"name\": \"fare\"", StringComparison.Ordinal);
 
-        // What VS Code still holds lands while the gesture waits: a column typed into the schema by hand.
-        Session(notebook).Settle = () =>
-        {
-            SchemaBlock(notebook).Source = typed;
+        // What VS Code still holds lands while the tick waits — a column typed into the schema by hand — written into
+        // the notebook the way VS Code writes it, whenever it lands and past any order the host keeps.
+        var sending = notebook.GestureAsync(SchemaBlock(notebook), tick, "true");
 
-            return Task.CompletedTask;
-        };
+        await Task.Delay(NotebookSession.SettleTime / 6, TestContext.Current.CancellationToken);
+        SchemaBlock(notebook).Source = typed;
 
-        var sent = await notebook.GestureAsync(SchemaBlock(notebook), tick, "true");
+        var sent = await sending;
 
         Assert.False(sent.StateChanged);
         Assert.Equal(typed, SchemaBlock(notebook).Source);
@@ -72,38 +79,30 @@ public sealed class SettleTests : IDisposable
     }
 
     [Fact]
-    public async Task APickOrAView_ChangesNothing_AndDoesNotWait()
+    public async Task APickOrAView_ChangesNothing_AndDoesNotWait_WhileAChangeDoes()
     {
         await using var notebook = await NotebookAsync();
-        var waited = 0;
 
-        Session(notebook).Settle = () =>
-        {
-            waited++;
-
-            return Task.CompletedTask;
-        };
-
+        // The first view reads the source once; the ones clocked after it draw what was read.
         await notebook.GestureAsync(SchemaBlock(notebook), StepRenderer.Show);
         await notebook.GestureAsync(SchemaBlock(notebook), StepRenderer.Columns);
-        await notebook.GestureAsync(SchemaBlock(notebook), List(notebook).SelectOf(StepRenderer.ListType)!.Value.Action, "target.distribution");
-        await notebook.GestureAsync(SchemaBlock(notebook), List(notebook).SelectOf(StepRenderer.ListRange)!.Value.Action, "range");
-        await notebook.GestureAsync(SchemaBlock(notebook), List(notebook).SelectOf(StepRenderer.ListRangeKind, "include")!.Value.Action, "integer");
 
-        Assert.Equal(0, waited);
+        Assert.All(
+            [
+                await ClockedAsync(notebook, StepRenderer.Show),
+                await ClockedAsync(notebook, StepRenderer.Columns),
+                await ClockedAsync(notebook, List(notebook).SelectOf(StepRenderer.ListType)!.Value.Action, "target.distribution"),
+                await ClockedAsync(notebook, List(notebook).SelectOf(StepRenderer.ListRange)!.Value.Action, "range"),
+                await ClockedAsync(notebook, List(notebook).SelectOf(StepRenderer.ListRangeKind, "include")!.Value.Action, "integer"),
+            ],
+            took => Assert.True(took < NotebookSession.SettleTime, $"a pick or a view took {took.TotalMilliseconds} ms"));
 
-        await notebook.GestureAsync(SchemaBlock(notebook), List(notebook).Row("pclass").Kind.Action, "category");
-
-        Assert.Equal(1, waited);
+        Assert.True(
+            await ClockedAsync(notebook, List(notebook).Row("pclass").Kind.Action, "category") >= NotebookSession.SettleTime,
+            "a change to the blocks did not wait");
     }
 
     [Fact]
-    public async Task TheWait_IsLongerThanTheQuarterSecondVSCodeHoldsAKeystroke()
-    {
-        var clock = Stopwatch.StartNew();
-
-        await new NotebookSession().Settle();
-
-        Assert.True(clock.Elapsed >= TimeSpan.FromMilliseconds(250), $"waited {clock.ElapsedMilliseconds} ms");
-    }
+    public void TheWait_IsLongerThanTheQuarterSecondVSCodeHoldsAKeystroke() =>
+        Assert.True(NotebookSession.SettleTime > TimeSpan.FromMilliseconds(250), $"the wait is {NotebookSession.SettleTime.TotalMilliseconds} ms");
 }

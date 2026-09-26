@@ -1,10 +1,10 @@
-// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Net;
 using DeepSharp.Pipelines;
+using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
-using Verso.Abstractions;
 
 namespace DeepSharp.Tests.Notebooks;
 
@@ -48,8 +48,6 @@ public sealed class TakeOverActionTests : IDisposable
         return notebook;
     }
 
-    private static TakeOverAction Button(Notebook notebook) => notebook.Host.GetToolbarActions().OfType<TakeOverAction>().Single();
-
     private static IReadOnlyList<IPipelineStep> Steps(Notebook notebook) =>
         [.. notebook.Scaffold.Cells.Where(cell => cell.Type == StepCellType.StepType).Select(cell => NotebookVerbs.Catalog().ReadStep(cell.Source))];
 
@@ -66,43 +64,53 @@ public sealed class TakeOverActionTests : IDisposable
         notebook.Scaffold.Cells[1].Outputs[^1].Content.Boxes().Cast<DrawnBox?>()
             .SingleOrDefault(box => box!.Value.Action.StartsWith($"{StepRenderer.Apply} ", StringComparison.Ordinal));
 
-    private async Task ListAsync(Notebook notebook) => await Button(notebook).ExecuteAsync(new ToolbarGesture(notebook, NotebookPath));
+    private static Task ListAsync(Notebook notebook) => notebook.PressAsync(TakeOverAction.Id);
 
     // The list's box, sent the way the router sends it: ticked or not.
-    private static Task<CellInteractionContext> ApplyAsync(Notebook notebook, string action, bool ticked) =>
+    private static Task<GestureResult> ApplyAsync(Notebook notebook, string action, bool ticked) =>
         notebook.GestureAsync(notebook.Scaffold.Cells[1], action, ticked ? "true" : "false");
 
     [Fact]
     public async Task TheButton_IsOffered_ForASavedNotebookThatMakesAPipeline_WithColumnsSavedBesideIt()
     {
         await using var notebook = await NotebookAsync(Titanic);
-        var button = Button(notebook);
+        await using var untitled = await Notebook.OpenAsync();
 
-        Assert.False(await button.IsEnabledAsync(new ToolbarGesture(notebook, NotebookPath)));
+        foreach (var block in Titanic)
+        {
+            untitled.AddBlock(block);
+        }
+
+        Assert.False(await notebook.EnabledAsync(TakeOverAction.Id));
 
         Saved(Blocks(notebook).Steps);
 
-        Assert.True(await button.IsEnabledAsync(new ToolbarGesture(notebook, NotebookPath)));
-        Assert.False(await button.IsEnabledAsync(new ToolbarGesture(notebook, filePath: null)));
+        Assert.True(await notebook.EnabledAsync(TakeOverAction.Id));
+        Assert.False(await untitled.EnabledAsync(TakeOverAction.Id));
 
         notebook.AddBlock("""{"step": "normalise", "column": "colour", "scale": "standard", "outOfRange": "pass"}""");
 
-        Assert.False(await button.IsEnabledAsync(new ToolbarGesture(notebook, NotebookPath)));
+        Assert.False(await notebook.EnabledAsync(TakeOverAction.Id));
     }
 
     [Fact]
     public async Task TheButton_PressedWhereItIsNotOffered_SaysWhy_AndChangesNothing()
     {
         await using var notebook = await NotebookAsync(Titanic);
-        var button = Button(notebook);
+        await using var untitled = await Notebook.OpenAsync();
 
-        var nothingSaved = await Assert.ThrowsAsync<InvalidOperationException>(() => button.ExecuteAsync(new ToolbarGesture(notebook, NotebookPath)));
-        var neverSaved = await Assert.ThrowsAsync<InvalidOperationException>(() => button.ExecuteAsync(new ToolbarGesture(notebook, filePath: null)));
+        foreach (var block in Titanic)
+        {
+            untitled.AddBlock(block);
+        }
+
+        var nothingSaved = await Assert.ThrowsAsync<InvalidOperationException>(() => ListAsync(notebook));
+        var neverSaved = await Assert.ThrowsAsync<InvalidOperationException>(() => ListAsync(untitled));
 
         Saved(Blocks(notebook).Steps);
         notebook.AddBlock("""{"step": "normalise", "column": "colour", "scale": "standard", "outOfRange": "pass"}""");
 
-        var noPipeline = await Assert.ThrowsAsync<InvalidOperationException>(() => button.ExecuteAsync(new ToolbarGesture(notebook, NotebookPath)));
+        var noPipeline = await Assert.ThrowsAsync<InvalidOperationException>(() => ListAsync(notebook));
 
         Assert.Equal("There are no columns saved beside the notebook to take over.", nothingSaved.Message);
         Assert.Equal("A notebook never saved has nothing saved beside it to take over.", neverSaved.Message);
@@ -117,7 +125,7 @@ public sealed class TakeOverActionTests : IDisposable
         File.WriteAllText(ColumnsFile, PipelinePreset.Of(
             Pdd.Create().ReadCsv("titanic.csv").Declare(columns => columns.Integer("survived")).Declaration, header: null).ToJson());
 
-        Assert.False(await Button(notebook).IsEnabledAsync(new ToolbarGesture(notebook, NotebookPath)));
+        Assert.False(await notebook.EnabledAsync(TakeOverAction.Id));
 
         var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => ListAsync(notebook));
 

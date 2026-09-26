@@ -18,8 +18,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- The engine behind a host is internal; the suite measures what only it can say. -->
+    <!-- The engine behind a host is internal; the suites measure what only it can say — the notebook's suite runs on
+         this host, and hands its contexts to a part itself where a test is about the part. -->
     <InternalsVisibleTo Include="DeepSharp.Verso.Api.Tests" />
+    <InternalsVisibleTo Include="DeepSharp.Verso.Notebooks.Tests" />
   </ItemGroup>
 
   <ItemGroup>

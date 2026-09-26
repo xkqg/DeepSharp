@@ -38,7 +38,7 @@ Src/DeepSharp.Verso.Api/             an application of your own that hosts the n
 Src/DeepSharp.Verso.Serve/           to come: DeepSharp's own server, the notebook in a browser
 Samples/                          runnable programs and the published data they read
 Tst/DeepSharp/                    the tests of the libraries
-Tst/DeepSharp.Verso.Notebooks/    the notebook's tests, run inside Verso's own engine
+Tst/DeepSharp.Verso.Notebooks/    the notebook's tests, run in the host an application of your own uses
 Tst/DeepSharp.Verso.Api/          the host's tests, run on Verso's own engine the way an application runs it
 ```
 
@@ -912,7 +912,7 @@ matches the runtime it is on. The Extensions panel keeps one install per runtime
 and loads the newest one the runtime it is on can run, so two hosts on one machine each find their own. The
 code is one code for both: where .NET 10 had a shorter way to say something, the way both runtimes have is the
 one used — a JSON writer's line ending among them, so a pipeline file is written with a line feed on every
-machine and runtime — and both suites run on both runtimes.
+machine and runtime — and every suite runs on both runtimes.
 
 Two packages follow the notebook: `DeepSharp.Verso.Api`, with which an application of your own hosts it, and, to
 come, `DeepSharp.Verso.Serve`, DeepSharp's own server that shows it in a browser, built on Api. The notebook package
@@ -936,9 +936,11 @@ and closes what it built. What is done to an open notebook — typing a cell's t
 a block drew — takes its turn at the host, one at a time and in the order it came, because the engine serves one
 caller at a time: two callers at once broke its count of runs, and a change made while another was under way acted
 on blocks that were going away. The host's turns are its own and never the notebook's session's, since a change
-handed on from inside that one would wait for the one it is inside and never run. A request about a cell a change
-before it rewrote or took away is refused, because nothing it meant still stands; what a part answers a click with is
-what the cell shows next. A run that never ends is stopped the only way the engine can stop one, with a fresh kernel —
+handed on from inside that one would wait for the one it is inside and never run. Typing, running or opening the
+panel of a cell a change before it rewrote or took away is refused, because nothing it meant still stands; a click from
+its card is handed on all the same, as Verso's own editors hand every click on, because a page sends clicks from the
+card it shows until it draws again — a walk down a select sends several — and the part knows what became of the block
+the card was drawn for. What a part answers a click with is what the cell shows next. A run that never ends is stopped the only way the engine can stop one, with a fresh kernel —
 its token cancelled, a C# loop that waits goes on — so stopping clears the notebook's variables, the pipeline handed
 to C# cells among them, and the run itself goes on in the background until the application ends. C# runs take their
 turn across the whole process, because a C# kernel takes over the process's console while it runs: two at once printed
