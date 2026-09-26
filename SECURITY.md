@@ -24,9 +24,10 @@ fourth for `deepsharp-serve`, the one part of DeepSharp that listens on a port:
   from here; deciding that is our job.
 - **A way past `deepsharp-serve`'s boundary.** The notebook it serves runs code as the person who started it, so
   the server listens on that computer alone, answers only a request carrying the token it printed, answers only
-  under a name of that computer, and serves nothing from the folder it runs in. A request that reaches a notebook
-  from another computer, from a page that does not hold the token, or under another name, or that reads a file from
-  that folder, is a vulnerability.
+  under a name of that computer, and serves nothing from the folder it runs in. It writes into that folder only a
+  new notebook a page asks for, under the bare name of a `.verso` file, and never over a file. A request that reaches
+  a notebook from another computer, from a page that does not hold the token, or under another name, that reads a file
+  from that folder, or that makes the server write anywhere else or over a file, is a vulnerability.
 
 ## What is not
 

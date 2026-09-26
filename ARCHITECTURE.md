@@ -1054,7 +1054,13 @@ close, and when a person closes the notebook without saving it. The toolbar is t
 over goes to the page that pressed it, as a download under its own name, never through the stream and never written
 beside the notebook. A cell's panel is its parts' sections, and a field's new value goes to its part as the page sent
 it, as JSON, the way Verso's own editors hand it on — each part reads it, so the server holds no rule of its own about
-what a field may hold. Saving writes the notebook to its file.
+what a field may hold. Saving writes the notebook to its file. A page adds a cell after another or at the end,
+takes one away, moves one past the neighbour it names, turns one into another kind, and asks what a cell's kernel offers
+as its text is typed; each is the host's own verb, answered as every other one is. In a folder, a page can make a new
+notebook, under the bare name of a `.verso` file: a name that holds a folder on any system, another format or a hidden
+name is refused, a name a file already has is a conflict, and a server started beside one notebook makes none, which
+the page is told with the list, so it offers the new notebook only where one can be made. That notebook is the one
+file the server writes that a person did not save, made whole beside the others and never over one.
 
 The page is one file the tool carries — its markup, its style and its script, with no framework and nothing fetched
 from anywhere else — and it draws a notebook as Verso's editors draw one: a block's output as the HTML its part wrote,

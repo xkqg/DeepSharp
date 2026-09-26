@@ -179,7 +179,9 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   or in the cookie its first page sets — and only under a name of this computer, and serves its own page and nothing
   from the folder it runs in. It says where it is once, then nothing; `--port` names the port, `--no-browser` opens
   none, and a port already taken stops it before it says anything. A page keeps a stream of a notebook open — the
-  notebook as it stands, then each change, numbered — and sends typing, runs, a stop and clicks on a block's controls;
+  notebook as it stands, then each change, numbered — and sends typing, runs, a stop and clicks on a block's controls,
+  adds, takes away, moves and turns cells into another kind, and asks what a cell's kernel offers as it is typed; in a
+  folder, it makes a new notebook under the bare name of a `.verso` file, never over a file that is there;
   a cell a change replaced answers the version it is gone from, and a stream ends when the server stops, when the page
   goes away, or when the notebook is closed without saving. The toolbar, a cell's properties panel and saving are
   there too; a file a button hands over arrives as a download in the page that pressed it, under its own name, and

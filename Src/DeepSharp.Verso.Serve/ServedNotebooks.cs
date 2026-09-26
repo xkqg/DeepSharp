@@ -50,6 +50,38 @@ internal sealed class ServedNotebooks(ServeOptions options) : IAsyncDisposable
     public async Task<string?> FileOfAsync(string name) =>
         (await NamesAsync()).Contains(name, StringComparer.Ordinal) ? System.IO.Path.Join(Folder, name) : null;
 
+    /// <summary>Whether the server serves a folder of notebooks, rather than one notebook.</summary>
+    public bool IsFolder => !File.Exists(options.Path);
+
+    /// <summary>
+    /// Where a new notebook of a name goes: in the folder served, under that name; nothing when the server serves one
+    /// notebook, since it then has no folder of notebooks to make one in.
+    /// </summary>
+    /// <param name="name">The name a page asked for.</param>
+    /// <returns>The new notebook's file, or nothing.</returns>
+    /// <exception cref="ArgumentException">
+    /// The name is not the bare name of a .verso file: it names a folder too, on any system — so a new notebook never lands
+    /// outside the folder served — or another format, or it is hidden, or holds a character no file name may hold here.
+    /// </exception>
+    public string? NewFile(string name)
+    {
+        if (!IsFolder)
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(name)
+            || name.IndexOfAny(['/', '\\']) >= 0
+            || name.IndexOfAny(System.IO.Path.GetInvalidFileNameChars()) >= 0
+            || name.StartsWith('.')
+            || !name.EndsWith(".verso", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException($"'{name}' is not a name a new notebook can have: the bare name of a .verso file, in the folder served.", nameof(name));
+        }
+
+        return System.IO.Path.Join(Folder, name);
+    }
+
     /// <summary>Closes the engine, when it was ever asked.</summary>
     /// <returns>When it is closed.</returns>
     public async ValueTask DisposeAsync()
