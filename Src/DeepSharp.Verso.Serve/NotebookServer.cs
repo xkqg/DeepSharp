@@ -62,6 +62,11 @@ public static class NotebookServer
         NotebookEndpoints.Map(app);
         app.Lifetime.ApplicationStarted.Register(() => Started(app, options, token, said));
 
+        // The notebooks close as soon as the server is told to stop, each run under way stopped as a close stops it, so a
+        // request that waits for a run is answered, and the server does not wait out the time it gives a request to end.
+        // Closing the notebooks is one close, which the container waits for as it closes them itself.
+        app.Lifetime.ApplicationStopping.Register(() => _ = app.Services.GetRequiredService<OpenNotebooks>().DisposeAsync().AsTask());
+
         return app;
     }
 

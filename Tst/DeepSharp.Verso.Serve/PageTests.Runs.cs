@@ -23,45 +23,37 @@ public sealed partial class PageTests
             new CellModel { Type = "code", Language = "csharp", Source = "while (true) { await System.Threading.Tasks.Task.Delay(10); }" },
             new CellModel { Type = "code", Language = "csharp", Source = $$"""System.IO.File.AppendAllText(@"{{ran}}", "x");""" });
         await using var served = await StartAsync();
+        var page = await OpenAsync(served, "runs.verso");
+        var text = Cell(page, 1).Locator("textarea.source");
 
-        try
+        await Cell(page, 0).Locator("button.run").ClickAsync();
+        await Expect(page.Locator("#stop")).ToBeVisibleAsync(new() { Timeout = 30_000 });
+
+        await Expect(Cell(page, 0).Locator("button.run")).ToBeDisabledAsync();
+        await Expect(Cell(page, 1).Locator("button.run")).ToBeDisabledAsync();
+
+        // Selecting a cell draws its bar again, and the run under way still holds its ▶.
+        await Cell(page, 1).Locator(".cell-bar").ClickAsync();
+        await Expect(Cell(page, 1)).ToHaveClassAsync(new Regex("selected"));
+        await Expect(Cell(page, 1).Locator("button.run")).ToBeDisabledAsync();
+
+        await text.PressAsync("Shift+Enter");
+        await page.Locator("#stop").ClickAsync();
+        await Expect(page.Locator("#stop")).ToBeHiddenAsync(new() { Timeout = 30_000 });
+        await Expect(Cell(page, 1).Locator("button.run")).ToBeEnabledAsync();
+
+        // The page sends one thing at a time, in the order asked: once the typing after the Stop reached the server, a run
+        // the Shift+Enter had asked would have run before it.
+        await text.FillAsync("var after = 1;");
+        await text.BlurAsync();
+
+        for (var waited = 0; (await CurrentAsync(served, "runs.verso")).Cells[1].Source != "var after = 1;"; waited += 50)
         {
-            var page = await OpenAsync(served, "runs.verso");
-            var text = Cell(page, 1).Locator("textarea.source");
-
-            await Cell(page, 0).Locator("button.run").ClickAsync();
-            await Expect(page.Locator("#stop")).ToBeVisibleAsync(new() { Timeout = 30_000 });
-
-            await Expect(Cell(page, 0).Locator("button.run")).ToBeDisabledAsync();
-            await Expect(Cell(page, 1).Locator("button.run")).ToBeDisabledAsync();
-
-            // Selecting a cell draws its bar again, and the run under way still holds its ▶.
-            await Cell(page, 1).Locator(".cell-bar").ClickAsync();
-            await Expect(Cell(page, 1)).ToHaveClassAsync(new Regex("selected"));
-            await Expect(Cell(page, 1).Locator("button.run")).ToBeDisabledAsync();
-
-            await text.PressAsync("Shift+Enter");
-            await page.Locator("#stop").ClickAsync();
-            await Expect(page.Locator("#stop")).ToBeHiddenAsync(new() { Timeout = 30_000 });
-            await Expect(Cell(page, 1).Locator("button.run")).ToBeEnabledAsync();
-
-            // The page sends one thing at a time, in the order asked: once the typing after the Stop reached the server, a run
-            // the Shift+Enter had asked would have run before it.
-            await text.FillAsync("var after = 1;");
-            await text.BlurAsync();
-
-            for (var waited = 0; (await CurrentAsync(served, "runs.verso")).Cells[1].Source != "var after = 1;"; waited += 50)
-            {
-                Assert.True(waited < 30_000, "the typing never reached the server");
-                await Task.Delay(50, TestContext.Current.CancellationToken);
-            }
-
-            Assert.False(File.Exists(ran), "the Shift+Enter asked for a run while one was under way");
+            Assert.True(waited < 30_000, "the typing never reached the server");
+            await Task.Delay(50, TestContext.Current.CancellationToken);
         }
-        finally
-        {
-            await StopAnyRunAsync(served, "runs.verso");
-        }
+
+        Assert.False(File.Exists(ran), "the Shift+Enter asked for a run while one was under way");
     }
 
     [Fact]
@@ -70,20 +62,6 @@ public sealed partial class PageTests
         await SaveAAndBAsync();
         await using var served = await StartAsync();
         var runningA = await RunForeverInAAsync(served);
-
-        try
-        {
-            await StopsTheWaitAsync(served, runningA);
-        }
-        finally
-        {
-            await StopAnyRunAsync(served, "b.verso");
-            await StopAnyRunAsync(served, "a.verso");
-        }
-    }
-
-    private async Task StopsTheWaitAsync(Served served, Task<HttpResponseMessage> runningA)
-    {
         var page = await OpenAsync(served, "b.verso");
 
         await Cell(page, 0).Locator("button.run").ClickAsync();
@@ -119,28 +97,26 @@ public sealed partial class PageTests
         await using var served = await StartAsync();
         var runningA = await RunForeverInAAsync(served);
 
-        try
-        {
-            var page = await OpenAsync(served, "b.verso");
+        var page = await OpenAsync(served, "b.verso");
 
-            await page.Locator("#toolbar button[data-button='verso.action.run-all']").ClickAsync();
+        await page.Locator("#toolbar button[data-button='verso.action.run-all']").ClickAsync();
 
-            // A button's run names no cell while it waits, so the page says it on its own line.
-            await Expect(page.Locator("#status")).ToHaveTextAsync("Waits for another notebook's C# run to end…", new() { Timeout = 30_000 });
+        // A button's run names no cell while it waits, so the page says it on its own line.
+        await Expect(page.Locator("#status")).ToHaveTextAsync("Waits for another notebook's C# run to end…", new() { Timeout = 30_000 });
 
-            await page.Locator("#stop").ClickAsync();
+        await page.Locator("#stop").ClickAsync();
 
-            await Expect(page.Locator("#stop")).ToBeHiddenAsync(new() { Timeout = 30_000 });
-            await Expect(page.Locator("#status")).ToBeEmptyAsync();
-            Assert.Empty((await CurrentAsync(served, "b.verso")).Cells[0].Outputs);
-        }
-        finally
-        {
-            await StopAnyRunAsync(served, "b.verso");
-            await StopAnyRunAsync(served, "a.verso");
-        }
+        await Expect(page.Locator("#stop")).ToBeHiddenAsync(new() { Timeout = 30_000 });
+        await Expect(page.Locator("#status")).ToBeEmptyAsync();
+        Assert.Empty((await CurrentAsync(served, "b.verso")).Cells[0].Outputs);
 
-        await runningA;
+        var stopping = await served.Client.PostAsJsonAsync(
+            "/api/notebooks/a.verso/stop",
+            new { run = (await CurrentAsync(served, "a.verso")).Running!.Value.Number },
+            TestContext.Current.CancellationToken);
+
+        stopping.EnsureSuccessStatusCode();
+        (await runningA).EnsureSuccessStatusCode();
     }
 
     // Notebook A with a C# cell that never ends, and notebook B with a C# cell of its own.
@@ -165,14 +141,5 @@ public sealed partial class PageTests
         }
 
         return running;
-    }
-
-    // A run that never ends is stopped before the server is, whatever the test found: a close waits for the run under way.
-    private static async Task StopAnyRunAsync(Served served, string notebook)
-    {
-        if ((await CurrentAsync(served, notebook)).Running is { } run)
-        {
-            await served.Client.PostAsJsonAsync($"/api/notebooks/{notebook}/stop", new { run = run.Number }, TestContext.Current.CancellationToken);
-        }
     }
 }

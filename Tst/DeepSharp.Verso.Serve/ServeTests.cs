@@ -218,7 +218,6 @@ public sealed class ServeTests : IDisposable
 
         Assert.Equal(0, await NotebookServer.RunAsync(["--help"], said, errors, TestContext.Current.CancellationToken));
         Assert.Contains(ServeOptions.Usage, said.ToString(), StringComparison.Ordinal);
-        Assert.Equal(0, await Program.Main(["--help"]));
     }
 
     [Fact]

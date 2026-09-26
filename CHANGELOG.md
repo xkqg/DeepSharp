@@ -186,29 +186,28 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   or in the cookie its first page sets — makes a change only for its own page, since a browser carries that cookie for
   a page from any port of this computer, and answers only under a name of this computer, and serves its own page and nothing
   from the folder it runs in. It says where it is once, then nothing; `--port` names the port, `--no-browser` opens
-  none, and a port already taken stops it before it says anything. A page keeps a stream of a notebook open — the
-  notebook as it stands, then each change, numbered — and sends typing, runs, a stop naming the run it means and
-  clicks on a block's controls,
-  adds, takes away, moves and turns cells into another kind, and asks what a cell's kernel offers as it is typed; in a
-  folder, it makes a new notebook under the bare name of a `.verso` file, never over a file that is there;
-  a cell a change replaced answers the version it is gone from, and a stream ends when the server stops, when the page
-  goes away, or when the notebook is closed without saving. The toolbar, a cell's properties panel and saving are
-  there too; a file a button hands over arrives as a download in the page that pressed it, under its own name, and
-  nothing is written beside the notebook. The page draws the notebook as Verso's editors draw one and sends what a
-  person does the way Verso's own router means to: a button on its click, a box or a select on its change, never on a
-  key, one at a time, the typing first; a dropped stream reconnects and reads the whole notebook again. A cell is added
-  after another or at the end, of any kind the notebook has, taken away once the person says yes, moved or turned into
-  another kind, each only where the notebook's layout allows it; a cell's bar and the export menu hold only the
-  engine's buttons that can be pressed there, as in Verso's editor; a cell shown rendered shows its text while it is
-  selected, as in Verso's editor; the parameters form draws itself and its controls reach Verso's parameters part as
-  Verso's own script sends them; as a cell's text is typed, what its kernel offers is listed under it — on Ctrl+Space,
-  and after a dot or a quote — and a line says what the word at the cursor means until the text is left; a run is
-  offered only while none is under way, as in Verso's editor, and a run that waits for another notebook's C# run says
-  so, on its cell or on the page's own line; a change asked for while a cell runs says it waits; a refusal is said in
-  the server's own words; and a
-  folder's list, shown
-  even when it holds one notebook, makes a new one. It carries a
-  build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8 is gone.
+  none, a port already taken stops it before it says anything, and Ctrl+C ends it within moments whatever a notebook
+  runs: every run is stopped as a close stops it, and a thread a cell left going does not keep the tool alive. A page
+  keeps a stream of a notebook open — the notebook as it stands, then each change, numbered — and sends typing, runs, a
+  stop naming the run it means and clicks on a block's controls, adds, takes away, moves and turns cells into another
+  kind, and asks what a cell's kernel offers as it is typed; in a folder, it makes a new notebook under the bare name of
+  a `.verso` file, never over a file that is there; a cell a change replaced answers the version it is gone from, and a
+  stream ends when the server stops, when the page goes away, or when the notebook is closed without saving. The
+  toolbar, a cell's properties panel and saving are there too; a file a button hands over arrives as a download in the
+  page that pressed it, under its own name, and nothing is written beside the notebook. The page draws the notebook as
+  Verso's editors draw one and sends what a person does the way Verso's own router means to: a button on its click, a
+  box or a select on its change, never on a key, one at a time, the typing first; a dropped stream reconnects and reads
+  the whole notebook again. A cell is added after another or at the end, of any kind the notebook has, taken away once
+  the person says yes, moved or turned into another kind, each only where the notebook's layout allows it; a cell's bar
+  and the export menu hold only the engine's buttons that can be pressed there, as in Verso's editor; a cell shown
+  rendered shows its text while it is selected, as in Verso's editor; the parameters form draws itself and its controls
+  reach Verso's parameters part as Verso's own script sends them; as a cell's text is typed, what its kernel offers is
+  listed under it — on Ctrl+Space, and after a dot or a quote — and a line says what the word at the cursor means until
+  the text is left; a run is offered only while none is under way, as in Verso's editor, and a run that waits for
+  another notebook's C# run says so, on its cell or on the page's own line; a change asked for while a cell runs says it
+  waits; a refusal is said in the server's own words; and a folder's list, shown even when it holds one notebook, makes
+  a new one. It carries a build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8 is
+  gone.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

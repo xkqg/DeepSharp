@@ -1066,10 +1066,12 @@ of its folder that Verso's engine says it reads — asked of the engine, so a fo
 here — and a page names one by its file name alone: any other name, a path among them, is not found. A page keeps a
 stream of a notebook open — the notebook as it stands, then each change, numbered by version, written by one writer
 on both runtimes — and sends what a person does: typing, running, stopping the run it names, a click on a block's
-control. A cell a
-change replaced answers the version it is gone from, so the page knows what to wait for; a refusal says why. A stream
-ends when the server stops, rather than holding the stop up, when the page goes away, so the notebook it showed can
-close, and when a person closes the notebook without saving it. The toolbar is the engine's, and a file a button hands
+control. A cell a change replaced answers the version it is gone from, so the page knows what to wait for; a refusal
+says why. A stream ends when the server stops, rather than holding the stop up, when the page goes away, so the
+notebook it showed can close, and when a person closes the notebook without saving it. The notebooks close as soon as
+the server is told to stop, each run under way stopped as a close stops it, so a request that waits for a run is
+answered rather than waited out; and the tool ends its process once it has stopped, as Verso's own host does, so a
+thread a cell left going cannot keep it alive. The toolbar is the engine's, and a file a button hands
 over goes to the page that pressed it, as a download under its own name, never through the stream and never written
 beside the notebook. A cell's panel is its parts' sections, and a field's new value goes to its part as the page sent
 it, as JSON, the way Verso's own editors hand it on — each part reads it, so the server holds no rule of its own about

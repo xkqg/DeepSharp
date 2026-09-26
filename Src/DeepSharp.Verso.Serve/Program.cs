@@ -6,8 +6,15 @@ namespace DeepSharp.Verso.Serve;
 /// <summary><c>deepsharp-serve</c>: DeepSharp's own server, the notebook in your browser.</summary>
 public static class Program
 {
-    /// <summary>Runs the server with the command line it was started with, until Ctrl+C stops it.</summary>
+    /// <summary>
+    /// Runs the server with the command line it was started with, until Ctrl+C stops it, and then ends the process, as
+    /// Verso's own host ends its process when it stops: a thread a notebook's cell left going would otherwise keep the tool
+    /// alive after its stop.
+    /// </summary>
     /// <param name="args">The command line's words.</param>
-    /// <returns>0 once it stopped, or said its usage; 1 when it could not listen; 2 when its command line was refused.</returns>
-    public static Task<int> Main(string[] args) => NotebookServer.RunAsync(args, Console.Out, Console.Error, CancellationToken.None);
+    /// <returns>
+    /// When it has run. The process ends with 0 once it stopped, or said its usage; 1 when it could not listen; 2 when its
+    /// command line was refused.
+    /// </returns>
+    public static async Task Main(string[] args) => Environment.Exit(await NotebookServer.RunAsync(args, Console.Out, Console.Error, CancellationToken.None));
 }
