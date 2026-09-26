@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Pipelines;
 using DeepSharp.Verso.Notebooks;
 using Verso.Abstractions;
 
@@ -87,7 +88,7 @@ public sealed class SessionTests : IDisposable
         var mayFinish = new TaskCompletionSource();
         var order = new List<string>();
 
-        var first = session.OneAtATimeAsync(async () =>
+        var first = session.OneAtATimeAsync(async _ =>
         {
             order.Add("first begins");
             await mayFinish.Task;
@@ -95,7 +96,7 @@ public sealed class SessionTests : IDisposable
 
             return (string?)"first";
         });
-        var second = session.OneAtATimeAsync(() =>
+        var second = session.OneAtATimeAsync(_ =>
         {
             order.Add("second");
 
@@ -124,7 +125,7 @@ public sealed class SessionTests : IDisposable
         var declare = notebook.Scaffold.Cells[1];
         var session = notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session;
         var mayFinish = new TaskCompletionSource();
-        var running = session.OneAtATimeAsync(async () =>
+        var running = session.OneAtATimeAsync(async _ =>
         {
             await mayFinish.Task;
 
@@ -160,11 +161,67 @@ public sealed class SessionTests : IDisposable
 
         notebook.Scaffold.Cells[3].Source = """{"step": "fill.missing", "column": "age", "with": "mean"}""";
         session.Publish(NotebookPipeline.Of(notebook.Scaffold.Cells));
-        session.Request(last.Id, asked.RequestFor(last.Id, ViewTrigger.Run, page: 0));
 
-        await notebook.RunAsync(last);
+        await session.OneAtATimeAsync(async turn =>
+        {
+            await session.AskAsync(last.Id, asked.RequestFor(last.Id, ViewTrigger.Run, page: 0), turn, notebook.Scaffold.NotebookOps);
+
+            return true;
+        });
 
         Assert.False(notebook.Scaffold.Variables.TryGet<string>(StepKernel.HandOver, out var handed) && handed!.Contains("\"fitted\"", StringComparison.Ordinal));
         Assert.Equal(0, session.RunsFitted);
+    }
+
+    [Fact]
+    public async Task AChangeAStopCameAfter_LeavesItsBlockNothing_AndNeverRunsIt()
+    {
+        await using var notebook = await Notebook.OpenAsync(Path.Join(_folder, "titanic.verso"));
+
+        foreach (var block in Titanic)
+        {
+            notebook.AddBlock(block);
+        }
+
+        var blocks = notebook.Host.GetCellTypes().OfType<StepCellType>().Single();
+        var last = notebook.Scaffold.Cells[^1];
+        var asked = NotebookPipeline.Of(notebook.Scaffold.Cells);
+
+        await blocks.Session.OneAtATimeAsync(async turn =>
+        {
+            // The stop comes after the change began, before it asks its block for anything.
+            blocks.Stopped();
+            await blocks.Session.AskAsync(last.Id, asked.RequestFor(last.Id, ViewTrigger.Show, page: 0), turn, notebook.Scaffold.NotebookOps);
+
+            return true;
+        });
+
+        Assert.Empty(last.Outputs);
+        Assert.Null(blocks.Session.Take(last.Id));
+    }
+
+    [Fact]
+    public async Task AFitThatEndsAfterAStop_IsNotHandedOver_ThoughTheBlocksStillDeclareIt()
+    {
+        await using var notebook = await Notebook.OpenAsync(Path.Join(_folder, "titanic.verso"));
+
+        foreach (var block in Titanic)
+        {
+            notebook.AddBlock(block);
+        }
+
+        var blocks = notebook.Host.GetCellTypes().OfType<StepCellType>().Single();
+        var assembled = NotebookPipeline.Of(notebook.Scaffold.Cells);
+        var fit = new Pipeline(assembled.Readable, rows: null, SourceFolder.Of(_folder)).Run();
+
+        blocks.Session.Publish(assembled);
+
+        // The turn of a change that began before the stop, and whose fit ends after it.
+        var turn = await blocks.Session.OneAtATimeAsync(turn => Task.FromResult(turn));
+        blocks.Stopped();
+
+        Assert.False(blocks.Session.HandOverFit(notebook.Scaffold.Variables, fit, "the bytes it read", turn));
+        Assert.Equal(0, blocks.Session.RunsFitted);
+        Assert.False(notebook.Scaffold.Variables.TryGet<string>(StepKernel.HandOver, out _));
     }
 }

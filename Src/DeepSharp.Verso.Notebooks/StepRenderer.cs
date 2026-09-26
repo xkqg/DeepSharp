@@ -207,11 +207,10 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return "This gesture came without the notebook it was made in, so there is nothing for it to act on.";
         }
 
-        var gesture = new Gesture(
-            session, notebook, operations, variables, context.CellId,
-            LayoutLets(operations, LayoutCapabilities.CellInsert | LayoutCapabilities.CellDelete));
+        var mayAddAndRemove = LayoutLets(operations, LayoutCapabilities.CellInsert | LayoutCapabilities.CellDelete);
 
-        return await session.OneAtATimeAsync(() => HandleAsync(gesture, context));
+        return await session.OneAtATimeAsync(turn =>
+            HandleAsync(new Gesture(session, notebook, operations, variables, context.CellId, mayAddAndRemove, turn), context));
     }
 
     private static async Task<string?> HandleAsync(Gesture gesture, CellInteractionContext context)
@@ -225,6 +224,13 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         }
 
         var assembled = NotebookPipeline.Of(gesture.Notebook.Cells);
+
+        // What changed since the last gesture without one seeing it — a block added, taken away, moved or typed into in
+        // the editor — is caught up with first: a grid the blocks no longer make is cleared.
+        foreach (var stale in gesture.Session.BlocksChanged(assembled, gesture.Variables, except: gesture.Cell))
+        {
+            await gesture.Operations.ClearOutputAsync(stale);
+        }
 
         switch (context.InteractionType)
         {

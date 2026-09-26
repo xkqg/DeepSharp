@@ -13,9 +13,10 @@ namespace DeepSharp.Verso.Notebooks;
 /// <param name="Variables">The values the notebook's cells share.</param>
 /// <param name="Cell">The block the gesture was made on.</param>
 /// <param name="MayAddAndRemove">Whether the layout the notebook is shown in lets a part add and remove blocks.</param>
+/// <param name="Turn">The gesture's turn on the notebook: what it asks a block for is asked with it.</param>
 internal readonly record struct Gesture(
     NotebookSession Session, NotebookModel Notebook, INotebookOperations Operations, IVariableStore Variables, Guid Cell,
-    bool MayAddAndRemove);
+    bool MayAddAndRemove, NotebookTurn Turn);
 
 /// <summary>What a commit does to one block.</summary>
 internal enum BlockChangeKind
@@ -113,13 +114,11 @@ internal static class StepCommit
         var now = NotebookPipeline.Of(gesture.Notebook.Cells);
         var shown = gesture with { Cell = written.Shown };
 
-        foreach (var cell in gesture.Session.ForgetStale(now, except: shown.Cell))
+        // Only a block's view is cleared: a block deleted since it was shown has nothing left to clear, and a cell turned
+        // into another kind shows what is its own.
+        foreach (var cell in gesture.Session.BlocksChanged(now, gesture.Variables, except: shown.Cell))
         {
-            // A block deleted since it was shown has nothing left to clear.
-            if (gesture.Notebook.Cells.Any(each => each.Id == cell))
-            {
-                await gesture.Operations.ClearOutputAsync(cell);
-            }
+            await gesture.Operations.ClearOutputAsync(cell);
         }
 
         // A block written is one a front end has never seen, and its run is what makes a front end read the notebook
@@ -142,8 +141,9 @@ internal static class StepCommit
     /// <returns>A task that ends when the block has run.</returns>
     internal static async Task NotMadeAsync(Gesture gesture, NotebookPipeline assembled, IReadOnlyList<string> notMade, ListPicks? list = null)
     {
-        gesture.Session.Request(gesture.Cell, assembled.RequestFor(gesture.Cell, ViewTrigger.Commit, page: 0) with { NotMade = notMade, List = list });
-        await gesture.Operations.ExecuteCellAsync(gesture.Cell);
+        var request = assembled.RequestFor(gesture.Cell, ViewTrigger.Commit, page: 0) with { NotMade = notMade, List = list };
+
+        await gesture.Session.AskAsync(gesture.Cell, request, gesture.Turn, gesture.Operations);
     }
 
     /// <summary>Shows the data at the block a gesture was made on, by leaving its kernel a request and running it.</summary>
@@ -163,9 +163,7 @@ internal static class StepCommit
         gesture.Session.Publish(assembled);
 
         gesture.Session.HandOver(gesture.Variables, assembled);
-        gesture.Session.Request(gesture.Cell, assembled.RequestFor(gesture.Cell, trigger, page) with { List = list });
-
-        await gesture.Operations.ExecuteCellAsync(gesture.Cell);
+        await gesture.Session.AskAsync(gesture.Cell, assembled.RequestFor(gesture.Cell, trigger, page) with { List = list }, gesture.Turn, gesture.Operations);
 
         return null;
     }

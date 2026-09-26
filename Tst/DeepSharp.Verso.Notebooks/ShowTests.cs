@@ -93,7 +93,8 @@ public sealed class ShowTests : IDisposable
     {
         // A C# cell never sees a pipeline the blocks no longer make, as far as a part is told: a block run by hand
         // with other text, a block no gesture has read, and a block that is not a step all take the hand-over back
-        // until a gesture reads the notebook again. An edit never run, or a block deleted or moved, tells no part.
+        // until a gesture reads the notebook again. An edit never run, or a block deleted or moved, is caught up with
+        // at that gesture.
         await using var notebook = await NotebookAsync(Titanic);
         var fill = notebook.Scaffold.Cells[3];
         bool HandedOver() => notebook.Scaffold.Variables.TryGet<string>(StepKernel.HandOver, out _);

@@ -14,8 +14,8 @@ namespace DeepSharp.Tests.Notebooks;
 /// that learns, and hands C# cells the declaration with what it learned; "Export the pipeline" saves the pipeline
 /// file, with what the fit learned only while it is the fit of the steps the blocks declare now. A C# cell reads the
 /// pipeline afresh every time it runs, under a key no C# variable can have, and so never sees one the blocks no
-/// longer make — as far as a part is told: an edit in the editor that was never run, or a block deleted or moved,
-/// reaches no part until the notebook is read again.
+/// longer make: an edit in the editor that was never run, or a block added, deleted or moved, is caught up with at the
+/// next gesture, and at once when the host changed the cells itself.
 /// </summary>
 public sealed class ToolbarTests : IDisposable
 {
@@ -318,7 +318,7 @@ public sealed class ToolbarTests : IDisposable
         await using var notebook = await NotebookAsync(Titanic);
         var session = notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session;
         var mayFinish = new TaskCompletionSource();
-        var holding = session.OneAtATimeAsync(async () =>
+        var holding = session.OneAtATimeAsync(async _ =>
         {
             await mayFinish.Task;
 

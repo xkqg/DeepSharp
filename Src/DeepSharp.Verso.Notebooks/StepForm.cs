@@ -18,10 +18,10 @@ namespace DeepSharp.Verso.Notebooks;
 /// the one place a step lives, so the form writes it and never the cell's metadata, where a number would come back
 /// as something else. It never throws, because Verso shows an empty panel for a part that does.
 /// <para>
-/// A column is picked from the columns in scope at the block as the last gesture assembled the notebook: this part
-/// is handed one cell and never assembles the notebook itself. A change makes stale what was worked out from the
-/// block — its own card, and every view shown below it — and those are cleared; and since no gesture saw the change,
-/// the pipeline handed to C# cells is withdrawn until one does.
+/// A column is picked from the columns in scope at the block as the notebook was last read: this part is handed one
+/// cell, and reaches the others only through the notebook the last gesture read. A change makes stale what was worked
+/// out from the block — its own card, and every view shown below it — and those are cleared; and since no gesture saw
+/// the change, it goes through the rule every such change does, which takes back the pipeline handed to C# cells.
 /// </para>
 /// </remarks>
 [VersoExtension]
@@ -100,7 +100,7 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
 
         var session = RequiredSession;
 
-        return session.OneAtATimeAsync(() => Task.FromResult(Changed(session, cell, propertyName, value, context.Variables)));
+        return session.OneAtATimeAsync(_ => Task.FromResult(Changed(session, cell, propertyName, value, context.Variables)));
     }
 
     // Makes the change on a block that stands; says whether the field was one of the step's.
@@ -170,7 +170,8 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
     }
 
     // Writes the step, and clears what was worked out from the block as it was: its own card, and every view shown
-    // that the change made stale. No gesture saw the change, so what was handed to C# cells is withdrawn.
+    // that the change made stale. No gesture saw the change, so it goes through the rule every such change does, which
+    // takes back what was handed to C# cells.
     private static void Write(NotebookSession session, IVariableStore variables, CellModel cell, IPipelineStep edited, StepCatalog catalog)
     {
         cell.Source = edited.AsBlockText();
@@ -179,14 +180,17 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
 
         if (session.Assembled is { } before)
         {
-            // A view of a block deleted since is forgotten with the rest: there is nothing left to clear.
-            foreach (var stale in session.ForgetStale(NotebookPipeline.Of(before.Cells), except: null))
+            // A view of a block deleted since, or of a cell turned into another kind, is forgotten with the rest, and
+            // nothing of such a cell's is cleared.
+            foreach (var stale in session.BlocksChanged(NotebookPipeline.Of(before.Cells), variables, except: null))
             {
-                before.Cells.FirstOrDefault(each => each.Id == stale)?.Outputs.Clear();
+                before.Cells.First(each => each.Id == stale).Outputs.Clear();
             }
         }
-
-        NotebookSession.Withdraw(variables);
+        else
+        {
+            NotebookSession.Withdraw(variables);
+        }
     }
 
     // What the form knows around a block: the columns before it, when the last gesture assembled it into the

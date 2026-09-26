@@ -120,7 +120,12 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   changes nothing until the list's own box is ticked. Every change to a notebook takes its turn — a gesture on the
   grid or a list, a change in the form, the toolbar's run, export and take-over — so a host that hands them over side
   by side still changes the blocks one at a time, and a change still on its way to a block the change before it
-  rewrote is not made. C# cells in the same notebook are handed the
+  rewrote is not made. A block added, taken away or moved, a cell turned into another kind, or text typed into a
+  block — none of which Verso's editors tell a part of — is caught up with at the next gesture: a grid the blocks no
+  longer make is cleared, and the pipeline handed to C# cells is taken back unless they still make it, while a cell
+  turned into another kind keeps what it shows. An application that changes cells itself tells the notebook at once,
+  with `StepCellType.BlocksChangedAsync`, and tells it of a stop with `StepCellType.Stopped`, after which what the
+  stopped run asks for writes nothing. C# cells in the same notebook are handed the
   pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. Saving the
   notebook keeps the steps and leaves out what the blocks show, the data included. It is
   installed from Verso's Extensions panel and runs in Verso's VS Code extension, in the browser editor
@@ -136,8 +141,11 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   and what they show, are handed over as plain values. Typing a cell's text, running a cell and a click on a control a
   block drew take their turn one at a time, in the order they came; typing or running a cell a change before it
   rewrote is refused, while a click from its card still reaches the part, which knows the block it became, and what a
-  part answers a click with is what the cell shows next. A run that never ends is stopped by a
-  fresh kernel, and C# runs take their turn across the whole process, so none prints into another. The toolbar is
+  part answers a click with is what the cell shows next. Typing into a block tells the notebook at once, so what was
+  worked out from the block as it was is taken back. A run that never ends is stopped by a fresh kernel, and the
+  notebook is told first: what the run left behind writes nothing more — no grid, and no pipeline handed to C# cells —
+  and the notebook takes its next change at once. C# runs take their turn across the whole process, so none prints
+  into another. The toolbar is
   every button the engine has, each saying whether it can be pressed; a file a button hands over goes to whoever
   pressed it, and nothing is written beside the notebook. A cell's properties panel is a section from every part that
   has one for it, and a changed field is made by that part. A notebook is saved the way Verso's editors save it — what

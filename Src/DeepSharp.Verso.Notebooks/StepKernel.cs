@@ -40,8 +40,10 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
     /// <remarks>
     /// A C# cell reads it with <c>Variables.TryGet&lt;string&gt;</c>, because it is often not there: not until "Show the
     /// data here" or the toolbar's run reads the blocks, and not again after Verso's Run All, a change made in a block's
-    /// form, a block run by hand with other text, or blocks that make no whole pipeline — whenever the blocks may no
-    /// longer make what it held. Either of those two reads the blocks and hands it over again. The text reads back
+    /// form, a block run by hand with other text, blocks that make no whole pipeline, or a stopped run — whenever the
+    /// blocks may no longer make what it held. A block added, taken away, moved, turned into another kind or typed into
+    /// takes it back too, unless the blocks still make it, once the notebook hears of it: at the next gesture, or at once
+    /// from a host that changes cells itself. Either of those two reads the blocks and hands it over again. The text reads back
     /// through a catalog of the packages' own verbs, <c>StepCatalog.BuiltIn().WithIndicators()</c>, and a relative
     /// source path in it is read from the folder handed over beside it, under <see cref="Folder"/>.
     /// <para>
@@ -105,7 +107,8 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
     /// <remarks>
     /// A block run because somebody ran it shows its card. A block run by a gesture shows its card and what the
     /// gesture asked for — the data there, or why there is none — and the request is taken once, so running the
-    /// block again afterwards shows the card alone. A block run by hand whose step is not the one the last gesture
+    /// block again afterwards shows the card alone. A run stopped since the gesture began shows its card and nothing it
+    /// worked out after it, and hands nothing over. A block run by hand whose step is not the one the last gesture
     /// read withdraws the pipeline handed to C# cells, which no longer is the one the blocks make.
     /// </remarks>
     public async Task<IReadOnlyList<CellOutput>> ExecuteAsync(string code, IExecutionContext context)
@@ -215,6 +218,12 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
         }
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or FormatException or InvalidOperationException)
         {
+            // A run stopped since it was asked for says nothing of what it met.
+            if (session.StoppedSince(request.Turn))
+            {
+                return;
+            }
+
             // The rows are gone or other than a fit learned from: nothing learned from them is handed on.
             session.Hidden(context.CellId);
 
@@ -225,6 +234,12 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
 
             await context.WriteOutputAsync(StepCard.RowsRefused(refused.Message));
 
+            return;
+        }
+
+        // A run stopped since it was asked for writes nothing more: the person who stopped it gets no grid of it.
+        if (session.StoppedSince(request.Turn))
+        {
             return;
         }
 
@@ -255,9 +270,21 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
         }
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or FormatException or InvalidOperationException)
         {
+            // A list stopped since it was asked for says nothing of what it met.
+            if (session.StoppedSince(request.Turn))
+            {
+                return;
+            }
+
             session.Hidden(context.CellId);
             await context.WriteOutputAsync(StepCard.RowsRefused(refused.Message));
 
+            return;
+        }
+
+        // A list stopped since it was asked for is neither drawn nor saved.
+        if (session.StoppedSince(request.Turn))
+        {
             return;
         }
 
@@ -294,6 +321,12 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
     private static void HandOverOnceRead(
         NotebookSession session, ViewRequest request, Pipeline pipeline, string fingerprint, IVariableStore variables)
     {
+        // A run stopped since it was asked for hands nothing over, and fits nothing it would only throw away.
+        if (session.StoppedSince(request.Turn))
+        {
+            return;
+        }
+
         if (!request.RunsTheWholePipeline)
         {
             if (session.Assembled is { } assembled)
@@ -306,7 +339,7 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
 
         if (!session.HandOverFitAgain(variables, pipeline.Declaration, fingerprint))
         {
-            session.HandOverFit(variables, pipeline.Run(), fingerprint);
+            session.HandOverFit(variables, pipeline.Run(), fingerprint, request.Turn);
         }
     }
 

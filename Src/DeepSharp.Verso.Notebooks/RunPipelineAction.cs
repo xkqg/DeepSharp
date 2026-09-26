@@ -70,7 +70,7 @@ public sealed class RunPipelineAction : NotebookExtension, IToolbarAction
 
         var session = RequiredSession;
 
-        await session.OneAtATimeAsync(async () =>
+        await session.OneAtATimeAsync(async turn =>
         {
             var assembled = NotebookPipeline.Of(context.NotebookCells);
 
@@ -79,14 +79,18 @@ public sealed class RunPipelineAction : NotebookExtension, IToolbarAction
                 return false;
             }
 
-            session.Publish(assembled);
+            // What changed since the last gesture without one seeing it is caught up with first.
+            foreach (var stale in session.BlocksChanged(assembled, context.Variables, except: null))
+            {
+                await context.Notebook.ClearOutputAsync(stale);
+            }
+
             session.HandOver(context.Variables, assembled);
 
             // The whole pipeline runs at its last block; one the blocks do not make is refused at the block that stops it.
             var at = assembled.Whole ? assembled.Blocks[^1].Cell : assembled.Blocks.First(block => block.Faults.Count > 0).Cell;
 
-            session.Request(at, assembled.RequestFor(at, ViewTrigger.Run, page: 0));
-            await context.Notebook.ExecuteCellAsync(at);
+            await session.AskAsync(at, assembled.RequestFor(at, ViewTrigger.Run, page: 0), turn, context.Notebook);
 
             return true;
         });

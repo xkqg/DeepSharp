@@ -81,4 +81,42 @@ public sealed class StepCellType : NotebookExtension, ICellType
 
         return catalog.ReadStep(catalog.Describe(ReadCsvStep.Name).Template).AsBlockText();
     }
+
+    /// <summary>
+    /// Tells the notebook its cells changed where no gesture saw it: a block inserted, taken away or moved, a cell turned
+    /// into another kind, or text typed into one. What was worked out from the blocks as they were is taken back — a grid
+    /// they no longer make is cleared, and the pipeline handed to C# cells is taken back unless they still make it.
+    /// </summary>
+    /// <param name="notebook">The notebook, its cells as they stand now.</param>
+    /// <param name="variables">The notebook's variables, as a host hands them to a part.</param>
+    /// <param name="operations">What can be done to the notebook: a grid is cleared through it.</param>
+    /// <returns>A task that ends when the notebook has caught up.</returns>
+    /// <remarks>
+    /// A host that changes cells itself calls it after each such change, as <c>DeepSharp.Verso.Api</c> does. Verso's own
+    /// editors call nothing, and the notebook catches up at their next gesture instead. It waits its turn among the
+    /// notebook's changes, so it never lands in the middle of one.
+    /// </remarks>
+    public Task BlocksChangedAsync(NotebookModel notebook, IVariableStore variables, INotebookOperations operations)
+    {
+        ArgumentNullException.ThrowIfNull(notebook);
+        ArgumentNullException.ThrowIfNull(variables);
+        ArgumentNullException.ThrowIfNull(operations);
+
+        return Session.OneAtATimeAsync(async _ =>
+        {
+            foreach (var stale in Session.BlocksChanged(NotebookPipeline.Of(notebook.Cells), variables, except: null))
+            {
+                await operations.ClearOutputAsync(stale);
+            }
+
+            return true;
+        });
+    }
+
+    /// <summary>
+    /// Tells the notebook the run under way was stopped: what that run asked for writes nothing more — no grid, and nothing
+    /// handed to C# cells — and the notebook takes its next change at once, while the run goes on by itself.
+    /// </summary>
+    /// <remarks>A host that stops a run calls it before the run's kernel restarts, as <c>DeepSharp.Verso.Api</c> does.</remarks>
+    public void Stopped() => Session.Stopped();
 }

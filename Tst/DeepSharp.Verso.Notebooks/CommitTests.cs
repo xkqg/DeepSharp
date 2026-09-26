@@ -60,7 +60,8 @@ public sealed class CommitTests : IDisposable
         notebook.Scaffold.NotebookOps,
         notebook.Scaffold.Variables,
         cell.Id,
-        MayAddAndRemove: true);
+        MayAddAndRemove: true,
+        Turn: default);
 
     // ---- which blocks change
 

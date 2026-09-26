@@ -29,6 +29,14 @@ internal readonly record struct SourceBytes(bool Known, string? Fingerprint)
     public bool Allow(string learnedFrom) => !Known || Fingerprint == learnedFrom;
 }
 
+/// <summary>One change's turn on a notebook, as it began: how many runs had been stopped by then.</summary>
+/// <param name="Stops">How many runs had been stopped when the change began.</param>
+/// <remarks>
+/// A stop that comes after the turn began voids what the change asks for from then on: a run it started goes on by
+/// itself, and writes nothing more — no grid, and nothing handed to C# cells.
+/// </remarks>
+internal readonly record struct NotebookTurn(int Stops);
+
 /// <summary>
 /// What only holds between the calls on one notebook: which block shows what, what a gesture asked a block for, what
 /// the notebook hands to C# cells, and that one change on it runs at a time.
@@ -88,29 +96,97 @@ internal sealed class NotebookSession
     /// before it has finished.
     /// </summary>
     /// <typeparam name="T">What the change answers.</typeparam>
-    /// <param name="change">The change: a gesture may ask a block for something and run the block.</param>
+    /// <param name="change">
+    /// The change, handed its turn: a gesture may ask a block for something with it, through <see cref="AskAsync"/>.
+    /// </param>
     /// <returns>Its answer.</returns>
     /// <remarks>
     /// A gesture leaves a request and then runs the block that takes it; two gestures that interleave would each take
     /// the other's, and a change in a form written while a gesture rewrites the blocks lands on a block that is going
     /// away. One host sends one request at a time, another runs them side by side, and this holds for both. A change
-    /// handed on from inside another never runs: it waits for the one it is inside.
+    /// handed on from inside another never runs: it waits for the one it is inside. A stop gives the lane back at once:
+    /// the change it stopped goes on by itself, and what it asks for from then on writes nothing. The turn begins in the
+    /// same step that gives the change the lane, so a stop comes either before it, and is not its own, or after, and gives
+    /// its lane back.
     /// </remarks>
-    public async Task<T> OneAtATimeAsync<T>(Func<Task<T>> change)
+    public async Task<T> OneAtATimeAsync<T>(Func<NotebookTurn, Task<T>> change)
     {
         var mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var before = Interlocked.Exchange(ref _lane, mine.Task);
 
         await before;
 
+        var turn = default(NotebookTurn);
+
+        Change(state =>
+        {
+            turn = new NotebookTurn(state.Stops);
+
+            return state with { Holder = mine };
+        });
+
         try
         {
-            return await change();
+            return await change(turn);
         }
         finally
         {
-            mine.SetResult();
+            // A change a stop gave the lane back for no longer holds it: the lane may be the next change's by now.
+            Change(state => state.Holder == mine ? state with { Holder = null } : state);
+            mine.TrySetResult();
         }
+    }
+
+    /// <summary>
+    /// Counts a stop of the run under way, and gives the notebook back at once: the change that run holds lets the next
+    /// one in, and what the run asks for from then on writes nothing — no grid, and nothing handed to C# cells — while
+    /// the run itself goes on by itself.
+    /// </summary>
+    public void Stopped()
+    {
+        TaskCompletionSource? holding = null;
+
+        Change(state =>
+        {
+            holding = state.Holder;
+
+            return state with { Stops = state.Stops + 1, Holder = null };
+        });
+
+        holding?.TrySetResult();
+    }
+
+    /// <summary>Whether a run was stopped since a change began: what the change asks for then writes nothing.</summary>
+    /// <param name="turn">The change's turn.</param>
+    /// <returns><see langword="true"/> once a stop came after the turn began.</returns>
+    public bool StoppedSince(NotebookTurn turn) => Now.Stops != turn.Stops;
+
+    /// <summary>
+    /// Catches up with blocks that changed where no gesture saw it — a block inserted, taken away or moved, a cell turned
+    /// into another kind, text typed into one: keeps the pipeline the cells make now, forgets every view they no longer
+    /// make, and takes back what was handed to C# cells unless the blocks still make it.
+    /// </summary>
+    /// <param name="now">The pipeline the cells make now.</param>
+    /// <param name="variables">The notebook's variables, as the caller was handed them.</param>
+    /// <param name="except">The block a gesture was made on, which that gesture shows again itself; nothing otherwise.</param>
+    /// <returns>
+    /// The blocks whose views were forgotten, for the caller to clear: blocks still, never a cell that stopped being one,
+    /// since what such a cell shows is its own.
+    /// </returns>
+    /// <remarks>It hands nothing over: only a gesture or the toolbar's run does.</remarks>
+    public IReadOnlyList<Guid> BlocksChanged(NotebookPipeline now, IVariableStore variables, Guid? except)
+    {
+        ArgumentNullException.ThrowIfNull(now);
+        ArgumentNullException.ThrowIfNull(variables);
+
+        Publish(now);
+
+        if (variables.TryGet<string>(StepKernel.HandOver, out var handed) && handed != EnvelopeFor(variables, now, SourceBytes.Unknown))
+        {
+            Withdraw(variables);
+        }
+
+        return [.. ForgetStale(now, except).Where(cell => now.PositionOf(cell) >= 0)];
     }
 
     /// <summary>Keeps the pipeline a gesture assembled, for the parts that ask what is around a block.</summary>
@@ -174,8 +250,9 @@ internal sealed class NotebookSession
     /// <param name="variables">The notebook's variables.</param>
     /// <param name="prepared">The run.</param>
     /// <param name="fingerprint">The fingerprint of the bytes it read.</param>
+    /// <param name="turn">The turn of the change that asked for the run: a stop since voids it.</param>
     /// <returns><see langword="true"/> when it was handed over.</returns>
-    public bool HandOverFit(IVariableStore variables, PreparedData prepared, string fingerprint)
+    public bool HandOverFit(IVariableStore variables, PreparedData prepared, string fingerprint, NotebookTurn turn)
     {
         ArgumentNullException.ThrowIfNull(variables);
         ArgumentNullException.ThrowIfNull(prepared);
@@ -186,7 +263,7 @@ internal sealed class NotebookSession
 
         Change(state =>
         {
-            fitted = state.Assembled?.Readable.Equals(prepared.Declaration) == true;
+            fitted = state.Stops == turn.Stops && state.Assembled?.Readable.Equals(prepared.Declaration) == true;
 
             return fitted ? state with { Run = stamp, RunsFitted = state.RunsFitted + 1 } : state;
         });
@@ -299,10 +376,38 @@ internal sealed class NotebookSession
     public IReadOnlyList<IPipelineStep>? ContinuationOf(string control, string key, string fingerprint) =>
         Now.Select is { } last && last.Control == control && last.KeyLeft == key && last.FingerprintLeft == fingerprint ? last.Drawn : null;
 
-    /// <summary>Asks a block to show something the next time it runs.</summary>
+    /// <summary>
+    /// Asks a block to show something, and runs it: leaves the block the request, which its kernel takes once, and runs
+    /// the block through the notebook — unless a stop came since the change that asks began, which then leaves nothing
+    /// and runs nothing.
+    /// </summary>
     /// <param name="cell">The block's cell.</param>
     /// <param name="request">What to show.</param>
-    public void Request(Guid cell, ViewRequest request) => Change(state => state with { Requests = state.Requests.SetItem(cell, request) });
+    /// <param name="turn">The turn of the change that asks.</param>
+    /// <param name="notebook">What can be done to the notebook: the block is run through it.</param>
+    /// <returns>A task that ends when the block has run, or at once for a change that was stopped.</returns>
+    /// <remarks>
+    /// The request carries the turn, so a stop that comes while the block runs voids it too. A stopped change that went
+    /// on would otherwise leave its request over one a later change left, and run the block with it.
+    /// </remarks>
+    public async Task AskAsync(Guid cell, ViewRequest request, NotebookTurn turn, INotebookOperations notebook)
+    {
+        ArgumentNullException.ThrowIfNull(notebook);
+
+        var left = false;
+
+        Change(state =>
+        {
+            left = state.Stops == turn.Stops;
+
+            return left ? state with { Requests = state.Requests.SetItem(cell, request with { Turn = turn }) } : state;
+        });
+
+        if (left)
+        {
+            await notebook.ExecuteCellAsync(cell);
+        }
+    }
 
     /// <summary>Takes what a block was asked to show, once.</summary>
     /// <param name="cell">The block's cell.</param>
@@ -445,6 +550,12 @@ internal sealed class NotebookSession
 
         /// <summary>How many runs of the whole pipeline were fitted and handed over.</summary>
         public int RunsFitted { get; init; }
+
+        /// <summary>How many runs were stopped.</summary>
+        public int Stops { get; init; }
+
+        /// <summary>The change that holds the lane now: a stop gives it back.</summary>
+        public TaskCompletionSource? Holder { get; init; }
     }
 
     /// <summary>Why a change was not made, and the text it was refused on.</summary>

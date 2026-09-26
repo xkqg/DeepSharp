@@ -886,7 +886,9 @@ Verso's own engine. The session is held by the block type Verso loaded, the one 
 notebook reaches — the block type's own kernel directly, every other part through the host that loaded it —
 and one change on it runs at a time: a gesture, a change in a block's form, the toolbar's run, export and take-over
 each wait for the one before them, in the order they came, since one host hands them over one at a time and another
-side by side. A change still on its way to a block the change before it rewrote or took away is not made, as a host
+side by side. A stop gives the notebook back at once: the change it stopped goes on by itself, and what that change
+asks for from then on writes nothing — no grid, and nothing handed to C# cells — because a change's turn begins with
+the number of stops so far, and what it asks a block for carries its turn. A change still on its way to a block the change before it rewrote or took away is not made, as a host
 that looks a block up by its id and finds none makes none. It is never static and never shared with another
 notebook. A block run by hand reaches the session outside that line, so what the session knows is one value, and
 each change makes the next value from the one there is and puts it in place whole: a reader never sees half a
@@ -899,8 +901,11 @@ run learned while it is the run of the steps declared now over the bytes there n
 types and a cell's are loaded apart and are not the same types even when their names are. The key is one no C#
 variable can have, so a cell reads it afresh every time rather than the value it saw first. It is taken back
 whenever the blocks may no longer make what it holds, and only a gesture or the toolbar's run hands it over
-again, which is as far as the notebook can see: an edit that was never run, or a block deleted or moved, tells
-no part of it anything.
+again. What changes the blocks without a gesture — a block added, taken away or moved, a cell turned into another
+kind, text typed into a block — reaches the notebook through one rule, as soon as it hears of it: a grid the blocks no
+longer make is cleared, and the pipeline is taken back unless they still make it, while a cell turned into another
+kind keeps what it shows, since that is its own. Verso's editors tell a part nothing of such a change, so the notebook
+hears of it at the next gesture; a host that changes cells itself tells it at once.
 
 A notebook of blocks is saved as a `.verso` file. Saving one as Jupyter is refused, because a Jupyter file has
 no place for a block type and would keep the steps as code cells; opening a Jupyter file whose code cells read
@@ -950,7 +955,10 @@ its card is handed on all the same, as Verso's own editors hand every click on, 
 card it shows until it draws again — a walk down a select sends several — and the part knows what became of the block
 the card was drawn for. What a part answers a click with is what the cell shows next. A run that never ends is stopped the only way the engine can stop one, with a fresh kernel —
 its token cancelled, a C# loop that waits goes on — so stopping clears the notebook's variables, the pipeline handed
-to C# cells among them, and the run itself goes on in the background until the application ends. C# runs take their
+to C# cells among them, and the run itself goes on in the background until the application ends. The notebook is told
+of the stop before the kernel restarts, so what the run left behind asks for from then on writes nothing, and the
+notebook takes its next change at once. Typing tells the notebook too, at once, so what was worked out from a block as
+it was is taken back before anything else is asked of it. C# runs take their
 turn across the whole process, because a C# kernel takes over the process's console while it runs: two at once printed
 into each other, in two notebooks and under two separate holders of notebooks alike. The toolbar is every button the
 engine has, Verso's own and DeepSharp's, each saying whether it can be pressed; a press takes its turn like anything

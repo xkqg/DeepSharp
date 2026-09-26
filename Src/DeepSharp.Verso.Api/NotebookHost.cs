@@ -100,7 +100,14 @@ public sealed class NotebookHost
     /// <summary>The notebook as Verso's engine holds and runs it.</summary>
     internal Scaffold Scaffold { get; }
 
-    /// <summary>Sets a cell's text, as typing it does; nothing runs.</summary>
+    // The block type the engine loaded, which keeps the notebook's session: found the way every part of the notebook
+    // finds it, among everything the engine loaded.
+    private StepCellType Blocks => ((IExtensionHostContext)Extensions).GetLoadedExtensions().OfType<StepCellType>().First();
+
+    /// <summary>
+    /// Sets a cell's text, as typing it does; nothing runs, and the notebook is told at once, so what was worked out from
+    /// a block as it was — a grid, the pipeline handed to C# cells — is taken back before anything else is asked of it.
+    /// </summary>
     /// <param name="cell">The cell.</param>
     /// <param name="source">Its new text.</param>
     /// <returns>The cell as it stands after.</returns>
@@ -109,12 +116,15 @@ public sealed class NotebookHost
     {
         ArgumentNullException.ThrowIfNull(source);
 
-        return TurnAsync(() =>
+        return TurnAsync(async () =>
         {
             Standing(cell);
             Scaffold.UpdateCellSource(cell, source);
 
-            return Task.FromResult(EndTurn().Cells.First(each => each.Id == cell));
+            // The notebook is told at once: what was worked out from the block as it was is taken back.
+            await Blocks.BlocksChangedAsync(Scaffold.Notebook, Scaffold.Variables, Scaffold.NotebookOps);
+
+            return EndTurn().Cells.First(each => each.Id == cell);
         });
     }
 
@@ -140,8 +150,9 @@ public sealed class NotebookHost
     /// <summary>
     /// Stops the run under way — a cell's, or a toolbar button's — if there is one: the only way Verso's engine stops a
     /// run that does not end is a fresh kernel, so the run's kernel is restarted, and what that kernel held — the
-    /// notebook's variables, the pipeline handed to C# cells among them — is gone. A run that never ends goes on in the
-    /// background until the application does.
+    /// notebook's variables, the pipeline handed to C# cells among them — is gone. The notebook is told first, so what
+    /// the run left behind asks for from then on writes nothing, and the notebook takes its next change at once. A run
+    /// that never ends goes on in the background until the application does.
     /// </summary>
     public void Stop() => Volatile.Read(ref _running)?.Stop();
 
@@ -662,6 +673,9 @@ public sealed class NotebookHost
             }
             else
             {
+                // The notebook is told first, so what the run left behind asks for from now on writes nothing, and the
+                // notebook takes its next change at once.
+                Blocks.Stopped();
                 await Scaffold.RestartKernelAsync(kernel);
             }
 

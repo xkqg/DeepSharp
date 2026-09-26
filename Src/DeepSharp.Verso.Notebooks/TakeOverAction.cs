@@ -78,7 +78,7 @@ public sealed class TakeOverAction : NotebookExtension, IToolbarAction
         var path = context.NotebookMetadata.ColumnsFilePath()
             ?? throw new InvalidOperationException("A notebook never saved has nothing saved beside it to take over.");
 
-        await session.OneAtATimeAsync(async () =>
+        await session.OneAtATimeAsync(async turn =>
         {
             var assembled = NotebookPipeline.Of(context.NotebookCells);
 
@@ -100,8 +100,9 @@ public sealed class TakeOverAction : NotebookExtension, IToolbarAction
 
             var at = ListedAt(assembled);
 
-            session.Request(at, assembled.RequestFor(at, ViewTrigger.TakeOver, page: 0) with { Card = Listed(assembled.Readable, path, context.NotebookMetadata.SourceFolder()) });
-            await context.Notebook.ExecuteCellAsync(at);
+            var request = assembled.RequestFor(at, ViewTrigger.TakeOver, page: 0) with { Card = Listed(assembled.Readable, path, context.NotebookMetadata.SourceFolder()) };
+
+            await session.AskAsync(at, request, turn, context.Notebook);
 
             return true;
         });

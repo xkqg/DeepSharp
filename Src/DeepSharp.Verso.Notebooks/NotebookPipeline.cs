@@ -111,13 +111,16 @@ internal sealed record ListPicks(
 /// <param name="List">
 /// The list of the source's columns, drawn with these picks, in place of the grid; nothing for the grid.
 /// </param>
+/// <param name="Turn">
+/// The turn of the change that asked for it: once a stop comes after that turn began, what it asks for writes nothing.
+/// </param>
 /// <remarks>
 /// The whole pipeline is fitted only when the toolbar's run asks it of a notebook that makes one pipeline; every other
 /// request shows the data at its block, the list of the source's columns, or the card it carries.
 /// </remarks>
 internal readonly record struct ViewRequest(
     PipelineDeclaration? Declaration, int Position, int Page, IReadOnlyList<string> Faults, ViewTrigger Trigger, bool Whole,
-    IReadOnlyList<string> NotMade, CellOutput? Card = null, ListPicks? List = null)
+    IReadOnlyList<string> NotMade, CellOutput? Card = null, ListPicks? List = null, NotebookTurn Turn = default)
 {
     /// <summary>Whether to run the whole pipeline, fitting every step, and hand what it learned over.</summary>
     public bool RunsTheWholePipeline => Trigger == ViewTrigger.Run && Whole;
