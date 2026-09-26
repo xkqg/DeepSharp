@@ -34,11 +34,12 @@ Src/DeepSharp.Pipelines/          the data side
 Src/DeepSharp.Pipelines.DataFrame/   a reader of Microsoft's DataFrame, through MatPlotLibNet.DataFrame
 Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
 Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
-Src/DeepSharp.Verso.Serve/           to come: the notebook for the browser editor verso serve starts
-Src/DeepSharp.Verso.Api/             to come: an application of your own that hosts the notebook
+Src/DeepSharp.Verso.Api/             an application of your own that hosts the notebook
+Src/DeepSharp.Verso.Serve/           to come: DeepSharp's own server, the notebook in a browser
 Samples/                          runnable programs and the published data they read
 Tst/DeepSharp/                    the tests of the libraries
 Tst/DeepSharp.Verso.Notebooks/    the notebook's tests, run inside Verso's own engine
+Tst/DeepSharp.Verso.Api/          the host's tests, run on Verso's own engine the way an application runs it
 ```
 
 The tensor library and the pipeline library do not reference each other, and a test reads their assembly
@@ -502,10 +503,10 @@ after the logo instead.
 
 A front end is the one exception, by decision: it is named after its host first and after what it is there
 second — `DeepSharp.Verso.Notebooks`. It carries nothing of the host inside it, it plugs into it, and a person
-looks for it by the host's name, in the host's own list of extensions. Another part for the same host takes the
-same prefix, and two are named: `DeepSharp.Verso.Serve` for the browser editor `verso serve` starts, and
-`DeepSharp.Verso.Api` for an application that hosts the notebook itself. The package is not Verso's; it is
-DeepSharp's way into it.
+looks for it by the host's name, in the host's own list of extensions. Another package for the same host takes the
+same prefix: `DeepSharp.Verso.Api`, with which an application of your own hosts the notebook — it carries Verso's
+engine rather than plugging into it — and, to come, `DeepSharp.Verso.Serve`, DeepSharp's own server that shows the
+notebook in a browser, built on it. The packages are not Verso's; they are DeepSharp's way into it.
 
 A project is created when there is code to put in it. Six empty assemblies laid out in advance are a
 diagram that has to be maintained; the layout above is the decision, and each package appears the day its
@@ -913,17 +914,25 @@ code is one code for both: where .NET 10 had a shorter way to say something, the
 one used — a JSON writer's line ending among them, so a pipeline file is written with a line feed on every
 machine and runtime — and both suites run on both runtimes.
 
-Two packages are named to follow the notebook, one for each place it runs outside VS Code: `DeepSharp.Verso.Serve`
-for the browser editor, and `DeepSharp.Verso.Api` for an application of your own. Neither exists yet, because today
-one package serves all three places with the same code. Each appears the day it has code of its own, and what the
-three share is kept in one package beside them rather than written into each.
+Two packages follow the notebook: `DeepSharp.Verso.Api`, with which an application of your own hosts it, and, to
+come, `DeepSharp.Verso.Serve`, DeepSharp's own server that shows it in a browser, built on Api. The notebook package
+stays the same code in every place, and a host's work lives in the host's package. What two of them would share is
+kept in one package beside them rather than written into each, and that package appears with the first type both
+sides compile against; none does yet.
 
 The block's kernel answers Verso's question for the faults in a text, but no Verso editor asks it: they ask for
 completions and hover texts only. A fault is therefore shown where a block runs, on its card, each at its line.
 
-An application that embeds the engine gets the notebook's parts from Verso's own discovery, which reads every
+An application that embeds the engine can get the notebook's parts from Verso's own discovery, which reads every
 assembly beside the application that references Verso's abstractions; the notebook's own tests open it exactly
-so. Verso's editor itself is not published for applications to reuse, so such an application does what the
+so. A program published as a single file has no assemblies beside it, and discovery then finds none, without a
+word. `DeepSharp.Verso.Api` therefore registers the parts itself, before discovery runs — a part discovery meets
+again is passed over, while one registered after it would be refused as a second — and opens a notebook the way
+Verso's own editors do: through the serializer for its format, past the guards that run after reading, with the
+cells that are only ever shown rendered drawn. An extension a notebook asks for is refused rather than fetched. One
+file is one notebook however many views show it: the file is known by its full path, compared as the file system
+compares names, it is opened once however many callers ask at the same moment, and an open that fails is forgotten
+and closes what it built. Verso's editor itself is not published for applications to reuse, so such an application does what the
 editor does: it draws a block's output, which is HTML; it hands a control's `data-action` and `data-extension-id`
 to the part the control names, with its `data-payload` — or, for a control that carries none, its state, as Verso's
 own router sends it: `true` or `false` for a box, the value it is at for a select — and with the notebook's variables
@@ -933,7 +942,8 @@ the cell types, so what the blocks show stays out of the file. An application th
 block with `StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write
 the file with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds
 the steps and no fit, because nothing ran them there. The drawing, the passing on and the toolbar's context are
-what `DeepSharp.Verso.Api` is named for: written once, beside the notebook, rather than by every application.
+what `DeepSharp.Verso.Api` is named for, written once beside the notebook rather than by every application; it opens
+the notebook today, and the rest is still to come.
 
 ## Decisions
 

@@ -12,6 +12,7 @@
                 <ModulePath>.*DeepSharp[.]Pipelines[.]DataFrame[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]Indicators[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Verso[.]Notebooks[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Verso[.]Api[.]dll$</ModulePath>
             </Include>
             <Exclude>
                 <ModulePath>.*\.Tests\.dll$</ModulePath>

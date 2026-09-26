@@ -10,7 +10,8 @@ request. Underneath it, the pipeline became strict where it was only polite. Eve
 the same rules, a row is known by what it says rather than where it stands, and a file says everything that is
 wrong with it at once, each at its line and column. A model can be asked for more than one answer — the shares
 of a whole, labels, a value some rows on — and its predictions come back in their own units; and the columns a
-pipeline decides about can be changed from the notebook, saved beside it and taken over again.
+pipeline decides about can be changed from the notebook, saved beside it and taken over again. An application of
+your own can host the notebook, too.
 
 ### Upgrading from 0.2
 
@@ -124,6 +125,14 @@ pipeline decides about can be changed from the notebook, saved beside it and tak
   notebook keeps the steps and leaves out what the blocks show, the data included. It is
   installed from Verso's Extensions panel and runs in Verso's VS Code extension, in the browser editor
   `verso serve` opens, and inside an application that takes Verso's engine as a dependency.
+
+- **`DeepSharp.Verso.Api` — the notebook in an application of your own.** It opens a notebook the way Verso's own
+  editors open one — through the serializer for its format, past the guards that run after reading, with the cells
+  that are only ever shown rendered drawn — and registers the notebook's parts itself, so a program published as a
+  single file, with nothing beside it for Verso to find, still has them. One file is one notebook, however many views
+  show it: the same path twice, or two spellings of one path, hand back the same host, and a notebook that cannot be
+  opened leaves nothing open behind it. An extension a notebook asks for is refused rather than fetched. Its cells,
+  and what they show, are handed over as plain values.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

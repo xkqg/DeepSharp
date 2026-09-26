@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A suite of its own, beside the notebook's: it tests the package an application hosts notebooks with, inside
+       Verso's own engine, the way that application runs it. -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DeepSharp.Tests.Api</RootNamespace>
+    <!-- As in the other suites: the documentation file switches the unused-using analyser on, and a test's name is
+         its documentation. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DeepSharp.Verso.Api\DeepSharp.Verso.Api.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One way to find the repository and the data the samples read, shared with the other suites. -->
+    <Compile Include="..\DeepSharp\Repository.cs" Link="Repository.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

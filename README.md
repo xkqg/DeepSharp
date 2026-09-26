@@ -69,8 +69,9 @@ It also runs the whole pipeline and exports it as the same file the chain writes
 Install it from Verso's Extensions panel. The same package runs in Verso's VS Code extension, in the browser
 editor `verso serve` opens, and inside an application of your own — the
 [Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook#where-it-runs) page says what each needs. Two more
-packages are named to follow it, one for each place it runs outside VS Code: `DeepSharp.Verso.Serve` and
-`DeepSharp.Verso.Api`; the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says where they stand.
+packages follow it: `DeepSharp.Verso.Api`, with which an application of your own hosts the notebook, and, to come,
+`DeepSharp.Verso.Serve`, DeepSharp's own server that shows it in a browser; the
+[roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says where they stand.
 
 A C# cell in the same notebook reads what the blocks declare, as text — it is there after "Show the data here" or
 the toolbar's run, and taken back whenever the blocks may no longer make it:
@@ -111,7 +112,7 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
 | `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block, and its columns chosen from the grid or a list and saved beside it. It runs in Verso's VS Code extension, in `verso serve` and in an application of your own. |
-| `DeepSharp.Verso.Serve` | To come: the notebook for the browser editor `verso serve` starts. On the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap), not yet released. |
-| `DeepSharp.Verso.Api` | To come: an application of your own hosting the notebook, with drawing what a block shows, passing a click on and the toolbar's context done for it. On the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap), not yet released. |
+| `DeepSharp.Verso.Api` | An application of your own hosting the notebook: one open notebook for each file, however many views show it, with the notebook's parts registered by the package itself — so a program published as a single file has them too — and its cells, and what they show, handed over as plain values. |
+| `DeepSharp.Verso.Serve` | To come: DeepSharp's own server that shows the notebook in a browser, on Verso's engine and built on `DeepSharp.Verso.Api`, with nothing else to install. On the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap), not yet released. |
 
 Runs on .NET 8 and .NET 10. MIT — see [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE).

@@ -5,6 +5,7 @@
     <Project Path="Src/DeepSharp.Pipelines.DataFrame/DeepSharp.Pipelines.DataFrame.csproj" />
     <Project Path="Src/DeepSharp.Pipelines.Indicators/DeepSharp.Pipelines.Indicators.csproj" />
     <Project Path="Src/DeepSharp.Verso.Notebooks/DeepSharp.Verso.Notebooks.csproj" />
+    <Project Path="Src/DeepSharp.Verso.Api/DeepSharp.Verso.Api.csproj" />
   </Folder>
   <Folder Name="/Samples/">
     <Project Path="Samples/DeepSharp.Sample.Pipelines/DeepSharp.Sample.Pipelines.csproj" />
@@ -15,5 +16,8 @@
   </Folder>
   <Folder Name="/Tst/DeepSharp.Verso.Notebooks/">
     <Project Path="Tst/DeepSharp.Verso.Notebooks/DeepSharp.Verso.Notebooks.Tests.csproj" />
+  </Folder>
+  <Folder Name="/Tst/DeepSharp.Verso.Api/">
+    <Project Path="Tst/DeepSharp.Verso.Api/DeepSharp.Verso.Api.Tests.csproj" />
   </Folder>
 </Solution>
