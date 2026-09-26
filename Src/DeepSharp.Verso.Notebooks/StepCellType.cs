@@ -74,7 +74,11 @@ public sealed class StepCellType : NotebookExtension, ICellType
     public bool PersistsOutputs => false;
 
     /// <inheritdoc />
-    /// <remarks>A new block starts as the step that reads a CSV file, written the way the step writes itself.</remarks>
+    /// <remarks>
+    /// The step that reads a CSV file, written the way the step writes itself: the block a new notebook starts with when
+    /// <c>DeepSharp.Verso.Api</c> makes one. A block added to a notebook that is there already starts empty, since neither
+    /// Verso's engine nor its editors ask a cell type for its default text.
+    /// </remarks>
     public string GetDefaultContent()
     {
         var catalog = NotebookVerbs.Catalog();

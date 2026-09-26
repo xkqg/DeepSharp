@@ -2,7 +2,10 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Collections.Concurrent;
+using DeepSharp.Verso.Notebooks;
+using Verso.Abstractions;
 using Verso.Extensions;
+using Verso.Serializers;
 
 namespace DeepSharp.Verso.Api;
 
@@ -66,6 +69,58 @@ public sealed class OpenNotebooks : IAsyncDisposable
         made = new Lazy<Task<NotebookHost>>(() => OpenOrForgetAsync(file, made!));
 
         return _open.GetOrAdd(file, made).Value.WaitAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Makes a new notebook at a path and opens it: one block, the step that reads a CSV file, written whole under a name
+    /// of its own before it takes its place, so nothing ever meets half a notebook — and never over a file already there.
+    /// </summary>
+    /// <param name="path">Where it is saved: a .verso file, the one format that keeps a block a block.</param>
+    /// <param name="cancellationToken">Stops waiting for the new notebook to open; the file is made all the same.</param>
+    /// <returns>The new notebook's host.</returns>
+    /// <exception cref="ArgumentException">The path names a file of another format.</exception>
+    /// <exception cref="IOException">A file is there already; it is left as it was.</exception>
+    /// <exception cref="InvalidOperationException">An open notebook is that file already, whether or not the file is still there.</exception>
+    /// <exception cref="ObjectDisposedException">These notebooks were closed.</exception>
+    public async Task<NotebookHost> CreateAsync(string path, CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _closed) != 0, this);
+
+        var file = Path.GetFullPath(path);
+
+        if (!file.EndsWith(".verso", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("A new notebook is a .verso file: the one format that keeps a block a block.", nameof(path));
+        }
+
+        if (_open.ContainsKey(file))
+        {
+            throw new InvalidOperationException($"'{file}' is open already, as a notebook of its own.");
+        }
+
+        var notebook = new NotebookModel { Title = Path.GetFileNameWithoutExtension(file), DefaultKernelId = "csharp", ActiveLayout = LayoutDefaults.Reference };
+
+        notebook.Cells.Add(new CellModel { Type = StepCellType.StepType, Language = StepKernel.Language, Source = new StepCellType().GetDefaultContent() });
+
+        // Written whole under a name of its own, then moved into place by the file system in one step that never replaces
+        // a file: whoever looks finds no notebook, or the whole of it.
+        var whole = Path.Join(Path.GetDirectoryName(file), $".{Path.GetFileName(file)}.{Guid.NewGuid():N}.tmp");
+
+        await File.WriteAllTextAsync(whole, await new VersoSerializer().SerializeAsync(notebook), CancellationToken.None);
+
+        try
+        {
+            File.Move(whole, file, overwrite: false);
+        }
+        catch
+        {
+            File.Delete(whole);
+
+            throw;
+        }
+
+        return await OpenAsync(file, cancellationToken);
     }
 
     /// <summary>Saves a notebook these hold under another name; from then on it is that file, and the old one only a file.</summary>
