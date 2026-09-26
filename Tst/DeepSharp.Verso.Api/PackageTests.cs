@@ -45,4 +45,23 @@ public class PackageTests
         Assert.Equal("1.2.2", engine.Attribute("Version")!.Value);
         Assert.Equal(typeof(global::Verso.Scaffold).Assembly.GetName().Version!.ToString(3), engine.Attribute("Version")!.Value);
     }
+
+    [Fact]
+    public void EveryEnumTheHostNamesAfterVersos_HoldsTheNamesAndValuesVersosDoes()
+    {
+        // The host hands an application its own enums rather than the engine's, read across by name: an engine that adds
+        // a name the host lacks would fail that read, so the two are held equal here.
+        AssertSame<global::Verso.Abstractions.LayoutCapabilities, LayoutAllows>();
+        AssertSame<global::Verso.Abstractions.ToolbarPlacement, ToolbarPlace>();
+        AssertSame<global::Verso.Abstractions.PropertyFieldType, FieldKind>();
+    }
+
+    private static void AssertSame<TVerso, THost>()
+        where TVerso : struct, Enum
+        where THost : struct, Enum
+    {
+        Assert.Equal(Enum.GetNames<TVerso>(), Enum.GetNames<THost>());
+        Assert.Equal(Enum.GetValues<TVerso>().Select(value => Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture)),
+            Enum.GetValues<THost>().Select(value => Convert.ToInt64(value, System.Globalization.CultureInfo.InvariantCulture)));
+    }
 }

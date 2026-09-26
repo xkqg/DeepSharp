@@ -78,8 +78,9 @@ public sealed class NotebookHost
         FilePath = filePath;
         Extensions = extensions;
         Scaffold = scaffold;
+        Kinds = KindsOf(extensions);
         _saved = saved;
-        _published = new(new NotebookVersion(0, [.. scaffold.Cells.Select(cell => cell.Hosted([]))], null));
+        _published = new(new NotebookVersion(0, [.. scaffold.Cells.Select(cell => cell.Hosted([]))], null, Layout));
         scaffold.OnCellExecuting += Began;
         scaffold.OnCellExecuted += Said;
         scaffold.OnCellOutputUpdated += Said;
@@ -94,6 +95,16 @@ public sealed class NotebookHost
     /// <summary>The notebook's cells as they stand, in order.</summary>
     public IReadOnlyList<HostedCell> Cells => Current.Cells;
 
+    /// <summary>
+    /// Every kind a cell can be added as or turned into, as Verso's editors offer them: code in each language the engine
+    /// runs, Markdown, and every other kind of cell the engine has — a pipeline block among them.
+    /// </summary>
+    /// <remarks>
+    /// Code in the blocks' own language is left out: such a cell runs as a block does and draws its card, but it is no
+    /// block, so the pipeline the notebook declares never counts it.
+    /// </remarks>
+    public IReadOnlyList<HostedKind> Kinds { get; }
+
     /// <summary>The engine's extensions: Verso's own and DeepSharp's.</summary>
     internal ExtensionHost Extensions { get; }
 
@@ -104,6 +115,9 @@ public sealed class NotebookHost
     // finds it, among everything the engine loaded.
     private StepCellType Blocks => ((IExtensionHostContext)Extensions).GetLoadedExtensions().OfType<StepCellType>().First();
 
+    // The layout the notebook is shown in, as the engine holds it now.
+    private HostedLayout Layout => new(Scaffold.NotebookOps.ActiveLayoutId, Enum.Parse<LayoutAllows>(Scaffold.LayoutCapabilities.ToString()));
+
     /// <summary>
     /// Sets a cell's text, as typing it does; nothing runs, and the notebook is told at once, so what was worked out from
     /// a block as it was — a grid, the pipeline handed to C# cells — is taken back before anything else is asked of it.
@@ -112,6 +126,7 @@ public sealed class NotebookHost
     /// <param name="source">Its new text.</param>
     /// <returns>The cell as it stands after.</returns>
     /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
+    /// <exception cref="LayoutCapabilityException">The layout the notebook is shown in does not let a cell's text be changed.</exception>
     public Task<HostedCell> EditAsync(Guid cell, string source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -119,14 +134,105 @@ public sealed class NotebookHost
         return TurnAsync(async () =>
         {
             Standing(cell);
+            MayEdit();
             Scaffold.UpdateCellSource(cell, source);
 
             // The notebook is told at once: what was worked out from the block as it was is taken back.
-            await Blocks.BlocksChangedAsync(Scaffold.Notebook, Scaffold.Variables, Scaffold.NotebookOps);
+            await TellAsync();
 
             return EndTurn().Cells.First(each => each.Id == cell);
         });
     }
+
+    /// <summary>Adds a cell of a kind right after another, as the add button between two cells does; it starts empty.</summary>
+    /// <param name="after">The cell it follows.</param>
+    /// <param name="kind">One of <see cref="Kinds"/>.</param>
+    /// <returns>The new cell.</returns>
+    /// <exception cref="CellGoneException">A change before this one rewrote the cell it follows or took it away.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The notebook lists no such kind, or the layout it is shown in does not let a cell be added
+    /// (<see cref="LayoutCapabilityException"/>).
+    /// </exception>
+    public Task<HostedCell> InsertAsync(Guid after, HostedKind kind) => TurnAsync(() =>
+        AddedAsync(Scaffold.Notebook.Cells.IndexOf(Standing(after)) + 1, kind));
+
+    /// <summary>Adds a cell of a kind at the end, as the add button under the last cell does; it starts empty.</summary>
+    /// <param name="kind">One of <see cref="Kinds"/>.</param>
+    /// <returns>The new cell.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The notebook lists no such kind, or the layout it is shown in does not let a cell be added
+    /// (<see cref="LayoutCapabilityException"/>).
+    /// </exception>
+    public Task<HostedCell> AddAsync(HostedKind kind) => TurnAsync(() => AddedAsync(Scaffold.Cells.Count, kind));
+
+    /// <summary>Takes a cell away.</summary>
+    /// <param name="cell">The cell.</param>
+    /// <returns>When it is gone.</returns>
+    /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
+    /// <exception cref="LayoutCapabilityException">The layout the notebook is shown in does not let a cell be taken away.</exception>
+    public Task RemoveAsync(Guid cell) => TurnAsync(async () =>
+    {
+        Standing(cell);
+        await Scaffold.NotebookOps.RemoveCellAsync(cell);
+        await TellAsync();
+
+        return true;
+    });
+
+    /// <summary>Moves a cell up past its neighbour, to stand right before it.</summary>
+    /// <param name="cell">The cell.</param>
+    /// <param name="neighbour">The cell it passes: the one above it, as the page showed them.</param>
+    /// <returns>When it is moved.</returns>
+    /// <exception cref="CellGoneException">A change before this one rewrote either cell or took it away.</exception>
+    /// <exception cref="LayoutCapabilityException">The layout the notebook is shown in does not let a cell be moved.</exception>
+    /// <remarks>
+    /// Named by the neighbour it passes rather than by a place, since another view may have moved cells meanwhile, and a
+    /// place counted there is somewhere else here. A cell named as its own neighbour passes nothing.
+    /// </remarks>
+    public Task MoveBeforeAsync(Guid cell, Guid neighbour) => MoveAsync(cell, neighbour, after: false);
+
+    /// <summary>Moves a cell down past its neighbour, to stand right after it.</summary>
+    /// <param name="cell">The cell.</param>
+    /// <param name="neighbour">The cell it passes: the one below it, as the page showed them.</param>
+    /// <returns>When it is moved.</returns>
+    /// <exception cref="CellGoneException">A change before this one rewrote either cell or took it away.</exception>
+    /// <exception cref="LayoutCapabilityException">The layout the notebook is shown in does not let a cell be moved.</exception>
+    /// <remarks>
+    /// Named by the neighbour it passes rather than by a place, since another view may have moved cells meanwhile, and a
+    /// place counted there is somewhere else here. A cell named as its own neighbour passes nothing.
+    /// </remarks>
+    public Task MoveAfterAsync(Guid cell, Guid neighbour) => MoveAsync(cell, neighbour, after: true);
+
+    /// <summary>
+    /// Turns a cell into another kind in one step, as Verso's editors do: its type and language change, its text stays,
+    /// and what it showed is cleared. The same kind again changes nothing.
+    /// </summary>
+    /// <param name="cell">The cell.</param>
+    /// <param name="kind">One of <see cref="Kinds"/>.</param>
+    /// <returns>The cell as it stands after.</returns>
+    /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The notebook lists no such kind, or the layout it is shown in does not let a cell be changed
+    /// (<see cref="LayoutCapabilityException"/>).
+    /// </exception>
+    public Task<HostedCell> ChangeKindAsync(Guid cell, HostedKind kind) => TurnAsync(async () =>
+    {
+        var listed = Listed(kind);
+        var changed = Standing(cell);
+
+        MayEdit();
+
+        if (!Same(changed.Type, listed.Type) || !Same(changed.Language, listed.Language))
+        {
+            changed.Type = listed.Type;
+            changed.Language = listed.Language;
+            changed.Outputs.Clear();
+            Scaffold.OutputChannels.CloseForCell(cell, "the cell's outputs were cleared");
+            await TellAsync();
+        }
+
+        return EndTurn().Cells.First(each => each.Id == cell);
+    });
 
     /// <summary>Runs a cell, as pressing its run button does.</summary>
     /// <param name="cell">The cell.</param>
@@ -563,19 +669,20 @@ public sealed class NotebookHost
         HostedCell[] changed = [.. cells.Where(cell => !before.TryGetValue(cell.Id, out var was) || was != cell)];
         var order = cells.Select(cell => cell.Id).SequenceEqual(last.Cells.Select(cell => cell.Id)) ? null : cells.Select(cell => cell.Id).ToArray();
         var running = Volatile.Read(ref _executing)?.Value;
+        var layout = Layout;
 
-        if (order is null && changed.Length == 0 && running == last.Running)
+        if (order is null && changed.Length == 0 && running == last.Running && layout == last.Layout)
         {
             return last;
         }
 
-        var next = new NotebookVersion(last.Version + 1, cells, running);
+        var next = new NotebookVersion(last.Version + 1, cells, running, layout);
 
         Volatile.Write(ref _published, new StrongBox<NotebookVersion>(next));
 
         foreach (var view in Volatile.Read(ref _audience).Views)
         {
-            view.Offer(new NotebookChange(next.Version, order, changed, running));
+            view.Offer(new NotebookChange(next.Version, order, changed, running, layout));
         }
 
         return next;
@@ -618,6 +725,73 @@ public sealed class NotebookHost
     }
 
     private CellModel Standing(Guid cell) => Scaffold.GetCell(cell) ?? throw new CellGoneException(cell, Current.Version);
+
+    // The kinds Verso's editors offer, with each language folded in: code in every language the engine runs but the
+    // blocks' own, then Markdown, then every other kind of cell in the order the engine has them. The languages are the
+    // engine's kernels, which is what its list of registered languages holds in a notebook opened here.
+    private static HostedKind[] KindsOf(ExtensionHost extensions) =>
+    [
+        .. extensions.GetKernels()
+            .Where(kernel => !Same(kernel.LanguageId, StepKernel.Language))
+            .Select(kernel => new HostedKind("code", kernel.LanguageId, kernel.DisplayName)),
+        .. extensions.GetCellTypes()
+            .Where(type => !Same(type.CellTypeId, "code"))
+            .OrderBy(type => Same(type.CellTypeId, "markdown") ? 0 : 1)
+            .Select(type => new HostedKind(type.CellTypeId, type.Kernel?.LanguageId, type.DisplayName)),
+    ];
+
+    private static bool Same(string? one, string? other) => string.Equals(one, other, StringComparison.OrdinalIgnoreCase);
+
+    // A kind the notebook lists, as it lists it; one it does not list is refused.
+    private HostedKind Listed(HostedKind kind)
+    {
+        foreach (var each in Kinds.Where(each => Same(each.Type, kind.Type) && Same(each.Language, kind.Language)))
+        {
+            return each;
+        }
+
+        throw new InvalidOperationException($"The notebook has no kind of cell '{kind.Type}' in '{kind.Language}' to add or turn a cell into.");
+    }
+
+    // A cell of a listed kind added at a place, empty, through the port the notebook's layout guards; the notebook is told.
+    private async Task<HostedCell> AddedAsync(int at, HostedKind kind)
+    {
+        var listed = Listed(kind);
+        var added = Guid.Parse(await Scaffold.NotebookOps.InsertCellAsync(at, listed.Type, listed.Language));
+
+        await TellAsync();
+
+        return EndTurn().Cells.First(each => each.Id == added);
+    }
+
+    // A cell moved to stand right before or right after its neighbour, wherever either stands now.
+    private Task MoveAsync(Guid cell, Guid neighbour, bool after) => TurnAsync(async () =>
+    {
+        var cells = Scaffold.Notebook.Cells;
+        var from = cells.IndexOf(Standing(cell));
+        var to = cells.IndexOf(Standing(neighbour));
+
+        if (from != to)
+        {
+            await Scaffold.NotebookOps.MoveCellAsync(cell, to - (from < to ? 1 : 0) + (after ? 1 : 0));
+            await TellAsync();
+        }
+
+        return true;
+    });
+
+    // A layout that does not let a cell's text or kind be changed refuses it, as the engine's own port refuses what its
+    // layout does not allow.
+    private void MayEdit()
+    {
+        if (!Scaffold.LayoutCapabilities.HasFlag(LayoutCapabilities.CellEdit))
+        {
+            throw new LayoutCapabilityException(LayoutCapabilities.CellEdit);
+        }
+    }
+
+    // Tells the notebook its cells changed, so what was worked out from the blocks as they were is taken back.
+    private Task TellAsync() => Blocks.BlocksChangedAsync(Scaffold.Notebook, Scaffold.Variables, Scaffold.NotebookOps);
 
     private async Task SaveToAsync(string path)
     {

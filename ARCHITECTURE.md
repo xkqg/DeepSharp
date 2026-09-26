@@ -957,7 +957,15 @@ handed on from inside that one would wait for the one it is inside and never run
 panel of a cell a change before it rewrote or took away is refused, because nothing it meant still stands; a click from
 its card is handed on all the same, as Verso's own editors hand every click on, because a page sends clicks from the
 card it shows until it draws again — a walk down a select sends several — and the part knows what became of the block
-the card was drawn for. What a part answers a click with is what the cell shows next. A run that never ends is stopped the only way the engine can stop one, with a fresh kernel —
+the card was drawn for. What a part answers a click with is what the cell shows next. A cell is added after another
+or at the end, of a kind the engine has — Verso's editors' list with each language folded in, code in the blocks' own
+language left out, since such a cell is no block — and starts empty, as the engine inserts every kind; it is taken
+away, moved past the neighbour it passes, which no other view can have moved the way it can move a place counted by
+index, or turned into another kind in one step, keeping its text and losing what it showed. Each goes through the port
+the notebook's layout guards, the engine's own, so the dashboard, which lets cells be run and resized and nothing
+else, refuses them, and typing and a change of kind ask the same layout whether a cell may be edited. Every version
+says which layout the notebook is shown in and what it allows, so a page offers what Verso's editors offer there, and
+each change tells the notebook, as typing does. A run that never ends is stopped the only way the engine can stop one, with a fresh kernel —
 its token cancelled, a C# loop that waits goes on — so stopping clears the notebook's variables, the pipeline handed
 to C# cells among them, and the run itself goes on in the background until the application ends. The notebook is told
 of the stop before the kernel restarts, so what the run left behind asks for from then on writes nothing, and the

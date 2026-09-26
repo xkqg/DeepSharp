@@ -143,7 +143,11 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   and what they show, are handed over as plain values. Typing a cell's text, running a cell and a click on a control a
   block drew take their turn one at a time, in the order they came; typing or running a cell a change before it
   rewrote is refused, while a click from its card still reaches the part, which knows the block it became, and what a
-  part answers a click with is what the cell shows next. Typing into a block tells the notebook at once, so what was
+  part answers a click with is what the cell shows next. A cell is added after another or at the end, of any kind the
+  engine has — code in a language it runs, Markdown, a pipeline block and the rest — and starts empty; it is taken
+  away, moved past the neighbour it passes, or turned into another kind in one step, keeping its text. Each goes
+  through the port the notebook's layout guards, so a layout that does not allow it refuses it, typing included, and
+  every version says which layout the notebook is shown in and what it allows. Typing into a block tells the notebook at once, so what was
   worked out from the block as it was is taken back. A run that never ends is stopped by a fresh kernel, and the
   notebook is told first: what the run left behind writes nothing more — no grid, and no pipeline handed to C# cells —
   and the notebook takes its next change at once. C# runs take their turn across the whole process, so none prints

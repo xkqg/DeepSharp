@@ -34,6 +34,9 @@ public sealed partial class FeedTests : IDisposable
 
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
+    // The notebook's own layout, which lets a person do everything to its cells.
+    private static readonly HostedLayout InTheNotebook = new("notebook", (LayoutAllows)255);
+
     private static CellModel Block(string source) => new() { Type = StepCellType.StepType, Language = StepKernel.Language, Source = source };
 
     private static CellModel CSharp(string source) => new() { Type = "code", Language = "csharp", Source = source };
@@ -332,11 +335,11 @@ public sealed partial class FeedTests : IDisposable
         var c = a with { Id = Guid.NewGuid(), Source = "c" };
         var run = new HostedRun(a.Id, DateTimeOffset.UnixEpoch);
 
-        var both = new NotebookChange(1, [a.Id, b.Id], [a, b], null).Then(new NotebookChange(2, null, [a with { Source = "a2" }], run));
+        var both = new NotebookChange(1, [a.Id, b.Id], [a, b], null, InTheNotebook).Then(new NotebookChange(2, null, [a with { Source = "a2" }], run, InTheNotebook));
 
-        Assert.Equal(new NotebookChange(2, [a.Id, b.Id], [b, a with { Source = "a2" }], run), both);
+        Assert.Equal(new NotebookChange(2, [a.Id, b.Id], [b, a with { Source = "a2" }], run, InTheNotebook), both);
 
-        var all = both.Then(new NotebookChange(3, [c.Id, a.Id], [c], null));
+        var all = both.Then(new NotebookChange(3, [c.Id, a.Id], [c], null, InTheNotebook));
 
         Assert.Equal(3, all.Version);
         Assert.Equal([c.Id, a.Id], all.Order);
@@ -344,7 +347,7 @@ public sealed partial class FeedTests : IDisposable
         Assert.Null(all.Running);
 
         // Where neither says the order changed, nothing is left out.
-        Assert.Equal(new NotebookChange(5, null, [a, b], null), new NotebookChange(4, null, [a], null).Then(new NotebookChange(5, null, [b], null)));
+        Assert.Equal(new NotebookChange(5, null, [a, b], null, InTheNotebook), new NotebookChange(4, null, [a], null, InTheNotebook).Then(new NotebookChange(5, null, [b], null, InTheNotebook)));
     }
 
     [Fact]
@@ -434,14 +437,15 @@ public sealed partial class FeedTests : IDisposable
     {
         var cell = new HostedCell(Guid.NewGuid(), "code", "csharp", "1 + 1", [new HostedOutput("text/plain", "2", IsError: false)], new Dictionary<string, string>(), 1, "Success", TimeSpan.FromMilliseconds(5));
         var run = new HostedRun(cell.Id, DateTimeOffset.UnixEpoch);
-        var version = new NotebookVersion(3, [cell], run);
-        var change = new NotebookChange(3, [cell.Id], [cell], run);
+        var version = new NotebookVersion(3, [cell], run, InTheNotebook);
+        var change = new NotebookChange(3, [cell.Id], [cell], run, InTheNotebook);
 
         Assert.Equal(version, version with { Cells = [cell with { Outputs = [new HostedOutput("text/plain", "2", IsError: false)] }] });
         Assert.Equal(version.GetHashCode(), (version with { Cells = [cell] }).GetHashCode());
         Assert.NotEqual(version, version with { Version = 4 });
         Assert.NotEqual(version, version with { Cells = [] });
         Assert.NotEqual(version, version with { Running = null });
+        Assert.NotEqual(version, version with { Layout = new HostedLayout("dashboard", LayoutAllows.CellResize | LayoutAllows.CellExecute) });
 
         Assert.Equal(change, change with { Order = [cell.Id], Cells = [cell] });
         Assert.Equal(change.GetHashCode(), (change with { Order = [cell.Id] }).GetHashCode());
@@ -452,5 +456,6 @@ public sealed partial class FeedTests : IDisposable
         Assert.NotEqual(change, change with { Order = [] });
         Assert.NotEqual(change, change with { Cells = [] });
         Assert.NotEqual(change, change with { Running = null });
+        Assert.NotEqual(change, change with { Layout = new HostedLayout(null, (LayoutAllows)127) });
     }
 }
