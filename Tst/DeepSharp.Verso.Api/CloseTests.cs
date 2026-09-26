@@ -14,7 +14,7 @@ namespace DeepSharp.Tests.Api;
 /// with changes not yet saved stays open until it is saved. An application can also close one notebook at once, and
 /// what was asked of a notebook before it closed, and waited behind the close, is refused.
 /// </summary>
-public sealed class CloseTests : IDisposable
+public sealed partial class CloseTests : IDisposable
 {
     private static readonly TimeSpan Grace = TimeSpan.FromMilliseconds(200);
 
@@ -160,24 +160,6 @@ public sealed class CloseTests : IDisposable
         await ForgottenAsync(notebooks, host);
 
         Assert.Empty(notebooks.Paths);
-    }
-
-    [Fact]
-    public async Task WhatWasAskedBeforeACloseAndWaitedBehindIt_IsRefused_WhileWhatWasUnderWayFinishes()
-    {
-        var go = At("go");
-        var notebooks = new OpenNotebooks();
-        var host = await OpenAsync(notebooks, "wait.verso", CSharp($$"""while (!System.IO.File.Exists(@"{{go}}")) { await System.Threading.Tasks.Task.Delay(10); } 1 + 1"""));
-
-        var running = host.RunAsync(host.Cells[0].Id);
-        var asked = host.ToolbarAsync();
-        var closing = notebooks.DisposeAsync().AsTask();
-
-        await File.WriteAllTextAsync(go, "go", TestContext.Current.CancellationToken);
-
-        Assert.Contains("2", string.Concat((await running).Outputs.Select(output => output.Content)), StringComparison.Ordinal);
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => asked);
-        await closing;
     }
 
     [Fact]

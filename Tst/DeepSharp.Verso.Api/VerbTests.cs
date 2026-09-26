@@ -310,4 +310,36 @@ public sealed partial class VerbTests : IDisposable
         Assert.True(ticked.StateChanged);
         await Assert.ThrowsAsync<ObjectDisposedException>(() => host.RunAsync(read));
     }
+
+    [Fact]
+    public async Task ClosingTheNotebooksAgain_WaitsForTheCloseUnderWay()
+    {
+        var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
+        var read = host.Cells[0].Id;
+        var grid = await ShownAsync(host, read);
+        Task? closing = null;
+        Task? again = null;
+        var endedMeanwhile = false;
+
+        // The notebooks are closed twice as the tick runs the first block it wrote: the close waits for the tick to finish,
+        // and the second close is the same close.
+        host.Scaffold.OnCellExecuting += _ =>
+        {
+            if (closing is null)
+            {
+                closing = notebooks.DisposeAsync().AsTask();
+                again = notebooks.DisposeAsync().AsTask();
+                endedMeanwhile = again.IsCompleted;
+            }
+        };
+
+        var ticked = await host.GestureAsync(new HostedGesture(read, StepRenderer.Id, IncludeBoxOf(grid, "deck"), "true"));
+
+        await again!.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+
+        Assert.False(endedMeanwhile);
+        Assert.True(ticked.StateChanged);
+        Assert.True(closing!.IsCompleted);
+    }
 }

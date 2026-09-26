@@ -977,7 +977,9 @@ A run exists from the moment it is asked, numbered for each open notebook, and a
 stop sent again after that run ended stops no other. A run that never ends is stopped the only way the engine can stop
 one, with a fresh kernel — its token cancelled, a C# loop that waits goes on — so stopping clears the notebook's
 variables, the pipeline handed to C# cells among them, and the run itself goes on in the background until the
-application ends. The kernel started afresh is the one that runs the cell: its language, else the notebook's default
+application ends. Verso's C# kernel puts the process's console back as it found it whenever a run ends, so a run left
+behind that ends later can take from another notebook's C# run what that run prints at that moment. The kernel started
+afresh is the one that runs the cell: its language, else the notebook's default
 kernel — the engine's own rule, which also decides whether the run takes the C# turn. The notebook is told of the stop
 before the kernel restarts, so what the run left behind asks for from then on writes nothing, and the notebook takes its
 next change at once. Typing tells the notebook too, at once, so what was worked out from a block as it was is taken back
@@ -1031,9 +1033,12 @@ notebooks finds it, told which cells never save what they show, so a block's vie
 count: a page that stops reading ends its view, and nothing else says a notebook is in use. A notebook with changes not
 yet saved stays open until it is saved, or until the application closes it, which it can do for one notebook at once;
 without a grace, notebooks stay open until they are closed, so an application that uses one without a view is never
-left holding a closed one. A close waits only for what is under way: whatever else was asked before it and still
-waits its turn is refused when that turn comes, since a close discards what has not begun, as it discards what is not
-saved.
+left holding a closed one. No close waits for a run: a close stops the run under way as a stop does — one that waits
+for the C# turn never runs, one that runs is left behind — and waits only for a change under way, which runs no code a
+person wrote. Whatever else was asked before it and still waits its turn is refused when that turn comes, since a close
+discards what has not begun, as it discards what is not saved. Closing every notebook stops the run in each before it
+closes any of them, because stopping one run hands the C# turn on, and a run another notebook still let wait for it
+would start.
 
 `DeepSharp.Verso.Serve` is the tool `deepsharp-serve`, run beside a notebook or a folder of them. The notebook it serves
 runs code as the person who started it, so the server is shut to everyone else. It listens on this computer alone,

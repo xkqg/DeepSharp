@@ -655,16 +655,28 @@ public sealed class NotebookHost
     });
 
     /// <summary>
-    /// Closes the notebook: every view ends and anything asked from now on is refused; what is under way finishes, and then
-    /// the engine closes.
+    /// Shuts the notebook, the first half of closing it, at once: every view ends, anything asked from now on is refused,
+    /// and the run under way is stopped as <see cref="Stop"/> stops it — one that waits never runs, one that runs is left
+    /// behind — so no close waits for a run.
     /// </summary>
-    /// <returns>When it is closed.</returns>
-    internal async ValueTask CloseAsync()
+    internal void Shut()
     {
         foreach (var view in Interlocked.Exchange(ref _audience, Audience.Gone).Views)
         {
             view.End();
         }
+
+        Volatile.Read(ref _running)?.Stop();
+    }
+
+    /// <summary>
+    /// Closes the notebook: it is shut, so every view ends, anything asked from now on is refused and the run under way is
+    /// stopped; a change under way finishes, and then the engine closes.
+    /// </summary>
+    /// <returns>When it is closed.</returns>
+    internal async ValueTask CloseAsync()
+    {
+        Shut();
 
         await _turns.TakeTurnAsync(async () =>
         {
@@ -701,9 +713,9 @@ public sealed class NotebookHost
     }
 
     // Everything done to the notebook: refused once it closes, and otherwise one at a time, in the order it came, each
-    // ending with the notebook published as it then stands. A close waits only for what is under way: whatever else was
-    // asked before it and still waits its turn is refused when that turn comes, since a close discards what has not
-    // begun, as it discards what is not saved.
+    // ending with the notebook published as it then stands. A close stops the run under way and waits only for a change
+    // under way: whatever else was asked before it and still waits its turn is refused when that turn comes, since a
+    // close discards what has not begun, as it discards what is not saved.
     private Task<T> TurnAsync<T>(Func<Task<T>> change)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _audience).Closed, this);
@@ -925,16 +937,23 @@ public sealed class NotebookHost
     // Runs until it ends, or until Stop. The run is under way from here, so a Stop finds it even while it waits: a C#
     // run first waits its turn among the process's C# runs, and when that turn is not free every view is told the run
     // waits. A Stop then ends the wait at once, and the turn, when it comes, starts nothing. Only the run under way can
-    // be stopped, so the slot holds one, and a Stop after it ended meets a run nobody waits for any more.
+    // be stopped, so the slot holds one, and a Stop after it ended meets a run nobody waits for any more. A close marks
+    // the notebook closed before it looks for the run under way, and the run takes its slot before it looks for a close,
+    // each by an exchange, so one always finds the other: a run whose turn began as the notebook shut stops itself.
     private async Task<bool> RunUntilStoppedAsync(Run run, Func<Task> start, string? kernel)
     {
-        Volatile.Write(ref _running, run);
+        Interlocked.Exchange(ref _running, run);
 
         try
         {
-            if (!run.Waits)
+            if (Volatile.Read(ref _audience).Closed)
             {
-                return await GoAsync(run, start, kernel);
+                run.Stop();
+            }
+
+            if (!run.TakesTheCSharpTurn)
+            {
+                return run.Starts() && await GoAsync(run, start, kernel);
             }
 
             var turned = CSharpRuns.TakeTurnAsync(() => run.Starts() ? GoAsync(run, start, kernel) : Task.FromResult(false));
@@ -1022,17 +1041,17 @@ public sealed class NotebookHost
         }
     }
 
-    // A run, from the moment it is asked: its number, the cell it runs, and whether it still waits for the C# turn, runs,
-    // or was stopped before it ran. Each change of that is one exchange, so a stop and the C# turn that arrive together
-    // agree on which came first.
+    // A run, from the moment it is asked: its number, the cell it runs, and whether it has yet to start, runs, or was
+    // stopped before it ran. Each change of that is one exchange, so a stop and the start that arrive together agree on
+    // which came first, and a run stopped before it started never starts.
     private sealed class Run(long number, Guid? cell, bool takesTheCSharpTurn)
     {
-        private const int Waiting = 0;
+        private const int Before = 0;
         private const int Going = 1;
         private const int StoppedFirst = 2;
 
         private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        private int _state = takesTheCSharpTurn ? Waiting : Going;
+        private int _state = Before;
 
         public long Number => number;
 
@@ -1042,19 +1061,23 @@ public sealed class NotebookHost
 
         public Task Stopped => _stopped.Task;
 
+        // Whether it takes its turn among the process's C# runs.
+        public bool TakesTheCSharpTurn => takesTheCSharpTurn;
+
         // Whether it still waits for the C# turn.
-        public bool Waits => Volatile.Read(ref _state) == Waiting;
+        public bool Waits => takesTheCSharpTurn && Volatile.Read(ref _state) == Before;
 
         // Whether a stop came before it ran: then it never runs.
         public bool StoppedBeforeItRan => Volatile.Read(ref _state) == StoppedFirst;
 
-        // Its C# turn came: it runs, unless a stop came first.
-        public bool Starts() => Interlocked.CompareExchange(ref _state, Going, Waiting) == Waiting;
+        // It may start now: it runs, unless a stop came first.
+        public bool Starts() => Interlocked.CompareExchange(ref _state, Going, Before) == Before;
 
-        // Stops it: a run that waits never runs; one that runs is ended by whoever runs it. Whether this stop was the first.
+        // Stops it: a run that has yet to start never runs; one that runs is ended by whoever runs it. Whether this stop was
+        // the first.
         public bool Stop()
         {
-            Interlocked.CompareExchange(ref _state, StoppedFirst, Waiting);
+            Interlocked.CompareExchange(ref _state, StoppedFirst, Before);
 
             return _stopped.TrySetResult();
         }

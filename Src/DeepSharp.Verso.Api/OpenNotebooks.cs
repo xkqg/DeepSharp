@@ -28,12 +28,13 @@ public sealed class OpenNotebooks : IAsyncDisposable
     // Ends every watch when these notebooks close.
     private readonly CancellationTokenSource _closing = new();
 
+    // The close of every notebook these hold, made once: whoever asks again waits for the same close.
+    private readonly Lazy<Task> _disposed;
+
     private int _closed;
 
     /// <summary>Notebooks that stay open until they are closed.</summary>
-    public OpenNotebooks()
-    {
-    }
+    public OpenNotebooks() => _disposed = new(CloseEveryNotebookAsync);
 
     /// <summary>Notebooks that each close by themselves once no view has shown them for a while.</summary>
     /// <param name="grace">
@@ -42,6 +43,7 @@ public sealed class OpenNotebooks : IAsyncDisposable
     /// </param>
     /// <exception cref="ArgumentOutOfRangeException">The grace is nothing, or less.</exception>
     public OpenNotebooks(TimeSpan grace)
+        : this()
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(grace, TimeSpan.Zero);
 
@@ -168,9 +170,12 @@ public sealed class OpenNotebooks : IAsyncDisposable
         _open.TryRemove(KeyValuePair.Create(from, holding));
     }
 
-    /// <summary>Closes a notebook these hold at once, whatever it holds that is not saved.</summary>
+    /// <summary>
+    /// Closes a notebook these hold at once, whatever it holds that is not saved: its run under way is stopped, never waited
+    /// for, and a change under way finishes.
+    /// </summary>
     /// <param name="notebook">The notebook.</param>
-    /// <returns>When it is closed: its views ended, what was under way finished, its engine closed.</returns>
+    /// <returns>When it is closed: its views ended, its run stopped, a change under way finished, its engine closed.</returns>
     /// <exception cref="InvalidOperationException">These notebooks do not hold it.</exception>
     public async Task CloseAsync(NotebookHost notebook)
     {
@@ -183,13 +188,26 @@ public sealed class OpenNotebooks : IAsyncDisposable
     /// <summary>The files open now, as their full paths.</summary>
     internal IReadOnlyCollection<string> Paths => [.. _open.Keys];
 
-    /// <summary>Closes every notebook this holds, once.</summary>
+    /// <summary>
+    /// Closes every notebook this holds, once: the run under way in every one is stopped before any of them is closed, so a
+    /// run that waited for another notebook's C# run never starts; a change under way finishes. Asked again, it waits for
+    /// the same close.
+    /// </summary>
     /// <returns>When they are closed.</returns>
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync() => new(_disposed.Value);
+
+    // Shuts every notebook these hold, with nothing awaited in between, and then closes each: stopping one notebook's run
+    // hands the C# turn on, and a run another notebook still let wait for it would start.
+    private async Task CloseEveryNotebookAsync()
     {
-        if (Interlocked.Exchange(ref _closed, 1) != 0)
+        Interlocked.Exchange(ref _closed, 1);
+
+        foreach (var opening in _open.Values)
         {
-            return;
+            if (opening.Value is { IsCompletedSuccessfully: true } open)
+            {
+                open.Result.Shut();
+            }
         }
 
         await _closing.CancelAsync();
