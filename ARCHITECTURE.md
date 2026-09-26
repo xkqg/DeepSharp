@@ -945,7 +945,14 @@ turn across the whole process, because a C# kernel takes over the process's cons
 into each other, in two notebooks and under two separate holders of notebooks alike. The toolbar is every button the
 engine has, Verso's own and DeepSharp's, each saying whether it can be pressed; a press takes its turn like anything
 else, and the C# turn too, since a button may run cells. A file a button hands over goes to whoever pressed it, and
-nothing is written beside the notebook. Verso's editor itself is not published for applications to reuse, so such an application does what the
+nothing is written beside the notebook. A cell's properties panel is a section from every part that has one for the
+cell — DeepSharp's form for a block, Verso's own for how any cell is shown — and a change to a field is made by the
+part its section came from. Saving is Verso's own: the serializer for the notebook's format, which leaves out what a
+block shows and keeps what a C# cell printed, past the guards that run before writing, and the file written whole
+under a name of its own before it takes the old one's place. Saved under another name, the notebook is that file from
+then on, and what DeepSharp names after it — the columns saved beside it, an exported pipeline — follows; the holder of
+the notebooks saves it so, since only it knows which files are open, and a name another open notebook holds is
+refused. Verso's editor itself is not published for applications to reuse, so such an application does what the
 editor does: it draws a block's output, which is HTML; it hands a control's `data-action` and `data-extension-id`
 to the part the control names, with its `data-payload` — or, for a control that carries none, its state, as Verso's
 own router sends it: `true` or `false` for a box, the value it is at for a select — and with the notebook's variables
@@ -956,8 +963,8 @@ block with `StepCatalog.ReadStep` and builds the declaration through its constru
 the file with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds
 the steps and no fit, because nothing ran them there. The drawing, the passing on and the toolbar's context are
 what `DeepSharp.Verso.Api` is named for, written once beside the notebook rather than by every application; it opens
-the notebook, passes a click on and gives the toolbar its context today, and the properties panel, saving and the news
-of what changed are still to come.
+the notebook, passes a click on, gives the toolbar and the properties panel their context and saves the notebook today,
+and the news of what changed is still to come.
 
 ## Decisions
 

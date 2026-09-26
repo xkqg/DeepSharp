@@ -43,6 +43,57 @@ public sealed class OpenNotebooks : IAsyncDisposable
         return _open.GetOrAdd(file, made).Value.WaitAsync(cancellationToken);
     }
 
+    /// <summary>Saves a notebook these hold under another name; from then on it is that file, and the old one only a file.</summary>
+    /// <param name="notebook">The notebook.</param>
+    /// <param name="path">Where to save it.</param>
+    /// <returns>When it is saved there.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// These notebooks do not hold it, or another open notebook is that file already.
+    /// </exception>
+    /// <remarks>Its own name saves it where it is.</remarks>
+    public async Task SaveAsAsync(NotebookHost notebook, string path)
+    {
+        ArgumentNullException.ThrowIfNull(notebook);
+        ArgumentException.ThrowIfNullOrWhiteSpace(path);
+
+        var from = notebook.FilePath;
+
+        if (!_open.TryGetValue(from, out var holding) || !ReferenceEquals(await holding.Value, notebook))
+        {
+            throw new InvalidOperationException($"These notebooks do not hold '{from}'.");
+        }
+
+        var file = Path.GetFullPath(path);
+
+        if (_open.Comparer.Equals(file, from))
+        {
+            await notebook.SaveAsync();
+
+            return;
+        }
+
+        // The new name is taken before anything is written, so no one opens it as a notebook of its own meanwhile.
+        var kept = new Lazy<Task<NotebookHost>>(Task.FromResult(notebook));
+
+        if (!_open.TryAdd(file, kept))
+        {
+            throw new InvalidOperationException($"'{file}' is open already, as a notebook of its own.");
+        }
+
+        try
+        {
+            await notebook.SaveAsAsync(file);
+        }
+        catch
+        {
+            _open.TryRemove(KeyValuePair.Create(file, kept));
+
+            throw;
+        }
+
+        _open.TryRemove(KeyValuePair.Create(from, holding));
+    }
+
     /// <summary>The files open now, as their full paths.</summary>
     internal IReadOnlyCollection<string> Paths => [.. _open.Keys];
 

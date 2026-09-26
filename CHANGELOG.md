@@ -137,7 +137,10 @@ your own can host the notebook, too.
   is refused, and what a part answers a click with is what the cell shows next. A run that never ends is stopped by a
   fresh kernel, and C# runs take their turn across the whole process, so none prints into another. The toolbar is
   every button the engine has, each saying whether it can be pressed; a file a button hands over goes to whoever
-  pressed it, and nothing is written beside the notebook.
+  pressed it, and nothing is written beside the notebook. A cell's properties panel is a section from every part that
+  has one for it, and a changed field is made by that part. A notebook is saved the way Verso's editors save it — what
+  a block shows left out, written whole before it takes the file's place — and saved under another name it is that file
+  from then on, what DeepSharp names after it following; a name another open notebook holds is refused.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

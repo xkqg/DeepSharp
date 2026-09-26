@@ -45,7 +45,7 @@ public sealed class NotebookHost
     }
 
     /// <summary>The file the notebook is saved in, as a full path.</summary>
-    public string FilePath { get; }
+    public string FilePath { get; private set; }
 
     /// <summary>The notebook's cells as they stand, in order.</summary>
     public IReadOnlyList<HostedCell> Cells => [.. Scaffold.Cells.Select(cell => cell.Hosted())];
@@ -184,6 +184,84 @@ public sealed class NotebookHost
         return context.Handed;
     }));
 
+    /// <summary>A cell's properties panel: a section from every part that has one for the cell, in their order.</summary>
+    /// <param name="cell">The cell.</param>
+    /// <returns>The sections.</returns>
+    /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
+    public Task<IReadOnlyList<HostedSection>> PropertiesAsync(Guid cell) => TurnAsync(async () =>
+    {
+        var shown = Standing(cell);
+        var context = new RenderContext(Scaffold, shown);
+        var sections = new List<HostedSection>();
+
+        foreach (var part in Extensions.GetPropertyProviders().Where(each => each.AppliesTo(shown, context)).OrderBy(each => each.Order))
+        {
+            var section = await part.GetPropertiesSectionAsync(shown, context);
+
+            sections.Add(new HostedSection(
+                part.ExtensionId,
+                section.Title,
+                section.Description,
+                [.. section.Fields.Select(field => new HostedField(
+                    field.Name,
+                    field.DisplayName,
+                    Enum.Parse<FieldKind>(field.FieldType.ToString()),
+                    field.CurrentValue,
+                    field.Description,
+                    [.. (field.Options ?? []).Select(option => new HostedOption(option.Value, option.DisplayName))],
+                    field.IsReadOnly))]));
+        }
+
+        return (IReadOnlyList<HostedSection>)sections;
+    });
+
+    /// <summary>Changes a field of a cell's properties panel, through the part its section came from.</summary>
+    /// <param name="cell">The cell.</param>
+    /// <param name="part">The part the field's section came from.</param>
+    /// <param name="field">The field.</param>
+    /// <param name="value">What it is set to.</param>
+    /// <returns>When the part has made the change.</returns>
+    /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
+    /// <exception cref="InvalidOperationException">No part of that name has a properties section.</exception>
+    public Task SetPropertyAsync(Guid cell, string part, string field, object? value) => TurnAsync(async () =>
+    {
+        var changed = Standing(cell);
+        var provider = Extensions.GetPropertyProviders().FirstOrDefault(each => each.ExtensionId == part)
+            ?? throw new InvalidOperationException($"No part named '{part}' has a properties section.");
+
+        await provider.OnPropertyChangedAsync(changed, field, value, new RenderContext(Scaffold, changed));
+
+        return true;
+    });
+
+    /// <summary>
+    /// Saves the notebook to its file the way Verso's own editors save it: through the serializer for its format, which
+    /// leaves out what a block shows, past the guards that run before writing, and written whole under a name of its own
+    /// before it takes the file's place, so nothing ever meets half a notebook.
+    /// </summary>
+    /// <returns>When it is saved.</returns>
+    public Task SaveAsync() => TurnAsync(async () =>
+    {
+        await SaveToAsync(FilePath);
+
+        return true;
+    });
+
+    /// <summary>Saves the notebook under another name, which is its file from then on.</summary>
+    /// <param name="path">The new file, as a full path.</param>
+    /// <returns>When it is saved there.</returns>
+    /// <remarks>Only its holder names it, since the holder knows which files are open; <see cref="OpenNotebooks.SaveAsAsync"/>.</remarks>
+    internal Task SaveAsAsync(string path) => TurnAsync(async () =>
+    {
+        await SaveToAsync(path);
+
+        // What the notebook names after itself — the columns saved beside it, an exported pipeline — follows the file.
+        Scaffold.SetFilePath(path);
+        FilePath = path;
+
+        return true;
+    });
+
     /// <summary>Registers DeepSharp's parts with an engine, before it looks for any beside the application.</summary>
     /// <param name="extensions">The engine.</param>
     /// <returns>When they are registered.</returns>
@@ -287,6 +365,27 @@ public sealed class NotebookHost
     }
 
     private CellModel Standing(Guid cell) => Scaffold.GetCell(cell) ?? throw new CellGoneException(cell);
+
+    private async Task SaveToAsync(string path)
+    {
+        var serializer = Extensions.GetSerializers().FirstOrDefault(each => each.CanImport(path))
+            ?? throw new NotSupportedException($"No format Verso knows writes '{Path.GetFileName(path)}'.");
+
+        // What a live output shows now is what is saved, as Verso's own editors ask before they write.
+        await Scaffold.RefreshLiveOutputsAsync();
+
+        var notebook = Scaffold.Notebook;
+
+        foreach (var guard in Extensions.GetPostProcessors().Where(each => each.CanProcess(path, serializer.FormatId)).OrderBy(each => each.Priority))
+        {
+            notebook = await guard.PreSerializeAsync(notebook, path);
+        }
+
+        var whole = Path.Join(Path.GetDirectoryName(path), $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
+
+        await File.WriteAllTextAsync(whole, await serializer.SerializeAsync(notebook));
+        File.Move(whole, path, overwrite: true);
+    }
 
     // Runs a cell until it ends, or until Stop. A run is not asked to stop, since one that does not end does not listen
     // either (measured: a C# loop that awaits goes on with its token cancelled); a fresh kernel ends the turn, and the
