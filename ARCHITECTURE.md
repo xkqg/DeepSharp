@@ -1082,9 +1082,11 @@ The page writes a notebook as Verso's editor does. Under the last cell is a butt
 as, and the same row opens under the selected cell, so a cell goes after it; the new cell is selected with its text
 open. A cell's bar changes its kind through a list of the kinds, moves it past the neighbour it is drawn beside, and
 deletes it — after asking, which Verso's editor does not, because a delete takes the cell away from every page that
-shows the notebook. Verso's own buttons for a cell are on its bar too — running it, clearing what it shows — each
-pressable where the host says it can be pressed for that cell. Each is offered only where the notebook's layout allows it, read from every version, so the
-dashboard offers running and nothing else, and a cell's text cannot be written there. A cell shown rendered — Markdown,
+shows the notebook. Each is offered only where the notebook's layout allows it, read from every version, so the
+dashboard offers running and nothing else, and a cell's text cannot be written there. The engine's own buttons are
+drawn as Verso's editor draws them: a cell's bar and the export menu hold only those that can be pressed there now —
+clearing what a cell shows once it shows something, an export the notebook allows — with no menu when nothing can be
+exported, and no Run Cell on a bar whose own button runs the cell. A cell shown rendered — Markdown,
 Mermaid, HTML — shows its text while it has none, has no output, or is selected, as Verso's editor decides; a kind
 nobody writes, the parameters form, shows none, and is run once when it is drawn with nothing to show, as Verso's
 editor runs it, so the form draws itself. The form's controls name no part, so the page does for them what Verso's

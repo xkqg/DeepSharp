@@ -112,6 +112,9 @@
 
   // What a toolbar button's place and a panel field's kind are called in the server's answers.
   const Place = { Main: 0, Cell: 1, Menu: 2, Export: 3 };
+
+  // Verso's editor runs a cell from the button of its own on the cell's bar, and leaves the engine's Run Cell off it.
+  const RunFromTheBar = new Set(['verso.action.run-cell']);
   const Kind = { Text: 0, Number: 1, Toggle: 2, Select: 3, Several: 4, Colour: 5, Words: 6 };
 
   // What the notebook's layout lets a person do to its cells, as the server's versions say it.
@@ -491,7 +494,11 @@
     }
 
     drawn.push(allowed(Allows.Edit) ? kindSelect(cell) : kindName(cell));
-    drawn.push(...state.buttons.filter(button => button.place === Place.Cell).map(button => drawButton(button, [cell.id])));
+
+    // As Verso's editor draws a cell's buttons: only those that can be pressed for the cell now.
+    drawn.push(...state.buttons
+      .filter(button => button.place === Place.Cell && !RunFromTheBar.has(button.id) && (button.enabledFor ?? []).includes(cell.id))
+      .map(button => drawButton(button, [cell.id])));
 
     const status = document.createElement('span');
 
@@ -1084,7 +1091,8 @@
 
     toolbar.replaceChildren(...state.buttons.filter(button => button.place === Place.Main).map(button => drawButton(button, [])));
 
-    const exports = state.buttons.filter(button => button.place === Place.Export);
+    // As Verso's editor shows its export menu: what can be exported now, and no menu when nothing can.
+    const exports = state.buttons.filter(button => button.place === Place.Export && button.isEnabled);
 
     exportMenu.hidden = exports.length === 0;
     exportMenu.querySelector('div').replaceChildren(...exports.map(button => drawButton(button, [])));
@@ -1104,8 +1112,8 @@
     element.type = 'button';
     element.dataset.button = button.id;
 
-    // A button on a cell's bar can be pressed where the host says it can be for that cell, as Verso's editor asks it.
-    element.disabled = cells.length > 0 ? !(button.enabledFor ?? []).includes(cells[0]) : !button.isEnabled;
+    // A cell's button is drawn only where it can be pressed; any other says whether it can be pressed now.
+    element.disabled = cells.length === 0 && !button.isEnabled;
     element.title = button.label;
 
     if (button.icon?.trimStart().startsWith('<svg')) {
