@@ -9,6 +9,7 @@ using DeepSharp.Verso.Api;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Primitives;
 
 namespace DeepSharp.Verso.Serve;
 
@@ -16,8 +17,9 @@ namespace DeepSharp.Verso.Serve;
 /// <remarks>
 /// A notebook runs code, so the server is shut to everyone but the person who started it: it listens on this computer
 /// alone; it answers only a request that carries the token it said when it started — in the address, or in the cookie
-/// its first page sets — so no other page can drive it; and it answers only under a name of this computer, so a site
-/// that makes its own name point here cannot reach it through the browser either. It serves its own page, which it
+/// its first page sets; it makes a change only for its own page, since a browser carries this computer's cookie for a
+/// page from any of its ports, so no other page can drive it; and it answers only under a name of this computer, so a
+/// site that makes its own name point here cannot reach it through the browser either. It serves its own page, which it
 /// carries, and nothing from the folder it runs in. It writes nothing to the console once it has said where it is,
 /// since a C# cell takes the console over while it runs.
 /// </remarks>
@@ -50,7 +52,12 @@ public static class NotebookServer
         var app = builder.Build();
 
         app.UseHostFiltering();
-        app.Use((context, next) => Carries(context, token) ? next(context) : Refused(context));
+        app.Use((context, next) => Carried(context, token) switch
+        {
+            TokenIn.Nothing => Refused(context),
+            var carried when !HttpMethods.IsGet(context.Request.Method) && !FromOwnPage(context, carried) => Forbidden(context),
+            _ => next(context),
+        });
         app.MapGet("/", () => Results.Stream(typeof(NotebookServer).Assembly.GetManifestResourceStream("page.html")!, "text/html; charset=utf-8"));
         NotebookEndpoints.Map(app);
         app.Lifetime.ApplicationStarted.Register(() => Started(app, options, token, said));
@@ -108,8 +115,15 @@ public static class NotebookServer
         return 0;
     }
 
-    // A request carries the token in its address, as the tool said it, or in the cookie the first page set.
-    private static bool Carries(HttpContext context, string token)
+    // Where a request carried the token: nowhere, in its address as the tool said it, or in the cookie the first page set.
+    private enum TokenIn
+    {
+        Nothing,
+        Address,
+        Cookie,
+    }
+
+    private static TokenIn Carried(HttpContext context, string token)
     {
         var cookie = $"{CookiePrefix}{context.Connection.LocalPort}";
 
@@ -117,10 +131,23 @@ public static class NotebookServer
         {
             context.Response.Cookies.Append(cookie, token, new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Strict, Path = "/" });
 
-            return true;
+            return TokenIn.Address;
         }
 
-        return Same(context.Request.Cookies[cookie], token);
+        return Same(context.Request.Cookies[cookie], token) ? TokenIn.Cookie : TokenIn.Nothing;
+    }
+
+    // A change is made only for the server's own page. A browser names the page a request comes from in its Origin, and
+    // carries this computer's cookie for a page from any of its ports — to a browser they are one site — so a request the
+    // cookie carried must name the server's own page; a program that carries the token in the address names no page, but
+    // one it names must be the server's.
+    private static bool FromOwnPage(HttpContext context, TokenIn carried)
+    {
+        var origin = context.Request.Headers.Origin;
+
+        return StringValues.IsNullOrEmpty(origin)
+            ? carried == TokenIn.Address
+            : string.Equals(origin, $"http://{context.Request.Host}", StringComparison.OrdinalIgnoreCase);
     }
 
     // Compared in the same time whatever the guess, so the time a refusal takes says nothing of the token.
@@ -132,6 +159,13 @@ public static class NotebookServer
         context.Response.StatusCode = StatusCodes.Status401Unauthorized;
 
         return context.Response.WriteAsync("This server answers only the address it said when it started.");
+    }
+
+    private static Task Forbidden(HttpContext context)
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+
+        return context.Response.WriteAsync("This server makes a change only for its own page.");
     }
 
     // Once it listens: where, on the address it really bound — a port already taken stops it before it gets here — and a

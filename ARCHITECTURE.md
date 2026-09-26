@@ -1032,7 +1032,11 @@ saved.
 runs code as the person who started it, so the server is shut to everyone else. It listens on this computer alone,
 on a port the system picks unless one is named. It answers only a request that carries the token it said when it
 started — in the address, or in the cookie its first page sets, named after the port, because a browser keeps a
-cookie for a computer whatever its port and two servers would overwrite each other's. It answers only under a name
+cookie for a computer whatever its port and two servers would overwrite each other's. For the same reason it makes a
+change only for its own page: a browser carries that cookie for a page from any port of this computer and names the
+page a request comes from, so a request that changes something must name the server's page when the cookie carried
+it — a page on another port closed a notebook and threw away what was typed before this was checked — while a program
+that carries the token in the address names none. It answers only under a name
 of this computer, because a site can make its own name point here and a browser would then carry the site's page to
 the server. And it serves its own page, which it carries, and nothing from the folder it runs in: a server that
 served its folder answered a private file lying beside the notebook. It says where it is once, on the address it

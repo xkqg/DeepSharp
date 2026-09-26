@@ -178,7 +178,8 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   `dotnet tool install --global DeepSharp.Verso.Serve` and run beside a notebook or a folder of them, built on
   `DeepSharp.Verso.Api` and needing nothing else installed. The notebook it serves runs code, so it
   listens on this computer alone, answers only a request carrying the token it said when it started — in the address,
-  or in the cookie its first page sets — and only under a name of this computer, and serves its own page and nothing
+  or in the cookie its first page sets — makes a change only for its own page, since a browser carries that cookie for
+  a page from any port of this computer, and answers only under a name of this computer, and serves its own page and nothing
   from the folder it runs in. It says where it is once, then nothing; `--port` names the port, `--no-browser` opens
   none, and a port already taken stops it before it says anything. A page keeps a stream of a notebook open — the
   notebook as it stands, then each change, numbered — and sends typing, runs, a stop and clicks on a block's controls,

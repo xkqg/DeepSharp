@@ -221,6 +221,70 @@ public sealed class ServeTests : IDisposable
         Assert.Equal(0, await Program.Main(["--help"]));
     }
 
+    [Fact]
+    public async Task AChange_TheCookieCarriesFromAnotherPageOfThisComputer_IsRefused_AndMakesNothing()
+    {
+        await using var started = await StartAsync();
+        var port = started.Address.Port + 1;
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await NewAsync(started, "a.verso", cookie: true, $"http://127.0.0.1:{port}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await NewAsync(started, "b.verso", cookie: true, $"http://localhost:{port}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await NewAsync(started, "c.verso", cookie: true, origin: null)).StatusCode);
+        Assert.Empty(Directory.GetFiles(_folder, "?.verso"));
+    }
+
+    [Fact]
+    public async Task AChange_FromTheServersOwnPage_IsAnswered_UnderEitherNameOfThisComputer()
+    {
+        await using var started = await StartAsync();
+
+        Assert.Equal(HttpStatusCode.Created, (await NewAsync(started, "own.verso", cookie: true, $"http://127.0.0.1:{started.Address.Port}")).StatusCode);
+
+        var underLocalhost = await PostAsync(started.Address, "/api/notebooks", """{"name": "local.verso"}""", request =>
+        {
+            request.Headers.Host = $"localhost:{started.Address.Port}";
+            request.Headers.Add("Cookie", $"{CookieFor(started.Address)}={Token}");
+            request.Headers.Add("Origin", $"http://localhost:{started.Address.Port}");
+        });
+
+        Assert.Equal(HttpStatusCode.Created, underLocalhost.StatusCode);
+    }
+
+    [Fact]
+    public async Task AProgram_CarryingTheTokenInTheAddress_NamesNoPage_ButAPageItNamesMustBeTheServers()
+    {
+        await using var started = await StartAsync();
+
+        Assert.Equal(HttpStatusCode.Created, (await NewAsync(started, "program.verso", cookie: false, origin: null)).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await NewAsync(started, "other.verso", cookie: false, $"http://127.0.0.1:{started.Address.Port + 1}")).StatusCode);
+        Assert.False(File.Exists(Path.Join(_folder, "other.verso")));
+    }
+
+    private static Task<HttpResponseMessage> PostAsync(Uri address, string path, string json, Action<HttpRequestMessage> dress)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, new Uri(address, path)) { Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json") };
+
+        dress(request);
+
+        return Browser().SendAsync(request, TestContext.Current.CancellationToken);
+    }
+
+    // A new notebook asked of the server as a script asks it: the token carried by the cookie or by the address, and the
+    // page it comes from named, or none.
+    private static Task<HttpResponseMessage> NewAsync(Started started, string name, bool cookie, string? origin) =>
+        PostAsync(started.Address, cookie ? "/api/notebooks" : $"/api/notebooks?token={Token}", $$"""{"name": "{{name}}"}""", request =>
+        {
+            if (cookie)
+            {
+                request.Headers.Add("Cookie", $"{CookieFor(started.Address)}={Token}");
+            }
+
+            if (origin is not null)
+            {
+                request.Headers.Add("Origin", origin);
+            }
+        });
+
     private static int FreePort()
     {
         using var probe = new TcpListener(IPAddress.Loopback, 0);

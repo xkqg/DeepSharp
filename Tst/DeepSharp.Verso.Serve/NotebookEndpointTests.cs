@@ -72,7 +72,9 @@ public sealed partial class NotebookEndpointTests : IDisposable
         var address = new Uri(app.Services.GetRequiredService<IServer>().Features.GetRequiredFeature<IServerAddressesFeature>().Addresses.Single());
         var client = new HttpClient(new HttpClientHandler { UseCookies = false }) { BaseAddress = address };
 
+        // As the server's own page asks: the cookie its first page set, and the page named, as a browser names it.
         client.DefaultRequestHeaders.Add("Cookie", $"deepsharp-serve-{address.Port}={Token}");
+        client.DefaultRequestHeaders.Add("Origin", address.GetLeftPart(UriPartial.Authority));
 
         return new Served(app, client);
     }
