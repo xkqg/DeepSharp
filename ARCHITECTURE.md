@@ -887,9 +887,12 @@ notebook reaches — the block type's own kernel directly, every other part thro
 and one change on it runs at a time: a gesture, a change in a block's form, the toolbar's run, export and take-over
 each wait for the one before them, in the order they came, since one host hands them over one at a time and another
 side by side. A change still on its way to a block the change before it rewrote or took away is not made, as a host
-that looks a block up by its id and finds none makes none. It is never static and never shared with another notebook. A grid whose
-view, or whose boxes, the blocks no longer match is cleared, not worked out again: work runs when somebody asks
-for it.
+that looks a block up by its id and finds none makes none. It is never static and never shared with another
+notebook. A block run by hand reaches the session outside that line, so what the session knows is one value, and
+each change makes the next value from the one there is and puts it in place whole: a reader never sees half a
+change, and no change is lost to another made beside it — without a lock, which would keep each piece safe and
+the fact they make together unsafe. A grid whose view, or whose boxes, the blocks no longer match is cleared, not
+worked out again: work runs when somebody asks for it.
 
 C# cells in the same notebook are handed the pipeline as text — the declaration, with what the whole pipeline's
 run learned while it is the run of the steps declared now over the bytes there now — because the notebook's

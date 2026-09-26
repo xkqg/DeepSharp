@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Collections.Immutable;
 using DeepSharp.Pipelines;
 using Verso.Abstractions;
 
@@ -34,8 +35,9 @@ internal readonly record struct SourceBytes(bool Known, string? Fingerprint)
 /// </summary>
 /// <remarks>
 /// Kept by the block type Verso loaded, the one object every part of a notebook reaches; nothing here is saved, and
-/// nothing is shared with another notebook. Everything is taken under a lock, since no host promises one call at a
-/// time.
+/// nothing is shared with another notebook. No host promises one call at a time, so everything the session knows is
+/// one value: each change makes the next value from the one there is and puts it in place whole, and a reader takes
+/// the value there is. A reader never sees half a change, and no change is lost to another made beside it.
 /// <para>
 /// One view is kept: the last one worked out, under the key of the steps it is worked out from and the fingerprint of
 /// the bytes it was read from. A view is those two and nothing else, so while both stay it is the same view, and
@@ -51,17 +53,8 @@ internal readonly record struct SourceBytes(bool Known, string? Fingerprint)
 /// </remarks>
 internal sealed class NotebookSession
 {
-    private readonly object _lock = new();
-    private readonly Dictionary<Guid, ViewRequest> _requests = [];
-    private readonly Dictionary<Guid, ShownView> _shown = [];
-    private readonly Dictionary<Guid, Refusal> _refusals = [];
-    private readonly HashSet<Guid> _gone = [];
-    private NotebookPipeline? _assembled;
-    private SelectCommit? _select;
-    private KeptView? _view;
-    private RunStamp? _run;
-    private int _viewsRun;
-    private int _runsFitted;
+    // Everything the session knows, as one value that each change replaces whole.
+    private State _state = new();
 
     // The last change's turn: the next one waits for it, so they take the lane in the order they came.
     private Task _lane = Task.CompletedTask;
@@ -76,52 +69,19 @@ internal sealed class NotebookSession
     public static TimeSpan SettleTime { get; } = TimeSpan.FromMilliseconds(300);
 
     /// <summary>The pipeline the blocks made at the last gesture, when there was one.</summary>
-    public NotebookPipeline? Assembled
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _assembled;
-            }
-        }
-    }
+    public NotebookPipeline? Assembled => Now.Assembled;
 
     /// <summary>How many views were worked out from the source up: the number keeping the last one exists to keep down.</summary>
-    public int ViewsRun
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _viewsRun;
-            }
-        }
-    }
+    public int ViewsRun => Now.ViewsRun;
 
     /// <summary>How many times a run of the whole pipeline was fitted and handed over.</summary>
-    public int RunsFitted
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _runsFitted;
-            }
-        }
-    }
+    public int RunsFitted => Now.RunsFitted;
 
     /// <summary>The blocks that show data, each with the key of the steps its rows were worked out from.</summary>
-    public IReadOnlyDictionary<Guid, string> Shown
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return _shown.ToDictionary(each => each.Key, each => each.Value.Key);
-            }
-        }
-    }
+    public IReadOnlyDictionary<Guid, string> Shown => Now.Shown.ToDictionary(each => each.Key, each => each.Value.Key);
+
+    // The value there is now: taken once, it holds still while it is read.
+    private State Now => Volatile.Read(ref _state);
 
     /// <summary>
     /// Runs one change on the notebook — a gesture, a change in a block's form, a toolbar button — once every change made
@@ -139,13 +99,7 @@ internal sealed class NotebookSession
     public async Task<T> OneAtATimeAsync<T>(Func<Task<T>> change)
     {
         var mine = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        Task before;
-
-        lock (_lock)
-        {
-            before = _lane;
-            _lane = mine.Task;
-        }
+        var before = Interlocked.Exchange(ref _lane, mine.Task);
 
         await before;
 
@@ -161,13 +115,7 @@ internal sealed class NotebookSession
 
     /// <summary>Keeps the pipeline a gesture assembled, for the parts that ask what is around a block.</summary>
     /// <param name="assembled">The pipeline.</param>
-    public void Publish(NotebookPipeline assembled)
-    {
-        lock (_lock)
-        {
-            _assembled = assembled;
-        }
-    }
+    public void Publish(NotebookPipeline assembled) => Change(state => state with { Assembled = assembled });
 
     /// <summary>Hands C# cells the pipeline the blocks make, knowing nothing of the source's bytes.</summary>
     /// <param name="variables">The notebook's variables, as the caller was handed them.</param>
@@ -210,14 +158,7 @@ internal sealed class NotebookSession
             return null;
         }
 
-        RunStamp? run;
-
-        lock (_lock)
-        {
-            run = _run;
-        }
-
-        return run is { } stamped
+        return Now.Run is { } stamped
                && stamped.Key == KeyOf(assembled.Readable)
                && bytes.Allow(stamped.Fingerprint)
                && variables.TryGet<string>(StepKernel.HandOver, out var handed)
@@ -240,21 +181,22 @@ internal sealed class NotebookSession
         ArgumentNullException.ThrowIfNull(prepared);
 
         var envelope = prepared.ToJson();
+        var stamp = new RunStamp(KeyOf(prepared.Declaration), fingerprint, envelope);
+        var fitted = false;
 
-        lock (_lock)
+        Change(state =>
         {
-            if (_assembled?.Readable.Equals(prepared.Declaration) != true)
-            {
-                return false;
-            }
+            fitted = state.Assembled?.Readable.Equals(prepared.Declaration) == true;
 
-            _run = new RunStamp(KeyOf(prepared.Declaration), fingerprint, envelope);
-            _runsFitted++;
+            return fitted ? state with { Run = stamp, RunsFitted = state.RunsFitted + 1 } : state;
+        });
+
+        if (fitted)
+        {
+            variables.Set(StepKernel.HandOver, envelope);
         }
 
-        variables.Set(StepKernel.HandOver, envelope);
-
-        return true;
+        return fitted;
     }
 
     /// <summary>
@@ -270,14 +212,7 @@ internal sealed class NotebookSession
         ArgumentNullException.ThrowIfNull(variables);
         ArgumentNullException.ThrowIfNull(declaration);
 
-        RunStamp? run;
-
-        lock (_lock)
-        {
-            run = _run;
-        }
-
-        if (run is not { } stamped || stamped.Fingerprint != fingerprint || stamped.Key != KeyOf(declaration))
+        if (Now.Run is not { } stamped || stamped.Fingerprint != fingerprint || stamped.Key != KeyOf(declaration))
         {
             return false;
         }
@@ -322,33 +257,21 @@ internal sealed class NotebookSession
     /// <param name="why">Why.</param>
     public void Refused(Guid cell, string source, string why)
     {
-        lock (_lock)
-        {
-            _refusals[cell] = new Refusal(source, why);
-        }
+        var refusal = new Refusal(source, why);
+
+        Change(state => state with { Refusals = state.Refusals.SetItem(cell, refusal) });
     }
 
     /// <summary>Forgets a refusal: a change to the block's form was made, or asked for what already was.</summary>
     /// <param name="cell">The block's cell.</param>
-    public void Accepted(Guid cell)
-    {
-        lock (_lock)
-        {
-            _refusals.Remove(cell);
-        }
-    }
+    public void Accepted(Guid cell) => Change(state => state with { Refusals = state.Refusals.Remove(cell) });
 
     /// <summary>Why the last change to a block's form was not made, while the block's text is what it was then.</summary>
     /// <param name="cell">The block's cell.</param>
     /// <param name="source">The block's text now.</param>
     /// <returns>Why, or nothing when no change was refused or the block has changed since.</returns>
-    public string? RefusalFor(Guid cell, string source)
-    {
-        lock (_lock)
-        {
-            return _refusals.TryGetValue(cell, out var refusal) && refusal.Source == source ? refusal.Why : null;
-        }
-    }
+    public string? RefusalFor(Guid cell, string source) =>
+        Now.Refusals.TryGetValue(cell, out var refusal) && refusal.Source == source ? refusal.Why : null;
 
     /// <summary>
     /// Remembers the last change a select that commits made: which select, the steps its walk started from, and the
@@ -360,10 +283,9 @@ internal sealed class NotebookSession
     /// <param name="fingerprintLeft">The fingerprint of the source's bytes the change was made over.</param>
     public void SelectCommitted(string control, IReadOnlyList<IPipelineStep> drawn, string keyLeft, string fingerprintLeft)
     {
-        lock (_lock)
-        {
-            _select = new SelectCommit(control, drawn, keyLeft, fingerprintLeft);
-        }
+        var select = new SelectCommit(control, drawn, keyLeft, fingerprintLeft);
+
+        Change(state => state with { Select = select });
     }
 
     /// <summary>
@@ -374,47 +296,37 @@ internal sealed class NotebookSession
     /// <param name="key">The key of the whole declaration now.</param>
     /// <param name="fingerprint">The fingerprint of the source's bytes now, as this session read them.</param>
     /// <returns>The steps, or nothing when the send goes on from no change of its own: something else changed since.</returns>
-    public IReadOnlyList<IPipelineStep>? ContinuationOf(string control, string key, string fingerprint)
-    {
-        lock (_lock)
-        {
-            return _select is { } last && last.Control == control && last.KeyLeft == key && last.FingerprintLeft == fingerprint ? last.Drawn : null;
-        }
-    }
+    public IReadOnlyList<IPipelineStep>? ContinuationOf(string control, string key, string fingerprint) =>
+        Now.Select is { } last && last.Control == control && last.KeyLeft == key && last.FingerprintLeft == fingerprint ? last.Drawn : null;
 
     /// <summary>Asks a block to show something the next time it runs.</summary>
     /// <param name="cell">The block's cell.</param>
     /// <param name="request">What to show.</param>
-    public void Request(Guid cell, ViewRequest request)
-    {
-        lock (_lock)
-        {
-            _requests[cell] = request;
-        }
-    }
+    public void Request(Guid cell, ViewRequest request) => Change(state => state with { Requests = state.Requests.SetItem(cell, request) });
 
     /// <summary>Takes what a block was asked to show, once.</summary>
     /// <param name="cell">The block's cell.</param>
     /// <returns>The request, or nothing when the block runs because somebody ran it.</returns>
     public ViewRequest? Take(Guid cell)
     {
-        lock (_lock)
+        ViewRequest? taken = null;
+
+        Change(state =>
         {
-            return _requests.Remove(cell, out var request) ? request : null;
-        }
+            taken = state.Requests.TryGetValue(cell, out var request) ? request : null;
+
+            return state with { Requests = state.Requests.Remove(cell) };
+        });
+
+        return taken;
     }
 
     /// <summary>The view kept last, when it is the one these steps work out over these bytes.</summary>
     /// <param name="key">The key of the steps the view is worked out from.</param>
     /// <param name="fingerprint">The fingerprint of the source's bytes.</param>
     /// <returns>The view, or nothing when it has to be worked out.</returns>
-    public PipelineView? ViewFor(string key, string fingerprint)
-    {
-        lock (_lock)
-        {
-            return _view is { } kept && kept.Key == key && kept.Fingerprint == fingerprint ? kept.View : null;
-        }
-    }
+    public PipelineView? ViewFor(string key, string fingerprint) =>
+        Now.View is { } kept && kept.Key == key && kept.Fingerprint == fingerprint ? kept.View : null;
 
     /// <summary>Counts a view worked out just now, and keeps it in place of the one kept before.</summary>
     /// <param name="key">The key of the steps it was worked out from.</param>
@@ -423,13 +335,11 @@ internal sealed class NotebookSession
     /// <returns>The same view.</returns>
     public PipelineView Keep(string key, string fingerprint, PipelineView view)
     {
-        lock (_lock)
-        {
-            _viewsRun++;
-            _view = new KeptView(key, fingerprint, view);
+        var kept = new KeptView(key, fingerprint, view);
 
-            return view;
-        }
+        Change(state => state with { ViewsRun = state.ViewsRun + 1, View = kept });
+
+        return view;
     }
 
     /// <summary>Remembers that a block shows data: what its rows were worked out from, and what its grid offers.</summary>
@@ -438,10 +348,9 @@ internal sealed class NotebookSession
     /// <param name="header">The columns the grid shows, and what its header offers for each.</param>
     public void Showing(Guid cell, string key, GridHeader header)
     {
-        lock (_lock)
-        {
-            _shown[cell] = new ShownGrid(key, header);
-        }
+        var shown = new ShownGrid(key, header);
+
+        Change(state => state with { Shown = state.Shown.SetItem(cell, shown) });
     }
 
     /// <summary>Remembers that a block shows the list of the source's columns, and the blocks it was drawn for.</summary>
@@ -449,10 +358,9 @@ internal sealed class NotebookSession
     /// <param name="key">The key of the whole declaration the list was drawn for.</param>
     public void Listing(Guid cell, string key)
     {
-        lock (_lock)
-        {
-            _shown[cell] = new ShownList(key);
-        }
+        var shown = new ShownList(key);
+
+        Change(state => state with { Shown = state.Shown.SetItem(cell, shown) });
     }
 
     /// <summary>
@@ -460,36 +368,17 @@ internal sealed class NotebookSession
     /// that it is gone, rewritten as another block or taken out, so a change still on its way to it is not made.
     /// </summary>
     /// <param name="cell">The block's cell.</param>
-    public void Removed(Guid cell)
-    {
-        lock (_lock)
-        {
-            _shown.Remove(cell);
-            _refusals.Remove(cell);
-            _gone.Add(cell);
-        }
-    }
+    public void Removed(Guid cell) =>
+        Change(state => state with { Shown = state.Shown.Remove(cell), Refusals = state.Refusals.Remove(cell), Gone = state.Gone.Add(cell) });
 
     /// <summary>Whether a block still stands: no change took it away.</summary>
     /// <param name="cell">The block's cell.</param>
     /// <returns><see langword="true"/> unless a change took the block away.</returns>
-    public bool Stands(Guid cell)
-    {
-        lock (_lock)
-        {
-            return !_gone.Contains(cell);
-        }
-    }
+    public bool Stands(Guid cell) => !Now.Gone.Contains(cell);
 
     /// <summary>Forgets that a block shows data: it shows its card alone, or nothing.</summary>
     /// <param name="cell">The block's cell.</param>
-    public void Hidden(Guid cell)
-    {
-        lock (_lock)
-        {
-            _shown.Remove(cell);
-        }
-    }
+    public void Hidden(Guid cell) => Change(state => state with { Shown = state.Shown.Remove(cell) });
 
     /// <summary>
     /// Forgets every view the blocks as they are now no longer show: its rows are worked out from other steps, its grid
@@ -502,22 +391,16 @@ internal sealed class NotebookSession
     {
         ArgumentNullException.ThrowIfNull(now);
 
-        lock (_lock)
+        Guid[] stale = [];
+
+        Change(state =>
         {
-            Guid[] stale =
-            [
-                .. _shown
-                    .Where(each => each.Key != except && !each.Value.StillHolds(now, each.Key))
-                    .Select(each => each.Key),
-            ];
+            stale = [.. state.Shown.Where(each => each.Key != except && !each.Value.StillHolds(now, each.Key)).Select(each => each.Key)];
 
-            foreach (var cell in stale)
-            {
-                _shown.Remove(cell);
-            }
+            return state with { Shown = state.Shown.RemoveRange(stale) };
+        });
 
-            return stale;
-        }
+        return stale;
     }
 
     /// <summary>The key of a whole declaration: that of its last step, which covers every step above it.</summary>
@@ -525,6 +408,44 @@ internal sealed class NotebookSession
     /// <returns>The key; empty for a declaration without steps.</returns>
     internal static string KeyOf(PipelineDeclaration declaration) =>
         declaration.Steps.Count == 0 ? string.Empty : declaration.KeyAt(declaration.Steps.Count - 1);
+
+    // Makes the next value from the one there is and puts it in place whole. A change made beside it in the meantime
+    // has the next value made again from the one that change left, so the transition is worked out from nothing but it.
+    private void Change(Func<State, State> transition) => ImmutableInterlocked.Update(ref _state, transition);
+
+    /// <summary>Everything the session knows at one moment.</summary>
+    private sealed record State
+    {
+        /// <summary>What each block was asked to show the next time it runs.</summary>
+        public ImmutableDictionary<Guid, ViewRequest> Requests { get; init; } = ImmutableDictionary<Guid, ViewRequest>.Empty;
+
+        /// <summary>What each block shows, under the key it was drawn for.</summary>
+        public ImmutableDictionary<Guid, ShownView> Shown { get; init; } = ImmutableDictionary<Guid, ShownView>.Empty;
+
+        /// <summary>Why the last change to each block's form was not made.</summary>
+        public ImmutableDictionary<Guid, Refusal> Refusals { get; init; } = ImmutableDictionary<Guid, Refusal>.Empty;
+
+        /// <summary>The blocks a change took away.</summary>
+        public ImmutableHashSet<Guid> Gone { get; init; } = [];
+
+        /// <summary>The pipeline the blocks made at the last gesture.</summary>
+        public NotebookPipeline? Assembled { get; init; }
+
+        /// <summary>The last change a select that commits made.</summary>
+        public SelectCommit? Select { get; init; }
+
+        /// <summary>The one view kept.</summary>
+        public KeptView? View { get; init; }
+
+        /// <summary>What the notebook's own last run learned.</summary>
+        public RunStamp? Run { get; init; }
+
+        /// <summary>How many views were worked out from the source up.</summary>
+        public int ViewsRun { get; init; }
+
+        /// <summary>How many runs of the whole pipeline were fitted and handed over.</summary>
+        public int RunsFitted { get; init; }
+    }
 
     /// <summary>Why a change was not made, and the text it was refused on.</summary>
     /// <param name="Source">The block's text.</param>

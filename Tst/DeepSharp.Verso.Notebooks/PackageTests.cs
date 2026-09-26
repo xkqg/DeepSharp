@@ -49,6 +49,66 @@ public class PackageTests
     }
 
     [Fact]
+    public void NeitherTheNotebookPackageNorItsHost_TakesALock()
+    {
+        // What one change makes whole is a value, handed on whole; who may change it is its owner — never a lock around
+        // state, which makes the collection safe and the fact it holds unsafe. Read off the compiled code, every method a
+        // lock or a semaphore would sit in included, so the rule holds without anybody remembering it.
+        string[] blocking = ["Monitor", "Lock", "SemaphoreSlim", "Semaphore", "Mutex", "ReaderWriterLockSlim", "ReaderWriterLock", "SpinLock"];
+
+        var taken = new[] { Package, typeof(DeepSharp.Verso.Api.NotebookHost).Assembly }
+            .SelectMany(assembly => assembly.GetTypes())
+            .SelectMany(type => type.GetMethods(Every).Cast<MethodBase>().Concat(type.GetConstructors(Every)))
+            .SelectMany(method => Called(method).Select(called => (Method: method, Called: called)))
+            .Where(each => each.Called.DeclaringType is { Namespace: "System.Threading" } owner && blocking.Contains(owner.Name))
+            .Select(each => $"{each.Method.DeclaringType!.Name}.{each.Method.Name} → {each.Called.DeclaringType!.Name}.{each.Called.Name}")
+            .Distinct()
+            .ToArray();
+
+        Assert.True(taken.Length == 0, $"Taken: {string.Join("; ", taken)}");
+    }
+
+    private const BindingFlags Every = BindingFlags.DeclaredOnly | BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic;
+
+    private static readonly Dictionary<short, System.Reflection.Emit.OpCode> OpCodes = typeof(System.Reflection.Emit.OpCodes)
+        .GetFields(BindingFlags.Public | BindingFlags.Static)
+        .Select(field => (System.Reflection.Emit.OpCode)field.GetValue(null)!)
+        .ToDictionary(code => code.Value);
+
+    // Every method a body calls or constructs, read off its IL one instruction at a time.
+    private static IEnumerable<MethodBase> Called(MethodBase method)
+    {
+        if (method.GetMethodBody()?.GetILAsByteArray() is not { } il)
+        {
+            yield break;
+        }
+
+        var typeArguments = method.DeclaringType!.IsGenericType ? method.DeclaringType.GetGenericArguments() : null;
+        var methodArguments = method.IsGenericMethod ? method.GetGenericArguments() : null;
+
+        for (var at = 0; at < il.Length;)
+        {
+            var code = il[at] == 0xFE ? OpCodes[BitConverter.ToInt16([il[at + 1], 0xFE])] : OpCodes[il[at]];
+            at += code.Size;
+
+            if (code.OperandType == System.Reflection.Emit.OperandType.InlineMethod)
+            {
+                yield return method.Module.ResolveMethod(BitConverter.ToInt32(il, at), typeArguments, methodArguments)!;
+            }
+
+            at += code.OperandType switch
+            {
+                System.Reflection.Emit.OperandType.InlineNone => 0,
+                System.Reflection.Emit.OperandType.ShortInlineBrTarget or System.Reflection.Emit.OperandType.ShortInlineI or System.Reflection.Emit.OperandType.ShortInlineVar => 1,
+                System.Reflection.Emit.OperandType.InlineVar => 2,
+                System.Reflection.Emit.OperandType.InlineI8 or System.Reflection.Emit.OperandType.InlineR => 8,
+                System.Reflection.Emit.OperandType.InlineSwitch => 4 + 4 * BitConverter.ToInt32(il, at),
+                _ => 4,
+            };
+        }
+    }
+
+    [Fact]
     public void ThePackageIsFoundUnderItsTags_AndTakesTheAbstractionsAsARange()
     {
         var project = Project();

@@ -25,8 +25,9 @@ internal readonly record struct SourceRows(IRowSource Rows, string Fingerprint);
 /// One entry, keyed by the read step itself, the path the core's one rule resolves, and a SHA-256 of the file's
 /// bytes. The bytes are read and hashed on every use and the rows are parsed from those same bytes, so a file
 /// changed on disk is opened again and the rows kept are always the ones the fingerprint names. The entry lives as
-/// long as the notebook's session and is shared with nothing else; one parse per key is kept under the entry's own
-/// lock.
+/// long as the notebook's session and is shared with nothing else. It is one value, put in place whole: two readers
+/// of new bytes at the same moment may both parse them, and the entry one of them made stays — the same rows either
+/// way.
 /// </para>
 /// <para>
 /// A notebook's rows come from a file: nothing hands rows in to a notebook, the way code hands them to a pipeline
@@ -35,11 +36,11 @@ internal readonly record struct SourceRows(IRowSource Rows, string Fingerprint);
 /// </remarks>
 internal sealed class SourceCache
 {
-    private readonly object _lock = new();
     private Kept? _kept;
+    private int _parsed;
 
     /// <summary>How many times a source was parsed: the number the cache exists to keep down.</summary>
-    public int Parsed { get; private set; }
+    public int Parsed => Volatile.Read(ref _parsed);
 
     /// <summary>The rows the declaration's source opens, from memory when the same step read the same bytes last.</summary>
     /// <param name="declaration">The declaration whose source is read.</param>
@@ -61,20 +62,17 @@ internal sealed class SourceCache
         var bytes = File.ReadAllBytes(path);
         var fingerprint = Fingerprint(bytes);
 
-        lock (_lock)
+        if (Volatile.Read(ref _kept) is { } kept && kept.Read == read && kept.Path == path && kept.Fingerprint == fingerprint)
         {
-            if (_kept is { } kept && kept.Read == read && kept.Path == path && kept.Fingerprint == fingerprint)
-            {
-                return new SourceRows(kept.Rows, fingerprint);
-            }
-
-            var rows = CsvRowSource.FromText(Decoded(bytes), path);
-
-            _kept = new Kept(read, path, fingerprint, rows);
-            Parsed++;
-
-            return new SourceRows(rows, fingerprint);
+            return new SourceRows(kept.Rows, fingerprint);
         }
+
+        var rows = CsvRowSource.FromText(Decoded(bytes), path);
+
+        Volatile.Write(ref _kept, new Kept(read, path, fingerprint, rows));
+        Interlocked.Increment(ref _parsed);
+
+        return new SourceRows(rows, fingerprint);
     }
 
     /// <summary>What is known of the bytes the declaration's source holds now: read and hashed, never parsed.</summary>
@@ -105,13 +103,8 @@ internal sealed class SourceCache
     /// What a gesture knows of the source: it is handed no file, so the rows this session read last are the source's
     /// columns as the person saw them.
     /// </remarks>
-    public SourceRows? KeptFor(ReadCsvStep read)
-    {
-        lock (_lock)
-        {
-            return _kept is { } kept && kept.Read == read ? new SourceRows(kept.Rows, kept.Fingerprint) : null;
-        }
-    }
+    public SourceRows? KeptFor(ReadCsvStep read) =>
+        Volatile.Read(ref _kept) is { } kept && kept.Read == read ? new SourceRows(kept.Rows, kept.Fingerprint) : null;
 
     private static string Fingerprint(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
