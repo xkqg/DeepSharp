@@ -168,6 +168,9 @@
   // One send at a time, in the order they came: each waits for the one before it.
   let chain = Promise.resolve();
 
+  // Once the notebook is closed, nothing waiting is sent: each would open the closed notebook again.
+  let closed = false;
+
   const Waiting = 'Waits for the run under way to end…';
 
   // What a button's run says while it waits for another notebook's C# run: it names no cell yet.
@@ -182,7 +185,7 @@
     }
 
     const next = chain
-      .then(work)
+      .then(() => closed ? undefined : work())
       .then(() => {
         if (waits && statusLine.textContent === Waiting) {
           say('');
@@ -284,6 +287,8 @@
     }
 
     const stream = new EventSource(notebookPath('/updates'));
+
+    state.stream = stream;
 
     stream.addEventListener('snapshot', event => drawAll(JSON.parse(event.data)));
     stream.addEventListener('change', event => apply(JSON.parse(event.data)));
@@ -1373,15 +1378,28 @@
     }
   });
 
-  closeButton.addEventListener('click', () => {
-    if (!confirm('Close the notebook without saving it? What is not saved is lost.')) {
+  // A close goes past everything waiting, as a stop does: what waits may be waiting for the very run the close stops.
+  closeButton.addEventListener('click', async () => {
+    const running = state.running === null
+      ? ''
+      : ' The run under way is stopped; code that does not stop goes on in the background until the tool stops.';
+
+    if (!confirm(`Close the notebook without saving it? What is not saved is lost.${running}`)) {
       return;
     }
 
-    enqueue(async () => {
+    // Nothing waiting is sent after it, the buttons are not asked again, and the stream it ends is not opened again: each
+    // would open the closed notebook again.
+    closed = true;
+    clearTimeout(refreshTimer);
+    state.stream?.close();
+
+    try {
       await api(notebookPath('/close'), { method: 'POST' });
       location.search = '';
-    });
+    } catch (error) {
+      say(error.message, true);
+    }
   });
 
   // ---- Begin -------------------------------------------------------------------------------------------------------

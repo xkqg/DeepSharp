@@ -205,9 +205,9 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   listed under it — on Ctrl+Space, and after a dot or a quote — and a line says what the word at the cursor means until
   the text is left; a run is offered only while none is under way, as in Verso's editor, and a run that waits for
   another notebook's C# run says so, on its cell or on the page's own line; a change asked for while a cell runs says it
-  waits; a refusal is said in the server's own words; and a folder's list, shown even when it holds one notebook, makes
-  a new one. It carries a build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8 is
-  gone.
+  waits; Close goes at once, even while a run is under way, and says first that the run is stopped; a refusal is said in
+  the server's own words; and a folder's list, shown even when it holds one notebook, makes a new one. It carries a
+  build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8 is gone.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

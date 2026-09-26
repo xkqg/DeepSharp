@@ -1118,9 +1118,12 @@ and goes when the text is left. An answer that comes back after the text moved o
 is dropped. A run is offered as Verso's editor offers one: not while a run is under way, since what a cell's run
 button or Shift+Enter asked then would only wait behind it and run after its Stop; a run that waits for a C# run in
 another notebook says so — on its cell, or on the page's own line for a button that runs no cell yet — and Stop ends
-the wait. A change asked for while a cell runs says it waits for the
-run, and a refusal is said in the server's own words, a cell another page took away among them. A folder is listed,
-even when it holds one notebook, with a way to make a new one; a server beside one notebook opens it at once.
+the wait. A change asked for while a cell runs says it waits for the run, and a refusal is said in the server's own
+words, a cell another page took away among them. A close goes past everything the page has waiting, as a stop does,
+since what waits may be waiting for the very run the close stops; its question says the run under way is stopped; and
+the page sends nothing for the notebook after it — no change that waited, no refresh of its buttons, no stream opened
+again — since each would open the closed notebook again. A folder is listed, even when it holds one notebook, with a way
+to make a new one; a server beside one notebook opens it at once.
 
 ## Decisions
 

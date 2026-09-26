@@ -326,6 +326,8 @@ public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browser
     // A started server and a client that carries its token.
     private sealed class Served(WebApplication app, HttpClient client, Uri address) : IAsyncDisposable
     {
+        public WebApplication App => app;
+
         public HttpClient Client => client;
 
         public Uri Address => address;
