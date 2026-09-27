@@ -49,6 +49,11 @@ public sealed class NotebookHost
     private readonly Lane _turns = new();
     private Run? _running;
 
+    // The run whose work the engine is in, as the flow that started it carries it: the engine says a cell began or ended
+    // from inside the execution that ran it, however late that is, so a run left behind that ends while another run of the
+    // same cell is under way ends its own record and never the other's.
+    private readonly AsyncLocal<Run?> _raising = new();
+
     // The number the last run was given: each run of the notebook is counted, so a stop names the run it means.
     private long _runs;
 
@@ -788,11 +793,11 @@ public sealed class NotebookHost
         return next;
     }
 
-    // The engine says a cell began: while a run is under way, it is what that run runs now. A cell the engine begins
-    // outside any run is no run's, and no view is told it runs.
+    // The engine says a cell began: it is what the run whose work the engine is in runs now. A cell the engine begins
+    // outside every run is no run's, and no view is told it runs.
     private void Began(Guid cell)
     {
-        if (Volatile.Read(ref _running) is { } run)
+        if (_raising.Value is { } run)
         {
             run.Began(cell, Scaffold.GetCell(cell) is { } began ? KernelOf(began) : Scaffold.DefaultKernelId);
         }
@@ -800,10 +805,10 @@ public sealed class NotebookHost
         Said(cell);
     }
 
-    // The engine says a cell ended: the run under way runs nothing now, unless something else began since.
+    // The engine says a cell ended: the run whose work that was runs nothing now, unless something else began since.
     private void Ended(Guid cell)
     {
-        Volatile.Read(ref _running)?.Ended(cell);
+        _raising.Value?.Ended(cell);
         Said(cell);
     }
 
@@ -993,6 +998,10 @@ public sealed class NotebookHost
         Publish();
 
         var said = Listen();
+
+        // What the engine says from inside this work is this run's.
+        _raising.Value = run;
+
         var ran = start();
         var ended = Task.WhenAny(ran, run.Stopped);
 

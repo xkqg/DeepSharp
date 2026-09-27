@@ -409,6 +409,49 @@ public sealed partial class ToolbarTests
     }
 
     [Fact]
+    public async Task AStoppedRunEndingDuringItsCellsNextRun_LeavesThatRunsStopWhole()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "same.verso", CSharp(Held("first")));
+        var cell = host.Cells[0].Id;
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var restarted = new ConcurrentQueue<string?>();
+
+        // The first run is stopped while the cell runs, and the cell is left behind.
+        var first = host.RunAsync(cell);
+
+        await UntilAsync("first-began", "the cell never began");
+        Assert.True(host.Stop(1));
+        await first.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+        // The same cell runs again, as code that never ends, while the run left behind is still in it.
+        await host.EditAsync(cell, $$"""System.IO.File.WriteAllText(@"{{Path.Join(_folder, "again-began")}}", "on"); while (true) { await System.Threading.Tasks.Task.Delay(10); }""");
+
+        var again = host.RunAsync(cell);
+
+        await UntilAsync("again-began", "the cell never ran again");
+
+        // The run left behind ends, and the engine says the cell ended.
+        host.Scaffold.OnCellExecuted += each =>
+        {
+            if (each == cell)
+            {
+                ended.TrySetResult();
+            }
+        };
+
+        await File.WriteAllTextAsync(Path.Join(_folder, "first-go"), "go", TestContext.Current.CancellationToken);
+        await ended.Task.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+        // The second run's stop still starts afresh the kernel of the cell it runs, and the run ends.
+        host.Scaffold.OnKernelRestarting += restarted.Enqueue;
+
+        Assert.True(host.Stop(2));
+        await again.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+        Assert.Equal(["csharp"], restarted);
+    }
+
+    [Fact]
     public async Task ACellLeftBehindThatEndsWhileAButtonsCodeRuns_LeavesThatRunsStopWhole()
     {
         var path = Path.Join(_folder, "code-late.verso");
