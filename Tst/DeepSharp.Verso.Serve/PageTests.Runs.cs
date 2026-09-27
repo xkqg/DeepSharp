@@ -10,7 +10,9 @@ namespace DeepSharp.Tests.Serve;
 
 // A run is offered as Verso's editor offers it: not while one is under way, since what a cell's ▶ or Shift+Enter asked
 // then would only wait behind it and run after its Stop. And a run that waits for another notebook's C# run says so — on
-// its cell, or on the page's own line for a button that runs no cell yet — and its Stop ends the wait.
+// its cell, or on the page's own line for a button that runs no cell yet — and its Stop ends the wait. A Stop of Run All
+// leaves the cell under way behind, and no cell after it begins, even once the one left behind ends.
+[Collection(RunsLeftBehind.Name)]
 public sealed partial class PageTests
 {
     [Fact]
@@ -119,6 +121,57 @@ public sealed partial class PageTests
         (await runningA).EnsureSuccessStatusCode();
     }
 
+    [Fact]
+    public async Task StoppingRunAllFromThePage_RunsNoFurtherCell_AndRunButtonsReturn()
+    {
+        var ran = At("ran");
+
+        // The first cell says it began, waits until it is let go, and says it ended; the second leaves a mark if it runs.
+        await SaveAsync(
+            "all.verso",
+            new CellModel
+            {
+                Type = "code",
+                Language = "csharp",
+                Source = $$"""System.IO.File.WriteAllText(@"{{At("began")}}", "on"); while (!System.IO.File.Exists(@"{{At("go")}}")) { await System.Threading.Tasks.Task.Delay(10); } System.IO.File.WriteAllText(@"{{At("ended")}}", "on");""",
+            },
+            new CellModel { Type = "code", Language = "csharp", Source = $$"""System.IO.File.AppendAllText(@"{{ran}}", "x");""" });
+        await using var served = await StartAsync();
+        var page = await OpenAsync(served, "all.verso");
+
+        await page.Locator("#toolbar button[data-button='verso.action.run-all']").ClickAsync();
+        await UntilAsync("began", "Run All's first cell never began");
+
+        await Expect(page.Locator("#stop")).ToBeVisibleAsync(new() { Timeout = 30_000 });
+        await Expect(Cell(page, 0)).ToHaveClassAsync(new Regex("running"));
+        await Expect(Cell(page, 1).Locator("button.run")).ToBeDisabledAsync();
+
+        await page.Locator("#stop").ClickAsync();
+
+        await Expect(page.Locator("#stop")).ToBeHiddenAsync(new() { Timeout = 30_000 });
+        await Expect(Cell(page, 0)).Not.ToHaveClassAsync(new Regex("running"));
+        await Expect(Cell(page, 0).Locator("button.run")).ToBeEnabledAsync();
+        await Expect(Cell(page, 1).Locator("button.run")).ToBeEnabledAsync();
+
+        // The cell left behind is let go and ends, and the press's loop is given the moment it would take to begin the next.
+        await File.WriteAllTextAsync(At("go"), "go", TestContext.Current.CancellationToken);
+        await UntilAsync("ended", "the cell left behind never ended");
+        await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+
+        Assert.False(File.Exists(ran), "a cell after the stopped one ran");
+        Assert.Empty((await CurrentAsync(served, "all.verso")).Cells[1].Outputs);
+    }
+
+    // Waits until a cell leaves the mark it is named by.
+    private async Task UntilAsync(string mark, string what)
+    {
+        for (var waited = 0; !File.Exists(At(mark)); waited += 50)
+        {
+            Assert.True(waited < 30_000, what);
+            await Task.Delay(50, TestContext.Current.CancellationToken);
+        }
+    }
+
     // Notebook A with a C# cell that never ends, and notebook B with a C# cell of its own.
     private async Task SaveAAndBAsync()
     {
@@ -134,11 +187,7 @@ public sealed partial class PageTests
         var endless = (await CurrentAsync(served, "a.verso")).Cells[0].Id;
         var running = served.Client.PostAsync($"/api/notebooks/a.verso/cells/{endless}/run", null, TestContext.Current.CancellationToken);
 
-        for (var waited = 0; !File.Exists(At("started")); waited += 50)
-        {
-            Assert.True(waited < 30_000, "notebook A's run never began");
-            await Task.Delay(50, TestContext.Current.CancellationToken);
-        }
+        await UntilAsync("started", "notebook A's run never began");
 
         return running;
     }
