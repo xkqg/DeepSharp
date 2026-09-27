@@ -211,13 +211,13 @@ public sealed partial class ToolbarTests : IDisposable
     {
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
-        using var stop = new CancellationTokenSource();
-        var operations = new RunOperations(host.Scaffold, stop.Token);
-        var context = new ToolbarContext(host.Scaffold, [], operations, stop.Token);
+        var run = new Run(1, cell: null, takesTheCSharpTurn: true);
+        var operations = new RunOperations(host.Scaffold, run);
+        var context = new ToolbarContext(host.Scaffold, [], operations, run.Token);
 
         await context.WriteOutputAsync(new CellOutput("text/plain", "written"));
 
-        Assert.Equal(stop.Token, context.CancellationToken);
+        Assert.Equal(run.Token, context.CancellationToken);
         Assert.Same(operations, context.Notebook);
         Assert.All(host.Cells, cell => Assert.Empty(cell.Outputs));
         Assert.Null(context.Handed);

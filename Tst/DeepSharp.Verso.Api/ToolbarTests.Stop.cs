@@ -3,7 +3,10 @@
 
 using System.Collections.Concurrent;
 using DeepSharp.Verso.Api;
+using Verso.Abstractions;
 using Verso.Contexts;
+using Verso.Extensions;
+using Verso.Serializers;
 
 namespace DeepSharp.Tests.Api;
 
@@ -114,11 +117,11 @@ public sealed partial class ToolbarTests
 
         await host.RunAsync(cell);
 
-        using var stop = new CancellationTokenSource();
+        var run = new Run(2, cell: null, takesTheCSharpTurn: true);
 
-        await stop.CancelAsync();
+        run.Stop();
 
-        var stopped = new RunOperations(host.Scaffold, stop.Token);
+        var stopped = new RunOperations(host.Scaffold, run);
         var layout = stopped.ActiveLayoutId;
         var theme = stopped.ActiveThemeId;
         var begun = Begun(host);
@@ -153,8 +156,7 @@ public sealed partial class ToolbarTests
         var host = await OpenAsync(notebooks, "port.verso", CSharp("6 * 7"), CSharp("var second = 2;"));
         var first = host.Cells[0].Id;
         var second = host.Cells[1].Id;
-        using var stop = new CancellationTokenSource();
-        var port = new RunOperations(host.Scaffold, stop.Token);
+        var port = new RunOperations(host.Scaffold, new Run(1, cell: null, takesTheCSharpTurn: true));
 
         await port.ExecuteCellAsync(first);
         Assert.NotEmpty(host.Scaffold.Cells[0].Outputs);
@@ -199,14 +201,272 @@ public sealed partial class ToolbarTests
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "from.verso", CSharp(Held("first")), CSharp("var second = 2;"));
         var begun = Begun(host);
-        using var stop = new CancellationTokenSource();
-        var running = new RunOperations(host.Scaffold, stop.Token).ExecuteFromAsync(host.Cells[0].Id);
+        var run = new Run(1, cell: null, takesTheCSharpTurn: true);
+        var running = new RunOperations(host.Scaffold, run).ExecuteFromAsync(host.Cells[0].Id);
 
         await UntilAsync("first-began", "the first cell never began");
-        await stop.CancelAsync();
+        run.Stop();
         await LetGoAsync("first");
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running.WaitAsync(AtOnce, TestContext.Current.CancellationToken));
         Assert.Equal([host.Cells[0].Id], begun);
+    }
+
+    private static string Printed(HostedCell cell) => string.Concat(cell.Outputs.Select(output => output.Content));
+
+    [Fact]
+    public async Task AStopBetweenCells_StartsNoKernelAfresh_AndKeepsTheVariables()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "between.verso", CSharp("var kept = 42;"), CSharp("var second = 2;"), CSharp("System.Console.Write(kept);"));
+        var first = host.Cells[0].Id;
+        var restarts = 0;
+        var stopped = false;
+
+        host.Scaffold.OnKernelRestarting += _ => Interlocked.Increment(ref restarts);
+
+        // The stop lands as the first cell ends and before the second begins: nothing runs then.
+        host.Scaffold.OnCellExecuted += cell =>
+        {
+            if (cell == first && !stopped)
+            {
+                stopped = host.Stop(1);
+            }
+        };
+
+        await host.RunToolbarAsync("verso.action.run-all").WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+        Assert.True(stopped);
+        Assert.Equal(0, Volatile.Read(ref restarts));
+        Assert.Equal("42", Printed(await host.RunAsync(host.Cells[2].Id).WaitAsync(AtOnce, TestContext.Current.CancellationToken)));
+    }
+
+    [Fact]
+    public async Task APress_IsToldByItsNumberFromItsStartAndBetweenCells_AndAsNoRunOnceStopped()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "told.verso", CSharp("var first = 1;"), CSharp("var second = 2;"));
+        var first = host.Cells[0].Id;
+        HostedRun? atTheReset = null;
+        HostedRun? inTheFirstCell = null;
+        HostedRun? betweenCells = null;
+        var reset = false;
+
+        // What every view is told as Run All resets its kernels, before any cell begins.
+        ((VariableStore)host.Scaffold.Variables).OnVariablesChanged += () =>
+        {
+            if (!reset)
+            {
+                reset = true;
+                atTheReset = host.Current.Running;
+            }
+        };
+
+        // What the run is while the first cell runs.
+        host.Scaffold.OnCellExecuting += cell =>
+        {
+            if (cell == first)
+            {
+                inTheFirstCell = host.Running;
+            }
+        };
+
+        // What the run is as the first cell ends, before the second begins; the press is stopped there.
+        host.Scaffold.OnCellExecuted += cell =>
+        {
+            if (cell == first && betweenCells is null)
+            {
+                betweenCells = host.Running;
+                host.Stop(1);
+            }
+        };
+
+        await host.RunToolbarAsync("verso.action.run-all").WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+        Assert.Equal(1, atTheReset?.Number);
+        Assert.Null(atTheReset?.Cell);
+        Assert.False(atTheReset?.Waits);
+        Assert.Equal(first, inTheFirstCell?.Cell);
+        Assert.Equal(1, betweenCells?.Number);
+        Assert.Null(betweenCells?.Cell);
+        Assert.Null(host.Running);
+        Assert.Null(host.Current.Running);
+    }
+
+    [Fact]
+    public async Task AButtonsCodeWithNoCell_IsStoppedWithAFreshKernel()
+    {
+        var path = Path.Join(_folder, "code.verso");
+
+        // The notebook's own kernel is the blocks', so only the code the button runs tells which kernel runs.
+        var notebook = new NotebookModel { DefaultKernelId = "pdd" };
+
+        notebook.Cells.Add(CSharp("6 * 7"));
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        var engine = new ExtensionHost();
+
+        await engine.LoadExtensionAsync(new CodeButton(
+            $$"""System.IO.File.WriteAllText(@"{{Path.Join(_folder, "code-began")}}", "on"); while (true) { await System.Threading.Tasks.Task.Delay(10); }"""));
+
+        var host = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+
+        try
+        {
+            var pressing = host.RunToolbarAsync(CodeButton.Id);
+
+            await UntilAsync("code-began", "the button's code never began");
+
+            Assert.True(host.Stop(1));
+            await pressing.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+            // The C# kernel was started afresh, so a C# cell runs although the button's code never ends.
+            Assert.Equal("42", Printed(await host.RunAsync(host.Cells[0].Id).WaitAsync(AtOnce, TestContext.Current.CancellationToken)));
+        }
+        finally
+        {
+            await host.CloseAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AButtonStoppedAfterItsCodeEnded_StartsNoKernelAfresh()
+    {
+        var path = Path.Join(_folder, "after.verso");
+        var notebook = new NotebookModel { DefaultKernelId = "pdd" };
+
+        notebook.Cells.Add(CSharp("System.Console.Write(kept);"));
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        var engine = new ExtensionHost();
+        var waiting = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // The button's code ends, and the button then waits for what never comes: the stop lands while nothing runs.
+        await engine.LoadExtensionAsync(new CodeButton("var kept = 42;", () =>
+        {
+            waiting.TrySetResult();
+
+            return Task.Delay(Timeout.Infinite, TestContext.Current.CancellationToken);
+        }));
+
+        var host = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+
+        try
+        {
+            var pressing = host.RunToolbarAsync(CodeButton.Id);
+
+            await waiting.Task.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+            Assert.True(host.Stop(1));
+            await pressing.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+            // No kernel was started afresh, so what the button's code set is still there.
+            Assert.Equal("42", Printed(await host.RunAsync(host.Cells[0].Id).WaitAsync(AtOnce, TestContext.Current.CancellationToken)));
+        }
+        finally
+        {
+            await host.CloseAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ACellLeftBehindThatEndsLater_LeavesTheNextRunsStopWhole()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "late.verso", CSharp(Held("first")), CSharp(Held("second")));
+        var first = host.Cells[0].Id;
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var restarted = new ConcurrentQueue<string?>();
+
+        host.Scaffold.OnCellExecuted += cell =>
+        {
+            if (cell == first)
+            {
+                ended.TrySetResult();
+            }
+        };
+
+        // The first run is stopped while its cell runs, and the cell is left behind.
+        var running = host.RunAsync(first);
+
+        await UntilAsync("first-began", "the first cell never began");
+        Assert.True(host.Stop(1));
+        await running.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+        // The second run's cell runs when the cell left behind ends, and the engine says so.
+        var second = host.RunAsync(host.Cells[1].Id);
+
+        await UntilAsync("second-began", "the second cell never began");
+        await File.WriteAllTextAsync(Path.Join(_folder, "first-go"), "go", TestContext.Current.CancellationToken);
+        await ended.Task.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+        // The second run's stop still starts afresh the kernel of the cell it runs.
+        host.Scaffold.OnKernelRestarting += restarted.Enqueue;
+
+        Assert.True(host.Stop(2));
+        await second.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+        Assert.Equal(["csharp"], restarted);
+    }
+
+    [Fact]
+    public async Task ACellLeftBehindThatEndsWhileAButtonsCodeRuns_LeavesThatRunsStopWhole()
+    {
+        var path = Path.Join(_folder, "code-late.verso");
+
+        // The notebook's own kernel is the blocks', so a stop that started it afresh would not end the button's C#.
+        var notebook = new NotebookModel { DefaultKernelId = "pdd" };
+
+        notebook.Cells.Add(CSharp(Held("first")));
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        var engine = new ExtensionHost();
+
+        await engine.LoadExtensionAsync(new CodeButton(
+            $$"""System.IO.File.WriteAllText(@"{{Path.Join(_folder, "code-began")}}", "on"); while (true) { await System.Threading.Tasks.Task.Delay(10); }"""));
+
+        var host = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+
+        try
+        {
+            var first = host.Cells[0].Id;
+            var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var restarted = new ConcurrentQueue<string?>();
+
+            host.Scaffold.OnCellExecuted += cell =>
+            {
+                if (cell == first)
+                {
+                    ended.TrySetResult();
+                }
+            };
+
+            // The first run is stopped while its cell runs, and the cell is left behind.
+            var running = host.RunAsync(first);
+
+            await UntilAsync("first-began", "the cell never began");
+            Assert.True(host.Stop(1));
+            await running.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+            // The button's code runs in no cell, and every view is told the run with no cell, when the cell left behind
+            // ends, and the engine says so.
+            var pressing = host.RunToolbarAsync(CodeButton.Id);
+
+            await UntilAsync("code-began", "the button's code never began");
+            Assert.Equal(2, host.Running?.Number);
+            Assert.Null(host.Running?.Cell);
+            await File.WriteAllTextAsync(Path.Join(_folder, "first-go"), "go", TestContext.Current.CancellationToken);
+            await ended.Task.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+            // The button's stop still starts afresh the kernel of the code it runs.
+            host.Scaffold.OnKernelRestarting += restarted.Enqueue;
+
+            Assert.True(host.Stop(2));
+            await pressing.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+            Assert.Equal(["csharp"], restarted);
+        }
+        finally
+        {
+            await host.CloseAsync();
+        }
     }
 }
