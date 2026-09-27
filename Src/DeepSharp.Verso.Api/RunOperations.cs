@@ -99,39 +99,26 @@ internal sealed class RunOperations(Scaffold scaffold, Run run) : INotebookOpera
         return Notebook.MoveCellAsync(cellId, newIndex);
     }
 
-    public async Task ExecuteCodeAsync(string code, string? language = null, CancellationToken ct = default)
-    {
-        run.Token.ThrowIfCancellationRequested();
-
-        using var either = CancellationTokenSource.CreateLinkedTokenSource(run.Token, ct);
-
-        // Code with no cell begins no cell the engine tells of, so the run is told here what runs, for a stop to start its
-        // kernel afresh: the language it was asked in, none being the notebook's default kernel, which is where the engine
-        // runs it and what a restart naming no kernel starts.
-        run.Began(null, language);
-
-        try
-        {
-            await scaffold.ExecuteCodeAsync(code, language, either.Token);
-        }
-        finally
-        {
-            run.Ended(null);
-        }
-    }
+    public Task ExecuteCodeAsync(string code, string? language = null, CancellationToken ct = default) =>
+        CodeAsync(language, ct, either => scaffold.ExecuteCodeAsync(code, language, either));
 
     // Forwarded as the engine has it: the interface's own default runs the code and hands back no outputs.
-    public async Task<IReadOnlyList<CellOutput>> ExecuteCodeCaptureOutputsAsync(string code, string? language = null, CancellationToken ct = default)
+    public Task<IReadOnlyList<CellOutput>> ExecuteCodeCaptureOutputsAsync(string code, string? language = null, CancellationToken ct = default) =>
+        CodeAsync(language, ct, either => scaffold.ExecuteCodeCaptureOutputsAsync(code, language, either));
+
+    // Code with no cell begins no cell the engine tells of, so the run is told here what runs, for a stop to start its
+    // kernel afresh: the kernel the engine runs it in — the language it was asked in, else the notebook's default kernel.
+    private async Task<T> CodeAsync<T>(string? language, CancellationToken ct, Func<CancellationToken, Task<T>> runs)
     {
         run.Token.ThrowIfCancellationRequested();
 
         using var either = CancellationTokenSource.CreateLinkedTokenSource(run.Token, ct);
 
-        run.Began(null, language);
+        run.Began(null, language ?? scaffold.DefaultKernelId);
 
         try
         {
-            return await scaffold.ExecuteCodeCaptureOutputsAsync(code, language, either.Token);
+            return await runs(either.Token);
         }
         finally
         {

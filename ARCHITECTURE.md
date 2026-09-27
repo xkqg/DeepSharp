@@ -979,12 +979,14 @@ with a fresh kernel — its token cancelled, a C# loop that waits goes on — so
 the pipeline handed to C# cells among them, and the run itself goes on in the background until the application ends.
 Verso's C# kernel puts the process's console back as it found it whenever a run ends, so a run left behind that ends
 later can take from another notebook's C# run what that run prints at that moment. The kernel started afresh is the one
-that runs what runs now — a cell's language, else the notebook's default kernel, the engine's own rule, which also
-decides whether the run takes the C# turn, or the language of code a button runs in no cell — and only that: a stop
-between two cells, before the first, or while Run All resets the kernels starts none, so what the kernels hold stays.
-What runs now is what the engine says began and has not yet said ended, each word taken as the word of the run whose
-work it came from: a run left behind that ends while its cell runs again ends nothing of the run under way, and that
-run's stop still starts the cell's kernel afresh.
+that runs what runs now, found as the engine finds it when it runs a cell — the kernel of the cell's type, or none when
+the type only draws; else the kernel the cell's language names; else none when a renderer claims its type; else the
+notebook's default kernel — which also decides whether the run takes the C# turn, so a cell that only draws takes none;
+for code a button runs in no cell, it is the code's language, else the default kernel. And only that: a stop between two
+cells, before the first, while Run All resets the kernels, or while a cell only draws starts none, so what the kernels
+hold stays. What runs now is what the engine says began and has not yet said ended, each word taken as the word of the
+run whose work it came from: a run left behind that ends while its cell runs again ends nothing of the run under way,
+and that run's stop still starts the cell's kernel afresh.
 The notebook is told of the stop before the kernel restarts, so what the run left behind asks for from then on writes
 nothing, and the notebook takes its next change at once. Typing tells the notebook too, at once, so what was worked out
 from a block as it was is taken back before anything else is asked of it. C# runs take their turn across the whole

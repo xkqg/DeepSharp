@@ -89,6 +89,6 @@ internal sealed class Run(long number, Guid? cell, bool takesTheCSharpTurn)
 
 /// <summary>What a run runs now: a cell, or code with no cell, the kernel that runs it, and since when.</summary>
 /// <param name="Cell">The cell; none for code.</param>
-/// <param name="Kernel">The kernel that runs it, as a restart names it: none for the notebook's default kernel.</param>
+/// <param name="Kernel">The kernel that runs it, which a stop starts afresh; none when no kernel runs it — a cell that only draws.</param>
 /// <param name="Since">When it began.</param>
 internal readonly record struct Underway(Guid? Cell, string? Kernel, DateTimeOffset Since);

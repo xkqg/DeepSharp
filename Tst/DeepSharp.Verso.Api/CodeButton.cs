@@ -9,9 +9,10 @@ namespace DeepSharp.Tests.Api;
 /// A toolbar button that runs code of its own, in no cell, through the notebook it is handed — as any part may. Verso
 /// loads it as it loads every extension, so the notebook's own machinery runs it.
 /// </summary>
-/// <param name="code">The C# it runs.</param>
+/// <param name="code">The code it runs.</param>
 /// <param name="then">What it does after the code, if anything.</param>
-internal sealed class CodeButton(string code, Func<Task>? then = null) : IToolbarAction
+/// <param name="language">The language it names; none for the notebook's default kernel.</param>
+internal sealed class CodeButton(string code, Func<Task>? then = null, string? language = "csharp") : IToolbarAction
 {
     public const string Id = "deepsharp.tests.run-code";
 
@@ -43,7 +44,7 @@ internal sealed class CodeButton(string code, Func<Task>? then = null) : IToolba
 
     public async Task ExecuteAsync(IToolbarActionContext context)
     {
-        await context.Notebook.ExecuteCodeAsync(code, "csharp", context.CancellationToken);
+        await context.Notebook.ExecuteCodeAsync(code, language, context.CancellationToken);
 
         if (then is not null)
         {

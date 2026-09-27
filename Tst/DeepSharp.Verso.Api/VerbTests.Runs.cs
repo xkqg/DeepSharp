@@ -3,12 +3,16 @@
 
 using DeepSharp.Verso.Api;
 using Verso.Abstractions;
+using Verso.Extensions;
+using Verso.Serializers;
 
 namespace DeepSharp.Tests.Api;
 
 // A run exists from the moment it is asked, whether it runs or waits for another notebook's C# run, and a Stop names the
-// run it means. Which kernel runs a cell is the engine's rule — the cell's language, else the notebook's default kernel
-// — and it decides both whether the run takes the C# turn and which kernel a Stop starts afresh.
+// run it means. Which kernel runs a cell is the engine's rule, in the engine's order — the kernel of the cell's type, or
+// none when the type only draws; else the kernel the cell's language names; else none when a renderer claims the type;
+// else the notebook's default kernel — and it decides both whether the run takes the C# turn and which kernel a Stop
+// starts afresh.
 public sealed partial class VerbTests
 {
     private static string Endless(string started) =>
@@ -23,6 +27,18 @@ public sealed partial class VerbTests
             Assert.True(waited < 30_000, what);
             await Task.Delay(20, TestContext.Current.CancellationToken);
         }
+    }
+
+    // Notebook A runs a C# cell that never ends, so the process's C# turn is taken until A is stopped.
+    private async Task<Holding> HoldTheCSharpTurnAsync(OpenNotebooks notebooks)
+    {
+        var started = Path.Join(_folder, "holding");
+        var a = await OpenAsync(notebooks, "a.verso", CSharp(Endless(started)));
+        var running = a.RunAsync(a.Cells[0].Id);
+
+        await UntilAsync(() => File.Exists(started), "notebook A's run never began");
+
+        return new Holding(a, running);
     }
 
     [Fact]
@@ -139,4 +155,79 @@ public sealed partial class VerbTests
         await running;
         Assert.False(host.Stop(now.Number));
     }
+
+    [Fact]
+    public async Task AMarkdownCell_TakesNoCSharpTurn()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var (a, holding) = await HoldTheCSharpTurnAsync(notebooks);
+        var b = await OpenAsync(notebooks, "b.verso", new CellModel { Type = "markdown", Source = "# The passengers" });
+
+        // The cell only draws: it runs no kernel, so it waits for no C# run.
+        var drawn = await b.RunAsync(b.Cells[0].Id).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        Assert.Contains("The passengers", Printed(drawn), StringComparison.Ordinal);
+        Assert.True(a.Stop(a.Running!.Value.Number));
+        await holding;
+    }
+
+    [Theory]
+    [InlineData("python", "csharp")]
+    [InlineData(null, "python")]
+    public async Task ACellInALanguageNoKernelReads_TakesNoCSharpTurn(string? language, string defaultKernel)
+    {
+        await using var notebooks = new OpenNotebooks();
+        var (a, holding) = await HoldTheCSharpTurnAsync(notebooks);
+        var notebook = new NotebookModel { DefaultKernelId = defaultKernel };
+
+        // The cell's own language, or else the notebook's default, is Python.
+        notebook.Cells.Add(new CellModel { Type = "code", Language = language, Source = "print(1)" });
+
+        var b = await OpenAsync(notebooks, "b.verso", notebook);
+
+        // No kernel here reads Python, so the engine runs none and says so; nothing waits for a C# run.
+        var ran = await b.RunAsync(b.Cells[0].Id).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+        Assert.Equal("Failed", ran.LastStatus);
+        Assert.True(a.Stop(a.Running!.Value.Number));
+        await holding;
+    }
+
+    [Fact]
+    public async Task ACellOfAPartThatOnlyDraws_TakesNoCSharpTurn()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var (a, holding) = await HoldTheCSharpTurnAsync(notebooks);
+        var path = Path.Join(_folder, "drawn.verso");
+        var notebook = new NotebookModel { DefaultKernelId = "csharp" };
+
+        notebook.Cells.Add(new CellModel { Type = DrawingPart.Type, Source = "drawn" });
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        var engine = new ExtensionHost();
+
+        await engine.LoadExtensionAsync(new DrawingPart());
+
+        var b = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+
+        try
+        {
+            // A type a renderer claims, with no language, is drawn: no kernel runs it, whatever the default kernel.
+            var drawn = await b.RunAsync(b.Cells[0].Id).WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+
+            Assert.Equal("drawn", Printed(drawn));
+        }
+        finally
+        {
+            await b.CloseAsync();
+        }
+
+        Assert.True(a.Stop(a.Running!.Value.Number));
+        await holding;
+    }
+
+    /// <summary>A notebook whose C# run never ends, and that run.</summary>
+    /// <param name="A">The notebook.</param>
+    /// <param name="Running">Its run, until it is stopped.</param>
+    private readonly record struct Holding(NotebookHost A, Task<HostedCell> Running);
 }

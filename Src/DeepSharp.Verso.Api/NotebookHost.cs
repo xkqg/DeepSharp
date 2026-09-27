@@ -296,10 +296,11 @@ public sealed class NotebookHost
     /// <returns>The cell as it stands after the run, or after <see cref="Stop"/> ended it.</returns>
     /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
     /// <remarks>
-    /// The cell runs in its language's kernel, else the notebook's default kernel, as the engine decides. A C# run takes
-    /// its turn among every C# run in the process, because a C# kernel takes over the process's console while it runs,
-    /// and two at once would print into each other; while it waits for that turn it is the run under way all the same,
-    /// told to every view and stopped like any other.
+    /// The cell runs where the engine runs it: in its type's kernel, or none when its type only draws; else in the kernel
+    /// its language names; else in none when a renderer claims its type; else in the notebook's default kernel. A C# run
+    /// takes its turn among every C# run in the process, because a C# kernel takes over the process's console while it
+    /// runs, and two at once would print into each other; while it waits for that turn it is the run under way all the
+    /// same, told to every view and stopped like any other. A cell that only draws takes no C# turn.
     /// </remarks>
     public Task<HostedCell> RunAsync(Guid cell) => TurnAsync(async () =>
     {
@@ -797,9 +798,10 @@ public sealed class NotebookHost
     // outside every run is no run's, and no view is told it runs.
     private void Began(Guid cell)
     {
+        // The engine found the cell a moment ago, and nothing else changes the notebook while a run holds its turn.
         if (_raising.Value is { } run)
         {
-            run.Began(cell, Scaffold.GetCell(cell) is { } began ? KernelOf(began) : Scaffold.DefaultKernelId);
+            run.Began(cell, KernelOf(Scaffold.Cells.First(each => each.Id == cell)));
         }
 
         Said(cell);
@@ -1015,13 +1017,14 @@ public sealed class NotebookHost
         if (await ended != ran || !await EndedByItselfAsync(ran, run))
         {
             // The notebook is told first, so what the run left behind asks for from now on writes nothing, and the
-            // notebook takes its next change at once. Only what runs now is started afresh: before the first cell,
-            // between two cells and while Run All resets the kernels, nothing runs, and what the kernels hold stays.
+            // notebook takes its next change at once. Only the kernel of what runs now is started afresh: before the
+            // first cell, between two cells, while Run All resets the kernels, and while a cell only draws, no kernel
+            // runs, and what the kernels hold stays.
             Blocks.Stopped();
 
-            if (run.Now is { } now)
+            if (run.Now is { Kernel: { } kernel })
             {
-                await Scaffold.RestartKernelAsync(now.Kernel);
+                await Scaffold.RestartKernelAsync(kernel);
             }
         }
 
@@ -1045,9 +1048,39 @@ public sealed class NotebookHost
         }
     }
 
-    // Which kernel runs a cell: its language, else the notebook's default kernel — the engine's own rule, so a run takes
-    // the C# turn, and a stop starts a kernel afresh, by the kernel that really runs the cell.
-    private string? KernelOf(CellModel cell) => cell.Language ?? Scaffold.DefaultKernelId;
+    // Which kernel runs a cell, in the order the engine asks when it runs one: a cell type it has answers first — with
+    // its own kernel, or with none when it only draws; a cell of no such type runs in the kernel its language names; a
+    // type a renderer claims is drawn and runs none; a cell that names no language runs in the notebook's default kernel.
+    // None is a cell no kernel runs, so a run takes the C# turn, and a stop starts a kernel afresh, only when a kernel
+    // really runs the cell.
+    private string? KernelOf(CellModel cell)
+    {
+        if (Extensions.GetCellTypes().FirstOrDefault(type => Names(type.CellTypeId, cell.Type)) is { } type)
+        {
+            return type.Kernel?.LanguageId;
+        }
+
+        if (!string.IsNullOrEmpty(cell.Language) && KernelNamed(cell.Language) is { } named)
+        {
+            return named.LanguageId;
+        }
+
+        if (Extensions.GetRenderers().Any(renderer => Names(renderer.CellTypeId, cell.Type)))
+        {
+            return null;
+        }
+
+        // A language no kernel reads runs in none: the engine takes it for the default kernel's name, and finds no kernel.
+        return cell.Language is null ? Scaffold.DefaultKernelId : null;
+    }
+
+    // The kernel the engine finds for a language: one it was given, one a part brings, or one a cell type brings.
+    private ILanguageKernel? KernelNamed(string language) =>
+        Scaffold.GetKernel(language)
+        ?? Extensions.GetCellTypes().Select(type => type.Kernel).FirstOrDefault(kernel => kernel is not null && Names(kernel.LanguageId, language));
+
+    // Whether two of the engine's names name the same thing, as the engine compares them.
+    private static bool Names(string one, string other) => string.Equals(one, other, StringComparison.OrdinalIgnoreCase);
 
     // Who views the notebook, since when nobody has, and whether it is closed.
     private sealed class Audience(ImmutableArray<NotebookSubscription> views, bool closed, long aloneSince)

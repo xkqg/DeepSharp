@@ -153,10 +153,12 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   C#'s members. A new notebook is made as one block that reads a CSV file, as a `.verso` file written whole before it
   appears, and never over a file that is there already. Typing into a block tells the notebook at once, so what was
   worked out from the block as it was is taken back. A run exists from the moment it is asked, numbered, and a stop
-  names the run it means. A run that never ends is stopped by a fresh kernel — of what runs now, the cell's language,
-  else the notebook's default kernel, or the language of code a button runs in no cell; a stop while nothing runs,
-  between two cells, starts none — and the notebook is told first: what the run left behind writes nothing more — no
-  grid, and no pipeline handed to C# cells — and the notebook takes its next change at once. C# runs take their turn
+  names the run it means. A run that never ends is stopped by a fresh kernel — of what runs now, found as the engine
+  finds it: the kernel of the cell's type, else of its language, else the notebook's default, and none for a cell that
+  only draws, which takes no C# turn either; for code a button runs in no cell, its language, else the default. A stop
+  while nothing runs, between two cells, starts none — and the notebook is told first: what the run left behind writes
+  nothing more — no grid, and no pipeline handed to C# cells — and the notebook takes its next change at once. C# runs
+  take their turn
   across the whole process, so none prints into another; a C# run waiting for its turn is told on every version, and a
   stop ends the wait, so it never runs. The toolbar is every button the engine has, each saying whether it can be
   pressed — a button on a cell's toolbar for each cell, as Verso's editors ask it, so a page draws a cell's buttons

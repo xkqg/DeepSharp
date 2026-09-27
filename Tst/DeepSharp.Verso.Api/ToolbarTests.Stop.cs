@@ -409,6 +409,122 @@ public sealed partial class ToolbarTests
     }
 
     [Fact]
+    public async Task AStopWhileACellOnlyDraws_StartsNoKernelAfresh()
+    {
+        var path = Path.Join(_folder, "held.verso");
+        var notebook = new NotebookModel { DefaultKernelId = "csharp" };
+
+        notebook.Cells.Add(CSharp("var kept = 42;"));
+        notebook.Cells.Add(new CellModel { Type = HeldDrawing.Type, Source = "held" });
+        notebook.Cells.Add(CSharp("System.Console.Write(kept);"));
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        var engine = new ExtensionHost();
+
+        await engine.LoadExtensionAsync(new HeldDrawing(Path.Join(_folder, "drawing-began"), Path.Join(_folder, "drawing-go")));
+
+        var host = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+        var restarted = new ConcurrentQueue<string?>();
+
+        try
+        {
+            await host.RunAsync(host.Cells[0].Id);
+            host.Scaffold.OnKernelRestarting += restarted.Enqueue;
+
+            // The cell only draws: while it draws, it runs, and no kernel does.
+            var drawing = host.RunAsync(host.Cells[1].Id);
+
+            await UntilAsync("drawing-began", "the cell never began to draw");
+
+            Assert.True(host.Stop(host.Running!.Value.Number));
+            await drawing.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+            // No kernel was started afresh, so what the C# kernel holds is still there.
+            Assert.Empty(restarted);
+            Assert.Equal("42", Printed(await host.RunAsync(host.Cells[2].Id).WaitAsync(AtOnce, TestContext.Current.CancellationToken)));
+        }
+        finally
+        {
+            await File.WriteAllTextAsync(Path.Join(_folder, "drawing-go"), "go", TestContext.Current.CancellationToken);
+            await host.CloseAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AStopOfACellInAKernelOnlyACellTypeBrings_StartsThatKernelAfresh()
+    {
+        var path = Path.Join(_folder, "kernelled.verso");
+        var notebook = new NotebookModel { DefaultKernelId = "csharp" };
+
+        // A plain code cell that names the language of a kernel only a cell type brings.
+        notebook.Cells.Add(new CellModel { Type = "code", Language = HeldKernel.Language, Source = "held" });
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        var engine = new ExtensionHost();
+
+        await engine.LoadExtensionAsync(new KernelledType(Path.Join(_folder, "kernel-began"), Path.Join(_folder, "kernel-go")));
+
+        var host = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+        var restarted = new ConcurrentQueue<string?>();
+
+        try
+        {
+            host.Scaffold.OnKernelRestarting += restarted.Enqueue;
+
+            var running = host.RunAsync(host.Cells[0].Id);
+
+            await UntilAsync("kernel-began", "the cell never began");
+
+            Assert.True(host.Stop(host.Running!.Value.Number));
+            await running.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+            Assert.Equal([HeldKernel.Language], restarted);
+        }
+        finally
+        {
+            await File.WriteAllTextAsync(Path.Join(_folder, "kernel-go"), "go", TestContext.Current.CancellationToken);
+            await host.CloseAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AButtonsCodeInNoLanguage_IsStoppedWithTheDefaultKernelAfresh()
+    {
+        var path = Path.Join(_folder, "default.verso");
+
+        // The notebook's own kernel is C#, and the button names no language, so the default kernel runs its code.
+        var notebook = new NotebookModel { DefaultKernelId = "csharp" };
+
+        notebook.Cells.Add(CSharp("6 * 7"));
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        var engine = new ExtensionHost();
+
+        await engine.LoadExtensionAsync(new CodeButton(
+            $$"""System.IO.File.WriteAllText(@"{{Path.Join(_folder, "code-began")}}", "on"); while (true) { await System.Threading.Tasks.Task.Delay(10); }""",
+            language: null));
+
+        var host = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+        var restarted = new ConcurrentQueue<string?>();
+
+        try
+        {
+            host.Scaffold.OnKernelRestarting += restarted.Enqueue;
+
+            var pressing = host.RunToolbarAsync(CodeButton.Id);
+
+            await UntilAsync("code-began", "the button's code never began");
+
+            Assert.True(host.Stop(1));
+            await pressing.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+            Assert.Equal(["csharp"], restarted);
+        }
+        finally
+        {
+            await host.CloseAsync();
+        }
+    }
+
+    [Fact]
     public async Task AStoppedRunEndingDuringItsCellsNextRun_LeavesThatRunsStopWhole()
     {
         await using var notebooks = new OpenNotebooks();
