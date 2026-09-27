@@ -402,7 +402,9 @@ public sealed class NotebookHost
     /// </remarks>
     public Task<IReadOnlyList<HostedToolbarAction>> ToolbarAsync() => TurnAsync(async () =>
     {
-        var context = new ToolbarContext(Scaffold, [], Scaffold.NotebookOps, CancellationToken.None);
+        // Asking a button whether it can be pressed is a look, and a look does nothing to the notebook.
+        var look = new ReadPort(Scaffold);
+        var context = new ToolbarContext(Scaffold, [], look);
         var buttons = new List<HostedToolbarAction>();
 
         foreach (var action in Extensions.GetToolbarActions())
@@ -414,7 +416,7 @@ public sealed class NotebookHost
             {
                 foreach (var cell in Scaffold.Cells)
                 {
-                    if (await action.IsEnabledAsync(new ToolbarContext(Scaffold, [cell.Id], Scaffold.NotebookOps, CancellationToken.None)))
+                    if (await action.IsEnabledAsync(new ToolbarContext(Scaffold, [cell.Id], look)))
                     {
                         cells.Add(cell.Id);
                     }
@@ -456,7 +458,7 @@ public sealed class NotebookHost
 
         // The button acts on the notebook through its run, so a stop reaches every cell it would still run; one that runs a
         // cell, or code, that never ends is stopped as a cell's run is, and a stop starts afresh only what runs.
-        var context = new ToolbarContext(Scaffold, cells, new RunOperations(Scaffold, run), run.Token);
+        var context = new ToolbarContext(Scaffold, cells, new RunPort(Scaffold, run));
 
         await RunUntilStoppedAsync(run, () => action.ExecuteAsync(context));
 
@@ -470,7 +472,9 @@ public sealed class NotebookHost
     public Task<IReadOnlyList<HostedSection>> PropertiesAsync(Guid cell) => TurnAsync(async () =>
     {
         var shown = Standing(cell);
-        var context = new RenderContext(Scaffold, shown);
+
+        // Drawing a section is a look, and a look does nothing to the notebook.
+        var context = new RenderContext(Scaffold, shown, new ReadPort(Scaffold));
         var sections = new List<HostedSection>();
 
         foreach (var part in Extensions.GetPropertyProviders().Where(each => each.AppliesTo(shown, context)).OrderBy(each => each.Order))
@@ -508,7 +512,7 @@ public sealed class NotebookHost
         var provider = Extensions.GetPropertyProviders().FirstOrDefault(each => each.ExtensionId == part)
             ?? throw new InvalidOperationException($"No part named '{part}' has a properties section.");
 
-        await provider.OnPropertyChangedAsync(changed, field, value, new RenderContext(Scaffold, changed));
+        await provider.OnPropertyChangedAsync(changed, field, value, new RenderContext(Scaffold, changed, new ReadPort(Scaffold)));
 
         return true;
     });

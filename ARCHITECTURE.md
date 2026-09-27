@@ -1018,8 +1018,11 @@ file with `verso export --format "Export the pipeline" --extensions <the publish
 and no fit, because nothing ran them there. The passing on, the toolbar's context and the rest are what
 `DeepSharp.Verso.Api` is named for, written once beside the notebook rather than by every application: it opens the
 notebook, passes a click on, gives the toolbar and the properties panel their context, saves the notebook, and tells
-every view of it what changed. The drawing stays the application's own, since only the application knows what it draws
-with, and it is handed every cell and what the cell shows as plain values to draw from. Each change makes the notebook's
+every view of it what changed. What a part may do through that context is the host's to say, by what it asks the part
+for: a press acts through its run, and a look — a button asked whether it can be pressed, a panel asked to draw its
+section — through operations that refuse every verb, whoever wrote the part, so what is only looked at does nothing to
+the notebook. The drawing stays the application's own, since only the application knows what it draws with, and it is
+handed every cell and what the cell shows as plain values to draw from. Each change makes the notebook's
 next version, and a view is told the cells that came or changed, as they now stand, with every id in order whenever
 cells came, went or moved; a click that rewrites a block puts a new cell, under a new id, in the old one's place, since
 a cell is known by its id and by nothing else. The engine says nothing when a cell is cleared, inserted or taken away,

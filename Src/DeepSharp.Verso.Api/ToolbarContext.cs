@@ -12,10 +12,9 @@ namespace DeepSharp.Verso.Api;
 /// </summary>
 /// <param name="scaffold">The notebook.</param>
 /// <param name="selected">The cells the button is pressed for.</param>
-/// <param name="notebook">What the button may do to the notebook: a press's run's operations, or the notebook's own.</param>
-/// <param name="stopped">Marked when the press's run is stopped; none for a button asked whether it can be pressed.</param>
-internal sealed class ToolbarContext(Scaffold scaffold, IReadOnlyList<Guid> selected, INotebookOperations notebook, CancellationToken stopped)
-    : NotebookContext(scaffold, notebook, stopped), IToolbarActionContext
+/// <param name="port">What the button may do to the notebook: a press's run's, or a look's, which does nothing to it.</param>
+internal sealed class ToolbarContext(Scaffold scaffold, IReadOnlyList<Guid> selected, NotebookPort port)
+    : NotebookContext(scaffold, port), IToolbarActionContext
 {
     public IReadOnlyList<Guid> SelectedCellIds => selected;
 

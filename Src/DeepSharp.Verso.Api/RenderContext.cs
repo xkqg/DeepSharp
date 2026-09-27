@@ -12,8 +12,9 @@ namespace DeepSharp.Verso.Api;
 /// </summary>
 /// <param name="scaffold">The notebook.</param>
 /// <param name="cell">The cell.</param>
-internal sealed class RenderContext(Scaffold scaffold, CellModel cell)
-    : NotebookContext(scaffold, scaffold.NotebookOps, CancellationToken.None), ICellRenderContext
+/// <param name="port">What the part may do to the notebook while it draws the section or changes a field.</param>
+internal sealed class RenderContext(Scaffold scaffold, CellModel cell, NotebookPort port)
+    : NotebookContext(scaffold, port), ICellRenderContext
 {
     public Guid CellId => cell.Id;
 

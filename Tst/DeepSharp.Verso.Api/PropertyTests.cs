@@ -105,7 +105,7 @@ public sealed class PropertyTests : IDisposable
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, [.. Titanic.Select(Block)]);
         var cell = host.Scaffold.Cells[0];
-        var context = new RenderContext(host.Scaffold, cell);
+        var context = new RenderContext(host.Scaffold, cell, new ReadPort(host.Scaffold));
 
         Assert.Equal(cell.Id, context.CellId);
         Assert.Same(cell.Metadata, context.CellMetadata);

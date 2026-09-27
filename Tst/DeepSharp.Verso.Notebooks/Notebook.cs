@@ -148,16 +148,16 @@ internal sealed class Notebook : IAsyncDisposable
     public async Task<bool> EnabledAsync(string button) => (await Opened.ToolbarAsync()).Single(each => each.Id == button).IsEnabled;
 
     /// <summary>
-    /// What the host hands a toolbar button asked outside any run, for a test that hands it to a button itself: the
-    /// notebook's own operations, and nothing that stops it.
+    /// What the host hands a toolbar button asked whether it can be pressed, for a test that hands it to a button itself:
+    /// a look's operations, which do nothing to the notebook, and nothing that stops it.
     /// </summary>
     /// <returns>The context; the file a button hands over is kept in it.</returns>
-    public ToolbarContext ToolbarContext() => new(Scaffold, [], Scaffold.NotebookOps, CancellationToken.None);
+    public ToolbarContext ToolbarContext() => new(Scaffold, [], new ReadPort(Scaffold));
 
-    /// <summary>What the host hands a part drawing or changing a cell's properties panel.</summary>
+    /// <summary>What the host hands a part drawing a cell's properties panel: a look's operations, which do nothing.</summary>
     /// <param name="cell">The cell.</param>
     /// <returns>The context.</returns>
-    public RenderContext RenderContext(CellModel cell) => new(Scaffold, cell);
+    public RenderContext RenderContext(CellModel cell) => new(Scaffold, cell, new ReadPort(Scaffold));
 
     public async ValueTask DisposeAsync()
     {

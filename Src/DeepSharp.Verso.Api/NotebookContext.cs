@@ -11,11 +11,11 @@ namespace DeepSharp.Verso.Api;
 /// done to it, its file and theme, and a way to hand over a file, which is kept for whoever asked the part to act.
 /// </summary>
 /// <param name="scaffold">The notebook.</param>
-/// <param name="notebook">
-/// What the part may do to the notebook: the notebook's own operations, or a run's, which refuse once the run is stopped.
+/// <param name="port">
+/// What the part may do to the notebook, as the host says by what it asks the part for: a press's run, which refuses once
+/// the run is stopped and whose stop the part is told of, or a look, which refuses every verb.
 /// </param>
-/// <param name="stopped">Marked when the run the part acts in is stopped; none when it acts in no run.</param>
-internal abstract class NotebookContext(Scaffold scaffold, INotebookOperations notebook, CancellationToken stopped) : IVersoContext
+internal abstract class NotebookContext(Scaffold scaffold, NotebookPort port) : IVersoContext
 {
     /// <summary>The file the part handed over last; nothing when it handed none.</summary>
     public HostedFile? Handed { get; private set; }
@@ -25,7 +25,7 @@ internal abstract class NotebookContext(Scaffold scaffold, INotebookOperations n
 
     public IVariableStore Variables => scaffold.Variables;
 
-    public CancellationToken CancellationToken => stopped;
+    public CancellationToken CancellationToken => port.Token;
 
     public IThemeContext Theme => scaffold.ThemeContext;
 
@@ -35,7 +35,7 @@ internal abstract class NotebookContext(Scaffold scaffold, INotebookOperations n
 
     public INotebookMetadata NotebookMetadata => scaffold.Metadata;
 
-    public INotebookOperations Notebook => notebook;
+    public INotebookOperations Notebook => port;
 
     public string? ActiveLayoutId => scaffold.NotebookOps.ActiveLayoutId;
 
