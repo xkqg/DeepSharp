@@ -15,7 +15,7 @@ namespace DeepSharp.Tests.Api;
 /// hands over goes to whoever pressed it, and nothing is written beside the notebook. A button that may run C# cells
 /// takes the application's C# turn, so it prints into no other notebook.
 /// </summary>
-public sealed class ToolbarTests : IDisposable
+public sealed partial class ToolbarTests : IDisposable
 {
     private readonly string _folder = Directory.CreateTempSubdirectory("deepsharp-api-toolbar-").FullName;
 
@@ -207,15 +207,18 @@ public sealed class ToolbarTests : IDisposable
     }
 
     [Fact]
-    public async Task AButtonsContext_HasNoCellOfItsOwnToWriteInto_AndNothingToCancel()
+    public async Task AButtonsContext_CarriesTheRunsToken_AndHasNoCellOfItsOwnToWriteInto()
     {
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
-        var context = new ToolbarContext(host.Scaffold, []);
+        using var stop = new CancellationTokenSource();
+        var operations = new RunOperations(host.Scaffold, stop.Token);
+        var context = new ToolbarContext(host.Scaffold, [], operations, stop.Token);
 
         await context.WriteOutputAsync(new CellOutput("text/plain", "written"));
 
-        Assert.Equal(CancellationToken.None, context.CancellationToken);
+        Assert.Equal(stop.Token, context.CancellationToken);
+        Assert.Same(operations, context.Notebook);
         Assert.All(host.Cells, cell => Assert.Empty(cell.Outputs));
         Assert.Null(context.Handed);
     }

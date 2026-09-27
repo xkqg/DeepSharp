@@ -303,11 +303,10 @@ public sealed class NotebookHost
     {
         var running = Standing(cell);
         var kernel = KernelOf(running);
+        var run = new Run(Interlocked.Increment(ref _runs), running.Id, takesTheCSharpTurn: string.Equals(kernel, CSharp, StringComparison.OrdinalIgnoreCase));
 
-        await RunUntilStoppedAsync(
-            new Run(Interlocked.Increment(ref _runs), running.Id, takesTheCSharpTurn: string.Equals(kernel, CSharp, StringComparison.OrdinalIgnoreCase)),
-            () => Scaffold.ExecuteCellAsync(running.Id),
-            kernel);
+        // The engine is handed the run's token, as Verso's browser editor hands it its own.
+        await RunUntilStoppedAsync(run, () => Scaffold.ExecuteCellAsync(running.Id, run.Token), kernel);
 
         return EndTurn().Cells.First(each => each.Id == cell);
     });
@@ -319,6 +318,8 @@ public sealed class NotebookHost
     /// that runs — so what that kernel held, the notebook's variables and the pipeline handed to C# cells among them, is
     /// gone. The notebook is told first, so what the run left behind asks for from then on writes nothing, and the
     /// notebook takes its next change at once; a run that never ends goes on in the background until the application does.
+    /// A button that runs cells is stopped cell by cell: the cell under way is left behind, no cell it would still run
+    /// begins, and nothing else it asks of the notebook is done.
     /// </summary>
     /// <param name="run">The run, by its number — so a stop sent again after that run ended stops no other.</param>
     /// <returns>Whether it stopped that run; nothing is stopped when no run of that number is under way.</returns>
@@ -398,7 +399,7 @@ public sealed class NotebookHost
     /// </remarks>
     public Task<IReadOnlyList<HostedToolbarAction>> ToolbarAsync() => TurnAsync(async () =>
     {
-        var context = new ToolbarContext(Scaffold, []);
+        var context = new ToolbarContext(Scaffold, [], Scaffold.NotebookOps, CancellationToken.None);
         var buttons = new List<HostedToolbarAction>();
 
         foreach (var action in Extensions.GetToolbarActions())
@@ -410,7 +411,7 @@ public sealed class NotebookHost
             {
                 foreach (var cell in Scaffold.Cells)
                 {
-                    if (await action.IsEnabledAsync(new ToolbarContext(Scaffold, [cell.Id])))
+                    if (await action.IsEnabledAsync(new ToolbarContext(Scaffold, [cell.Id], Scaffold.NotebookOps, CancellationToken.None)))
                     {
                         cells.Add(cell.Id);
                     }
@@ -439,17 +440,22 @@ public sealed class NotebookHost
     /// <returns>The file it handed over, for whoever pressed it; nothing when it handed none.</returns>
     /// <exception cref="InvalidOperationException">The engine has no button of that name.</exception>
     /// <remarks>
-    /// A button may run cells, C# among them, so a press takes its turn among the process's C# runs as a C# run does. A file is
-    /// never written beside the notebook: where it is saved is for whoever pressed the button to say.
+    /// A button may run cells, C# among them, so a press takes its turn among the process's C# runs as a C# run does. A
+    /// press is one run, and the button acts on the notebook through it, so once the run is stopped the notebook refuses
+    /// what the button asks. A file is never written beside the notebook: where it is saved is for whoever pressed the
+    /// button to say.
     /// </remarks>
     public Task<HostedFile?> RunToolbarAsync(string id, params Guid[] cells) => TurnAsync(async () =>
     {
         var action = Extensions.GetToolbarActions().FirstOrDefault(each => each.ActionId == id)
             ?? throw new InvalidOperationException($"The notebook has no toolbar button '{id}'.");
-        var context = new ToolbarContext(Scaffold, cells);
+        var run = new Run(Interlocked.Increment(ref _runs), cell: null, takesTheCSharpTurn: true);
 
-        // A button that runs the cells can meet one that never ends; a stop starts afresh the kernel of the cell it runs.
-        await RunUntilStoppedAsync(new Run(Interlocked.Increment(ref _runs), cell: null, takesTheCSharpTurn: true), () => action.ExecuteAsync(context), Scaffold.DefaultKernelId);
+        // The button acts on the notebook through its run, so a stop reaches every cell it would still run; one that runs a
+        // cell that never ends is stopped as a cell's run is, and a stop starts afresh the kernel of the cell it runs.
+        var context = new ToolbarContext(Scaffold, cells, new RunOperations(Scaffold, run.Token), run.Token);
+
+        await RunUntilStoppedAsync(run, () => action.ExecuteAsync(context), Scaffold.DefaultKernelId);
 
         return context.Handed;
     });
@@ -991,11 +997,7 @@ public sealed class NotebookHost
             Publish();
         }
 
-        if (await ended == ran)
-        {
-            await ran;
-        }
-        else
+        if (await ended != ran || !await EndedByItselfAsync(ran, run))
         {
             // The notebook is told first, so what the run left behind asks for from now on writes nothing, and the
             // notebook takes its next change at once.
@@ -1004,6 +1006,23 @@ public sealed class NotebookHost
         }
 
         return true;
+    }
+
+    // Whether a run's work ended by itself: it did, unless it ended with the stop's own cancellation — the engine heeding
+    // the stop between two cells — which is a stopped run; any other end, a fault among them, is the work's own and
+    // reaches whoever asked for it.
+    private static async Task<bool> EndedByItselfAsync(Task ran, Run run)
+    {
+        try
+        {
+            await ran;
+
+            return true;
+        }
+        catch (OperationCanceledException) when (run.Token.IsCancellationRequested)
+        {
+            return false;
+        }
     }
 
     // Which kernel runs a cell: its language, else the notebook's default kernel — the engine's own rule, so a run takes
@@ -1051,6 +1070,9 @@ public sealed class NotebookHost
         private const int StoppedFirst = 2;
 
         private readonly TaskCompletionSource _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        // Marked by the stop before anyone waiting on it is woken, so whatever the run still asks sees it stopped first.
+        private readonly CancellationTokenSource _stop = new();
         private int _state = Before;
 
         public long Number => number;
@@ -1060,6 +1082,9 @@ public sealed class NotebookHost
         public DateTimeOffset Asked { get; } = DateTimeOffset.UtcNow;
 
         public Task Stopped => _stopped.Task;
+
+        // Marked when the run is stopped: what the run asks of the notebook, and the engine running it, look at it.
+        public CancellationToken Token => _stop.Token;
 
         // Whether it takes its turn among the process's C# runs.
         public bool TakesTheCSharpTurn => takesTheCSharpTurn;
@@ -1078,6 +1103,9 @@ public sealed class NotebookHost
         public bool Stop()
         {
             Interlocked.CompareExchange(ref _state, StoppedFirst, Before);
+
+            // Marked at once; what listens to the mark is told elsewhere, so a stop never waits for it.
+            _ = _stop.CancelAsync();
 
             return _stopped.TrySetResult();
         }

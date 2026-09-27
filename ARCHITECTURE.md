@@ -989,56 +989,57 @@ holders of notebooks alike. A run that waits for that turn is the run under way 
 waits, and a stop ends the wait, so the turn, when it comes, starts nothing. The toolbar is every button the
 engine has, Verso's own and DeepSharp's, each saying whether it can be pressed, and a button on a cell's toolbar is
 asked for every cell, as Verso's editors ask it for the cell it is drawn on — asked with no cell chosen, running a cell
-and clearing one could never be pressed; a press takes its turn like anything else, and the C# turn too, since a
-button may run cells. A file a button hands over goes to whoever pressed it, and nothing is written beside the
-notebook. A cell's properties panel is a section from every part that has one for the
-cell — DeepSharp's form for a block, Verso's own for how any cell is shown — and a change to a field is made by the
-part its section came from. Saving is Verso's own: the serializer for the notebook's format, which leaves out what a
-block shows and keeps what a C# cell printed, past the guards that run before writing, and the file written whole
-under a name of its own before it takes the old one's place. Saved under another name, the notebook is that file from
-then on, and what DeepSharp names after it — the columns saved beside it, an exported pipeline — follows; the holder of
-the notebooks saves it so, since only it knows which files are open, and a name another open notebook holds is
-refused. Verso's editor itself is not published for applications to reuse, so such an application does what the
-editor does: it draws a block's output, which is HTML; it hands a control's `data-action` and `data-extension-id`
-to the part the control names, with its `data-payload` — or, for a control that carries none, its state, as Verso's
-own router sends it: `true` or `false` for a box, the value it is at for a select — and with the notebook's variables
-and operations; it draws again when a block's output is updated or a gesture says it changed the blocks; it gives the
-toolbar's buttons — Run, Export and the take-over — a context of its own; and it saves through a serializer that knows
-the cell types, so what the blocks show stays out of the file. An application that only wants the pipeline reads each
-block with `StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write
-the file with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds
-the steps and no fit, because nothing ran them there. The passing on, the toolbar's context and the rest are what
-`DeepSharp.Verso.Api` is named for, written once beside the notebook rather than by every application: it opens the
-notebook, passes a click on, gives the toolbar and the properties panel their context, saves the notebook, and tells
-every view of it what changed. The drawing stays the application's own, since only the application knows what it draws
-with, and it is handed every cell and what the cell shows as plain values to draw from. Each change makes the notebook's next version, and a view is told the cells that came or
-changed, as they now stand, with every id in order whenever cells came, went or moved; a click that rewrites a block
-puts a new cell, under a new id, in the old one's place, since a cell is known by its id and by nothing else. The
+and clearing one could never be pressed; a press takes its turn like anything else, and the C# turn too, since a button
+may run cells. A press is one run, and the button acts on the notebook through it: stopped, the cell under way is left
+behind, no cell the button would still run begins, and nothing else it asks of the notebook is done — as the Stop of
+Verso's browser editor ends a Run All between its cells. A file a button hands over goes to whoever pressed it, and
+nothing is written beside the notebook. A cell's properties panel is a section from every part that has one for the cell
+— DeepSharp's form for a block, Verso's own for how any cell is shown — and a change to a field is made by the part its
+section came from. Saving is Verso's own: the serializer for the notebook's format, which leaves out what a block shows
+and keeps what a C# cell printed, past the guards that run before writing, and the file written whole under a name of
+its own before it takes the old one's place. Saved under another name, the notebook is that file from then on, and what
+DeepSharp names after it — the columns saved beside it, an exported pipeline — follows; the holder of the notebooks
+saves it so, since only it knows which files are open, and a name another open notebook holds is refused. Verso's editor
+itself is not published for applications to reuse, so such an application does what the editor does: it draws a block's
+output, which is HTML; it hands a control's `data-action` and `data-extension-id` to the part the control names, with
+its `data-payload` — or, for a control that carries none, its state, as Verso's own router sends it: `true` or `false`
+for a box, the value it is at for a select — and with the notebook's variables and operations; it draws again when a
+block's output is updated or a gesture says it changed the blocks; it gives the toolbar's buttons — Run, Export and the
+take-over — a context of its own; and it saves through a serializer that knows the cell types, so what the blocks show
+stays out of the file. An application that only wants the pipeline reads each block with `StepCatalog.ReadStep` and
+builds the declaration through its constructor, or has the command line write the file with `verso export --format
+"Export the pipeline" --extensions <the published package>`. That file holds the steps and no fit, because nothing ran
+them there. The passing on, the toolbar's context and the rest are what `DeepSharp.Verso.Api` is named for, written once
+beside the notebook rather than by every application: it opens the notebook, passes a click on, gives the toolbar and
+the properties panel their context, saves the notebook, and tells every view of it what changed. The drawing stays the
+application's own, since only the application knows what it draws with, and it is handed every cell and what the cell
+shows as plain values to draw from. Each change makes the notebook's next version, and a view is told the cells that
+came or changed, as they now stand, with every id in order whenever cells came, went or moved; a click that rewrites a
+block puts a new cell, under a new id, in the old one's place, since a cell is known by its id and by nothing else. The
 engine says nothing when a cell is cleared, inserted or taken away, nor when a form changes a block's text, so the host
 does not pass on what the engine says: it compares the notebook with its last version at the end of everything done to
 it. What the engine does say — a cell began, ended or showed something — only wakes it to compare, because the engine
 says it from inside the run, and a view doing its own work there held a click twice as long. What a C# cell displays
 while it runs reaches a view before the run ends, gathered for a moment first, as Verso's browser editor gathers it;
-what it prints comes whole at the end, as the engine hands it over. Every version says which run is under way — the
-cell that runs or waits for the C# turn, since when, and the number a stop names — so a view can say so and offer to
-stop it. A view never holds the notebook up: one that reads slower than
-the notebook changes is kept one change behind, the latest look at each cell, and never holds more than the notebook
-itself. The outputs a run is adding to are copied whole or not at all, as the engine copies them itself: a copy taken
-while the list grows its storage fails, and one can hold a place the list has counted and not yet filled, so a cell
-caught that way keeps what it showed until the run says more. A file that repeats a cell's id gives each repeat an id
-of its own when it opens, as Jupyter's own reader repairs repeated ids, because nothing else tells such cells apart.
-Given a grace, the holder of the notebooks closes one by itself once no view has shown it for that long, nothing runs
-or waits in it, and nothing in it differs from the file it was last saved to — as Verso's own comparison of two
-notebooks finds it, told which cells never save what they show, so a block's view never counts. The views are the only
-count: a page that stops reading ends its view, and nothing else says a notebook is in use. A notebook with changes not
-yet saved stays open until it is saved, or until the application closes it, which it can do for one notebook at once;
-without a grace, notebooks stay open until they are closed, so an application that uses one without a view is never
-left holding a closed one. No close waits for a run: a close stops the run under way as a stop does — one that waits
-for the C# turn never runs, one that runs is left behind — and waits only for a change under way, which runs no code a
-person wrote. Whatever else was asked before it and still waits its turn is refused when that turn comes, since a close
-discards what has not begun, as it discards what is not saved. Closing every notebook stops the run in each before it
-closes any of them, because stopping one run hands the C# turn on, and a run another notebook still let wait for it
-would start.
+what it prints comes whole at the end, as the engine hands it over. Every version says which run is under way — the cell
+that runs or waits for the C# turn, since when, and the number a stop names — so a view can say so and offer to stop it.
+A view never holds the notebook up: one that reads slower than the notebook changes is kept one change behind, the
+latest look at each cell, and never holds more than the notebook itself. The outputs a run is adding to are copied whole
+or not at all, as the engine copies them itself: a copy taken while the list grows its storage fails, and one can hold a
+place the list has counted and not yet filled, so a cell caught that way keeps what it showed until the run says more. A
+file that repeats a cell's id gives each repeat an id of its own when it opens, as Jupyter's own reader repairs repeated
+ids, because nothing else tells such cells apart. Given a grace, the holder of the notebooks closes one by itself once
+no view has shown it for that long, nothing runs or waits in it, and nothing in it differs from the file it was last
+saved to — as Verso's own comparison of two notebooks finds it, told which cells never save what they show, so a block's
+view never counts. The views are the only count: a page that stops reading ends its view, and nothing else says a
+notebook is in use. A notebook with changes not yet saved stays open until it is saved, or until the application closes
+it, which it can do for one notebook at once; without a grace, notebooks stay open until they are closed, so an
+application that uses one without a view is never left holding a closed one. No close waits for a run: a close stops the
+run under way as a stop does — one that waits for the C# turn never runs, one that runs is left behind — and waits only
+for a change under way, which runs no code a person wrote. Whatever else was asked before it and still waits its turn is
+refused when that turn comes, since a close discards what has not begun, as it discards what is not saved. Closing every
+notebook stops the run in each before it closes any of them, because stopping one run hands the C# turn on, and a run
+another notebook still let wait for it would start.
 
 `DeepSharp.Verso.Serve` is the tool `deepsharp-serve`, run beside a notebook or a folder of them. The notebook it serves
 runs code as the person who started it, so the server is shut to everyone else. It listens on this computer alone,

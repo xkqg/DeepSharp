@@ -147,9 +147,12 @@ internal sealed class Notebook : IAsyncDisposable
     /// <returns>Whether it can.</returns>
     public async Task<bool> EnabledAsync(string button) => (await Opened.ToolbarAsync()).Single(each => each.Id == button).IsEnabled;
 
-    /// <summary>What the host hands a toolbar button, for a test that hands it to a button itself.</summary>
+    /// <summary>
+    /// What the host hands a toolbar button asked outside any run, for a test that hands it to a button itself: the
+    /// notebook's own operations, and nothing that stops it.
+    /// </summary>
     /// <returns>The context; the file a button hands over is kept in it.</returns>
-    public ToolbarContext ToolbarContext() => new(Scaffold, []);
+    public ToolbarContext ToolbarContext() => new(Scaffold, [], Scaffold.NotebookOps, CancellationToken.None);
 
     /// <summary>What the host hands a part drawing or changing a cell's properties panel.</summary>
     /// <param name="cell">The cell.</param>

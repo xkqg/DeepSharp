@@ -9,7 +9,7 @@ namespace DeepSharp.Tests.Api;
 // run never runs, one that runs is left behind — while a change under way finishes and what was asked behind the close
 // is refused. The holder stops the run of every notebook it holds before it closes any, so a run that waited never starts
 // once another's stop hands the C# turn on. Only the grace, which closes a notebook nobody uses, never closes over a run.
-[Collection(nameof(CloseTests))]
+[Collection(RunsLeftBehind.Name)]
 public sealed partial class CloseTests
 {
     // Longer than any close takes that does not wait for a run; a close that waits for one never ends.
@@ -130,17 +130,23 @@ public sealed partial class CloseTests
             CSharp($$"""System.IO.File.WriteAllText(@"{{started}}", "on"); while (!System.IO.File.Exists(@"{{go}}")) { await System.Threading.Tasks.Task.Delay(10); } System.IO.File.WriteAllText(@"{{ended}}", "on");"""),
             CSharp(Marking(ran)));
 
+        var begun = new System.Collections.Concurrent.ConcurrentQueue<Guid>();
+
+        host.Scaffold.OnCellExecuting += begun.Enqueue;
+
         var pressing = host.RunToolbarAsync("verso.action.run-all");
 
         await UntilAsync(() => File.Exists(started), "Run All's first cell never began");
         await notebooks.DisposeAsync().AsTask().WaitAsync(AtOnce, TestContext.Current.CancellationToken);
         await pressing.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
 
-        // The first cell was left behind; once it ends, Run All would go on to the next cell, of a notebook that is closed.
+        // The first cell was left behind; once it ends, Run All would go on to the next cell, of a notebook that is closed:
+        // the next cell never begins, since the close stopped the press.
         await File.WriteAllTextAsync(go, "go", TestContext.Current.CancellationToken);
         await UntilAsync(() => File.Exists(ended), "the cell left behind never ended");
         await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
+        Assert.Equal([host.Cells[0].Id], begun);
         Assert.False(File.Exists(ran));
     }
 
@@ -235,12 +241,4 @@ public sealed partial class CloseTests
 
         await ForgottenAsync(notebooks, b);
     }
-}
-
-// A run left behind that later ends puts the process's console back as it found it when it began, under whatever C# run
-// is under way then — Verso's C# kernel does so at the end of every run — so the closes, which let such runs end, run
-// on their own, once every test run in parallel is done.
-[CollectionDefinition(nameof(CloseTests), DisableParallelization = true)]
-public sealed class CloseTestsRunAlone
-{
 }
