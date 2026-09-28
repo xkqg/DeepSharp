@@ -78,7 +78,7 @@ public sealed class TakeOverAction : NotebookExtension, IToolbarAction
         var path = context.NotebookMetadata.ColumnsFilePath()
             ?? throw new InvalidOperationException("A notebook never saved has nothing saved beside it to take over.");
 
-        await session.OneAtATimeAsync(async turn =>
+        await session.OneAtATimeAsync(context.CancellationToken, async turn =>
         {
             var assembled = NotebookPipeline.Of(context.NotebookCells);
 

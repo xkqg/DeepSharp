@@ -35,9 +35,8 @@ public class PackageTests
     [Fact]
     public void TheToolReferencesTheRuntime_AspNet_AndAClosedListOfPackages()
     {
-        // On .NET 8 the stream's writer and the async LINQ that puts the stream together come from their packages; on
-        // .NET 10 they are the runtime's own.
-        string[] allowed = ["DeepSharp.Verso.Api", "Verso", "Verso.Abstractions", "System.Net.ServerSentEvents", "System.Linq.AsyncEnumerable"];
+        // The socket a page speaks over is ASP.NET's own on both runtimes, so the host's package and Verso's engine are all.
+        string[] allowed = ["DeepSharp.Verso.Api", "Verso", "Verso.Abstractions"];
         var runtime = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
         var aspNet = Path.GetDirectoryName(typeof(WebApplication).Assembly.Location)!;
 

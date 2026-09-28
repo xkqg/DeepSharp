@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Parts the page suite's notebooks carry beside the application, where Verso's engine finds every part an
+       application ships: a part in an assembly of its own, loaded the way a third party's would be. Not a suite, and
+       not a package: nothing measures it and nothing ships it. Its name must not end in .Tests, since Verso's engine
+       passes over an assembly named so. -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DeepSharp.Tests.Serve.Parts</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The same abstractions the notebook package is built against, so the engine the suite runs accepts the part. -->
+    <PackageReference Include="Verso.Abstractions" Version="[1.1.0, 2.0.0)" />
+  </ItemGroup>
+
+</Project>

@@ -5,6 +5,7 @@ using DeepSharp.Pipelines;
 using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
 using Verso.Abstractions;
+using Verso.Extensions;
 using Verso.Serializers;
 
 namespace DeepSharp.Tests.Api;
@@ -78,14 +79,16 @@ public sealed class AuthoringTests : IDisposable
 
         Assert.Equal(
             [
-                new HostedKind("code", "csharp", "C# (Roslyn)", Editable: true),
-                new HostedKind("markdown", null, "Markdown", Editable: true),
-                new HostedKind(StepCellType.StepType, StepKernel.Language, "Pipeline step", Editable: true),
-                new HostedKind("html", "html", "HTML", Editable: true),
-                new HostedKind("mermaid", "mermaid", "Mermaid", Editable: true),
+                new HostedKind("code", "csharp", "C# (Roslyn)", Editable: true, Rendered: false),
+
+                // Markdown, HTML and Mermaid are shown rendered once they have run, as Verso's editors fold them.
+                new HostedKind("markdown", null, "Markdown", Editable: true, Rendered: true),
+                new HostedKind(StepCellType.StepType, StepKernel.Language, "Pipeline step", Editable: true, Rendered: false),
+                new HostedKind("html", "html", "HTML", Editable: true, Rendered: true),
+                new HostedKind("mermaid", "mermaid", "Mermaid", Editable: true, Rendered: true),
 
                 // The parameters form is drawn from the notebook's parameters, and nobody writes its text.
-                new HostedKind("parameters", null, "Parameters", Editable: false),
+                new HostedKind("parameters", null, "Parameters", Editable: false, Rendered: false),
             ],
             host.Kinds);
     }
@@ -207,11 +210,48 @@ public sealed class AuthoringTests : IDisposable
     {
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
-        var withheld = new HostedKind("code", StepKernel.Language, "Pipeline step", Editable: true);
+        var withheld = new HostedKind("code", StepKernel.Language, "Pipeline step", Editable: true, Rendered: false);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => host.AddAsync(withheld));
         await Assert.ThrowsAsync<InvalidOperationException>(() => host.ChangeKindAsync(host.Cells[0].Id, withheld));
         Assert.Equal(5, host.Cells.Count);
+    }
+
+    [Fact]
+    public async Task AKindNamedWithNoLanguage_IsTheOneVersosEditorsGiveIt_TheNotebooksKernelElseCSharp()
+    {
+        var code = new HostedKind("code", null, "Code", Editable: true, Rendered: false);
+
+        await using var notebooks = new OpenNotebooks();
+        var namingNone = await OpenAsync(notebooks, "plain.verso", new NotebookModel());
+
+        // A notebook that names no kernel is given code in C#, as Verso's editors give a new code cell.
+        Assert.Equal("csharp", (await namingNone.AddAsync(code)).Language);
+
+        var path = Path.Join(_folder, "slow.verso");
+        var engine = new ExtensionHost();
+
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(new NotebookModel { DefaultKernelId = SlowStartKernel.Language }), TestContext.Current.CancellationToken);
+        await engine.LoadExtensionAsync(new SlowStartKernel(Path.Join(_folder, "go")));
+
+        var naming = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+
+        try
+        {
+            // One that names its kernel is given code in it, for a cell added and for a cell turned into code.
+            Assert.Equal(SlowStartKernel.Language, (await naming.AddAsync(code)).Language);
+
+            var markdown = await naming.AddAsync(Kind(naming, "markdown"));
+
+            Assert.Equal(SlowStartKernel.Language, (await naming.ChangeKindAsync(markdown.Id, code)).Language);
+
+            // A type with a kernel of its own is given that kernel's language.
+            Assert.Equal(StepKernel.Language, (await naming.InsertAsync(markdown.Id, new HostedKind(StepCellType.StepType, null, "Pipeline step", Editable: true, Rendered: false))).Language);
+        }
+        finally
+        {
+            await naming.CloseAsync();
+        }
     }
 
     [Fact]
@@ -228,7 +268,7 @@ public sealed class AuthoringTests : IDisposable
         var host = await OpenAsync(notebooks, "dashboard.verso", notebook);
         var (read, declare) = (host.Cells[0].Id, host.Cells[1].Id);
 
-        Assert.Equal(new HostedLayout("dashboard", LayoutAllows.CellResize | LayoutAllows.CellExecute), host.Current.Layout);
+        Assert.Equal(new HostedLayout("dashboard", LayoutAllows.CellResize | LayoutAllows.CellExecute, HasPropertiesPanel: false), host.Current.Layout);
         await Assert.ThrowsAsync<LayoutCapabilityException>(() => host.InsertAsync(read, Kind(host, "code")));
         await Assert.ThrowsAsync<LayoutCapabilityException>(() => host.AddAsync(Kind(host, "code")));
         await Assert.ThrowsAsync<LayoutCapabilityException>(() => host.RemoveAsync(read));
@@ -261,12 +301,12 @@ public sealed class AuthoringTests : IDisposable
         // the press waits — a version of its own — so the versions move on at least once.
         await host.RunToolbarAsync("verso.switchLayout");
 
-        Assert.Equal(new HostedLayout("presentation", LayoutAllows.None), host.Current.Layout);
+        Assert.Equal(new HostedLayout("presentation", LayoutAllows.None, HasPropertiesPanel: false), host.Current.Layout);
         Assert.True(host.Current.Version > before);
     }
 
     [Fact]
-    public async Task ANotebookNamingALayoutTheEngineDoesNotHave_SaysNone_AndAllowsEveryCellAction()
+    public async Task ANotebookNamingALayoutTheEngineDoesNotHave_IsShownInTheNotebooksOwn_WhereEveryCellActionIsAllowed()
     {
         var notebook = new NotebookModel { ActiveLayout = new LayoutReference("elsewhere.layout", "no-such-layout") };
 
@@ -275,9 +315,12 @@ public sealed class AuthoringTests : IDisposable
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "elsewhere.verso", notebook);
 
-        Assert.Null(host.Current.Layout.Id);
+        // As Verso's editor shows it: in the layout the engine falls back on; the file keeps the name it had.
+        Assert.Equal("notebook", host.Current.Layout.Id);
         Assert.True(host.Current.Layout.Allows.HasFlag(
             LayoutAllows.CellInsert | LayoutAllows.CellDelete | LayoutAllows.CellReorder | LayoutAllows.CellEdit | LayoutAllows.CellExecute));
+        Assert.True(host.Current.Layout.HasPropertiesPanel);
+
         var added = await host.AddAsync(Kind(host, "code"));
 
         Assert.Equal(added.Id, host.Cells[^1].Id);

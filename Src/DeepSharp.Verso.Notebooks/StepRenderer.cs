@@ -209,7 +209,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         var mayAddAndRemove = LayoutLets(operations, LayoutCapabilities.CellInsert | LayoutCapabilities.CellDelete);
 
-        return await session.OneAtATimeAsync(turn =>
+        return await session.OneAtATimeAsync(context.CancellationToken, turn =>
             HandleAsync(new Gesture(session, notebook, operations, variables, context.CellId, mayAddAndRemove, turn), context));
     }
 
@@ -227,10 +227,15 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         // What changed since the last gesture without one seeing it — a block added, taken away, moved or typed into in
         // the editor — is caught up with first: a grid the blocks no longer make is cleared.
-        foreach (var stale in gesture.Session.BlocksChanged(assembled, gesture.Variables, except: gesture.Cell))
+        await gesture.Session.LetThroughAsync(gesture.Turn, async () =>
         {
-            await gesture.Operations.ClearOutputAsync(stale);
-        }
+            foreach (var stale in gesture.Session.StaleIn(assembled, except: gesture.Cell))
+            {
+                await gesture.Operations.ClearOutputAsync(stale);
+            }
+
+            gesture.Session.CaughtUp(assembled, gesture.Variables, except: gesture.Cell);
+        });
 
         switch (context.InteractionType)
         {

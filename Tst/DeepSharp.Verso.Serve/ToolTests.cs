@@ -77,8 +77,11 @@ public sealed class ToolTests : IDisposable
             Assert.NotNull(said);
 
             var address = new Uri(said[(said.IndexOf(" at ", StringComparison.Ordinal) + 4)..]);
-            using var browser = new HttpClient { BaseAddress = new Uri(address.GetLeftPart(UriPartial.Authority)) };
-            var running = browser.PostAsync($"/api/notebooks/endless.verso/cells/{cell.Id}/run{address.Query}", null, TestContext.Current.CancellationToken);
+            await using var socket = await PageSocket.ProgramAsync(address, "endless.verso");
+
+            await socket.SnapshotAsync();
+
+            var running = await socket.SendAsync("run", new { cell = cell.Id });
 
             for (var waited = 0; !File.Exists(started); waited += 20)
             {

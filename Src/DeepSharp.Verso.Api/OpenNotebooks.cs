@@ -101,7 +101,8 @@ public sealed class OpenNotebooks : IAsyncDisposable
             throw new InvalidOperationException($"'{file}' is open already, as a notebook of its own.");
         }
 
-        var notebook = new NotebookModel { Title = Path.GetFileNameWithoutExtension(file), DefaultKernelId = "csharp", ActiveLayout = LayoutDefaults.Reference };
+        var now = DateTimeOffset.UtcNow;
+        var notebook = new NotebookModel { Title = Path.GetFileNameWithoutExtension(file), DefaultKernelId = "csharp", Created = now, Modified = now };
 
         notebook.Cells.Add(new CellModel { Type = StepCellType.StepType, Language = StepKernel.Language, Source = new StepCellType().GetDefaultContent() });
 

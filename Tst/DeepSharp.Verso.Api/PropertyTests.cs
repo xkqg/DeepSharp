@@ -57,6 +57,9 @@ public sealed class PropertyTests : IDisposable
 
         var sections = await host.PropertiesAsync(host.Cells[4].Id);
         var form = sections.Single(section => section.Part == StepForm.Id);
+
+        // The notebook's own layout has the panel, as Verso's has it.
+        Assert.True(host.Current.Layout.HasPropertiesPanel);
         var scale = form.Fields.Single(field => field.Name == "scale");
 
         Assert.Equal("Pipeline step", form.Title);
@@ -97,6 +100,31 @@ public sealed class PropertyTests : IDisposable
         var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => host.SetPropertyAsync(host.Cells[4].Id, "no.such.part", "scale", "minmax"));
 
         Assert.Contains("no.such.part", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ANotebookShownInALayoutWithNoPanel_RefusesThePanelAndItsFields_AndItsBlocksKeepTheirText()
+    {
+        var notebook = new NotebookModel { ActiveLayout = new LayoutReference("verso.layout.dashboard", "dashboard") };
+
+        foreach (var block in Titanic)
+        {
+            notebook.Cells.Add(Block(block));
+        }
+
+        var path = Path.Join(_folder, "dashboard.verso");
+
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        await using var notebooks = new OpenNotebooks();
+        var host = await notebooks.OpenAsync(path, TestContext.Current.CancellationToken);
+        var normalise = host.Cells[4].Id;
+
+        // As Verso's editors offer the panel only in a layout that has one: the dashboard has none.
+        Assert.False(host.Current.Layout.HasPropertiesPanel);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.PropertiesAsync(normalise));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => host.SetPropertyAsync(normalise, StepForm.Id, "scale", "minmax"));
+        Assert.Equal(Titanic[4], host.Cells[4].Source);
     }
 
     [Fact]

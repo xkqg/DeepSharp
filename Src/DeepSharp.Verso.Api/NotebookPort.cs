@@ -41,60 +41,66 @@ internal abstract class NotebookPort(Scaffold scaffold) : INotebookOperations
 
     public abstract Task<IReadOnlyList<CellOutput>> ExecuteCodeCaptureOutputsAsync(string code, string? language = null, CancellationToken ct = default);
 
-    public Task ClearOutputAsync(Guid cellId)
+    public async Task ClearOutputAsync(Guid cellId)
     {
-        Admit();
+        using var admitted = Admit();
 
-        return Engine.ClearOutputAsync(cellId);
+        await Engine.ClearOutputAsync(cellId);
     }
 
-    public Task ClearAllOutputsAsync()
+    public async Task ClearAllOutputsAsync()
     {
-        Admit();
+        using var admitted = Admit();
 
-        return Engine.ClearAllOutputsAsync();
+        await Engine.ClearAllOutputsAsync();
     }
 
-    public Task RestartKernelAsync(string? kernelId = null)
+    public async Task RestartKernelAsync(string? kernelId = null)
     {
-        Admit();
+        using var admitted = Admit();
 
-        return Engine.RestartKernelAsync(kernelId);
+        await Engine.RestartKernelAsync(kernelId);
     }
 
-    public Task<string> InsertCellAsync(int index, string type, string? language = null)
+    public async Task<string> InsertCellAsync(int index, string type, string? language = null)
     {
-        Admit();
+        using var admitted = Admit();
 
-        return Engine.InsertCellAsync(index, type, language);
+        return await Engine.InsertCellAsync(index, type, language);
     }
 
-    public Task RemoveCellAsync(Guid cellId)
+    public async Task RemoveCellAsync(Guid cellId)
     {
-        Admit();
+        using var admitted = Admit();
 
-        return Engine.RemoveCellAsync(cellId);
+        await Engine.RemoveCellAsync(cellId);
     }
 
-    public Task MoveCellAsync(Guid cellId, int newIndex)
+    public async Task MoveCellAsync(Guid cellId, int newIndex)
     {
-        Admit();
+        using var admitted = Admit();
 
-        return Engine.MoveCellAsync(cellId, newIndex);
+        await Engine.MoveCellAsync(cellId, newIndex);
     }
 
     public void SetActiveLayout(string layoutId)
     {
-        Admit();
+        using var admitted = Admit();
+
         Engine.SetActiveLayout(layoutId);
     }
 
     public void SetActiveTheme(string themeId)
     {
-        Admit();
+        using var admitted = Admit();
+
         Engine.SetActiveTheme(themeId);
     }
 
-    /// <summary>Lets a verb through, or refuses it with why, before it touches the notebook.</summary>
-    protected abstract void Admit();
+    /// <summary>
+    /// Lets a verb through, or refuses it with why, before it touches the notebook; one let through is held until it has
+    /// landed, so a stop of the run it acts in waits for it before a kernel starts afresh.
+    /// </summary>
+    /// <returns>What is held while the verb is on its way.</returns>
+    protected abstract Admission Admit();
 }

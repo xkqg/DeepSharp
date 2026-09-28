@@ -23,5 +23,6 @@
   </Folder>
   <Folder Name="/Tst/DeepSharp.Verso.Serve/">
     <Project Path="Tst/DeepSharp.Verso.Serve/DeepSharp.Verso.Serve.Tests.csproj" />
+    <Project Path="Tst/DeepSharp.Verso.Serve.TestParts/DeepSharp.Verso.Serve.TestParts.csproj" />
   </Folder>
 </Solution>

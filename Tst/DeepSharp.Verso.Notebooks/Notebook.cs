@@ -142,10 +142,14 @@ internal sealed class Notebook : IAsyncDisposable
     /// <returns>The file it handed over; nothing when it handed none.</returns>
     public Task<HostedFile?> PressAsync(string button) => Opened.RunToolbarAsync(button);
 
-    /// <summary>Whether a toolbar button can be pressed now, as the host's toolbar says.</summary>
+    /// <summary>
+    /// Whether a toolbar button can be pressed now, asked as the host asks it for every version — with a look's operations
+    /// and no cell chosen — so what it reads beside the notebook, a file saved there, counts as it stands now.
+    /// </summary>
     /// <param name="button">The button's id.</param>
     /// <returns>Whether it can.</returns>
-    public async Task<bool> EnabledAsync(string button) => (await Opened.ToolbarAsync()).Single(each => each.Id == button).IsEnabled;
+    public Task<bool> EnabledAsync(string button) =>
+        Host.GetToolbarActions().Single(each => each.ActionId == button).IsEnabledAsync(ToolbarContext());
 
     /// <summary>
     /// What the host hands a toolbar button asked whether it can be pressed, for a test that hands it to a button itself:

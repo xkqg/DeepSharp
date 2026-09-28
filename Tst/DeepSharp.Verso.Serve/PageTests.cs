@@ -1,7 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using System.Net.Http.Json;
 using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
 using DeepSharp.Verso.Serve;
@@ -19,10 +18,10 @@ namespace DeepSharp.Tests.Serve;
 
 /// <summary>
 /// The page, in a real browser against the real server: it draws the notebook as Verso's editors draw one, sends what
-/// a person does the way Verso's own router means to — a button on its click, a box or a select on its change, never
-/// on a key, one at a time in the order they came, the typing before the click — draws each change, and reads the whole
-/// notebook again when its stream comes back. Its toolbar downloads what a button hands over, its panel changes a field
-/// through its part, and it saves.
+/// a person does over its one socket the way Verso's own router means to — a button on its click, a box or a select on
+/// its change, never on a key, in the order they came, the typing as it is typed and so before the click — draws each
+/// change, and draws the notebook onto what it shows when its connection comes back. Its toolbar downloads what a button
+/// hands over, its panel changes a field through its part, and it saves.
 /// </summary>
 public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browsers>, IDisposable
 {
@@ -90,8 +89,16 @@ public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browser
         return page;
     }
 
-    private static Task<NotebookVersion> CurrentAsync(Served served, string notebook) =>
-        served.Client.GetFromJsonAsync<NotebookVersion>($"/api/notebooks/{notebook}", TestContext.Current.CancellationToken);
+    // The notebook as a page opening it now is told it.
+    private static async Task<NotebookVersion> CurrentAsync(Served served, string notebook)
+    {
+        await using var socket = await SocketAsync(served, notebook);
+
+        return (await socket.SnapshotAsync()).Version;
+    }
+
+    // A notebook's socket, as another page of this server opens one.
+    private static Task<PageSocket> SocketAsync(Served served, string notebook) => PageSocket.OpenAsync(served.Address, notebook, Token);
 
     private static ILocator Cell(IPage page, int index) => page.Locator("section.cell").Nth(index);
 
@@ -121,12 +128,13 @@ public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browser
 
         await Expect(show).ToHaveCountAsync(1);
 
-        var before = (await CurrentAsync(served, "titanic.verso")).Version;
+        var before = (await CurrentAsync(served, "titanic.verso")).Cells[0].ExecutionCount;
 
         await show.ClickAsync();
 
+        // Sent once: the Show ran its block once.
         await Expect(Cell(page, 0).Locator("input[type=checkbox][data-action^='deepsharp.include']").First).ToBeVisibleAsync();
-        Assert.Equal(before + 1, (await CurrentAsync(served, "titanic.verso")).Version);
+        Assert.Equal(before + 1, (await CurrentAsync(served, "titanic.verso")).Cells[0].ExecutionCount);
     }
 
     [Fact]
@@ -210,7 +218,7 @@ public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browser
     }
 
     [Fact]
-    public async Task APageWhoseStreamDropped_ReadsTheWholeNotebookAgain_WhenItIsBack()
+    public async Task APageWhoseSocketEnded_OpensItAgain_AndDrawsTheNotebookWhole()
     {
         await SaveAsync("titanic.verso", [.. Titanic.Select(Block)]);
         await using var served = await StartAsync();
@@ -219,14 +227,19 @@ public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browser
 
         await Expect(Cell(page, 3).Locator("textarea.source")).ToHaveValueAsync(Titanic[3]);
 
-        await page.Context.SetOfflineAsync(true);
+        // Another page changes a cell, then closes the notebook without saving it: this page's socket ends with it.
+        await using (var other = await SocketAsync(served, "titanic.verso"))
+        {
+            var fill = (await other.SnapshotAsync()).Version.Cells[3].Id;
 
-        var fill = (await CurrentAsync(served, "titanic.verso")).Cells[3].Id;
+            await other.AskAsync("edit", new { cell = fill, source = mean });
+            await Expect(Cell(page, 3).Locator("textarea.source")).ToHaveValueAsync(mean);
+            await other.AskAsync("close");
+        }
 
-        await served.Client.PostAsJsonAsync($"/api/notebooks/titanic.verso/cells/{fill}/source", new { source = mean }, TestContext.Current.CancellationToken);
-        await page.Context.SetOfflineAsync(false);
-
-        await Expect(Cell(page, 3).Locator("textarea.source")).ToHaveValueAsync(mean, new() { Timeout = 30_000 });
+        // The page opens its socket again and draws the notebook whole, as its file holds it: the change it was told is gone.
+        await Expect(Cell(page, 3).Locator("textarea.source")).ToHaveValueAsync(Titanic[3], new() { Timeout = 30_000 });
+        await Expect(page.Locator("#status")).ToBeEmptyAsync();
     }
 
     [Fact]
@@ -271,6 +284,7 @@ public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browser
         var page = await OpenAsync(served, "titanic.verso");
 
         await Cell(page, 4).Locator(".cell-bar").ClickAsync();
+        await page.Locator("#panels button[data-panel='properties']").ClickAsync();
         await page.Locator($"#panel select[data-part='{StepForm.Id}'][data-field='scale']").SelectOptionAsync("minmax");
 
         await Expect(Cell(page, 4).Locator("textarea.source")).ToHaveValueAsync(new System.Text.RegularExpressions.Regex("\"minmax\""));
@@ -287,7 +301,7 @@ public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browser
         await Cell(page, 3).Locator("textarea.source").FillAsync(mean);
         await page.Locator("#save").ClickAsync();
 
-        await Expect(page.Locator("#status")).ToHaveTextAsync(new System.Text.RegularExpressions.Regex("[Ss]aved"));
+        await Expect(page.Locator("#notice")).ToHaveTextAsync("Saved to titanic.verso");
         Assert.Contains("mean", await File.ReadAllTextAsync(At("titanic.verso"), TestContext.Current.CancellationToken), StringComparison.Ordinal);
     }
 

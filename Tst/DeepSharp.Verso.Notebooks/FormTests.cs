@@ -848,7 +848,7 @@ public sealed class FormTests : IDisposable
         var normalise = notebook.Scaffold.Cells[4];
         var session = notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session;
         var mayFinish = new TaskCompletionSource();
-        var holding = session.OneAtATimeAsync(async _ =>
+        var holding = session.OneAtATimeAsync(CancellationToken.None, async _ =>
         {
             await mayFinish.Task;
 

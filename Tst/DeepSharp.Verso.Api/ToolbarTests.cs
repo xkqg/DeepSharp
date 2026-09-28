@@ -38,7 +38,8 @@ public sealed partial class ToolbarTests : IDisposable
 
     private async Task<NotebookHost> OpenAsync(OpenNotebooks notebooks, string name, params CellModel[] cells)
     {
-        var notebook = new NotebookModel();
+        // Naming its kernel, as every notebook Verso's editors make names it: Restart Kernel restarts that one.
+        var notebook = new NotebookModel { DefaultKernelId = "csharp" };
 
         foreach (var cell in cells)
         {
@@ -59,7 +60,8 @@ public sealed partial class ToolbarTests : IDisposable
         var whole = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
         var broken = await OpenAsync(notebooks, "broken.verso", Block(Titanic[0]), Block("""{"step": "declare"}"""));
 
-        var buttons = await whole.ToolbarAsync();
+        // Every version carries every button, as it stands then: the notebook's first one among them.
+        var buttons = whole.Current.Buttons;
         var export = buttons.Single(button => button.Id == ExportPipelineAction.Id);
 
         Assert.Equal(ToolbarPlace.ExportMenu, export.Place);
@@ -67,7 +69,8 @@ public sealed partial class ToolbarTests : IDisposable
         Assert.True(export.IsEnabled);
         Assert.Equal(ToolbarPlace.MainToolbar, buttons.Single(button => button.Id == RunPipelineAction.Id).Place);
         Assert.Contains(buttons, button => button.Id == "verso.action.run-all");
-        Assert.False((await broken.ToolbarAsync()).Single(button => button.Id == ExportPipelineAction.Id).IsEnabled);
+        Assert.False(broken.Current.Buttons.Single(button => button.Id == ExportPipelineAction.Id).IsEnabled);
+        Assert.All(buttons, button => Assert.Null(button.Fault));
     }
 
     [Fact]
@@ -79,7 +82,8 @@ public sealed partial class ToolbarTests : IDisposable
 
         await host.RunAsync(shown);
 
-        var buttons = await host.ToolbarAsync();
+        // The version the run's turn ended with says it.
+        var buttons = host.Current.Buttons;
 
         // Running a cell asks only that the layout lets cells run; clearing one, that it shows something.
         Assert.Equal([shown, silent], buttons.Single(button => button.Id == "verso.action.run-cell").EnabledFor);
@@ -91,13 +95,14 @@ public sealed partial class ToolbarTests : IDisposable
     public void TwoLooksAtAButton_AreEqual_WhileTheyHoldTheSame()
     {
         var cell = Guid.NewGuid();
-        var button = new HostedToolbarAction("id", "Label", null, IconOnly: false, IsPrimary: false, null, ToolbarPlace.CellToolbar, 1, IsEnabled: true, [cell]);
+        var button = new HostedToolbarAction("id", "Label", null, IconOnly: false, IsPrimary: false, null, ToolbarPlace.CellToolbar, 1, IsEnabled: true, [cell], Fault: null);
 
         Assert.Equal(button, button with { EnabledFor = [cell] });
         Assert.Equal(button.GetHashCode(), (button with { EnabledFor = [cell] }).GetHashCode());
         Assert.NotEqual(button, button with { EnabledFor = [] });
         Assert.NotEqual(button, button with { IsEnabled = false });
         Assert.NotEqual(button, button with { Label = "Other" });
+        Assert.NotEqual(button, button with { Fault = "It could not say." });
     }
 
     [Fact]
@@ -211,7 +216,7 @@ public sealed partial class ToolbarTests : IDisposable
     {
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
-        var run = new Run(1, cell: null, takesTheCSharpTurn: true);
+        var run = new Run(1, cell: null, takesTheCSharpTurn: true, told: () => { }, tell: () => Task.CompletedTask);
         var port = new RunPort(host.Scaffold, run);
         var context = new ToolbarContext(host.Scaffold, [], port);
 

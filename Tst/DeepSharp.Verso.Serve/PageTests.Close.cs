@@ -8,9 +8,9 @@ using static Microsoft.Playwright.Assertions;
 
 namespace DeepSharp.Tests.Serve;
 
-// A close goes past everything the page has waiting, as a stop does, since what waits may wait for the very run the close
-// stops; it says the run under way is stopped before a person agrees; and nothing the page still had waiting is sent
-// after it, since each would open the closed notebook again.
+// A close goes past everything asked before it, as a stop does, since what waits may wait for the very run the close
+// stops; it says the run under way is stopped before a person agrees; what was asked before it and waited behind the run
+// is refused; and the page opens no socket after it, since that would open the closed notebook again.
 public sealed partial class PageTests
 {
     private static CellModel EndlessCell() =>
@@ -40,12 +40,12 @@ public sealed partial class PageTests
     }
 
     [Fact]
-    public async Task Closing_SendsNothingThePageStillHadWaiting_SoNothingOpensTheNotebookAgain()
+    public async Task Closing_RefusesWhatWaitedBehindTheRun_AndOpensNoSocketAfter_SoNothingOpensTheNotebookAgain()
     {
         await SaveAsync("endless.verso", EndlessCell(), new CellModel { Type = "code", Language = "csharp", Source = "var kept = 1;" });
         await using var served = await StartAsync();
         var page = await OpenAsync(served, "endless.verso");
-        var sent = new List<string>();
+        var opened = new List<string>();
         var closing = false;
 
         page.Dialog += async (_, dialog) =>
@@ -53,39 +53,33 @@ public sealed partial class PageTests
             closing = true;
             await dialog.AcceptAsync();
         };
-        page.Request += (_, request) =>
+        page.WebSocket += (_, socket) =>
         {
-            if (closing && request.Url.Contains("/api/notebooks/endless.verso/", StringComparison.Ordinal) && !request.Url.EndsWith("/close", StringComparison.Ordinal))
+            if (closing)
             {
-                sent.Add($"{request.Method} {request.Url}");
+                opened.Add(socket.Url);
             }
         };
 
         await Cell(page, 0).Locator("button.run").ClickAsync();
         await Expect(page.Locator("#stop")).ToBeVisibleAsync(new() { Timeout = 30_000 });
 
-        // Typing while the cell runs waits behind the run, as every change does.
+        // Typing while the cell runs is sent, and waits behind the run at the notebook, as every change does.
         var text = Cell(page, 1).Locator("textarea.source");
 
         await text.FillAsync("var typed = 2;");
         await text.BlurAsync();
         await Expect(page.Locator("#status")).ToHaveTextAsync("Waits for the run under way to end…");
 
-        // The server's answer to the close is held back a while, as a slow close's would be: the stream the close ended
-        // would open again meanwhile, were it left to itself.
-        await page.RouteAsync("**/close", async route =>
-        {
-            var answer = await route.FetchAsync();
-
-            await Task.Delay(TimeSpan.FromSeconds(5));
-            await route.FulfillAsync(new() { Response = answer });
-        });
         await page.Locator("#close").ClickAsync();
         await Expect(page.Locator("#notebooks")).ToBeVisibleAsync(new() { Timeout = 10_000 });
 
-        Assert.Empty(sent);
+        // Longer than the page takes to open a socket again.
+        await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
-        // The notebook opens again as its file says: the typing reached no notebook that stayed open after the close.
+        Assert.Empty(opened);
+
+        // The notebook opens again as its file says: what waited behind the run was refused when the close came.
         var again = await served.App.Services.GetRequiredService<OpenNotebooks>().OpenAsync(At("endless.verso"), TestContext.Current.CancellationToken);
 
         Assert.Equal("var kept = 1;", again.Cells[1].Source);

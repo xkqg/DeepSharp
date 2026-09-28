@@ -25,7 +25,7 @@ internal sealed class ReadPort(Scaffold scaffold) : NotebookPort(scaffold)
     public override Task<IReadOnlyList<CellOutput>> ExecuteCodeCaptureOutputsAsync(string code, string? language = null, CancellationToken ct = default) =>
         throw Refused();
 
-    protected override void Admit() => throw Refused();
+    protected override Admission Admit() => throw Refused();
 
     private static InvalidOperationException Refused() =>
         new("A part asked only to look at the notebook, to say whether it can be pressed or to draw its section, does nothing to it.");

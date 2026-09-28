@@ -70,7 +70,7 @@ public sealed class RunPipelineAction : NotebookExtension, IToolbarAction
 
         var session = RequiredSession;
 
-        await session.OneAtATimeAsync(async turn =>
+        await session.OneAtATimeAsync(context.CancellationToken, async turn =>
         {
             var assembled = NotebookPipeline.Of(context.NotebookCells);
 
@@ -79,13 +79,18 @@ public sealed class RunPipelineAction : NotebookExtension, IToolbarAction
                 return false;
             }
 
-            // What changed since the last gesture without one seeing it is caught up with first.
-            foreach (var stale in session.BlocksChanged(assembled, context.Variables, except: null))
+            // What changed since the last gesture without one seeing it is caught up with first — each grid the blocks no
+            // longer make cleared before it is forgotten — and the pipeline the blocks make is handed over, as one write.
+            await session.LetThroughAsync(turn, async () =>
             {
-                await context.Notebook.ClearOutputAsync(stale);
-            }
+                foreach (var stale in session.StaleIn(assembled, except: null))
+                {
+                    await context.Notebook.ClearOutputAsync(stale);
+                }
 
-            session.HandOver(context.Variables, assembled);
+                session.CaughtUp(assembled, context.Variables, except: null);
+                session.HandOver(context.Variables, assembled);
+            });
 
             // The whole pipeline runs at its last block; one the blocks do not make is refused at the block that stops it.
             var at = assembled.Whole ? assembled.Blocks[^1].Cell : assembled.Blocks.First(block => block.Faults.Count > 0).Cell;

@@ -122,11 +122,16 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   by side still changes the blocks one at a time, and a change still on its way to a block the change before it
   rewrote is not made. A block added, taken away or moved, a cell turned into another kind, or text typed into a
   block — none of which Verso's editors tell a part of — is caught up with at the next gesture: a grid the blocks no
-  longer make is cleared, and the pipeline handed to C# cells is taken back unless they still make it, while a cell
-  turned into another kind keeps what it shows. An application that changes cells itself tells the notebook at once,
-  with `StepCellType.BlocksChangedAsync`, and tells it of a stop with `StepCellType.Stopped`, after which what the
-  stopped run asks for writes nothing. C# cells in the same notebook are handed the
-  pipeline as text, under `deepsharp.pipeline`, with the notebook's folder under `deepsharp.folder`. Saving the
+  longer make is cleared — before it is forgotten, so one a stop leaves on the screen is cleared by the next catch-up —
+  and the pipeline handed to C# cells is taken back unless they still make it, while a cell turned into another kind
+  keeps what it shows. An application that changes cells itself tells the notebook at once,
+  with `StepCellType.BlocksChangedAsync`, and tells it of a stop with `StepCellType.StoppedAsync`, which gives the
+  notebook back at once and ends once every write let through before the stop has landed; from then on what the
+  stopped run asks for writes nothing, and a change whose run was stopped before it began does nothing at all. What a
+  block's run writes — its card, a grid and what it measured, the list of the columns, the columns saved beside the
+  notebook, what is handed to C# cells — is written whole or not at all, so a stop, Verso's own editors' Stop among
+  them, never splits one. C# cells in the same notebook are handed the pipeline as text, under `deepsharp.pipeline`,
+  with the notebook's folder under `deepsharp.folder`. Saving the
   notebook keeps the steps and leaves out what the blocks show, the data included. It is saved as `.verso`, the one
   format that keeps a block a block: saving it as Jupyter or Markdown, which keep a cell's text and lose its kind, is
   refused, and so is opening a file of another format whose code cells are steps. It is
@@ -139,80 +144,130 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   that are only ever shown rendered drawn — and registers the notebook's parts itself, so a program published as a
   single file, with nothing beside it for Verso to find, still has them. One file is one notebook, however many views
   show it: the same path twice, or two spellings of one path, hand back the same host, and a notebook that cannot be
-  opened leaves nothing open behind it. An extension a notebook asks for is refused rather than fetched. Its cells,
-  and what they show, are handed over as plain values. Typing a cell's text, running a cell and a click on a control a
-  block drew take their turn one at a time, in the order they came; typing or running a cell a change before it
-  rewrote is refused, while a click from its card still reaches the part, which knows the block it became, and what a
-  part answers a click with is what the cell shows next. A cell is added after another or at the end, of any kind the
-  engine has — code in a language it runs, Markdown, a pipeline block and the rest, each saying whether a person writes
-  its text — and starts empty; it is taken
-  away, moved past the neighbour it passes, or turned into another kind in one step, keeping its text. Each goes
-  through the port the notebook's layout guards, so a layout that does not allow it refuses it, typing included, and
-  every version says which layout the notebook is shown in and what it allows. As a cell's text is typed, its kernel
-  offers what may come next and says what a word means, as Verso's editors ask it: a block's verbs, keys and columns,
-  C#'s members. A new notebook is made as one block that reads a CSV file, as a `.verso` file written whole before it
-  appears, and never over a file that is there already. Typing into a block tells the notebook at once, so what was
-  worked out from the block as it was is taken back. A run exists from the moment it is asked, numbered, and a stop
-  names the run it means. A run that never ends is stopped by a fresh kernel — of what runs now, found as the engine
-  finds it: the kernel of the cell's type, else of its language, else the notebook's default, and none for a cell that
-  only draws, which takes no C# turn either; for code a button runs in no cell, its language, else the default. A stop
-  while nothing runs, between two cells, starts none — and the notebook is told first: what the run left behind writes
-  nothing more — no grid, and no pipeline handed to C# cells — and the notebook takes its next change at once. C# runs
-  take their turn
-  across the whole process, so none prints into another; a C# run waiting for its turn is told on every version, and a
-  stop ends the wait, so it never runs. The toolbar is every button the engine has, each saying whether it can be
+  opened leaves nothing open behind it. An extension a notebook asks for is refused rather than fetched. Nothing the
+  engine falls back on — a kernel, a layout, a theme — is written into a notebook, as Verso's browser editor writes
+  none: a file that names none is saved naming none, and a layout the engine lacks is shown in the notebook's own and
+  kept by its name. What the layouts arranged, such as the dashboard's tiles, and what the parts keep as settings are
+  handed back at open and taken back at every save. Its cells, and what they show, are handed over as plain values.
+  Typing a cell's text, running a cell and a click on a control a block drew take their turn one at a time, in the
+  order they came; typing or running a cell a change before it rewrote is refused, while a click from its card still
+  reaches the part, which knows the block it became, and what a part answers a click with is what the cell shows next.
+  A cell is added after another or at the end, of any kind the engine has — code in a language it runs, Markdown, a
+  pipeline block and the rest, each saying whether a person writes its text and whether it is shown rendered once it
+  has run — and starts empty; a kind named with no language takes the one Verso's editors give it. It is taken away,
+  moved past the neighbour it passes, or turned into another kind in one step, keeping its text. Each goes through the
+  port the notebook's layout guards, so a layout that does not allow it refuses it, typing included, and every version
+  says which layout the notebook is shown in, what it allows and whether it has a properties panel: the dashboard and
+  the presentation have none, and there a cell's panel and its fields are refused. As a cell's text is typed, its
+  kernel offers what may come next and says what a word means, as Verso's editors ask it: a block's verbs, keys and
+  columns, C#'s members. A new notebook is made as one block that reads a CSV file, naming C# as its kernel and when it
+  was made, as a `.verso` file written whole before it appears, and never over a file that is there already. Typing
+  into a block tells the notebook at once, so what was worked out from the block as it was is taken back. A run exists
+  from the moment it is asked, numbered, and a stop names the run it means. A run that never ends is stopped by a
+  fresh kernel — of what ran at the stop, found as the engine finds it: the kernel of the cell's type, else of its
+  language, else the notebook's default, and none for a cell that only draws, which takes no C# turn either; for code a
+  button runs in no cell, its language, else the default. A stop while nothing runs, between two cells, starts none. A
+  stop is one step: unless the run already ended by itself, it takes the run's end, marks the run, tells the notebook —
+  what the run left behind writes nothing more, no grid and no pipeline handed to C# cells, and the notebook takes its
+  next change at once — and only then takes what runs as the kernel to start afresh, which happens once everything let
+  through before the stop has landed; so whether a kernel starts afresh never depends on when a thread happens to run.
+  C# runs take their turn across the whole process, so none prints
+  into another; a C# run waiting for its turn is told on every version, and a stop ends the wait, so it never runs.
+  Every version carries the toolbar: every button the engine has, each asked at that version whether it can be
   pressed — a button on a cell's toolbar for each cell, as Verso's editors ask it, so a page draws a cell's buttons
-  where they can be pressed; a press is one run, and stopped, the cell under way is left behind and no cell the button
-  would still run begins; a file a button hands over goes to whoever pressed it, and nothing is written beside the
-  notebook. A cell's properties panel is a section from every part that has one for it, and a changed field is made by
-  that part. A look — a button asked whether it can be pressed, a panel asked to draw its section — is refused every
-  verb, so what is only looked at does nothing to the notebook. A change — a click on a control a cell drew, a changed field — runs DeepSharp's blocks as its own; anything else it asks to run is a run of its own, told and stopped as any run is, and once that run is stopped nothing else the change asks is done. A notebook is saved the way Verso's editors save it —
-  what a block shows left out, written whole before it takes the file's place — and saved under another name it is that
-  file from then on, what DeepSharp names after it
-  following; a name another open notebook holds is refused. Every view of a notebook is told what changed: the notebook
-  as it stands when the view begins, then each change after it, numbered — the cells that came or changed as they now
-  stand, and every id in order when cells came, went or moved, whatever made the change, a clear and a form included, of
-  which the engine says nothing. A cell carries what Verso's editors draw it with: how it is shown, how many times it
-  ran, how its last run ended and how long it took. What a C# cell displays while it runs reaches a view before the run
-  ends, and every version says which run is under way, from its start — the cell that runs or waits, none between a
-  button's cells, since when, and the number a stop names. A view that reads slowly holds one change, the latest look at
-  each cell, and never holds the notebook up. A request about a cell that is gone says from which version on. A file
-  that repeats a cell's id gives each repeat an id of its own, as Jupyter's own reader does. Given a grace, a notebook
-  closes by itself once no view has shown it for that long, nothing runs or waits in it, and nothing in it differs from
-  the file it was last saved to — what a block shows never counts, as it is never saved; one with changes not yet saved
-  stays open until it is saved. An application can close one notebook at once: its run under way is stopped, never
-  waited for, a change under way finishes, and whatever still waits its turn is refused; closing them all stops every
-  notebook's run before any of them closes.
+  where they can be pressed — and a button whose part cannot say is not pressable, and says why. A press is one run,
+  and stopped, the cell under way is left behind and no cell the button would still run begins; a file a button hands
+  over goes to whoever pressed it, unless the press was stopped, and nothing is written beside the notebook. A cell's
+  properties panel is a section
+  from every part that has one for it, and a changed field is made by that part. The panel, what a kernel offers and
+  what a word means are read beside the notebook's turn, so they answer while a run is under way and through a stop's
+  fresh kernel; one that a start afresh overlapped says nothing, even when the kernel failed as it was put away, since the
+  kernel it asked is gone. A look — a button asked whether it can be pressed, a panel asked to draw its section — is refused every
+  verb, so what is only looked at does nothing to the notebook. A change — a click on a control a cell drew, a changed
+  field — runs DeepSharp's blocks as its own; anything else it asks to run is a run of its own, told and stopped as
+  any run is, and once that run is stopped nothing else the change asks is done, and what it would answer or hand over
+  is dropped. The layouts and the themes the engine
+  has are listed, and each is switched by its id in the notebook's turn and saved as the notebook's choice
+  (`SwitchLayoutAsync`, `SwitchThemeAsync`). What a person does to what a layout drew — a tile moved, resized or run —
+  goes to the layout's own part as a change (`InteractAsync`): a move runs nothing and waits for no C# run, a tile's
+  run is a run told and stopped as any, and a file the part hands over goes to whoever acted. The title is changed as
+  Verso's editors change it (`RetitleAsync`): a change every view is told, unsaved until saved, and the name of what
+  the notebook is exported as. A notebook is saved the way Verso's editors save it — what a block shows left out, when
+  it was last saved stamped in, written whole before it takes the file's place — and saved under another name it is
+  that file from then on, what DeepSharp names after it following; a name another open notebook holds is refused.
+  Every view of a notebook is told what changed: the notebook as it stands when the view begins, then each change after
+  it, numbered — the cells that came or changed as they now stand, and every id in order when cells came, went or
+  moved, whatever made the change, a clear and a form included, of which the engine says nothing. A turn tells every
+  view what it does while it does it, and one version is made at a time, so no view loses a change. A cell carries
+  what Verso's editors draw it with: how it is shown, how many times it ran, how its last run ended and how long it
+  took; what it shows carries a failure's name and where it happened, and whether a text came on standard output or
+  standard error. What a C# cell displays while it runs reaches a view before the run ends, and every version says
+  which run is under way, from its start — the cell that runs or waits, none between a button's cells, since when, and
+  the number a stop names. Every version says, too, what the engine runs that no run owns — a block a change runs, and
+  what a stop left behind — each until the engine says it ended; whether the notebook differs from its file, worked
+  out at open too, so a save is told as a version; what became of its kernels — how many times one was started afresh,
+  by a stop or by Verso's Restart Kernel, whether one is being started now, and why the last start failed; the theme
+  the notebook chose; what the layout draws of its own — the dashboard's tiles, the presentation's column — as HTML
+  with a slot for each cell it shows, or why it could not; and what the notebook says of itself: its title, its
+  default kernel, when it was made and last saved, and the version of its format. A view that reads slowly holds one
+  change, the latest look at each cell, and never holds the notebook up; it takes the change waiting, or waits for the
+  next, whenever it is ready for one. A request about a cell that is gone says from which version on. A file that
+  repeats a cell's id gives each repeat an id of its own, as Jupyter's own reader does. Given a grace, a notebook
+  closes by itself once no view has shown it for that long, nothing runs or waits in it — nothing a stop left behind
+  either — and nothing in it differs from the file it was last saved to — what a block shows never counts, as it is
+  never saved; one with changes not yet saved stays open until it is saved. An application can close one notebook at
+  once: its run under way is stopped, never waited for, a change under way finishes, and whatever still waits its turn
+  is refused; a closed notebook tells its views nothing more, and closing them all stops every notebook's run before
+  any of them closes.
 
 - **`DeepSharp.Verso.Serve` — DeepSharp's own server.** The tool `deepsharp-serve`, installed with
   `dotnet tool install --global DeepSharp.Verso.Serve` and run beside a notebook or a folder of them, built on
-  `DeepSharp.Verso.Api` and needing nothing else installed. The notebook it serves runs code, so it
-  listens on this computer alone, answers only a request carrying the token it said when it started — in the address,
-  or in the cookie its first page sets — makes a change only for its own page, since a browser carries that cookie for
-  a page from any port of this computer, and answers only under a name of this computer, and serves its own page and nothing
-  from the folder it runs in. It says where it is once, then nothing; `--port` names the port, `--no-browser` opens
-  none, a port already taken stops it before it says anything, and Ctrl+C ends it within moments whatever a notebook
-  runs: every run is stopped as a close stops it, and a thread a cell left going does not keep the tool alive. A page
-  keeps a stream of a notebook open — the notebook as it stands, then each change, numbered — and sends typing, runs, a
-  stop naming the run it means and clicks on a block's controls, adds, takes away, moves and turns cells into another
-  kind, and asks what a cell's kernel offers as it is typed; in a folder, it makes a new notebook under the bare name of
-  a `.verso` file, never over a file that is there; a cell a change replaced answers the version it is gone from, and a
-  stream ends when the server stops, when the page goes away, or when the notebook is closed without saving. The
-  toolbar, a cell's properties panel and saving are there too; a file a button hands over arrives as a download in the
-  page that pressed it, under its own name, and nothing is written beside the notebook. The page draws the notebook as
-  Verso's editors draw one and sends what a person does the way Verso's own router means to: a button on its click, a
-  box or a select on its change, never on a key, one at a time, the typing first; a dropped stream reconnects and reads
-  the whole notebook again. A cell is added after another or at the end, of any kind the notebook has, taken away once
-  the person says yes, moved or turned into another kind, each only where the notebook's layout allows it; a cell's bar
-  and the export menu hold only the engine's buttons that can be pressed there, as in Verso's editor; a cell shown
-  rendered shows its text while it is selected, as in Verso's editor; the parameters form draws itself and its controls
-  reach Verso's parameters part as Verso's own script sends them; as a cell's text is typed, what its kernel offers is
-  listed under it — on Ctrl+Space, and after a dot or a quote — and a line says what the word at the cursor means until
-  the text is left; a run is offered only while none is under way, as in Verso's editor, and a run that waits for
-  another notebook's C# run says so, on its cell or on the page's own line; a change asked for while a cell runs says it
-  waits; Close goes at once, even while a run is under way, and says first that the run is stopped; a refusal is said in
-  the server's own words; and a folder's list, shown even when it holds one notebook, makes a new one. It carries a
-  build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8 is gone.
+  `DeepSharp.Verso.Api` and needing nothing else installed. The notebook it serves runs code, so it listens on this
+  computer alone, answers only a request carrying the token it said when it started — in the address, or in the cookie
+  its first page sets — opens a notebook's connection and makes a change only for its own page, since a browser carries
+  that cookie for a page from any port of this computer, answers only under a name of this computer, and serves its own
+  page and nothing from the folder it runs in. It says where it is once, then nothing; `--port` names the port,
+  `--no-browser` opens none, a port already taken stops it before it says anything, and Ctrl+C ends it within moments
+  whatever a notebook runs: every run is stopped as a close stops it, and a thread a cell left going does not keep the
+  tool alive. It carries a build for .NET 8 and one for .NET 10, and keeps starting on the newer runtime once .NET 8
+  is gone.
+
+  A page holds one connection to a notebook, a WebSocket, as Verso's editor holds one for each tab: the notebook as it
+  stands first, then each change, numbered. On it the page asks for what a person does — typing, sent as it is typed;
+  a run, and a stop naming the run it means, answered at once, past everything asked before it; a click on a block's
+  controls; a cell added, taken away, moved or turned into another kind; what a cell's kernel offers and what a word
+  means; a toolbar button; a cell's properties, and a field changed, its value handed on in the form Verso's browser
+  editor hands it; the layout, the theme and the title; an act on what a layout drew; a save and a close — and each is
+  answered to that page alone, never before the change it made. A dropped connection opens again by itself, and the
+  notebook is drawn onto what the page shows, so the cell being written keeps its text and its cursor; text typed while
+  it is down is kept, marked as not sent yet, and sent once it is back. A notebook the server does not serve is refused
+  in words, and a cell another change took away is said to be gone in plain words. A file a button hands over arrives
+  as a download in the page that pressed it, under its own name, and nothing is written beside the notebook; in a
+  folder, the page makes a new notebook under the bare name of a `.verso` file, never over a file that is there.
+
+  The page draws the notebook as Verso's editor draws it, and carries everything it draws with, so it fetches nothing
+  from anywhere: a block's output; a failure with its name and where it happened, and standard error labelled; JSON as
+  a tree, CSV as a table, progress as a bar; Mermaid diagrams, and formulas in Markdown, from Mermaid 11.17.2 and KaTeX
+  0.18.9 carried inside it, their notices in the package; a widget in a sandboxed frame of its own, shown as the state
+  it saved. A browser that has the page is told it is unchanged rather than sent it again. The dashboard and the
+  presentation are drawn as the engine arranges them, the dashboard's tiles moved, resized and run where they stand.
+  The panels are Verso's: Metadata, where the title is changed; the chosen cell's Properties, where the layout has
+  them, each field described under its label; and View, which switches the layout and the theme, the page drawn in the
+  notebook's theme once it chose one. A cell is chosen as in Verso's editor, and a cell shown rendered shows its text
+  while it is chosen; cells are added, taken away once you say yes, moved and turned into another kind, each only where
+  the notebook's layout allows it, and a cell's bar and the export menu hold only the engine's buttons that can be
+  pressed there. A cell's text takes Verso's keys — Shift+Enter, Ctrl+Enter, Alt+Enter, Ctrl+Alt+Enter, Tab and Escape
+  — lists what its kernel offers as it is typed, on Ctrl+Space and after a dot or a quote, says what the word at the
+  cursor means, and, in a code cell, folds to its first lines. Outputs set hidden say so, and outputs cut short keep to
+  the cell's lines. The parameters form draws itself, and its controls reach Verso's parameters part as Verso's own
+  script sends them. Beside the notebook's name stand its kernel and how many cells it has, a status of what its
+  kernels do, and a dot on Save while anything is unsaved. A run is offered only while none is under way, and its Stop
+  stands where Run All stood; a run that waits for another notebook's C# run says so, and a cell a change runs, or a run
+  a stop left behind, shows running with nothing to stop. The page says things as Verso's editor does: a notice that
+  goes after three seconds — "Saved to titanic.verso", "Kernel restarted" — a sentence that stands while what it says
+  holds, and an error in a banner with Dismiss; when the connection goes while something is unsaved, it says that is
+  lost if the server has stopped. Close goes at once, even while a run is under way, and asks first only when something
+  would be lost; a folder's list, shown even when it holds one notebook, makes a new one.
 
 - **What a model is asked to predict comes in kinds.** `Target(column)` names one column, as before.
   `Distribution(columns, scaleBy)`, `target.distribution`, names the columns a whole is divided among — a flock

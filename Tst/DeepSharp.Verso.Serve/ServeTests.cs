@@ -2,7 +2,10 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Serve;
 using Microsoft.AspNetCore.Builder;
@@ -17,8 +20,10 @@ namespace DeepSharp.Tests.Serve;
 /// <summary>
 /// DeepSharp's server as a browser meets it: it listens on this computer alone, answers only a request that carries
 /// the token it printed — in the address, or in the cookie the first page sets — and only under a name of this
-/// computer, and it serves its own page and nothing from the folder it runs in. It says one line when it starts, on
-/// the address it really bound, and nothing after; a port already taken stops it before it says anything.
+/// computer, and it serves its own page and nothing from the folder it runs in. The page carries what it draws diagrams
+/// and formulas with, and is named by a tag, so a browser that has it already is only told it is unchanged. It says one
+/// line when it starts, on the address it really bound, and nothing after; a port already taken stops it before it says
+/// anything.
 /// </summary>
 public sealed class ServeTests : IDisposable
 {
@@ -77,6 +82,78 @@ public sealed class ServeTests : IDisposable
         var after = await GetAsync(started.Address, "/", request => request.Headers.Add("Cookie", $"{CookieFor(started.Address)}={Token}"));
 
         Assert.Equal(HttpStatusCode.OK, after.StatusCode);
+    }
+
+    [Fact]
+    public async Task ThePage_CarriesWhatItDrawsDiagramsAndFormulasWith_AndNamesNoOtherPlace()
+    {
+        await using var started = await StartAsync();
+
+        var page = await (await GetAsync(started.Address, $"/?token={Token}")).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        var carried = Path.Join(Repository.Root, "Src", "DeepSharp.Verso.Serve", "Page", "carried");
+
+        // Mermaid and KaTeX as their packages hold them, KaTeX's faces drawn from the fonts the page carries.
+        Assert.Equal(await File.ReadAllTextAsync(Path.Join(carried, "mermaid", "mermaid.min.js"), TestContext.Current.CancellationToken), Carried(page, "carried-mermaid"));
+        Assert.Equal(await File.ReadAllTextAsync(Path.Join(carried, "katex", "katex.min.js"), TestContext.Current.CancellationToken), Carried(page, "carried-katex"));
+
+        var faces = Carried(page, "carried-katex-css");
+
+        Assert.Equal(20, Regex.Count(faces, @"url\(data:font/woff2;base64,[A-Za-z0-9+/=]+\) format\(""woff2""\)"));
+        Assert.DoesNotContain("url(fonts/", faces, StringComparison.Ordinal);
+        Assert.Contains(Convert.ToBase64String(await File.ReadAllBytesAsync(Path.Join(carried, "katex", "fonts", "KaTeX_Main-Regular.woff2"), TestContext.Current.CancellationToken)), faces, StringComparison.Ordinal);
+
+        // Nothing names another place to fetch them from.
+        Assert.DoesNotContain("cdn.jsdelivr.net", page, StringComparison.Ordinal);
+
+        // Its icon too is its own, so a browser asks the server for none.
+        Assert.Contains("<link rel=\"icon\" href=\"data:,\">", page, StringComparison.Ordinal);
+    }
+
+    // A text the page carries: the JSON string its block holds, read back. Nothing in the block is markup to HTML, so no
+    // text a library holds can end the block before its own end.
+    private static string Carried(string page, string id)
+    {
+        var block = $"<script type=\"application/json\" id=\"{id}\">";
+        var at = page.IndexOf(block, StringComparison.Ordinal);
+
+        Assert.True(at >= 0, $"the page carries no {id}");
+
+        var start = at + block.Length;
+        var held = page[start..page.IndexOf("</script>", start, StringComparison.Ordinal)];
+
+        Assert.DoesNotContain('<', held);
+
+        return JsonSerializer.Deserialize<string>(held)!;
+    }
+
+    [Fact]
+    public async Task ThePage_IsNamedByATag_AndABrowserThatHasItIsToldItIsUnchanged()
+    {
+        await using var started = await StartAsync();
+        var cookie = $"{CookieFor(started.Address)}={Token}";
+        var first = await GetAsync(started.Address, "/", request => request.Headers.Add("Cookie", cookie));
+        var tag = first.Headers.ETag;
+
+        Assert.NotNull(tag);
+        Assert.True(first.Headers.CacheControl?.NoCache);
+
+        var again = await GetAsync(started.Address, "/", request =>
+        {
+            request.Headers.Add("Cookie", cookie);
+            request.Headers.IfNoneMatch.Add(tag);
+        });
+
+        Assert.Equal(HttpStatusCode.NotModified, again.StatusCode);
+        Assert.Empty(await again.Content.ReadAsByteArrayAsync(TestContext.Current.CancellationToken));
+
+        var changed = await GetAsync(started.Address, "/", request =>
+        {
+            request.Headers.Add("Cookie", cookie);
+            request.Headers.IfNoneMatch.Add(new EntityTagHeaderValue("\"another\""));
+        });
+
+        Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
+        Assert.Equal(tag, changed.Headers.ETag);
     }
 
     [Fact]
@@ -247,6 +324,22 @@ public sealed class ServeTests : IDisposable
         });
 
         Assert.Equal(HttpStatusCode.Created, underLocalhost.StatusCode);
+    }
+
+    [Fact]
+    public async Task ASocket_TheCookieCarriesFromAnotherPageOfThisComputer_IsRefused_AndOneFromTheServersOwnPageOpens()
+    {
+        File.WriteAllText(Path.Join(_folder, "empty.verso"), """{"formatVersion": "1.0", "cells": []}""");
+        await using var started = await StartAsync();
+        var port = started.Address.Port + 1;
+
+        // A socket is asked for as any page is fetched, so the page it comes from is checked on the asking itself.
+        Assert.Equal(HttpStatusCode.Forbidden, await PageSocket.RefusedAsync(started.Address, "empty.verso", Token, $"http://127.0.0.1:{port}"));
+        Assert.Equal(HttpStatusCode.Forbidden, await PageSocket.RefusedAsync(started.Address, "empty.verso", Token, $"http://localhost:{port}"));
+
+        await using var own = await PageSocket.OpenAsync(started.Address, "empty.verso", Token);
+
+        Assert.Empty((await own.SnapshotAsync()).Version.Cells);
     }
 
     [Fact]

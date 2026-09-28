@@ -365,6 +365,49 @@ public class BlockTests
     }
 
     [Fact]
+    public async Task ABlockWhoseRunWasStoppedBeforeItsFirstWrite_WritesNothing()
+    {
+        var folder = Directory.CreateTempSubdirectory("deepsharp-block-").FullName;
+
+        try
+        {
+            await using var notebook = await Notebook.OpenAsync(Path.Join(folder, "stopped.verso"));
+            var block = notebook.AddBlock("""{"step": "read.csv", "path": "titanic.csv"}""");
+            var scaffold = notebook.Scaffold;
+            var written = new List<CellOutput>();
+            using var stop = new CancellationTokenSource();
+
+            // The run the engine hands the block is stopped before the block writes anything.
+            await stop.CancelAsync();
+
+            var context = new global::Verso.Contexts.ExecutionContext(
+                block.Id, 1, scaffold.Variables, stop.Token, scaffold.ThemeContext, scaffold.LayoutCapabilities, scaffold.ExtensionHostContext,
+                scaffold.Metadata, scaffold.NotebookOps,
+                writeOutput: output =>
+                {
+                    written.Add(output);
+
+                    return Task.CompletedTask;
+                },
+                display: output =>
+                {
+                    written.Add(output);
+
+                    return Task.CompletedTask;
+                });
+
+            await notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Kernel.ExecuteAsync(block.Source, context);
+
+            Assert.Empty(written);
+            Assert.False(scaffold.Variables.TryGet<string>(StepKernel.Folder, out _));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task TheFaultsOfABlock_AreItsDiagnosticsToo_CountedFromOne()
     {
         var kernel = new StepKernel();

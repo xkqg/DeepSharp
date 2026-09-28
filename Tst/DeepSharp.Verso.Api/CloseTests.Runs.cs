@@ -104,7 +104,7 @@ public sealed partial class CloseTests
 
         await UntilAsync(() => File.Exists(started), "the cell never began");
 
-        var asked = host.ToolbarAsync();
+        var asked = host.SaveAsync();
 
         await notebooks.DisposeAsync().AsTask().WaitAsync(AtOnce, TestContext.Current.CancellationToken);
 

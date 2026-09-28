@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Collections.Concurrent;
+using System.Globalization;
 using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
 using Verso.Abstractions;
@@ -189,7 +190,7 @@ public sealed class ChangeTests : IDisposable
             var clicked = await clicking.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
 
             Assert.Equal(["run", "insert"], refused);
-            Assert.Equal("went on", clicked.Answer);
+            Assert.Null(clicked.Answer);
             Assert.Single(b.Cells);
         }
         finally
@@ -211,6 +212,119 @@ public sealed class ChangeTests : IDisposable
         await b.CloseAsync().AsTask().WaitAsync(AtOnce, TestContext.Current.CancellationToken);
         await clicking.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
         await LetGoAsync("b");
+    }
+
+    [Theory]
+    [InlineData("every cell")]
+    [InlineData("every cell from the first")]
+    public async Task AClickRunningEveryCell_IsARunOfItsOwn_AndItsStopRunsNoCellAfterTheOneUnderWay(string asked)
+    {
+        var refused = new ConcurrentQueue<string>();
+        var b = await OpenWithAsync(
+            new ClickingPart(async context =>
+            {
+                var notebook = context.Notebook!;
+
+                try
+                {
+                    await (asked == "every cell" ? notebook.ExecuteAllAsync() : notebook.ExecuteFromAsync(context.NotebookModel!.Cells[0].Id));
+                }
+                catch (OperationCanceledException)
+                {
+                    refused.Enqueue("run");
+                }
+
+                // Once its run was stopped, nothing else it asks is done.
+                try
+                {
+                    await notebook.ExecuteCodeAsync("var after = 1;", "csharp");
+                }
+                catch (OperationCanceledException)
+                {
+                    refused.Enqueue("code");
+                }
+
+                return "went on";
+            }),
+            CSharp(Held("b")),
+            CSharp($$"""System.IO.File.WriteAllText(@"{{At("second-began")}}", "on");"""));
+
+        try
+        {
+            var clicking = b.GestureAsync(Click(b));
+
+            await UntilAsync(() => File.Exists(At("b-began")), "the click's first cell never began");
+
+            // A run of its own, told with the cell under way, and stopped as any run is.
+            var run = b.Running!.Value;
+
+            Assert.Equal(b.Cells[0].Id, run.Cell);
+            Assert.True(b.Stop(run.Number));
+
+            var clicked = await clicking.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+            Assert.Equal(["run", "code"], refused);
+            Assert.Null(clicked.Answer);
+            Assert.Null(b.Running);
+
+            // Not even once the cell left behind ends, given the moment the run would take to begin the next.
+            await LetGoAsync("b");
+            await UntilAsync(() => File.Exists(At("b-ended")), "the cell left behind never ended");
+            await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
+            Assert.False(File.Exists(At("second-began")));
+        }
+        finally
+        {
+            await LetGoAsync("b");
+            await b.CloseAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AClickRunningCode_IsARunOfNoCell_AndHandsBackWhatTheCodeShows()
+    {
+        var shown = new ConcurrentQueue<string>();
+        var b = await OpenWithAsync(
+            new ClickingPart(async context =>
+            {
+                var notebook = context.Notebook!;
+
+                foreach (var output in await notebook.ExecuteCodeCaptureOutputsAsync("6 * 7", "csharp"))
+                {
+                    shown.Enqueue(output.Content);
+                }
+
+                await notebook.ExecuteCodeAsync(Held("code"), "csharp");
+
+                return "ran";
+            }),
+            CSharp("1 + 1"));
+
+        try
+        {
+            var clicking = b.GestureAsync(Click(b));
+
+            await UntilAsync(() => File.Exists(At("code-began")), "the click's code never began");
+
+            // What the first code showed came back to the part; the second is a run of no cell, stopped as any run is.
+            Assert.Contains("42", string.Concat(shown), StringComparison.Ordinal);
+
+            var run = b.Running!.Value;
+
+            Assert.Null(run.Cell);
+            Assert.False(run.Waits);
+            Assert.True(b.Stop(run.Number));
+
+            var clicked = await clicking.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+            Assert.Null(clicked.Answer);
+            Assert.Null(b.Running);
+        }
+        finally
+        {
+            await LetGoAsync("code");
+            await b.CloseAsync();
+        }
     }
 
     [Fact]
@@ -271,4 +385,132 @@ public sealed class ChangeTests : IDisposable
         Assert.NotEmpty(told);
         Assert.All(told, run => Assert.Null(run));
     }
+
+    [Fact]
+    public async Task AViewIsToldTheBlockAClickRuns_AsNoRun()
+    {
+        // A source large enough that its block runs far longer than what the engine says is gathered for.
+        await File.WriteAllLinesAsync(
+            At("large.csv"),
+            ["survived,age", .. Enumerable.Range(0, 300_000).Select(row => $"{row % 2},{(row % 7 == 0 ? "" : (row % 80).ToString(CultureInfo.InvariantCulture))}")],
+            TestContext.Current.CancellationToken);
+
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(
+            notebooks,
+            "large.verso",
+            Block("""{"step": "read.csv", "path": "large.csv"}"""),
+            Block("""{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "age", "kind": "number", "optional": true}]}"""),
+            Block("""{"step": "split.stratified", "column": "survived", "train": 0.7, "validation": 0.15, "test": 0.15, "seed": 20260923}"""));
+        var block = host.Cells[2].Id;
+        var told = new ConcurrentQueue<NotebookChange>();
+        var toldWhileItRan = new ConcurrentQueue<NotebookChange>();
+        var asTheEngineBeganIt = new ConcurrentQueue<Told>();
+        using var view = host.Subscribe();
+
+        host.Scaffold.OnCellExecuting += cell =>
+        {
+            if (cell == block)
+            {
+                asTheEngineBeganIt.Enqueue(new Told(host.Executing, host.Running));
+            }
+        };
+
+        // What the view was told by the time the engine says the block ended.
+        host.Scaffold.OnCellExecuted += cell =>
+        {
+            if (cell == block)
+            {
+                foreach (var change in told)
+                {
+                    toldWhileItRan.Enqueue(change);
+                }
+            }
+        };
+
+        var reading = Task.Run(
+            async () =>
+            {
+                await foreach (var change in view.ReadAllAsync(TestContext.Current.CancellationToken))
+                {
+                    told.Enqueue(change);
+                }
+            },
+            TestContext.Current.CancellationToken);
+
+        // A block's Show runs the block as the click's own.
+        await host.GestureAsync(new HostedGesture(block, StepRenderer.Id, "deepsharp.show", "")).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+        view.Dispose();
+        await reading;
+
+        // From the engine's word it began, the block is what runs with no run; while it ran, every view was told so, with
+        // nothing to stop; once it ended, nothing is told running.
+        var began = Assert.Single(asTheEngineBeganIt);
+
+        Assert.Null(began.Running);
+        var executing = Assert.Single(began.Executing);
+
+        Assert.Equal(block, executing.Cell);
+        Assert.False(executing.LeftBehind);
+        Assert.Contains(toldWhileItRan, change => change.Executing.Any(each => each.Cell == block && !each.LeftBehind) && change.Running is null);
+        Assert.Empty(host.Executing);
+        Assert.Empty(host.Current.Executing);
+        Assert.Empty(told.Last().Executing);
+    }
+
+    [Fact]
+    public async Task EveryCellTheEngineRunsWithNoRun_IsToldUntilItEnds_ThoughAnotherEndsBeforeIt()
+    {
+        var b = await OpenWithAsync(
+            new ClickingPart(async context =>
+            {
+                await context.Notebook!.ExecuteCellAsync(context.NotebookModel!.Cells[0].Id);
+
+                return null;
+            }),
+            Block("""{"step": "read.csv", "path": "titanic.csv"}"""),
+            CSharp("System.Threading.Thread.Sleep(500);"));
+        var block = b.Cells[0].Id;
+        var slow = b.Cells[1].Id;
+        Task? running = null;
+        var withBothBegun = new ConcurrentQueue<IReadOnlyList<HostedExecution>>();
+        var atTheBlocksEnd = new ConcurrentQueue<IReadOnlyList<HostedExecution>>();
+
+        // As the engine begins the click's block, it begins another cell that no run owns, which runs on after the block.
+        b.Scaffold.OnCellExecuting += cell =>
+        {
+            if (cell == block)
+            {
+                running = b.Scaffold.ExecuteCellAsync(slow);
+                withBothBegun.Enqueue(b.Executing);
+            }
+        };
+        b.Scaffold.OnCellExecuted += cell =>
+        {
+            if (cell == block)
+            {
+                atTheBlocksEnd.Enqueue(b.Executing);
+            }
+        };
+
+        try
+        {
+            await b.GestureAsync(Click(b)).WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+            // Both are told while both run, and the block's end takes back only its own: the cell begun after it still runs.
+            Assert.Equal(new HashSet<Guid?> { block, slow }, Assert.Single(withBothBegun).Select(each => each.Cell).ToHashSet());
+            Assert.Equal([slow], Assert.Single(atTheBlocksEnd).Select(each => each.Cell));
+
+            await running!.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+            Assert.Empty(b.Executing);
+        }
+        finally
+        {
+            await b.CloseAsync();
+        }
+    }
+
+    // What the host told of what runs at one moment: what the engine runs that no run owns, and the run under way.
+    private readonly record struct Told(IReadOnlyList<HostedExecution> Executing, HostedRun? Running);
 }

@@ -4,19 +4,30 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DeepSharp</title>
+<!-- The page's icon is its own, as everything it draws is: a browser asks the server for none. -->
+<link rel="icon" href="data:,">
 <style>
   :root {
     --ground: #fbfbfa; --paper: #ffffff; --ink: #1d1d1b; --quiet: #6b6b66; --line: #deddd8;
-    --accent: #2458a6; --wrong: #b3261e; --run: #2e7d32; --pick: #eef3fb;
+    --accent: #2458a6; --wrong: #b3261e; --run: #2e7d32; --pick: #eef3fb; --warn: #9a6700;
+    --json-string: #a31515; --json-number: #098658; --json-boolean: #0000ff;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    /* The theme a widget's document may read, named as Verso's pages name it, from this page's own colours. */
+    --verso-cell-output-background: var(--paper); --verso-cell-output-foreground: var(--ink); --verso-border-default: var(--line);
+    --verso-bg-default: var(--ground); --verso-fg-default: var(--ink); --verso-fg-muted: var(--quiet); --verso-accent-primary: var(--accent);
+    --verso-ui-font-family: system-ui, -apple-system, "Segoe UI", sans-serif; --verso-ui-font-size: 14px; --verso-font-family-mono: var(--mono);
     color-scheme: light dark;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --ground: #151514; --paper: #1d1d1b; --ink: #ecebe6; --quiet: #a3a29c; --line: #34332f; --accent: #8ab4f8; --wrong: #f2b8b5; --run: #81c995; --pick: #1f2a3a; }
+    :root { --ground: #151514; --paper: #1d1d1b; --ink: #ecebe6; --quiet: #a3a29c; --line: #34332f; --accent: #8ab4f8; --wrong: #f2b8b5; --run: #81c995; --pick: #1f2a3a; --warn: #e3b341; --json-string: #ce9178; --json-number: #b5cea8; --json-boolean: #569cd6; }
   }
   * { box-sizing: border-box; }
   body { margin: 0; font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--ground); color: var(--ink); }
   header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; padding: .5rem 1rem; background: var(--paper); border-bottom: 1px solid var(--line); }
-  header h1 { font-size: 1rem; margin: 0 1rem 0 0; }
+  header h1 { font-size: 1rem; margin: 0; }
+  #doc-info { display: flex; flex-direction: column; margin-right: 1rem; }
+  #doc-info .meta { font-size: .75rem; color: var(--quiet); }
+  #doc-info .meta:empty { display: none; }
   header .spacer { flex: 1; }
   button { font: inherit; color: inherit; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; padding: .2rem .6rem; cursor: pointer; }
   button:hover:not(:disabled) { border-color: var(--accent); }
@@ -25,16 +36,44 @@
   details { position: relative; }
   details > summary { list-style: none; cursor: pointer; border: 1px solid var(--line); border-radius: 4px; padding: .2rem .6rem; }
   details > div { position: absolute; right: 0; top: 2rem; display: flex; flex-direction: column; gap: .25rem; padding: .5rem; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; min-width: 14rem; }
-  #status { color: var(--quiet); }
-  #status.wrong { color: var(--wrong); }
+  #status, #notice { color: var(--quiet); }
+  #error { flex-basis: 100%; display: flex; gap: .75rem; align-items: center; padding: .35rem .75rem; border: 1px solid var(--wrong); border-radius: 4px; background: color-mix(in srgb, var(--wrong) 10%, var(--paper)); color: var(--wrong); }
+  #error[hidden] { display: none; }
+  #error .text { flex: 1; }
+  .kernel { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 7.5rem; padding: 3px 10px; border-radius: 999px; font-size: 12px; white-space: nowrap; }
+  .kernel[hidden] { display: none; }
+  .kernel .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .kernel.idle { color: var(--run); background: color-mix(in srgb, var(--run) 10%, transparent); }
+  .kernel.running { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+  .kernel.running .dot { animation: pulse 1s ease-in-out infinite; }
+  .kernel.restarting { color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+  .kernel.error { color: var(--wrong); background: color-mix(in srgb, var(--wrong) 10%, transparent); }
+  @keyframes pulse { 50% { opacity: .3; } }
+  #save .unsaved { display: inline-block; width: 6px; height: 6px; margin-left: .35rem; border-radius: 50%; background: var(--accent); vertical-align: middle; }
+  #save .unsaved[hidden] { display: none; }
   .layout { display: flex; align-items: flex-start; }
   .column { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   main { padding: 1rem; display: flex; flex-direction: column; gap: .75rem; }
   aside#panel { width: 22rem; max-width: 40vw; position: sticky; top: 3rem; max-height: calc(100vh - 3rem); overflow: auto; padding: 1rem; border-left: 1px solid var(--line); }
   aside#panel:empty { display: none; }
   aside#panel h3 { font-size: .95rem; margin: .75rem 0 .25rem; }
+  aside#panel .panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; }
+  aside#panel .panel-title { font-size: .8rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--quiet); }
+  aside#panel .panel-collapse { border: 0; background: none; font-size: 1.1rem; line-height: 1; }
+  aside#panel .empty { color: var(--quiet); }
+  aside#panel .view-title { margin: .75rem 0 .25rem; font-size: .8rem; font-weight: 600; color: var(--quiet); }
+  aside#panel .view-row { display: flex; align-items: center; gap: .5rem; padding: .3rem .5rem; border-radius: 4px; cursor: pointer; }
+  aside#panel .view-row:hover, aside#panel .view-row:focus-visible { background: var(--pick); }
+  aside#panel .view-row[aria-pressed=true] { font-weight: 600; }
+  aside#panel .view-row .chip { font-size: .75rem; padding: 0 .4rem; border: 1px solid var(--line); border-radius: 999px; color: var(--quiet); font-weight: 400; }
+  aside#panel .view-row .check { margin-left: auto; color: var(--accent); }
+  #panels { display: inline-flex; gap: .25rem; }
+  #panels button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); }
   aside#panel label { display: block; margin: .5rem 0 .15rem; color: var(--quiet); }
+  aside#panel .field-description { margin: 0 0 .25rem; font-size: .85em; color: var(--quiet); }
   aside#panel input[type=text], aside#panel input[type=number], aside#panel select { width: 100%; }
+  aside#panel .meta-value { display: block; }
+  aside#panel hr { border: 0; border-top: 1px solid var(--line); margin: .75rem 0; }
   section.cell { background: var(--paper); border: 1px solid var(--line); border-radius: 6px; }
   section.cell.selected { border-color: var(--accent); }
   section.cell.running { border-color: var(--run); }
@@ -42,6 +81,14 @@
   .cell-bar .kind { color: var(--quiet); font-size: .85em; }
   .cell-bar select.kind { font: inherit; font-size: .85em; color: inherit; background: var(--paper); border: 1px solid var(--line); border-radius: 4px; }
   .cell-bar button.delete:hover:not(:disabled) { border-color: var(--wrong); color: var(--wrong); }
+  .cell-bar button.fold { border: 0; background: none; padding: .2rem .3rem; }
+  .cell-bar button.fold .chevron { display: inline-block; font-size: 9px; transition: transform .15s ease; }
+  .cell-bar button.fold.folded .chevron { transform: rotate(-90deg); }
+  .source-preview { padding: .5rem .75rem; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--paper) 94%, var(--quiet)); cursor: pointer; }
+  .source-preview[hidden] { display: none; }
+  .source-preview pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 13px/1.45 var(--mono); }
+  section.cell.unsent { border-color: var(--warn); border-style: dashed; }
+  section.cell.unsent .cell-bar .status::after { content: " not sent yet"; color: var(--warn); }
   .insert-row, .add-row { display: flex; flex-wrap: wrap; gap: .3rem; align-items: center; }
   .insert-row { display: none; padding: .3rem .5rem; border-top: 1px dashed var(--line); }
   section.cell.selected .insert-row { display: flex; }
@@ -63,34 +110,112 @@
   textarea.source[hidden] { display: none; }
   .outputs { padding: .5rem; overflow: auto; }
   .outputs:empty { display: none; }
-  .outputs.preview { max-height: calc(var(--lines, 5) * 1.45em + 1rem); }
-  .outputs pre { margin: 0; white-space: pre-wrap; font: 13px/1.4 ui-monospace, "Cascadia Mono", Consolas, monospace; }
-  .outputs pre.wrong { color: var(--wrong); }
+  /* Cut short as Verso's editor cuts what a cell shows: each text and each failure to the lines the cell keeps, whatever
+     is drawn as a page to 160 pixels; standard error, progress and widgets are never cut. */
+  .outputs.preview > pre.text, .outputs.preview .error-content, .outputs.preview .error-stack { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines, 5); overflow: hidden; }
+  .outputs.preview > :is(.html, .json, .csv-frame, .mermaid-container) { max-height: 160px; overflow: hidden; }
+  .output-summary { margin: .5rem; padding: 8px 12px; border: 1px dashed var(--line); border-radius: 8px; color: var(--quiet); font-size: 12px; }
+  .output-summary[hidden] { display: none; }
+  .outputs pre { margin: 0; white-space: pre-wrap; font: 13px/1.4 var(--mono); }
+  .outputs img { max-width: 100%; }
+  .outputs .error { background: color-mix(in srgb, var(--wrong) 12%, var(--paper)); color: var(--wrong); padding: .5rem; }
+  .outputs .error-name { font-weight: 700; margin-bottom: 4px; }
+  .outputs .error-content { word-break: break-word; }
+  .outputs .error-stack { margin-top: 4px; word-break: break-word; font-size: 11px; opacity: .75; }
+  .outputs .stderr { padding: .5rem; border-left: 3px solid var(--warn); }
+  .outputs .stderr-label { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; opacity: .75; margin-bottom: 2px; }
+  .outputs .progress { padding: .5rem; }
+  .outputs .progress-label { display: flex; justify-content: space-between; gap: 12px; font-size: 12px; margin-bottom: 4px; }
+  .outputs .progress-status { opacity: .7; }
+  .outputs .progress-track { height: 6px; border-radius: 999px; overflow: hidden; background: color-mix(in srgb, var(--quiet) 25%, transparent); }
+  .outputs .progress-fill { height: 100%; background: var(--run); transition: width 120ms linear; }
+  .outputs .progress-fill.unknown { width: 35%; animation: slide 1.1s ease-in-out infinite; }
+  @keyframes slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+  @media (prefers-reduced-motion: reduce) {
+    .outputs .progress-fill { transition: none; }
+    .outputs .progress-fill.unknown { animation: none; width: 100%; opacity: .4; }
+  }
+  .outputs .json { font: 13px/1.5 var(--mono); }
+  .outputs .json details { margin-left: 16px; }
+  .outputs .json summary { cursor: pointer; list-style: none; user-select: none; }
+  .outputs .json summary::-webkit-details-marker { display: none; }
+  .outputs .json summary::before { content: "\25B6"; font-size: 9px; margin-right: 4px; color: var(--quiet); display: inline-block; transition: transform .1s; }
+  .outputs .json details[open] > summary::before { transform: rotate(90deg); }
+  .outputs .json .jk { color: var(--accent); }
+  .outputs .json .js { color: var(--json-string); }
+  .outputs .json .jn { color: var(--json-number); }
+  .outputs .json .jb { color: var(--json-boolean); }
+  .outputs .json .jnull { color: var(--quiet); font-style: italic; }
+  .outputs .json .jcount { opacity: .7; }
+  .outputs .csv-frame { max-height: 400px; overflow: auto; border: 1px solid var(--line); border-radius: 4px; }
+  .outputs table.csv { border-collapse: collapse; width: 100%; font: 13px var(--mono); }
+  .outputs table.csv th { padding: 6px 12px; text-align: left; white-space: nowrap; background: var(--ground); border: 1px solid var(--line); font-weight: 600; }
+  .outputs table.csv td { padding: 4px 12px; border: 1px solid var(--line); white-space: nowrap; }
+  .outputs table.csv tr:hover td { background: var(--pick); }
+  .outputs iframe.widget { width: 100%; border: 0; display: block; opacity: .68; filter: saturate(.5); }
+  .outputs .widget-inert { margin: 2px 0 0; font-size: .8125rem; color: var(--quiet); }
+  /* What a layout draws of its own — Verso's dashboard, its presentation — styled as Verso's editors style it: each cell
+     placed in the slot that names it shows only what it shows. Colours are the notebook's theme's where it chose one, and
+     the page's own otherwise. */
+  #arrangement[hidden], main[hidden] { display: none; }
+  #arrangement .verso-dashboard-root { display: flex; flex-direction: column; }
+  #arrangement .verso-dashboard-grid { display: grid; grid-template-columns: repeat(12, 1fr); grid-auto-rows: 50px; gap: var(--verso-cell-gap, 8px); padding: var(--verso-content-margin-vertical, 16px) var(--verso-content-margin-horizontal, 24px); align-content: start; }
+  #arrangement .verso-dashboard-cell { position: relative; display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--verso-cell-border, var(--line)); border-radius: var(--verso-cell-border-radius, 6px); background: var(--verso-cell-background, var(--paper)); box-shadow: var(--verso-elevation-1, 0 1px 3px rgba(0, 0, 0, .08)); transition: box-shadow .15s, border-color .15s; }
+  #arrangement .verso-dashboard-cell:hover { border-color: var(--verso-cell-active-border, var(--accent)); box-shadow: var(--verso-elevation-2, 0 2px 8px rgba(0, 0, 0, .12)); }
+  #arrangement .verso-dashboard-cell-toolbar { display: flex; flex-shrink: 0; align-items: center; gap: 4px; padding: 4px 8px; background: var(--verso-toolbar-background, var(--ground)); border-bottom: 1px solid var(--verso-cell-border, var(--line)); opacity: 0; transition: opacity .15s; }
+  #arrangement .verso-dashboard-cell:hover .verso-dashboard-cell-toolbar, #arrangement .verso-dashboard-cell:focus-within .verso-dashboard-cell-toolbar { opacity: 1; }
+  #arrangement .verso-dashboard-drag-handle { cursor: grab; }
+  #arrangement .verso-dashboard-drag-handle:active { cursor: grabbing; }
+  #arrangement .verso-dashboard-drag-icon { margin-left: auto; color: var(--quiet); font-size: 14px; user-select: none; }
+  #arrangement .verso-dashboard-resize-handle { position: absolute; right: 0; bottom: 0; z-index: 2; width: 20px; height: 20px; cursor: se-resize; opacity: 0; transition: opacity .15s; }
+  #arrangement .verso-dashboard-resize-handle::after { content: ""; position: absolute; right: 3px; bottom: 3px; width: 10px; height: 10px; border-right: 2px solid var(--quiet); border-bottom: 2px solid var(--quiet); }
+  #arrangement .verso-dashboard-cell:hover .verso-dashboard-resize-handle { opacity: 1; }
+  #arrangement .verso-dashboard-cell.verso-resizing { z-index: 10; opacity: .7; }
+  #arrangement .verso-dashboard-cell.verso-dragging { opacity: .3; }
+  #arrangement .verso-dashboard-cell > section.cell { flex: 1; min-height: 0; overflow: auto; }
+  .tile-ghost { position: fixed; z-index: 1000; pointer-events: none; border: 2px dashed var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  .tile-size { position: fixed; z-index: 1001; pointer-events: none; padding: 2px 8px; border-radius: 3px; background: var(--accent); color: var(--paper); font: 11px var(--mono); }
+  .tile-place { pointer-events: none; border: 2px dashed var(--accent); border-radius: 6px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  #arrangement .verso-presentation-view { max-width: 960px; margin: 0 auto; padding: 24px 12px; }
+  #arrangement .verso-presentation-cell { margin-bottom: 16px; }
+  #arrangement .verso-presentation-input { margin: 0 0 8px; padding: 8px 12px; border: 1px solid var(--verso-cell-border, var(--line)); border-radius: 4px; background: var(--verso-editor-background, var(--ground)); }
+  #arrangement .verso-presentation-input pre { margin: 0; white-space: pre-wrap; font: 13px/1.4 var(--mono); }
+  #arrangement [data-cell-slot] section.cell { border: 0; border-radius: 0; background: transparent; }
+  #arrangement [data-cell-slot] section.cell > :is(.cell-bar, textarea.source, .source-preview, .hover-line, .insert-row, ul.completions) { display: none; }
   #notebooks { list-style: none; padding: 0; margin: 2rem auto; max-width: 40rem; }
   #notebooks li { padding: .4rem 0; border-bottom: 1px solid var(--line); }
   #notebooks a { color: var(--accent); text-decoration: none; }
   #new { display: flex; gap: .5rem; max-width: 40rem; margin: 0 auto; }
   #new input { flex: 1; font: inherit; }
 </style>
+<style id="notebook-theme"></style>
 </head>
 <body>
 <header>
-  <h1 id="notebook-name">DeepSharp</h1>
+  <div id="doc-info"><h1 id="notebook-name">DeepSharp</h1><span class="meta"></span></div>
+  <span id="kernel" class="kernel idle" hidden><span class="dot"></span><span class="text">Kernel idle</span></span>
   <span id="toolbar"></span>
   <details id="export" hidden><summary>Export</summary><div></div></details>
   <button id="stop" hidden title="Stop the run under way: its kernel starts afresh">Stop</button>
   <span class="spacer"></span>
+  <span id="notice" role="status" aria-live="polite"></span>
   <span id="status" role="status" aria-live="polite"></span>
-  <button id="save" hidden title="Save the notebook to its file (Ctrl+S)">Save</button>
+  <button id="save" hidden title="Save the notebook to its file (Ctrl+S)">Save<span class="unsaved" hidden aria-hidden="true"></span></button>
   <button id="close" hidden title="Close the notebook without saving it">Close</button>
+  <span id="panels"></span>
+  <div id="error" role="alert" hidden><span class="text"></span><button type="button" class="dismiss">Dismiss</button></div>
 </header>
 <div class="layout">
   <div class="column">
+    <div id="arrangement" hidden></div>
     <main id="notebook"></main>
     <div id="adding" class="add-row" hidden></div>
   </div>
-  <aside id="panel" aria-label="Properties"></aside>
+  <aside id="panel" aria-label="Panel"></aside>
 </div>
+<!-- What the page draws diagrams and formulas with: Mermaid 11.17.2 and KaTeX 0.18.9, both under the MIT licence
+     (THIRD-PARTY-NOTICES.txt beside the tool), carried here by the server and run only once one first shows. -->
+<!-- carried -->
 <script>
 'use strict';
 (() => {
@@ -103,10 +228,18 @@
   }
 
   const main = document.getElementById('notebook');
+  const arrangement = document.getElementById('arrangement');
   const panel = document.getElementById('panel');
+  const panelsBar = document.getElementById('panels');
+  const themeStyle = document.getElementById('notebook-theme');
+  const docInfo = document.getElementById('doc-info');
   const statusLine = document.getElementById('status');
+  const noticeLine = document.getElementById('notice');
+  const errorBanner = document.getElementById('error');
   const stopButton = document.getElementById('stop');
   const saveButton = document.getElementById('save');
+  const unsavedDot = saveButton.querySelector('.unsaved');
+  const kernelStatus = document.getElementById('kernel');
   const closeButton = document.getElementById('close');
   const exportMenu = document.getElementById('export');
   const toolbar = document.getElementById('toolbar');
@@ -122,7 +255,11 @@
   // What the notebook's layout lets a person do to its cells, as the server's versions say it.
   const Allows = { Insert: 1, Delete: 2, Reorder: 4, Edit: 8, Execute: 32 };
 
-  const state = { name: null, cells: new Map(), running: null, selected: null, buttons: [], kinds: [], allows: 255, focus: null, drawn: new Set() };
+  const state = {
+    name: null, cells: new Map(), running: null, executing: [], kernels: null, unsaved: false, selected: null, buttons: [], kinds: [], allows: 255,
+    panel: true, focus: null, drawn: new Set(), layouts: [], themes: [], layoutId: null, themeId: null, openPanel: null,
+    order: [], arrangement: null, metadata: null,
+  };
 
   const allowed = flag => (state.allows & flag) === flag;
 
@@ -130,14 +267,57 @@
   const kindKey = (type, language) => `${type}|${language ?? ''}`;
   const kindOf = cell => state.kinds.find(kind => kindKey(kind.type, kind.language) === kindKey(cell.type, cell.language));
 
-  function say(message, wrong = false) {
-    statusLine.textContent = message;
-    statusLine.classList.toggle('wrong', wrong);
+  // A cell of a kind shown rendered once it has run — Markdown, HTML, Mermaid — as the engine says of its kinds.
+  const renderedKind = cell => kindOf(cell)?.rendered === true;
+
+  // The cell a person chose, kept whatever layout the notebook is shown in, and the cell drawn chosen: none in a layout
+  // that lets nothing be edited, as Verso's editor hands its cells no choice there, so a cell shown rendered stays shown.
+  const chosen = () => allowed(Allows.Edit) ? state.selected : null;
+
+  // As Verso's editor shows such a cell: rendered, in place of its text, once it has text and output and is not chosen;
+  // while chosen, its text stands in for its rendering.
+  const shownRendered = cell => renderedKind(cell) && cell.outputs.length > 0 && cell.source.trim() !== '';
+  const previewOf = cell => shownRendered(cell) && chosen() !== cell.id;
+
+  // What the page says, kept apart as Verso's editor keeps it: a notice, gone after three seconds, a newer one starting the
+  // three again; a sentence that stands while what it says holds, one for each thing the page tells of; and an error, in a
+  // banner of its own, kept until it is dismissed or another takes its place.
+  let noticeTimer = 0;
+  const held = new Map();
+
+  function notice(message) {
+    clearTimeout(noticeTimer);
+    noticeLine.textContent = message;
+    noticeTimer = setTimeout(() => {
+      noticeLine.textContent = '';
+    }, 3000);
   }
+
+  function hold(about, sentence) {
+    if (sentence) {
+      held.set(about, sentence);
+    } else {
+      held.delete(about);
+    }
+
+    statusLine.textContent = [...held.values()].join(' ');
+  }
+
+  function fail(message) {
+    errorBanner.querySelector('.text').textContent = message;
+    errorBanner.hidden = false;
+  }
+
+  function dismiss() {
+    errorBanner.hidden = true;
+    errorBanner.querySelector('.text').textContent = '';
+  }
+
+  errorBanner.querySelector('.dismiss').addEventListener('click', dismiss);
 
   const notebookPath = (tail = '') => `/api/notebooks/${encodeURIComponent(state.name)}${tail}`;
 
-  // Everything asked of the server: a refusal comes back as what it says.
+  // What is asked of the server over HTTP — the notebooks of the folder, a new one: a refusal comes back as what it says.
   async function api(path, options = {}) {
     const init = { method: options.method ?? 'GET', headers: {} };
 
@@ -165,51 +345,239 @@
 
   const json = async (path, options) => (await api(path, options)).json();
 
-  // One send at a time, in the order they came: each waits for the one before it.
-  let chain = Promise.resolve();
+  // ---- The notebook's socket: the page's one connection to its notebook -------------------------------------------
 
-  // Once the notebook is closed, nothing waiting is sent: each would open the closed notebook again.
+  // The socket while there is one, and every ask sent on it and not answered yet, by its id.
+  let socket = null;
+  let asks = 0;
+  const pending = new Map();
+
+  // How many times in a row the socket was opened again; one that draws the notebook starts the count afresh.
+  let retries = 0;
+
+  // Once the notebook is closed from this page, nothing is sent and its socket is not opened again: each would open the
+  // closed notebook again. A page that goes away opens none either, until it is shown again.
   let closed = false;
+  let leaving = false;
+
+  // Until the notebook's first frame is drawn.
+  let opening = true;
+
+  // Opens the notebook's socket, as Verso's editor holds one connection per tab: its first frame draws the notebook
+  // whole, each change after it is drawn as it comes, and each answer settles the ask it names. A socket that ends is
+  // opened again, and the notebook drawn whole from its first frame — what changed meanwhile was never told, and a
+  // notebook opened afresh counts its versions from the start — unless this page closed the notebook or went away, or
+  // the server refused the notebook, saying why.
+  function connect() {
+    const opening = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}${notebookPath('/socket')}`);
+
+    socket = opening;
+    opening.addEventListener('message', event => told(JSON.parse(event.data)));
+    opening.addEventListener('close', event => {
+      if (socket !== opening) {
+        return;
+      }
+
+      socket = null;
+
+      for (const each of pending.values()) {
+        each.reject(new Error('The connection to the server went before this was answered; it may or may not have been done.'));
+      }
+
+      pending.clear();
+
+      if (closed || leaving || event.code >= 4000) {
+        return;
+      }
+
+      // As G18 has it: what the notebook holds unsaved is lost if the server has stopped, which the page cannot tell from a
+      // connection that went.
+      hold('connection', event.code === 1000 ? 'The notebook was closed; it is opened again…' : `Reconnecting…${state.unsaved ? ` ${LostAtStop}` : ''}`);
+      setTimeout(connect, Math.min(5000, 250 * 2 ** retries++));
+    });
+  }
+
+  function told(frame) {
+    switch (frame.type) {
+      case 'snapshot':
+        retries = 0;
+        state.kinds = frame.kinds;
+        state.layouts = frame.layouts ?? [];
+        state.themes = frame.themes ?? [];
+        hold('connection', null);
+        drawAll(frame.version);
+
+        // As Verso's editor chooses as a notebook opens: the first cell not shown rendered — on this page's first frame of
+        // the notebook alone, since a socket opened again keeps what the person chose.
+        if (opening) {
+          opening = false;
+          chooseFirst();
+        }
+
+        flushTyping();
+        break;
+      case 'change':
+        apply(frame.change);
+        break;
+      case 'answer':
+        settle(frame.id)?.resolve(frame.result);
+        break;
+      case 'refused':
+        // A refusal that names no ask is of the notebook itself — not served, or not to be opened — or of something the
+        // page sent that the server could not read.
+        if (frame.id === 0) {
+          fail(frame.message);
+        } else {
+          settle(frame.id)?.reject(new Error(frame.message));
+        }
+
+        break;
+    }
+  }
+
+  function settle(id) {
+    const each = pending.get(id);
+
+    pending.delete(id);
+
+    return each;
+  }
+
+  // Asks the notebook something, answered to this page alone: sent at once, the socket keeping the order asks come in,
+  // and the notebook taking each in its turn.
+  function ask(name, fields = {}) {
+    if (socket?.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error('The page is not connected to the server just now; try again in a moment.'));
+    }
+
+    const id = ++asks;
+
+    return new Promise((resolve, reject) => {
+      pending.set(id, { resolve, reject });
+      socket.send(JSON.stringify({ id, ask: name, ...fields }));
+    });
+  }
 
   const Waiting = 'Waits for the run under way to end…';
+
+  // What the page says as its socket ends while the notebook holds changes not saved.
+  const LostAtStop = 'What was not saved is lost if the server has stopped.';
 
   // What a button's run says while it waits for another notebook's C# run: it names no cell yet.
   const WaitsForCSharp = "Waits for another notebook's C# run to end…";
 
-  function enqueue(work) {
-    // A change asked for while a cell runs is made once the run ends, and says so meanwhile.
+  // How many changes asked while a run was under way are not answered yet.
+  let waiting = 0;
+
+  // How many changes this page asked for are not answered yet: until each is, what it changes may not be in the file.
+  let unanswered = 0;
+
+  // A change to the notebook, asked at once: one asked while a cell runs is made once the run ends, and says so
+  // meanwhile. What refuses it is said, unless the asker says it otherwise; nothing is asked once the notebook is closed.
+  // Its answer, or nothing.
+  async function request(name, fields, failed = error => fail(error.message)) {
+    if (closed) {
+      return undefined;
+    }
+
     const waits = state.running !== null;
 
+    unanswered++;
+
     if (waits) {
-      say(Waiting);
+      waiting++;
+      hold('waiting', Waiting);
     }
 
-    const next = chain
-      .then(() => closed ? undefined : work())
-      .then(() => {
-        if (waits && statusLine.textContent === Waiting) {
-          say('');
-        }
-      })
-      .catch(error => say(error.message, true));
+    try {
+      return await ask(name, fields);
+    } catch (error) {
+      failed(error);
 
-    chain = next;
+      return undefined;
+    } finally {
+      unanswered--;
 
-    return next;
+      if (waits && --waiting === 0) {
+        hold('waiting', null);
+      }
+    }
   }
 
-  // Typing is sent before anything that comes after it, so a click acts on the text as the person left it.
+  // Typing is sent as it is typed, as Verso's editor sends each change: the whole text, at once, before anything asked
+  // after it, so a click acts on the text as the person left it; it then waits its turn at the notebook, not in the page.
+  // Until every edit of a cell is answered, what the notebook tells of the cell is older than what the person has, and
+  // writes over none of it. Text typed while the page has no socket, or sent on one that went before it was answered, is
+  // kept, and sent once the page has a socket again: an edit carries the whole text, so one that arrives twice changes
+  // nothing the second time. By cell: the text not sent yet; and how many edits are on their way, with the text the last
+  // one carried.
   const typed = new Map();
-  let typingTimer = 0;
+  const sending = new Map();
 
   function flushTyping() {
-    clearTimeout(typingTimer);
+    if (socket?.readyState === WebSocket.OPEN) {
+      for (const [id, source] of typed) {
+        typed.delete(id);
+        sendTyped(id, source);
+      }
+    }
 
-    for (const [id, source] of typed) {
-      typed.delete(id);
-      enqueue(() => api(notebookPath(`/cells/${id}/source`), { method: 'POST', body: { source } }));
+    markUnsent();
+  }
+
+  // A cell whose typing is kept, not sent yet, is marked so until it is sent.
+  function markUnsent() {
+    for (const section of cellSections()) {
+      section.classList.toggle('unsent', typed.has(section.dataset.cellId));
     }
   }
+
+  async function sendTyped(id, source) {
+    const on = socket;
+
+    sending.set(id, { count: (sending.get(id)?.count ?? 0) + 1, text: source });
+
+    try {
+      // A refusal is said; an edit the socket took with it when it went is kept, with what was typed since, to be sent
+      // again — of a cell the notebook still holds.
+      await request('edit', { cell: id, source }, error => {
+        if (socket === on) {
+          fail(error.message);
+        } else if (state.cells.has(id)) {
+          typed.set(id, sending.get(id).text);
+          markUnsent();
+        }
+      });
+    } finally {
+      const { count, text } = sending.get(id);
+
+      if (count > 1) {
+        sending.set(id, { count: count - 1, text });
+      } else {
+        // Every edit of the cell answered: it shows what the notebook holds, unless there is more to send.
+        sending.delete(id);
+
+        const section = sectionOf(id);
+
+        if (section) {
+          fill(section, state.cells.get(id));
+        }
+      }
+    }
+  }
+
+  // A page that goes closes its socket as it goes, what was typed having left as it was typed; shown again from the
+  // browser's history, it opens one again.
+  window.addEventListener('pagehide', () => {
+    leaving = true;
+    socket?.close(1000, 'the page left');
+  });
+  window.addEventListener('pageshow', event => {
+    if (event.persisted && state.name && !closed) {
+      leaving = false;
+      connect();
+    }
+  });
 
   // ---- The notebooks of a folder --------------------------------------------------------------------------------
 
@@ -238,7 +606,7 @@
     }
 
     main.replaceChildren(items, ...(served.folder ? [newForm()] : []));
-    say(names.length === 0 ? 'There is no notebook here yet.' : '');
+    hold('empty', names.length === 0 ? 'There is no notebook here yet.' : null);
   }
 
   // A new notebook in the folder served, under the name of a .verso file; the server says why a name will not do.
@@ -259,10 +627,11 @@
 
       const named = name.value.trim();
 
-      enqueue(async () => {
-        await api('/api/notebooks', { method: 'POST', body: { name: named } });
-        location.search = `?notebook=${encodeURIComponent(named)}`;
-      });
+      api('/api/notebooks', { method: 'POST', body: { name: named } })
+        .then(() => {
+          location.search = `?notebook=${encodeURIComponent(named)}`;
+        })
+        .catch(error => fail(error.message));
     });
 
     return form;
@@ -270,52 +639,63 @@
 
   // ---- A notebook ------------------------------------------------------------------------------------------------
 
-  async function open(name) {
+  // A notebook, over its socket: the kinds a cell can be come with its first frame, before the first cell is drawn, since
+  // they say which cells a person writes.
+  function open(name) {
     state.name = name;
     document.title = `${name} — DeepSharp`;
     document.getElementById('notebook-name').textContent = name;
     saveButton.hidden = false;
     closeButton.hidden = false;
-
-    // The kinds a cell can be, before the first cell is drawn: they say which cells a person writes.
-    try {
-      state.kinds = await json(notebookPath('/kinds'));
-    } catch (error) {
-      say(error.message, true);
-
-      return;
-    }
-
-    const stream = new EventSource(notebookPath('/updates'));
-
-    state.stream = stream;
-
-    stream.addEventListener('snapshot', event => drawAll(JSON.parse(event.data)));
-    stream.addEventListener('change', event => apply(JSON.parse(event.data)));
-    stream.onopen = () => say('');
-    stream.onerror = () => say(stream.readyState === EventSource.CLOSED ? 'The server is gone.' : 'Reconnecting…', true);
-
-    loadToolbar();
+    connect();
   }
 
+  // The notebook as its socket's first frame tells it, drawn onto what the page shows: a cell still there is drawn again
+  // where it stands, so the text the person is in keeps its focus and what a cell shows is kept; one that went is taken
+  // away, and one that came is drawn in its place.
   function drawAll(version) {
     state.cells.clear();
     state.allows = version.layout?.allows ?? 255;
-    main.replaceChildren();
+    state.panel = version.layout?.hasPropertiesPanel ?? true;
+    state.layoutId = version.layout?.id ?? null;
+    state.buttons = version.buttons ?? [];
     drawAdding();
+    drawToolbar();
 
     for (const cell of version.cells) {
       state.cells.set(cell.id, cell);
-      main.append(fill(document.createElement('section'), cell));
     }
 
-    showRunning(version.running);
-    refreshSoon();
+    for (const section of cellSections()) {
+      const cell = state.cells.get(section.dataset.cellId);
+
+      if (cell) {
+        fill(section, cell);
+      }
+    }
+
+    state.arrangement = version.arrangement ?? null;
+    state.metadata = version.metadata;
+    arrange(version.cells.map(cell => cell.id));
+    drawArrangement();
+
+    showRunning(version.running, version.executing, version.kernels);
+    showDocInfo();
+    showUnsaved(version.unsaved);
+    themeIs(version.themeId);
+    drawPanels();
+    drawCarried();
   }
 
   function apply(change) {
     for (const cell of change.cells) {
       state.cells.set(cell.id, cell);
+    }
+
+    // The buttons come with the version whenever one says something else: every bar is drawn from them.
+    if (change.buttons) {
+      state.buttons = change.buttons;
+      drawToolbar();
     }
 
     if (change.order) {
@@ -331,13 +711,43 @@
     }
 
     layoutIs(change.layout);
-    showRunning(change.running);
-    refreshSoon();
+
+    // What the layout draws of its own comes whenever it draws something else than before.
+    if (change.arrangement) {
+      state.arrangement = change.arrangement;
+      drawArrangement();
+    }
+
+    // What the notebook says of itself comes whenever it says something else than before.
+    if (change.metadata) {
+      state.metadata = change.metadata;
+      showMetadata();
+    }
+
+    const restarts = state.kernels?.restarts ?? 0;
+
+    showRunning(change.running, change.executing, change.kernels);
+    showDocInfo();
+    sayRestarted(restarts);
+    showUnsaved(change.unsaved);
+    themeIs(change.themeId);
+    refreshPanelSoon();
+    drawCarried();
   }
 
   // A layout switched while the page shows the notebook: every cell offers again what the new one allows.
   function layoutIs(layout) {
     const allows = layout?.allows ?? 255;
+    const panelled = layout?.hasPropertiesPanel ?? true;
+    const id = layout?.id ?? null;
+
+    // As Verso's editor closes the properties panel on a layout that has none, and offers it again on one that does; and
+    // the View panel shows which layout is the notebook's now.
+    if (panelled !== state.panel || id !== state.layoutId) {
+      state.panel = panelled;
+      state.layoutId = id;
+      drawPanels();
+    }
 
     if (allows === state.allows) {
       return;
@@ -346,7 +756,7 @@
     state.allows = allows;
     drawAdding();
 
-    for (const section of main.querySelectorAll('section.cell')) {
+    for (const section of cellSections()) {
       const cell = state.cells.get(section.dataset.cellId);
 
       if (cell) {
@@ -376,32 +786,374 @@
     return button;
   }
 
-  const sectionOf = id => main.querySelector(`section.cell[data-cell-id="${CSS.escape(id)}"]`);
+  // Every cell the page draws, wherever it stands: in the list, or placed in a slot of what a layout draws of its own.
+  const cellSections = () => document.querySelectorAll('section.cell');
+  const sectionOf = id => document.querySelector(`section.cell[data-cell-id="${CSS.escape(id)}"]`);
 
-  // The cells in the order the notebook holds them: a cell that went is taken away, one that came is drawn in its place.
+  // While the page moves cells or takes them away: a text that loses its focus then was not left by the person.
+  let redrawing = false;
+
+  // The cells in the order the notebook holds them: a cell that went is taken away, one that came is drawn in its place,
+  // and one already in its place stays where it is, so the text the person is in keeps its focus. While what the layout
+  // draws of its own shows the notebook, that arrangement places the cells, and a cell that came waits in the list for it.
+  // The chosen cell going — taken away here or in another tab — hands the choice to the cell a click put in its place,
+  // else to the first, as Verso's editor chooses the first once its chosen cell is deleted.
   function arrange(order) {
-    const drawn = new Map([...main.querySelectorAll('section.cell')].map(section => [section.dataset.cellId, section]));
+    const was = state.order;
+    const drawn = new Map([...cellSections()].map(section => [section.dataset.cellId, section]));
+    const gone = state.selected !== null && !order.includes(state.selected);
+    const inItsPlace = gone ? order[was.indexOf(state.selected)] : undefined;
+    const next = inItsPlace !== undefined && !was.includes(inItsPlace) ? inItsPlace : order[0] ?? null;
 
-    for (const [id, section] of drawn) {
-      if (!order.includes(id)) {
-        section.remove();
-        state.cells.delete(id);
+    state.order = order;
+    redrawing = true;
+
+    try {
+      for (const [id, section] of drawn) {
+        if (!order.includes(id)) {
+          section.remove();
+          state.cells.delete(id);
+        }
       }
+
+      let before = null;
+
+      for (const id of order) {
+        const section = drawn.get(id) ?? fill(document.createElement('section'), state.cells.get(id));
+
+        if (!arrangement.hidden) {
+          if (!section.isConnected) {
+            main.append(section);
+          }
+
+          continue;
+        }
+
+        if ((before ? before.nextElementSibling : main.firstElementChild) !== section) {
+          if (before) {
+            before.after(section);
+          } else {
+            main.prepend(section);
+          }
+        }
+
+        before = section;
+      }
+    } finally {
+      redrawing = false;
     }
 
-    let before = null;
-
-    for (const id of order) {
-      const section = drawn.get(id) ?? fill(document.createElement('section'), state.cells.get(id));
-
-      if (before) {
-        before.after(section);
+    if (gone) {
+      if (next === null) {
+        deselect();
       } else {
-        main.prepend(section);
+        select(next);
+      }
+    }
+  }
+
+  // What the layout the notebook is shown in draws of its own — Verso's dashboard, its presentation — drawn as Verso's
+  // editors draw it: the arrangement, each cell's element placed in the slot that names it, and the cells it shows no slot
+  // for kept out of sight in the list. A layout that draws nothing of its own, the notebook's among them, is the page's
+  // list; one that failed to draw is too, and the page says why. Every cell goes back to the list first, so a new
+  // arrangement takes none away with the old one, and the list is in the notebook's order again when it shows. All of it
+  // is done before the page is laid out again, so the page stays where it was scrolled to.
+  function drawArrangement() {
+    const html = state.arrangement?.html ?? null;
+
+    redrawing = true;
+
+    try {
+      for (const section of arrangement.querySelectorAll('[data-cell-slot] > section.cell')) {
+        main.append(section);
       }
 
-      before = section;
+      arrangement.innerHTML = html ?? '';
+      arrangement.hidden = html === null;
+      main.hidden = html !== null;
+
+      for (const slot of arrangement.querySelectorAll('[data-cell-slot]')) {
+        const section = sectionOf(slot.dataset.cellSlot);
+
+        if (section) {
+          slot.append(section);
+        }
+      }
+    } finally {
+      redrawing = false;
     }
+
+    if (html === null) {
+      arrange(state.order);
+    } else {
+      holdTiles();
+    }
+
+    if (state.arrangement?.fault) {
+      fail(`The layout could not be drawn: ${state.arrangement.fault}`);
+    }
+
+    drawCarried();
+  }
+
+  // ---- Diagrams and formulas, drawn as Verso's editors draw them, from what the page carries ------------------------
+
+  // A library the page carries, read the first time it is needed.
+  const carried = id => JSON.parse(document.getElementById(id).textContent);
+
+  let mermaidLoading = null;
+  let katexLoading = null;
+  let parked = null;
+
+  // Run as Verso's own loader runs it: in a function whose define, exports and module stand in for whatever the page has
+  // of its own, with the bundle's namespace linked to the page's global first, so Mermaid lands on window.mermaid.
+  function loadMermaid() {
+    mermaidLoading ??= Promise.resolve().then(() => {
+      new Function('define', 'exports', 'module',
+        '"use strict";var __esbuild_esm_mermaid_nm=(globalThis.__esbuild_esm_mermaid_nm=globalThis.__esbuild_esm_mermaid_nm||{});\n'
+        + carried('carried-mermaid') + '\n//# sourceURL=mermaid.min.js')();
+      window.mermaid.initialize({ startOnLoad: false, theme: 'default' });
+
+      return window.mermaid;
+    });
+
+    return mermaidLoading;
+  }
+
+  // KaTeX runs the same way, landing on window.katex, and its stylesheet — its fonts written in — comes with it.
+  function loadKatex() {
+    katexLoading ??= Promise.resolve().then(() => {
+      new Function('define', 'exports', 'module', carried('carried-katex') + '\n//# sourceURL=katex.min.js')();
+
+      const faces = document.createElement('style');
+
+      faces.id = 'katex-faces';
+      faces.textContent = carried('carried-katex-css');
+      document.head.append(faces);
+
+      return window.katex;
+    });
+
+    return katexLoading;
+  }
+
+  const hasBox = node => node.checkVisibility ? node.checkVisibility() : node.offsetParent !== null;
+
+  // Every diagram and formula the cells show, drawn once each, and a library run only when one shows: a page with neither
+  // never runs either. Mermaid measures a diagram's text where it stands, so one out of sight — in a cell a layout has not
+  // placed, or a rendering hidden while its cell is written in — waits until it has a place on the page. A library that
+  // fails is said.
+  async function drawCarried() {
+    try {
+      if (document.querySelector('.outputs .mermaid:not([data-processed])')) {
+        const mermaid = await loadMermaid();
+        const ready = [];
+
+        for (const node of document.querySelectorAll('.outputs .mermaid:not([data-processed])')) {
+          if (hasBox(node)) {
+            ready.push(node);
+          } else {
+            park(node);
+          }
+        }
+
+        if (ready.length > 0) {
+          await mermaid.run({ nodes: ready });
+        }
+      }
+
+      if (document.querySelector('.outputs .math:not([data-katex-processed])')) {
+        const katex = await loadKatex();
+
+        // Asked only now, after the wait: a drawing that came meanwhile finds these marked, and typesets nothing twice.
+        for (const node of document.querySelectorAll('.outputs .math:not([data-katex-processed])')) {
+          node.setAttribute('data-katex-processed', 'true');
+
+          const math = formula(node);
+
+          try {
+            katex.render(math.tex, node, { displayMode: math.display, throwOnError: false });
+          } catch {
+            // Some text KaTeX throws on all the same: what was written stays, which says the most.
+          }
+        }
+      }
+    } catch (error) {
+      fail(`Diagrams or formulas could not be drawn: ${error.message}`);
+    }
+  }
+
+  // Waits for a diagram to have a place on the page, and draws it then.
+  function park(node) {
+    parked ??= new ResizeObserver(entries => {
+      const ready = [];
+
+      for (const entry of entries) {
+        if (!entry.target.isConnected || entry.target.hasAttribute('data-processed')) {
+          parked.unobserve(entry.target);
+        } else if (entry.contentRect.width > 0 && hasBox(entry.target)) {
+          parked.unobserve(entry.target);
+          ready.push(entry.target);
+        }
+      }
+
+      if (ready.length > 0) {
+        loadMermaid().then(mermaid => mermaid.run({ nodes: ready })).catch(error => fail(`Diagrams could not be drawn: ${error.message}`));
+      }
+    });
+    parked.observe(node);
+  }
+
+  // The delimiters say which a formula is: \( \) in the line, \[ \] on a line of its own; with neither, the element
+  // Markdown drew it as does.
+  function formula(node) {
+    const text = node.textContent.trim();
+
+    if (text.startsWith('\\(') && text.endsWith('\\)')) {
+      return { tex: text.slice(2, -2), display: false };
+    }
+
+    if (text.startsWith('\\[') && text.endsWith('\\]')) {
+      return { tex: text.slice(2, -2), display: true };
+    }
+
+    return { tex: text, display: node.tagName === 'DIV' };
+  }
+
+  // ---- Verso's dashboard: a tile moved by its bar and resized by its corner, as Verso's own script does it --------
+
+  // How high a row of the dashboard's grid is, as the grid lays it out.
+  const TileRow = 50;
+
+  // Where a tile is placed and how large it is, as the arrangement drew it, and where a new place goes: to the dashboard's
+  // own part, which draws it there with the next version.
+  const spanOf = (value, otherwise) => Number(/span\s+(\d+)/.exec(value)?.[1] ?? otherwise);
+  const startOf = value => Number(/(\d+)/.exec(value)?.[1] ?? 1) - 1;
+
+  function placeTile(tile, row, column, width, height) {
+    const cell = tile.dataset.cellSlot;
+
+    request('interact', { layout: state.layoutId, action: 'updateCellPosition', payload: JSON.stringify({ cellId: cell, row, col: column, width, height }), target: cell });
+  }
+
+  // The grid a tile stands in, measured as the dashboard measures it: a column is its share of the width, the gap to the
+  // next one included.
+  function gridOf(tile) {
+    const grid = tile.closest('.verso-dashboard-grid');
+    const style = getComputedStyle(grid);
+    const gap = parseFloat(style.rowGap) || 8;
+    const left = parseFloat(style.paddingLeft) || 24;
+
+    return { grid, gap, left, top: parseFloat(style.paddingTop) || 16, column: (grid.clientWidth - left * 2 + gap) / 12, box: grid.getBoundingClientRect() };
+  }
+
+  // The dashboard's tiles, wherever an arrangement draws them.
+  function holdTiles() {
+    for (const tile of arrangement.querySelectorAll('.verso-dashboard-cell[data-cell-slot]')) {
+      tile.querySelector('.verso-dashboard-drag-handle')?.addEventListener('mousedown', event => dragTile(event, tile));
+      tile.querySelector('.verso-dashboard-resize-handle')?.addEventListener('mousedown', event => resizeTile(event, tile));
+    }
+  }
+
+  // Held by the empty part of its bar — its buttons are pressed, not dragged — a tile moves with the pointer, and where its
+  // top-left corner is let go is its new place, clamped to the grid.
+  function dragTile(event, tile) {
+    if (event.button !== 0 || event.target.closest('button')) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const grid = gridOf(tile);
+    const start = tile.getBoundingClientRect();
+    const width = spanOf(tile.style.gridColumn, 6);
+    const height = spanOf(tile.style.gridRow, 4);
+    const ghost = element('div', 'tile-ghost');
+    const place = element('div', 'tile-place');
+    const at = moved => {
+      const x = moved.clientX - (event.clientX - start.left) - grid.box.left - grid.left;
+      const y = moved.clientY - (event.clientY - start.top) - grid.box.top - grid.top;
+
+      return { row: Math.max(0, Math.floor(y / (TileRow + grid.gap))), column: Math.min(Math.max(0, Math.min(11, Math.floor(x / grid.column))), 12 - width) };
+    };
+
+    Object.assign(ghost.style, { left: `${start.left}px`, top: `${start.top}px`, width: `${start.width}px`, height: `${start.height}px` });
+    Object.assign(place.style, { gridColumn: tile.style.gridColumn, gridRow: tile.style.gridRow });
+    document.body.append(ghost);
+    grid.grid.append(place);
+    tile.classList.add('verso-dragging');
+
+    const move = moved => {
+      const target = at(moved);
+
+      ghost.style.left = `${start.left + moved.clientX - event.clientX}px`;
+      ghost.style.top = `${start.top + moved.clientY - event.clientY}px`;
+      place.style.gridColumn = `${target.column + 1} / span ${width}`;
+      place.style.gridRow = `${target.row + 1} / span ${height}`;
+    };
+    const up = released => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      tile.classList.remove('verso-dragging');
+      ghost.remove();
+      place.remove();
+
+      const target = at(released);
+
+      placeTile(tile, target.row, target.column, width, height);
+    };
+
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
+  }
+
+  // Held by its corner, a tile grows and shrinks with the pointer, snapped to whole columns — one to twelve — and rows.
+  function resizeTile(event, tile) {
+    if (event.button !== 0) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    const grid = gridOf(tile);
+    const start = tile.getBoundingClientRect();
+    const ghost = element('div', 'tile-ghost');
+    const size = element('div', 'tile-size');
+    const snapped = moved => ({
+      width: Math.max(1, Math.min(12, Math.round((start.width + moved.clientX - event.clientX) / grid.column))),
+      height: Math.max(1, Math.round((start.height + moved.clientY - event.clientY) / (TileRow + grid.gap))),
+    });
+
+    Object.assign(ghost.style, { left: `${start.left}px`, top: `${start.top}px`, width: `${start.width}px`, height: `${start.height}px` });
+    document.body.append(ghost, size);
+    tile.classList.add('verso-resizing');
+
+    const move = moved => {
+      const target = snapped(moved);
+      const wide = target.width * grid.column - grid.gap;
+      const high = target.height * (TileRow + grid.gap) - grid.gap;
+
+      ghost.style.width = `${wide}px`;
+      ghost.style.height = `${high}px`;
+      size.textContent = `${target.width} × ${target.height}`;
+      size.style.left = `${start.left + wide + 8}px`;
+      size.style.top = `${start.top + high - 20}px`;
+    };
+    const up = released => {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+      tile.classList.remove('verso-resizing');
+      ghost.remove();
+      size.remove();
+
+      const target = snapped(released);
+
+      placeTile(tile, startOf(tile.style.gridRow), startOf(tile.style.gridColumn), target.width, target.height);
+    };
+
+    document.addEventListener('mousemove', move);
+    document.addEventListener('mouseup', up);
   }
 
   // What a part keeps with a cell, written as JSON; a value JSON could not write is kept as its text.
@@ -419,17 +1171,60 @@
     }
   };
 
+  // A count a part keeps with a cell, as Verso's editor reads one from a notebook's file: a whole number above nought, else
+  // the default.
+  const countOf = (cell, key, otherwise) => {
+    const count = metadata(cell, key);
+
+    return Number.isInteger(count) && count > 0 && count <= 2147483647 ? count : otherwise;
+  };
+
+  // How a cell's outputs are shown, as Verso's editor reads the part's word: cut short, hidden — either without regard to
+  // case — or else in full.
+  const visibilityOf = cell => {
+    const word = metadata(cell, 'verso:ui.outputVisibility');
+    const read = typeof word === 'string' ? word.toLowerCase() : '';
+
+    return read === 'preview' || read === 'hidden' ? read : 'expanded';
+  };
+
+  // The part that keeps how a cell is shown, and a code cell's fold among it.
+  const DisplayPart = 'verso.propertyprovider.display';
+  const Folded = 'verso:ui.inputCollapsed';
+
+  // As Verso's editor folds a cell's text: a code cell that is written, and only such a cell, folded while the part keeps
+  // true for it.
+  const foldable = cell => (kindOf(cell)?.editable ?? true) && cell.type.toLowerCase() === 'code';
+  const foldedOf = cell => foldable(cell) && metadata(cell, Folded) === true;
+
+  // A folded cell's text as Verso's editor shows it: its first lines that say something, trimmed at their ends, a mark
+  // when there are more, and a word when there are none.
+  function firstLines(source, count) {
+    const lines = source.replace(/\r\n/g, '\n').split('\n').map(line => line.trimEnd()).filter(line => line.trim() !== '');
+
+    if (lines.length === 0) {
+      return '(empty)';
+    }
+
+    const shown = lines.slice(0, Math.max(1, count));
+
+    return [...shown, ...(lines.length > shown.length ? ['...'] : [])].join('\n');
+  }
+
   // A cell drawn as Verso's editors draw one: its text, what it shows, how it last ran.
   function fill(section, cell) {
     section.className = 'cell';
     section.dataset.cellId = cell.id;
     section.dataset.type = cell.type;
-    section.classList.toggle('selected', state.selected === cell.id);
+    section.classList.toggle('selected', chosen() === cell.id);
+    section.classList.toggle('unsent', typed.has(cell.id));
     markRun(section);
 
     let bar = section.querySelector('.cell-bar');
     let source = section.querySelector('textarea.source');
+    let lines = section.querySelector('.source-preview');
     let outputs = section.querySelector('.outputs');
+    let summary = section.querySelector('.output-summary');
     let inserting = section.querySelector('.insert-row');
 
     if (!bar) {
@@ -438,8 +1233,13 @@
       source = document.createElement('textarea');
       source.className = 'source';
       source.spellcheck = false;
+
+      // A folded cell's lines choose the cell on a click, as Verso's editor has them.
+      lines = element('div', 'source-preview', [element('pre')]);
+      lines.addEventListener('click', () => select(section.dataset.cellId));
       outputs = document.createElement('div');
       outputs.className = 'outputs';
+      summary = element('div', 'output-summary');
       inserting = document.createElement('div');
       inserting.className = 'insert-row';
 
@@ -447,7 +1247,7 @@
 
       meaning.className = 'hover-line';
       meaning.setAttribute('aria-live', 'polite');
-      section.replaceChildren(bar, source, meaning, outputs, inserting);
+      section.replaceChildren(bar, source, lines, meaning, outputs, summary, inserting);
       listenTo(section, source);
     }
 
@@ -456,21 +1256,26 @@
     // Between this cell and the next, for the cell selected: a button for every kind a cell can be added as.
     inserting.replaceChildren(...(allowed(Allows.Insert) ? state.kinds.map(kind => kindButton(kind, `+ ${kind.name}`, () => addCell(cell.id, kind))) : []));
 
-    // Text the person is typing is theirs until it is sent.
-    if (!typed.has(cell.id) && source.value !== cell.source) {
-      source.value = cell.source;
+    // Text the person typed is theirs until the notebook has answered it: what it tells of the cell meanwhile is older,
+    // and writes over none of it. The text is as high as what the person has.
+    const text = typed.get(cell.id) ?? sending.get(cell.id)?.text ?? cell.source;
+
+    if (source.value !== text) {
+      source.value = text;
     }
 
-    source.rows = Math.min(20, Math.max(2, cell.source.split('\n').length));
+    source.rows = Math.min(20, Math.max(2, text.split('\n').length));
     source.readOnly = !allowed(Allows.Edit);
 
     // As Verso's editors show a cell: a kind nobody writes shows no text; one shown rendered shows its text only while
-    // it has none, has no output, or is selected.
+    // it has none, has no output, or is selected; a folded one shows its first lines in its place.
     const written = kindOf(cell)?.editable ?? true;
-    const rendered = ['markdown', 'mermaid', 'html'].includes(cell.type)
-      && cell.outputs.length > 0 && cell.source.trim() !== '' && state.selected !== cell.id;
+    const preview = previewOf(cell);
+    const folded = foldedOf(cell);
 
-    source.hidden = !written || metadata(cell, 'verso:ui.inputCollapsed') === true || rendered;
+    source.hidden = !written || folded || preview;
+    lines.hidden = !folded;
+    lines.firstElementChild.textContent = folded ? firstLines(text, countOf(cell, 'verso:ui.inputPreviewLineCount', 2)) : '';
 
     // As Verso's editors do: a cell nobody writes that shows nothing yet is run once, so it draws itself — the
     // parameters form among them; once it shows something, clearing it draws it again.
@@ -486,12 +1291,17 @@
       requestAnimationFrame(() => source.focus());
     }
 
-    const visibility = metadata(cell, 'verso:ui.outputVisibility');
+    // Where Verso's editor draws what a cell shows: always for a kind nobody writes; for another once it shows something —
+    // for a kind shown rendered only in place of its text, never beside it. There, hidden outputs are said to be hidden.
+    const visibility = visibilityOf(cell);
+    const shows = !written || cell.outputs.length > 0 && (!renderedKind(cell) || preview);
 
-    outputs.hidden = visibility === 'hidden';
+    outputs.hidden = !shows || visibility === 'hidden';
+    summary.hidden = !shows || visibility !== 'hidden';
+    summary.textContent = summary.hidden ? '' : counted(cell.outputs.length, 'output hidden', 'outputs hidden');
     outputs.classList.toggle('preview', visibility === 'preview');
-    outputs.style.setProperty('--lines', String(metadata(cell, 'verso:ui.outputPreviewLineCount') ?? 5));
-    outputs.replaceChildren(...cell.outputs.map(drawOutput));
+    outputs.style.setProperty('--lines', String(countOf(cell, 'verso:ui.outputPreviewLineCount', 5)));
+    drawOutputs(outputs, cell.outputs);
 
     return section;
   }
@@ -500,11 +1310,22 @@
     const drawn = [];
 
     if (allowed(Allows.Execute)) {
-      const run = barButton('run', '▶', 'Run the cell (Shift+Enter)', () => runCell(cell.id));
+      const run = barButton('run', '▶', RunSays, () => runCell(cell.id));
 
-      // As Verso's editor offers it: not while a run is under way, which a cell's run would only queue behind.
-      run.disabled = state.running !== null;
+      canRun(run, cell.id);
       drawn.push(run);
+    }
+
+    // As Verso's editor folds a code cell's text: from a button of its own, the fold kept with the cell by the part that
+    // keeps how a cell is shown.
+    if (foldable(cell)) {
+      const folded = foldedOf(cell);
+      const fold = barButton('fold', '', folded ? 'Expand Code' : 'Collapse Code', () => request('property', { cell: cell.id, part: DisplayPart, field: 'inputCollapsed', value: !folded }));
+
+      fold.setAttribute('aria-label', fold.title);
+      fold.classList.toggle('folded', folded);
+      fold.append(text('span', 'chevron', '▼'));
+      drawn.push(fold);
     }
 
     drawn.push(allowed(Allows.Edit) ? kindSelect(cell) : kindName(cell));
@@ -517,7 +1338,9 @@
     const status = document.createElement('span');
 
     status.className = 'status';
-    status.textContent = describeRun(cell);
+    // How a cell last ran is said as Verso's editor says it: not while it is shown rendered, and never for a cell nobody
+    // writes, whose running mark is all it shows.
+    status.textContent = previewOf(cell) || !(kindOf(cell)?.editable ?? true) ? '' : describeRun(cell);
     drawn.push(status);
 
     // As Verso's editors draw them: up for any but the first, down for any but the last, and delete.
@@ -531,6 +1354,15 @@
     }
 
     bar.replaceChildren(...drawn);
+  }
+
+  const RunSays = 'Run the cell (Shift+Enter)';
+
+  // As Verso's editor offers a cell's run: not while a run is under way, which it would only queue behind, and saying why
+  // when the run is another cell's.
+  function canRun(run, id) {
+    run.disabled = state.running !== null;
+    run.title = state.running !== null && state.running.cell !== id ? `${RunSays}. Another cell is running.` : RunSays;
   }
 
   function barButton(name, mark, title, pressed) {
@@ -608,48 +1440,500 @@
     return total < 60 ? `${total.toFixed(1)}s` : `${(total / 60).toFixed(1)}m`;
   }
 
-  // What a cell shows, by what it is: HTML as the notebook's parts wrote it, text and faults as text, an image as one.
+  // Which of a kernel's text streams an output came on, as the server's versions say it.
+  const Stream = { Output: 0, Error: 1 };
+
+  // What a cell shows, each drawn once and kept while it stays what it was — a widget's frame goes on running what it
+  // runs — and drawn anew where it changed, as Verso's editor keeps each output by what it is and where it stands.
+  function drawOutputs(container, outputs) {
+    outputs.forEach((output, index) => {
+      const drawn = container.children[index];
+
+      if (drawn && sameOutput(drawn.drawnFrom, output)) {
+        return;
+      }
+
+      const element = drawOutput(output);
+
+      element.drawnFrom = output;
+
+      if (drawn) {
+        drawn.replaceWith(element);
+      } else {
+        container.append(element);
+      }
+    });
+
+    while (container.children.length > outputs.length) {
+      container.lastElementChild.remove();
+    }
+  }
+
+  const sameOutput = (one, other) => !!one && one.contentType === other.contentType && one.content === other.content
+    && one.isError === other.isError && one.errorName === other.errorName && one.errorStack === other.errorStack && one.stream === other.stream;
+
+  // What a cell shows, drawn as Verso's editor draws it, in its order: a failure, progress, a widget, a diagram, HTML or
+  // SVG, an image, JSON, a table, standard error, and text.
   function drawOutput(output) {
-    if (output.isError || !output.contentType.startsWith('text/html') && !output.contentType.startsWith('image/')) {
-      const text = document.createElement('pre');
+    const type = output.contentType;
 
-      text.textContent = output.contentType === 'application/json' ? pretty(output.content) : output.content;
-      text.classList.toggle('wrong', output.isError);
-
-      return text;
+    if (output.isError) {
+      return element('div', 'error', [
+        text('div', 'error-name', output.errorName ?? 'Error'),
+        text('pre', 'error-content', output.content),
+        ...(output.errorStack ? [text('pre', 'error-stack', output.errorStack)] : []),
+      ]);
     }
 
-    if (output.contentType.startsWith('image/') && output.contentType !== 'image/svg+xml') {
+    if (type === 'text/x-verso-progress') {
+      return drawProgress(output.content);
+    }
+
+    if (type === 'text/x-verso-widget') {
+      return drawWidget(output.content);
+    }
+
+    if (type === 'text/x-verso-mermaid') {
+      return element('div', 'mermaid-container', [text('pre', 'mermaid', output.content)]);
+    }
+
+    if (type === 'text/html' || type === 'image/svg+xml') {
+      const html = element('div', 'html');
+
+      html.innerHTML = output.content;
+
+      return html;
+    }
+
+    if (type.startsWith('image/')) {
       const image = document.createElement('img');
 
-      image.src = `data:${output.contentType};base64,${output.content}`;
+      image.src = `data:${type};base64,${output.content}`;
       image.alt = '';
 
-      return image;
+      return element('div', 'html', [image]);
     }
 
-    const html = document.createElement('div');
+    if (type === 'application/json') {
+      return drawJson(output.content);
+    }
 
-    html.innerHTML = output.content;
+    if (type === 'text/csv') {
+      return drawCsv(output.content);
+    }
 
-    return html;
+    if (output.stream === Stream.Error) {
+      const stderr = element('div', 'stderr', [text('div', 'stderr-label', 'stderr'), text('pre', null, output.content)]);
+
+      stderr.setAttribute('role', 'note');
+      stderr.setAttribute('aria-label', 'Standard error output');
+
+      return stderr;
+    }
+
+    return text('pre', 'text', output.content);
   }
 
-  function pretty(text) {
+  function element(tag, name, children = []) {
+    const made = document.createElement(tag);
+
+    if (name) {
+      made.className = name;
+    }
+
+    made.append(...children);
+
+    return made;
+  }
+
+  function text(tag, name, words) {
+    const made = element(tag, name);
+
+    made.textContent = words;
+
+    return made;
+  }
+
+  // Progress as one bar that advances: its activity and status said, the value moving silently; a bar of unknown length
+  // when no share is given, full once done.
+  function drawProgress(content) {
+    let progress;
+
     try {
-      return JSON.stringify(JSON.parse(text), null, 2);
+      progress = JSON.parse(content);
     } catch {
-      return text;
+      progress = {};
+    }
+
+    const activity = typeof progress.activity === 'string' ? progress.activity : 'Working';
+    const status = typeof progress.status === 'string' ? progress.status : null;
+    const percent = progress.done === true ? 100
+      : typeof progress.percent === 'number' ? Math.min(100, Math.max(0, Math.trunc(progress.percent))) : null;
+    const fill = element('div', percent === null ? 'progress-fill unknown' : 'progress-fill');
+    const track = element('div', 'progress-track', [fill]);
+
+    if (percent !== null) {
+      fill.style.width = `${percent}%`;
+      track.setAttribute('aria-valuenow', String(percent));
+    }
+
+    track.setAttribute('role', 'progressbar');
+    track.setAttribute('aria-label', activity);
+    track.setAttribute('aria-valuemin', '0');
+    track.setAttribute('aria-valuemax', '100');
+
+    return element('div', 'progress', [
+      element('div', 'progress-label', [text('span', null, activity), ...(status ? [text('span', 'progress-status', status)] : [])]),
+      track,
+    ]);
+  }
+
+  // JSON as a tree, as Verso's editor draws it: open two levels deep, each object and list saying how much it holds, and
+  // a number written as the JSON wrote it. What is not JSON is shown as it is.
+  function drawJson(content) {
+    let root;
+
+    try {
+      root = JSON.parse(content, (key, value, context) => typeof value === 'number' ? new Numeral(context?.source ?? String(value)) : value);
+    } catch {
+      return element('div', 'json', [text('pre', null, content)]);
+    }
+
+    return element('div', 'json', [drawJsonValue(root, null, 0)]);
+  }
+
+  // A number as the JSON wrote it, which no JSON value can be mistaken for.
+  class Numeral {
+    constructor(source) {
+      this.source = source;
     }
   }
+
+  const counted = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+
+  function drawJsonValue(value, key, depth) {
+    const named = key === null ? [] : [text('span', 'jk', JSON.stringify(key)), ': '];
+    const line = (...parts) => element('div', null, [...named, ...parts]);
+
+    if (value === null) {
+      return line(text('span', 'jnull', 'null'));
+    }
+
+    if (typeof value === 'string') {
+      return line(text('span', 'js', JSON.stringify(value)));
+    }
+
+    if (typeof value === 'boolean') {
+      return line(text('span', 'jb', String(value)));
+    }
+
+    if (value instanceof Numeral) {
+      return line(text('span', 'jn', value.source));
+    }
+
+    const list = Array.isArray(value);
+    const entries = list ? value.map(item => [null, item]) : Object.entries(value);
+    const [open, close] = list ? ['[', ']'] : ['{', '}'];
+
+    if (entries.length === 0) {
+      return line(text('span', 'jbrace', open + close));
+    }
+
+    const details = element('details', null, [
+      element('summary', null, [...named, text('span', 'jbrace', open), ' ', text('span', 'jcount', list ? counted(entries.length, 'item', 'items') : counted(entries.length, 'key', 'keys'))]),
+      ...entries.map(([name, item]) => drawJsonValue(item, name, depth + 1)),
+      element('div', null, [text('span', 'jbrace', close)]),
+    ]);
+
+    details.open = depth < 2;
+
+    return details;
+  }
+
+  // A table of comma-separated values, as Verso's editor draws one: its first row the heading, a quoted field kept whole.
+  function drawCsv(content) {
+    const lines = content.split('\n').filter(line => line.length > 0);
+
+    if (lines.length === 0) {
+      return text('span', null, 'Empty CSV');
+    }
+
+    const table = element('table', 'csv', lines.map((line, index) =>
+      element('tr', null, csvFields(line).map(field => text(index === 0 ? 'th' : 'td', null, field)))));
+
+    return element('div', 'csv-frame', [table]);
+  }
+
+  function csvFields(line) {
+    const fields = [];
+    let field = '';
+    let quoted = false;
+
+    for (let at = 0; at < line.length; at++) {
+      const character = line[at];
+
+      if (quoted) {
+        if (character === '"' && line[at + 1] === '"') {
+          field += '"';
+          at++;
+        } else if (character === '"') {
+          quoted = false;
+        } else {
+          field += character;
+        }
+      } else if (character === '"') {
+        quoted = true;
+      } else if (character === ',') {
+        fields.push(field.trim());
+        field = '';
+      } else {
+        field += character;
+      }
+    }
+
+    fields.push(field.trim());
+
+    return fields;
+  }
+
+  // ---- A widget: a whole document, in a frame of its own ------------------------------------------------------------
+
+  // As Verso's editor frames one: the frame runs the document's code and reaches nothing of this page, starts small and
+  // takes the height the document says it came to, or a fixed one when it never says. Nothing makes a widget answer in
+  // this tool — no part it carries opens a way back — so it shows its saved state, and says so.
+  const WidgetStart = 28;
+  const WidgetUnsized = 420;
+  const WidgetMost = 2000;
+
+  // Written into the document ahead of it, so it runs first: a base a widget's loader can build addresses on; a
+  // download the widget starts — which the frame may not — handed to this page instead; how tall the document came to;
+  // and the theme, as this page gives it.
+  const FrameScript = '<script>(' + String(function () {
+    var Native = window.URL;
+
+    function Forgiving(url, base) {
+      try {
+        return new Native(url, base);
+      } catch (e) {
+        return new Native(url, 'https://widget.invalid/');
+      }
+    }
+
+    Forgiving.prototype = Native.prototype;
+    ['createObjectURL', 'revokeObjectURL', 'canParse', 'parse'].forEach(function (name) {
+      if (Native[name]) {
+        Forgiving[name] = Native[name].bind(Native);
+      }
+    });
+    window.URL = Forgiving;
+
+    function saved(anchor) {
+      var name = anchor && anchor.getAttribute && anchor.getAttribute('download');
+      var href = anchor && anchor.href;
+
+      return name && href && (href.indexOf('blob:') === 0 || href.indexOf('data:') === 0) ? { name: name, href: href } : null;
+    }
+
+    function handOut(request, otherwise) {
+      fetch(request.href).then(function (response) {
+        return response.blob();
+      }).then(function (blob) {
+        return new Promise(function (resolve, reject) {
+          var reader = new FileReader();
+
+          reader.onload = function () { resolve({ type: blob.type, result: String(reader.result) }); };
+          reader.onerror = function () { reject(reader.error); };
+          reader.readAsDataURL(blob);
+        });
+      }).then(function (read) {
+        var comma = read.result.indexOf(',');
+
+        parent.postMessage({
+          type: 'verso/widget-download',
+          fileName: request.name,
+          contentType: read.type || 'application/octet-stream',
+          data: comma >= 0 ? read.result.slice(comma + 1) : read.result,
+        }, '*');
+      }).catch(function () {
+        otherwise();
+      });
+    }
+
+    var click = HTMLAnchorElement.prototype.click;
+    var dispatch = HTMLAnchorElement.prototype.dispatchEvent;
+
+    HTMLAnchorElement.prototype.click = function () {
+      var request = saved(this);
+      var anchor = this;
+      var given = arguments;
+
+      if (!request) {
+        return click.apply(this, arguments);
+      }
+
+      handOut(request, function () { click.apply(anchor, given); });
+    };
+    HTMLAnchorElement.prototype.dispatchEvent = function (event) {
+      var request = event && event.type === 'click' ? saved(this) : null;
+      var anchor = this;
+      var given = arguments;
+
+      if (!request) {
+        return dispatch.apply(this, arguments);
+      }
+
+      handOut(request, function () { dispatch.apply(anchor, given); });
+
+      return true;
+    };
+
+    var last = -1;
+
+    function report() {
+      var body = document.body;
+
+      if (!body) {
+        return;
+      }
+
+      var height = Math.max(body.scrollHeight, body.offsetHeight);
+
+      for (var i = 0; i < body.children.length; i++) {
+        var edge = body.children[i].getBoundingClientRect().bottom + (window.pageYOffset || 0);
+
+        if (edge > height) {
+          height = Math.ceil(edge);
+        }
+      }
+
+      if (height > 0 && height !== last) {
+        last = height;
+        parent.postMessage({ type: 'verso/widget-height', height: height }, '*');
+      }
+    }
+
+    function watch() {
+      report();
+
+      if (window.ResizeObserver && document.body) {
+        new ResizeObserver(report).observe(document.body);
+      }
+    }
+
+    window.addEventListener('load', report);
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', watch);
+    } else {
+      watch();
+    }
+
+    setTimeout(report, 300);
+    setTimeout(report, 1500);
+    setTimeout(report, 5000);
+
+    window.addEventListener('message', function (event) {
+      var data = event.data;
+
+      if (!data || data.type !== 'verso/widget-theme' || !data.values) {
+        return;
+      }
+
+      for (var name in data.values) {
+        if (Object.prototype.hasOwnProperty.call(data.values, name)) {
+          document.documentElement.style.setProperty(name, data.values[name]);
+        }
+      }
+
+      document.documentElement.style.setProperty('--verso-theme-kind', data.kind);
+      window.dispatchEvent(new CustomEvent('verso:themechanged', { detail: { kind: data.kind } }));
+      report();
+    });
+  }) + ')();<\/script>';
+
+  // The theme a widget's document may read, as this page's colours stand where the frame sits.
+  const ThemeNames = [
+    '--verso-cell-output-background', '--verso-cell-output-foreground', '--verso-border-default', '--verso-bg-default',
+    '--verso-fg-default', '--verso-fg-muted', '--verso-accent-primary', '--verso-ui-font-family', '--verso-ui-font-size',
+    '--verso-font-family-mono',
+  ];
+
+  function themeAt(place) {
+    const style = getComputedStyle(place);
+    const values = Object.fromEntries(ThemeNames.map(name => [name, style.getPropertyValue(name).trim()]).filter(([, value]) => value));
+
+    return { values, kind: matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light' };
+  }
+
+  // The document with the frame's script spliced in after its head, or ahead of it when it has none, as Verso's editor
+  // splices its own.
+  function framed(documentText, theme) {
+    const style = `<style>:root{${Object.entries(theme.values).map(([name, value]) => `${name}:${value};`).join('')}--verso-theme-kind:${theme.kind};}</style>`;
+    const head = /<head[^>]*>/i.exec(documentText);
+
+    if (!head) {
+      return style + FrameScript + documentText;
+    }
+
+    const at = head.index + head[0].length;
+
+    return documentText.slice(0, at) + style + FrameScript + documentText.slice(at);
+  }
+
+  function drawWidget(documentText) {
+    const frame = document.createElement('iframe');
+    const note = text('p', 'widget-inert', 'Showing saved state: this widget is not connected to a kernel here.');
+    const wrapper = element('div', 'widget-output', [frame, note]);
+
+    frame.className = 'widget';
+    frame.title = 'Widget output';
+    frame.setAttribute('sandbox', 'allow-scripts');
+    frame.style.height = `${WidgetStart}px`;
+    note.setAttribute('role', 'note');
+
+    // Written once it stands in the page, where the theme it reads is the one around it.
+    requestAnimationFrame(() => {
+      frame.srcdoc = framed(documentText, themeAt(frame));
+      setTimeout(() => {
+        if (!frame.sized) {
+          frame.style.height = `${WidgetUnsized}px`;
+        }
+      }, 6000);
+    });
+
+    return wrapper;
+  }
+
+  // What a widget's frame says: how tall its document came to, and a file it asks this page to save.
+  window.addEventListener('message', event => {
+    const frame = [...document.querySelectorAll('iframe.widget')].find(each => each.contentWindow === event.source);
+    const data = event.data;
+
+    if (!frame || !data) {
+      return;
+    }
+
+    if (data.type === 'verso/widget-height' && typeof data.height === 'number' && data.height > 0) {
+      frame.sized = true;
+      frame.style.height = `${Math.min(WidgetMost, Math.ceil(data.height))}px`;
+    } else if (data.type === 'verso/widget-download' && data.fileName && data.data) {
+      download({ name: String(data.fileName), contentType: String(data.contentType || 'application/octet-stream'), bytes: String(data.data) });
+    }
+  });
+
+  // A widget follows the page's colours as they change.
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+    for (const frame of document.querySelectorAll('iframe.widget')) {
+      frame.contentWindow?.postMessage({ type: 'verso/widget-theme', ...themeAt(frame) }, '*');
+    }
+  });
 
   function listenTo(section, source) {
     const id = () => section.dataset.cellId;
 
     source.addEventListener('input', event => {
       typed.set(id(), source.value);
-      clearTimeout(typingTimer);
-      typingTimer = setTimeout(flushTyping, 500);
+      flushTyping();
 
       // A dot or a quote asks what may come next; anything else typed while a list is open asks again.
       if (Asks.has(event.data) || offering?.source === source) {
@@ -663,15 +1947,27 @@
         meanSoon(section, source);
       }
     });
-    source.addEventListener('click', () => meanSoon(section, source));
+    // As Verso's editor chooses a cell: the focus arriving in its text, or a click there.
+    const choose = () => {
+      if (state.selected !== id()) {
+        select(id());
+      }
+    };
+
+    source.addEventListener('focus', choose);
+    source.addEventListener('click', () => {
+      choose();
+      meanSoon(section, source);
+    });
     source.addEventListener('blur', () => {
       flushTyping();
       closeOffer();
       clearTimeout(meaningTimer);
       section.querySelector('.hover-line').textContent = '';
 
-      // A cell shown rendered is rendered again from what was written into it.
-      if (['markdown', 'mermaid', 'html'].includes(state.cells.get(id())?.type) && allowed(Allows.Execute)) {
+      // A cell shown rendered is rendered again from what was written into it, as the person leaves its text — not as
+      // the page moves the cell or takes it away, and, as Verso's editor has it, only when something is written there.
+      if (!redrawing && renderedKind(state.cells.get(id())) && source.value.trim() !== '' && allowed(Allows.Execute)) {
         runCell(id());
       }
     });
@@ -686,7 +1982,7 @@
           return;
         }
 
-        if ((event.key === 'Enter' && !event.shiftKey) || event.key === 'Tab') {
+        if ((event.key === 'Enter' && !event.shiftKey && !event.ctrlKey && !event.altKey && !event.metaKey) || (event.key === 'Tab' && !event.shiftKey)) {
           event.preventDefault();
           take(offering.items[offering.active]);
 
@@ -708,30 +2004,193 @@
         return;
       }
 
-      if (event.key === 'Enter' && event.shiftKey) {
+      // As Verso's editor takes the keys in a cell's text: Shift+Enter runs the cell and selects the one below — a new code
+      // cell when it is the last — Ctrl+Enter runs it and stays, and Alt+Enter runs it and inserts a code cell below. No
+      // run is asked while one is under way, as Verso's editor starts none then; the rest is done all the same, and none of
+      // them moves the text focus.
+      const chord = runChord(event);
+
+      if (chord) {
         event.preventDefault();
 
-        if (state.running === null) {
+        if (state.running === null && allowed(Allows.Execute)) {
           runCell(id());
         }
+
+        if (chord === 'below') {
+          selectBelow(id());
+        } else if (chord === 'insert' && allowed(Allows.Insert)) {
+          addAndSelect(id());
+        }
+
+        return;
+      }
+
+      if (event.key === 'Tab' && !event.ctrlKey && !event.altKey && !event.metaKey && !source.readOnly) {
+        event.preventDefault();
+        indent(source, event.shiftKey);
+
+        return;
+      }
+
+      // Escape leaves the text, and the cell is the one selected; what was typed is sent as the text is left, and a cell
+      // shown rendered renders, as Verso's editor leaves it.
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        select(id());
+        source.blur();
       }
     });
 
-    // A cell shown rendered is written in by selecting it, which shows its text.
-    section.querySelector('.outputs').addEventListener('dblclick', () => {
+    // As Verso's editor chooses a cell by what it shows, or by the line saying it is hidden: one click, on a cell shown
+    // rendered — which then shows its text — or on a cell nobody writes.
+    const chooseByWhatItShows = () => {
       const cell = state.cells.get(id());
 
-      if (cell && ['markdown', 'mermaid', 'html'].includes(cell.type)) {
-        state.focus = cell.id;
+      if (cell && state.selected !== cell.id && (previewOf(cell) || !(kindOf(cell)?.editable ?? true))) {
         select(cell.id);
       }
-    });
+    };
+
+    section.querySelector('.outputs').addEventListener('click', chooseByWhatItShows);
+    section.querySelector('.output-summary').addEventListener('click', chooseByWhatItShows);
     section.querySelector('.cell-bar').addEventListener('click', () => select(id()));
   }
 
+  // Running a cell shown rendered renders it, so it leaves the selection and its rendering shows, as Verso's editor has it.
   function runCell(id) {
     flushTyping();
-    enqueue(() => api(notebookPath(`/cells/${id}/run`), { method: 'POST' }));
+    leaveRendered(id);
+    request('run', { cell: id });
+  }
+
+  function leaveRendered(id) {
+    if (id !== null && state.selected === id && renderedKind(state.cells.get(id))) {
+      deselect();
+    }
+  }
+
+  // The keys that run a cell from its text, by the chord pressed exactly: what else each does, or none.
+  function runChord(event) {
+    if (event.key !== 'Enter') {
+      return null;
+    }
+
+    const held = [event.shiftKey, event.ctrlKey || event.metaKey, event.altKey];
+
+    return held.filter(Boolean).length !== 1 || event.ctrlKey && event.metaKey ? null
+      : event.shiftKey ? 'below' : event.altKey ? 'insert' : 'stay';
+  }
+
+  // The cell below is selected and scrolled to; the last cell has none, so a code cell is added at the end, where the
+  // layout lets one be added, and selected — as Verso's editor does.
+  function selectBelow(id) {
+    const below = state.order[state.order.indexOf(id) + 1];
+
+    if (below) {
+      select(below);
+      sectionOf(below)?.scrollIntoView({ block: 'nearest' });
+    } else if (allowed(Allows.Insert)) {
+      addAndSelect(null);
+    }
+  }
+
+  // A code cell added after a cell, or at the end with none, then selected and scrolled to; the notebook gives it its
+  // language, as Verso's editor gives a new code cell the notebook's kernel.
+  async function addAndSelect(after) {
+    flushTyping();
+
+    const cell = await request('add', { after, type: 'code' });
+
+    if (cell) {
+      select(cell.id);
+      sectionOf(cell.id)?.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  // Ctrl+Alt+Enter runs every cell wherever it is pressed, as Verso's editor has it: the engine's Run All, when it can be
+  // pressed and no run is under way.
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || !event.ctrlKey || !event.altKey || !state.name || closed) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const runAll = state.buttons.find(button => button.id === RunAll);
+
+    // As Verso's editor runs every cell from its keys, the choice is kept — but a cell shown rendered that is chosen leaves
+    // it, as it does whenever it runs.
+    if (runAll?.isEnabled && state.running === null) {
+      leaveRendered(state.selected);
+      press(runAll, []);
+    }
+  });
+
+  // Indentation as Verso's editor writes it: four spaces to a stop. Tab with nothing selected, or within one line, writes
+  // spaces to the next stop; over lines, or over a whole line, it moves each line's indentation to the next stop, leaving
+  // empty lines alone when there are several; Shift+Tab moves each line's indentation back a stop. What it writes is
+  // typing like any other.
+  const Stop = 4;
+
+  const columnOf = before => [...before].reduce((column, character) => character === '\t' ? (Math.floor(column / Stop) + 1) * Stop : column + 1, 0);
+
+  function indent(source, back) {
+    const text = source.value;
+    const start = source.selectionStart;
+    const end = source.selectionEnd;
+    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    const lineEnd = text.indexOf('\n', start) < 0 ? text.length : text.indexOf('\n', start);
+    const withinALine = !text.slice(start, end).includes('\n') && !(start === lineStart && end === lineEnd && start !== end);
+
+    if (!back && withinALine) {
+      source.setRangeText(' '.repeat(Stop - (columnOf(text.slice(lineStart, start)) % Stop)), start, end, 'end');
+    } else {
+      shiftLines(source, back);
+    }
+
+    source.dispatchEvent(new Event('input'));
+  }
+
+  function shiftLines(source, back) {
+    const text = source.value;
+    const start = source.selectionStart;
+    const end = source.selectionEnd;
+
+    // A selection that ends where a line begins does not take that line, as an editor's does not.
+    const last = end > start && text[end - 1] === '\n' ? end - 1 : end;
+    const from = text.lastIndexOf('\n', start - 1) + 1;
+    const to = text.indexOf('\n', last) < 0 ? text.length : text.indexOf('\n', last);
+    const lines = text.slice(from, to).split('\n');
+    let first = 0;
+    let moved = 0;
+
+    const shifted = lines.map((line, index) => {
+      const indentation = line.match(/^[ \t]*/)[0];
+
+      if (line.length === 0 && (back || lines.length > 1) || back && indentation.length === 0) {
+        return line;
+      }
+
+      const column = columnOf(indentation);
+      const stop = back ? Math.max(0, Math.ceil(column / Stop) - 1) * Stop : (Math.floor(column / Stop) + 1) * Stop;
+      const written = ' '.repeat(stop) + line.slice(indentation.length);
+
+      if (index === 0) {
+        first = written.length - line.length;
+      }
+
+      moved += written.length - line.length;
+
+      return written;
+    });
+
+    source.setRangeText(shifted.join('\n'), from, to);
+
+    // The selection keeps the text it held: one that began where its line begins still does.
+    const begins = start === from ? from : Math.max(from, start + first);
+
+    source.setSelectionRange(begins, start === end ? begins : end + moved);
   }
 
   // ---- What a cell's kernel offers as its text is typed, and what a word means ----------------------------------
@@ -755,9 +2214,9 @@
     let offered;
 
     try {
-      offered = await json(notebookPath(`/cells/${section.dataset.cellId}/completions`), { method: 'POST', body: { code, position } });
+      offered = await ask('completions', { cell: section.dataset.cellId, code, position });
     } catch (error) {
-      say(error.message, true);
+      fail(error.message);
 
       return;
     }
@@ -835,9 +2294,7 @@
       let said = null;
 
       try {
-        const response = await api(notebookPath(`/cells/${section.dataset.cellId}/hover`), { method: 'POST', body: { code, position } });
-
-        said = response.status === 200 ? await response.json() : null;
+        said = await ask('hover', { cell: section.dataset.cellId, code, position });
       } catch {
         // A meaning the kernel could not give is simply not said.
       }
@@ -852,14 +2309,15 @@
   // ---- Writing the notebook: a cell added, taken away, moved or turned into another kind -------------------------
 
   // A cell added after another, or at the end with none; it is selected, with its text open, once it is drawn.
-  function addCell(after, kind) {
+  async function addCell(after, kind) {
     flushTyping();
-    enqueue(async () => {
-      const cell = await json(notebookPath('/cells'), { method: 'POST', body: { after, type: kind.type, language: kind.language } });
 
+    const cell = await request('add', { after, type: kind.type, language: kind.language });
+
+    if (cell) {
       state.focus = cell.id;
       select(cell.id);
-    });
+    }
   }
 
   // A delete takes the cell out of the notebook for every page that shows it, so it is asked first.
@@ -869,58 +2327,107 @@
     }
 
     flushTyping();
-    enqueue(() => api(notebookPath(`/cells/${id}/remove`), { method: 'POST' }));
+    request('remove', { cell: id });
   }
 
   // A move names the neighbour it passes, as this page shows the cells: another page may have moved them meanwhile.
   function moveCell(id, up) {
-    const order = [...main.querySelectorAll('section.cell')].map(section => section.dataset.cellId);
-    const neighbour = order[order.indexOf(id) + (up ? -1 : 1)];
+    const neighbour = state.order[state.order.indexOf(id) + (up ? -1 : 1)];
 
     if (!neighbour) {
       return;
     }
 
     flushTyping();
-    enqueue(() => api(notebookPath(`/cells/${id}/move`), { method: 'POST', body: up ? { before: neighbour } : { after: neighbour } }));
+    request('move', up ? { cell: id, before: neighbour } : { cell: id, after: neighbour });
   }
 
   function changeKind(id, kind) {
     flushTyping();
-    enqueue(() => api(notebookPath(`/cells/${id}/kind`), { method: 'POST', body: { type: kind.type, language: kind.language } }));
+    request('kind', { cell: id, type: kind.type, language: kind.language });
   }
 
-  function showRunning(running) {
+  // The run under way, which a Stop ends; what the engine runs that no run owns — a block a change runs, or what a stop
+  // left behind — which runs with nothing to stop; and what became of the kernels.
+  function showRunning(running, executing, kernels) {
+    const wasRunning = state.running !== null;
+
     state.running = running ?? null;
+    state.executing = executing ?? [];
+    state.kernels = kernels ?? null;
     stopButton.hidden = state.running === null;
+    showKernels();
 
-    for (const section of main.querySelectorAll('section.cell')) {
+    // A run beginning or ending swaps the Stop and the primary button, and every cell's run follows.
+    if (wasRunning !== (state.running !== null)) {
+      drawToolbar();
+    }
+
+    for (const section of cellSections()) {
       markRun(section);
+
+      const run = section.querySelector('.cell-bar button.run');
+
+      if (run) {
+        canRun(run, section.dataset.cellId);
+      }
     }
 
-    for (const run of main.querySelectorAll('.cell-bar button.run')) {
-      run.disabled = state.running !== null;
-    }
+    hold('csharp', state.running?.waits && state.running.cell === null ? WaitsForCSharp : null);
 
-    if (state.running?.waits && state.running.cell === null) {
-      say(WaitsForCSharp);
-    } else if (statusLine.textContent === WaitsForCSharp) {
-      say('');
-    }
+    // As the page says while a run a stop left behind goes on.
+    hold('behind', state.executing.some(each => each.leftBehind) ? GoesOn : null);
   }
 
-  // A cell the run under way runs, or waits to run until another notebook's C# run ends.
+  // A cell the run under way runs, or waits to run until another notebook's C# run ends; or a cell the engine runs that no
+  // run owns, marked running as Verso's editor marks any cell that runs.
   function markRun(section) {
     const mine = state.running !== null && state.running.cell === section.dataset.cellId;
+    const unowned = state.executing.some(each => each.cell === section.dataset.cellId);
 
-    section.classList.toggle('running', mine && !state.running.waits);
+    section.classList.toggle('running', mine && !state.running.waits || unowned);
     section.classList.toggle('waiting', mine && state.running.waits);
   }
 
-  // A stop goes past everything waiting: what waits may be waiting for the very run it stops.
+  // What the kernel status beside the notebook's name says, as Verso's editor words it.
+  const KernelSays = { idle: 'Kernel idle', running: 'Running…', restarting: 'Restarting…', error: 'Kernel error' };
+
+  // The kernel status, as Verso's editor shows it: being started afresh, else running while anything runs, else the fault
+  // a start afresh left, until a cell runs, else idle. Why a start failed is said when the status is pointed at.
+  function showKernels() {
+    const kernels = state.kernels ?? { restarts: 0, restarting: false, fault: null };
+    const now = kernels.restarting ? 'restarting'
+      : state.running !== null || state.executing.length > 0 ? 'running'
+      : kernels.fault ? 'error' : 'idle';
+
+    kernelStatus.className = `kernel ${now}`;
+    kernelStatus.querySelector('.text').textContent = KernelSays[now];
+    kernelStatus.title = now === 'error' ? `${KernelSays.error}: ${kernels.fault}` : KernelSays[now];
+    kernelStatus.hidden = false;
+  }
+
+  const Restarted = 'Kernel restarted';
+  const GoesOn = 'The stopped run goes on in the background until the tool stops.';
+
+  // As Verso's editor says a kernel was started afresh: a notice, once the version counts one more.
+  function sayRestarted(before) {
+    if ((state.kernels?.restarts ?? 0) > before) {
+      notice(Restarted);
+    }
+  }
+
+  const SaveSays = 'Save the notebook to its file (Ctrl+S)';
+
+  // As Verso's editor marks its Save while anything differs from the notebook's file.
+  function showUnsaved(unsaved) {
+    state.unsaved = unsaved === true;
+    unsavedDot.hidden = !state.unsaved;
+    saveButton.title = state.unsaved ? `${SaveSays}. You have unsaved changes.` : SaveSays;
+  }
+
+  // A stop is answered at once, past everything asked before it: what waits may be waiting for the very run it stops.
   // A stop names the run it means, so one sent again after that run ended stops no other.
-  stopButton.addEventListener('click', () => api(notebookPath('/stop'), { method: 'POST', body: { run: state.running?.number ?? 0 } })
-    .catch(error => say(error.message, true)));
+  stopButton.addEventListener('click', () => ask('stop', { run: state.running?.number ?? 0 }).catch(error => fail(error.message)));
 
   // ---- What a block's controls send, the way Verso's own router means it ---------------------------------------
 
@@ -929,18 +2436,46 @@
   document.addEventListener('click', event => {
     const control = event.target.closest?.('[data-action]');
 
-    if (control && control.closest('.outputs') && (control.tagName === 'BUTTON' || control.hasAttribute('data-payload'))) {
-      send(control);
+    if (control && (control.tagName === 'BUTTON' || control.hasAttribute('data-payload'))) {
+      route(control);
     }
   });
 
   document.addEventListener('change', event => {
     const control = event.target.closest?.('[data-action]');
 
-    if (control && control.closest('.outputs') && ['INPUT', 'SELECT', 'TEXTAREA'].includes(control.tagName)) {
-      send(control);
+    if (control && ['INPUT', 'SELECT', 'TEXTAREA'].includes(control.tagName)) {
+      route(control);
     }
   });
+
+  // As Verso's router sends it: a control a cell drew goes to the part that drew it; one a layout drew around the cells —
+  // a tile's run button — goes to the layout's own part, with what it carries and what it is aimed at.
+  function route(control) {
+    if (control.closest('.outputs')) {
+      send(control);
+    } else if (arrangement.contains(control)) {
+      actOn(control);
+    }
+  }
+
+  async function actOn(control) {
+    flushTyping();
+
+    const file = await request('interact', {
+      layout: state.layoutId,
+      action: control.getAttribute('data-action'),
+      payload: payloadOf(control),
+      target: control.getAttribute('data-target-id'),
+    });
+
+    if (file) {
+      download(file);
+    }
+  }
+
+  const payloadOf = control => control.getAttribute('data-payload')
+    ?? (control.type === 'checkbox' || control.type === 'radio' ? String(control.checked) : String(control.value ?? ''));
 
   function send(control) {
     const cell = control.closest('[data-cell-id]');
@@ -950,14 +2485,8 @@
       return;
     }
 
-    const payload = control.getAttribute('data-payload')
-      ?? (control.type === 'checkbox' || control.type === 'radio' ? String(control.checked) : String(control.value ?? ''));
-
     flushTyping();
-    enqueue(() => api(notebookPath('/gestures'), {
-      method: 'POST',
-      body: { cell: cell.dataset.cellId, extensionId: part.getAttribute('data-extension-id'), action: control.getAttribute('data-action'), payload },
-    }));
+    request('gesture', { cell: cell.dataset.cellId, extensionId: part.getAttribute('data-extension-id'), action: control.getAttribute('data-action'), payload: payloadOf(control) });
   }
 
   // ---- Verso's parameters form ----------------------------------------------------------------------------------
@@ -980,10 +2509,7 @@
     }
 
     flushTyping();
-    enqueue(() => api(notebookPath('/gestures'), {
-      method: 'POST',
-      body: { cell, extensionId: Parameters, action, payload: JSON.stringify(payload) },
-    }));
+    request('gesture', { cell, extensionId: Parameters, action, payload: JSON.stringify(payload) });
   }
 
   function openAddRow(control, open) {
@@ -1105,28 +2631,35 @@
 
   let refreshTimer = 0;
 
-  // The buttons say whether they can be pressed, and a change can change that: asked again once changes settle.
-  function refreshSoon() {
+  // The panel of the cell chosen says what the cell holds, and a change can change that: drawn again once changes settle.
+  function refreshPanelSoon() {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {
-      loadToolbar();
-
-      if (state.selected && state.cells.has(state.selected)) {
+      if (state.openPanel === 'properties' && state.selected && state.cells.has(state.selected)) {
         loadPanel(state.selected);
       }
     }, 300);
   }
 
-  async function loadToolbar() {
-    try {
-      state.buttons = await json(notebookPath('/toolbar'));
-    } catch (error) {
-      say(error.message, true);
+  // The engine's Run All.
+  const RunAll = 'verso.action.run-all';
 
-      return;
+  // The buttons that only step through the layouts or the themes: Verso's editor leaves them off its toolbar, and switches
+  // both in its View panel instead.
+  const Cycling = new Set(['verso.switchLayout', 'verso.switchTheme']);
+
+  // The toolbar, the export menu and every cell's bar, drawn from the buttons the last version carried. While a run is under
+  // way the one Stop stands where the primary button stands, as Verso's toolbar swaps them, so no second run is pressed
+  // there; else it stands beside the export menu, where the page's header has it.
+  function drawToolbar() {
+    const row = state.buttons.filter(button => button.place === Place.Main && !Cycling.has(button.id));
+    const swapped = state.running !== null && row.some(button => button.isPrimary);
+
+    toolbar.replaceChildren(...row.map(button => swapped && button.isPrimary ? stopButton : drawButton(button, [])));
+
+    if (!swapped) {
+      exportMenu.after(stopButton);
     }
-
-    toolbar.replaceChildren(...state.buttons.filter(button => button.place === Place.Main).map(button => drawButton(button, [])));
 
     // As Verso's editor shows its export menu: what can be exported now, and no menu when nothing can.
     const exports = state.buttons.filter(button => button.place === Place.Export && button.isEnabled);
@@ -1134,7 +2667,7 @@
     exportMenu.hidden = exports.length === 0;
     exportMenu.querySelector('div').replaceChildren(...exports.map(button => drawButton(button, [])));
 
-    for (const section of main.querySelectorAll('section.cell')) {
+    for (const section of cellSections()) {
       const cell = state.cells.get(section.dataset.cellId);
 
       if (cell) {
@@ -1149,9 +2682,10 @@
     element.type = 'button';
     element.dataset.button = button.id;
 
-    // A cell's button is drawn only where it can be pressed; any other says whether it can be pressed now.
+    // A cell's button is drawn only where it can be pressed; any other says whether it can be pressed now, and one whose
+    // part could not say is not pressed, and says why.
     element.disabled = cells.length === 0 && !button.isEnabled;
-    element.title = button.label;
+    element.title = button.fault ? `${button.label} — it could not say whether it can be pressed: ${button.fault}` : button.label;
 
     if (button.icon?.trimStart().startsWith('<svg')) {
       element.innerHTML = button.icon;
@@ -1165,62 +2699,341 @@
 
     element.addEventListener('click', event => {
       event.stopPropagation();
+
+      // As Verso's editor takes the choice away when its toolbar's Run All is pressed.
+      if (button.id === RunAll) {
+        deselect();
+      }
+
       press(button, cells);
     });
 
     return element;
   }
 
-  function press(button, cells) {
+  async function press(button, cells) {
     if (button.confirmation && !confirm(button.confirmation)) {
       return;
     }
 
     exportMenu.open = false;
     flushTyping();
-    enqueue(async () => {
-      const response = await api(notebookPath(`/toolbar/${encodeURIComponent(button.id)}`), { method: 'POST', body: { cells } });
 
-      if (response.status === 200) {
-        await download(response);
-      }
-    });
+    const file = await request('press', { button: button.id, cells });
+
+    if (file) {
+      download(file);
+    }
   }
 
   // A file a button handed over is saved by this page alone, under the name it came with.
-  async function download(response) {
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
+  function download(file) {
+    const bytes = Uint8Array.from(atob(file.bytes), character => character.charCodeAt(0));
+    const url = URL.createObjectURL(new Blob([bytes], { type: file.contentType }));
     const link = document.createElement('a');
 
     link.href = url;
-    link.download = fileName(response.headers.get('Content-Disposition')) ?? 'download';
+    link.download = file.name;
     document.body.append(link);
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  function fileName(disposition) {
-    const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition ?? '');
+  // ---- The panels beside the notebook, as Verso's editor has them ------------------------------------------------------
 
-    if (encoded) {
-      return decodeURIComponent(encoded[1]);
+  const PanelNames = { metadata: 'Metadata', properties: 'Properties', view: 'View' };
+  const PanelTitles = { metadata: 'Metadata', properties: 'Cell Properties', view: 'View' };
+
+  // What is offered, in Verso's order: what the notebook says of itself, always; a cell's properties where the layout has
+  // a panel for them; and the View panel — the engine this page serves always has Verso's own layouts and themes to
+  // choose from.
+  const offeredPanels = () => ['metadata', ...(state.panel ? ['properties'] : []), 'view'];
+
+  // The toggles, each opening its panel or closing it; none is open at first, one at a time, and one no longer offered is
+  // closed.
+  function drawPanels() {
+    const offered = offeredPanels();
+
+    if (state.openPanel && !offered.includes(state.openPanel)) {
+      state.openPanel = null;
     }
 
-    const plain = /filename="?([^";]+)"?/i.exec(disposition ?? '');
+    panelsBar.replaceChildren(...offered.map(name => {
+      const toggle = text('button', null, PanelNames[name]);
 
-    return plain ? plain[1] : null;
+      toggle.type = 'button';
+      toggle.dataset.panel = name;
+      toggle.setAttribute('aria-pressed', String(state.openPanel === name));
+      toggle.addEventListener('click', () => {
+        state.openPanel = state.openPanel === name ? null : name;
+        drawPanels();
+      });
+
+      return toggle;
+    }));
+
+    drawPanel();
   }
 
-  // ---- The properties panel ----------------------------------------------------------------------------------------
+  // The open panel: its heading, a way to close it, and what it shows.
+  function drawPanel() {
+    if (!state.openPanel) {
+      panel.replaceChildren();
+
+      return;
+    }
+
+    const collapse = text('button', 'panel-collapse', '›');
+
+    collapse.type = 'button';
+    collapse.title = 'Collapse panel';
+    collapse.setAttribute('aria-label', 'Collapse panel');
+    collapse.addEventListener('click', () => {
+      state.openPanel = null;
+      drawPanels();
+    });
+
+    const body = element('div', 'panel-body');
+
+    panel.replaceChildren(element('div', 'panel-head', [text('span', 'panel-title', PanelTitles[state.openPanel]), collapse]), body);
+
+    if (state.openPanel === 'view') {
+      drawView(body);
+    } else if (state.openPanel === 'metadata') {
+      drawMetadata(body);
+    } else if (state.selected && state.cells.has(state.selected)) {
+      loadPanel(state.selected, true);
+    } else {
+      body.append(text('p', 'empty', 'Select a cell to view its properties.'));
+    }
+  }
+
+  // The View panel, as Verso's: the layouts, a read-only one said to be so, and the themes, the notebook's own marked.
+  function drawView(body) {
+    body.append(
+      text('div', 'view-title', 'Layout'),
+      ...state.layouts.map(layout => viewRow(
+        layout.name,
+        layout.id === state.layoutId,
+        (layout.allows & Allows.Edit) === Allows.Edit ? null : 'Read only',
+        row => { row.dataset.layout = layout.id; },
+        () => request('layout', { layout: layout.id }))),
+      text('div', 'view-title', 'Theme'),
+      ...state.themes.map(theme => viewRow(
+        theme.name,
+        theme.id === state.themeId,
+        null,
+        row => { row.dataset.theme = theme.id; },
+        () => request('theme', { theme: theme.id }))));
+  }
+
+  // The Metadata panel, as Verso's: the title, which a person changes here and which names what the notebook is exported
+  // as; then what the notebook says of itself — the kernel a cell that names none runs in, its file, when it was made and
+  // last saved, and the version of its format.
+  function drawMetadata(body) {
+    const title = document.createElement('input');
+
+    title.type = 'text';
+    title.placeholder = 'Untitled';
+    title.dataset.meta = 'title';
+    title.addEventListener('change', () => request('title', { title: title.value }));
+
+    // A title looked at and left as it was shows what the notebook holds, which another tab may have changed meanwhile.
+    title.addEventListener('focus', () => { title.dataset.shown = title.value; });
+    title.addEventListener('blur', () => {
+      if (title.value === title.dataset.shown) {
+        showMetadata();
+      }
+    });
+
+    const shown = name => {
+      const value = element('span', 'meta-value');
+
+      value.dataset.meta = name;
+
+      return value;
+    };
+
+    const field = (label, value) => [text('label', null, label), value];
+
+    body.append(
+      ...field('Title', title),
+      ...field('Default Kernel', shown('defaultKernel')),
+      element('hr'),
+      ...field('File', shown('file')),
+      ...field('Created', shown('created')),
+      ...field('Modified', shown('modified')),
+      ...field('Format Version', shown('formatVersion')));
+    showMetadata();
+  }
+
+  // What the notebook says of itself, where the Metadata panel shows it; a title being written stays the person's own.
+  function showMetadata() {
+    const body = state.openPanel === 'metadata' ? panel.querySelector('.panel-body') : null;
+
+    if (!body || !state.metadata) {
+      return;
+    }
+
+    const title = body.querySelector("[data-meta='title']");
+
+    if (document.activeElement !== title) {
+      title.value = state.metadata.title ?? '';
+    }
+
+    body.querySelector("[data-meta='defaultKernel']").textContent = kernelName(state.metadata.defaultKernel);
+    body.querySelector("[data-meta='file']").textContent = state.name;
+    body.querySelector("[data-meta='created']").textContent = dated(state.metadata.created);
+    body.querySelector("[data-meta='modified']").textContent = dated(state.metadata.modified);
+    body.querySelector("[data-meta='formatVersion']").textContent = state.metadata.formatVersion;
+  }
+
+  // Beside the notebook's name, as Verso's toolbar says it: the name cut short past twenty characters; its kernel, with how
+  // many other languages its code cells are written in; and how many cells it has. The tip holds what the line holds back:
+  // the whole name, and every kernel when there are several.
+  const NameShown = 20;
+
+  function showDocInfo() {
+    if (!state.metadata) {
+      return;
+    }
+
+    const name = state.name;
+    const languages = [];
+
+    for (const cell of state.order.map(id => state.cells.get(id))) {
+      const language = cell?.type.toLowerCase() === 'code' ? cell.language ?? state.metadata.defaultKernel : null;
+
+      if (language && !languages.some(each => each.toLowerCase() === language.toLowerCase())) {
+        languages.push(language);
+      }
+    }
+
+    const kernel = state.metadata.defaultKernel ? kernelName(state.metadata.defaultKernel) : 'No kernel';
+    const cut = name.length > NameShown;
+    const several = languages.length > 1;
+
+    docInfo.querySelector('h1').textContent = cut ? `${name.slice(0, NameShown)}…` : name;
+    docInfo.querySelector('.meta').textContent = `${several ? `${kernel} +${languages.length - 1}` : kernel} · ${counted(state.order.length, 'cell', 'cells')}`;
+    docInfo.title = cut || several ? [name, ...(several ? [`Kernels: ${languages.map(kernelName).join(', ')}`] : [])].join('\n') : '';
+  }
+
+  // A kernel by the name the notebook's kinds give its language, as Verso's panel lists it; one it has no kernel for, by
+  // its id.
+  const kernelName = id => id
+    ? state.kinds.find(kind => kind.type === 'code' && kind.language?.toLowerCase() === id.toLowerCase())?.name ?? id
+    : '—';
+
+  // A moment as Verso's panel writes it, in the offset it was kept with: the day, then hours and minutes.
+  const dated = moment => moment ? `${moment.slice(0, 10)} ${moment.slice(11, 16)}` : '—';
+
+  function viewRow(name, chosen, chip, mark, choose) {
+    const row = element('div', 'view-row', [
+      text('span', 'name', name),
+      ...(chip ? [text('span', 'chip', chip)] : []),
+      ...(chosen ? [text('span', 'check', '✓')] : []),
+    ]);
+
+    mark(row);
+    row.tabIndex = 0;
+    row.setAttribute('role', 'button');
+    row.setAttribute('aria-pressed', String(chosen));
+
+    const pick = () => {
+      if (!chosen) {
+        choose();
+      }
+    };
+
+    row.addEventListener('click', pick);
+    row.addEventListener('keydown', event => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        pick();
+      }
+    });
+
+    return row;
+  }
+
+  // What a theme's tone draws on: the page's own colours taken from the theme's tokens.
+  const Tone = { Light: 0, Dark: 1, HighContrast: 2 };
+  const ThemeColours = [
+    '--ground: var(--verso-bg-default)', '--paper: var(--verso-cell-background)', '--ink: var(--verso-fg-default)',
+    '--quiet: var(--verso-fg-muted)', '--line: var(--verso-border-default)', '--accent: var(--verso-accent-primary)',
+    '--wrong: var(--verso-status-error)', '--run: var(--verso-status-success)', '--warn: var(--verso-status-warning)',
+    '--pick: var(--verso-highlight-background)',
+  ].join('; ');
+
+  // The theme the notebook chose, drawn as Verso's surfaces draw one — its tokens, the page's colours taken from them —
+  // and while it chose none, the page's own look. Nothing of it is kept in the browser.
+  function themeIs(id) {
+    if ((id ?? null) === state.themeId) {
+      return;
+    }
+
+    state.themeId = id ?? null;
+
+    const theme = state.themes.find(each => each.id === state.themeId);
+
+    themeStyle.textContent = theme
+      ? `${theme.css}\n:root { ${ThemeColours}; color-scheme: ${theme.tone === Tone.Light ? 'light' : 'dark'}; }`
+      : '';
+
+    for (const frame of document.querySelectorAll('iframe.widget')) {
+      frame.contentWindow?.postMessage({ type: 'verso/widget-theme', ...themeAt(frame) }, '*');
+    }
+
+    if (state.openPanel === 'view') {
+      drawPanel();
+    }
+  }
+
+  // As Verso's cell list takes the choice away: a click on the list, beside every cell — pressed there as well as let go
+  // there, since a cell chosen as it is pressed moves the cells under the pointer before it is let go.
+  let pressedBeside = false;
+
+  main.addEventListener('pointerdown', event => {
+    pressedBeside = !event.target.closest('section.cell');
+  });
+  main.addEventListener('click', event => {
+    if (pressedBeside && state.name && state.selected !== null && !event.target.closest('section.cell')) {
+      deselect();
+    }
+  });
+
+  // The first cell not shown rendered, chosen; none when every cell is.
+  function chooseFirst() {
+    const first = state.order.find(id => !shownRendered(state.cells.get(id)));
+
+    if (first) {
+      select(first);
+    }
+  }
+
+  // No cell is selected: the one that was is drawn again, and the properties panel says so.
+  function deselect() {
+    const before = state.selected;
+    const cell = before ? state.cells.get(before) : undefined;
+
+    state.selected = null;
+
+    if (cell && sectionOf(before)) {
+      fill(sectionOf(before), cell);
+    }
+
+    if (state.openPanel === 'properties') {
+      drawPanel();
+    }
+  }
 
   function select(id) {
     const before = state.selected;
 
     state.selected = id;
 
-    for (const section of main.querySelectorAll('section.cell')) {
+    for (const section of cellSections()) {
       const cell = state.cells.get(section.dataset.cellId);
 
       if (cell && (cell.id === before || cell.id === id)) {
@@ -1228,25 +3041,42 @@
       }
     }
 
-    loadPanel(id);
+    // As Verso's panel reads a cell's properties: when another cell is chosen, not again for the same one.
+    if (id !== before) {
+      loadPanel(id, true);
+    }
   }
 
-  async function loadPanel(id) {
+  // A cell's properties, drawn in the properties panel while it is open, as Verso's panel draws them: while another cell's
+  // are read it says so, and the fields of the cell chosen before go at once, so nothing is changed on a cell no longer
+  // chosen; a cell that has none, or whose properties could not be read, is said to have none. Read again for the same
+  // cell, its fields stay until the new ones come.
+  async function loadPanel(id, fresh = false) {
+    if (state.openPanel !== 'properties' || !state.panel) {
+      return;
+    }
+
+    if (fresh) {
+      panel.querySelector('.panel-body')?.replaceChildren(text('p', 'empty', 'Loading...'));
+    }
+
     let sections;
 
     try {
-      sections = await json(notebookPath(`/cells/${id}/properties`));
-    } catch (error) {
-      say(error.message, true);
+      sections = await ask('properties', { cell: id });
+    } catch {
+      sections = [];
+    }
 
+    const body = panel.querySelector('.panel-body');
+
+    if (state.selected !== id || state.openPanel !== 'properties' || !body) {
       return;
     }
 
-    if (state.selected !== id) {
-      return;
-    }
-
-    panel.replaceChildren(...sections.flatMap(section => drawSection(id, section)));
+    body.replaceChildren(...(sections.length === 0
+      ? [text('p', 'empty', 'No properties available for this cell.')]
+      : sections.flatMap(section => drawSection(id, section))));
   }
 
   function drawSection(id, section) {
@@ -1263,12 +3093,9 @@
       drawn.push(words);
     }
 
+    // As Verso's panel draws a field: its label, what it is said to be under it, and the field.
     for (const field of section.fields) {
-      const label = document.createElement('label');
-
-      label.textContent = field.label;
-      label.title = field.description ?? '';
-      drawn.push(label, drawField(id, section.part, field));
+      drawn.push(text('label', null, field.label), ...(field.description ? [text('div', 'field-description', field.description)] : []), drawField(id, section.part, field));
     }
 
     return drawn;
@@ -1281,11 +3108,11 @@
       case Kind.Toggle:
         input = document.createElement('input');
         input.type = 'checkbox';
-        input.checked = field.value === true;
+        input.checked = switchedOn(field.value);
         break;
       case Kind.Select:
         input = document.createElement('select');
-        input.append(...field.options.map(option => new Option(option.label, option.value, false, option.value === field.value)));
+        input.append(...field.options.map(option => new Option(option.label, option.value, false, sameWord(field.value, option.value))));
         break;
       case Kind.Several:
         return drawSeveral(id, part, field);
@@ -1314,9 +3141,19 @@
     return input;
   }
 
-  // Several choices: a box for each, sent as the list of those ticked.
+  // As Verso's panel reads a field's value: a switch is on when it is true, or the word true in any case; a choice is the
+  // one whose value is the field's in any case; several choices are a list, or one line of words parted by commas.
+  const switchedOn = value => value === true || typeof value === 'string' && value.trim().toLowerCase() === 'true';
+  const sameWord = (value, word) => value !== null && value !== undefined && String(value).toLowerCase() === String(word).toLowerCase();
+  const wordsOf = value => Array.isArray(value)
+    ? value.map(String)
+    : String(value ?? '').split(',').map(word => word.trim()).filter(word => word);
+
+  // Several choices: a box for each, ticked for a choice among the field's words in any case; a box changed sends the
+  // field's words with that one choice added or taken away, as Verso's panel sends them — a word not among the choices
+  // is kept.
   function drawSeveral(id, part, field) {
-    const chosen = Array.isArray(field.value) ? field.value : String(field.value ?? '').split(',').filter(value => value);
+    const words = wordsOf(field.value);
     const group = document.createElement('div');
 
     group.dataset.part = part;
@@ -1328,9 +3165,20 @@
 
       box.type = 'checkbox';
       box.value = option.value;
-      box.checked = chosen.includes(option.value);
+      box.checked = words.some(word => sameWord(word, option.value));
       box.disabled = field.isReadOnly;
-      box.addEventListener('change', () => change(id, part, field.name, [...group.querySelectorAll('input:checked')].map(ticked => ticked.value)));
+      box.addEventListener('change', () => {
+        const now = [...words];
+        const at = now.indexOf(option.value);
+
+        if (box.checked && at < 0) {
+          now.push(option.value);
+        } else if (!box.checked && at >= 0) {
+          now.splice(at, 1);
+        }
+
+        change(id, part, field.name, now);
+      });
       label.append(box, ` ${option.label}`);
       group.append(label);
     }
@@ -1343,8 +3191,9 @@
     switch (kind) {
       case Kind.Toggle:
         return input.checked;
+      // As Verso's panel sends a number: as a number when it is written as one, else as the text it is.
       case Kind.Number:
-        return input.value === '' ? null : Number(input.value);
+        return input.value.trim() !== '' && Number.isFinite(Number(input.value)) ? Number(input.value) : input.value;
       case Kind.Words:
         return input.value.split(',').map(word => word.trim()).filter(word => word);
       default:
@@ -1352,22 +3201,23 @@
     }
   }
 
-  function change(id, part, field, value) {
+  async function change(id, part, field, value) {
     flushTyping();
-    enqueue(async () => {
-      await api(notebookPath(`/cells/${id}/properties`), { method: 'POST', body: { part, field, value } });
-      await loadPanel(id);
-    });
+    await request('property', { cell: id, part, field, value });
+    await loadPanel(id);
   }
 
   // ---- Saving and closing ------------------------------------------------------------------------------------------
 
-  function save() {
+  // As Verso's editor saves: an error said before is cleared as the save begins, and a save done is a notice naming the
+  // file. Saved says nothing back: a save that was refused has said why.
+  async function save() {
     flushTyping();
-    enqueue(async () => {
-      await api(notebookPath('/save'), { method: 'POST' });
-      say('Saved.');
-    });
+    dismiss();
+
+    if (await request('save') === null) {
+      notice(`Saved to ${state.name}`);
+    }
   }
 
   saveButton.addEventListener('click', save);
@@ -1378,27 +3228,30 @@
     }
   });
 
-  // A close goes past everything waiting, as a stop does: what waits may be waiting for the very run the close stops.
+  // A close goes past everything asked before it, as a stop does: what waits may be waiting for the very run it stops. It
+  // asks first only when something would be lost: what is not saved — typing not sent yet, or a change not answered yet,
+  // among it — or the run under way.
   closeButton.addEventListener('click', async () => {
-    const running = state.running === null
-      ? ''
-      : ' The run under way is stopped; code that does not stop goes on in the background until the tool stops.';
+    const unsaved = state.unsaved || typed.size > 0 || unanswered > 0;
+    const lost = [
+      ...(unsaved ? ['What is not saved is lost.'] : []),
+      ...(state.running === null ? [] : ['The run under way is stopped; code that does not stop goes on in the background until the tool stops.']),
+    ];
 
-    if (!confirm(`Close the notebook without saving it? What is not saved is lost.${running}`)) {
+    if (lost.length > 0 && !confirm(`Close the notebook${unsaved ? ' without saving it' : ''}? ${lost.join(' ')}`)) {
       return;
     }
 
-    // Nothing waiting is sent after it, the buttons are not asked again, and the stream it ends is not opened again: each
+    // Nothing is asked after it, the panel is not drawn again, and the socket the close ends is not opened again: each
     // would open the closed notebook again.
     closed = true;
     clearTimeout(refreshTimer);
-    state.stream?.close();
 
     try {
-      await api(notebookPath('/close'), { method: 'POST' });
+      await ask('close');
       location.search = '';
     } catch (error) {
-      say(error.message, true);
+      fail(error.message);
     }
   });
 
@@ -1409,7 +3262,7 @@
   if (named) {
     open(named);
   } else {
-    list().catch(error => say(error.message, true));
+    list().catch(error => fail(error.message));
   }
 })();
 </script>

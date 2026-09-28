@@ -135,14 +135,13 @@ public sealed partial class CloseTests : IDisposable
         // The look the notebooks take waits behind the run; something asked meanwhile waits behind the look.
         await Beyond();
 
-        var asked = host.ToolbarAsync();
+        var asked = host.SaveAsync();
 
         Assert.Contains(host.FilePath, notebooks.Paths);
 
         await File.WriteAllTextAsync(go, "go", TestContext.Current.CancellationToken);
         await running;
-
-        Assert.NotEmpty(await asked);
+        await asked;
 
         await ForgottenAsync(notebooks, host);
     }
@@ -183,12 +182,12 @@ public sealed partial class CloseTests : IDisposable
 
         Assert.DoesNotContain(closed.FilePath, notebooks.Paths);
         Assert.Contains(kept.FilePath, notebooks.Paths);
-        await Assert.ThrowsAsync<ObjectDisposedException>(() => closed.ToolbarAsync());
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => closed.SaveAsync());
 
         // Its watch ends with it, and the other notebook goes on.
         await Beyond();
 
-        Assert.NotEmpty(await kept.ToolbarAsync());
+        await kept.SaveAsync();
         keeping.Dispose();
 
         await using var others = new OpenNotebooks();

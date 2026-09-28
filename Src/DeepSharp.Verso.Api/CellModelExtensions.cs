@@ -37,8 +37,22 @@ internal static class CellModelExtensions
             return null;
         }
 
-        return Array.IndexOf(copy, null) >= 0 ? null : [.. copy.Select(output => new HostedOutput(output.MimeType, output.Content, output.IsError))];
+        return Array.IndexOf(copy, null) >= 0 ? null : [.. copy.Select(Hosted)];
     }
+
+    // An output as a view is told it: the stream it came on in the Api's own words, since the engine's are not handed out.
+    private static HostedOutput Hosted(CellOutput output) => new(
+        output.MimeType,
+        output.Content,
+        output.IsError,
+        output.ErrorName,
+        output.ErrorStackTrace,
+        output.Channel switch
+        {
+            OutputChannel.Stdout => OutputStream.StandardOutput,
+            OutputChannel.Stderr => OutputStream.StandardError,
+            _ => null,
+        });
 
     /// <summary>What is kept with a cell, each value written as JSON.</summary>
     /// <param name="metadata">The cell's metadata.</param>

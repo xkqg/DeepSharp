@@ -3,9 +3,12 @@
 
 using System.Net;
 using System.Net.Http.Json;
-using System.Net.ServerSentEvents;
+using System.Net.WebSockets;
+using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using DeepSharp.Tests.Serve.Parts;
 using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
 using DeepSharp.Verso.Serve;
@@ -20,16 +23,15 @@ using Verso.Serializers;
 namespace DeepSharp.Tests.Serve;
 
 /// <summary>
-/// What a page asks of a notebook the server serves: which notebooks there are, the notebook as it stands and each
-/// change after it — a stream a page keeps open — and what a person does to it: typing, running, stopping, a click on a
-/// block's control. A name the server does not serve is not found, a cell a change replaced answers the version it
-/// is gone from, and a refusal says why. A stream ends when the server stops or the page goes away.
+/// What a page asks of a notebook the server serves: which notebooks there are, over HTTP; and over one socket per page,
+/// the notebook as it stands and each change after it, and what a person does to it — typing, running, stopping, a click
+/// on a block's control — each ask answered to that page alone, by its id, never before the change it made. A name the
+/// server does not serve is not found, a cell a change replaced answers the version it is gone from, and a refusal says
+/// why. A socket ends when its notebook closes, when the server stops, or when its page goes away.
 /// </summary>
 public sealed partial class NotebookEndpointTests : IDisposable
 {
     private const string Token = "fedcba9876543210fedcba9876543210";
-
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     private static readonly string[] Titanic =
     [
@@ -76,32 +78,19 @@ public sealed partial class NotebookEndpointTests : IDisposable
         client.DefaultRequestHeaders.Add("Cookie", $"deepsharp-serve-{address.Port}={Token}");
         client.DefaultRequestHeaders.Add("Origin", address.GetLeftPart(UriPartial.Authority));
 
-        return new Served(app, client);
+        return new Served(app, client, address);
     }
 
-    // A view as a page opens one: the stream, read event by event.
-    private static async Task<View> ViewAsync(Served served, string name)
+    // A page's socket on a notebook the server serves.
+    private static Task<PageSocket> SocketAsync(Served served, string name = "titanic.verso") => PageSocket.OpenAsync(served.Address, name, Token);
+
+    // The notebook as a page opening it now sees it.
+    private static async Task<NotebookVersion> NotebookAsync(Served served, string name = "titanic.verso")
     {
-        var answer = await served.Client.SendAsync(
-            new HttpRequestMessage(HttpMethod.Get, $"/api/notebooks/{name}/updates"), HttpCompletionOption.ResponseHeadersRead, TestContext.Current.CancellationToken);
+        await using var socket = await SocketAsync(served, name);
 
-        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
-        Assert.Equal("text/event-stream", answer.Content.Headers.ContentType?.MediaType);
-
-        var events = SseParser.Create(await answer.Content.ReadAsStreamAsync(TestContext.Current.CancellationToken))
-            .EnumerateAsync(TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
-
-        return new View(answer, events);
+        return (await socket.SnapshotAsync()).Version;
     }
-
-    private static async Task<SseItem<string>> NextAsync(View view)
-    {
-        Assert.True(await view.Events.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken));
-
-        return view.Events.Current;
-    }
-
-    private static T Read<T>(SseItem<string> item) => JsonSerializer.Deserialize<T>(item.Data, Json)!;
 
     // What a control a block drew carries, read the way a browser reads the attribute.
     private static string ActionOf(HostedCell cell, Func<string, bool> which) =>
@@ -130,59 +119,81 @@ public sealed partial class NotebookEndpointTests : IDisposable
     [InlineData("..%2Ftitanic.verso")]
     [InlineData("sub%2Ftitanic.verso")]
     [InlineData("missing.verso")]
-    public async Task ANameTheServerDoesNotServe_IsNotFound(string name)
+    public async Task ANameTheServerDoesNotServe_IsNotFound_OnItsSocket(string name)
     {
         await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served, name);
 
-        Assert.Equal(HttpStatusCode.NotFound, (await served.Client.GetAsync($"/api/notebooks/{name}", TestContext.Current.CancellationToken)).StatusCode);
-        Assert.Equal(HttpStatusCode.OK, (await served.Client.GetAsync("/api/notebooks/titanic.verso", TestContext.Current.CancellationToken)).StatusCode);
+        var refused = await socket.UnnamedAsync();
+
+        Assert.Equal(404, refused.Status);
+        await socket.Ended.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        Assert.Equal((WebSocketCloseStatus)4404, socket.CloseStatus);
+        Assert.NotEmpty((await NotebookAsync(served)).Cells);
     }
 
     [Fact]
-    public async Task AView_BeginsWithTheNotebookAsItStands_ThenEachChange_NumberedByVersion()
+    public async Task EveryPerNotebookRouteButTheSocket_IsGone()
     {
         await using var served = await StartAsync();
-        await using var view = await ViewAsync(served, "titanic.verso");
+        var cell = (await NotebookAsync(served)).Cells[0].Id;
 
-        var first = await NextAsync(view);
-        var snapshot = Read<NotebookVersion>(first);
+        Assert.Equal(HttpStatusCode.NotFound, (await served.Client.GetAsync("/api/notebooks/titanic.verso", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await served.Client.GetAsync("/api/notebooks/titanic.verso/updates", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await served.Client.GetAsync("/api/notebooks/titanic.verso/toolbar", TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await served.Client.PostAsync($"/api/notebooks/titanic.verso/cells/{cell}/run", null, TestContext.Current.CancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await served.Client.PostAsync("/api/notebooks/titanic.verso/save", null, TestContext.Current.CancellationToken)).StatusCode);
 
-        Assert.Equal("snapshot", first.EventType);
-        Assert.Equal("0", first.EventId);
-        Assert.Equal(Titanic, snapshot.Cells.Select(cell => cell.Source));
+        // The socket's address answers a socket alone.
+        Assert.Equal(HttpStatusCode.BadRequest, (await served.Client.GetAsync("/api/notebooks/titanic.verso/socket", TestContext.Current.CancellationToken)).StatusCode);
+    }
 
-        var fill = snapshot.Cells[3].Id;
+    [Fact]
+    public async Task ASocket_BeginsWithTheNotebookAsItStands_AndItsKinds_ThenEachChange_BeforeTheAnswerToTheAskThatMadeIt()
+    {
+        await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
+
+        var snapshot = await socket.SnapshotAsync();
+
+        Assert.Equal(0, snapshot.Version.Version);
+        Assert.Equal(Titanic, snapshot.Version.Cells.Select(cell => cell.Source));
+        Assert.Contains(snapshot.Kinds, kind => kind.Type == StepCellType.StepType);
+
+        var fill = snapshot.Version.Cells[3].Id;
         var mean = Titanic[3].Replace("median", "mean", StringComparison.Ordinal);
-        var edited = await served.Client.PostAsJsonAsync($"/api/notebooks/titanic.verso/cells/{fill}/source", new { source = mean }, TestContext.Current.CancellationToken);
+        var edited = await socket.AskAsync("edit", new { cell = fill, source = mean });
 
-        Assert.Equal(mean, (await edited.Content.ReadFromJsonAsync<HostedCell>(TestContext.Current.CancellationToken)).Source);
+        // An edit is answered done: what it changed comes with the version, as every change's does.
+        Assert.True(edited.IsNothing);
 
-        var next = await NextAsync(view);
-        var change = Read<NotebookChange>(next);
+        var change = await socket.ChangeAsync();
 
-        Assert.Equal("change", next.EventType);
-        Assert.Equal("1", next.EventId);
+        Assert.Equal(1, change.Version);
         Assert.Equal(mean, Assert.Single(change.Cells).Source);
-        Assert.Equal(1, (await served.Client.GetFromJsonAsync<NotebookVersion>("/api/notebooks/titanic.verso", TestContext.Current.CancellationToken)).Version);
+
+        // The page is told the change before the answer to the ask that made it.
+        var frames = socket.Frames.ToList();
+
+        Assert.True(frames.IndexOf("change 1") < frames.IndexOf("answer 1"), string.Join(", ", frames));
     }
 
     [Fact]
-    public async Task ARunAndAClickOnABlocksControl_AreMadeThroughTheServer_AndTheViewIsToldTheNewOrder()
+    public async Task ARunAndAClickOnABlocksControl_AreMadeThroughTheSocket_AndThePageIsToldTheNewOrder()
     {
         await using var served = await StartAsync();
-        await using var view = await ViewAsync(served, "titanic.verso");
-        var cells = Read<NotebookVersion>(await NextAsync(view)).Cells;
+        await using var socket = await SocketAsync(served);
+        var cells = (await socket.SnapshotAsync()).Version.Cells;
         var read = cells[0].Id;
 
-        var card = await (await served.Client.PostAsync($"/api/notebooks/titanic.verso/cells/{read}/run", null, TestContext.Current.CancellationToken))
-            .Content.ReadFromJsonAsync<HostedCell>(TestContext.Current.CancellationToken);
+        var card = (await socket.AskAsync("run", new { cell = read })).Result<HostedCell>();
 
         Assert.NotEmpty(card.Outputs);
 
-        await Click(served, read, ActionOf(card, action => action == "deepsharp.show"), "");
+        await ClickAsync(socket, read, ActionOf(card, action => action == "deepsharp.show"), "");
 
-        var grid = (await served.Client.GetFromJsonAsync<NotebookVersion>("/api/notebooks/titanic.verso", TestContext.Current.CancellationToken)).Cells[0];
-        var ticked = await Click(served, read, ActionOf(grid, action => action.StartsWith("deepsharp.include ", StringComparison.Ordinal) && action.Contains("\"deck\"", StringComparison.Ordinal)), "true");
+        var grid = (await NotebookAsync(served)).Cells[0];
+        var ticked = await ClickAsync(socket, read, ActionOf(grid, action => action.StartsWith("deepsharp.include ", StringComparison.Ordinal) && action.Contains("\"deck\"", StringComparison.Ordinal)), "true");
 
         Assert.True(ticked.StateChanged);
 
@@ -190,49 +201,210 @@ public sealed partial class NotebookEndpointTests : IDisposable
 
         do
         {
-            change = Read<NotebookChange>(await NextAsync(view));
+            change = await socket.ChangeAsync();
         }
         while (change.Order is null);
 
         Assert.DoesNotContain(cells[1].Id, change.Order);
     }
 
-    private static async Task<GestureResult> Click(Served served, Guid cell, string action, string payload)
-    {
-        var answer = await served.Client.PostAsJsonAsync(
-            "/api/notebooks/titanic.verso/gestures", new HostedGesture(cell, StepRenderer.Id, action, payload), TestContext.Current.CancellationToken);
-
-        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
-
-        return await answer.Content.ReadFromJsonAsync<GestureResult>(TestContext.Current.CancellationToken);
-    }
-
     [Fact]
-    public async Task TypingIntoACellAChangeReplaced_AnswersTheVersionItIsGoneFrom()
+    public async Task AClickNamingNoPayload_ReachesItsPart_WithAnEmptyOne_AsVersoHandsEveryPartOne()
     {
         await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
+        var cell = (await socket.SnapshotAsync()).Version.Cells[0].Id;
+
+        var bare = (await socket.AskAsync("gesture", new { cell, extensionId = AnsweringPart.Id, action = "answer" })).Result<GestureResult>();
+        var carrying = (await socket.AskAsync("gesture", new { cell, extensionId = AnsweringPart.Id, action = "answer", payload = "tick" })).Result<GestureResult>();
+
+        Assert.Equal("[]", bare.Answer);
+        Assert.Equal("[tick]", carrying.Answer);
+    }
+
+    private static async Task<GestureResult> ClickAsync(PageSocket socket, Guid cell, string action, string payload) =>
+        (await socket.AskAsync("gesture", new HostedGesture(cell, StepRenderer.Id, action, payload))).Result<GestureResult>();
+
+    [Fact]
+    public async Task TypingIntoACellAChangeReplaced_IsRefused_NamingTheVersionItIsGoneFrom()
+    {
+        await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
         var gone = Guid.NewGuid();
 
-        var answer = await served.Client.PostAsJsonAsync($"/api/notebooks/titanic.verso/cells/{gone}/source", new { source = "x" }, TestContext.Current.CancellationToken);
-        var body = await answer.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken);
+        await socket.SnapshotAsync();
 
-        Assert.Equal(HttpStatusCode.Conflict, answer.StatusCode);
-        Assert.Equal(gone, body.GetProperty("cell").GetGuid());
-        Assert.Equal(0, body.GetProperty("version").GetInt64());
-        Assert.Equal(HttpStatusCode.Conflict, (await served.Client.PostAsync($"/api/notebooks/titanic.verso/cells/{gone}/run", null, TestContext.Current.CancellationToken)).StatusCode);
+        var refused = await socket.AskAsync("edit", new { cell = gone, source = "x" });
+
+        Assert.True(refused.Refused);
+        Assert.Equal(409, refused.Status);
+
+        // Said for the person who reads it; the cell and the version stay on the refusal for a program that reads those.
+        Assert.Equal("The cell is no longer in the notebook: a change made before this one rewrote it or took it away.", refused.Frame.GetProperty("message").GetString());
+        Assert.Equal(gone, refused.Frame.GetProperty("cell").GetGuid());
+        Assert.Equal(0, refused.Frame.GetProperty("version").GetInt64());
+        Assert.Equal(409, (await socket.AskAsync("run", new { cell = gone })).Status);
     }
 
     [Fact]
     public async Task AClickNamingNoPart_IsRefused_SayingWhy()
     {
         await using var served = await StartAsync();
-        var cell = (await served.Client.GetFromJsonAsync<NotebookVersion>("/api/notebooks/titanic.verso", TestContext.Current.CancellationToken)).Cells[0].Id;
+        await using var socket = await SocketAsync(served);
+        var cell = (await socket.SnapshotAsync()).Version.Cells[0].Id;
 
-        var answer = await served.Client.PostAsJsonAsync(
-            "/api/notebooks/titanic.verso/gestures", new HostedGesture(cell, "no.such.part", "deepsharp.show", ""), TestContext.Current.CancellationToken);
+        var refused = await socket.AskAsync("gesture", new HostedGesture(cell, "no.such.part", "deepsharp.show", ""));
 
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, answer.StatusCode);
-        Assert.Contains("no.such.part", (await answer.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal(422, refused.Status);
+        Assert.Contains("no.such.part", refused.Why, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnAskTheServerDoesNotKnow_OrCannotRead_IsRefusedAsABadRequest_AndTheSocketGoesOn()
+    {
+        await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
+
+        await socket.SnapshotAsync();
+
+        Assert.Equal(400, (await socket.AskAsync("fly")).Status);
+        var unnamed = await socket.AskAsync(null);
+
+        Assert.Equal(400, unnamed.Status);
+        Assert.Equal("A page asks nothing called '' of a notebook.", unnamed.Why);
+
+        await socket.SendAsync("this is not an ask");
+
+        Assert.Equal(400, (await socket.UnnamedAsync()).Status);
+        Assert.Equal(400, (await socket.AskAsync("move", new { cell = Guid.NewGuid() })).Status);
+        Assert.False((await socket.AskAsync("stop", new { run = 1 })).Refused);
+    }
+
+    [Theory]
+    [InlineData("run", "{}", "cell")]
+    [InlineData("edit", """{"cell": "{cell}"}""", "text")]
+    [InlineData("gesture", """{"cell": "{cell}", "action": "deepsharp.show"}""", "part")]
+    [InlineData("gesture", """{"cell": "{cell}", "extensionId": "io.github.xkqg.deepsharp.notebooks.renderer"}""", "action")]
+    [InlineData("add", "{}", "kind")]
+    [InlineData("completions", """{"cell": "{cell}", "position": 0}""", "text")]
+    [InlineData("hover", """{"cell": "{cell}", "code": ""}""", "position")]
+    [InlineData("press", "{}", "button")]
+    [InlineData("property", """{"cell": "{cell}", "field": "scale"}""", "part")]
+    [InlineData("property", """{"cell": "{cell}", "part": "io.github.xkqg.deepsharp.notebooks.form"}""", "field")]
+    [InlineData("interact", """{"action": "move"}""", "layout")]
+    [InlineData("interact", """{"layout": "dashboard"}""", "action")]
+    [InlineData("layout", "{}", "layout")]
+    [InlineData("theme", "{}", "theme")]
+    public async Task AnAskLackingWhatItNames_IsRefusedAsABadRequest_SayingWhatItLacks(string ask, string fields, string lacks)
+    {
+        await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
+        var cell = (await socket.SnapshotAsync()).Version.Cells[0].Id;
+
+        var refused = await socket.AskAsync(ask, JsonNode.Parse(fields.Replace("{cell}", cell.ToString(), StringComparison.Ordinal)));
+
+        Assert.Equal(400, refused.Status);
+        Assert.Equal($"'{ask}' names no {lacks}.", refused.Why);
+    }
+
+    [Fact]
+    public async Task AFieldsValueNoPageSends_ReachesItsPart_AsNothing_AsWords_OrAsTheJsonItCameAs()
+    {
+        var cell = new CellModel { Type = "code", Language = "csharp", Source = "1 + 1" };
+        var notebook = new NotebookModel();
+
+        cell.Metadata[ReadingPart.Marked] = true;
+        notebook.Cells.Add(cell);
+        File.WriteAllText(At("values.verso"), await new VersoSerializer().SerializeAsync(notebook));
+
+        await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served, "values.verso");
+        var id = (await socket.SnapshotAsync()).Version.Cells[0].Id;
+
+        // What the part writes down it was handed: the value's type and the value.
+        async Task<string?> HandedAsync(string field, object? value)
+        {
+            Assert.True((await socket.AskAsync("property", new { cell = id, part = ReadingPart.Part, field, value })).IsNothing);
+
+            var metadata = (await NotebookAsync(served, "values.verso")).Cells[0].Metadata;
+
+            return metadata.TryGetValue(ReadingPart.Got + field, out var got) ? JsonSerializer.Deserialize<string>(got) : null;
+        }
+
+        Assert.Equal(":", await HandedAsync("flag", null));
+        Assert.Equal("List`1:1|b", await HandedAsync("choices", new object[] { 1, "b" }));
+        Assert.Equal("JsonElement:{\"a\":1}", await HandedAsync("count", new { a = 1 }));
+    }
+
+    [Fact]
+    public async Task TheLayoutAndTheTheme_AreSwitchedByTheIdAnAskNames_AndOneNamingNoneOrOneTheEngineLacksIsRefused()
+    {
+        await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
+        var first = await socket.NextAsync();
+
+        // The first frame lists what the notebook can be shown in — Verso's three layouts and the test suite's own two — each
+        // theme with its block of custom properties.
+        Assert.Equal(5, first.GetProperty("layouts").GetArrayLength());
+        Assert.Contains("--verso-bg-default", first.GetProperty("themes")[0].GetProperty("css").GetString(), StringComparison.Ordinal);
+
+        Assert.Equal(400, (await socket.AskAsync("layout")).Status);
+        Assert.Equal(400, (await socket.AskAsync("theme")).Status);
+        Assert.Equal(422, (await socket.AskAsync("layout", new { layout = "no-such-layout" })).Status);
+        Assert.Equal(422, (await socket.AskAsync("theme", new { theme = "no-such-theme" })).Status);
+
+        Assert.True((await socket.AskAsync("layout", new { layout = "presentation" })).IsNothing);
+        Assert.True((await socket.AskAsync("theme", new { theme = "verso-dark" })).IsNothing);
+
+        await using var other = await SocketAsync(served);
+        var shown = (await other.SnapshotAsync()).Version;
+
+        Assert.Equal("presentation", shown.Layout.Id);
+        Assert.Equal("verso-dark", shown.ThemeId);
+    }
+
+    [Fact]
+    public async Task ATitle_IsGivenThroughTheSocket_AndEveryPageIsToldIt()
+    {
+        await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
+
+        Assert.Null((await socket.SnapshotAsync()).Version.Metadata.Title);
+        Assert.True((await socket.AskAsync("title", new { title = "Passengers" })).IsNothing);
+        Assert.Equal("Passengers", (await socket.ChangeAsync()).Metadata?.Title);
+
+        // One with no title takes it away.
+        Assert.True((await socket.AskAsync("title")).IsNothing);
+        Assert.Null((await socket.ChangeAsync()).Metadata?.Title);
+    }
+
+    [Fact]
+    public async Task InTheDashboard_EveryPageIsToldItsArrangement_AndATileMovedThroughTheSocketIsArrangedAnew()
+    {
+        await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
+        var tile = (await socket.SnapshotAsync()).Version.Cells[0].Id;
+
+        Assert.True((await socket.AskAsync("layout", new { layout = "dashboard" })).IsNothing);
+        Assert.Contains($"data-cell-slot=\"{tile}\"", (await socket.ChangeAsync()).Arrangement?.Html, StringComparison.Ordinal);
+
+        var payload = $$"""{"cellId":"{{tile}}","row":3,"col":0,"width":6,"height":4}""";
+
+        Assert.Equal(400, (await socket.AskAsync("interact", new { action = "updateCellPosition", payload, target = tile })).Status);
+        Assert.Equal(400, (await socket.AskAsync("interact", new { layout = "dashboard", payload, target = tile })).Status);
+        Assert.True((await socket.AskAsync("interact", new { layout = "dashboard", action = "updateCellPosition", payload, target = tile })).IsNothing);
+        Assert.Contains("grid-column:1/span 6;grid-row:4/span 4", (await socket.ChangeAsync()).Arrangement?.Html, StringComparison.Ordinal);
+
+        // An act on a layout the notebook is no longer shown in is refused, in words.
+        var refused = await socket.AskAsync("interact", new { layout = "presentation", action = "run", target = tile });
+
+        Assert.Equal(422, refused.Status);
+        Assert.Contains("presentation", refused.Why, StringComparison.Ordinal);
+
+        // A page that opens now is told the arrangement with the notebook.
+        await using var later = await SocketAsync(served);
+
+        Assert.Contains("grid-row:4/span 4", (await later.SnapshotAsync()).Version.Arrangement.Html, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -243,101 +415,110 @@ public sealed partial class NotebookEndpointTests : IDisposable
             $$"""{"cells": [{"cell_type": "code", "execution_count": null, "metadata": {}, "outputs": [], "source": [{{JsonSerializer.Serialize(Titanic[0])}}]}], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}""");
 
         await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served, "old.ipynb");
 
-        var answer = await served.Client.GetAsync("/api/notebooks/old.ipynb", TestContext.Current.CancellationToken);
+        var refused = await socket.UnnamedAsync();
 
-        Assert.Equal(HttpStatusCode.UnprocessableEntity, answer.StatusCode);
-        Assert.Contains("read.csv", (await answer.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("message").GetString(), StringComparison.Ordinal);
+        Assert.Equal(422, refused.Status);
+        Assert.Contains("read.csv", refused.Why, StringComparison.Ordinal);
+        await socket.Ended.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        Assert.Equal((WebSocketCloseStatus)4422, socket.CloseStatus);
     }
 
     [Fact]
     public async Task Stopping_IsAnswered_WhetherOrNotARunIsUnderWay()
     {
         await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
 
-        var answer = await served.Client.PostAsJsonAsync("/api/notebooks/titanic.verso/stop", new { run = 1 }, TestContext.Current.CancellationToken);
+        await socket.SnapshotAsync();
 
-        Assert.Equal(HttpStatusCode.OK, answer.StatusCode);
-        Assert.False((await answer.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("stopped").GetBoolean());
+        Assert.False((await socket.AskAsync("stop", new { run = 1 })).Result<JsonElement>().GetProperty("stopped").GetBoolean());
     }
 
     [Fact]
-    public async Task ClosingANotebook_EndsItsViews_AndWhatItHeldUnsavedIsGone()
+    public async Task ClosingANotebook_IsAnswered_ThenEndsEverySocket_AndWhatItHeldUnsavedIsGone()
     {
         await using var served = await StartAsync();
-        await using var view = await ViewAsync(served, "titanic.verso");
-        var fill = Read<NotebookVersion>(await NextAsync(view)).Cells[3].Id;
+        await using var socket = await SocketAsync(served);
+        await using var other = await SocketAsync(served);
+        var fill = (await socket.SnapshotAsync()).Version.Cells[3].Id;
 
-        await served.Client.PostAsJsonAsync($"/api/notebooks/titanic.verso/cells/{fill}/source", new { source = "{}" }, TestContext.Current.CancellationToken);
-        await NextAsync(view);
+        await other.SnapshotAsync();
+        await socket.AskAsync("edit", new { cell = fill, source = "{}" });
 
-        Assert.Equal(HttpStatusCode.NoContent, (await served.Client.PostAsync("/api/notebooks/titanic.verso/close", null, TestContext.Current.CancellationToken)).StatusCode);
-        Assert.False(await view.Events.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        Assert.True((await socket.AskAsync("close")).IsNothing);
+
+        foreach (var each in new[] { socket, other })
+        {
+            await each.Ended.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+            Assert.Equal(WebSocketCloseStatus.NormalClosure, each.CloseStatus);
+        }
 
         // Opened again, it is the notebook the file holds.
-        Assert.Equal(Titanic[3], (await served.Client.GetFromJsonAsync<NotebookVersion>("/api/notebooks/titanic.verso", TestContext.Current.CancellationToken)).Cells[3].Source);
+        Assert.Equal(Titanic[3], (await NotebookAsync(served)).Cells[3].Source);
     }
 
     [Fact]
-    public async Task APageThatLeavesAsSoonAsItHasTheNotebook_EndsItsStream_WithoutWaitingForAChange()
+    public async Task APageThatNeverClosesItsSide_IsLetGo_OnceItsNotebookClosed()
     {
-        await using var notebooks = new OpenNotebooks();
-        var host = await notebooks.OpenAsync(At("titanic.verso"), TestContext.Current.CancellationToken);
-        using var view = host.Subscribe();
+        await using var served = await StartAsync();
+        using var silent = new ClientWebSocket();
 
-        var events = NotebookEndpoints.Changes.Events(view, TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        silent.Options.SetRequestHeader("Cookie", $"deepsharp-serve-{served.Address.Port}={Token}");
+        silent.Options.SetRequestHeader("Origin", served.Address.GetLeftPart(UriPartial.Authority));
+        await silent.ConnectAsync(new Uri($"ws://{served.Address.Authority}/api/notebooks/titanic.verso/socket"), TestContext.Current.CancellationToken);
 
-        Assert.True(await events.MoveNextAsync());
-        Assert.Equal("snapshot", events.Current.EventType);
+        // A page that reads nothing more, and so never closes its side once the server closed its own.
+        await using (var closing = await SocketAsync(served))
+        {
+            await closing.SnapshotAsync();
+            await closing.AskAsync("close");
+        }
 
-        await events.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
+        var stopping = System.Diagnostics.Stopwatch.StartNew();
+
+        await served.App.StopAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        // Let go after a moment, rather than kept until the server gives up on its last request.
+        Assert.True(stopping.Elapsed < TimeSpan.FromSeconds(15), $"the server took {stopping.Elapsed.TotalSeconds:0.0} s to stop");
     }
 
     [Fact]
-    public async Task APageThatLeavesAsSoonAsItHasAChange_EndsItsStream_WithoutWaitingForTheNext()
-    {
-        await using var notebooks = new OpenNotebooks();
-        var host = await notebooks.OpenAsync(At("titanic.verso"), TestContext.Current.CancellationToken);
-        using var view = host.Subscribe();
-
-        var events = NotebookEndpoints.Changes.Events(view, TestContext.Current.CancellationToken).GetAsyncEnumerator(TestContext.Current.CancellationToken);
-
-        Assert.True(await events.MoveNextAsync());
-
-        await host.EditAsync(host.Cells[3].Id, Titanic[3].Replace("median", "mean", StringComparison.Ordinal));
-
-        Assert.True(await events.MoveNextAsync());
-        Assert.Equal("change", events.Current.EventType);
-
-        await events.DisposeAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
-    }
-
-    [Fact]
-    public async Task StoppingTheServer_EndsAnOpenView_AtOnce()
+    public async Task StoppingTheServer_EndsAnOpenSocket_AtOnce()
     {
         var served = await StartAsync();
-        await using var view = await ViewAsync(served, "titanic.verso");
+        await using var socket = await SocketAsync(served);
 
-        await NextAsync(view);
+        await socket.SnapshotAsync();
 
         var stopping = served.App.StopAsync(TestContext.Current.CancellationToken);
 
-        Assert.False(await view.Events.MoveNextAsync().AsTask().WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+        await socket.Ended.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         await stopping.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         await served.DisposeAsync();
     }
 
-    [Fact]
-    public async Task AViewWhosePageWentAway_Ends_SoTheNotebookClosesOnceNoPageShowsIt()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task APageThatLeaves_EndsItsView_SoTheNotebookClosesOnceNoPageShowsIt(bool afterAChange)
     {
         await using var served = await StartAsync(grace: TimeSpan.FromMilliseconds(200));
         var host = await served.App.Services.GetRequiredService<OpenNotebooks>().OpenAsync(At("titanic.verso"), TestContext.Current.CancellationToken);
-        var view = await ViewAsync(served, "titanic.verso");
+        var socket = await SocketAsync(served);
 
-        await NextAsync(view);
+        await socket.SnapshotAsync();
 
-        // The page's tab closes: its connection goes with it.
-        await view.DisposeAsync();
+        if (afterAChange)
+        {
+            // Left just after a change was told, saved first, so nothing unsaved keeps the notebook.
+            await host.EditAsync(host.Cells[3].Id, Titanic[3].Replace("median", "mean", StringComparison.Ordinal));
+            await host.SaveAsync();
+        }
+
+        // The page's tab closes: its socket goes with it.
+        await socket.DisposeAsync();
 
         for (var waited = TimeSpan.Zero; ; waited += TimeSpan.FromMilliseconds(100))
         {
@@ -346,7 +527,7 @@ public sealed partial class NotebookEndpointTests : IDisposable
             // Asked, not viewed: a view would be a page showing it.
             try
             {
-                await host.ToolbarAsync();
+                await host.PropertiesAsync(host.Cells[0].Id);
             }
             catch (ObjectDisposedException)
             {
@@ -358,29 +539,29 @@ public sealed partial class NotebookEndpointTests : IDisposable
     }
 
     [Fact]
-    public async Task TheToolbar_IsEveryButtonTheEngineHas_EachSayingWhetherItCanBePressedNow()
+    public async Task TheToolbar_RidesTheVersion_EveryButtonTheEngineHas_EachSayingWhetherItCanBePressedThen()
     {
         await using var served = await StartAsync();
 
-        var buttons = await served.Client.GetFromJsonAsync<HostedToolbarAction[]>("/api/notebooks/titanic.verso/toolbar", TestContext.Current.CancellationToken);
+        var version = await NotebookAsync(served);
 
-        Assert.True(buttons!.Single(button => button.Id == ExportPipelineAction.Id).IsEnabled);
-        Assert.Contains(buttons!, button => button.Id == "verso.action.run-all");
+        Assert.True(version.Buttons.Single(button => button.Id == ExportPipelineAction.Id).IsEnabled);
+        Assert.Contains(version.Buttons, button => button.Id == "verso.action.run-all");
     }
 
     [Fact]
     public async Task AFileAButtonHandsOver_GoesToThePageThatPressedIt_UnderItsOwnName_AndNothingIsWrittenBesideTheNotebook()
     {
         await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
 
-        var pressed = await served.Client.PostAsJsonAsync($"/api/notebooks/titanic.verso/toolbar/{ExportPipelineAction.Id}", new { cells = Array.Empty<Guid>() }, TestContext.Current.CancellationToken);
-        var disposition = pressed.Content.Headers.ContentDisposition!;
+        await socket.SnapshotAsync();
 
-        Assert.Equal(HttpStatusCode.OK, pressed.StatusCode);
-        Assert.Equal("application/json", pressed.Content.Headers.ContentType?.MediaType);
-        Assert.Equal("attachment", disposition.DispositionType);
-        Assert.Equal("titanic.pipeline.json", disposition.FileNameStar);
-        Assert.Contains("\"normalise\"", await pressed.Content.ReadAsStringAsync(TestContext.Current.CancellationToken), StringComparison.Ordinal);
+        var file = (await socket.AskAsync("press", new { button = ExportPipelineAction.Id, cells = Array.Empty<Guid>() })).Result<HostedFile>();
+
+        Assert.Equal("titanic.pipeline.json", file.Name);
+        Assert.Equal("application/json", file.ContentType);
+        Assert.Contains("\"normalise\"", Encoding.UTF8.GetString(file.Bytes), StringComparison.Ordinal);
         Assert.False(File.Exists(At("titanic.pipeline.json")));
     }
 
@@ -388,17 +569,19 @@ public sealed partial class NotebookEndpointTests : IDisposable
     public async Task AButtonThatHandsNothingOver_IsAnsweredWithNothing_AndOneTheEngineDoesNotHave_IsRefused()
     {
         await using var served = await StartAsync();
+        await using var socket = await SocketAsync(served);
 
-        Assert.Equal(
-            HttpStatusCode.NoContent,
-            (await served.Client.PostAsJsonAsync($"/api/notebooks/titanic.verso/toolbar/{RunPipelineAction.Id}", new { cells = Array.Empty<Guid>() }, TestContext.Current.CancellationToken)).StatusCode);
-        Assert.Equal(
-            HttpStatusCode.UnprocessableEntity,
-            (await served.Client.PostAsJsonAsync("/api/notebooks/titanic.verso/toolbar/no.such.button", new { cells = Array.Empty<Guid>() }, TestContext.Current.CancellationToken)).StatusCode);
+        await socket.SnapshotAsync();
+
+        Assert.True((await socket.AskAsync("press", new { button = RunPipelineAction.Id, cells = Array.Empty<Guid>() })).IsNothing);
+        Assert.Equal(422, (await socket.AskAsync("press", new { button = "no.such.button", cells = Array.Empty<Guid>() })).Status);
+
+        // A press that names no cells is pressed for none, as the notebook's own buttons are.
+        Assert.True((await socket.AskAsync("press", new { button = RunPipelineAction.Id })).IsNothing);
     }
 
     [Fact]
-    public async Task ACellsPanel_IsTheSectionsOfItsParts_AndAFieldIsChangedByItsPart_WithTheValueAsThePageSentIt()
+    public async Task ACellsPanel_IsTheSectionsOfItsParts_AndAFieldIsChangedByItsPart_WithItsValueAsVersosBrowserEditorHandsItOn()
     {
         var notebook = new NotebookModel();
 
@@ -411,61 +594,56 @@ public sealed partial class NotebookEndpointTests : IDisposable
         File.WriteAllText(At("panel.verso"), await new VersoSerializer().SerializeAsync(notebook));
 
         await using var served = await StartAsync();
-        var cells = (await served.Client.GetFromJsonAsync<NotebookVersion>("/api/notebooks/panel.verso", TestContext.Current.CancellationToken)).Cells;
+        await using var socket = await SocketAsync(served, "panel.verso");
+        var cells = (await socket.SnapshotAsync()).Version.Cells;
         var normalise = cells[4].Id;
         var code = cells[5].Id;
 
-        var sections = await served.Client.GetFromJsonAsync<JsonElement[]>($"/api/notebooks/panel.verso/cells/{normalise}/properties", TestContext.Current.CancellationToken);
+        var sections = (await socket.AskAsync("properties", new { cell = normalise })).Result<JsonElement[]>();
 
-        Assert.Contains(sections!, section => section.GetProperty("part").GetString() == StepForm.Id);
+        Assert.Contains(sections, section => section.GetProperty("part").GetString() == StepForm.Id);
 
         async Task ChangeAsync(Guid cell, string part, string field, object value) =>
-            Assert.Equal(
-                HttpStatusCode.NoContent,
-                (await served.Client.PostAsJsonAsync($"/api/notebooks/panel.verso/cells/{cell}/properties", new { part, field, value }, TestContext.Current.CancellationToken)).StatusCode);
+            Assert.True((await socket.AskAsync("property", new { cell, part, field, value })).IsNothing);
 
         await ChangeAsync(normalise, StepForm.Id, "scale", "minmax");
         await ChangeAsync(code, "verso.propertyprovider.display", "inputCollapsed", true);
         await ChangeAsync(code, "verso.propertyprovider.display", "outputPreviewLineCount", 8);
 
-        var after = (await served.Client.GetFromJsonAsync<NotebookVersion>("/api/notebooks/panel.verso", TestContext.Current.CancellationToken)).Cells;
+        var after = (await NotebookAsync(served, "panel.verso")).Cells;
 
         Assert.Contains("\"minmax\"", after[4].Source, StringComparison.Ordinal);
         Assert.Equal("true", after[5].Metadata["verso:ui.inputCollapsed"]);
         Assert.Equal("8", after[5].Metadata["verso:ui.outputPreviewLineCount"]);
+
+        // A number reaches the part as Verso's browser editor hands one on, as a double, which the part reads as it reads
+        // one from that editor.
+        await ChangeAsync(code, "verso.propertyprovider.display", "outputPreviewLineCount", 3.5);
+        Assert.Equal("3", (await NotebookAsync(served, "panel.verso")).Cells[5].Metadata["verso:ui.outputPreviewLineCount"]);
     }
 
     [Fact]
     public async Task Saving_WritesTheNotebookToItsFile()
     {
         await using var served = await StartAsync();
-        var fill = (await served.Client.GetFromJsonAsync<NotebookVersion>("/api/notebooks/titanic.verso", TestContext.Current.CancellationToken)).Cells[3].Id;
+        await using var socket = await SocketAsync(served);
+        var fill = (await socket.SnapshotAsync()).Version.Cells[3].Id;
         var mean = Titanic[3].Replace("median", "mean", StringComparison.Ordinal);
 
-        await served.Client.PostAsJsonAsync($"/api/notebooks/titanic.verso/cells/{fill}/source", new { source = mean }, TestContext.Current.CancellationToken);
+        await socket.AskAsync("edit", new { cell = fill, source = mean });
 
-        Assert.Equal(HttpStatusCode.NoContent, (await served.Client.PostAsync("/api/notebooks/titanic.verso/save", null, TestContext.Current.CancellationToken)).StatusCode);
+        Assert.True((await socket.AskAsync("save")).IsNothing);
         Assert.Contains("mean", (await new VersoSerializer().DeserializeAsync(await File.ReadAllTextAsync(At("titanic.verso"), TestContext.Current.CancellationToken))).Cells[3].Source, StringComparison.Ordinal);
     }
 
-    // A page's stream: the answer it arrives in, closed with the view, as a tab closing closes its connection.
-    private sealed class View(HttpResponseMessage answer, IAsyncEnumerator<SseItem<string>> events) : IAsyncDisposable
-    {
-        public IAsyncEnumerator<SseItem<string>> Events => events;
-
-        public async ValueTask DisposeAsync()
-        {
-            await events.DisposeAsync();
-            answer.Dispose();
-        }
-    }
-
     // A started server and a browser that carries its token, stopped and closed with the test.
-    private sealed class Served(WebApplication app, HttpClient client) : IAsyncDisposable
+    private sealed class Served(WebApplication app, HttpClient client, Uri address) : IAsyncDisposable
     {
         public WebApplication App => app;
 
         public HttpClient Client => client;
+
+        public Uri Address => address;
 
         public async ValueTask DisposeAsync()
         {

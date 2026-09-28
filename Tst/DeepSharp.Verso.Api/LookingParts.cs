@@ -18,7 +18,9 @@ internal sealed class LookingButton : IToolbarAction
 
     public string? Description => null;
 
-    public string ActionId => "deepsharp.tests.looking";
+    public const string Id = "deepsharp.tests.looking";
+
+    public string ActionId => Id;
 
     public string DisplayName => "Looking";
 
@@ -38,6 +40,44 @@ internal sealed class LookingButton : IToolbarAction
 
         return true;
     }
+
+    public Task ExecuteAsync(IToolbarActionContext context) => Task.CompletedTask;
+}
+
+/// <summary>A button on a cell's toolbar that cannot tell, for any cell, whether it can be pressed — as a part may fail.</summary>
+internal sealed class FailingCellButton : IToolbarAction
+{
+    public const string Id = "deepsharp.tests.failing-cell";
+
+    public const string Why = "It cannot tell for a cell.";
+
+    public string ExtensionId => "deepsharp.tests.failing-cell-button";
+
+    public string Name => "A cell's button that fails when asked for a cell";
+
+    public string Version => "1.0.0";
+
+    public string? Author => null;
+
+    public string? Description => null;
+
+    public string ActionId => Id;
+
+    public string DisplayName => "Failing";
+
+    public string? Icon => null;
+
+    public ToolbarPlacement Placement => ToolbarPlacement.CellToolbar;
+
+    public int Order => 0;
+
+    public Task OnLoadedAsync(IExtensionHostContext context) => Task.CompletedTask;
+
+    public Task OnUnloadedAsync() => Task.CompletedTask;
+
+    // Asked for the notebook as a whole it says no; asked for a cell it fails.
+    public Task<bool> IsEnabledAsync(IToolbarActionContext context) =>
+        context.SelectedCellIds.Count > 0 ? throw new InvalidOperationException(Why) : Task.FromResult(false);
 
     public Task ExecuteAsync(IToolbarActionContext context) => Task.CompletedTask;
 }
@@ -68,6 +108,38 @@ internal sealed class LookingPanel : ICellPropertyProvider
         await context.Notebook.ExecuteCellAsync(cell.Id);
 
         return new PropertySection("Looking", null, []);
+    }
+
+    public Task OnPropertyChangedAsync(CellModel cell, string propertyName, object? value, ICellRenderContext context) => Task.CompletedTask;
+}
+
+/// <summary>A properties part that, asked to draw its section, takes until it is let go — as a slow part does.</summary>
+/// <param name="until">When it is let go.</param>
+internal sealed class WaitingPanel(Task until) : ICellPropertyProvider
+{
+    public string ExtensionId => "deepsharp.tests.waiting-panel";
+
+    public string Name => "A panel that takes until it is let go";
+
+    public string Version => "1.0.0";
+
+    public string? Author => null;
+
+    public string? Description => null;
+
+    public int Order => 0;
+
+    public Task OnLoadedAsync(IExtensionHostContext context) => Task.CompletedTask;
+
+    public Task OnUnloadedAsync() => Task.CompletedTask;
+
+    public bool AppliesTo(CellModel cell, ICellRenderContext context) => true;
+
+    public async Task<PropertySection> GetPropertiesSectionAsync(CellModel cell, ICellRenderContext context)
+    {
+        await until;
+
+        return new PropertySection("Waiting", null, []);
     }
 
     public Task OnPropertyChangedAsync(CellModel cell, string propertyName, object? value, ICellRenderContext context) => Task.CompletedTask;

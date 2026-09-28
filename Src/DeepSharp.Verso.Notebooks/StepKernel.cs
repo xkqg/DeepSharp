@@ -40,8 +40,8 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
     /// <remarks>
     /// A C# cell reads it with <c>Variables.TryGet&lt;string&gt;</c>, because it is often not there: not until "Show the
     /// data here" or the toolbar's run reads the blocks, and not again after Verso's Run All, a change made in a block's
-    /// form, a block run by hand with other text, blocks that make no whole pipeline, or a stopped run — whenever the
-    /// blocks may no longer make what it held. A block added, taken away, moved, turned into another kind or typed into
+    /// form, a block run by hand with other text, blocks that make no whole pipeline, or a stopped run that started a
+    /// kernel afresh — whenever the blocks may no longer make what it held. A block added, taken away, moved, turned into another kind or typed into
     /// takes it back too, unless the blocks still make it, once the notebook hears of it: at the next gesture, or at once
     /// from a host that changes cells itself. Either of those two reads the blocks and hands it over again. The text reads back
     /// through a catalog of the packages' own verbs, <c>StepCatalog.BuiltIn().WithIndicators()</c>, and a relative
@@ -107,9 +107,12 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
     /// <remarks>
     /// A block run because somebody ran it shows its card. A block run by a gesture shows its card and what the
     /// gesture asked for — the data there, or why there is none — and the request is taken once, so running the
-    /// block again afterwards shows the card alone. A run stopped since the gesture began shows its card and nothing it
-    /// worked out after it, and hands nothing over. A block run by hand whose step is not the one the last gesture
-    /// read withdraws the pipeline handed to C# cells, which no longer is the one the blocks make.
+    /// block again afterwards shows the card alone. Every write is let through whole, once it is worked out, under the
+    /// ticket of the block's run and, for what a gesture asked, that gesture's turn: a block whose run was stopped shows
+    /// what it wrote before the stop — its card, when it got that far — and nothing after it, and hands nothing over; one
+    /// stopped before its kernel began shows nothing, since the engine clears a block as it begins it. A block run by hand
+    /// whose step is not the one the last gesture read withdraws the pipeline handed to C# cells, which no longer is the
+    /// one the blocks make.
     /// </remarks>
     public async Task<IReadOnlyList<CellOutput>> ExecuteAsync(string code, IExecutionContext context)
     {
@@ -118,9 +121,13 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
 
         var catalog = NotebookVerbs.Catalog();
         var session = Session;
-        var request = session.Take(context.CellId);
+        var ticket = session.Enter(context.CancellationToken);
+        var request = session.Take(context.CellId, ticket);
+        var cell = context.CellId;
+        var variables = context.Variables;
+        var folder = context.NotebookMetadata.FolderPath();
 
-        NotebookSession.HandOverFolder(context.Variables, context.NotebookMetadata.FolderPath());
+        session.LetThrough(ticket, () => NotebookSession.HandOverFolder(variables, folder));
 
         IPipelineStep step;
 
@@ -130,29 +137,37 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
         }
         catch (PipelineFileException refused)
         {
-            session.Hidden(context.CellId);
-            NotebookSession.Withdraw(context.Variables);
-            await context.WriteOutputAsync(StepCard.Refused(refused.Faults));
+            await session.LetThroughAsync(ticket, async () =>
+            {
+                session.Hidden(cell);
+                NotebookSession.Withdraw(variables);
+                await context.WriteOutputAsync(StepCard.Refused(refused.Faults));
+            });
 
             return [];
         }
 
-        await context.WriteOutputAsync(StepCard.Of(step, catalog.Describe(step.Verb).Purpose));
+        await session.LetThroughAsync(ticket, () => context.WriteOutputAsync(StepCard.Of(step, catalog.Describe(step.Verb).Purpose)));
 
         if (request is { } asked)
         {
-            await ShowAsync(session, asked, context);
+            await ShowAsync(session, asked, ticket, context);
         }
         else
         {
-            session.Hidden(context.CellId);
-
             // Run by hand with other text than the last gesture read: the pipeline handed to C# cells is no longer
             // the one the blocks make, and a C# cell sees none until a gesture reads them again.
-            if (session.Assembled?.Blocks.FirstOrDefault(block => block.Cell == context.CellId).Step?.Equals(step) != true)
+            var other = session.Assembled?.Blocks.FirstOrDefault(block => block.Cell == cell).Step?.Equals(step) != true;
+
+            session.LetThrough(ticket, () =>
             {
-                NotebookSession.Withdraw(context.Variables);
-            }
+                session.Hidden(cell);
+
+                if (other)
+                {
+                    NotebookSession.Withdraw(variables);
+                }
+            });
         }
 
         return [];
@@ -162,42 +177,60 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
     // for, what it learned, handed over beside the declaration. A view is worked out once for the steps and the
     // bytes it comes from and shown again from memory while both stay, so another page, or the same view again,
     // runs no step. What stops the rows on the way — a file that is not there, a column the rows lack, a value
-    // that is not what its column declares — is said at the block, in the words of what stopped them.
-    private static async Task ShowAsync(NotebookSession session, ViewRequest request, IExecutionContext context)
+    // that is not what its column declares — is said at the block, in the words of what stopped them. Each write is
+    // one whole write, let through for the gesture's turn and the block's run.
+    private static async Task ShowAsync(NotebookSession session, ViewRequest request, NotebookTurn ticket, IExecutionContext context)
     {
+        var cell = context.CellId;
+
         // A card asked for in place of the data — a take-over's list — reads no rows and changes nothing.
         if (request.Card is { } card)
         {
-            session.Hidden(context.CellId);
-            await context.WriteOutputAsync(card);
+            await session.LetThroughAsync(request.Turn, ticket.Mark, async () =>
+            {
+                session.Hidden(cell);
+                await context.WriteOutputAsync(card);
+            });
 
             return;
         }
 
         if (request.NotMade.Count > 0)
         {
-            await context.WriteOutputAsync(StepCard.NotMade(request.NotMade));
+            await session.LetThroughAsync(request.Turn, ticket.Mark, () => context.WriteOutputAsync(StepCard.NotMade(request.NotMade)));
         }
 
         if (request.Declaration is not { } declaration)
         {
-            session.Hidden(context.CellId);
-            await context.WriteOutputAsync(StepCard.NoData(request.Faults));
+            await session.LetThroughAsync(request.Turn, ticket.Mark, async () =>
+            {
+                session.Hidden(cell);
+                await context.WriteOutputAsync(StepCard.NoData(request.Faults));
+            });
 
             return;
         }
 
         if (request.List is { } picks)
         {
-            await ListAsync(session, request, declaration, picks, context);
+            await ListAsync(session, request, ticket, declaration, picks, context);
 
             return;
         }
 
         // What the blocks decided is saved before the rows are read: a decision stands whatever the rows meet.
-        if (request.SavesTheColumns && context.NotebookMetadata.ColumnsFilePath() is { } path && new ColumnsFile(path).Save(declaration) is { } notSaved)
+        if (request.SavesTheColumns && context.NotebookMetadata.ColumnsFilePath() is { } path)
         {
-            await context.WriteOutputAsync(notSaved);
+            var columns = new ColumnsFile(path);
+            var saving = columns.Saving(declaration);
+
+            await session.LetThroughAsync(request.Turn, ticket.Mark, async () =>
+            {
+                if (columns.Write(saving) is { } notSaved)
+                {
+                    await context.WriteOutputAsync(notSaved);
+                }
+            });
         }
 
         var key = declaration.ViewKeyAt(request.Position);
@@ -214,54 +247,53 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
             view = session.ViewFor(key, source.Fingerprint)
                 ?? session.Keep(key, source.Fingerprint, pipeline.ViewAt(request.Position + 1));
 
-            HandOverOnceRead(session, request, pipeline, source.Fingerprint, context.Variables);
+            HandOverOnceRead(session, request, ticket, pipeline, source.Fingerprint, context.Variables);
         }
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or FormatException or InvalidOperationException)
         {
-            // A run stopped since it was asked for says nothing of what it met.
-            if (session.StoppedSince(request.Turn))
+            // The rows are gone or other than a fit learned from: nothing learned from them is handed on. A run stopped
+            // since it was asked for says nothing of what it met.
+            await session.LetThroughAsync(request.Turn, ticket.Mark, async () =>
             {
-                return;
-            }
+                session.Hidden(cell);
 
-            // The rows are gone or other than a fit learned from: nothing learned from them is handed on.
-            session.Hidden(context.CellId);
+                if (session.Assembled is { } assembled)
+                {
+                    session.HandOver(context.Variables, assembled, SourceBytes.Unreadable);
+                }
 
-            if (session.Assembled is { } assembled)
-            {
-                session.HandOver(context.Variables, assembled, SourceBytes.Unreadable);
-            }
-
-            await context.WriteOutputAsync(StepCard.RowsRefused(refused.Message));
+                await context.WriteOutputAsync(StepCard.RowsRefused(refused.Message));
+            });
 
             return;
         }
 
-        // A run stopped since it was asked for writes nothing more: the person who stopped it gets no grid of it.
-        if (session.StoppedSince(request.Turn))
-        {
-            return;
-        }
-
+        // The grid, what the block measured under it, and the record that the block shows it are one write: a run
+        // stopped since it was asked for writes none of it, and a stop while it is written waits for all of it.
         var grid = DataGrid.Of(view, request.Page, declaration);
+        var measured = view.Evidence.TryGetValue(request.Position, out var evidence) ? evidence.Accept(new EvidenceView()) : null;
 
-        await context.WriteOutputAsync(grid.Output);
-
-        // A block that declares evidence shows what it measured under the rows it measured it on.
-        if (view.Evidence.TryGetValue(request.Position, out var evidence))
+        await session.LetThroughAsync(request.Turn, ticket.Mark, async () =>
         {
-            await context.WriteOutputAsync(evidence.Accept(new EvidenceView()));
-        }
+            await context.WriteOutputAsync(grid.Output);
 
-        session.Showing(context.CellId, key, grid.Header);
+            if (measured is { } drawn)
+            {
+                await context.WriteOutputAsync(drawn);
+            }
+
+            session.Showing(cell, key, grid.Header);
+        });
     }
 
     // Every column of the source as one row, from the rows as the source reads them — no step runs. The list marks new
     // the columns the saved file never showed, then says in the file that it showed them; a change made from the list
     // saves the decisions with the header it showed. A saved file that cannot be read is said to be so and never written.
+    // What the list shows and what it saves are worked out first and written as one write.
     private static async Task ListAsync(
-        NotebookSession session, ViewRequest request, PipelineDeclaration declaration, ListPicks picks, IExecutionContext context)
+        NotebookSession session, ViewRequest request, NotebookTurn ticket, PipelineDeclaration declaration, ListPicks picks, IExecutionContext context)
     {
+        var cell = context.CellId;
         SourceRows source;
 
         try
@@ -271,20 +303,12 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException or FormatException or InvalidOperationException)
         {
             // A list stopped since it was asked for says nothing of what it met.
-            if (session.StoppedSince(request.Turn))
+            await session.LetThroughAsync(request.Turn, ticket.Mark, async () =>
             {
-                return;
-            }
+                session.Hidden(cell);
+                await context.WriteOutputAsync(StepCard.RowsRefused(refused.Message));
+            });
 
-            session.Hidden(context.CellId);
-            await context.WriteOutputAsync(StepCard.RowsRefused(refused.Message));
-
-            return;
-        }
-
-        // A list stopped since it was asked for is neither drawn nor saved.
-        if (session.StoppedSince(request.Turn))
-        {
             return;
         }
 
@@ -292,54 +316,60 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
         var file = context.NotebookMetadata.ColumnsFilePath() is { } path ? new ColumnsFile(path) : (ColumnsFile?)null;
         var stored = file?.Stored() ?? default;
         IReadOnlyList<string> fresh = stored.Preset is { } preset ? preset.NewColumns(header) : [];
-
-        if (stored.Unreadable is { } unreadable)
-        {
-            await context.WriteOutputAsync(unreadable);
-        }
-        else if (file is { } columns)
-        {
-            var notSaved = request.SavesTheColumns ? columns.Save(declaration, header)
-                : request.Trigger == ViewTrigger.Show ? columns.SaveSource(stored, header)
-                : null;
-
-            if (notSaved is { } card)
-            {
-                await context.WriteOutputAsync(card);
-            }
-        }
-
+        var saving = stored.Unreadable is not null || file is not { } columns ? default
+            : request.SavesTheColumns ? columns.Saving(declaration, header)
+            : request.Trigger == ViewTrigger.Show ? ColumnsSave.OfSource(stored, header)
+            : default;
         var drawn = NotebookSession.KeyOf(declaration);
+        var list = ColumnList.Of(NotebookVerbs.Catalog(), declaration, source, fresh, stored.Preset, drawn, picks, request.Whole);
 
-        await context.WriteOutputAsync(ColumnList.Of(NotebookVerbs.Catalog(), declaration, source, fresh, stored.Preset, drawn, picks, request.Whole));
-        session.Listing(context.CellId, drawn);
+        // A list stopped since it was asked for is neither drawn nor saved.
+        await session.LetThroughAsync(request.Turn, ticket.Mark, async () =>
+        {
+            if (stored.Unreadable is { } unreadable)
+            {
+                await context.WriteOutputAsync(unreadable);
+            }
+            else if (file?.Write(saving) is { } notSaved)
+            {
+                await context.WriteOutputAsync(notSaved);
+            }
+
+            await context.WriteOutputAsync(list);
+            session.Listing(cell, drawn);
+        });
     }
 
     // What the notebook hands to C# cells once the rows were read. A run of the whole pipeline hands over what it
     // learned — and a run of these steps over these bytes runs once: asked again, it hands the same over again. A
-    // view knows the bytes the gesture did not, and keeps what a run learned only while it learned it from them.
+    // view knows the bytes the gesture did not, and keeps what a run learned only while it learned it from them. Each is
+    // one write, let through for the gesture's turn and the block's run.
     private static void HandOverOnceRead(
-        NotebookSession session, ViewRequest request, Pipeline pipeline, string fingerprint, IVariableStore variables)
+        NotebookSession session, ViewRequest request, NotebookTurn ticket, Pipeline pipeline, string fingerprint, IVariableStore variables)
     {
-        // A run stopped since it was asked for hands nothing over, and fits nothing it would only throw away.
-        if (session.StoppedSince(request.Turn))
+        // A run already stopped fits nothing it would only throw away; whether anything is handed over is decided where it
+        // is let through.
+        if (session.StoppedSince(request.Turn) || ticket.Mark.IsCancellationRequested)
         {
             return;
         }
 
         if (!request.RunsTheWholePipeline)
         {
-            if (session.Assembled is { } assembled)
+            session.LetThrough(request.Turn, ticket.Mark, () =>
             {
-                session.HandOver(variables, assembled, SourceBytes.Of(fingerprint));
-            }
+                if (session.Assembled is { } assembled)
+                {
+                    session.HandOver(variables, assembled, SourceBytes.Of(fingerprint));
+                }
+            });
 
             return;
         }
 
-        if (!session.HandOverFitAgain(variables, pipeline.Declaration, fingerprint))
+        if (!session.HandOverFitAgain(variables, pipeline.Declaration, fingerprint, request.Turn, ticket.Mark))
         {
-            session.HandOverFit(variables, pipeline.Run(), fingerprint, request.Turn);
+            session.HandOverFit(variables, pipeline.Run(), fingerprint, request.Turn, ticket.Mark);
         }
     }
 

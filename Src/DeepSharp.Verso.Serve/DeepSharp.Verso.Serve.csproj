@@ -20,18 +20,14 @@
     <ProjectReference Include="..\DeepSharp.Verso.Api\DeepSharp.Verso.Api.csproj" />
   </ItemGroup>
 
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <!-- The stream a page reads is written by one writer on both runtimes: .NET 10 has it built in, and on .NET 8 it
-         comes from its package — the same bytes, measured. -->
-    <PackageReference Include="System.Net.ServerSentEvents" Version="10.0.12" />
-    <!-- And the stream is the view's changes behind the notebook as it stood, put together with the async LINQ .NET 10
-         has built in, which .NET 8 takes from its package. -->
-    <PackageReference Include="System.Linq.AsyncEnumerable" Version="10.0.12" />
-  </ItemGroup>
-
   <ItemGroup>
     <!-- The page travels inside the tool: nothing is ever served from the folder the tool runs in. -->
     <EmbeddedResource Include="Page\page.html" LogicalName="page.html" />
+    <!-- What it draws diagrams and formulas with travels inside it too, as its makers publish it: THIRD-PARTY-NOTICES.txt. -->
+    <EmbeddedResource Include="Page\carried\mermaid\mermaid.min.js" LogicalName="carried/mermaid/mermaid.min.js" />
+    <EmbeddedResource Include="Page\carried\katex\katex.min.js" LogicalName="carried/katex/katex.min.js" />
+    <EmbeddedResource Include="Page\carried\katex\katex.min.css" LogicalName="carried/katex/katex.min.css" />
+    <EmbeddedResource Include="Page\carried\katex\fonts\*.woff2" LogicalName="carried/katex/fonts/%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>
@@ -41,6 +37,7 @@
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
     <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="THIRD-PARTY-NOTICES.txt" Pack="true" PackagePath="\" />
     <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
   </ItemGroup>
 

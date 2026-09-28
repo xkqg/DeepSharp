@@ -36,23 +36,64 @@ public sealed class LookTests : IDisposable
         return await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
     }
 
-    [Theory]
-    [InlineData("button")]
-    [InlineData("panel")]
-    public async Task ALookThatRunsACell_IsRefused_AndNoCellBegins(string look)
+    [Fact]
+    public async Task APanelThatRunsACell_IsRefused_AndNoCellBegins()
     {
-        var host = await OpenWithAsync(look == "button" ? new LookingButton() : new LookingPanel());
+        var host = await OpenWithAsync(new LookingPanel());
         var begun = new ConcurrentQueue<Guid>();
 
         host.Scaffold.OnCellExecuting += begun.Enqueue;
 
         try
         {
-            var looking = look == "button" ? (Task)host.ToolbarAsync() : host.PropertiesAsync(host.Cells[0].Id);
-
-            await Assert.ThrowsAsync<InvalidOperationException>(() => looking);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => host.PropertiesAsync(host.Cells[0].Id));
             Assert.Empty(begun);
             Assert.Empty(host.Cells[0].Outputs);
+        }
+        finally
+        {
+            await host.CloseAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AButtonWhoseLookRunsACell_IsRefused_NoCellBegins_AndTheVersionSaysItCannotBePressed_AndWhy()
+    {
+        var begun = new ConcurrentQueue<Guid>();
+        var host = await OpenWithAsync(new LookingButton());
+
+        host.Scaffold.OnCellExecuting += begun.Enqueue;
+
+        try
+        {
+            // Every version asks it again: a change is one more look.
+            await host.EditAsync(host.Cells[0].Id, "System.Console.Write(2);");
+
+            var looking = host.Current.Buttons.Single(button => button.Id == LookingButton.Id);
+
+            Assert.False(looking.IsEnabled);
+            Assert.StartsWith("A part asked only to look at the notebook", looking.Fault, StringComparison.Ordinal);
+            Assert.Empty(begun);
+            Assert.Empty(host.Cells[0].Outputs);
+        }
+        finally
+        {
+            await host.CloseAsync();
+        }
+    }
+
+    [Fact]
+    public async Task ACellsButtonWhoseLookFailsForTheCell_IsNotPressableThere_AndTheVersionSaysWhy()
+    {
+        var host = await OpenWithAsync(new FailingCellButton());
+
+        try
+        {
+            var failing = host.Current.Buttons.Single(button => button.Id == FailingCellButton.Id);
+
+            Assert.Empty(failing.EnabledFor);
+            Assert.False(failing.IsEnabled);
+            Assert.Equal(FailingCellButton.Why, failing.Fault);
         }
         finally
         {

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
 using Verso.Abstractions;
 
@@ -185,7 +186,7 @@ public sealed class CatchUpTests : IDisposable
         {
             if (cell == block.Id)
             {
-                blocks.Stopped();
+                _ = blocks.StoppedAsync();
             }
         }
 
@@ -193,7 +194,7 @@ public sealed class CatchUpTests : IDisposable
 
         try
         {
-            await blocks.Session.OneAtATimeAsync(async turn =>
+            await blocks.Session.OneAtATimeAsync(CancellationToken.None, async turn =>
             {
                 await blocks.Session.AskAsync(block.Id, request, turn, notebook.Scaffold.NotebookOps);
 
@@ -204,6 +205,130 @@ public sealed class CatchUpTests : IDisposable
         {
             notebook.Scaffold.OnCellExecuting -= StopAsItBegins;
         }
+    }
+
+    // A toolbar button pressed through a run that was stopped before the button began, as a host hands a press its run:
+    // the button does nothing, and says it was stopped.
+    private static async Task<ToolbarContext> PressStoppedAsync<T>(Notebook notebook)
+        where T : IToolbarAction
+    {
+        var run = notebook.Opened.RunFor(null, runsCSharp: true);
+        var context = new ToolbarContext(notebook.Scaffold, [], new RunPort(notebook.Scaffold, run));
+
+        run.Stop();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => notebook.Host.GetToolbarActions().OfType<T>().Single().ExecuteAsync(context));
+
+        return context;
+    }
+
+    [Fact]
+    public async Task AStoppedPressesCatchUp_LeavesNoStaleGridBehind()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var blocks = Blocks(notebook);
+        var fill = notebook.Scaffold.Cells[3];
+
+        // The pipeline handed over and a grid shown; then a block added above it in Verso's own editor, which tells no part.
+        await notebook.PressAsync(RunPipelineAction.Id);
+        await notebook.GestureAsync(fill, StepRenderer.Show);
+        Assert.True(ShowsAGrid(fill));
+        notebook.Scaffold.InsertCell(2, StepCellType.StepType, StepKernel.Language, """{"step": "drop.columns", "columns": ["pclass"]}""");
+
+        // The toolbar's run, stopped the moment its catch-up takes the handed-over pipeline back.
+        var run = notebook.Opened.RunFor(null, runsCSharp: true);
+        var context = new ToolbarContext(notebook.Scaffold, [], new RunPort(notebook.Scaffold, run));
+        var stopped = false;
+
+        void StopAsItTakesBack()
+        {
+            if (!stopped)
+            {
+                stopped = true;
+                run.Stop();
+            }
+        }
+
+        notebook.Scaffold.Variables.OnVariablesChanged += StopAsItTakesBack;
+
+        try
+        {
+            await Record.ExceptionAsync(() => notebook.Host.GetToolbarActions().OfType<RunPipelineAction>().Single().ExecuteAsync(context));
+        }
+        finally
+        {
+            notebook.Scaffold.Variables.OnVariablesChanged -= StopAsItTakesBack;
+        }
+
+        // The next catch-up clears whatever grid the blocks no longer make: none is left on the screen, forgotten.
+        await blocks.BlocksChangedAsync(notebook.Scaffold.Notebook, notebook.Scaffold.Variables, notebook.Scaffold.NotebookOps);
+
+        Assert.True(stopped);
+        Assert.False(ShowsAGrid(fill));
+    }
+
+    [Fact]
+    public async Task ANextChangesHandOver_SurvivesAStopsFreshKernel()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var last = notebook.Scaffold.Cells[^1];
+
+        void StopAsTheLastBlockBegins(Guid cell)
+        {
+            if (cell == last.Id && notebook.Opened.Running is { } run)
+            {
+                notebook.Opened.Stop(run.Number);
+            }
+        }
+
+        // The toolbar's run, stopped as its last block begins: its kernel is started afresh before the run's turn ends.
+        notebook.Scaffold.OnCellExecuting += StopAsTheLastBlockBegins;
+
+        try
+        {
+            await notebook.PressAsync(RunPipelineAction.Id);
+        }
+        finally
+        {
+            notebook.Scaffold.OnCellExecuting -= StopAsTheLastBlockBegins;
+        }
+
+        // The change after it hands the pipeline over, and nothing the stop did comes after that.
+        await notebook.GestureAsync(notebook.Scaffold.Cells[0], StepRenderer.Show);
+
+        Assert.NotNull(HandedOver(notebook));
+    }
+
+    [Fact]
+    public async Task APressStoppedBeforeItsChangeBegan_HandsNothingOver_AndLeavesNoRequest()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+
+        await PressStoppedAsync<RunPipelineAction>(notebook);
+
+        Assert.Null(HandedOver(notebook));
+        Assert.Null(Blocks(notebook).Session.Take(notebook.Scaffold.Cells[^1].Id, Blocks(notebook).Session.Enter(CancellationToken.None)));
+    }
+
+    [Fact]
+    public async Task ATakeOverStoppedBeforeItsChangeBegan_LeavesNoRequest()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+
+        // Columns saved beside the notebook, for the take-over to list.
+        await notebook.PressAsync(RunPipelineAction.Id);
+        Assert.True(File.Exists(Path.Join(_folder, "titanic.columns.json")));
+
+        await PressStoppedAsync<TakeOverAction>(notebook);
+
+        Assert.All(notebook.Scaffold.Cells, cell => Assert.Null(Blocks(notebook).Session.Take(cell.Id, Blocks(notebook).Session.Enter(CancellationToken.None))));
+    }
+
+    [Fact]
+    public async Task AnExportStoppedBeforeItsChangeBegan_HandsNoFileOver()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+
+        Assert.Null((await PressStoppedAsync<ExportPipelineAction>(notebook)).Handed);
     }
 
     [Fact]
@@ -236,6 +361,194 @@ public sealed class CatchUpTests : IDisposable
 
         Assert.Null(HandedOver(notebook));
         Assert.False(ShowsAGrid(last));
+    }
+
+    // As AskAndStopAsync, but the stop comes the moment the block has written its card: between the card and whatever the
+    // block works out after it, as the engine tells a host each output the moment it is written.
+    private static async Task AskAndStopAtItsCardAsync(Notebook notebook, CellModel block, ViewRequest request)
+    {
+        var blocks = Blocks(notebook);
+        var stopped = false;
+
+        void StopAtItsCard(Guid cell)
+        {
+            if (cell == block.Id && !stopped)
+            {
+                stopped = true;
+                _ = blocks.StoppedAsync();
+            }
+        }
+
+        notebook.Scaffold.OnCellOutputUpdated += StopAtItsCard;
+
+        try
+        {
+            await blocks.Session.OneAtATimeAsync(CancellationToken.None, async turn =>
+            {
+                await blocks.Session.AskAsync(block.Id, request, turn, notebook.Scaffold.NotebookOps);
+
+                return true;
+            });
+        }
+        finally
+        {
+            notebook.Scaffold.OnCellOutputUpdated -= StopAtItsCard;
+        }
+
+        Assert.True(stopped);
+    }
+
+    [Fact]
+    public async Task ARunStoppedAtItsBlocksCard_SavesNoColumns()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var last = notebook.Scaffold.Cells[^1];
+        var assembled = NotebookPipeline.Of(notebook.Scaffold.Cells);
+
+        Blocks(notebook).Session.Publish(assembled);
+        await AskAndStopAtItsCardAsync(notebook, last, assembled.RequestFor(last.Id, ViewTrigger.Run, page: 0));
+
+        Assert.Single(last.Outputs);
+        Assert.False(File.Exists(Path.Join(_folder, "titanic.columns.json")));
+        Assert.Null(HandedOver(notebook));
+    }
+
+    [Fact]
+    public async Task ATakeOverStoppedAtItsBlocksCard_ListsNothing()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var declare = notebook.Scaffold.Cells[1];
+        var assembled = NotebookPipeline.Of(notebook.Scaffold.Cells);
+        var listed = new CellOutput("text/html", "<div>what taking the saved columns over would change</div>");
+
+        Blocks(notebook).Session.Publish(assembled);
+        await AskAndStopAtItsCardAsync(notebook, declare, assembled.RequestFor(declare.Id, ViewTrigger.TakeOver, page: 0) with { Card = listed });
+
+        Assert.Single(declare.Outputs);
+        Assert.DoesNotContain(listed, declare.Outputs);
+    }
+
+    [Fact]
+    public async Task AChangeNotMadeStoppedAtItsBlocksCard_SaysNothingOfIt()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var declare = notebook.Scaffold.Cells[1];
+        var assembled = NotebookPipeline.Of(notebook.Scaffold.Cells);
+
+        Blocks(notebook).Session.Publish(assembled);
+        await AskAndStopAtItsCardAsync(notebook, declare, assembled.RequestFor(declare.Id, ViewTrigger.Commit, page: 0) with { NotMade = ["a drop the blocks cannot make"] });
+
+        Assert.Single(declare.Outputs);
+        Assert.False(File.Exists(Path.Join(_folder, "titanic.columns.json")));
+    }
+
+    [Fact]
+    public async Task AShowWithNoPipelineStoppedAtItsBlocksCard_SaysNothingOfIt()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var declare = notebook.Scaffold.Cells[1];
+
+        Blocks(notebook).Session.Publish(NotebookPipeline.Of(notebook.Scaffold.Cells));
+        await AskAndStopAtItsCardAsync(notebook, declare, new ViewRequest(null, 1, 0, ["the block above says why"], ViewTrigger.Show, false, []));
+
+        Assert.Single(declare.Outputs);
+    }
+
+    [Fact]
+    public async Task AStopWhileAGridIsDrawn_LeavesTheGridListedAsShown()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var blocks = Blocks(notebook);
+        var last = notebook.Scaffold.Cells[^1];
+        var assembled = NotebookPipeline.Of(notebook.Scaffold.Cells);
+        var stopped = false;
+
+        void StopAsTheGridIsDrawn(Guid cell)
+        {
+            if (cell == last.Id && !stopped && ShowsAGrid(last))
+            {
+                stopped = true;
+                _ = blocks.StoppedAsync();
+            }
+        }
+
+        blocks.Session.Publish(assembled);
+        notebook.Scaffold.OnCellOutputUpdated += StopAsTheGridIsDrawn;
+
+        try
+        {
+            await blocks.Session.OneAtATimeAsync(CancellationToken.None, async turn =>
+            {
+                await blocks.Session.AskAsync(last.Id, assembled.RequestFor(last.Id, ViewTrigger.Show, page: 0), turn, notebook.Scaffold.NotebookOps);
+
+                return true;
+            });
+        }
+        finally
+        {
+            notebook.Scaffold.OnCellOutputUpdated -= StopAsTheGridIsDrawn;
+        }
+
+        // The grid and the record that the block shows it are one write: a stop in the middle of it waits for the rest.
+        Assert.True(stopped);
+        Assert.True(ShowsAGrid(last));
+        Assert.Contains(last.Id, blocks.Session.Shown.Keys);
+    }
+
+    [Fact]
+    public async Task ARunStoppedAsItsBlockBegins_SavesNoColumns()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var last = notebook.Scaffold.Cells[^1];
+        var assembled = NotebookPipeline.Of(notebook.Scaffold.Cells);
+
+        Blocks(notebook).Session.Publish(assembled);
+        await AskAndStopAsync(notebook, last, assembled.RequestFor(last.Id, ViewTrigger.Run, page: 0));
+
+        Assert.Single(last.Outputs);
+        Assert.False(File.Exists(Path.Join(_folder, "titanic.columns.json")));
+    }
+
+    [Fact]
+    public async Task ATakeOverStoppedAsItsBlockBegins_ListsNothing()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var declare = notebook.Scaffold.Cells[1];
+        var assembled = NotebookPipeline.Of(notebook.Scaffold.Cells);
+        var listed = new CellOutput("text/html", "<div>what taking the saved columns over would change</div>");
+
+        Blocks(notebook).Session.Publish(assembled);
+        await AskAndStopAsync(notebook, declare, assembled.RequestFor(declare.Id, ViewTrigger.TakeOver, page: 0) with { Card = listed });
+
+        Assert.DoesNotContain(listed, declare.Outputs);
+        Assert.Single(declare.Outputs);
+    }
+
+    [Fact]
+    public async Task AChangeNotMadeStoppedAsItsBlockBegins_SaysNothingOfIt()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var declare = notebook.Scaffold.Cells[1];
+        var assembled = NotebookPipeline.Of(notebook.Scaffold.Cells);
+
+        Blocks(notebook).Session.Publish(assembled);
+        await AskAndStopAsync(notebook, declare, assembled.RequestFor(declare.Id, ViewTrigger.Commit, page: 0) with { NotMade = ["a drop the blocks cannot make"] });
+
+        Assert.Single(declare.Outputs);
+        Assert.DoesNotContain(declare.Outputs, output => output.Content.Contains("a drop the blocks cannot make", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task AShowWithNoPipelineStoppedAsItsBlockBegins_SaysNothingOfIt()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var declare = notebook.Scaffold.Cells[1];
+
+        Blocks(notebook).Session.Publish(NotebookPipeline.Of(notebook.Scaffold.Cells));
+        await AskAndStopAsync(notebook, declare, new ViewRequest(null, 1, 0, ["the block above says why"], ViewTrigger.Show, false, []));
+
+        Assert.Single(declare.Outputs);
+        Assert.DoesNotContain(declare.Outputs, output => output.Content.Contains("the block above says why", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -292,12 +605,12 @@ public sealed class CatchUpTests : IDisposable
         var session = Blocks(notebook).Session;
         var never = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        var held = session.OneAtATimeAsync(_ => never.Task);
-        var next = session.OneAtATimeAsync(_ => Task.FromResult(true));
+        var held = session.OneAtATimeAsync(CancellationToken.None, _ => never.Task);
+        var next = session.OneAtATimeAsync(CancellationToken.None, _ => Task.FromResult(true));
 
         Assert.False(next.IsCompleted);
 
-        Blocks(notebook).Stopped();
+        _ = Blocks(notebook).StoppedAsync();
 
         Assert.True(await next.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
         Assert.False(held.IsCompleted);
@@ -308,11 +621,11 @@ public sealed class CatchUpTests : IDisposable
     }
 
     [Fact]
-    public async Task TheToolbarsRunStoppedThroughTheHost_WritesNothing_WhenItEndsByItselfLater()
+    public async Task TheToolbarsRunStoppedThroughTheHost_AsItsLastBlockBegins_LeavesNothingHandedOver()
     {
-        // The passengers many times over: a run that works on long after it is stopped as its block begins.
-        var lines = await File.ReadAllLinesAsync(Path.Join(_folder, "titanic.csv"), TestContext.Current.CancellationToken);
-        await File.WriteAllLinesAsync(Path.Join(_folder, "titanic.csv"), [lines[0], .. Enumerable.Repeat(lines[1..], 400).SelectMany(rows => rows)], TestContext.Current.CancellationToken);
+        // Stopped as the engine begins its last block: the engine then refuses the block before its kernel is entered, and
+        // the stop takes the block's kernel as what runs — decided in the stop itself, however soon the block ends — and
+        // starts it afresh, which takes back what the run handed over before the stop.
         await using var notebook = await NotebookAsync(Titanic);
         var last = notebook.Scaffold.Cells[^1];
         var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

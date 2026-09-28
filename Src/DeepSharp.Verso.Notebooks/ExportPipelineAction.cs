@@ -78,7 +78,7 @@ public sealed class ExportPipelineAction : NotebookExtension, IToolbarAction
 
         var session = RequiredSession;
 
-        return session.OneAtATimeAsync(async _ =>
+        return session.OneAtATimeAsync(context.CancellationToken, async _ =>
         {
             var assembled = NotebookPipeline.Of(context.NotebookCells);
 

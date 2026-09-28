@@ -20,7 +20,7 @@ namespace DeepSharp.Tests.Serve;
 public sealed partial class PageTests
 {
     [Fact]
-    public async Task APageFromAnotherPortOfThisComputer_CannotCloseTheNotebook_InTheBrowserThatOpenedIt()
+    public async Task APageFromAnotherPortOfThisComputer_CannotOpenTheNotebooksSocket_InTheBrowserThatOpenedIt()
     {
         await SaveAsync("code.verso", new CellModel { Type = "code", Language = "csharp", Source = "var a = 1;" });
         await using var served = await StartAsync();
@@ -36,11 +36,14 @@ public sealed partial class PageTests
             await Task.Delay(50, TestContext.Current.CancellationToken);
         }
 
+        // Its socket, were it opened, would close the notebook and lose what was typed.
         await using var other = await OtherPageAsync($$"""
             <!doctype html><title>other</title>
             <script>
-              fetch('{{served.Address}}api/notebooks/code.verso/close', { method: 'POST', credentials: 'include', mode: 'no-cors' })
-                .finally(() => document.title = 'sent');
+              const socket = new WebSocket('ws://{{served.Address.Authority}}/api/notebooks/code.verso/socket');
+
+              socket.onopen = () => socket.send(JSON.stringify({ id: 1, ask: 'close' }));
+              socket.onclose = () => document.title = 'sent';
             </script>
             """);
         var visitor = await page.Context.NewPageAsync();

@@ -275,6 +275,36 @@ public sealed class ColumnListTests : IDisposable
     }
 
     [Fact]
+    public async Task AChangeMadeFromTheListThatCannotBeSaved_IsMade_AndTheListSaysSoAboveItself()
+    {
+        // A folder where the file goes refuses the file on every system.
+        await using var notebook = await NotebookAsync(Titanic);
+
+        await ChooseAsync(notebook);
+        Directory.CreateDirectory(ColumnsFile);
+        await TickAsync(notebook, Schema(notebook), "pclass", ticked: false);
+
+        Assert.True(Declared(notebook).Columns.Single(column => column.Name == "pclass").Excluded);
+        Assert.True(Directory.Exists(ColumnsFile));
+        Assert.Contains(Schema(notebook).Outputs, output => output.IsError
+            && output.Content.Contains("could not be written beside the notebook", StringComparison.Ordinal));
+        Assert.Equal(Header, List(notebook).Rows().Select(row => row.Column));
+    }
+
+    [Fact]
+    public async Task ChoosingTheColumnsOfASourceThatCannotBeRead_SaysSoAtTheSchema_AndListsNothing()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+
+        File.Delete(Path.Join(_folder, "titanic.csv"));
+        await ChooseAsync(notebook);
+
+        Assert.Contains(Schema(notebook).Outputs, output => output.IsError
+            && output.Content.Contains("There is no data to show here", StringComparison.Ordinal));
+        Assert.DoesNotContain(Schema(notebook).Outputs, output => output.Content.Contains("<tr data-column=", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task AColumnTheSchemaDoesNotNameButTheSavedColumnsDo_ShowsTheirKind_AndIsTakenInWithIt()
     {
         await using var notebook = await NotebookAsync(Titanic);

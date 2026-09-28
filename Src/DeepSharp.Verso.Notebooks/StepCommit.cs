@@ -115,11 +115,16 @@ internal static class StepCommit
         var shown = gesture with { Cell = written.Shown };
 
         // Only a block's view is cleared: a block deleted since it was shown has nothing left to clear, and a cell turned
-        // into another kind shows what is its own.
-        foreach (var cell in gesture.Session.BlocksChanged(now, gesture.Variables, except: shown.Cell))
+        // into another kind shows what is its own. Cleared before it is forgotten, as one write for the gesture's turn.
+        await gesture.Session.LetThroughAsync(gesture.Turn, async () =>
         {
-            await gesture.Operations.ClearOutputAsync(cell);
-        }
+            foreach (var cell in gesture.Session.StaleIn(now, except: shown.Cell))
+            {
+                await gesture.Operations.ClearOutputAsync(cell);
+            }
+
+            gesture.Session.CaughtUp(now, gesture.Variables, except: shown.Cell);
+        });
 
         // A block written is one a front end has never seen, and its run is what makes a front end read the notebook
         // again; the block shown is run by showing it.
@@ -160,9 +165,12 @@ internal static class StepCommit
             return "This cell is not a block of the pipeline.";
         }
 
-        gesture.Session.Publish(assembled);
-
-        gesture.Session.HandOver(gesture.Variables, assembled);
+        // Kept and handed over as one write for the gesture's turn: a stop since the gesture began does neither.
+        gesture.Session.LetThrough(gesture.Turn, () =>
+        {
+            gesture.Session.Publish(assembled);
+            gesture.Session.HandOver(gesture.Variables, assembled);
+        });
         await gesture.Session.AskAsync(gesture.Cell, assembled.RequestFor(gesture.Cell, trigger, page) with { List = list }, gesture.Turn, gesture.Operations);
 
         return null;

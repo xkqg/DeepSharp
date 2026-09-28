@@ -32,6 +32,20 @@ public sealed class NotebookSubscription : IDisposable
     /// </remarks>
     public IAsyncEnumerable<NotebookChange> ReadAllAsync(CancellationToken cancellationToken = default) => _waiting.Reader.ReadAllAsync(cancellationToken);
 
+    /// <summary>Takes the change waiting for the reader, when one does; never waits.</summary>
+    /// <param name="change">The change: every change since the last one taken, taken as one.</param>
+    /// <returns>Whether one waited.</returns>
+    /// <remarks>
+    /// For a reader that tells the changes in turn with messages of its own: a change the notebook made before one of
+    /// those messages is waiting by the time the message is, so taking it first keeps the two in the order they came.
+    /// </remarks>
+    public bool TryRead(out NotebookChange change) => _waiting.Reader.TryRead(out change);
+
+    /// <summary>Waits until a change waits for the reader, or the view has ended.</summary>
+    /// <param name="cancellationToken">Stops the waiting; the view goes on.</param>
+    /// <returns>Whether a change waits; nothing will once the view has ended and its last change was taken.</returns>
+    public ValueTask<bool> WaitToReadAsync(CancellationToken cancellationToken = default) => _waiting.Reader.WaitToReadAsync(cancellationToken);
+
     /// <summary>Ends the view: it is told nothing more.</summary>
     public void Dispose()
     {

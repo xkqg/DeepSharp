@@ -318,7 +318,7 @@ public sealed class ToolbarTests : IDisposable
         await using var notebook = await NotebookAsync(Titanic);
         var session = notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session;
         var mayFinish = new TaskCompletionSource();
-        var holding = session.OneAtATimeAsync(async _ =>
+        var holding = session.OneAtATimeAsync(CancellationToken.None, async _ =>
         {
             await mayFinish.Task;
 

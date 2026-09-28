@@ -117,7 +117,7 @@ public sealed partial class ToolbarTests
 
         await host.RunAsync(cell);
 
-        var run = new Run(2, cell: null, takesTheCSharpTurn: true);
+        var run = new Run(2, cell: null, takesTheCSharpTurn: true, told: () => { }, tell: () => Task.CompletedTask);
 
         run.Stop();
 
@@ -156,7 +156,7 @@ public sealed partial class ToolbarTests
         var host = await OpenAsync(notebooks, "port.verso", CSharp("6 * 7"), CSharp("var second = 2;"));
         var first = host.Cells[0].Id;
         var second = host.Cells[1].Id;
-        var port = new RunPort(host.Scaffold, new Run(1, cell: null, takesTheCSharpTurn: true));
+        var port = new RunPort(host.Scaffold, new Run(1, cell: null, takesTheCSharpTurn: true, told: () => { }, tell: () => Task.CompletedTask));
 
         await port.ExecuteCellAsync(first);
         Assert.NotEmpty(host.Scaffold.Cells[0].Outputs);
@@ -201,7 +201,7 @@ public sealed partial class ToolbarTests
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "from.verso", CSharp(Held("first")), CSharp("var second = 2;"));
         var begun = Begun(host);
-        var run = new Run(1, cell: null, takesTheCSharpTurn: true);
+        var run = new Run(1, cell: null, takesTheCSharpTurn: true, told: () => { }, tell: () => Task.CompletedTask);
         var running = new RunPort(host.Scaffold, run).ExecuteFromAsync(host.Cells[0].Id);
 
         await UntilAsync("first-began", "the first cell never began");
@@ -622,6 +622,76 @@ public sealed partial class ToolbarTests
             Assert.True(host.Stop(2));
             await pressing.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
             Assert.Equal(["csharp"], restarted);
+        }
+        finally
+        {
+            await host.CloseAsync();
+        }
+    }
+
+    [Fact]
+    public async Task AButtonsCodeWithNoCell_IsHandedTheRunsOwnToken()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "token.verso", CSharp("var first = 1;"));
+        var recording = new RecordingKernel();
+        var run = host.RunFor(null, runsCSharp: false);
+        var port = new RunPort(host.Scaffold, run);
+
+        host.Scaffold.RegisterKernel(recording);
+
+        // Asked with no token of its own, or with the run's own, the code is handed the run's token itself: marked in the
+        // very step that stops the run, never a moment after.
+        await port.ExecuteCodeAsync("anything", RecordingKernel.Language, CancellationToken.None);
+        Assert.Equal(run.Token, recording.Handed);
+
+        await port.ExecuteCodeAsync("anything", RecordingKernel.Language, run.Token);
+        Assert.Equal(run.Token, recording.Handed);
+    }
+
+    [Fact]
+    public async Task AStopDuringRunAllsReset_DrainsOnlyOnceTheResetEnded()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "reset-drain.verso", CSharp("var first = 1;"));
+        var go = new TaskCompletionSource();
+        var run = host.RunFor(null, runsCSharp: true);
+
+        host.Scaffold.RegisterKernel(new StoppingKernel(() => run.Stop(), go.Task));
+        run.Starts();
+
+        // Run All's reset puts the kernel away, which stops the run and holds the reset: the stop waits for it.
+        var running = new RunPort(host.Scaffold, run).ExecuteAllAsync();
+        var stop = await run.Stopped.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+
+        Assert.False(stop.Drained.IsCompleted);
+
+        go.SetResult();
+
+        await stop.Drained.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => running.WaitAsync(AtOnce, TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task AButtonStoppedWhileItWorks_HandsNoFile()
+    {
+        var path = Path.Join(_folder, "handing.verso");
+        var notebook = new NotebookModel();
+
+        notebook.Cells.Add(CSharp("var first = 1;"));
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        NotebookHost? host = null;
+        var engine = new ExtensionHost();
+
+        await engine.LoadExtensionAsync(new HandingButton(() => host!.Stop(host.Running!.Value.Number)));
+        host = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+
+        try
+        {
+            // Stopped before the file was handed over, in the same breath: what a stopped press hands over goes to nobody.
+            Assert.Null(await host.RunToolbarAsync(HandingButton.Id).WaitAsync(AtOnce, TestContext.Current.CancellationToken));
+            Assert.Null(host.Running);
         }
         finally
         {

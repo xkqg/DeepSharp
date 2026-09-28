@@ -9,7 +9,8 @@
 #   the .NET 8 build on the newest runtime        where that build goes once .NET 8 is removed
 #
 # and each is asked for its page, with and without the token in the address it names, for a file beside the notebook,
-# for the folder's notebooks, for the notebook and a stream of it, and to run the notebook's step.
+# for the folder's notebooks, and — over the notebook's socket, as its page asks — for a file beside the notebook asked
+# for as a notebook, for the notebook, and to run the notebook's step.
 #
 #   bash tools/serve/check.sh nupkgs     the folder `dotnet pack` wrote the packages to
 
@@ -22,6 +23,11 @@ folder="$work/notebooks"
 log="$work/serve.log"
 cell=5d1b7a52-3c2e-4f0a-9d6b-2f4e8c9a1b07
 server=
+
+# The notebook's socket is spoken to by PowerShell, which every runner carries; a Windows without PowerShell 7 has its
+# own, which runs a script only when told to.
+powershell=$(command -v pwsh || command -v powershell || true)
+[ -n "$powershell" ] || { echo '::error::no PowerShell to speak to the notebook socket with'; exit 1; }
 
 trap 'if [ -n "$server" ]; then kill "$server" 2> /dev/null || true; wait "$server" 2> /dev/null || true; fi; rm -rf "$work"' EXIT
 
@@ -73,26 +79,19 @@ check() {
   [ "$status" = 401 ] || fail "$what answered $status for its page without the token"
   status=$(curl -s -o /dev/null -w '%{http_code}' "$base/private.txt?token=$token")
   [ "$status" = 404 ] || fail "$what answered $status for the file beside the notebook"
-  status=$(curl -s -o /dev/null -w '%{http_code}' "$base/api/notebooks/private.txt?token=$token")
-  [ "$status" = 404 ] || fail "$what answered $status for the file beside the notebook, asked for as a notebook"
-
   [ "$(curl -s "$base/api/notebooks?token=$token")" = '["titanic.verso"]' ] || fail "$what listed the folder otherwise"
-  notebook=$(curl -s -D - "$base/api/notebooks/titanic.verso?token=$token")
-  grep -q "\"id\":\"$cell\"" <<< "$notebook" || fail "$what served the notebook as $notebook"
 
-  # A stream does not end: whatever arrived in the seconds given is what it began with, and the notebook is open by now.
-  # The status line is kept with each answer read, so a refusal says what it was: the server writes no log, since a
-  # running cell takes over the console it would write to.
-  stream=$(curl -s -N -D - --max-time 5 "$base/api/notebooks/titanic.verso/updates?token=$token" || true)
-  grep -q '^event: snapshot' <<< "$stream" && grep -q "$cell" <<< "$stream" || fail "$what began its stream with: $stream"
-
-  ran=$(curl -s -D - --max-time 120 -X POST "$base/api/notebooks/titanic.verso/cells/$cell/run?token=$token")
-  grep -q '"lastStatus":"Success"' <<< "$ran" && grep -q '"outputs":\[{' <<< "$ran" || fail "$what ran the step to: $ran"
+  # The notebook is asked over its socket, as its page asks, by a client every runner carries: the server writes no log,
+  # since a running cell takes over the console it would write to, so what the socket was told is what is said.
+  said=$("$powershell" -NoProfile -ExecutionPolicy Bypass -File "$root/tools/serve/socket.ps1" -Address "$base" -Token "$token" -Notebook private.txt -NotServed) \
+    || fail "$what, asked for the file beside the notebook as a notebook: $said"
+  said=$("$powershell" -NoProfile -ExecutionPolicy Bypass -File "$root/tools/serve/socket.ps1" -Address "$base" -Token "$token" -Notebook titanic.verso -Cell "$cell") \
+    || fail "$what, asked for the notebook over its socket: $said"
 
   kill "$server"
   wait "$server" 2> /dev/null || true
   server=
-  echo "    its page, refused without the token, nothing beside the notebook, the list, the notebook, its stream, a run"
+  echo "    its page, refused without the token, nothing beside the notebook, the list, over its socket the notebook and a run"
 }
 
 check 'the installed command' "$work/tool/deepsharp-serve"

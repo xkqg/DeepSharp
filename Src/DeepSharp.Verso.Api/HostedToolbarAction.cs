@@ -17,6 +17,10 @@ namespace DeepSharp.Verso.Api;
 /// For a button on a cell's toolbar or in its menu, the cells it can be pressed for now, each asked as Verso's editors ask
 /// it — pressed for that cell alone; nothing for a button of the notebook as a whole.
 /// </param>
+/// <param name="Fault">
+/// Why the button could not say whether it can be pressed — its part failed when asked — so it is not pressable where it
+/// failed; nothing when it said.
+/// </param>
 /// <remarks>Two looks at a button are equal while they say the same, whichever list the cells came in.</remarks>
 public readonly record struct HostedToolbarAction(
     string Id,
@@ -28,13 +32,14 @@ public readonly record struct HostedToolbarAction(
     ToolbarPlace Place,
     int Order,
     bool IsEnabled,
-    IReadOnlyList<Guid> EnabledFor)
+    IReadOnlyList<Guid> EnabledFor,
+    string? Fault)
 {
     /// <inheritdoc />
     public bool Equals(HostedToolbarAction other) =>
         Id == other.Id && Label == other.Label && Icon == other.Icon && IconOnly == other.IconOnly && IsPrimary == other.IsPrimary
         && Confirmation == other.Confirmation && Place == other.Place && Order == other.Order && IsEnabled == other.IsEnabled
-        && EnabledFor.SequenceEqual(other.EnabledFor);
+        && EnabledFor.SequenceEqual(other.EnabledFor) && Fault == other.Fault;
 
     /// <inheritdoc />
     public override int GetHashCode() => HashCode.Combine(Id, Label, Place, Order, IsEnabled, EnabledFor.Count);

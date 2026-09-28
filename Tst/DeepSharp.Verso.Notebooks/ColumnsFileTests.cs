@@ -65,6 +65,19 @@ public sealed class ColumnsFileTests : IDisposable
     }
 
     [Fact]
+    public async Task ASaveBesideATemporaryFileAnotherWriteHolds_StillLands()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+
+        // What another write holds while it is on its way, under the name one temporary file for each process would give it.
+        Directory.CreateDirectory($"{ColumnsFile}.{Environment.ProcessId}.tmp");
+
+        await RunAsync(notebook);
+
+        Assert.True(File.Exists(ColumnsFile));
+    }
+
+    [Fact]
     public async Task ShowingOrPagingTheData_SavesNothing()
     {
         await using var notebook = await NotebookAsync(Titanic);
@@ -163,20 +176,6 @@ public sealed class ColumnsFileTests : IDisposable
         Assert.Equal(before, await File.ReadAllTextAsync(ColumnsFile, TestContext.Current.CancellationToken));
         Assert.Contains(notebook.Scaffold.Cells[1].Outputs, output => output.IsError
             && output.Content.Contains("cannot be read, so they are not written over", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public async Task AFileThatCannotBeWrittenEvenUnderANameOfItsOwn_SaysSoToo()
-    {
-        // Something already stands under the name the file is first written as, and cannot be taken away.
-        await using var notebook = await NotebookAsync(Titanic);
-
-        Directory.CreateDirectory($"{ColumnsFile}.{Environment.ProcessId}.tmp");
-        await notebook.TickAsync(notebook.Scaffold.Cells[1], StepRenderer.Include, "pclass", ticked: false);
-
-        Assert.False(File.Exists(ColumnsFile));
-        Assert.Contains(notebook.Scaffold.Cells[1].Outputs, output => output.IsError
-            && output.Content.Contains("could not be written beside the notebook", StringComparison.Ordinal));
     }
 
     [Fact]

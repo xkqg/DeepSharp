@@ -30,12 +30,18 @@ namespace DeepSharp.Verso.Api;
 /// <para>
 /// Each change makes the next version of the notebook, and every view of it is told, cell by cell — whatever made the
 /// change, a click, a clear or a form, for none of which the engine says a word. What a cell shows while it runs is told
-/// as it comes. A view never holds the notebook up: one that reads slower than it changes is kept one change behind.
+/// as it comes. Every version also says what runs — the run under way, and what the engine runs that no run owns, what a
+/// stop left behind among it — what became of the kernels, whether the notebook differs from its file, what the layout
+/// it is shown in draws of its own, and what the notebook says of itself. A view never holds the notebook up: one that
+/// reads slower than it changes is kept one change behind.
 /// </para>
 /// </remarks>
 public sealed class NotebookHost
 {
     private const string CSharp = "csharp";
+
+    // Acts on an arrangement named in this space are the host's own, as Verso's editors keep them: never a layout part's.
+    private const string HostsOwn = "verso/";
 
     // The one thing in this package as wide as the process, because what it guards is: a C# kernel takes over the
     // process's console while it runs (Console.SetOut in Verso's C# kernel), so two C# runs anywhere in the process —
@@ -72,29 +78,50 @@ public sealed class NotebookHost
     // one another without anything else to keep them in order.
     private StrongBox<NotebookVersion> _published;
 
-    // Set when the engine says a cell began, ended or showed something; a run's turn waits on it to publish what it shows.
-    private TaskCompletionSource _said = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    // Set when the notebook is to be published, which only the turn under way does: by the engine's word that a cell began,
+    // ended or showed something, gathered for a moment first (false), or by an ask to publish at once (true).
+    private TaskCompletionSource<bool> _said = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    // The version the turn under way publishes next, as whoever asked for it waits for it.
+    private readonly NextVersion _next = new();
+
+    // What the engine runs that no run owns — a block a change runs, or what a stop left behind — each from the engine's
+    // word it began to its word it ended.
+    private readonly Executions _executions = new();
+
+    // What became of the notebook's kernels, as the engine says it.
+    private Restarts _restarts = Restarts.None;
 
     // Whether a turn that publishes what the engine said outside any turn is queued already.
     private int _telling;
 
-    private NotebookHost(string filePath, ExtensionHost extensions, Scaffold scaffold, NotebookModel saved)
+    private NotebookHost(
+        string filePath, ExtensionHost extensions, Scaffold scaffold, NotebookModel saved, IReadOnlyList<HostedToolbarAction> buttons, bool unsaved, HostedArrangement arrangement)
     {
         FilePath = filePath;
         Extensions = extensions;
         Scaffold = scaffold;
+        _blocks = ((IExtensionHostContext)extensions).GetLoadedExtensions().OfType<StepCellType>().First();
         Kinds = KindsOf(extensions);
         _saved = saved;
-        _published = new(new NotebookVersion(0, [.. scaffold.Cells.Select(cell => cell.Hosted([]))], null, Layout));
+        Layouts = LayoutsOf(extensions);
+        Themes = ThemesOf(extensions);
+        _published = new(new NotebookVersion(0, [.. scaffold.Cells.Select(cell => cell.Hosted([]))], null, [], Layout, buttons, Restarts.None.Hosted, unsaved, ThemeId, arrangement, Metadata));
         scaffold.OnCellExecuting += Began;
         scaffold.OnCellExecuted += Ended;
-        scaffold.OnCellOutputUpdated += Said;
+        scaffold.OnCellOutputUpdated += Showed;
+        scaffold.OnKernelRestarting += Restarting;
+        scaffold.OnKernelRestarted += Restarted;
+        scaffold.OnKernelRestartFailed += RestartFailed;
     }
 
     /// <summary>The file the notebook is saved in, as a full path.</summary>
     public string FilePath { get; private set; }
 
-    /// <summary>The notebook as of its last version: every cell in order, and the run under way.</summary>
+    /// <summary>
+    /// The notebook as of its last version: every cell in order, what runs, what became of its kernels, and whether it
+    /// differs from its file.
+    /// </summary>
     public NotebookVersion Current => Volatile.Read(ref _published).Value;
 
     /// <summary>The notebook's cells as they stand, in order.</summary>
@@ -110,6 +137,15 @@ public sealed class NotebookHost
     /// </remarks>
     public IReadOnlyList<HostedKind> Kinds { get; }
 
+    /// <summary>Every layout the engine can show the notebook in, in the engine's order, as Verso's View panel lists them.</summary>
+    public IReadOnlyList<HostedLayoutChoice> Layouts { get; }
+
+    /// <summary>
+    /// Every theme the engine can draw the notebook in, in the engine's order, as Verso's View panel lists them, each with the
+    /// block of custom properties Verso's surfaces style themselves from.
+    /// </summary>
+    public IReadOnlyList<HostedTheme> Themes { get; }
+
     /// <summary>The engine's extensions: Verso's own and DeepSharp's.</summary>
     internal ExtensionHost Extensions { get; }
 
@@ -118,10 +154,21 @@ public sealed class NotebookHost
 
     // The block type the engine loaded, which keeps the notebook's session: found the way every part of the notebook
     // finds it, among everything the engine loaded.
-    private StepCellType Blocks => ((IExtensionHostContext)Extensions).GetLoadedExtensions().OfType<StepCellType>().First();
+    // The notebook's block type, found once as the notebook opens: a stop tells it without asking the engine for anything.
+    private readonly StepCellType _blocks;
+
+    // The theme the notebook chose, as the engine resolved it; none while it chose none — the engine's own default is drawn
+    // by nobody but the engine's parts, and a view draws the notebook in its own look.
+    private string? ThemeId => Scaffold.Notebook.PreferredThemeId is null ? null : Scaffold.ThemeEngine?.ActiveTheme?.ThemeId;
+
+    // What the notebook says of itself, as the engine holds it now.
+    private HostedMetadata Metadata => new(Scaffold.Title, Scaffold.DefaultKernelId, Scaffold.Notebook.Created, Scaffold.Notebook.Modified, Scaffold.Notebook.FormatVersion);
 
     // The layout the notebook is shown in, as the engine holds it now.
-    private HostedLayout Layout => new(Scaffold.NotebookOps.ActiveLayoutId, Enum.Parse<LayoutAllows>(Scaffold.LayoutCapabilities.ToString()));
+    private HostedLayout Layout => new(
+        Scaffold.NotebookOps.ActiveLayoutId,
+        Enum.Parse<LayoutAllows>(Scaffold.LayoutCapabilities.ToString()),
+        Scaffold.LayoutManager?.ActiveLayout?.SupportsPropertiesPanel ?? true);
 
     /// <summary>
     /// Sets a cell's text, as typing it does; nothing runs, and the notebook is told at once, so what was worked out from
@@ -145,13 +192,16 @@ public sealed class NotebookHost
             // The notebook is told at once: what was worked out from the block as it was is taken back.
             await TellAsync();
 
-            return EndTurn().Cells.First(each => each.Id == cell);
+            return (await PublishedAsync()).Cells.First(each => each.Id == cell);
         });
     }
 
     /// <summary>Adds a cell of a kind right after another, as the add button between two cells does; it starts empty.</summary>
     /// <param name="after">The cell it follows.</param>
-    /// <param name="kind">One of <see cref="Kinds"/>.</param>
+    /// <param name="kind">
+    /// One of <see cref="Kinds"/>; one named with no language is given the language Verso's editors give it — code in the
+    /// notebook's default kernel, else C#.
+    /// </param>
     /// <returns>The new cell.</returns>
     /// <exception cref="CellGoneException">A change before this one rewrote the cell it follows or took it away.</exception>
     /// <exception cref="InvalidOperationException">
@@ -162,7 +212,10 @@ public sealed class NotebookHost
         AddedAsync(Scaffold.Notebook.Cells.IndexOf(Standing(after)) + 1, kind));
 
     /// <summary>Adds a cell of a kind at the end, as the add button under the last cell does; it starts empty.</summary>
-    /// <param name="kind">One of <see cref="Kinds"/>.</param>
+    /// <param name="kind">
+    /// One of <see cref="Kinds"/>; one named with no language is given the language Verso's editors give it — code in the
+    /// notebook's default kernel, else C#.
+    /// </param>
     /// <returns>The new cell.</returns>
     /// <exception cref="InvalidOperationException">
     /// The notebook lists no such kind, or the layout it is shown in does not let a cell be added
@@ -213,7 +266,10 @@ public sealed class NotebookHost
     /// and what it showed is cleared. The same kind again changes nothing.
     /// </summary>
     /// <param name="cell">The cell.</param>
-    /// <param name="kind">One of <see cref="Kinds"/>.</param>
+    /// <param name="kind">
+    /// One of <see cref="Kinds"/>; one named with no language is given the language Verso's editors give it — code in the
+    /// notebook's default kernel, else C#.
+    /// </param>
     /// <returns>The cell as it stands after.</returns>
     /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
     /// <exception cref="InvalidOperationException">
@@ -236,7 +292,7 @@ public sealed class NotebookHost
             await TellAsync();
         }
 
-        return EndTurn().Cells.First(each => each.Id == cell);
+        return (await PublishedAsync()).Cells.First(each => each.Id == cell);
     });
 
     /// <summary>
@@ -245,41 +301,51 @@ public sealed class NotebookHost
     /// <param name="cell">The cell.</param>
     /// <param name="code">Its text as the person has it, which may be ahead of what was sent.</param>
     /// <param name="position">Where the cursor stands in it, counted in characters.</param>
-    /// <returns>What is offered; nothing for a cell whose text no kernel reads.</returns>
-    /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
+    /// <returns>
+    /// What is offered; nothing for a cell whose text no kernel reads, and nothing when the kernel was started afresh while it
+    /// was asked, whether it answered or failed as it was put away.
+    /// </returns>
+    /// <exception cref="CellGoneException">The notebook's last version holds no such cell: a change rewrote it or took it away.</exception>
+    /// <exception cref="ObjectDisposedException">The notebook was closed.</exception>
     /// <remarks>
-    /// The kernel is started first when it has not been, as Verso's editors start it, rather than in the background, so
-    /// the first thing offered may take the time a kernel takes to start.
+    /// Answered beside whatever holds the notebook's turn, as Verso's editors ask while a cell runs. The kernel is started
+    /// first when it has not been, as Verso's editors start it, rather than in the background, so the first thing offered
+    /// may take the time a kernel takes to start.
     /// </remarks>
     public Task<IReadOnlyList<HostedCompletion>> CompletionsAsync(Guid cell, string code, int position)
     {
         ArgumentNullException.ThrowIfNull(code);
 
-        return TurnAsync(async () =>
+        return ReadAsync(cell, standing => KernelReadAsync(async () =>
         {
-            if (await KernelOfAsync(Standing(cell)) is not { } kernel)
+            if (await KernelOfAsync(standing) is not { } kernel)
             {
                 return (IReadOnlyList<HostedCompletion>)[];
             }
 
             return [.. (await kernel.GetCompletionsAsync(code, position))
                 .Select(offered => new HostedCompletion(offered.DisplayText, offered.InsertText, offered.Kind, offered.Description, offered.SortText))];
-        });
+        }, nothing: []));
     }
 
     /// <summary>What a word in a cell's text means, as Verso's editors ask it when the cursor rests on the word.</summary>
     /// <param name="cell">The cell.</param>
     /// <param name="code">Its text as the person has it.</param>
     /// <param name="position">Where the cursor rests in it, counted in characters.</param>
-    /// <returns>What the word means; nothing where the kernel says nothing, or for a cell whose text no kernel reads.</returns>
-    /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
+    /// <returns>
+    /// What the word means; nothing where the kernel says nothing, for a cell whose text no kernel reads, or when the kernel
+    /// was started afresh while it was asked, whether it answered or failed as it was put away.
+    /// </returns>
+    /// <exception cref="CellGoneException">The notebook's last version holds no such cell: a change rewrote it or took it away.</exception>
+    /// <exception cref="ObjectDisposedException">The notebook was closed.</exception>
+    /// <remarks>Answered beside whatever holds the notebook's turn, as Verso's editors ask while a cell runs.</remarks>
     public Task<HostedHover?> HoverAsync(Guid cell, string code, int position)
     {
         ArgumentNullException.ThrowIfNull(code);
 
-        return TurnAsync(async () =>
+        return ReadAsync(cell, standing => KernelReadAsync(async () =>
         {
-            if (await KernelOfAsync(Standing(cell)) is not { } kernel || await kernel.GetHoverInfoAsync(code, position) is not { } said)
+            if (await KernelOfAsync(standing) is not { } kernel || await kernel.GetHoverInfoAsync(code, position) is not { } said)
             {
                 return (HostedHover?)null;
             }
@@ -288,7 +354,7 @@ public sealed class NotebookHost
                 said.Content,
                 said.MimeType,
                 said.Range is { } range ? new HostedRange(range.StartLine, range.StartColumn, range.EndLine, range.EndColumn) : null);
-        });
+        }, nothing: null));
     }
 
     /// <summary>Runs a cell, as pressing its run button does.</summary>
@@ -310,19 +376,21 @@ public sealed class NotebookHost
         // The engine is handed the run's token, as Verso's browser editor hands it its own.
         await RunUntilStoppedAsync(run, () => Scaffold.ExecuteCellAsync(running.Id, run.Token));
 
-        return EndTurn().Cells.First(each => each.Id == cell);
+        return (await PublishedAsync()).Cells.First(each => each.Id == cell);
     });
 
     /// <summary>
     /// Stops a run — a cell's, or a toolbar button's — whether it still waits for another notebook's C# run or runs. One
     /// that waits never runs: its wait ends, and when the C# turn it waited for comes, nothing starts. One that runs is
-    /// stopped the only way Verso's engine stops a run that does not end, with a fresh kernel — the kernel of what runs
-    /// now, a cell or code a button runs in no cell — so what that kernel held, the notebook's variables and the pipeline
-    /// handed to C# cells among them, is gone. The notebook is told first, so what the run left behind asks for from then
-    /// on writes nothing, and the notebook takes its next change at once; a run that never ends goes on in the background
-    /// until the application does. A button that runs cells is stopped cell by cell: the cell under way is left behind, no
-    /// cell it would still run begins, and nothing else it asks of the notebook is done; a stop between two cells starts
-    /// no kernel afresh.
+    /// stopped the only way Verso's engine stops a run that does not end, with a fresh kernel — the kernel of what ran at
+    /// the stop, a cell or code a button runs in no cell — so what that kernel held, the notebook's variables and the
+    /// pipeline handed to C# cells among them, is gone. The stop is one step: unless the run already ended by itself, it
+    /// takes the run's end, marks the run, tells the notebook — so what the run left behind asks for from then on writes
+    /// nothing, and the notebook takes its next change at once — and only then takes what runs as the kernel to start
+    /// afresh, which happens once everything let through before the stop has landed. A run that never ends goes on in the
+    /// background until the application does. A button that runs cells is stopped cell by cell: the cell under way is left
+    /// behind, no cell it would still run begins, nothing else it asks of the notebook is done, and a file it hands over
+    /// goes to nobody; a stop between two cells starts no kernel afresh.
     /// </summary>
     /// <param name="run">The run, by its number — so a stop sent again after that run ended stops no other.</param>
     /// <returns>Whether it stopped that run; nothing is stopped when no run of that number is under way.</returns>
@@ -334,6 +402,20 @@ public sealed class NotebookHost
     /// now, and none before its first cell, between two, or while it runs code in no cell.
     /// </summary>
     public HostedRun? Running => Volatile.Read(ref _running)?.Hosted;
+
+    /// <summary>
+    /// What the engine runs now that no run owns, in the order each began: a block a change runs — a click, a changed
+    /// field — and what a stop left behind, each from the engine's word it began to its word it ended; every view is told
+    /// it with each version, as running with nothing to stop.
+    /// </summary>
+    public IReadOnlyList<HostedExecution> Executing => _executions.Now(Volatile.Read(ref _running));
+
+    /// <summary>
+    /// What became of the notebook's kernels: how many times one was started afresh — by a stop, or by Verso's Restart
+    /// Kernel — whether one is being started afresh now, and why the last start failed; every view is told it with each
+    /// version.
+    /// </summary>
+    public HostedKernels Kernels => Volatile.Read(ref _restarts).Hosted;
 
     /// <summary>
     /// Begins a view of the notebook: the notebook as it stands, then each change after it. It never waits for anything
@@ -395,52 +477,6 @@ public sealed class NotebookHost
         return new GestureResult(context.StateChanged, answer);
     });
 
-    /// <summary>Every toolbar button the engine has — Verso's own and DeepSharp's — each saying whether it can be pressed now.</summary>
-    /// <returns>The buttons, by place and then in their order.</returns>
-    /// <remarks>
-    /// A button of the notebook as a whole is asked once, with no cell chosen. One on a cell's toolbar or in its menu is
-    /// asked for every cell, as Verso's editors ask it for the cell it is drawn on, so a page can draw it pressable where
-    /// it is — running a cell wherever the layout lets cells run, clearing one once it shows something.
-    /// </remarks>
-    public Task<IReadOnlyList<HostedToolbarAction>> ToolbarAsync() => TurnAsync(async () =>
-    {
-        // Asking a button whether it can be pressed is a look, and a look does nothing to the notebook.
-        var look = new ReadPort(Scaffold);
-        var context = new ToolbarContext(Scaffold, [], look);
-        var buttons = new List<HostedToolbarAction>();
-
-        foreach (var action in Extensions.GetToolbarActions())
-        {
-            var place = Enum.Parse<ToolbarPlace>(action.Placement.ToString());
-            var cells = new List<Guid>();
-
-            if (place is ToolbarPlace.CellToolbar or ToolbarPlace.ContextMenu)
-            {
-                foreach (var cell in Scaffold.Cells)
-                {
-                    if (await action.IsEnabledAsync(new ToolbarContext(Scaffold, [cell.Id], look)))
-                    {
-                        cells.Add(cell.Id);
-                    }
-                }
-            }
-
-            buttons.Add(new HostedToolbarAction(
-                action.ActionId,
-                action.DisplayName,
-                action.Icon,
-                action.IconOnly,
-                action.IsPrimary,
-                action.ConfirmationPrompt,
-                place,
-                action.Order,
-                await action.IsEnabledAsync(context),
-                cells));
-        }
-
-        return (IReadOnlyList<HostedToolbarAction>)[.. buttons.OrderBy(button => button.Place).ThenBy(button => button.Order)];
-    });
-
     /// <summary>Presses a toolbar button.</summary>
     /// <param name="id">The button.</param>
     /// <param name="cells">The cells it is pressed for, for a button on a cell's toolbar.</param>
@@ -456,7 +492,7 @@ public sealed class NotebookHost
     {
         var action = Extensions.GetToolbarActions().FirstOrDefault(each => each.ActionId == id)
             ?? throw new InvalidOperationException($"The notebook has no toolbar button '{id}'.");
-        var run = new Run(Interlocked.Increment(ref _runs), cell: null, takesTheCSharpTurn: true);
+        var run = RunFor(null, runsCSharp: true);
 
         // The button acts on the notebook through its run, so a stop reaches every cell it would still run; one that runs a
         // cell, or code, that never ends is stopped as a cell's run is, and a stop starts afresh only what runs.
@@ -464,16 +500,20 @@ public sealed class NotebookHost
 
         await RunUntilStoppedAsync(run, () => action.ExecuteAsync(context));
 
-        return context.Handed;
+        // A stopped press hands nothing over: what it wrote after the stop is no one's.
+        return run.Claimed ? null : context.Handed;
     });
 
     /// <summary>A cell's properties panel: a section from every part that has one for the cell, in their order.</summary>
     /// <param name="cell">The cell.</param>
     /// <returns>The sections.</returns>
-    /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
-    public Task<IReadOnlyList<HostedSection>> PropertiesAsync(Guid cell) => TurnAsync(async () =>
+    /// <exception cref="CellGoneException">The notebook's last version holds no such cell: a change rewrote it or took it away.</exception>
+    /// <exception cref="ObjectDisposedException">The notebook was closed.</exception>
+    /// <exception cref="InvalidOperationException">The layout the notebook is shown in has no properties panel.</exception>
+    /// <remarks>Drawn beside whatever holds the notebook's turn, as Verso's editors draw the panel while a cell runs.</remarks>
+    public Task<IReadOnlyList<HostedSection>> PropertiesAsync(Guid cell) => ReadAsync(cell, async shown =>
     {
-        var shown = Standing(cell);
+        HasPanel();
 
         // Drawing a section is a look, and a look does nothing to the notebook.
         var context = new RenderContext(Scaffold, shown, new ReadPort(Scaffold));
@@ -507,10 +547,14 @@ public sealed class NotebookHost
     /// <param name="value">What it is set to.</param>
     /// <returns>When the part has made the change.</returns>
     /// <exception cref="CellGoneException">A change before this one rewrote the cell or took it away.</exception>
-    /// <exception cref="InvalidOperationException">No part of that name has a properties section.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// No part of that name has a properties section, or the layout the notebook is shown in has no properties panel.
+    /// </exception>
     public Task SetPropertyAsync(Guid cell, string part, string field, object? value) => TurnAsync(async () =>
     {
         var changed = Standing(cell);
+
+        HasPanel();
         var provider = Extensions.GetPropertyProviders().FirstOrDefault(each => each.ExtensionId == part)
             ?? throw new InvalidOperationException($"No part named '{part}' has a properties section.");
 
@@ -523,6 +567,129 @@ public sealed class NotebookHost
             return true;
         });
     });
+
+    /// <summary>
+    /// Hands what a person did to the arrangement the notebook's layout drew — a tile moved, resized or run — to the layout's
+    /// own part, as Verso's editors hand it on. An act named in the host's own space is the host's: every version carries the
+    /// arrangement as it is drawn, so asking for it again leaves nothing to do. An act the layout has no part for changes
+    /// nothing.
+    /// </summary>
+    /// <param name="interaction">The act.</param>
+    /// <returns>The file the part handed over, for whoever acted; nothing when it handed none.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The notebook is no longer shown in the layout that drew what was acted on; nothing is done.
+    /// </exception>
+    /// <remarks>
+    /// An act is a change: it runs DeepSharp's blocks as its own, and anything else it asks to run — a tile's C# cell — is a
+    /// run of its own, told and stopped as any run is, so a tile moved or resized runs nothing and waits for no C# run. A
+    /// layout may add, take away or move cells through the notebook's operations, as Verso's notebook layout does, so the
+    /// notebook is told its cells changed after every act.
+    /// </remarks>
+    public Task<HostedFile?> InteractAsync(HostedLayoutInteraction interaction) => TurnAsync(async () =>
+    {
+        var layout = Scaffold.LayoutManager?.ActiveLayout;
+
+        if (layout is null || !Names(layout.LayoutId, interaction.Layout))
+        {
+            throw new InvalidOperationException($"The notebook is no longer shown in the layout '{interaction.Layout}'.");
+        }
+
+        var extension = (layout as IExtension)?.ExtensionId ?? string.Empty;
+
+        if (interaction.Action.StartsWith(HostsOwn, StringComparison.Ordinal) || !Extensions.TryGetLayoutInteractionHandler(extension, layout.LayoutId, out var part))
+        {
+            return null;
+        }
+
+        var change = new ChangePort(this);
+        var context = new ToolbarContext(Scaffold, [], change);
+
+        await ChangeAsync(change, async () =>
+        {
+            // What the part asks to draw again is drawn with the next version, whatever it asks for.
+            await part.OnLayoutInteractionAsync(new LayoutInteractionContext
+            {
+                ExtensionId = extension,
+                LayoutId = layout.LayoutId,
+                InteractionType = interaction.Action,
+                Payload = interaction.Payload,
+                TargetId = interaction.Target,
+                Verso = context,
+            });
+
+            return true;
+        });
+
+        await TellAsync();
+
+        // A stopped act hands nothing over, as a stopped press hands nothing over.
+        return change.Stopped ? null : context.Handed;
+    });
+
+    /// <summary>
+    /// Titles the notebook, as Verso's Metadata panel does: the title names what it is exported as. The same title again
+    /// changes nothing.
+    /// </summary>
+    /// <param name="title">The title; nothing for none.</param>
+    /// <returns>When it is titled.</returns>
+    public Task RetitleAsync(string? title) => TurnAsync(() =>
+    {
+        Scaffold.Title = title;
+
+        return Task.FromResult(true);
+    });
+
+    /// <summary>
+    /// Shows the notebook in another layout, as Verso's View panel switches it: through the engine's own operations, which
+    /// name the layout in the notebook, so it is saved as the notebook's choice.
+    /// </summary>
+    /// <param name="id">One of <see cref="Layouts"/>.</param>
+    /// <returns>When it is shown in it.</returns>
+    /// <exception cref="InvalidOperationException">The engine has no layout of that id; nothing changes.</exception>
+    public Task SwitchLayoutAsync(string id)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+
+        return TurnAsync(() =>
+        {
+            var layout = Layouts.FirstOrDefault(each => Names(each.Id, id));
+
+            if (layout.Id is null)
+            {
+                throw new InvalidOperationException($"The notebook has no layout '{id}' to be shown in.");
+            }
+
+            Scaffold.NotebookOps.SetActiveLayout(layout.Id);
+
+            return Task.FromResult(true);
+        });
+    }
+
+    /// <summary>
+    /// Draws the notebook in a theme, as Verso's View panel switches it: an explicit choice, which the notebook names from
+    /// then on and saves as its own. Only such a choice names one; until then the notebook is drawn in a view's own look.
+    /// </summary>
+    /// <param name="id">One of <see cref="Themes"/>.</param>
+    /// <returns>When it is drawn in it.</returns>
+    /// <exception cref="InvalidOperationException">The engine has no theme of that id; nothing changes.</exception>
+    public Task SwitchThemeAsync(string id)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+
+        return TurnAsync(() =>
+        {
+            var theme = Themes.FirstOrDefault(each => Names(each.Id, id));
+
+            if (theme.Id is null)
+            {
+                throw new InvalidOperationException($"The notebook has no theme '{id}' to be drawn in.");
+            }
+
+            Scaffold.NotebookOps.SetActiveTheme(theme.Id);
+
+            return Task.FromResult(true);
+        });
+    }
 
     /// <summary>
     /// Saves the notebook to its file the way Verso's own editors save it: through the serializer for its format, which
@@ -618,9 +785,18 @@ public sealed class NotebookHost
 
             scaffold = new Scaffold(notebook, extensions, filePath);
             scaffold.InitializeSubsystems();
+            EnsureDefaults(extensions, scaffold);
+            await RestoreAsync(scaffold);
             await scaffold.RenderTransientCellsAsync(cancellationToken);
 
-            return new NotebookHost(filePath, extensions, scaffold, saved);
+            // Drawn first, since drawing places what the layout had not placed yet; what differs from the file as it opens —
+            // a cell's id repaired, a tile placed afresh — is unsaved from the first version.
+            var arrangement = await ArrangementAsync(scaffold);
+
+            await FlushAsync(scaffold);
+
+            return new NotebookHost(
+                filePath, extensions, scaffold, saved, await ButtonsAsync(extensions, scaffold), Differs(saved, scaffold, filePath, extensions), arrangement);
         }
         catch
         {
@@ -640,8 +816,8 @@ public sealed class NotebookHost
     internal void Leave(NotebookSubscription view) => ImmutableInterlocked.Update(ref _audience, audience => audience.Without(view));
 
     /// <summary>
-    /// Closes the notebook, when no view has shown it for the grace, nothing runs or waits, and nothing in it differs from
-    /// the file it was last saved to; otherwise leaves it open.
+    /// Closes the notebook, when no view has shown it for the grace, nothing runs or waits — nor runs on, left behind by a
+    /// stop — and nothing in it differs from the file it was last saved to; otherwise leaves it open.
     /// </summary>
     /// <param name="grace">How long no view must have shown it.</param>
     /// <param name="forget">Lets its holder forget it, before its engine closes.</param>
@@ -657,7 +833,8 @@ public sealed class NotebookHost
             return false;
         }
 
-        if (Volatile.Read(ref _pending) > 0 || IsUnsaved())
+        // A comparison caught by a cell still showing more keeps the notebook open: what it shows is not in the file yet.
+        if (Volatile.Read(ref _pending) > 0 || Executing.Count > 0 || await UnsavedAsync(takeBack: true, caught: true))
         {
             return true;
         }
@@ -706,8 +883,9 @@ public sealed class NotebookHost
         });
     }
 
-    // Reads a notebook the way Verso's own editors read one: through its format's serializer, past the guards that run
-    // after reading, and naming the kernel and the layout the editors name for a notebook that names neither.
+    // Reads a notebook the way Verso's own editors read one: through its format's serializer, and past the guards that run
+    // after reading. Nothing the engine falls back on is written into it, as Verso's browser editor writes nothing: a file
+    // that names no kernel or layout is saved naming none.
     private static async Task<NotebookModel> ReadAsync(ExtensionHost extensions, INotebookSerializer serializer, string content, string path)
     {
         var notebook = await serializer.DeserializeAsync(content);
@@ -717,25 +895,72 @@ public sealed class NotebookHost
             notebook = await guard.PostDeserializeAsync(notebook, path);
         }
 
-        notebook.DefaultKernelId ??= CSharp;
-        notebook.ActiveLayout ??= LayoutDefaults.Reference;
-
         return notebook;
+    }
+
+    // What the engine falls back on when the notebook names none, or names one it does not have — the notebook's own
+    // layout, a light theme — set on the engine and never written into the notebook, as Verso's browser editor sets them.
+    private static void EnsureDefaults(ExtensionHost extensions, Scaffold scaffold)
+    {
+        if (scaffold.LayoutManager is { ActiveLayout: null } layouts)
+        {
+            layouts.TryActivate(LayoutDefaults.LayoutId);
+        }
+
+        if (scaffold.ThemeEngine is { ActiveTheme: null } themes && extensions.GetThemes().FirstOrDefault(theme => theme.ThemeKind == ThemeKind.Light) is { } light)
+        {
+            themes.SetActiveTheme(light.ThemeId);
+        }
+    }
+
+    // What the file holds for the notebook's layouts and for the parts' settings, handed back to them as the notebook opens,
+    // as Verso's editors hand them back: before anything draws the notebook, which would otherwise arrange the layouts
+    // afresh, and before any save takes them back, which would otherwise take the parts' defaults in their place.
+    private static async Task RestoreAsync(Scaffold scaffold)
+    {
+        if (scaffold.LayoutManager is { } layouts)
+        {
+            // Restoring an arrangement is a look at the notebook, and a look does nothing to it.
+            await layouts.RestoreMetadataAsync(scaffold.Notebook, new ToolbarContext(scaffold, [], new ReadPort(scaffold)));
+        }
+
+        if (scaffold.SettingsManager is { } settings)
+        {
+            await settings.RestoreSettingsAsync(scaffold.Notebook);
+        }
+    }
+
+    // What the layouts and the parts' settings hold now, taken back into the notebook — before every save and every look
+    // at what is unsaved, as Verso's editors take them — since each keeps what a person changed in it until then.
+    private static async Task FlushAsync(Scaffold scaffold)
+    {
+        if (scaffold.LayoutManager is { } layouts)
+        {
+            await layouts.SaveMetadataAsync(scaffold.Notebook);
+        }
+
+        if (scaffold.SettingsManager is { } settings)
+        {
+            await settings.SaveSettingsAsync(scaffold.Notebook);
+        }
     }
 
     private async Task CloseEngineAsync()
     {
         Scaffold.OnCellExecuting -= Began;
         Scaffold.OnCellExecuted -= Ended;
-        Scaffold.OnCellOutputUpdated -= Said;
+        Scaffold.OnCellOutputUpdated -= Showed;
+        Scaffold.OnKernelRestarting -= Restarting;
+        Scaffold.OnKernelRestarted -= Restarted;
+        Scaffold.OnKernelRestartFailed -= RestartFailed;
         await Scaffold.DisposeAsync();
         await Extensions.DisposeAsync();
     }
 
     // Everything done to the notebook: refused once it closes, and otherwise one at a time, in the order it came, each
-    // ending with the notebook published as it then stands. A close stops the run under way and waits only for a change
-    // under way: whatever else was asked before it and still waits its turn is refused when that turn comes, since a
-    // close discards what has not begun, as it discards what is not saved.
+    // telling every view what it does while it does it, and ending with the notebook published as it then stands. A close
+    // stops the run under way and waits only for a change under way: whatever else was asked before it and still waits its
+    // turn is refused when that turn comes, since a close discards what has not begun, as it discards what is not saved.
     private Task<T> TurnAsync<T>(Func<Task<T>> change)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref _audience).Closed, this);
@@ -747,14 +972,7 @@ public sealed class NotebookHost
             {
                 ObjectDisposedException.ThrowIf(Volatile.Read(ref _audience).Closed, this);
 
-                try
-                {
-                    return await change();
-                }
-                finally
-                {
-                    EndTurn();
-                }
+                return await PublishingAsync(change);
             }
             finally
             {
@@ -763,75 +981,260 @@ public sealed class NotebookHost
         });
     }
 
-    // What in the notebook differs from the file it was last saved to, as Verso's own comparison of two notebooks finds it.
-    private bool IsUnsaved()
+    // A read of a cell, answered beside whatever holds the notebook's turn, as Verso's editors read a cell's panel and ask its
+    // kernel while a cell runs: refused once the notebook is closed; answered for a cell the notebook's last version holds,
+    // so one a change under way added is not read before any view is told it, and one it took away is gone; and counted
+    // among what is asked of the notebook, so it stays open while the read reads.
+    private async Task<T> ReadAsync<T>(Guid cell, Func<CellModel, Task<T>> read)
     {
-        var diff = NotebookDiffEngine.Compute(_saved, Scaffold.Notebook, FilePath, Extensions.GetCellTypes());
+        Interlocked.Increment(ref _pending);
+
+        try
+        {
+            // Looked at once counted, so a close that did not count it has marked the notebook closed by now.
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _audience).Closed, this);
+
+            var current = Current;
+
+            if (!current.Cells.Any(each => each.Id == cell) || Scaffold.GetCell(cell) is not { } standing)
+            {
+                throw new CellGoneException(cell, current.Version);
+            }
+
+            return await read(standing);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _pending);
+        }
+    }
+
+    // What a kernel is asked while nothing else holds it still: answered only when no start afresh overlapped the asking —
+    // none under way as it began, none begun while it read, as the engine says it begins one before it puts the kernel
+    // away. A read that overlapped one answers nothing, whatever the kernel said, and so does one the kernel failed while
+    // it was put away: what it would have said belongs to a kernel no longer there.
+    private async Task<T> KernelReadAsync<T>(Func<Task<T>> read, T nothing)
+    {
+        var before = Volatile.Read(ref _restarts);
+
+        if (before.Restarting)
+        {
+            return nothing;
+        }
+
+        try
+        {
+            var answer = await read();
+
+            return Volatile.Read(ref _restarts).Begun == before.Begun ? answer : nothing;
+        }
+        catch (Exception gone) when (gone is ObjectDisposedException or InvalidOperationException && Volatile.Read(ref _restarts).Begun != before.Begun)
+        {
+            return nothing;
+        }
+    }
+
+    // Whether the notebook differs from the file it was last saved to, as Verso's own comparison of two notebooks finds it:
+    // with what the layouts and the parts' settings hold taken back into it first when nothing else acts on the notebook,
+    // since a turn's work may be writing into it meanwhile. A comparison caught by a run writing what a cell shows — which
+    // Verso's engine catches the same way when it reads such a list — answers what it is told to fall back on.
+    private async Task<bool> UnsavedAsync(bool takeBack, bool caught)
+    {
+        if (takeBack)
+        {
+            await FlushAsync(Scaffold);
+        }
+
+        try
+        {
+            return Differs(_saved, Scaffold, FilePath, Extensions);
+        }
+        catch (Exception written) when (written is InvalidOperationException or ArgumentException)
+        {
+            return caught;
+        }
+    }
+
+    // What in a notebook differs from the file it was last saved to, as Verso's own comparison of two notebooks finds it,
+    // told which cells' outputs are never saved.
+    private static bool Differs(NotebookModel saved, Scaffold scaffold, string path, ExtensionHost extensions)
+    {
+        var diff = NotebookDiffEngine.Compute(saved, scaffold.Notebook, path, extensions.GetCellTypes());
 
         return diff.Summary.Added + diff.Summary.Removed + diff.Summary.Modified + diff.Summary.Moved + diff.MetadataChanges.Count > 0;
     }
 
-    // The end of a turn: the notebook is published as it stands.
-    private NotebookVersion EndTurn() => Publish();
+    // The end of a turn: the notebook is published as it stands, now that nothing else acts on it.
+    private Task<NotebookVersion> EndTurnAsync() => PublishAsync(whole: true);
 
-    // Publishes the notebook as it stands as the next version, unless it is the last one again: as the current version,
-    // and to every view, each told the cells that came or changed. A cell caught half written by a run keeps what it
-    // showed at the last version; the run's next word about it, or the end of its turn, publishes the rest.
-    private NotebookVersion Publish()
+    // A turn's work, what it does told while it does it, and then, whatever the work did, the notebook published as it
+    // stands. The turn is the notebook's one publisher, so no two versions are ever made at once: what the engine says is
+    // gathered for a moment first, as a burst of output is one version, and an ask to publish at once is published at once.
+    private async Task<T> PublishingAsync<T>(Func<Task<T>> change)
     {
+        try
+        {
+            var said = Listen();
+            var work = change();
+
+            while (await Task.WhenAny(work, said) == said)
+            {
+                var atOnce = await said;
+
+                said = Listen();
+
+                if (!atOnce)
+                {
+                    await Task.WhenAny(work, Task.Delay(Gathering));
+                }
+
+                await PublishAsync(whole: false);
+            }
+
+            return await work;
+        }
+        finally
+        {
+            await EndTurnAsync();
+        }
+    }
+
+    // Asks the turn under way to publish the notebook at once — a run that waits or starts, a change done — and waits for
+    // that version, so what comes next is told after it. Only a turn's own work asks, so a turn is there to answer; two
+    // that ask at once are told the same version.
+    private Task<NotebookVersion> PublishedAsync()
+    {
+        var asked = _next.AskAsync();
+
+        Volatile.Read(ref _said).TrySetResult(true);
+
+        return asked;
+    }
+
+    // Publishes the notebook as it stands, and tells it to whoever asked for the next version: whole when nothing else acts
+    // on the notebook, and otherwise as a turn's work leaves it meanwhile.
+    private Task<NotebookVersion> PublishAsync(bool whole) => _next.TellAsync(() => NextAsync(whole));
+
+    // The notebook as it stands as the next version, unless it is the last one again: as the current version, and to every
+    // view, each told the cells that came or changed, and the buttons when any says something else. A cell caught half
+    // written by a run keeps what it showed at the last version, and so does the word on what is unsaved; the run's next
+    // word about it, or the end of its turn, publishes the rest.
+    private async Task<NotebookVersion> NextAsync(bool whole)
+    {
+        var buttons = await ButtonsAsync(Extensions, Scaffold);
         var last = Current;
+
+        // Drawn before what is unsaved is taken, since drawing places what the layout had not placed yet.
+        var arrangement = await ArrangementAsync(Scaffold);
+        var unsaved = await UnsavedAsync(takeBack: whole, caught: last.Unsaved);
         var before = last.Cells.ToDictionary(cell => cell.Id);
 
         HostedCell[] cells = [.. Scaffold.Cells.Select(cell => cell.Hosted(before.TryGetValue(cell.Id, out var was) ? was.Outputs : []))];
         HostedCell[] changed = [.. cells.Where(cell => !before.TryGetValue(cell.Id, out var was) || was != cell)];
         var order = cells.Select(cell => cell.Id).SequenceEqual(last.Cells.Select(cell => cell.Id)) ? null : cells.Select(cell => cell.Id).ToArray();
-        var running = Running;
-        var layout = Layout;
 
-        if (order is null && changed.Length == 0 && running == last.Running && layout == last.Layout)
+        // The run under way is read once, so it is told either as the run or among what runs with no run, never both.
+        var under = Volatile.Read(ref _running);
+        var running = under?.Hosted;
+
+        _executions.Forget();
+
+        var executing = _executions.Now(under);
+        var kernels = Kernels;
+        var layout = Layout;
+        var theme = ThemeId;
+
+        var pressable = buttons.SequenceEqual(last.Buttons) ? null : buttons;
+        HostedArrangement? arranged = arrangement == last.Arrangement ? null : arrangement;
+        var metadata = Metadata;
+        HostedMetadata? said = metadata == last.Metadata ? null : metadata;
+
+        if (order is null && changed.Length == 0 && running == last.Running && executing.SequenceEqual(last.Executing) && layout == last.Layout && pressable is null
+            && kernels == last.Kernels && unsaved == last.Unsaved && theme == last.ThemeId && arranged is null && said is null)
         {
             return last;
         }
 
-        var next = new NotebookVersion(last.Version + 1, cells, running, layout);
+        var next = new NotebookVersion(last.Version + 1, cells, running, executing, layout, buttons, kernels, unsaved, theme, arrangement, metadata);
 
         Volatile.Write(ref _published, new StrongBox<NotebookVersion>(next));
 
         foreach (var view in Volatile.Read(ref _audience).Views)
         {
-            view.Offer(new NotebookChange(next.Version, order, changed, running, layout));
+            view.Offer(new NotebookChange(next.Version, order, changed, running, executing, layout, pressable, kernels, unsaved, theme, arranged, said));
         }
 
         return next;
     }
 
     // The engine says a cell began: it is what the run whose work the engine is in runs now. A cell the engine begins
-    // outside every run is no run's, and no view is told it runs.
+    // outside every run — a block a change runs — is no run's: every view is told it runs, with nothing to stop. Either
+    // way the kernels answer again, so a start afresh that failed before is past.
     private void Began(Guid cell)
     {
+        ImmutableInterlocked.Update(ref _restarts, restarts => restarts.Answered());
+
         // The engine found the cell a moment ago, and nothing else changes the notebook while a run holds its turn.
         if (_raising.Value is { } run)
         {
             run.Began(cell, KernelOf(Scaffold.Cells.First(each => each.Id == cell)));
         }
+        else
+        {
+            _executions.Began(cell);
+        }
 
-        Said(cell);
+        Said();
     }
 
-    // The engine says a cell ended: the run whose work that was runs nothing now, unless something else began since.
+    // The engine says a cell ended: the run whose work that was runs nothing now, unless something else began since — a
+    // run a stop left behind among them, which is then told running no more; a cell no run owns is told running no more.
     private void Ended(Guid cell)
     {
-        _raising.Value?.Ended(cell);
-        Said(cell);
+        if (_raising.Value is { } run)
+        {
+            run.Ended(cell);
+        }
+        else
+        {
+            _executions.Ended(cell);
+        }
+
+        Said();
     }
 
-    // The engine says a cell began, ended or showed something. It says so from inside the run, and the run waits for what
-    // it calls — a view doing its own work here held a click twice as long (measured) — so nothing is done here but
-    // asking for it to be published: a run's turn is woken to publish it, and when no turn to tell it is queued already,
-    // one is, for what the engine says outside any turn, such as a cell's background task showing more after its run.
-    private void Said(Guid cell)
+    // The engine says a cell showed something.
+    private void Showed(Guid cell) => Said();
+
+    // The engine begins to start a kernel afresh: every view is told at once, since a start takes a while.
+    private void Restarting(string? kernel)
     {
-        Volatile.Read(ref _said).TrySetResult();
+        ImmutableInterlocked.Update(ref _restarts, restarts => restarts.Began());
+        Said();
+    }
+
+    // The engine started a kernel afresh: it is counted, and what the kernel held — the notebook's variables — is gone.
+    private void Restarted(string? kernel)
+    {
+        ImmutableInterlocked.Update(ref _restarts, restarts => restarts.Ended());
+        Said();
+    }
+
+    // The engine failed to start a kernel afresh: every view is told why, until one starts afresh or a cell begins.
+    private void RestartFailed(string? kernel, Exception why)
+    {
+        ImmutableInterlocked.Update(ref _restarts, restarts => restarts.Failed(why.Message));
+        Said();
+    }
+
+    // The engine said something of a cell or a kernel, or a run what it runs now. It says so from inside the run, and the
+    // run waits for what it calls — a view doing its own work here held a click twice as long (measured) — so nothing is
+    // done here but asking for it to be published: the turn under way is woken to publish it, and when no turn to tell it
+    // is queued already, one is, for what is said outside any turn, such as a cell's background task showing more after
+    // its run, or what a stop left behind ending.
+    private void Said()
+    {
+        Volatile.Read(ref _said).TrySetResult(false);
 
         if (Interlocked.Exchange(ref _telling, 1) == 0)
         {
@@ -839,15 +1242,104 @@ public sealed class NotebookHost
             {
                 Volatile.Write(ref _telling, 0);
 
-                return Task.FromResult(Publish());
+                // A closed notebook is published no more: its engine is gone, whatever a stop left behind still says.
+                return Volatile.Read(ref _audience).Closed ? Task.FromResult(Current) : PublishAsync(whole: true);
             }));
         }
     }
 
-    // A fresh wait for the engine's next word.
-    private Task Listen()
+    // Every toolbar button the engine has — Verso's own and DeepSharp's — each saying whether it can be pressed now, by place
+    // and then in their order. A button of the notebook as a whole is asked once, with no cell chosen; one on a cell's
+    // toolbar or in its menu is asked for every cell, as Verso's editors ask it for the cell it is drawn on, so a page draws
+    // it pressable where it is — running a cell wherever the layout lets cells run, clearing one once it shows something.
+    // Asking is a look, which does nothing to the notebook.
+    private static async Task<IReadOnlyList<HostedToolbarAction>> ButtonsAsync(ExtensionHost extensions, Scaffold scaffold)
     {
-        var said = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var look = new ReadPort(scaffold);
+        var buttons = new List<HostedToolbarAction>();
+
+        foreach (var action in extensions.GetToolbarActions())
+        {
+            var place = Enum.Parse<ToolbarPlace>(action.Placement.ToString());
+            var cells = new List<Guid>();
+            string? fault = null;
+
+            if (place is ToolbarPlace.CellToolbar or ToolbarPlace.ContextMenu)
+            {
+                foreach (var cell in scaffold.Cells)
+                {
+                    var forCell = await AnswerAsync(action, new ToolbarContext(scaffold, [cell.Id], look));
+
+                    if (forCell.Pressable)
+                    {
+                        cells.Add(cell.Id);
+                    }
+
+                    fault ??= forCell.Fault;
+                }
+            }
+
+            var whole = await AnswerAsync(action, new ToolbarContext(scaffold, [], look));
+
+            buttons.Add(new HostedToolbarAction(
+                action.ActionId,
+                action.DisplayName,
+                action.Icon,
+                action.IconOnly,
+                action.IsPrimary,
+                action.ConfirmationPrompt,
+                place,
+                action.Order,
+                whole.Pressable,
+                cells,
+                whole.Fault ?? fault));
+        }
+
+        return [.. buttons.OrderBy(button => button.Place).ThenBy(button => button.Order)];
+    }
+
+    // What the layout the notebook is shown in draws of its own, as Verso's editors ask it to draw: only a layout that draws
+    // an arrangement in the page itself rather than the notebook's list, or in a frame of its own — and never the engine's
+    // own notebook layout, the list of the cells, whose arrangement says nothing a version does not. Drawing is a look, and
+    // a look does nothing to the notebook. A part that fails to draw holds up no version, and says why instead.
+    private static async Task<HostedArrangement> ArrangementAsync(Scaffold scaffold)
+    {
+        if (scaffold.LayoutManager?.ActiveLayout is not { RequiresCustomRenderer: true, RendererIsolation: LayoutRendererIsolation.Inline } layout
+            || (Names(layout.LayoutId, LayoutDefaults.LayoutId) && layout is IExtension { ExtensionId: var extension } && Names(extension, LayoutDefaults.ExtensionId)))
+        {
+            return default;
+        }
+
+        try
+        {
+            var drawn = await layout.RenderLayoutAsync(scaffold.Notebook.Cells, new ToolbarContext(scaffold, [], new ReadPort(scaffold)));
+
+            return Names(drawn.MimeType, "text/html") ? new HostedArrangement(drawn.Content, null) : default;
+        }
+        catch (Exception failed)
+        {
+            return new HostedArrangement(null, failed.Message);
+        }
+    }
+
+    // Whether a button can be pressed, as its part says. A part that fails to say is not pressed: every version asks every
+    // button, and one part that fails holds up no version, so what failed is told with the button instead.
+    private static async Task<Answer> AnswerAsync(IToolbarAction action, ToolbarContext context)
+    {
+        try
+        {
+            return new Answer(await action.IsEnabledAsync(context), null);
+        }
+        catch (Exception failed)
+        {
+            return new Answer(false, failed.Message);
+        }
+    }
+
+    // A fresh wait for the next word that the notebook is to be published: whether to publish it at once.
+    private Task<bool> Listen()
+    {
+        var said = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
         Volatile.Write(ref _said, said);
 
@@ -863,24 +1355,58 @@ public sealed class NotebookHost
     [
         .. extensions.GetKernels()
             .Where(kernel => !Same(kernel.LanguageId, StepKernel.Language))
-            .Select(kernel => new HostedKind("code", kernel.LanguageId, kernel.DisplayName, Editable: true)),
+            .Select(kernel => new HostedKind("code", kernel.LanguageId, kernel.DisplayName, Editable: true, Rendered: false)),
         .. extensions.GetCellTypes()
             .Where(type => !Same(type.CellTypeId, "code"))
             .OrderBy(type => Same(type.CellTypeId, "markdown") ? 0 : 1)
-            .Select(type => new HostedKind(type.CellTypeId, type.Kernel?.LanguageId, type.DisplayName, type.IsEditable)),
+            .Select(type => new HostedKind(type.CellTypeId, type.Kernel?.LanguageId, type.DisplayName, type.IsEditable, Rendered(extensions, type))),
     ];
+
+    // Whether a kind is shown rendered once it has run, as Verso's editors decide it: by the renderer the engine has for its
+    // type, else by the one its cell type brings.
+    private static bool Rendered(ExtensionHost extensions, ICellType type) =>
+        (extensions.GetRenderers().FirstOrDefault(renderer => Names(renderer.CellTypeId, type.CellTypeId)) ?? type.Renderer)?.CollapsesInputOnExecute ?? false;
 
     private static bool Same(string? one, string? other) => string.Equals(one, other, StringComparison.OrdinalIgnoreCase);
 
-    // A kind the notebook lists, as it lists it; one it does not list is refused.
+    // The layouts the engine has, as Verso's View panel lists them.
+    private static HostedLayoutChoice[] LayoutsOf(ExtensionHost extensions) =>
+    [
+        .. extensions.GetLayouts().Select(layout =>
+            new HostedLayoutChoice(layout.LayoutId, layout.DisplayName, Enum.Parse<LayoutAllows>(layout.Capabilities.ToString()))),
+    ];
+
+    // The themes the engine has, as Verso's View panel lists them, each with the block Verso's engine writes for it.
+    private static HostedTheme[] ThemesOf(ExtensionHost extensions) =>
+    [
+        .. extensions.GetThemes().Select(theme =>
+            new HostedTheme(theme.ThemeId, theme.DisplayName, Enum.Parse<ThemeTone>(theme.ThemeKind.ToString()), ThemeCss.BuildRootBlock(theme))),
+    ];
+
+    // A kind the notebook lists, as it lists it; one it does not list is refused. A kind named with no language is given
+    // the one Verso's editors give it: its cell type's kernel's; none for a type a renderer draws; else the notebook's
+    // default kernel, else C#.
     private HostedKind Listed(HostedKind kind)
     {
-        foreach (var each in Kinds.Where(each => Same(each.Type, kind.Type) && Same(each.Language, kind.Language)))
+        var language = kind.Language ?? LanguageOf(kind.Type);
+
+        foreach (var each in Kinds.Where(each => Same(each.Type, kind.Type) && Same(each.Language, language)))
         {
             return each;
         }
 
         throw new InvalidOperationException($"The notebook has no kind of cell '{kind.Type}' in '{kind.Language}' to add or turn a cell into.");
+    }
+
+    // The language Verso's editors give a cell of a type named with no language.
+    private string? LanguageOf(string type)
+    {
+        if (Extensions.GetCellTypes().FirstOrDefault(each => Names(each.CellTypeId, type)) is { } cellType)
+        {
+            return cellType.Kernel?.LanguageId;
+        }
+
+        return Extensions.GetRenderers().Any(renderer => Names(renderer.CellTypeId, type)) ? null : Scaffold.DefaultKernelId ?? CSharp;
     }
 
     // A cell of a listed kind added at a place, empty, through the port the notebook's layout guards; the notebook is told.
@@ -891,7 +1417,7 @@ public sealed class NotebookHost
 
         await TellAsync();
 
-        return EndTurn().Cells.First(each => each.Id == added);
+        return (await PublishedAsync()).Cells.First(each => each.Id == added);
     }
 
     // A cell moved to stand right before or right after its neighbour, wherever either stands now.
@@ -909,6 +1435,16 @@ public sealed class NotebookHost
 
         return true;
     });
+
+    // A layout with no properties panel refuses the panel and its fields, as Verso's editors offer the panel only in a
+    // layout that has one; a form's field rewrites a block, which such a layout does not let a person do.
+    private void HasPanel()
+    {
+        if (!Layout.HasPropertiesPanel)
+        {
+            throw new InvalidOperationException("The layout the notebook is shown in has no properties panel.");
+        }
+    }
 
     // A layout that does not let a cell's text or kind be changed refuses it, as the engine's own port refuses what its
     // layout does not allow.
@@ -935,31 +1471,37 @@ public sealed class NotebookHost
     }
 
     // Tells the notebook its cells changed, so what was worked out from the blocks as they were is taken back.
-    private Task TellAsync() => Blocks.BlocksChangedAsync(Scaffold.Notebook, Scaffold.Variables, new ChangePort(this));
+    private Task TellAsync() => _blocks.BlocksChangedAsync(Scaffold.Notebook, Scaffold.Variables, new ChangePort(this));
 
     // What a part does as a change: a change whose run was stopped ends as a stopped run ends, with nothing to answer, and a
     // change is over only once every run it asked for has ended or was stopped, whether or not it waited for them.
     private static async Task<T?> ChangeAsync<T>(ChangePort change, Func<Task<T>> act)
     {
+        var answer = default(T);
+
         try
         {
-            return await act();
+            answer = await act();
         }
-        catch (OperationCanceledException) when (change.Token.IsCancellationRequested)
+        catch (OperationCanceledException) when (change.Stopped)
         {
-            return default;
+            // A change whose run was stopped ends as that run ends.
         }
         finally
         {
             await change.SettledAsync();
         }
+
+        // A stopped change writes nothing, what it answers included.
+        return change.Stopped ? default : answer;
     }
 
     /// <summary>A run, numbered for the notebook, taking the C# turn when it runs C#.</summary>
     /// <param name="cell">The cell it runs; none when it runs several, or code in no cell.</param>
     /// <param name="runsCSharp">Whether it runs C#.</param>
     /// <returns>The run.</returns>
-    internal Run RunFor(Guid? cell, bool runsCSharp) => new(Interlocked.Increment(ref _runs), cell, takesTheCSharpTurn: runsCSharp);
+    /// <remarks>Its stop tells the notebook in the step that stops it, so what it asks for from then on writes nothing.</remarks>
+    internal Run RunFor(Guid? cell, bool runsCSharp) => new(Interlocked.Increment(ref _runs), cell, takesTheCSharpTurn: runsCSharp, Said, _blocks.StoppedAsync);
 
     /// <summary>
     /// A run a change asks for, run as every run is — told to every view from its ask, in the C# turn when it runs C#, and
@@ -987,8 +1529,11 @@ public sealed class NotebookHost
         var serializer = Extensions.GetSerializers().FirstOrDefault(each => each.CanImport(path))
             ?? throw new NotSupportedException($"No format Verso knows writes '{Path.GetFileName(path)}'.");
 
-        // What a live output shows now is what is saved, as Verso's own editors ask before they write.
+        // What a live output shows now is what is saved, as Verso's own editors ask before they write; what the layouts and
+        // the parts' settings hold now is taken back into the notebook; and the notebook is stamped with the time it is saved.
         await Scaffold.RefreshLiveOutputsAsync();
+        await FlushAsync(Scaffold);
+        Scaffold.Notebook.Modified = DateTimeOffset.UtcNow;
 
         var notebook = Scaffold.Notebook;
 
@@ -1012,7 +1557,8 @@ public sealed class NotebookHost
     // waits. A Stop then ends the wait at once, and the turn, when it comes, starts nothing. Only the run under way can
     // be stopped, so the slot holds one, and a Stop after it ended meets a run nobody waits for any more. A close marks
     // the notebook closed before it looks for the run under way, and the run takes its slot before it looks for a close,
-    // each by an exchange, so one always finds the other: a run whose turn began as the notebook shut stops itself.
+    // each by an exchange, so one always finds the other: a run whose turn began as the notebook shut stops itself. A run
+    // stopped before it ran waits for what the notebook let through before the stop, as every stopped run does.
     private async Task<bool> RunUntilStoppedAsync(Run run, Func<Task> start)
     {
         Interlocked.Exchange(ref _running, run);
@@ -1026,7 +1572,7 @@ public sealed class NotebookHost
 
             if (!run.TakesTheCSharpTurn)
             {
-                return run.Starts() && await GoAsync(run, start);
+                return run.Starts() ? await GoAsync(run, start) : await StoppedBeforeItRanAsync(run);
             }
 
             var turned = CSharpRuns.TakeTurnAsync(() => run.Starts() ? GoAsync(run, start) : Task.FromResult(false));
@@ -1034,12 +1580,12 @@ public sealed class NotebookHost
             // The turn was free when it began at once; otherwise the run waits, and every view is told.
             if (run.Waits)
             {
-                Publish();
+                await PublishedAsync();
             }
 
             await Task.WhenAny(turned, run.Stopped);
 
-            return !run.StoppedBeforeItRan && await turned;
+            return run.Stopped.IsCompleted && (await run.Stopped).BeforeItRan ? await StoppedBeforeItRanAsync(run) : await turned;
         }
         finally
         {
@@ -1047,61 +1593,54 @@ public sealed class NotebookHost
         }
     }
 
+    // A run stopped before it ran never runs; its flow ends once what was let through before the stop has landed.
+    private static async Task<bool> StoppedBeforeItRanAsync(Run run)
+    {
+        await (await run.Stopped).Drained;
+
+        return false;
+    }
+
     // A run under way, until it ends or a stop ends it; every view is told it from its start. It is not asked to stop,
     // since one that does not end does not listen either (measured: a C# loop that awaits goes on with its token
-    // cancelled); a fresh kernel — the kernel of what runs now — ends the turn, and the run is left behind. While it runs,
-    // what the engine says it shows is gathered for a moment and published, so a view sees it before the run ends.
+    // cancelled); a fresh kernel ends the turn, and the run is left behind. While it runs, its turn tells every view what
+    // the engine says it shows, so a view sees it before the run ends. Whichever comes first — the work's end or a stop —
+    // only wakes the flow: the run's end is decided by one exchange on the run, and a stop hands the flow its decision
+    // whole, so nothing here reads again what runs once it has moved on.
     private async Task<bool> GoAsync(Run run, Func<Task> start)
     {
-        Publish();
-
-        var said = Listen();
+        await PublishedAsync();
 
         // What the engine says from inside this work is this run's.
         _raising.Value = run;
 
         var ran = start();
-        var ended = Task.WhenAny(ran, run.Stopped);
 
-        while (await Task.WhenAny(ended, said) == said)
+        await Task.WhenAny(ran, run.Stopped);
+
+        if (ran.IsCompleted && run.Ends())
         {
-            said = Listen();
-            await Task.WhenAny(ended, Task.Delay(Gathering));
-            Publish();
-        }
-
-        if (await ended != ran || !await EndedByItselfAsync(ran, run))
-        {
-            // The notebook is told first, so what the run left behind asks for from now on writes nothing, and the
-            // notebook takes its next change at once. Only the kernel of what runs now is started afresh: before the
-            // first cell, between two cells, while Run All resets the kernels, and while a cell only draws, no kernel
-            // runs, and what the kernels hold stays.
-            Blocks.Stopped();
-
-            if (run.Now is { Kernel: { } kernel })
-            {
-                await Scaffold.RestartKernelAsync(kernel);
-            }
-        }
-
-        return true;
-    }
-
-    // Whether a run's work ended by itself: it did, unless it ended with the stop's own cancellation — the engine heeding
-    // the stop between two cells — which is a stopped run; any other end, a fault among them, is the work's own and
-    // reaches whoever asked for it.
-    private static async Task<bool> EndedByItselfAsync(Task ran, Run run)
-    {
-        try
-        {
+            // Ended by itself: what the work met, a fault among it, is its own and reaches whoever asked for it.
             await ran;
 
             return true;
         }
-        catch (OperationCanceledException) when (run.Token.IsCancellationRequested)
+
+        // Stopped: the notebook was told in the stop's own step. Whatever the run still runs goes on without it, and every
+        // view is told so until the engine says it ended. Only once what the notebook and the run let through before the
+        // stop has landed is the kernel that ran at the stop started afresh — none when nothing ran, before the first cell,
+        // between two cells, while Run All resets the kernels, or while a cell only draws, so what the kernels hold stays.
+        var stop = await run.Stopped;
+
+        _executions.LeftBehind(run);
+        await stop.Drained;
+
+        if (stop.Ran is { Kernel: { } kernel })
         {
-            return false;
+            await Scaffold.RestartKernelAsync(kernel);
         }
+
+        return true;
     }
 
     // Which kernel runs a cell, in the order the engine asks when it runs one: a cell type it has answers first — with
@@ -1137,6 +1676,9 @@ public sealed class NotebookHost
 
     // Whether two of the engine's names name the same thing, as the engine compares them.
     private static bool Names(string one, string other) => string.Equals(one, other, StringComparison.OrdinalIgnoreCase);
+
+    // What a button's part answered when asked whether it can be pressed: whether it can, or why it could not say.
+    private readonly record struct Answer(bool Pressable, string? Fault);
 
     // Who views the notebook, since when nobody has, and whether it is closed.
     private sealed class Audience(ImmutableArray<NotebookSubscription> views, bool closed, long aloneSince)

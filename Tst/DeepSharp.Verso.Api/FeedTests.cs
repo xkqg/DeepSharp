@@ -35,7 +35,16 @@ public sealed partial class FeedTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
     // The notebook's own layout, which lets a person do everything to its cells.
-    private static readonly HostedLayout InTheNotebook = new("notebook", (LayoutAllows)255);
+    private static readonly HostedLayout InTheNotebook = new("notebook", (LayoutAllows)255, HasPropertiesPanel: true);
+
+    // What a notebook's kernels are told as while none was started afresh.
+    private static readonly HostedKernels NoRestarts = new(0, Restarting: false, Fault: null);
+
+    // A button, as a version carries it.
+    private static readonly HostedToolbarAction Button = new("id", "Label", null, IconOnly: false, IsPrimary: false, null, ToolbarPlace.MainToolbar, 1, IsEnabled: true, [], Fault: null);
+
+    // What clears a cell's outputs, among Verso's own buttons.
+    private const string ClearCellOutput = "verso.action.clear-cell-output";
 
     private static CellModel Block(string source) => new() { Type = StepCellType.StepType, Language = StepKernel.Language, Source = source };
 
@@ -282,7 +291,6 @@ public sealed partial class FeedTests : IDisposable
         var before = host.Current;
 
         await Assert.ThrowsAsync<CellGoneException>(() => host.EditAsync(Guid.NewGuid(), Titanic[0]));
-        await host.ToolbarAsync();
         await host.PropertiesAsync(host.Cells[4].Id);
 
         Assert.Equal(before, host.Current);
@@ -334,20 +342,37 @@ public sealed partial class FeedTests : IDisposable
         var b = a with { Id = Guid.NewGuid(), Source = "b" };
         var c = a with { Id = Guid.NewGuid(), Source = "c" };
         var run = new HostedRun(1, a.Id, DateTimeOffset.UnixEpoch, Waits: false);
+        var cLeftBehind = new HostedExecution(c.Id, DateTimeOffset.UnixEpoch, LeftBehind: true);
+        var restarted = new HostedKernels(1, Restarting: false, Fault: null);
+        var drawn = new HostedArrangement("<div data-cell-slot=\"a\"></div>", Fault: null);
+        var redrawn = drawn with { Html = "<div></div>" };
+        var titled = new HostedMetadata("Passengers", "csharp", null, null, "1.1");
+        var retitled = titled with { Title = "Survivors" };
 
-        var both = new NotebookChange(1, [a.Id, b.Id], [a, b], null, InTheNotebook).Then(new NotebookChange(2, null, [a with { Source = "a2" }], run, InTheNotebook));
+        var both = new NotebookChange(1, [a.Id, b.Id], [a, b], null, [], InTheNotebook, [Button], NoRestarts, Unsaved: false, ThemeId: null, Arrangement: drawn, Metadata: titled)
+            .Then(new NotebookChange(2, null, [a with { Source = "a2" }], run, [], InTheNotebook, null, NoRestarts, Unsaved: true, ThemeId: null, Arrangement: null, Metadata: null));
 
-        Assert.Equal(new NotebookChange(2, [a.Id, b.Id], [b, a with { Source = "a2" }], run, InTheNotebook), both);
+        Assert.Equal(new NotebookChange(2, [a.Id, b.Id], [b, a with { Source = "a2" }], run, [], InTheNotebook, [Button], NoRestarts, Unsaved: true, ThemeId: null, Arrangement: drawn, Metadata: titled), both);
 
-        var all = both.Then(new NotebookChange(3, [c.Id, a.Id], [c], null, InTheNotebook));
+        var all = both.Then(new NotebookChange(3, [c.Id, a.Id], [c], null, [cLeftBehind], InTheNotebook, [Button with { IsEnabled = false }], restarted, Unsaved: false, ThemeId: "verso-dark", Arrangement: redrawn, Metadata: retitled));
 
         Assert.Equal(3, all.Version);
         Assert.Equal([c.Id, a.Id], all.Order);
         Assert.Equal([a with { Source = "a2" }, c], all.Cells);
         Assert.Null(all.Running);
+        Assert.Equal([cLeftBehind], all.Executing);
+        Assert.Equal([Button with { IsEnabled = false }], all.Buttons);
+        Assert.Equal(restarted, all.Kernels);
+        Assert.False(all.Unsaved);
+        Assert.Equal("verso-dark", all.ThemeId);
+        Assert.Equal(redrawn, all.Arrangement);
+        Assert.Equal(retitled, all.Metadata);
 
         // Where neither says the order changed, nothing is left out.
-        Assert.Equal(new NotebookChange(5, null, [a, b], null, InTheNotebook), new NotebookChange(4, null, [a], null, InTheNotebook).Then(new NotebookChange(5, null, [b], null, InTheNotebook)));
+        Assert.Equal(
+            new NotebookChange(5, null, [a, b], null, [], InTheNotebook, null, NoRestarts, Unsaved: false, ThemeId: null, Arrangement: null, Metadata: null),
+            new NotebookChange(4, null, [a], null, [new HostedExecution(a.Id, DateTimeOffset.UnixEpoch, LeftBehind: false)], InTheNotebook, null, NoRestarts, Unsaved: false, ThemeId: null, Arrangement: null, Metadata: null)
+                .Then(new NotebookChange(5, null, [b], null, [], InTheNotebook, null, NoRestarts, Unsaved: false, ThemeId: null, Arrangement: null, Metadata: null)));
     }
 
     [Fact]
@@ -433,19 +458,161 @@ public sealed partial class FeedTests : IDisposable
     }
 
     [Fact]
+    public async Task AView_IsReadAChangeAtATime_WithoutWaitingForOne_UntilItEnds()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
+        var view = host.Subscribe();
+
+        // Nothing waits yet: taking one takes nothing, and does not wait.
+        Assert.False(view.TryRead(out _));
+
+        await host.EditAsync(host.Cells[3].Id, Fill(1));
+
+        Assert.True(await view.WaitToReadAsync(TestContext.Current.CancellationToken));
+        Assert.True(view.TryRead(out var change));
+        Assert.Equal(1, change.Version);
+        Assert.False(view.TryRead(out _));
+
+        // Ended, a view has nothing more to wait for.
+        view.Dispose();
+
+        Assert.False(await view.WaitToReadAsync(TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
+    public async Task AChangeTellsTheButtons_WhenAndOnlyWhenTheyChanged()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "cells.verso", CSharp("1 + 1"), CSharp("2 + 2"));
+        var first = host.Cells[0].Id;
+        using var view = host.Subscribe();
+
+        // Every version carries every button as it stands then: nothing shows anything yet, so nothing can be cleared.
+        Assert.Empty(view.Snapshot.Buttons.Single(button => button.Id == ClearCellOutput).EnabledFor);
+
+        await host.RunAsync(first);
+
+        // Once a cell shows something it can be cleared, and the change that made it so says so.
+        var ran = await NextAsync(view);
+
+        Assert.Equal([first], ran.Buttons!.Single(button => button.Id == ClearCellOutput).EnabledFor);
+        Assert.Equal(host.Current.Buttons, ran.Buttons);
+
+        await host.EditAsync(host.Cells[1].Id, "3 + 3");
+
+        // A change that leaves every button as it was says nothing of them.
+        Assert.Null((await NextAsync(view)).Buttons);
+    }
+
+    [Fact]
+    public async Task EveryVersionOfATurn_HasItsOwnNumber()
+    {
+        var began = Path.Join(_folder, "a-began");
+        var go = Path.Join(_folder, "a-go");
+
+        await using var notebooks = new OpenNotebooks();
+
+        // Notebook A's cell takes the process's C# turn and gives it up the moment it is let go.
+        var a = await OpenAsync(notebooks, "a.verso", CSharp($$"""System.IO.File.WriteAllText(@"{{began}}", "on"); while (!System.IO.File.Exists(@"{{go}}")) { System.Threading.Thread.SpinWait(20); }"""));
+
+        // Notebook B has so many cells that telling a version of it takes a while; its last cell shows a line at a time.
+        var b = await OpenAsync(notebooks, "b.verso", [.. Enumerable.Range(0, 500).Select(_ => CSharp("1")), CSharp("for (var i = 0; i < 20; i++) { System.Console.WriteLine(i); System.Threading.Thread.Sleep(1); }")]);
+        var numbers = new List<long>();
+        var cells = b.Current.Cells.ToDictionary(cell => cell.Id);
+        IReadOnlyList<Guid> order = [.. b.Current.Cells.Select(cell => cell.Id)];
+        HostedRun? running = null;
+        using var view = b.Subscribe();
+
+        var reading = Task.Run(
+            async () =>
+            {
+                await foreach (var change in view.ReadAllAsync(TestContext.Current.CancellationToken))
+                {
+                    numbers.Add(change.Version);
+                    order = change.Order ?? order;
+                    running = change.Running;
+
+                    foreach (var cell in change.Cells)
+                    {
+                        cells[cell.Id] = cell;
+                    }
+                }
+            },
+            TestContext.Current.CancellationToken);
+
+        for (var round = 0; round < 10; round++)
+        {
+            var holding = a.RunAsync(a.Cells[0].Id);
+
+            for (var waited = 0; !File.Exists(began); waited += 5)
+            {
+                Assert.True(waited < 30_000, "notebook A's run never began");
+                await Task.Delay(5, TestContext.Current.CancellationToken);
+            }
+
+            // B's run waits for A's C# turn, and A lets it go the moment B's run is told waiting: B starts while it is told.
+            var letting = Task.Run(
+                () =>
+                {
+                    var patience = Stopwatch.StartNew();
+
+                    while (b.Running is not { Waits: true })
+                    {
+                        Assert.True(patience.Elapsed < TimeSpan.FromSeconds(30), "notebook B's run was never told waiting for A's C# turn");
+                        Thread.SpinWait(20);
+                    }
+
+                    File.WriteAllText(go, "go");
+                },
+                TestContext.Current.CancellationToken);
+
+            await b.RunAsync(b.Cells[^1].Id).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+            await letting;
+            await holding;
+
+            // Only once A's cell has ended, so no file it writes is still open.
+            File.Delete(began);
+            File.Delete(go);
+        }
+
+        view.Dispose();
+        await reading;
+
+        // Each version was told once, in order, and together they are the notebook as it stands.
+        Assert.Equal(numbers.Order().Distinct(), numbers);
+        Assert.Equal(b.Current.Version, numbers[^1]);
+        Assert.Equal(b.Current.Cells, order.Select(id => cells[id]));
+        Assert.Equal(b.Current.Running, running);
+    }
+
+    [Fact]
     public void TwoLooksAtAVersionOrAChange_AreEqual_WhileTheyHoldTheSame()
     {
-        var cell = new HostedCell(Guid.NewGuid(), "code", "csharp", "1 + 1", [new HostedOutput("text/plain", "2", IsError: false)], new Dictionary<string, string>(), 1, "Success", TimeSpan.FromMilliseconds(5));
+        var cell = new HostedCell(Guid.NewGuid(), "code", "csharp", "1 + 1", [new HostedOutput("text/plain", "2", IsError: false, ErrorName: null, ErrorStack: null, Stream: null)], new Dictionary<string, string>(), 1, "Success", TimeSpan.FromMilliseconds(5));
         var run = new HostedRun(1, cell.Id, DateTimeOffset.UnixEpoch, Waits: false);
-        var version = new NotebookVersion(3, [cell], run, InTheNotebook);
-        var change = new NotebookChange(3, [cell.Id], [cell], run, InTheNotebook);
+        var leftBehind = new HostedExecution(cell.Id, DateTimeOffset.UnixEpoch, LeftBehind: true);
+        var version = new NotebookVersion(3, [cell], run, [leftBehind], InTheNotebook, [Button], NoRestarts, Unsaved: false, ThemeId: null, Arrangement: default, Metadata: default);
+        var change = new NotebookChange(3, [cell.Id], [cell], run, [leftBehind], InTheNotebook, [Button], NoRestarts, Unsaved: false, ThemeId: null, Arrangement: null, Metadata: null);
+        var said = new HostedMetadata("Passengers", "csharp", null, null, "1.1");
+        var arranged = new HostedArrangement("<div></div>", Fault: null);
 
-        Assert.Equal(version, version with { Cells = [cell with { Outputs = [new HostedOutput("text/plain", "2", IsError: false)] }] });
+        Assert.Equal(version, version with { Cells = [cell with { Outputs = [new HostedOutput("text/plain", "2", IsError: false, ErrorName: null, ErrorStack: null, Stream: null)] }] });
         Assert.Equal(version.GetHashCode(), (version with { Cells = [cell] }).GetHashCode());
         Assert.NotEqual(version, version with { Version = 4 });
         Assert.NotEqual(version, version with { Cells = [] });
         Assert.NotEqual(version, version with { Running = null });
-        Assert.NotEqual(version, version with { Layout = new HostedLayout("dashboard", LayoutAllows.CellResize | LayoutAllows.CellExecute) });
+        Assert.Equal(version, version with { Executing = [leftBehind] });
+        Assert.NotEqual(version, version with { Executing = [] });
+        Assert.NotEqual(version, version with { Executing = [leftBehind with { LeftBehind = false }] });
+        Assert.NotEqual(version, version with { Kernels = NoRestarts with { Restarts = 1 } });
+        Assert.NotEqual(version, version with { Unsaved = true });
+        Assert.NotEqual(version, version with { ThemeId = "verso-dark" });
+        Assert.NotEqual(version, version with { Arrangement = arranged });
+        Assert.NotEqual(version, version with { Metadata = said });
+        Assert.NotEqual(version, version with { Layout = new HostedLayout("dashboard", LayoutAllows.CellResize | LayoutAllows.CellExecute, HasPropertiesPanel: false) });
+        Assert.Equal(version, version with { Buttons = [Button] });
+        Assert.NotEqual(version, version with { Buttons = [] });
 
         Assert.Equal(change, change with { Order = [cell.Id], Cells = [cell] });
         Assert.Equal(change.GetHashCode(), (change with { Order = [cell.Id] }).GetHashCode());
@@ -456,6 +623,22 @@ public sealed partial class FeedTests : IDisposable
         Assert.NotEqual(change, change with { Order = [] });
         Assert.NotEqual(change, change with { Cells = [] });
         Assert.NotEqual(change, change with { Running = null });
-        Assert.NotEqual(change, change with { Layout = new HostedLayout(null, (LayoutAllows)127) });
+        Assert.Equal(change, change with { Executing = [leftBehind] });
+        Assert.NotEqual(change, change with { Executing = [] });
+        Assert.NotEqual(change, change with { Kernels = NoRestarts with { Restarting = true } });
+        Assert.NotEqual(change, change with { Unsaved = true });
+        Assert.NotEqual(change, change with { ThemeId = "verso-dark" });
+        Assert.NotEqual(change, change with { Arrangement = arranged });
+        Assert.NotEqual(change with { Arrangement = arranged }, change);
+        Assert.Equal(change with { Arrangement = arranged }, change with { Arrangement = arranged with { } });
+        Assert.NotEqual(change with { Arrangement = arranged }, change with { Arrangement = arranged with { Fault = "It could not draw." } });
+        Assert.NotEqual(change, change with { Metadata = said });
+        Assert.NotEqual(change with { Metadata = said }, change);
+        Assert.NotEqual(change, change with { Layout = new HostedLayout(null, (LayoutAllows)127, HasPropertiesPanel: true) });
+        Assert.Equal(change, change with { Buttons = [Button] });
+        Assert.Equal(change with { Buttons = null }, change with { Buttons = null });
+        Assert.NotEqual(change, change with { Buttons = null });
+        Assert.NotEqual(change with { Buttons = null }, change);
+        Assert.NotEqual(change, change with { Buttons = [] });
     }
 }

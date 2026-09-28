@@ -11,7 +11,8 @@ namespace DeepSharp.Verso.Api;
 /// notebook told its cells changed. A change acts on the notebook as the notebook's own operations let it, and runs
 /// DeepSharp's blocks as its own; anything else it asks to run — another cell, all of them, all from one on, or code in
 /// no cell — is a run of its own, which every view is told from its ask, which takes the C# turn when it runs C#, and
-/// which a stop ends as it ends any run. Once such a run is stopped, nothing else the change asks is done.
+/// which a stop ends as it ends any run. Once such a run is stopped, nothing else the change asks is done, and what
+/// the change would answer or hand over is dropped.
 /// </summary>
 /// <param name="host">The notebook's host, which builds and runs every run.</param>
 /// <remarks>
@@ -23,45 +24,35 @@ internal sealed class ChangePort(NotebookHost host) : NotebookPort(host.Scaffold
     // The change's runs, one after another.
     private readonly Lane _runs = new();
 
-    // The change's last run: its token is the port's, and once it was stopped the port refuses.
+    // The change's last run: its token is the port's, and once a stop took it the port refuses.
     private Run? _run;
 
     public override CancellationToken Token => Volatile.Read(ref _run)?.Token ?? CancellationToken.None;
 
+    /// <summary>
+    /// Whether a stop took the change's run: nothing else the change asks is done, and what it would answer or hand over
+    /// is dropped.
+    /// </summary>
+    public bool Stopped => Volatile.Read(ref _run)?.Claimed == true;
+
     public override Task ExecuteCellAsync(Guid cellId)
     {
-        Admit();
+        ThrowIfStopped();
 
         return Scaffold.GetCell(cellId) is { Type: StepCellType.StepType }
             ? Engine.ExecuteCellAsync(cellId)
             : RunAsync(cellId, host.RunsCSharp(cellId), run => run.ExecuteCellAsync(cellId));
     }
 
-    public override Task ExecuteAllAsync()
-    {
-        Admit();
+    public override Task ExecuteAllAsync() => RunAsync(null, runsCSharp: true, run => run.ExecuteAllAsync());
 
-        return RunAsync(null, runsCSharp: true, run => run.ExecuteAllAsync());
-    }
+    public override Task ExecuteFromAsync(Guid cellId) => RunAsync(null, runsCSharp: true, run => run.ExecuteFromAsync(cellId));
 
-    public override Task ExecuteFromAsync(Guid cellId)
-    {
-        Admit();
-
-        return RunAsync(null, runsCSharp: true, run => run.ExecuteFromAsync(cellId));
-    }
-
-    public override Task ExecuteCodeAsync(string code, string? language = null, CancellationToken ct = default)
-    {
-        Admit();
-
-        return RunAsync(null, host.RunsCSharp(language), run => run.ExecuteCodeAsync(code, language, ct));
-    }
+    public override Task ExecuteCodeAsync(string code, string? language = null, CancellationToken ct = default) =>
+        RunAsync(null, host.RunsCSharp(language), run => run.ExecuteCodeAsync(code, language, ct));
 
     public override async Task<IReadOnlyList<CellOutput>> ExecuteCodeCaptureOutputsAsync(string code, string? language = null, CancellationToken ct = default)
     {
-        Admit();
-
         IReadOnlyList<CellOutput> outputs = [];
 
         await RunAsync(null, host.RunsCSharp(language), async run => outputs = await run.ExecuteCodeCaptureOutputsAsync(code, language, ct));
@@ -73,19 +64,29 @@ internal sealed class ChangePort(NotebookHost host) : NotebookPort(host.Scaffold
     /// <returns>A task that ends then.</returns>
     public Task SettledAsync() => _runs.TakeTurnAsync(() => Task.FromResult(true));
 
-    // Once the change's run was stopped, nothing else it asks is done.
-    protected override void Admit() => Token.ThrowIfCancellationRequested();
+    // Let through on the change's last run until a stop takes it, and held until it has landed; a change that ran nothing
+    // yet holds nothing.
+    protected override Admission Admit() => Volatile.Read(ref _run)?.Admit() ?? default;
 
-    // A run of the change's own, after every run it asked for before; the part is told when it was stopped.
+    // Once a stop took the change's run, nothing else it asks is done.
+    private void ThrowIfStopped() => Volatile.Read(ref _run)?.ThrowIfStopped();
+
+    // A run of the change's own, after every run it asked for before, and refused when its turn comes once the change's run
+    // was stopped, whether it was asked before the stop or after; the part is told when it was stopped.
     private Task RunAsync(Guid? cell, bool runsCSharp, Func<RunPort, Task> work) => _runs.TakeTurnAsync(async () =>
     {
-        Admit();
+        ThrowIfStopped();
 
         var run = host.RunFor(cell, runsCSharp);
 
         Volatile.Write(ref _run, run);
         await host.RunForChangeAsync(run, work);
-        run.Token.ThrowIfCancellationRequested();
+
+        // The run's end as its stop decided it: taken by a stop, it ends as a stopped run ends.
+        if (run.Claimed)
+        {
+            throw new OperationCanceledException(run.Token);
+        }
 
         return true;
     });

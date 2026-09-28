@@ -17,11 +17,11 @@ namespace DeepSharp.Verso.Serve;
 /// <remarks>
 /// A notebook runs code, so the server is shut to everyone but the person who started it: it listens on this computer
 /// alone; it answers only a request that carries the token it said when it started — in the address, or in the cookie
-/// its first page sets; it makes a change only for its own page, since a browser carries this computer's cookie for a
-/// page from any of its ports, so no other page can drive it; and it answers only under a name of this computer, so a
-/// site that makes its own name point here cannot reach it through the browser either. It serves its own page, which it
-/// carries, and nothing from the folder it runs in. It writes nothing to the console once it has said where it is,
-/// since a C# cell takes the console over while it runs.
+/// its first page sets; it opens a notebook's socket and makes a change only for its own page, since a browser carries
+/// this computer's cookie for a page from any of its ports, so no other page can drive it; and it answers only under a
+/// name of this computer, so a site that makes its own name point here cannot reach it through the browser either. It
+/// serves its own page, which it carries, and nothing from the folder it runs in. It writes nothing to the console once
+/// it has said where it is, since a C# cell takes the console over while it runs.
 /// </remarks>
 public static class NotebookServer
 {
@@ -51,14 +51,20 @@ public static class NotebookServer
 
         var app = builder.Build();
 
+        // Put together once: the page does not change while the server runs.
+        var page = ServedPage.Carrying();
+
         app.UseHostFiltering();
+        app.UseWebSockets();
+
+        // A socket is asked for as a page is fetched, but it makes changes: it is held to the rule every change is.
         app.Use((context, next) => Carried(context, token) switch
         {
             TokenIn.Nothing => Refused(context),
-            var carried when !HttpMethods.IsGet(context.Request.Method) && !FromOwnPage(context, carried) => Forbidden(context),
+            var carried when (!HttpMethods.IsGet(context.Request.Method) || context.WebSockets.IsWebSocketRequest) && !FromOwnPage(context, carried) => Forbidden(context),
             _ => next(context),
         });
-        app.MapGet("/", () => Results.Stream(typeof(NotebookServer).Assembly.GetManifestResourceStream("page.html")!, "text/html; charset=utf-8"));
+        app.MapGet("/", page.Answer);
         NotebookEndpoints.Map(app);
         app.Lifetime.ApplicationStarted.Register(() => Started(app, options, token, said));
 
@@ -142,10 +148,10 @@ public static class NotebookServer
         return Same(context.Request.Cookies[cookie], token) ? TokenIn.Cookie : TokenIn.Nothing;
     }
 
-    // A change is made only for the server's own page. A browser names the page a request comes from in its Origin, and
-    // carries this computer's cookie for a page from any of its ports — to a browser they are one site — so a request the
-    // cookie carried must name the server's own page; a program that carries the token in the address names no page, but
-    // one it names must be the server's.
+    // A change is made, and a notebook's socket opened, only for the server's own page. A browser names the page a
+    // request comes from in its Origin, and carries this computer's cookie for a page from any of its ports — to a
+    // browser they are one site — so a request the cookie carried must name the server's own page; a program that carries
+    // the token in the address names no page, but one it names must be the server's.
     private static bool FromOwnPage(HttpContext context, TokenIn carried)
     {
         var origin = context.Request.Headers.Origin;

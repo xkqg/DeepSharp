@@ -100,11 +100,11 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
 
         var session = RequiredSession;
 
-        return session.OneAtATimeAsync(_ => Task.FromResult(Changed(session, cell, propertyName, value, context.Variables)));
+        return session.OneAtATimeAsync(context.CancellationToken, turn => Task.FromResult(Changed(session, turn, cell, propertyName, value, context.Variables)));
     }
 
     // Makes the change on a block that stands; says whether the field was one of the step's.
-    private static bool Changed(NotebookSession session, CellModel cell, string field, object? value, IVariableStore variables)
+    private static bool Changed(NotebookSession session, NotebookTurn turn, CellModel cell, string field, object? value, IVariableStore variables)
     {
         var catalog = NotebookVerbs.Catalog();
 
@@ -124,7 +124,7 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
 
             if (!edited.Equals(step))
             {
-                Write(session, variables, cell, edited, catalog);
+                Write(session, turn, variables, cell, edited, catalog);
             }
         }
         catch (FormatException refused)
@@ -171,26 +171,34 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
 
     // Writes the step, and clears what was worked out from the block as it was: its own card, and every view shown
     // that the change made stale. No gesture saw the change, so it goes through the rule every such change does, which
-    // takes back what was handed to C# cells.
-    private static void Write(NotebookSession session, IVariableStore variables, CellModel cell, IPipelineStep edited, StepCatalog catalog)
+    // takes back what was handed to C# cells. The edit is the person's and stands whatever else happens; what it made
+    // stale elsewhere is caught up with as one write for the change's turn, each view cleared before it is forgotten.
+    private static void Write(NotebookSession session, NotebookTurn turn, IVariableStore variables, CellModel cell, IPipelineStep edited, StepCatalog catalog)
     {
         cell.Source = edited.AsBlockText();
         cell.Outputs.Clear();
         session.Hidden(cell.Id);
 
-        if (session.Assembled is { } before)
+        session.LetThrough(turn, () =>
         {
-            // A view of a block deleted since, or of a cell turned into another kind, is forgotten with the rest, and
-            // nothing of such a cell's is cleared.
-            foreach (var stale in session.BlocksChanged(NotebookPipeline.Of(before.Cells), variables, except: null))
+            if (session.Assembled is { } before)
             {
-                before.Cells.First(each => each.Id == stale).Outputs.Clear();
+                // A view of a block deleted since, or of a cell turned into another kind, is forgotten with the rest, and
+                // nothing of such a cell's is cleared.
+                var now = NotebookPipeline.Of(before.Cells);
+
+                foreach (var stale in session.StaleIn(now, except: null))
+                {
+                    before.Cells.First(each => each.Id == stale).Outputs.Clear();
+                }
+
+                session.CaughtUp(now, variables, except: null);
             }
-        }
-        else
-        {
-            NotebookSession.Withdraw(variables);
-        }
+            else
+            {
+                NotebookSession.Withdraw(variables);
+            }
+        });
     }
 
     // What the form knows around a block: the columns before it, when the last gesture assembled it into the

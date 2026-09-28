@@ -106,21 +106,31 @@ public sealed class StepCellType : NotebookExtension, ICellType
         ArgumentNullException.ThrowIfNull(variables);
         ArgumentNullException.ThrowIfNull(operations);
 
-        return Session.OneAtATimeAsync(async _ =>
+        return Session.OneAtATimeAsync(CancellationToken.None, turn => Session.LetThroughAsync(turn, async () =>
         {
-            foreach (var stale in Session.BlocksChanged(NotebookPipeline.Of(notebook.Cells), variables, except: null))
+            var now = NotebookPipeline.Of(notebook.Cells);
+
+            foreach (var stale in Session.StaleIn(now, except: null))
             {
                 await operations.ClearOutputAsync(stale);
             }
 
-            return true;
-        });
+            Session.CaughtUp(now, variables, except: null);
+        }));
     }
 
     /// <summary>
     /// Tells the notebook the run under way was stopped: what that run asked for writes nothing more — no grid, and nothing
     /// handed to C# cells — and the notebook takes its next change at once, while the run goes on by itself.
     /// </summary>
-    /// <remarks>A host that stops a run calls it before the run's kernel restarts, as <c>DeepSharp.Verso.Api</c> does.</remarks>
-    public void Stopped() => Session.Stopped();
+    /// <returns>
+    /// A task that ends once every write the notebook let through before the stop has landed; at once when none is on its
+    /// way. The notebook is told before the method returns: the task is only what the host waits for next.
+    /// </returns>
+    /// <remarks>
+    /// A host that stops a run marks the run first and calls this next, as <c>DeepSharp.Verso.Api</c> does. It starts a
+    /// kernel afresh only after the task ended, since a fresh kernel takes away what the kernels hold and a write still on
+    /// its way would land after it; and it lets the next change write only after that.
+    /// </remarks>
+    public Task StoppedAsync() => Session.Stopped();
 }

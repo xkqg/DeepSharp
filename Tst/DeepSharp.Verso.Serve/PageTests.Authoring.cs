@@ -13,14 +13,11 @@ namespace DeepSharp.Tests.Serve;
 // notebook has, and selected with its text open; a cell taken away once the person says yes, moved past its neighbour,
 // or turned into another kind — each only where the notebook's layout allows it. A cell shown rendered is rendered only
 // while it has text and output and is not selected. A change asked for while a cell runs says it waits; a cell another
-// page took away is said to be gone in the server's own words; and a folder is listed with a way to make a notebook.
+// page took away is said to be gone in plain words; and a folder is listed with a way to make a notebook.
 public sealed partial class PageTests
 {
     private async Task SaveAsync(string name, NotebookModel notebook) =>
         await File.WriteAllTextAsync(At(name), await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
-
-    // The line an event stream ends each of its lines with.
-    private const char Line = '\n';
 
     private static ILocator Adding(IPage page, string type) => page.Locator($"#adding button[data-type='{type}']");
 
@@ -48,7 +45,7 @@ public sealed partial class PageTests
         var page = await OpenAsync(served, "titanic.verso");
 
         await Cell(page, 1).Locator(".cell-bar").ClickAsync();
-        await Cell(page, 1).Locator(".insert-row button[data-type='code']").ClickAsync();
+        await Cell(page, 1).Locator(".insert-row button[data-type='code'][data-language='csharp']").ClickAsync();
 
         await Expect(page.Locator("section.cell")).ToHaveCountAsync(6);
         await Expect(Cell(page, 2)).ToHaveAttributeAsync("data-type", "code");
@@ -132,11 +129,14 @@ public sealed partial class PageTests
         await using var served = await StartAsync();
         var page = await OpenAsync(served, "dashboard.verso");
 
-        await Expect(page.Locator("section.cell")).ToHaveCountAsync(5);
+        // Drawn as its tiles, each showing only what its cell shows, and run by its own button, as Verso's dashboard is.
+        var tiles = page.Locator("#arrangement .verso-dashboard-cell");
+
+        await Expect(tiles).ToHaveCountAsync(5);
         await Expect(page.Locator("#adding button")).ToHaveCountAsync(0);
         await Expect(page.Locator("section.cell button.delete, section.cell button.up, section.cell button.down, section.cell select.kind")).ToHaveCountAsync(0);
-        await Expect(Cell(page, 3).Locator("textarea.source")).Not.ToBeEditableAsync();
-        await Expect(Cell(page, 3).Locator("button.run")).ToBeVisibleAsync();
+        await Expect(tiles.Nth(3).Locator("section.cell textarea.source")).ToBeHiddenAsync();
+        await Expect(tiles.Nth(3).Locator("button[data-action='run']")).ToHaveCountAsync(1);
     }
 
     [Fact]
@@ -172,6 +172,9 @@ public sealed partial class PageTests
 
         await Expect(page.Locator("#status")).ToHaveTextAsync(new Regex("Waits for the run"));
         await Expect(page.Locator("section.cell")).ToHaveCountAsync(2, new() { Timeout = 30_000 });
+
+        // Made, it waits no more, and the page no longer says so.
+        await Expect(page.Locator("#status")).ToBeEmptyAsync(new() { Timeout = 10_000 });
     }
 
     [Fact]
@@ -179,33 +182,43 @@ public sealed partial class PageTests
     {
         await SaveAsync("titanic.verso", [.. Titanic.Select(Block)]);
         await using var served = await StartAsync();
-        var snapshot = await served.Client.GetStringAsync("/api/notebooks/titanic.verso", TestContext.Current.CancellationToken);
         var context = await browsers.Browser.NewContextAsync();
         var page = await context.NewPageAsync();
-        var told = false;
 
-        // The page hears the notebook as it stands and nothing after: its stream is the snapshot alone, and the stream it
-        // opens again once that one ends is never answered.
-        await page.RouteAsync("**/updates", async route =>
+        // The page hears the notebook as it stands and no change after it: its socket carries what it asks and every
+        // answer, but not one change.
+        await page.RouteWebSocketAsync("**/socket", socket =>
         {
-            if (!told)
+            var server = socket.ConnectToServer();
+
+            socket.OnMessage(frame =>
             {
-                told = true;
-                await route.FulfillAsync(new() { Status = 200, ContentType = "text/event-stream", Body = $"event: snapshot{Line}id: 0{Line}data: {snapshot}{Line}{Line}" });
-            }
+                if (frame.Text is { } asked)
+                {
+                    server.Send(asked);
+                }
+            });
+            server.OnMessage(frame =>
+            {
+                if (frame.Text is { } told && !told.Contains("\"type\":\"change\"", StringComparison.Ordinal))
+                {
+                    socket.Send(told);
+                }
+            });
         });
         await page.GotoAsync($"{served.Address}?token={Token}&notebook=titanic.verso");
 
         await Expect(page.Locator("section.cell")).ToHaveCountAsync(5);
 
-        var gone = (await CurrentAsync(served, "titanic.verso")).Cells[4].Id;
+        await using var other = await SocketAsync(served, "titanic.verso");
+        var gone = (await other.SnapshotAsync()).Version.Cells[4].Id;
 
-        await served.Client.PostAsync($"/api/notebooks/titanic.verso/cells/{gone}/remove", null, TestContext.Current.CancellationToken);
+        await other.AskAsync("remove", new { cell = gone });
 
         page.Dialog += async (_, dialog) => await dialog.AcceptAsync();
         await Cell(page, 4).Locator("button.delete").ClickAsync();
 
-        await Expect(page.Locator("#status")).ToHaveTextAsync(new Regex($"The cell {gone} no longer stands"));
+        await Expect(page.Locator("#error .text")).ToHaveTextAsync("The cell is no longer in the notebook: a change made before this one rewrote it or took it away.");
     }
 
     [Fact]
@@ -235,7 +248,7 @@ public sealed partial class PageTests
         await page.Locator("#new input[name='name']").FillAsync("made.ipynb");
         await page.Locator("#new button").ClickAsync();
 
-        await Expect(page.Locator("#status")).ToHaveTextAsync(new Regex("not a name a new notebook can have"));
+        await Expect(page.Locator("#error .text")).ToHaveTextAsync(new Regex("not a name a new notebook can have"));
         Assert.False(File.Exists(At("made.ipynb")));
     }
 
