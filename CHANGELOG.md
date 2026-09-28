@@ -166,7 +166,7 @@ your own can host the notebook, too, and DeepSharp's own server shows it in a br
   would still run begins; a file a button hands over goes to whoever pressed it, and nothing is written beside the
   notebook. A cell's properties panel is a section from every part that has one for it, and a changed field is made by
   that part. A look — a button asked whether it can be pressed, a panel asked to draw its section — is refused every
-  verb, so what is only looked at does nothing to the notebook. A notebook is saved the way Verso's editors save it —
+  verb, so what is only looked at does nothing to the notebook. A change — a click on a control a cell drew, a changed field — runs DeepSharp's blocks as its own; anything else it asks to run is a run of its own, told and stopped as any run is, and once that run is stopped nothing else the change asks is done. A notebook is saved the way Verso's editors save it —
   what a block shows left out, written whole before it takes the file's place — and saved under another name it is that
   file from then on, what DeepSharp names after it
   following; a name another open notebook holds is refused. Every view of a notebook is told what changed: the notebook

@@ -1,4 +1,4 @@
-﻿# Architecture
+# Architecture
 
 This file records the decisions that shape DeepSharp, and why each one was taken. A decision that is not
 written down here is not a decision, it is a habit.
@@ -1021,7 +1021,7 @@ notebook, passes a click on, gives the toolbar and the properties panel their co
 every view of it what changed. What a part may do through that context is the host's to say, by what it asks the part
 for: a press acts through its run, and a look — a button asked whether it can be pressed, a panel asked to draw its
 section — through operations that refuse every verb, whoever wrote the part, so what is only looked at does nothing to
-the notebook. The drawing stays the application's own, since only the application knows what it draws with, and it is
+the notebook. A change — a click on a control a cell drew, a changed field — runs DeepSharp's blocks as its own; anything else it asks to run is a run of its own, told and stopped as any run is, and once that run is stopped nothing else the change asks is done. The drawing stays the application's own, since only the application knows what it draws with, and it is
 handed every cell and what the cell shows as plain values to draw from. Each change makes the notebook's
 next version, and a view is told the cells that came or changed, as they now stand, with every id in order whenever
 cells came, went or moved; a click that rewrites a block puts a new cell, under a new id, in the old one's place, since
@@ -1046,7 +1046,7 @@ in use. A notebook with changes not yet saved stays open until it is saved, or u
 can do for one notebook at once; without a grace, notebooks stay open until they are closed, so an application that uses
 one without a view is never left holding a closed one. No close waits for a run: a close stops the run under way as a
 stop does — one that waits for the C# turn never runs, one that runs is left behind — and waits only for a change under
-way, which runs no code a person wrote. Whatever else was asked before it and still waits its turn is refused when that
+way, whose runs of code a person wrote are runs the close stops. Whatever else was asked before it and still waits its turn is refused when that
 turn comes, since a close discards what has not begun, as it discards what is not saved. Closing every notebook stops
 the run in each before it closes any of them, because stopping one run hands the C# turn on, and a run another notebook
 still let wait for it would start.

@@ -305,8 +305,7 @@ public sealed class NotebookHost
     public Task<HostedCell> RunAsync(Guid cell) => TurnAsync(async () =>
     {
         var running = Standing(cell);
-        var kernel = KernelOf(running);
-        var run = new Run(Interlocked.Increment(ref _runs), running.Id, takesTheCSharpTurn: string.Equals(kernel, CSharp, StringComparison.OrdinalIgnoreCase));
+        var run = RunFor(running.Id, IsCSharp(KernelOf(running)));
 
         // The engine is handed the run's token, as Verso's browser editor hands it its own.
         await RunUntilStoppedAsync(run, () => Scaffold.ExecuteCellAsync(running.Id, run.Token));
@@ -360,12 +359,15 @@ public sealed class NotebookHost
     /// <remarks>
     /// A page sends a click from the card it shows until it draws again, and a change may have rewritten the card's block
     /// meanwhile; the click is handed on all the same, as Verso's own editors hand every click on, because the part knows
-    /// the block it became. What the part answers is shown only by a cell that still stands.
+    /// the block it became. What the part answers is shown only by a cell that still stands. A click is a change: it runs
+    /// DeepSharp's blocks as its own, and anything else it asks to run is a run of its own, told and stopped as any run
+    /// is; a click whose run was stopped ends as a stopped run ends, with nothing to answer.
     /// </remarks>
     public Task<GestureResult> GestureAsync(HostedGesture gesture) => TurnAsync(async () =>
     {
         var part = Extensions.GetInteractionHandler(gesture.ExtensionId)
             ?? throw new InvalidOperationException($"No part named '{gesture.ExtensionId}' answers a click.");
+        var change = new ChangePort(this);
         var context = new CellInteractionContext
         {
             Region = CellRegion.Output,
@@ -375,10 +377,10 @@ public sealed class NotebookHost
             ExtensionId = gesture.ExtensionId,
             CancellationToken = CancellationToken.None,
             Variables = Scaffold.Variables,
-            Notebook = Scaffold.NotebookOps,
+            Notebook = change,
             NotebookModel = Scaffold.Notebook,
         };
-        var answer = await part.OnCellInteractionAsync(context);
+        var answer = await ChangeAsync(change, () => part.OnCellInteractionAsync(context));
 
         if (answer is not null)
         {
@@ -512,9 +514,14 @@ public sealed class NotebookHost
         var provider = Extensions.GetPropertyProviders().FirstOrDefault(each => each.ExtensionId == part)
             ?? throw new InvalidOperationException($"No part named '{part}' has a properties section.");
 
-        await provider.OnPropertyChangedAsync(changed, field, value, new RenderContext(Scaffold, changed, new ReadPort(Scaffold)));
+        var change = new ChangePort(this);
 
-        return true;
+        return await ChangeAsync(change, async () =>
+        {
+            await provider.OnPropertyChangedAsync(changed, field, value, new RenderContext(Scaffold, changed, change));
+
+            return true;
+        });
     });
 
     /// <summary>
@@ -928,7 +935,52 @@ public sealed class NotebookHost
     }
 
     // Tells the notebook its cells changed, so what was worked out from the blocks as they were is taken back.
-    private Task TellAsync() => Blocks.BlocksChangedAsync(Scaffold.Notebook, Scaffold.Variables, Scaffold.NotebookOps);
+    private Task TellAsync() => Blocks.BlocksChangedAsync(Scaffold.Notebook, Scaffold.Variables, new ChangePort(this));
+
+    // What a part does as a change: a change whose run was stopped ends as a stopped run ends, with nothing to answer, and a
+    // change is over only once every run it asked for has ended or was stopped, whether or not it waited for them.
+    private static async Task<T?> ChangeAsync<T>(ChangePort change, Func<Task<T>> act)
+    {
+        try
+        {
+            return await act();
+        }
+        catch (OperationCanceledException) when (change.Token.IsCancellationRequested)
+        {
+            return default;
+        }
+        finally
+        {
+            await change.SettledAsync();
+        }
+    }
+
+    /// <summary>A run, numbered for the notebook, taking the C# turn when it runs C#.</summary>
+    /// <param name="cell">The cell it runs; none when it runs several, or code in no cell.</param>
+    /// <param name="runsCSharp">Whether it runs C#.</param>
+    /// <returns>The run.</returns>
+    internal Run RunFor(Guid? cell, bool runsCSharp) => new(Interlocked.Increment(ref _runs), cell, takesTheCSharpTurn: runsCSharp);
+
+    /// <summary>
+    /// A run a change asks for, run as every run is — told to every view from its ask, in the C# turn when it runs C#, and
+    /// stopped as any run is — with a press's work: through the run's port, so a stop reaches every cell it would still run.
+    /// </summary>
+    /// <param name="run">The run.</param>
+    /// <param name="work">What it does through the run's port.</param>
+    /// <returns>A task that ends when the run ends, or is stopped.</returns>
+    internal Task RunForChangeAsync(Run run, Func<RunPort, Task> work) => RunUntilStoppedAsync(run, () => work(new RunPort(Scaffold, run)));
+
+    /// <summary>Whether a cell runs in the C# kernel, by the kernel rule.</summary>
+    /// <param name="cell">The cell.</param>
+    /// <returns>Whether it does; not for a cell the notebook does not have.</returns>
+    internal bool RunsCSharp(Guid cell) => Scaffold.GetCell(cell) is { } found && IsCSharp(KernelOf(found));
+
+    /// <summary>Whether code in a language — the notebook's default kernel when it names none — runs in the C# kernel.</summary>
+    /// <param name="language">The language.</param>
+    /// <returns>Whether it does.</returns>
+    internal bool RunsCSharp(string? language) => IsCSharp(language ?? Scaffold.DefaultKernelId);
+
+    private static bool IsCSharp(string? kernel) => string.Equals(kernel, CSharp, StringComparison.OrdinalIgnoreCase);
 
     private async Task SaveToAsync(string path)
     {
