@@ -13,7 +13,7 @@
          extension compiled against a newer minor than the one it runs, so the floor stays low and a test pins
          the version compiled against. A range rather than an exact pin: an exact pin beside Verso's own engine
          in one test project is NU1608, an error here (measured). -->
-    <PackageReference Include="Verso.Abstractions" Version="[1.1.0, 2.0.0)" />
+    <PackageReference Include="Verso.Abstractions" Version="[1.2.2, 2.0.0)" />
     <!-- The colour maps, the correlation and the heatmap are borrowed, as the indicators are. -->
     <PackageReference Include="MatPlotLibNet" Version="1.18.0" />
   </ItemGroup>

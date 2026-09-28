@@ -13,7 +13,7 @@
 
   <ItemGroup>
     <!-- The same abstractions the notebook package is built against, so the engine the suite runs accepts the part. -->
-    <PackageReference Include="Verso.Abstractions" Version="[1.1.0, 2.0.0)" />
+    <PackageReference Include="Verso.Abstractions" Version="[1.2.2, 2.0.0)" />
   </ItemGroup>
 
 </Project>
