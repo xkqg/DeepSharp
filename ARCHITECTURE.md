@@ -1287,6 +1287,14 @@ So the backend is handed to what needs it, and the model stays independent of wh
 exists from the first line rather than being retrofitted, because retrofitting it means touching every
 operation that was written without it.
 
+Its operations are the ones a first network and its backward pass need, and the backward pass of each is written
+in the same operations — a matrix product and its transpose, a row added to every row and the rows summed, a
+mean, a scale by one value, a tensor filled with one value — so working out a gradient never reaches past the
+seam. `Add` stays two tensors of one shape: a bias is added by `AddRow`, which says so, and two shapes that differ
+by mistake are still refused rather than stretched to fit. .NET's vector primitives hold no matrix product, so the
+light engine writes its own, and every total it adds up is kept in double precision: added up in single
+precision, ten million tenths came to a mean of 0.1087937.
+
 ### A tensor never changes
 
 Handing the same tensor to two layers is safe, and a caller who reuses a scratch buffer cannot rewrite a

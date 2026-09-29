@@ -10,6 +10,21 @@ that says what it holds as it is read: each column is proposed a kind — a date
 every cell says, a person accepts or changes it, and what should not be there is named with the step that deals
 with it. What a network is handed lies between minus one and one.
 
+### Upgrading from 0.3
+
+- **A backend implements the new operations.** `ITensorBackend` gains `Subtract`, `MatMul`, `Transpose`,
+  `AddRow`, `SumRows`, `Mean`, `Scale` and `Fill`, so a backend written against 0.3 has to implement them before it
+  compiles again.
+
+### Added
+
+- **The operations a backward pass needs.** A matrix product, its transpose, a row added to every row of a matrix
+  — the way a bias reaches every example of a batch — and the rows summed, a subtraction, a mean that is one value
+  with no axes, as a loss is, a scale by one value, and a tensor filled with one value. `Add` still takes two tensors
+  of one shape. .NET's vector primitives hold no matrix product, so the one that ships is written here, and every
+  total is kept in double precision: ten million tenths average to a tenth, where a single-precision total gave
+  0.1087937.
+
 ## [0.3.0]
 
 A pipeline you can look at: every step written as a block of a notebook, and the data at any block shown on
