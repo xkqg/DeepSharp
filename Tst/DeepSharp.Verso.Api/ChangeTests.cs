@@ -24,7 +24,18 @@ public sealed class ChangeTests : IDisposable
 
     private readonly string _folder = Directory.CreateTempSubdirectory("deepsharp-api-changes-").FullName;
 
-    public void Dispose() => Directory.Delete(_folder, recursive: true);
+    public void Dispose()
+    {
+        // A cell a stop left behind goes on once it is let go, and writes into this folder as it ends: a test that does not
+        // wait for it has it write while the folder is taken away, which then refuses to go.
+        var running = Directory.GetFiles(_folder, "*-began")
+            .Where(began => !File.Exists(began[..^"began".Length] + "ended"))
+            .Select(Path.GetFileName)
+            .ToArray();
+
+        Assert.True(running.Length == 0, $"Still running as the test ended: {string.Join(", ", running)}");
+        Directory.Delete(_folder, recursive: true);
+    }
 
     private static CellModel CSharp(string source) => new() { Type = "code", Language = "csharp", Source = source };
 
@@ -32,11 +43,21 @@ public sealed class ChangeTests : IDisposable
 
     private string At(string name) => Path.Join(_folder, name);
 
-    // A cell that says it began, waits until it is let go, and says it ended.
+    // A cell that says it began, waits until it is let go, and says it ended a moment later, so a test that does not wait
+    // for it to end is caught as it ends.
     private string Held(string name) =>
-        $$"""System.IO.File.WriteAllText(@"{{At(name + "-began")}}", "on"); while (!System.IO.File.Exists(@"{{At(name + "-go")}}")) { await System.Threading.Tasks.Task.Delay(10); } System.IO.File.WriteAllText(@"{{At(name + "-ended")}}", "on");""";
+        $$"""System.IO.File.WriteAllText(@"{{At(name + "-began")}}", "on"); while (!System.IO.File.Exists(@"{{At(name + "-go")}}")) { await System.Threading.Tasks.Task.Delay(10); } await System.Threading.Tasks.Task.Delay(500); System.IO.File.WriteAllText(@"{{At(name + "-ended")}}", "on");""";
 
-    private Task LetGoAsync(string name) => File.WriteAllTextAsync(At(name + "-go"), "go", TestContext.Current.CancellationToken);
+    // Lets a held cell go and, when it began, waits until it ended.
+    private async Task LetGoAsync(string name)
+    {
+        await File.WriteAllTextAsync(At(name + "-go"), "go", TestContext.Current.CancellationToken);
+
+        if (File.Exists(At(name + "-began")))
+        {
+            await UntilAsync(() => File.Exists(At(name + "-ended")), $"the cell '{name}' let go never ended");
+        }
+    }
 
     private static async Task UntilAsync(Func<bool> holds, string what)
     {
@@ -269,7 +290,6 @@ public sealed class ChangeTests : IDisposable
 
             // Not even once the cell left behind ends, given the moment the run would take to begin the next.
             await LetGoAsync("b");
-            await UntilAsync(() => File.Exists(At("b-ended")), "the cell left behind never ended");
             await Task.Delay(TimeSpan.FromSeconds(1), TestContext.Current.CancellationToken);
             Assert.False(File.Exists(At("second-began")));
         }
