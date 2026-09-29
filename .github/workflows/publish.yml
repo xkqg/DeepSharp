@@ -3,8 +3,9 @@ name: Publish to NuGet
 on:
   release:
     types: [published]
-  # Measured on the sister repository: a release created by the bot token does not always start this on its
-  # own, and a release whose packages never went out is a quiet failure. This is the way back in.
+  # A release a person makes starts this through the event above. One that release.yml makes carries the bot as its
+  # author, and GitHub starts no workflow from an event the bot's own token raised, but for a dispatch: so release.yml
+  # dispatches this for the tag. By hand, the dispatch is the way back in for a tag whose packages never went out.
   workflow_dispatch:
     inputs:
       tag:
@@ -34,6 +35,16 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.tag || github.ref }}
+
+      # A tag publishes, and a package on NuGet cannot be taken back: a tag naming another version than the build
+      # declares would put that build's packages on NuGet under a release that says otherwise.
+      - name: The tag names the version the packages carry
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          tag="$TAG"
+          declared=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props)
+          test "${tag#v}" = "$declared" || { echo "The tag $tag names another version than the build declares, $declared"; exit 1; }
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6

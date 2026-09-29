@@ -64,6 +64,32 @@ public class ReleaseContractTests
     }
 
     [Fact]
+    public void TheReleaseWorkflow_StartsThePublishOfTheReleaseItMakes()
+    {
+        // GitHub starts no workflow from an event the bot's own token raised, but for a dispatch, and a release this
+        // workflow makes carries the bot as its author: 0.1.0, 0.2.0 and 0.3.0 each reached NuGet only once somebody
+        // started the publish by hand. So a tag publishes because the release it makes starts the publish itself.
+        string workflow = Read(".github", "workflows", "release.yml");
+        var made = workflow.IndexOf("gh release create", StringComparison.Ordinal);
+        var dispatched = workflow.IndexOf("gh workflow run publish.yml", StringComparison.Ordinal);
+
+        Assert.Contains("actions: write", workflow, StringComparison.Ordinal);
+        Assert.True(made >= 0 && dispatched > made, "release.yml does not start publish.yml once it has made the release");
+    }
+
+    [Fact]
+    public void ThePublishWorkflow_RefusesATagThatIsNotTheVersionItPacks()
+    {
+        // A tag publishes, and a package on NuGet cannot be taken back: a tag naming another version than the build's
+        // would put that build's packages on NuGet under a release that says otherwise.
+        string workflow = Read(".github", "workflows", "publish.yml");
+        var held = workflow.IndexOf("test \"${tag#v}\" = \"$declared\"", StringComparison.Ordinal);
+
+        Assert.True(held >= 0, "publish.yml does not hold the tag to the version the build declares");
+        Assert.True(held < workflow.IndexOf("dotnet pack DeepSharp.slnx", StringComparison.Ordinal), "publish.yml packs before it holds the tag to the version");
+    }
+
+    [Fact]
     public void ThePublishWorkflow_CannotReportSuccessWhileItPushedNothing()
     {
         // A loop that pushes nothing exits exactly as happily as one that pushed everything, and an empty

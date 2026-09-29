@@ -12,6 +12,8 @@ env:
 
 permissions:
   contents: write
+  # To start publish.yml for the release this makes: see the last step.
+  actions: write
 
 jobs:
   release:
@@ -36,12 +38,29 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Create the release
+        id: release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          gh release view "$TAG" >/dev/null 2>&1 \
-            && echo "The release already exists; leaving it alone." \
-            || gh release create "$TAG" \
-                 --title "DeepSharp ${{ steps.notes.outputs.version }}" \
-                 --notes-file notes.md
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "The release already exists; leaving it alone."
+            echo "made=false" >> "$GITHUB_OUTPUT"
+          else
+            gh release create "$TAG" \
+              --title "DeepSharp ${{ steps.notes.outputs.version }}" \
+              --notes-file notes.md
+            echo "made=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A release this workflow makes carries the bot as its author, and GitHub starts no workflow from an event the
+      # bot's own token raised, but for a dispatch: 0.1.0, 0.2.0 and 0.3.0 each reached NuGet only once somebody
+      # started the publish by hand. So the release starts it, for the tag. A release a person made starts it through
+      # its own event, and is not dispatched a second time.
+      - name: Publish the release to NuGet
+        if: steps.release.outputs.made == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          gh workflow run publish.yml --ref "$TAG" -f tag="$TAG"
