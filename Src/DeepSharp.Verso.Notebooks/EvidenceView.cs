@@ -67,7 +67,7 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
         foreach (var alert in profile.Alerts)
         {
             html.Append("<li><code>").Append(Encoded(alert.Column)).Append("</code> ").Append(Encoded(alert.Says))
-                .Append(" — answered by <code>").Append(Encoded(alert.Verb)).Append("</code></li>");
+                .Append(" — ").Append(Answered(alert.Answer)).Append("</li>");
         }
 
         var duplicates = profile.Duplicates;
@@ -163,6 +163,14 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
 
         return html.Append(svg);
     }
+
+    // How an alert is answered, in the words the profile shows.
+    private static string Answered(AlertAnswer answer) => answer.Action switch
+    {
+        AlertAction.LeaveOut => "answered by leaving it out",
+        AlertAction.SayMissing => $"answered by saying in the schema that <code>{Encoded(answer.Value!)}</code> stands for a gap",
+        _ => $"answered by <code>{Encoded(answer.Verb!)}</code>",
+    };
 
     private static string RowsWord(Standing over) => over == Standing.Train ? "training rows" : "rows";
 

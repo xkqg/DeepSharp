@@ -61,10 +61,35 @@ public sealed class EvidenceDrawingTests : IDisposable
 
         Assert.Contains(string.Create(CultureInfo.InvariantCulture, $"{profile.Rows} training rows"), shown, StringComparison.Ordinal);
         Assert.All(profile.Columns, column => Assert.Contains($">{column.Name}<", shown, StringComparison.Ordinal));
-        Assert.All(profile.Alerts, alert => Assert.Contains($">{alert.Verb}<", shown, StringComparison.Ordinal));
+        Assert.All(profile.Alerts, alert => Assert.Contains(
+            alert.Answer.Action switch
+            {
+                AlertAction.LeaveOut => "answered by leaving it out",
+                AlertAction.SayMissing => $"that <code>{alert.Answer.Value}</code> stands for a gap",
+                _ => $"answered by <code>{alert.Answer.Verb}</code>",
+            },
+            shown,
+            StringComparison.Ordinal));
+        Assert.Contains(profile.Alerts, alert => alert.Answer.Action == AlertAction.LeaveOut);
         Assert.Contains(string.Create(CultureInfo.InvariantCulture, $"{profile.Duplicates.Groups} groups of rows"), shown, StringComparison.Ordinal);
         Assert.Contains(string.Create(CultureInfo.InvariantCulture, $"{profile.Duplicates.ExtraCopies} extra copies"), shown, StringComparison.Ordinal);
         Assert.Contains(string.Create(CultureInfo.InvariantCulture, $"{profile.Duplicates.GroupsAcrossParts} of the groups"), shown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AColumnThatNeverChanges_IsMarkedConstant_AndItsAlertLeavesItOut()
+    {
+        var prepared = Pdd.Create()
+            .Read(CsvRowSource.FromText("k,v\n1,2\n1,3\n"), "two rows")
+            .Declare(schema => schema.Integer("k", "v"))
+            .Profile()
+            .Build()
+            .Run();
+
+        var shown = prepared.Evidence[2].Accept(new EvidenceView()).Content;
+
+        Assert.Contains("<td>integer, constant</td>", shown, StringComparison.Ordinal);
+        Assert.Contains("<code>k</code> Every row holds the same value, so it tells a model nothing. — answered by leaving it out", shown, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -31,6 +31,11 @@ with it. What a network is handed lies between minus one and one.
 - **Files are written against version 3.** A file this version writes names version 3, which 0.3 refuses as newer
   than itself; every file 0.3 wrote is read as it was.
 
+- **An alert names its columns and how it is answered.** `ProfileAlert` holds `Columns` — the one it was found in,
+  and for a column that repeats another or restates the answer, that other — and an `Answer`: a step for the column,
+  the column left out, or a value the schema says stands for a gap, in place of a verb. `Column` is still the one it
+  was found in. A column that never changes is answered by leaving it out, where `drop.columns` was named.
+
 - **A file read through the data frame keeps its own text.** `ReadCsvFrame` reads every column as text, as the file
   writes it, where the frame guessed each column's kind from its first ten rows and handed back its own spelling of
   what it read: `133.1285` for `133.1284878`, in 3,661 of the price series' 4,554 numbers. Its rows are now the rows
@@ -58,6 +63,14 @@ with it. What a network is handed lies between minus one and one.
   database or a typed data frame hands its moments over in. A take-over lists a change of format like any other change
   to a column, and a file holds a format only where one is said.
 
+- **What should not be there, found by the profile.** A column that goes with the answer value for value hands a
+  model the answer, and one that goes with a column before it says again what that column says — each named with its
+  values and how many training rows hold them, and answered by leaving it out; a column of words no two rows share, or
+  a running number, only names its row; and a number far from every other, held by more than one row and written as
+  files write that nothing is known — 0, −1, a run of nines — is answered by the schema saying it stands for a gap.
+  `AlertAnswer.AppliedTo` gives an answer that changes the columns, and a view carries the pipeline's `Answers` and the
+  columns its rows are `OrderedBy`. An extreme raises no alert: clipping or refusing one is a step you declare.
+
 - **A value that stands for a gap, said on the column.** `missing` on a declared column — `0`, where a file writes 0
   for a fare nobody knows — makes every cell holding it the gap it is, before the kind reads it, so a fill counts it
   and marks it. It is compared as the column's kind reads it when it reads as that kind, so `0` and `0.0` are one
@@ -79,6 +92,10 @@ with it. What a network is handed lies between minus one and one.
   code the database holds as words stays words however it is written.
 
 ### Fixed
+
+- **A gap is answered by a step the rules keep for its column.** The profile named `fill.missing` for a gap in words,
+  in true and false, or in moments, which no fill takes: a gap among words is answered by the encoder, which makes it
+  no category and marks it, and among true and false or moments by `drop.gaps`.
 
 - **The pipeline file's JSON Schema refuses what the reader refuses of a column.** An editor checking a file against
   it passed a `was` on a column that is not a category, and a category that says it was a category; the reader

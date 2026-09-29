@@ -219,6 +219,21 @@ public static class ColumnChoiceExtensions
             : declaration.Steps;
     }
 
+    /// <summary>The steps with a value said to stand for a gap in a column the schema names, or with none.</summary>
+    /// <param name="declaration">The pipeline.</param>
+    /// <param name="column">The column.</param>
+    /// <param name="missing">The value that stands for a gap; nothing for none.</param>
+    /// <returns>The steps with the schema changed, as <see cref="DeclareStep.WithColumnMissing"/> changes it.</returns>
+    /// <exception cref="ArgumentException">The schema does not name the column.</exception>
+    public static IReadOnlyList<IPipelineStep> WithMissing(this PipelineDeclaration declaration, string column, string? missing)
+    {
+        ArgumentNullException.ThrowIfNull(declaration);
+
+        return Schema(declaration) is { } declare
+            ? Replaced(declaration.Steps, declaration.ColumnsAt, declare.WithColumnMissing(column, missing))
+            : declaration.Steps;
+    }
+
     /// <summary>The steps with an output placed.</summary>
     /// <param name="declaration">The pipeline.</param>
     /// <param name="output">The output, made under its verb by <see cref="StepCatalog.Make"/>.</param>

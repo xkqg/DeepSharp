@@ -58,7 +58,7 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
         _captureAfter = steps;
         var walked = Walking(rows, declaration.WalkedFor(steps));
 
-        return new PipelineView(_captured!, Standings.Of(_captured!, _divided, _parts), Measured, walked.Evidence);
+        return new PipelineView(_captured!, Standings.Of(_captured!, _divided, _parts), Measured, walked.Evidence, ViewedColumns.Of(declaration));
     }
 
     /// <summary>Walks to the split, when there is one, so rows read elsewhere can be told where they stand.</summary>
@@ -70,7 +70,7 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
     {
         var evidence = declaration.SplitAt >= 0 ? Walking(rows, declaration.WalkedFor(steps)).Evidence : NothingProduced;
 
-        return new PipelineView(read, Standings.Of(read, _divided, _parts), Measured, evidence);
+        return new PipelineView(read, Standings.Of(read, _divided, _parts), Measured, evidence, ViewedColumns.Of(declaration));
     }
 
     /// <summary>Walks as far as the step that turns the rows into columns, and stops there.</summary>
@@ -265,7 +265,8 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
 
         var evidence = _evidence.ToDictionary(
             witnessed => witnessed.At,
-            witnessed => witnessed.Produce(new PipelineView(witnessed.Rows, Standings.Of(witnessed.Rows, _divided, _parts), Measured, NothingProduced)));
+            witnessed => witnessed.Produce(new PipelineView(
+                witnessed.Rows, Standings.Of(witnessed.Rows, _divided, _parts), Measured, NothingProduced, ViewedColumns.Of(declaration))));
 
         // A pipeline that learns nothing needs no split, and rows nothing divided are not training rows.
         return new Walked(Table, _parts ?? [.. Enumerable.Repeat(Part.Undivided, Table.RowCount)], evidence);

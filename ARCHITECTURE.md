@@ -202,12 +202,26 @@ same evidence, two runs are comparable without anyone remembering what was shown
 cannot quietly shrink to whatever happened to look good.
 
 Two kinds are built, both about the data before anything learns from it: a profile of the columns, which
-names for every problem it finds the step that answers it, and the rows a correlation is drawn from. Each is
+says for every problem it finds how it is answered, and the rows a correlation is drawn from. Each is
 measured on the rows the split trains on — the split below it as much as one above — because a profile over
 every row lets the rows a model will be measured on shape what it is shown. What they produce is output: it
 is kept with the run, in `PreparedData.Evidence`, and never written into the pipeline's file, since the file
 is what is replayed and a replay learns nothing. The measures of a trained model join them when there is a
 model to measure.
+
+What a profile finds is what should not be there, with the columns it is about and how it is answered — a step the
+column rules keep for the column's kind, the column left out as those rules leave one out, or a value the schema says
+stands for a gap. A gap among numbers is answered by a fill, among words by the encoder, which makes a gap no category
+and marks it, and among true and false or moments by dropping the rows it is in: naming a fill for a column no fill
+takes named a step the rules refuse. A column that goes with the answer value for value hands a model the answer; one
+that goes with a column before it says again what that column says; one whose values are each a row's own — words no
+two rows share, or a running number the rows are neither ordered nor divided by — only names its row. Each is
+answered by leaving it out. Two columns are compared only where their values repeat, each held by two rows or more on
+average, since columns that never repeat a value go with each other by chance; a profile therefore knows the
+pipeline's answers and the columns its rows are ordered by, which a view carries. A number far from every other, held
+by more than one row and written as files write that nothing is known — 0, −1, a run of nines — is answered by the
+schema saying so. An extreme is not something that should not be there: it is measured, and clipping or refusing one
+is a step somebody declares.
 
 The drawing lives in an optional package that draws with **MatPlotLibNet** — today the notebook's, which draws
 the correlation as a heatmap; the pipeline holds only the declaration and the numbers.
@@ -572,8 +586,8 @@ corrupted: the leak arrived as a column.
 
 So `Declare` names which columns take part, and what happens to the rest is declared rather than assumed:
 dropped, passed through, or handled. Dropping is the default, because a column nobody thought about is a
-column nobody checked. A warning on a feature that predicts the answer perfectly is worth having as well,
-but it is the second line of defence; the first is that unnamed means absent.
+column nobody checked. A profile also names a column that goes with the answer value for value, as it names
+`alive` beside `survived`, but that is the second line of defence; the first is that unnamed means absent.
 
 A column can also be named and left out. `excluded` keeps it in the schema with its kind while nothing reads it,
 the source is not asked for it and the rest of the file does not reach it, so bringing it back is taking a word

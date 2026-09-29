@@ -107,12 +107,32 @@ public class EvidenceTests
         var profile = (DataProfile)prepared.Evidence[2];
 
         Assert.Equal(Standing.Undivided, profile.Over);
-        Assert.Contains(profile.Alerts, alert => alert.Column == "a" && alert.Verb == "fill.missing");
-        Assert.Contains(profile.Alerts, alert => alert.Column == "b" && alert.Verb == "drop.columns");
-        Assert.Contains(profile.Alerts, alert => alert.Column == "c" && alert.Verb == "fill.nan");
-        Assert.Contains(profile.Alerts, alert => alert.Column == "d" && alert.Verb == "encode.categories");
-        Assert.Contains(profile.Alerts, alert => alert.Column == "w" && alert.Verb == "encode");
+        Assert.Contains(profile.Alerts, alert => alert.Answer == AlertAnswer.Step("fill.missing", "a"));
+        Assert.Contains(profile.Alerts, alert => alert.Answer == AlertAnswer.LeaveOut("b"));
+        Assert.Contains(profile.Alerts, alert => alert.Answer == AlertAnswer.Step("fill.nan", "c"));
+        Assert.Contains(profile.Alerts, alert => alert.Answer == AlertAnswer.Step("encode.categories", "d"));
+        Assert.Contains(profile.Alerts, alert => alert.Answer == AlertAnswer.Step("encode", "w"));
         Assert.All(profile.Alerts, alert => Assert.False(string.IsNullOrWhiteSpace(alert.Says)));
+        Assert.All(profile.Alerts, alert => Assert.Equal(alert.Column, alert.Answer.Column));
+    }
+
+    [Fact]
+    public void AColumnOfNumbersWithNoValue_HasNoSmallestLargestAverageOrMiddle()
+    {
+        var prepared = Pdd.Create()
+            .Read(CsvRowSource.FromText("a,b\n,1\n,2\n"), "two rows")
+            .Declare(schema => schema.Optional("a", ColumnKind.Number).Number("b"))
+            .Profile("a")
+            .Build()
+            .Run();
+
+        var a = Assert.Single(((DataProfile)prepared.Evidence[2]).Columns);
+
+        Assert.Equal(2, a.Gaps);
+        Assert.Null(a.Min);
+        Assert.Null(a.Max);
+        Assert.Null(a.Mean);
+        Assert.Null(a.Median);
     }
 
     [Fact]
