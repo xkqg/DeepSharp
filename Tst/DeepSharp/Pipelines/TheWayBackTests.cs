@@ -34,9 +34,10 @@ public class TheWayBackTests
     [InlineData(Scale.Robust)]
     [InlineData(Scale.Quantile)]
     [InlineData(Scale.Power)]
+    [InlineData(Scale.MidRange)]
     public void EveryScaleCanBeUndone(Scale scale)
     {
-        var prepared = Fares(fitting => fitting.Normalise("fare", scale));
+        var prepared = Fares(fitting => fitting.Normalise("fare", scale, scale == Scale.Quantile ? OutOfRange.Clip : OutOfRange.Pass));
         var scaled = (Column<double>)prepared.Table["fare"];
 
         // Row 1 of the file is a fare of 7.25. Whatever the scaling did to it, asking for it back has to

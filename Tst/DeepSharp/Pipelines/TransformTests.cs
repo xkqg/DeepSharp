@@ -263,7 +263,7 @@ public class TransformTests
             .Cyclical("Date", Period.DayOfWeek, Form.SplitSign)
             .SplitByTime("Date", 0.70, 0.15)
             .FillMissing("range", With.Median)
-            .Normalise("high", Scale.Robust, OutOfRange.Clip)
+            .Normalise("high", Scale.MidRange, OutOfRange.Clip)
             .Encode("direction", As.Ordinal, Unseen.Refuse)
             .NormaliseRow(Norm.L1, "high", "low")
             .Declaration;

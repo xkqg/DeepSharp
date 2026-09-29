@@ -96,7 +96,7 @@ public class ProjectionTests
             .Declare(schema => schema.Integer("survived", "pclass").Category("sex").Optional("age", ColumnKind.Number))
             .SplitStratified("survived", 0.70, 0.15)
             .FillMissing("age", With.Constant(-1))
-            .Normalise("age", Scale.Quantile)
+            .Normalise("age", Scale.Quantile, OutOfRange.Clip)
             .EncodeCategories()
             .Target("survived")
             .Build()

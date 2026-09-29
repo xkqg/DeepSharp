@@ -87,7 +87,7 @@ public class ParameterKindTests
 
         Assert.Equal(Scale.Robust, choice.Require(Scale.Robust));
         Assert.False(flag.Require(false));
-        Assert.Equal(["standard", "minmax", "maxabs", "robust", "quantile", "power"], choice.Choices);
+        Assert.Equal(["standard", "minmax", "maxabs", "robust", "quantile", "power", "midrange"], choice.Choices);
         Assert.Equal("""{"asCategories":false}""", Written(flag, false));
     }
 

@@ -1335,12 +1335,13 @@
                 "maxabs",
                 "robust",
                 "quantile",
-                "power"
+                "power",
+                "midrange"
               ]
             },
             {
               "type": "string",
-              "pattern": "^(?:[Ss][Tt][Aa][Nn][Dd][Aa][Rr][Dd]|[Mm][Ii][Nn][Mm][Aa][Xx]|[Mm][Aa][Xx][Aa][Bb][Ss]|[Rr][Oo][Bb][Uu][Ss][Tt]|[Qq][Uu][Aa][Nn][Tt][Ii][Ll][Ee]|[Pp][Oo][Ww][Ee][Rr])$"
+              "pattern": "^(?:[Ss][Tt][Aa][Nn][Dd][Aa][Rr][Dd]|[Mm][Ii][Nn][Mm][Aa][Xx]|[Mm][Aa][Xx][Aa][Bb][Ss]|[Rr][Oo][Bb][Uu][Ss][Tt]|[Qq][Uu][Aa][Nn][Tt][Ii][Ll][Ee]|[Pp][Oo][Ww][Ee][Rr]|[Mm][Ii][Dd][Rr][Aa][Nn][Gg][Ee])$"
             }
           ],
           "description": "Which kind of scaling: what the fit learns from the training rows."

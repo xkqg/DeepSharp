@@ -26,6 +26,30 @@ public enum Scale
 
     /// <summary>Reshaped towards a bell curve, then centred. For a column that leans heavily one way.</summary>
     Power,
+
+    /// <summary>
+    /// Centred on the middle of the training range and divided by half its width, so the training rows land between minus
+    /// one and one, as a network takes them — scikit-learn's MinMaxScaler with a feature range of minus one to one. Moved
+    /// by a single extreme value, as min-max is.
+    /// </summary>
+    MidRange,
+}
+
+/// <summary>Where each scale lands the training rows: the one rule a normalise step and a handover both read.</summary>
+public static class ScaleExtensions
+{
+    /// <summary>Where a scale lands the training rows, when it lands them in a range.</summary>
+    /// <param name="scale">The scale.</param>
+    /// <returns>
+    /// Between nothing and one for min-max and quantile, between minus one and one for max-abs and midrange; nothing for
+    /// standard, robust and power, which centre a column and leave its extremes where they fall.
+    /// </returns>
+    public static Form? Lands(this Scale scale) => scale switch
+    {
+        Scale.MinMax or Scale.Quantile => Form.Unit,
+        Scale.MaxAbs or Scale.MidRange => Form.Signed,
+        _ => null,
+    };
 }
 
 /// <summary>What happens to a value outside the range the fit learned.</summary>
@@ -82,6 +106,12 @@ public enum Norm
 /// its quartiles — which is why the kind is declared and what it learned is stored apart from it. Standard
 /// and min-max are both moved by a single extreme value, so on prices and volumes the robust form is
 /// usually the one describing the data rather than the spike.
+/// <para>
+/// What happens to a value outside the range the fit learned is declared with it, and a pair the scale cannot
+/// honour is refused where it is written: a scale that lands its rows in no range — standard, robust, power —
+/// has nothing to hold a value in or refuse it outside, and a rank has no place beyond the training rows for a
+/// value to pass to, so a quantile scale holds it at the edge or refuses it.
+/// </para>
 /// </remarks>
 public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<NormaliseStep>, IDescribesColumns
 {
@@ -89,7 +119,7 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
         "column", "The column to bring onto a comparable scale.", "column", ColumnKinds.Numbers);
 
     private static readonly OneOfParameter<Scale> ScaleKey = new(
-        "scale", "Which kind of scaling: what the fit learns from the training rows.", Scale.Standard);
+        "scale", "Which kind of scaling: what the fit learns from the training rows.", Scale.MidRange);
 
     private static readonly OneOfParameter<OutOfRange> OutOfRangeKey = new(
         "outOfRange", "What happens to a value outside the range the fit learned: let it through, hold it at the edge, or refuse.", OutOfRange.Pass);
@@ -98,12 +128,32 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
     /// <param name="column">The column to scale.</param>
     /// <param name="scale">Which kind of scaling.</param>
     /// <param name="outOfRange">What happens to a value outside the range the fit learned.</param>
-    /// <exception cref="ArgumentException">The column has no name.</exception>
+    /// <exception cref="ArgumentException">
+    /// The column has no name, or the scale cannot do what is said of a value outside its range: hold it or refuse it
+    /// with no range to hold it in, or let it through a rank.
+    /// </exception>
     public NormaliseStep(string column, Scale scale = Scale.Standard, OutOfRange outOfRange = OutOfRange.Pass)
     {
         Column = ColumnKey.Require(column);
         Scale = ScaleKey.Require(scale);
         OutOfRange = OutOfRangeKey.Require(outOfRange);
+
+        // A rule between two parameters, so it lives with the step that has both.
+        var word = Vocabulary<Scale>.WordFor(Scale, ScaleKey.Key);
+
+        if (OutOfRange != OutOfRange.Pass && Scale.Lands() is null)
+        {
+            throw new ArgumentException(
+                $"A {word} scale lands its rows in no range, so there is nothing to hold a value in or to refuse one outside: it lets every value through, which is pass.",
+                nameof(outOfRange));
+        }
+
+        if (OutOfRange == OutOfRange.Pass && Scale == Scale.Quantile)
+        {
+            throw new ArgumentException(
+                $"A {word} scale ranks a value among the training rows and has no place beyond them to let one through: it holds it at the edge, which is clip, or refuses it.",
+                nameof(outOfRange));
+        }
     }
 
     /// <inheritdoc />
@@ -201,6 +251,11 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
                 learned.Learned("spread", Spread(training.Finite[^1] - training.Finite[0]));
                 break;
 
+            case Scale.MidRange:
+                learned.Learned("centre", (training.Finite[0] + training.Finite[^1]) / 2);
+                learned.Learned("spread", Spread((training.Finite[^1] - training.Finite[0]) / 2));
+                break;
+
             case Scale.MaxAbs:
                 learned.Learned("centre", 0);
                 learned.Learned("spread", Spread(training.Finite.Max(Math.Abs)));
@@ -245,7 +300,9 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
 
             for (var row = 0; row < values.Length; row++)
             {
-                scaled[row] = values[row] is { } value ? Rank(knots, value) : null;
+                scaled[row] = values[row] is not { } value ? null
+                    : OutOfRange == OutOfRange.Refuse && (value < knots[0] || value > knots[^1]) ? throw Outside(row)
+                    : Rank(knots, value);
             }
 
             table.Put(new Column<double>(Column, ColumnKind.Number, scaled));
@@ -256,6 +313,10 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
         var centre = fitted.Number("centre");
         var spread = fitted.Number("spread");
         var lambda = Scale == Scale.Power ? fitted.Number("lambda") : 0;
+
+        // Where the training rows land, for a scale that lands them in a range; a scale that does not only passes.
+        var floor = Scale.Lands()?.Floor() ?? double.NegativeInfinity;
+        var ceiling = Scale.Lands() is null ? double.PositiveInfinity : 1;
 
         for (var row = 0; row < values.Length; row++)
         {
@@ -268,20 +329,19 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
 
             // Min-max on a price meets this the first time there is a new high, so what happens then is
             // part of the declaration rather than something the library decides on everybody's behalf.
-            scaled[row] = Scale == Scale.MinMax || Scale == Scale.MaxAbs
-                ? OutOfRange switch
-                {
-                    OutOfRange.Clip => Math.Clamp(next, Scale == Scale.MaxAbs ? -1 : 0, 1),
-                    OutOfRange.Refuse when next < (Scale == Scale.MaxAbs ? -1 : 0) || next > 1 =>
-                        throw new InvalidOperationException(
-                            $"Row {row + 1} of '{Column}' is outside the range this pipeline was fitted on."),
-                    _ => next,
-                }
-                : next;
+            scaled[row] = OutOfRange switch
+            {
+                OutOfRange.Clip => Math.Clamp(next, floor, ceiling),
+                OutOfRange.Refuse when next < floor || next > ceiling => throw Outside(row),
+                _ => next,
+            };
         }
 
         table.Put(new Column<double>(Column, ColumnKind.Number, scaled));
     }
+
+    private InvalidOperationException Outside(int row) =>
+        new($"Row {row + 1} of '{Column}' is outside the range this pipeline was fitted on.");
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
@@ -308,8 +368,8 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
                 continue;
             }
 
-            var width = knots[at] - knots[at - 1];
-            var within = width == 0 ? 0 : (value - knots[at - 1]) / width;
+            // The first knot the value does not pass, after one it passed: the two are never the same.
+            var within = (value - knots[at - 1]) / (knots[at] - knots[at - 1]);
 
             return (at - 1 + within) / (knots.Count - 1);
         }

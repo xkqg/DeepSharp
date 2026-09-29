@@ -458,18 +458,29 @@ not looking at market data has no use for the list.
 
 ### Normalising is a family, and two of its choices are declared
 
-Standard, min-max, max-abs, robust, quantile and power each learn something different — a mean and a
-spread, two extremes, a magnitude, a median and its quartiles, a whole distribution, a shaping parameter —
-which is why the kind is named in the declaration and what it learned is stored apart from it. Standard and
-min-max are both moved by a single extreme value, so on prices and volumes the robust and quantile forms
-are the ones that describe the data rather than the spike.
+Standard, min-max, max-abs, robust, quantile, power and midrange each learn something different — a mean
+and a spread, two extremes, a magnitude, a median and its quartiles, a whole distribution, a shaping
+parameter — which is why the kind is named in the declaration and what it learned is stored apart from it.
+Standard and min-max are both moved by a single extreme value, so on prices and volumes the robust and
+quantile forms are the ones that describe the data rather than the spike.
+
+Midrange is min-max centred: the middle of the training range becomes nothing and its ends minus one and one,
+which is where a network takes its features — scikit-learn's `MinMaxScaler` with a feature range of minus one
+to one. It learns the two extremes min-max learns and stores them as the same middle and spread, so its way
+back is the one every linear scale already has. Where each scale lands the training rows is one rule: between
+nothing and one for min-max and quantile, between minus one and one for max-abs and midrange, in no range for
+standard, robust and power, which centre a column and leave its extremes where they fall.
 
 Row-wise normalisation is a different verb, not a member of this family: it works across a row, learns
 nothing, and is fitted nowhere.
 
 Two decisions are made here rather than discovered later. What happens outside the learned range while the
 model is running — clip, pass through, or refuse — because a price meets a new high and min-max has no
-answer of its own. And whether the answer is normalised, because if it is, the way back is part of the
+answer of its own. Every pair does what it says or is refused where it is written: a scale that lands its rows
+in no range has nothing to hold a value in or refuse one outside, so it only passes, and a quantile scale ranks
+a value among the training rows and has no place beyond them to pass one to, so it holds it at the edge or
+refuses it. A refusal written into a pipeline and then ignored is worse than none: it reads as a guard that is
+not there. And whether the answer is normalised, because if it is, the way back is part of the
 saved pipeline; without it every error is reported in normalised units and every model looks excellent.
 
 ### The pipeline ends at the data, and the learner is a plug

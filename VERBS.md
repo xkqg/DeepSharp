@@ -322,13 +322,13 @@ Means what it says from version 1 of the file.
 Brings a column onto a comparable scale, by numbers learned from the training rows.
 
 ```json
-{"step":"normalise","column":"column","scale":"standard","outOfRange":"pass"}
+{"step":"normalise","column":"column","scale":"midrange","outOfRange":"pass"}
 ```
 
 | key | holds | a new block starts with |
 |---|---|---|
 | `column` | the name of a column holding a number, a whole number or true or false | `"column"` |
-| `scale` | one of `standard`, `minmax`, `maxabs`, `robust`, `quantile` or `power` | `"standard"` |
+| `scale` | one of `standard`, `minmax`, `maxabs`, `robust`, `quantile`, `power` or `midrange` | `"midrange"` |
 | `outOfRange` | one of `pass`, `clip` or `refuse` | `"pass"` |
 
 - **`column`**: The column to bring onto a comparable scale.

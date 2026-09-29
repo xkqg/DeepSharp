@@ -36,6 +36,12 @@ with it. What a network is handed lies between minus one and one.
   the column left out, or a value the schema says stands for a gap, in place of a verb. `Column` is still the one it
   was found in. A column that never changes is answered by leaving it out, where `drop.columns` was named.
 
+- **A scale does what is said of a value outside its range, or is refused where it is written.** Standard,
+  robust and power land their rows in no range, so they only pass: `clip` and `refuse` with them are refused, where
+  they did nothing. A quantile scale ranks a value among the training rows, so it holds one beyond them at the edge
+  or refuses it: `pass` with it is refused, where it held the value at the edge whatever was said — write `clip` for
+  what it did. A new `normalise` block starts with `midrange`.
+
 - **A file read through the data frame keeps its own text.** `ReadCsvFrame` reads every column as text, as the file
   writes it, where the frame guessed each column's kind from its first ten rows and handed back its own spelling of
   what it read: `133.1285` for `133.1284878`, in 3,661 of the price series' 4,554 numbers. Its rows are now the rows
@@ -62,6 +68,13 @@ with it. What a network is handed lies between minus one and one.
   it; left empty, the moments are read as ISO 8601 writes them. A column with a format also reads the round-trip form a
   database or a typed data frame hands its moments over in. A take-over lists a change of format like any other change
   to a column, and a file holds a format only where one is said.
+
+- **Features between minus one and one.** `Scale.MidRange` centres a column on the middle of its training range
+  and divides it by half its width, so the training rows land between minus one and one, as a network takes them —
+  scikit-learn's `MinMaxScaler` with a feature range of minus one to one — and comes back the way every linear scale
+  does. On the price series the second day's close of 128.720001 becomes 0.7993437, and four closes of the 152
+  days after training land outside, which `clip` holds at the edge and `refuse` refuses. `Lands()` says where each
+  scale lands the training rows, and a quantile scale can now refuse a value beyond them.
 
 - **What should not be there, found by the profile.** A column that goes with the answer value for value hands a
   model the answer, and one that goes with a column before it says again what that column says — each named with its

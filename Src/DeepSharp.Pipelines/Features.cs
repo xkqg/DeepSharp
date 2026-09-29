@@ -55,6 +55,11 @@ public enum Period
 /// </summary>
 internal static class FormExtensions
 {
+    /// <summary>The least value a column that lands in this form holds: minus one when signed, nothing otherwise.</summary>
+    /// <param name="form">Where the column lands: signed or unit.</param>
+    /// <returns>The lower end; the upper end is always one.</returns>
+    internal static double Floor(this Form form) => form == Form.Signed ? -1 : 0;
+
     /// <summary>The names of the columns one signed value becomes, in this form.</summary>
     /// <param name="form">How it is written down.</param>
     /// <param name="name">What the value is called.</param>

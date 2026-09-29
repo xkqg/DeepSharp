@@ -199,7 +199,7 @@ public class NotANumberAndShapeTests
     public void TheQuantileScalePutsEveryTrainingValueBetweenNothingAndOne()
     {
         var table = Read("a\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n");
-        var step = new NormaliseStep("a", Scale.Quantile);
+        var step = new NormaliseStep("a", Scale.Quantile, OutOfRange.Clip);
 
         var learned = step.Fit(table, AllTraining(table));
         step.ApplyTo(table, learned);
@@ -217,7 +217,7 @@ public class NotANumberAndShapeTests
     public void AValueOutsideWhatItSawHoldsAtTheEdge()
     {
         var table = Read("a\n1\n2\n3\n100\n-100\n");
-        var step = new NormaliseStep("a", Scale.Quantile);
+        var step = new NormaliseStep("a", Scale.Quantile, OutOfRange.Clip);
 
         var learned = step.Fit(table, [Part.Train, Part.Train, Part.Train, Part.Test, Part.Test]);
         step.ApplyTo(table, learned);
@@ -235,7 +235,7 @@ public class NotANumberAndShapeTests
             .Read(CsvRowSource.FromText("a\n1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n"), "ten rows")
             .Declare(schema => schema.Number("a"))
             .SplitAtRandom(0.70, 0.15, seed: 1)
-            .Normalise("a", Scale.Quantile)
+            .Normalise("a", Scale.Quantile, OutOfRange.Clip)
             .Build()
             .Run();
 
@@ -297,7 +297,7 @@ public class NotANumberAndShapeTests
             var declaration = new PipelineDeclaration([
                 new DeclareStep([new ColumnDeclaration("a", ColumnKind.Number, false)]),
                 new SplitAtRandomStep(new SplitShares(0.7, 0.15, 0.15), 1),
-                new NormaliseStep("a", scale),
+                new NormaliseStep("a", scale, scale == Scale.Quantile ? OutOfRange.Clip : OutOfRange.Pass),
             ]);
 
             Assert.Equal(declaration, PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn()));
