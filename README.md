@@ -114,7 +114,7 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 
 | | |
 |---|---|
-| `DeepSharp` | The tensors, their shape, and the backend the arithmetic runs on. |
+| `DeepSharp` | The tensors, their shape, the backend the arithmetic runs on, and the gradients worked out through it. |
 | `DeepSharp.Pipelines` | The data half: readers, features, the split, gaps, scales, the answer in four kinds, the handover, and the column decisions saved on their own and taken over — saved as a file and replayed. |
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |

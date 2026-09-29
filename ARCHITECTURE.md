@@ -1326,6 +1326,30 @@ What differs between them is what a project has to ship, not what a model has to
 inside an application; libtorch is 76 MB per platform. Both are legitimate, the choice is the caller's, and
 it is one line.
 
+### A gradient is worked out by a backend that records one pass
+
+A network learns by knowing which way to move each of its numbers, and that is worked out backwards from the loss
+through every operation the pass ran. The recording is a backend like any other: `RecordingBackend` wraps the backend
+the arithmetic runs on, is handed to the pass that wants gradients, writes each operation down as it runs it, and is
+dropped once `GradientsOf` has worked back from the loss. Nothing holds one or reaches for one, so there is no mode
+switched on somewhere and no recording that outlives its pass: the rule that nothing reaches for a shared instance
+holds for gradients too.
+
+What it keeps is a record of one pass's arithmetic, not a second description of the model. It is written as the code
+runs and dropped after, so there is no graph beside the model to keep in step with it, and a model written as plain
+code is differentiated as it was written.
+
+Every operation on the seam carries its rule for sending a gradient back, written in the seam's own operations, so an
+operation added to the seam without one does not compile, and the way back reads no tensor's values: it runs
+wherever the arithmetic does. A tensor read twice gets the sum of what both readings send back. The numbers asked
+about are known by which tensor they are, never by what they hold, and one the pass never read is refused rather than
+given a gradient of nothing. Each rule is checked by nudging every input a little either way and watching the loss, on
+the wrapped backend alone, so the recording is never used to check itself.
+
+An engine with its own way of working out gradients, as libtorch has, will need more than a second recording: a
+tensor here is values the managed side owns, and an engine that keeps its own history needs its own storage behind
+the tensor. That is a cost for the row that brings such an engine, and it is not paid now.
+
 ### One model, two vocabularies
 
 There are two ways people already know how to describe a network, and neither is going to convince the other

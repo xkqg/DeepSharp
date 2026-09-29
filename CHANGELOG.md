@@ -25,6 +25,12 @@ with it. What a network is handed lies between minus one and one.
   total is kept in double precision: ten million tenths average to a tenth, where a single-precision total gave
   0.1087937.
 
+- **Gradients, worked out automatically.** `RecordingBackend` wraps any backend for one pass and writes down each
+  operation as it runs it; `GradientsOf(loss, parameters)` then works back from a loss of one value to how much each
+  tensor moved it, each gradient of its tensor's own shape. A tensor read twice gets the sum of both readings, and one
+  the pass never read is refused rather than given a gradient of nothing. The way back runs on the wrapped backend's
+  own operations, and every operation's rule is checked against the loss nudged a little either way.
+
 ## [0.3.0]
 
 A pipeline you can look at: every step written as a block of a notebook, and the data at any block shown on
