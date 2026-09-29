@@ -97,7 +97,9 @@ public sealed class ColumnListTests : IDisposable
         Assert.Equal("22.0, 38.0, 26.0, 35.0, 35.0, ∅, 54.0, 2.0, 27.0, 14.0", list.Row("age").Values);
         Assert.Equal("integer", list.Row("survived").Kind.Value);
         Assert.Equal(string.Empty, list.Row("sex").Kind.Value);
-        Assert.Equal("text", list.Row("sex").ShownKind);
+        Assert.Equal("category", list.Row("sex").ShownKind);
+        Assert.Equal("category, proposed, 2 values", list.Row("sex").Proposed);
+        Assert.Equal(string.Empty, list.Row("survived").Proposed);
         Assert.True(list.Row("survived").Included is { Ticked: true, Enabled: true, CarriesAPayload: false });
         Assert.True(list.Row("sex").Included is { Ticked: false, Enabled: true });
         Assert.Equal([.. Titanic.Select(text => NotebookVerbs.Catalog().ReadStep(text))], Steps(notebook));
@@ -127,7 +129,7 @@ public sealed class ColumnListTests : IDisposable
 
         Assert.True(taken.StateChanged);
         Assert.Equal(["survived", "pclass", "sex", "age", "fare"], Declared(notebook).Columns.Select(column => column.Name));
-        Assert.Equal(ColumnKind.Text, Declared(notebook).Columns[2].Kind);
+        Assert.Equal(ColumnKind.Category, Declared(notebook).Columns[2].Kind);
         Assert.True(List(notebook).Row("sex").Included.Ticked);
     }
 
@@ -314,10 +316,49 @@ public sealed class ColumnListTests : IDisposable
         await ChooseAsync(notebook);
 
         Assert.Equal("category", List(notebook).Row("sex").ShownKind);
+        Assert.Equal(string.Empty, List(notebook).Row("sex").Proposed);
 
         await TickAsync(notebook, Schema(notebook), "sex", ticked: true);
 
         Assert.Equal(ColumnKind.Category, Declared(notebook).Columns.Single(column => column.Name == "sex").Kind);
+    }
+
+    [Fact]
+    public async Task AColumnNothingButItsCellsDecide_ShowsWhatTheyPropose_WithItsCounts_AndATickTakesItInSo()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+
+        await ChooseAsync(notebook);
+
+        Assert.Equal("category, proposed, 3 values", List(notebook).Row("embarked").Proposed);
+        Assert.Equal("integer, proposed, 7 values; category offered", List(notebook).Row("sibsp").Proposed);
+        Assert.Equal("boolean, proposed, 2 values", List(notebook).Row("alive").Proposed);
+
+        await TickAsync(notebook, Schema(notebook), "embarked", ticked: true);
+
+        Assert.Equal(new ColumnDeclaration("embarked", ColumnKind.Category, Optional: false), Declared(notebook).Columns.Single(column => column.Name == "embarked"));
+    }
+
+    [Fact]
+    public async Task MomentsWrittenAnotherWay_AreProposedWithTheirFormat_AndATickTakesThemInReadSo()
+    {
+        await File.WriteAllTextAsync(Path.Join(_folder, "days.csv"), "day,month,close\n27/11/2015,01/02/2015,1.5\n02/03/2015,01/03/2015,2.5\n", TestContext.Current.CancellationToken);
+        await using var notebook = await NotebookAsync(
+            """{"step": "read.csv", "path": "days.csv"}""",
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "close", "kind": "number", "optional": false}]}""");
+
+        await ChooseAsync(notebook);
+
+        Assert.Equal("timestamp written as d/M/yyyy, proposed, 2 values", List(notebook).Row("day").Proposed);
+        Assert.Equal("d/M/yyyy", List(notebook).Row("day").ShownFormat);
+        Assert.Equal("text, proposed, 2 values; timestamp offered, written as d/M/yyyy or M/d/yyyy", List(notebook).Row("month").Proposed);
+        Assert.Null(List(notebook).Row("month").ShownFormat);
+
+        await TickAsync(notebook, Schema(notebook), "day", ticked: true);
+
+        Assert.Equal(
+            new ColumnDeclaration("day", ColumnKind.Timestamp, Optional: false) { Format = "d/M/yyyy" },
+            Declared(notebook).Columns.Single(column => column.Name == "day"));
     }
 
     [Fact]

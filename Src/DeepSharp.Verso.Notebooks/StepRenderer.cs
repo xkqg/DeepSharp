@@ -51,6 +51,21 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     internal const string Columns = "deepsharp.columns";
 
     /// <summary>
+    /// The gesture an alert's box under a profile sends, with its column, what answering it does and the value it says:
+    /// ticked, the alert is answered — the column left out, or the value said to stand for a gap.
+    /// </summary>
+    internal const string Answer = "deepsharp.answer";
+
+    /// <summary>What answering an alert does, as an alert's box carries it: its word, in lower case.</summary>
+    internal const string AnswerKey = "answer";
+
+    /// <summary>The value an alert's box says stands for a gap.</summary>
+    internal const string ValueKey = "value";
+
+    /// <summary>The format a box takes a column of moments in with, when it is not ISO 8601's.</summary>
+    internal const string FormatKey = "format";
+
+    /// <summary>
     /// The gesture a row's box on the list sends, with its column, the kind the row shows, and what the list was drawn
     /// from: ticked, the column is taken in; unticked, it is left out.
     /// </summary>
@@ -293,7 +308,8 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
                     ListInclude => await ListedAsync(gesture, assembled, context, action, ticked),
                     ListOutput => await AnsweredAsync(gesture, assembled, context, action, ticked),
                     ListRemoveOutput => await RemovedAsync(gesture, assembled, context, action, ticked),
-                    _ => action.Text(ColumnKey) is { } column ? await TickedAsync(gesture, assembled, context, action.Gesture, column, ticked) : null,
+                    Answer => await AnsweredAlertAsync(gesture, assembled, context, action, ticked),
+                    _ => action.Text(ColumnKey) is { } column ? await TickedAsync(gesture, assembled, context, action, column, ticked) : null,
                 };
         }
     }
@@ -439,7 +455,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         {
             steps = !ticked ? assembled.Readable.Excluding(row.Column)
                 : picks.Range ? assembled.Readable.Including(header.Between(picks.IncludeFrom!, row.Column), picks.IncludeKind ?? ColumnKind.Text, header)
-                : assembled.Readable.Including(row.Column, action.Text(KindKey).AsKind() ?? ColumnKind.Text, header);
+                : TakenIn.CarriedBy(action).Into(assembled.Readable, row.Column, header);
         }
         catch (DeclarationException refused)
         {
@@ -656,7 +672,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     // differ from the steps there are. A box asks for a state, so a change the rules refuse is said at the block, and
     // one asked for again changes nothing.
     private static async Task<string?> TickedAsync(
-        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, string name, string column, bool ticked)
+        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, string column, bool ticked)
     {
         var declaration = assembled.Readable;
         var position = assembled.PositionOf(gesture.Cell);
@@ -671,9 +687,9 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         try
         {
-            steps = name switch
+            steps = action.Gesture switch
             {
-                Include when ticked => await TakenInAsync(gesture, assembled, column),
+                Include when ticked => await TakenInAsync(gesture, assembled, column, TakenIn.CarriedBy(action)),
                 Include => declaration.Excluding(column),
                 Category => Kinded(declaration, column, ticked),
                 _ => null,
@@ -695,11 +711,11 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         return null;
     }
 
-    // A column taken in. One the schema does not name comes in as text where the source has it, which only the source's
-    // own header says: the rows this session read from it. Before anything read them the block shows the source, which
-    // reads them, and says so; a column the source does not have was not ticked on its grid, nor was a column of rows
-    // handed in, which no grid shows.
-    private static async Task<IReadOnlyList<IPipelineStep>?> TakenInAsync(Gesture gesture, NotebookPipeline assembled, string column)
+    // A column taken in. One the schema does not name comes in as its box says — by the rule the list's box keeps too —
+    // where the source has it, which only the source's own header says: the rows this session read from it. Before
+    // anything read them the block shows the source, which reads them, and says so; a column the source does not have
+    // was not ticked on its grid, nor was a column of rows handed in, which no grid shows.
+    private static async Task<IReadOnlyList<IPipelineStep>?> TakenInAsync(Gesture gesture, NotebookPipeline assembled, string column, TakenIn taken)
     {
         var declaration = assembled.Readable;
 
@@ -721,8 +737,45 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return null;
         }
 
-        return header.Contains(column, StringComparer.Ordinal) ? declaration.Including(column, ColumnKind.Text, header) : null;
+        return header.Contains(column, StringComparer.Ordinal) ? taken.Into(declaration, column, header) : null;
     }
+
+    // An alert's box under a profile: ticked, its answer is given through the column rules — the column left out, or the
+    // value said to stand for a gap on the schema; unticked, nothing, since the box only ever asks for its answer. What the
+    // rules refuse is said at the block. Given twice, an answer changes nothing the second time.
+    private static async Task<string?> AnsweredAlertAsync(
+        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    {
+        var position = assembled.PositionOf(gesture.Cell);
+
+        if (!ticked || position < 0 || position >= assembled.Readable.Steps.Count
+            || action.Text(ColumnKey) is not { } column || AnswerOf(action.Text(AnswerKey)) is not { } answering)
+        {
+            return null;
+        }
+
+        IReadOnlyList<IPipelineStep> steps;
+
+        try
+        {
+            steps = new AlertAnswer(answering, column, Value: action.Text(ValueKey)).AppliedTo(assembled.Readable);
+        }
+        catch (DeclarationException refused)
+        {
+            await StepCommit.NotMadeAsync(gesture, assembled, [.. refused.Faults.Select(fault => fault.ToString())]);
+
+            return null;
+        }
+
+        context.StateChanged = await StepCommit.CommitAsync(gesture, assembled, steps);
+
+        return null;
+    }
+
+    // What an alert's box says answering it does: leaving its column out, or saying a value stands for a gap there.
+    private static AlertAction? AnswerOf(string? word) =>
+        Enum.GetValues<AlertAction>().Where(action => action != AlertAction.Step && string.Equals(action.ToString(), word, StringComparison.OrdinalIgnoreCase))
+            .Cast<AlertAction?>().FirstOrDefault();
 
     // A column the schema takes made a category, or given back the kind it was; nothing for a column it does not take,
     // nor for a category that does not say what it was.

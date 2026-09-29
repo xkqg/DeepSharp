@@ -219,18 +219,38 @@ public static class ColumnChoiceExtensions
             : declaration.Steps;
     }
 
+    /// <summary>The steps with a timestamp column the schema names read by a format, or as ISO 8601 writes moments.</summary>
+    /// <param name="declaration">The pipeline.</param>
+    /// <param name="column">The column.</param>
+    /// <param name="format">How its moments are written; nothing for ISO 8601.</param>
+    /// <returns>The steps with the schema changed, as <see cref="DeclareStep.WithColumnFormat"/> changes it.</returns>
+    /// <exception cref="DeclarationException">
+    /// The schema does not name the column, or it holds no moments: a fault at the schema's place, in the words a file shows.
+    /// </exception>
+    public static IReadOnlyList<IPipelineStep> WithFormat(this PipelineDeclaration declaration, string column, string? format)
+    {
+        ArgumentNullException.ThrowIfNull(declaration);
+
+        return Schema(declaration) is { } declare
+            ? Replaced(declaration.Steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnFormat(column, format)))
+            : declaration.Steps;
+    }
+
     /// <summary>The steps with a value said to stand for a gap in a column the schema names, or with none.</summary>
     /// <param name="declaration">The pipeline.</param>
     /// <param name="column">The column.</param>
     /// <param name="missing">The value that stands for a gap; nothing for none.</param>
     /// <returns>The steps with the schema changed, as <see cref="DeclareStep.WithColumnMissing"/> changes it.</returns>
-    /// <exception cref="ArgumentException">The schema does not name the column.</exception>
+    /// <exception cref="DeclarationException">
+    /// The schema does not name the column, or the value is nothing but spaces: a fault at the schema's place, in the words
+    /// a file shows.
+    /// </exception>
     public static IReadOnlyList<IPipelineStep> WithMissing(this PipelineDeclaration declaration, string column, string? missing)
     {
         ArgumentNullException.ThrowIfNull(declaration);
 
         return Schema(declaration) is { } declare
-            ? Replaced(declaration.Steps, declaration.ColumnsAt, declare.WithColumnMissing(column, missing))
+            ? Replaced(declaration.Steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnMissing(column, missing)))
             : declaration.Steps;
     }
 

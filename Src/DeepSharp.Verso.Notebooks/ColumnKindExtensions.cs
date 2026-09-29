@@ -15,7 +15,10 @@ internal static class ColumnKindExtensions
 
     /// <summary>The kind a word names.</summary>
     /// <param name="word">The word, as a control carries it.</param>
-    /// <returns>The kind; nothing for a word that names none.</returns>
+    /// <returns>
+    /// The kind whose word it is, in whatever case; nothing for any other word — a number, or several words joined by a
+    /// comma, which the runtime's own parser reads as a kind of its own.
+    /// </returns>
     public static ColumnKind? AsKind(this string? word) =>
-        Enum.TryParse<ColumnKind>(word, ignoreCase: true, out var kind) && Enum.IsDefined(kind) ? kind : null;
+        Enum.GetValues<ColumnKind>().Where(kind => string.Equals(kind.Word(), word, StringComparison.OrdinalIgnoreCase)).Cast<ColumnKind?>().FirstOrDefault();
 }

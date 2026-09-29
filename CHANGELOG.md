@@ -42,6 +42,10 @@ with it. What a network is handed lies between minus one and one.
   or refuses it: `pass` with it is refused, where it held the value at the edge whatever was said — write `clip` for
   what it did. A new `normalise` block starts with `midrange`.
 
+- **A column ticked in takes the kind its cells propose.** From the notebook's list or its grid, a column the schema
+  does not name is taken in as the file saved beside the notebook declares it, else as its cells propose, else as
+  text — one rule for both boxes — where the grid took every one in as text.
+
 - **A step that writes a column says where its values land.** `ColumnState.With(name, kind)` writes the column
   landing nowhere said, so a step from another package that lands a column in a range says so with
   `With(name, kind, lands)`, and one that makes a family with `WithFamily(start, lands)`; until it does, a learner
@@ -73,6 +77,12 @@ with it. What a network is handed lies between minus one and one.
   it; left empty, the moments are read as ISO 8601 writes them. A column with a format also reads the round-trip form a
   database or a typed data frame hands its moments over in. A take-over lists a change of format like any other change
   to a column, and a file holds a format only where one is said.
+
+- **The notebook's list shows what each column's cells propose.** Beside a column the schema and the saved file leave
+  to its cells, the list says what they propose — `category, proposed, 3 values`, with a category offered beside whole
+  numbers and the format moments are written in — and its box takes the column in so. A profile's alert whose answer
+  is a change to the columns carries a box that gives it: leaving the column out, or saying on the schema that a value
+  stands for a gap.
 
 - **A learner that takes every feature on one scale says so where they are handed over.** `Batch(part,
   Needs.OneScale)` and `Served(rows, Needs.OneScale)` refuse every feature not declared to land between minus one and
@@ -121,6 +131,9 @@ with it. What a network is handed lies between minus one and one.
   code the database holds as words stays words however it is written.
 
 ### Fixed
+
+- **A kind is read from its word alone.** A control that carried `1`, or two kinds joined by a comma, was read as a
+  kind in the notebook, where a file refuses both.
 
 - **A gap is answered by a step the rules keep for its column.** The profile named `fill.missing` for a gap in words,
   in true and false, or in moments, which no fill takes: a gap among words is answered by the encoder, which makes it

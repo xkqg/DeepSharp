@@ -24,8 +24,11 @@ internal readonly record struct DrawnSelect(string Action, string Value, IReadOn
 /// <param name="Included">Its box for whether it is in.</param>
 /// <param name="Output">Its box for whether it is an answer of the output.</param>
 /// <param name="Role">What it is to the output, as the row says it: an answer, read by an answer's way back, or nothing.</param>
+/// <param name="Proposed">What the row says the column's cells propose, for a column the schema and the saved file leave to them; nothing otherwise.</param>
+/// <param name="ShownFormat">The format its box takes a column of moments in with; nothing for any other.</param>
 internal readonly record struct ListedRow(
-    string Column, string Values, DrawnSelect Kind, string ShownKind, string Mark, DrawnBox Included, DrawnBox Output, string Role);
+    string Column, string Values, DrawnSelect Kind, string ShownKind, string Mark, DrawnBox Included, DrawnBox Output, string Role,
+    string Proposed, string? ShownFormat);
 
 /// <summary>A list as drawn: the block it was drawn on, and its page.</summary>
 /// <param name="On">The block.</param>
@@ -52,7 +55,9 @@ internal static partial class ListHtmlExtensions
                 Cell(row.Groups[2].Value, "mark"),
                 included,
                 boxes.Single(box => box.Action.StartsWith("deepsharp.list.output ", StringComparison.Ordinal)),
-                Regex.Match(row.Groups[2].Value, "<span class=\"deepsharp-role\">(.*?)</span>").Groups[1].Value);
+                Regex.Match(row.Groups[2].Value, "<span class=\"deepsharp-role\">(.*?)</span>").Groups[1].Value,
+                WebUtility.HtmlDecode(Regex.Match(row.Groups[2].Value, "<span class=\"deepsharp-proposed\">(.*?)</span>").Groups[1].Value),
+                FormatOf(included.Action));
         })];
 
     /// <summary>The row of one column.</summary>
@@ -124,6 +129,10 @@ internal static partial class ListHtmlExtensions
     // The kind a box's action carries, which a tick takes its column in with.
     private static string KindOf(string action) =>
         JsonNode.Parse(action[(action.IndexOf(' ', StringComparison.Ordinal) + 1)..])!["kind"]!.GetValue<string>();
+
+    // The format a box's action carries for a column of moments, when it carries one.
+    private static string? FormatOf(string action) =>
+        JsonNode.Parse(action[(action.IndexOf(' ', StringComparison.Ordinal) + 1)..])!["format"]?.GetValue<string>();
 
     [GeneratedRegex("<tr data-column=\"([^\"]*)\">(.*?)</tr>", RegexOptions.Singleline)]
     private static partial Regex Row();

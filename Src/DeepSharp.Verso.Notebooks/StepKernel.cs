@@ -235,6 +235,7 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
 
         var key = declaration.ViewKeyAt(request.Position);
         PipelineView view;
+        KindProposal proposal;
 
         try
         {
@@ -242,6 +243,7 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
             // by; a notebook that was never saved has no folder, and reads from the working directory.
             var folder = context.NotebookMetadata.SourceFolder();
             var source = session.Sources.RowsFor(declaration, folder);
+            proposal = source.Proposal;
             var pipeline = new Pipeline(declaration, source.Rows, folder);
 
             view = session.ViewFor(key, source.Fingerprint)
@@ -270,7 +272,10 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
 
         // The grid, what the block measured under it, and the record that the block shows it are one write: a run
         // stopped since it was asked for writes none of it, and a stop while it is written waits for all of it.
-        var grid = DataGrid.Of(view, request.Page, declaration);
+        // A column taken in from the grid is taken in by the rule the list keeps: as the file saved beside the notebook
+        // declares it, else as its cells propose.
+        var stored = context.NotebookMetadata.ColumnsFilePath() is { } beside ? new ColumnsFile(beside).Stored().Preset : null;
+        var grid = DataGrid.Of(view, request.Page, declaration, column => TakenIn.Of(column, stored, proposal));
         var measured = view.Evidence.TryGetValue(request.Position, out var evidence) ? evidence.Accept(new EvidenceView()) : null;
 
         await session.LetThroughAsync(request.Turn, ticket.Mark, async () =>

@@ -158,16 +158,29 @@ public sealed class GridActionTests : IDisposable
     }
 
     [Fact]
-    public async Task TickingAColumnTheSchemaDoesNotName_DeclaresItAsText_WhereTheSourceHasIt()
+    public async Task TickingAColumnTheSchemaDoesNotName_DeclaresItAsItsCellsPropose_WhereTheSourceHasIt_AsTheListWould()
     {
         await using var notebook = await NotebookAsync(Titanic);
         var read = notebook.Scaffold.Cells[0];
 
         await notebook.GestureAsync(read, StepRenderer.Show);
-        var gesture = await notebook.TickAsync(read, StepRenderer.Include, "sex", ticked: true);
+        var box = read.Outputs[^1].Content.Box(StepRenderer.Include, "sex")!.Value;
+        var gesture = await notebook.GestureAsync(read, box.Action, "true");
 
         Assert.True(gesture.StateChanged);
         Assert.Equal(["survived", "pclass", "sex", "age", "fare"], Names(notebook));
+        Assert.Equal(new ColumnDeclaration("sex", ColumnKind.Category, Optional: false), Declared(notebook).Columns[2]);
+    }
+
+    [Fact]
+    public async Task ABoxThatSaysNoKind_TakesItsColumnInAsText()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var read = notebook.Scaffold.Cells[0];
+
+        await notebook.GestureAsync(read, StepRenderer.Show);
+        await notebook.TickAsync(read, StepRenderer.Include, "sex", ticked: true);
+
         Assert.Equal(new ColumnDeclaration("sex", ColumnKind.Text, Optional: false), Declared(notebook).Columns[2]);
     }
 

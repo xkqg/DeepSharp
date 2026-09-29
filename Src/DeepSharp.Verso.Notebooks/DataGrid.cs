@@ -70,6 +70,10 @@ internal static class DataGrid
     /// <param name="view">The rows there, and where each stands.</param>
     /// <param name="page">Which page, counting from nought; one beyond the last shows the last.</param>
     /// <param name="declaration">The declaration the rows come from, which says what each column's boxes say.</param>
+    /// <param name="takenIn">
+    /// How a column the schema does not name is taken in, by the one rule every box keeps, which its box carries; nothing,
+    /// and its box carries none, so a tick takes it in as text.
+    /// </param>
     /// <returns>The grid, and the header it drew.</returns>
     /// <remarks>
     /// Every column has a box saying whether it is in, and every column the schema takes one saying whether it is a
@@ -77,10 +81,13 @@ internal static class DataGrid
     /// declaration, never a value. A column whose box says it is not in is drawn black, with its box, so ticking it
     /// brings its values back.
     /// </remarks>
-    public static DrawnGrid Of(PipelineView view, int page, PipelineDeclaration declaration)
+    public static DrawnGrid Of(PipelineView view, int page, PipelineDeclaration declaration, Func<string, TakenIn>? takenIn = null)
     {
         var table = view.Table;
         var header = HeaderOf(declaration, [.. table.Columns.Select(column => column.Name)]);
+        HashSet<string> unnamed = takenIn is null ? []
+            : [.. declaration.ChoicesFor([.. table.Columns.Select(column => column.Name)]).Rows
+                .Where(choice => choice.Standing == ColumnStanding.NotDeclared).Select(choice => choice.Name)];
         var pages = Math.Max(1, (table.RowCount + PageSize - 1) / PageSize);
         var shown = Math.Clamp(page, 0, pages - 1);
         var first = shown * PageSize;
@@ -97,7 +104,7 @@ internal static class DataGrid
         foreach (var column in header.Columns)
         {
             html.Append("<th>").Append(Encoded(column.Name));
-            Box(html, StepRenderer.Include, column.Name, column.Included, "included");
+            Box(html, StepRenderer.Include, column.Name, column.Included, "included", unnamed.Contains(column.Name) ? takenIn!(column.Name) : null);
 
             if (column.Category is { } category)
             {
@@ -188,11 +195,11 @@ internal static class DataGrid
         html.Append("</div>");
     }
 
-    // A box carries its gesture and its column in its data-action and no data-payload, so Verso's router sends the
-    // state it is in with them: whether it is ticked.
-    private static void Box(StringBuilder html, string gesture, string column, HeaderBox box, string label) =>
+    // A box carries its gesture and its column in its data-action — and, taking a column the schema does not name in, how
+    // it is taken in — and no data-payload, so Verso's router sends the state it is in with them: whether it is ticked.
+    private static void Box(StringBuilder html, string gesture, string column, HeaderBox box, string label, TakenIn? taken = null) =>
         html.Append(" <label><input type=\"checkbox\" data-action=\"")
-            .Append(Encoded(ControlAction.Of(gesture, new JsonObject { [StepRenderer.ColumnKey] = column })))
+            .Append(Encoded(ControlAction.Of(gesture, taken?.Into(new JsonObject { [StepRenderer.ColumnKey] = column }) ?? new JsonObject { [StepRenderer.ColumnKey] = column })))
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"')
             .Append(box.Ticked ? " checked" : string.Empty)
             .Append(box.Enabled ? string.Empty : " disabled")

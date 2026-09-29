@@ -4,6 +4,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.Json.Nodes;
 using DeepSharp.Pipelines;
 using MatPlotLibNet;
 using MatPlotLibNet.Numerics;
@@ -67,7 +68,9 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
         foreach (var alert in profile.Alerts)
         {
             html.Append("<li><code>").Append(Encoded(alert.Column)).Append("</code> ").Append(Encoded(alert.Says))
-                .Append(" — ").Append(Answered(alert.Answer)).Append("</li>");
+                .Append(" — ").Append(Answered(alert.Answer));
+            Control(html, alert.Answer);
+            html.Append("</li>");
         }
 
         var duplicates = profile.Duplicates;
@@ -162,6 +165,32 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
             .ToSvg();
 
         return html.Append(svg);
+    }
+
+    // An alert whose answer changes the columns has a box that gives it, drawn unticked: it carries its column, what
+    // answering does and the value it says, and no data-payload, so Verso's router sends whether it is ticked. One answered
+    // by a step to be written has none, since where a step belongs is a person's to say.
+    private static void Control(StringBuilder html, AlertAnswer answer)
+    {
+        if (answer.Action == AlertAction.Step)
+        {
+            return;
+        }
+
+        var carried = new JsonObject
+        {
+            [StepRenderer.ColumnKey] = answer.Column,
+            [StepRenderer.AnswerKey] = answer.Action.ToString().ToLowerInvariant(),
+        };
+
+        if (answer.Value is { } value)
+        {
+            carried[StepRenderer.ValueKey] = value;
+        }
+
+        html.Append(" <label><input type=\"checkbox\" data-action=\"").Append(Encoded(ControlAction.Of(StepRenderer.Answer, carried)))
+            .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append("\"> ")
+            .Append(answer.Action == AlertAction.LeaveOut ? "leave it out" : "say so").Append("</label>");
     }
 
     // How an alert is answered, in the words the profile shows.

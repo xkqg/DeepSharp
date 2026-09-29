@@ -16,9 +16,10 @@ namespace DeepSharp.Verso.Notebooks;
 /// <remarks>
 /// The rows are the source's columns in its order, then every column the schema names that the source lacks. A row's
 /// box is the grid's box, asked of the same column rules; it carries its column, the kind the row shows — the one the
-/// schema declares, else the one the saved file gives it, else text as the source holds it — and what the list was drawn
-/// from: the key of the blocks and the fingerprint of the source's bytes. Everything that comes from a person or a file
-/// is encoded before it reaches the page.
+/// schema declares, else the one a tick takes it in with by the one rule every box keeps, which a column's cells decide
+/// only where the saved file does not, and says so beside the kind with what the cells hold — and what the list was
+/// drawn from: the key of the blocks and the fingerprint of the source's bytes. Everything that comes from a person or a
+/// file is encoded before it reaches the page.
 /// </remarks>
 internal static class ColumnList
 {
@@ -56,7 +57,8 @@ internal static class ColumnList
         IReadOnlyList<string> columns = [.. header.Concat(declared.Select(column => column.Name).Where(name => !header.Contains(name, StringComparer.Ordinal)))];
         var first = source.Rows.Rows.Take(ValuesShown).ToArray();
         var rows = declaration.ChoicesFor(columns).Rows;
-        var kinds = rows.ToDictionary(choice => choice.Name, choice => choice.Kind ?? StoredKind(stored, choice.Name) ?? ColumnKind.Text);
+        var taking = rows.ToDictionary(choice => choice.Name, choice => TakenIn.Of(choice.Name, stored, source.Proposal));
+        var kinds = rows.ToDictionary(choice => choice.Name, choice => choice.Kind ?? taking[choice.Name].Kind);
         var verbs = OutputBox.Verbs(catalog);
         var stopped = verbs.ToDictionary(each => each, each => Stopped(catalog, declaration, rows, kinds, header, each));
 
@@ -96,9 +98,15 @@ internal static class ColumnList
                 .Append("<td class=\"deepsharp-name\">").Append(Encoded(choice.Name)).Append("</td>")
                 .Append("<td class=\"deepsharp-values\">").Append(Encoded(at < 0 ? string.Empty : Values(first, at))).Append("</td>")
                 .Append("<td class=\"deepsharp-in\">");
-            Box(html, choice, kinds[choice.Name], list);
+            Box(html, choice, choice.Kind is null ? taking[choice.Name] : new TakenIn(kinds[choice.Name]), list);
             html.Append("</td><td class=\"deepsharp-kind\">");
             Select(html, declaration, choice, declared.FirstOrDefault(column => column.Name == choice.Name)?.Kind, header, list);
+
+            if (choice.Kind is null && taking[choice.Name].Said() is { } proposed)
+            {
+                html.Append(" <span class=\"deepsharp-proposed\">").Append(Encoded(proposed)).Append("</span>");
+            }
+
             html.Append("</td><td class=\"deepsharp-answer\">");
             Answer(html, catalog, declaration, choice, kinds[choice.Name], header, list, reads is not null);
             html.Append("</td><td class=\"deepsharp-mark\">").Append(Encoded(mark)).Append("</td></tr>");
@@ -289,15 +297,12 @@ internal static class ColumnList
         html.Append("</select>");
     }
 
-    // A row's box: the gesture, the column, the kind a tick takes it in with, and what the list was drawn from and with.
-    private static void Box(StringBuilder html, ColumnChoice choice, ColumnKind kind, ListDrawing list)
+    // A row's box: the gesture, the column, the kind a tick takes it in with and the format it reads its moments by, and
+    // what the list was drawn from and with.
+    private static void Box(StringBuilder html, ColumnChoice choice, TakenIn taken, ListDrawing list)
     {
         var box = choice.IncludedBox();
-        var action = ControlAction.Of(StepRenderer.ListInclude, list.Carried(new JsonObject
-        {
-            [StepRenderer.ColumnKey] = choice.Name,
-            [StepRenderer.KindKey] = kind.Word(),
-        }));
+        var action = ControlAction.Of(StepRenderer.ListInclude, list.Carried(taken.Into(new JsonObject { [StepRenderer.ColumnKey] = choice.Name })));
 
         html.Append("<label><input type=\"checkbox\" data-action=\"").Append(Encoded(action))
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"')
@@ -305,10 +310,6 @@ internal static class ColumnList
             .Append(box.Enabled ? string.Empty : " disabled")
             .Append("> in</label>");
     }
-
-    // The kind the saved file gives a column its schema names — an excluded one too — when it names it.
-    private static ColumnKind? StoredKind(PipelinePreset? stored, string column) =>
-        stored?.Declare.Columns.FirstOrDefault(declared => declared.Name == column)?.Kind;
 
     private static string Values(IReadOnlyList<IReadOnlyList<string?>> rows, int at) =>
         string.Join(", ", rows.Select(row => row[at] is { Length: > 0 } value ? value : Blank));

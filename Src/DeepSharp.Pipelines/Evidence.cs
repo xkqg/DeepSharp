@@ -135,6 +135,9 @@ public readonly record struct AlertAnswer(AlertAction Action, string Column, str
     /// The steps with the column left out, as the column rules leave one out, or with the value said on the schema; the
     /// steps as they are for a step to be written, which a person places where it belongs.
     /// </returns>
+    /// <exception cref="DeclarationException">
+    /// The rules refuse the answer: the column is the last one the schema takes, or the schema does not name it.
+    /// </exception>
     public IReadOnlyList<IPipelineStep> AppliedTo(PipelineDeclaration declaration)
     {
         ArgumentNullException.ThrowIfNull(declaration);

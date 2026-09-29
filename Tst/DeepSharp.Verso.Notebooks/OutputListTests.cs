@@ -192,7 +192,7 @@ public sealed class OutputListTests : IDisposable
         Assert.False(typeless.StateChanged);
         Assert.True(SaysNotMade(notebook, "'' is not a kind of output the list can make."));
 
-        var kindless = await notebook.GestureAsync(Schema(notebook), box.Replace("\"kind\":\"text\",", string.Empty, StringComparison.Ordinal), "true");
+        var kindless = await notebook.GestureAsync(Schema(notebook), box.Replace("\"kind\":\"category\",", string.Empty, StringComparison.Ordinal), "true");
 
         Assert.True(kindless.StateChanged);
         Assert.Contains(((DeclareStep)Steps(notebook)[1]).Taking, column => column is { Name: "sex", Kind: ColumnKind.Text });

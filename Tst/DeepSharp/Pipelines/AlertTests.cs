@@ -263,6 +263,13 @@ public class AlertTests
 
         Assert.Same(unread.Steps, AlertAnswer.SayMissing("fare", "0").AppliedTo(unread));
         Assert.Throws<ArgumentNullException>(() => ((PipelineDeclaration)null!).WithMissing("fare", "0"));
+
+        // A column the schema does not name has no value of its own to say, and the refusal is in the words a file shows.
+        var nowhere = Assert.Single(Assert.Throws<DeclarationException>(() => AlertAnswer.SayMissing("nowhere", "0").AppliedTo(declaration)).Faults);
+
+        Assert.Equal(1, nowhere.At);
+        Assert.Contains("'nowhere'", nowhere.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("(Parameter", nowhere.Message, StringComparison.Ordinal);
     }
 
     [Fact]

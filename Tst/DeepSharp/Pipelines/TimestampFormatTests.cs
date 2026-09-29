@@ -153,6 +153,21 @@ public class TimestampFormatTests
     }
 
     [Fact]
+    public void ThePipelinesOwnOperation_ReadsAColumnsMomentsByAFormat_WhereTheSchemaNamesIt()
+    {
+        var written = new PipelineDeclaration(Prices(null).WithFormat("when", "dd/MM/yyyy"));
+        var unread = new PipelineDeclaration([new ReadCsvStep("prices.csv")]);
+
+        Assert.Equal("dd/MM/yyyy", ((DeclareStep)written.Steps[1]).Columns[0].Format);
+        Assert.Same(unread.Steps, unread.WithFormat("when", "dd/MM/yyyy"));
+        Assert.Throws<ArgumentNullException>(() => ((PipelineDeclaration)null!).WithFormat("when", null));
+        Assert.DoesNotContain(
+            "(Parameter",
+            Assert.Single(Assert.Throws<DeclarationException>(() => Prices(null).WithFormat("close", "dd/MM/yyyy")).Faults).Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ATakeOver_ListsAChangeOfFormatAlone()
     {
         var takenOver = PipelinePreset.Of(Prices("dd/MM/yyyy"), Header).TakeOver(Prices(null), Header);
