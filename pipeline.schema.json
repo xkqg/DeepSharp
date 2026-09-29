@@ -637,6 +637,11 @@
                 "type": "string",
                 "pattern": "\\S",
                 "description": "How a timestamp column's moments are written, as .NET writes a date format: dd/MM/yyyy, say. Left out, they are read as ISO 8601 writes them."
+              },
+              "missing": {
+                "type": "string",
+                "pattern": "\\S",
+                "description": "A value that stands for a gap in the column, read as the gap it is: 0, say, where a file writes 0 for a fare nobody knows. Left out, none does."
               }
             },
             "required": [

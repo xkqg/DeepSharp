@@ -133,7 +133,8 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
     // A column's kind, or "not taken", is the schema's own operation on the step as it reads, and the columns are
     // written back as the schema writes itself: a column not taken stays in it, excluded with its kind, and a step
     // below that reads it says so at its own block. Whether a taken column may be absent is written into it, and how a
-    // taken column's moments are written is the schema's own operation too: an empty field reads them as ISO 8601.
+    // taken column's moments are written and which of its values stands for a gap are the schema's own operations too:
+    // an empty field reads the moments as ISO 8601, and says no value stands for a gap.
     public bool Visit(ColumnDeclarationsParameter parameter)
     {
         if (read is not DeclareStep declare)
@@ -174,6 +175,18 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
             }
 
             Declared(parameter, () => declare.WithColumnFormat(written, string.IsNullOrWhiteSpace(value.Text) ? null : value.Text));
+
+            return true;
+        }
+
+        if (FormVocabulary.IsMissing(field, parameter.Key, out var gap))
+        {
+            if (declare.Taking.All(column => column.Name != gap))
+            {
+                throw new FormatException($"'{gap}' is not taken, so which of its values stands for a gap says nothing.");
+            }
+
+            Declared(parameter, () => declare.WithColumnMissing(gap, string.IsNullOrWhiteSpace(value.Text) ? null : value.Text));
 
             return true;
         }

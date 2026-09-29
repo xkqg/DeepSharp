@@ -629,6 +629,16 @@ guess about the order of day and month that the data cannot settle. A cell the c
 at the schema, with its row, its column and the form it was expected in, so the format is said once, in the
 declaration, rather than guessed on every run.
 
+A file also has its own way of writing that nothing is known: 0 for a fare nobody wrote down, -999 from a sensor that
+was off, a question mark in a column of numbers. Read as it is written, 0 is a fare like any other — the cheapest one —
+and no step can tell it from a real one: it lies inside the bounds an outlier rule learns from the training rows. So the schema says it,
+once, on the column: `missing`, a value that stands for a gap, turns every cell that holds it into the gap it is before
+the kind reads it, and every step downstream treats it as one — a fill counts and marks it. It is compared as the
+column's kind reads it when it reads as that kind, since a frame hands over 0 where the file writes 0.0, and as it is
+written otherwise, so a column of numbers can say that `?` is a gap without every question mark being refused. A row is
+still known by what the file wrote, so saying it moves no row to another part of a split. It is part of the schema
+rather than a step, because it is a fact about how the file writes, like its format, and nothing is learned from it.
+
 ### What a column holds is proposed from every cell, and said by a person
 
 Nobody should have to type fifteen kinds a file already shows, and nobody should find a kind decided for them. So a

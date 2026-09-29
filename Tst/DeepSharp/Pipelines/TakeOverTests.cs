@@ -520,11 +520,14 @@ public class TakeOverTests
         var parts = catalog.Describe("declare").Parameters.OfType<ColumnDeclarationsParameter>().Single().Parts;
 
         // A part the listing does not compare would be applied unseen: every part is here, the name being the row itself.
-        Assert.Equal(["name", "kind", "optional", "excluded", "was", "format"], parts.Select(part => part.Parameter.Key));
+        Assert.Equal(["name", "kind", "optional", "excluded", "was", "format", "missing"], parts.Select(part => part.Parameter.Key));
 
         static PipelineDeclaration Boarded(string? format) =>
             WithMaker(columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Number("fare")
                 .Column("boarded", ColumnKind.Timestamp, optional: true, format: format));
+
+        static PipelineDeclaration Fares(string? missing) =>
+            WithMaker(columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Column("fare", ColumnKind.Number, missing: missing));
 
         var blocks = WithMaker();
         var category = new PipelineDeclaration(blocks.WithKind("pclass", ColumnKind.Category));
@@ -536,6 +539,7 @@ public class TakeOverTests
             new("excluded", new PipelineDeclaration(blocks.Excluding("pclass")), blocks, "pclass"),
             new("was", category, categoryWithoutWas, "pclass"),
             new("format", Boarded("dd/MM/yyyy"), Boarded(null), "boarded"),
+            new("missing", Fares("0"), Fares(null), "fare"),
         ];
 
         Assert.Equal(parts.Skip(1).Select(part => part.Parameter.Key), flips.Select(flip => flip.Part));

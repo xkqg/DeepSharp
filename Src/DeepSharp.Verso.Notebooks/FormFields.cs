@@ -113,7 +113,8 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
             key, key, PropertyFieldType.Text, Written(key), parameter.Description, IsReadOnly: key == SplitSharesParameter.TestKey));
 
     // One pick per column the source has — the kind the schema gives it, or not taken — whether each column taken may
-    // be absent from the rows, and for each taken timestamp how its moments are written: empty for ISO 8601.
+    // be absent from the rows, for each taken timestamp how its moments are written, empty for ISO 8601, and for each
+    // taken column the value that stands for a gap, empty for none.
     public IEnumerable<PropertyField> Visit(ColumnDeclarationsParameter parameter)
     {
         // The columns as the schema reads them: one it excludes is not taken, and keeps its kind for when it is again.
@@ -149,6 +150,13 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
                     FormVocabulary.Format(parameter.Key, name), $"{name} is written as", PropertyFieldType.Text, taken.Declared.Format,
                     parameter.Format.Description));
             }
+
+            if (taken is not null)
+            {
+                fields.Add(new(
+                    FormVocabulary.Missing(parameter.Key, name), $"{name} is a gap when it holds", PropertyFieldType.Text, taken.Declared.Missing,
+                    parameter.Missing.Description));
+            }
         }
 
         return fields;
@@ -174,6 +182,6 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
 
     /// <summary>One column a schema takes, as the step wrote it and as the schema reads it.</summary>
     /// <param name="Kind">The kind, as written.</param>
-    /// <param name="Declared">The column as the schema reads it: whether it may be absent, and how its moments are written.</param>
+    /// <param name="Declared">The column as the schema reads it: whether it may be absent, how its moments are written, and which value stands for a gap.</param>
     private sealed record Taken(string Kind, ColumnDeclaration Declared);
 }

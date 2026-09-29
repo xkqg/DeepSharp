@@ -114,10 +114,12 @@ public static class SchemaBinding
     }
 
     // Reads one declared column. A cell that cannot be read as the column's kind is written down rather than thrown, so
-    // every such column can be named at once.
+    // every such column can be named at once. A cell holding the value the column says stands for a gap is a gap before
+    // anything reads it.
     private static IColumn Read(ColumnDeclaration declared, IReadOnlyList<string?>[] rows, int at, List<string> faults)
     {
-        var cells = rows.Select(row => at < row.Count ? row[at] : null).ToArray();
+        var gap = StandsForAGap(declared);
+        var cells = rows.Select(row => at < row.Count && !gap(row[at]) ? row[at] : null).ToArray();
 
         return declared.Kind switch
         {
@@ -156,6 +158,24 @@ public static class SchemaBinding
 
         return values;
     }
+
+    // Whether a cell holds the value the column says stands for a gap: the same value as the column's kind reads it, when
+    // the value reads as that kind; the same text otherwise, and always among words.
+    private static Func<string?, bool> StandsForAGap(ColumnDeclaration declared) => declared.Missing is not { } missing
+        ? _ => false
+        : declared.Kind switch
+        {
+            ColumnKind.Number => Same(missing, CellTextExtensions.AsNumber),
+            ColumnKind.Integer => Same(missing, CellTextExtensions.AsWholeNumber),
+            ColumnKind.Boolean => Same(missing, CellTextExtensions.AsTrueOrFalse),
+            ColumnKind.Timestamp => Same(missing, cell => cell.AsMoment(declared.Format)),
+            _ => cell => cell == missing,
+        };
+
+    private static Func<string?, bool> Same<T>(string missing, Func<string?, CellRead<T>> read)
+        where T : struct => read(missing).Value is { } value
+            ? cell => read(cell).Value is { } held && EqualityComparer<T>.Default.Equals(held, value)
+            : cell => cell == missing;
 
     // One sentence for a column: the one cell as it always was, or how many and the first few of them.
     private static string Unreadable(ColumnDeclaration declared, List<UnreadableCell> cells)

@@ -66,6 +66,13 @@ public sealed record ColumnDeclaration(string Name, ColumnKind Kind, bool Option
     /// column whose moments are written as ISO 8601 writes them.
     /// </summary>
     public string? Format { get; init; }
+
+    /// <summary>
+    /// A value that stands for a gap in the column — <c>0</c>, where a file writes 0 for a fare nobody knows — read as the
+    /// gap it is. Compared as the column's kind reads it when it reads as that kind, so 0 and 0.0 are one value; as it is
+    /// written otherwise, so a column of numbers can say that <c>?</c> is a gap. Nothing when no value stands for one.
+    /// </summary>
+    public string? Missing { get; init; }
 }
 
 /// <summary>
@@ -140,11 +147,12 @@ public sealed class SchemaBuilder
     /// For a timestamp column, how its moments are written, as .NET writes a date format — <c>dd/MM/yyyy</c>, say; nothing
     /// for moments written as ISO 8601 writes them.
     /// </param>
+    /// <param name="missing">A value that stands for a gap in the column, <c>0</c> say; nothing when none does.</param>
     /// <returns>This schema, so the next column can be written after it.</returns>
-    public SchemaBuilder Column(string name, ColumnKind kind, bool optional = false, string? format = null) =>
-        Add([name], kind, optional, format);
+    public SchemaBuilder Column(string name, ColumnKind kind, bool optional = false, string? format = null, string? missing = null) =>
+        Add([name], kind, optional, format, missing);
 
-    private SchemaBuilder Add(string[] names, ColumnKind kind, bool optional = false, string? format = null)
+    private SchemaBuilder Add(string[] names, ColumnKind kind, bool optional = false, string? format = null, string? missing = null)
     {
         ArgumentNullException.ThrowIfNull(names);
 
@@ -160,7 +168,7 @@ public sealed class SchemaBuilder
                 throw new ArgumentException($"The column '{name}' is declared twice.", nameof(names));
             }
 
-            _columns.Add(new ColumnDeclaration(name, kind, optional) { Format = format });
+            _columns.Add(new ColumnDeclaration(name, kind, optional) { Format = format, Missing = missing });
         }
 
         return this;
@@ -265,7 +273,8 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
     /// <returns>
     /// The schema with the column of that kind: made a category, it remembers the kind it was; given any other kind,
     /// it forgets it. A timestamp made another kind forgets how its moments were written, and a column made a timestamp
-    /// reads them as ISO 8601 until it is told otherwise. This schema when the column is of that kind already.
+    /// reads them as ISO 8601 until it is told otherwise. A value that stands for a gap still does: it is how the file
+    /// writes one, whatever the column is read as. This schema when the column is of that kind already.
     /// </returns>
     /// <exception cref="ArgumentException">The schema does not name the column; taking one in is <see cref="WithColumn"/>.</exception>
     public DeclareStep WithColumnKind(string name, ColumnKind kind)
@@ -308,6 +317,23 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
         }
 
         return Columns[at].Format == format ? this : Replaced(at, Columns[at] with { Format = format });
+    }
+
+    /// <summary>This schema with a value said to stand for a gap in a column, or with none.</summary>
+    /// <param name="name">The column.</param>
+    /// <param name="missing">The value that stands for a gap; nothing for none.</param>
+    /// <returns>The schema with the column read so; this schema when it is read so already.</returns>
+    /// <exception cref="ArgumentException">The schema does not name the column, or the value is nothing but spaces.</exception>
+    public DeclareStep WithColumnMissing(string name, string? missing)
+    {
+        var at = IndexOf(name);
+
+        if (at < 0)
+        {
+            throw new ArgumentException($"The schema does not name '{name}', so no value of it stands for a gap.", nameof(name));
+        }
+
+        return Columns[at].Missing == missing ? this : Replaced(at, Columns[at] with { Missing = missing });
     }
 
     private int IndexOf(string name)

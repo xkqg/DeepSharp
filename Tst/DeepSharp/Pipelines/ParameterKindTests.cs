@@ -202,10 +202,10 @@ public class ParameterKindTests
         // category says what it was, only a timestamp how its moments are written.
         var declared = new ColumnDeclarationsParameter("columns", "The columns.", [new ColumnDeclaration("a", ColumnKind.Number, false)]);
 
-        Assert.Equal(["name", "kind", "optional", "excluded", "was", "format"], declared.Parts.Select(part => part.Parameter.Key));
+        Assert.Equal(["name", "kind", "optional", "excluded", "was", "format", "missing"], declared.Parts.Select(part => part.Parameter.Key));
         Assert.Equal(["name", "kind", "optional"], declared.RequiredColumnKeys);
-        Assert.Equal([true, true, true, false, false, false], declared.Parts.Select(part => part.Required));
-        Assert.Equal([null, null, null, null, ColumnKind.Category, ColumnKind.Timestamp], declared.Parts.Select(part => part.Only));
+        Assert.Equal([true, true, true, false, false, false, false], declared.Parts.Select(part => part.Required));
+        Assert.Equal([null, null, null, null, ColumnKind.Category, ColumnKind.Timestamp, null], declared.Parts.Select(part => part.Only));
     }
 
     [Fact]

@@ -58,6 +58,13 @@ with it. What a network is handed lies between minus one and one.
   database or a typed data frame hands its moments over in. A take-over lists a change of format like any other change
   to a column, and a file holds a format only where one is said.
 
+- **A value that stands for a gap, said on the column.** `missing` on a declared column — `0`, where a file writes 0
+  for a fare nobody knows — makes every cell holding it the gap it is, before the kind reads it, so a fill counts it
+  and marks it. It is compared as the column's kind reads it when it reads as that kind, so `0` and `0.0` are one
+  value, and as it is written otherwise, so a column of numbers can say that `?` is a gap. From the chain
+  (`schema.Column("fare", ColumnKind.Number, missing: "0")`), in the file, and in the notebook's form, where every
+  taken column has a field for it; a take-over lists a change of it. The row is still known by what the file wrote.
+
 - **Each column's kind, proposed from every cell.** `KindProposal.Of(source)`, or `ProposedKinds()` on the chain
   before the schema, reads every cell of every row with the schema's own reading and proposes a kind for each column —
   true or false in any spelling, whole numbers, numbers, moments as ISO 8601 writes them or by the one usual format

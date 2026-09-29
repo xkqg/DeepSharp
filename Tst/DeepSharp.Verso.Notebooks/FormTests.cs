@@ -145,6 +145,7 @@ public sealed class FormTests : IDisposable
         Assert.True(FormVocabulary.IsKind(FormVocabulary.Kind("columns", "a/b"), "columns", out var kind) && kind == "a/b");
         Assert.True(FormVocabulary.IsAbsent(FormVocabulary.Absent("columns", "x"), "columns", out var absent) && absent == "x");
         Assert.True(FormVocabulary.IsFormat(FormVocabulary.Format("columns", "when"), "columns", out var written) && written == "when");
+        Assert.True(FormVocabulary.IsMissing(FormVocabulary.Missing("columns", "fare"), "columns", out var gap) && gap == "fare");
         Assert.True(FormVocabulary.IsMember(FormVocabulary.Member("columns", "age"), "columns", out var member) && member == "age");
         Assert.True(FormVocabulary.IsPlace(FormVocabulary.Place("columns", 2), "columns", out var place) && place == 2);
         Assert.Equal("with/value", FormVocabulary.StrategyValue("with"));
@@ -152,6 +153,7 @@ public sealed class FormTests : IDisposable
         Assert.False(FormVocabulary.IsKind("columns/optional/x", "columns", out _));
         Assert.False(FormVocabulary.IsAbsent("columns/kind/x", "columns", out _));
         Assert.False(FormVocabulary.IsFormat("columns/kind/x", "columns", out _));
+        Assert.False(FormVocabulary.IsMissing("columns/format/x", "columns", out _));
         Assert.False(FormVocabulary.IsMember("parts/x", "columns", out _));
         Assert.False(FormVocabulary.IsPlace("columns/first", "columns", out _));
         Assert.False(FormVocabulary.IsPlace("columns/-1", "columns", out _));
@@ -609,6 +611,36 @@ public sealed class FormTests : IDisposable
 
         Assert.Equal(before, declare.Source);
         Assert.Contains("'logged' is not taken", (await SectionAsync(notebook, declare)).Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EveryTakenColumn_SaysWhichValueStandsForAGap_AndLeftEmptyNoneDoes()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var declare = notebook.Scaffold.Cells[1];
+        var section = await SectionAsync(notebook, declare);
+        var fare = Field(section, "columns/missing/fare");
+
+        Assert.Equal(PropertyFieldType.Text, fare.FieldType);
+        Assert.Equal("fare is a gap when it holds", fare.DisplayName);
+        Assert.Null(fare.CurrentValue);
+        Assert.Equal(4, section.Fields.Count(field => field.Name.StartsWith("columns/missing/", StringComparison.Ordinal)));
+
+        await ChangeAsync(notebook, declare, "columns/missing/fare", "0");
+
+        Assert.Equal("0", ((DeclareStep)Step(declare)).Columns.Single(column => column.Name == "fare").Missing);
+        Assert.Equal("0", Field(await SectionAsync(notebook, declare), "columns/missing/fare").CurrentValue);
+
+        await ChangeAsync(notebook, declare, "columns/missing/fare", "");
+
+        Assert.Null(((DeclareStep)Step(declare)).Columns.Single(column => column.Name == "fare").Missing);
+
+        var before = declare.Source;
+
+        await ChangeAsync(notebook, declare, "columns/missing/sex", "?");
+
+        Assert.Equal(before, declare.Source);
+        Assert.Contains("'sex' is not taken", (await SectionAsync(notebook, declare)).Description, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -12,8 +12,8 @@ namespace DeepSharp.Verso.Notebooks;
 /// <remarks>
 /// A parameter with one value is one field under its own key. The others are named from their key and what the field
 /// is about — one column of a set, one place of a list of roles, the kind a schema gives one column, whether that
-/// column may be absent, how its moments are written, the number a way of filling carries — so a field the form draws
-/// is always one it reads back.
+/// column may be absent, how its moments are written, which of its values stands for a gap, the number a way of filling
+/// carries — so a field the form draws is always one it reads back.
 /// </remarks>
 internal static class FormVocabulary
 {
@@ -25,6 +25,8 @@ internal static class FormVocabulary
     private const string Absence = "optional";
 
     private const string Written = "format";
+
+    private const string Gap = "missing";
 
     private const string Number = "value";
 
@@ -97,6 +99,19 @@ internal static class FormVocabulary
     /// <param name="column">The column, when it is.</param>
     /// <returns><see langword="true"/> when it is.</returns>
     public static bool IsFormat(string field, string key, out string column) => After(field, $"{key}/{Written}/", out column);
+
+    /// <summary>The field of the value that stands for a gap in one declared column.</summary>
+    /// <param name="key">The declarations' key.</param>
+    /// <param name="column">The column.</param>
+    /// <returns>The field's name.</returns>
+    public static string Missing(string key, string column) => $"{key}/{Gap}/{column}";
+
+    /// <summary>Whether a field is the value that stands for a gap in a column, and which column.</summary>
+    /// <param name="field">The field's name.</param>
+    /// <param name="key">The declarations' key.</param>
+    /// <param name="column">The column, when it is.</param>
+    /// <returns><see langword="true"/> when it is.</returns>
+    public static bool IsMissing(string field, string key, out string column) => After(field, $"{key}/{Gap}/", out column);
 
     /// <summary>The field of the number a way of filling carries.</summary>
     /// <param name="key">The strategy's key.</param>

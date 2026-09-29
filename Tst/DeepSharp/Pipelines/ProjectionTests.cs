@@ -75,7 +75,8 @@ public class ProjectionTests
                 {"name":"c","kind":"category","optional":false,"was":"integer"},
                 {"name":"d","kind":"Category","optional":false,"was":"integer"},
                 {"name":"e","kind":"timestamp","optional":false,"format":"dd/MM/yyyy"},
-                {"name":"f","kind":"TIMESTAMP","optional":false,"format":"dd/MM/yyyy"}]}]}
+                {"name":"f","kind":"TIMESTAMP","optional":false,"format":"dd/MM/yyyy"},
+                {"name":"g","kind":"number","optional":false,"missing":"0"}]}]}
             """));
         Assert.False(Valid("""
             {"version":2,"declaration":[{"step":"declare","remainder":"drop","columns":[

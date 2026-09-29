@@ -501,6 +501,18 @@ public sealed class TakeOverActionTests : IDisposable
     }
 
     [Fact]
+    public async Task WhichValueStandsForAGap_IsListed()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var saved = Blocks(notebook).Steps.Select(step => step is DeclareStep declare ? declare.WithColumnMissing("fare", "0") : step);
+
+        Saved([.. saved]);
+        await ListAsync(notebook);
+
+        Assert.Contains("<code>fare</code>: taken, number → taken, number, a gap where it holds 0", Card(notebook), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UnderASchemaThatKeepsTheRest_ASavedDropIsMade_EvenOfAColumnTheSourceLacks()
     {
         await using var notebook = await NotebookAsync([Titanic[0], Titanic[1].Replace("\"remainder\": \"drop\"", "\"remainder\": \"keep\"", StringComparison.Ordinal), Titanic[2], Titanic[4]]);

@@ -756,10 +756,15 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
     public TextParameter Format { get; } = new(
         "format", "How a timestamp column's moments are written, as .NET writes a date format: dd/MM/yyyy, say. Left out, they are read as ISO 8601 writes them.", "yyyy-MM-dd");
 
+    /// <summary>The value that stands for a gap in one declared column, as it is written inside the list.</summary>
+    public TextParameter Missing { get; } = new(
+        "missing", "A value that stands for a gap in the column, read as the gap it is: 0, say, where a file writes 0 for a fare nobody knows. Left out, none does.", "0");
+
     /// <summary>The parts one declared column is written with, in the order they are written, each saying whether a file has to hold it.</summary>
     /// <remarks>
-    /// Whether it is excluded, what a category was and how a timestamp's moments are written are left out unless they say
-    /// something, so a column written before any of them existed is written exactly as it was, and keeps its key.
+    /// Whether it is excluded, what a category was, how a timestamp's moments are written and which value stands for a gap
+    /// are left out unless they say something, so a column written before any of them existed is written exactly as it
+    /// was, and keeps its key.
     /// </remarks>
     public IReadOnlyList<ColumnPart> Parts =>
     [
@@ -769,6 +774,7 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
         new(Excluded, Required: false),
         new(Was, Required: false, Only: ColumnKind.Category),
         new(Format, Required: false, Only: ColumnKind.Timestamp),
+        new(Missing, Required: false),
     ];
 
     /// <summary>The keys a file has to hold for every declared column.</summary>
@@ -801,12 +807,13 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
                 Excluded = column.TryGetProperty(Excluded.Key, out _) && Excluded.Read(column),
                 Was = column.TryGetProperty(Was.Key, out _) ? Was.Read(column) : null,
                 Format = column.TryGetProperty(Format.Key, out _) ? Format.Read(column) : null,
+                Missing = column.TryGetProperty(Missing.Key, out _) ? Missing.Read(column) : null,
             };
         })];
     }
 
     /// <inheritdoc />
-    /// <remarks>Excluded, what a category was and how a timestamp's moments are written are written only where they say something.</remarks>
+    /// <remarks>Excluded, what a category was, how a timestamp's moments are written and which value stands for a gap are written only where they say something.</remarks>
     public override void Write(Utf8JsonWriter writer, IReadOnlyList<ColumnDeclaration> value)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -834,6 +841,11 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
             if (column.Format is { } format)
             {
                 Format.Write(writer, format);
+            }
+
+            if (column.Missing is { } missing)
+            {
+                Missing.Write(writer, missing);
             }
 
             writer.WriteEndObject();
@@ -882,6 +894,12 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
                     throw new ArgumentException(
                         $"'{column.Name}' says its moments are written as {format}: only a timestamp column says how its moments are written.", Key);
                 }
+            }
+
+            // A value of nothing would stand for every empty cell, which is a gap already.
+            if (column.Missing is { } missing && string.IsNullOrWhiteSpace(missing))
+            {
+                throw new ArgumentException($"'{column.Name}' says nothing but spaces stands for a gap: a value that does is written out, 0 say.", Key);
             }
         }
 
