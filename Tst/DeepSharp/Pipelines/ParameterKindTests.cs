@@ -197,13 +197,15 @@ public class ParameterKindTests
     [Fact]
     public void ADeclaredColumnIsWrittenWithItsParts_ThreeOfThemRequired()
     {
-        // Excluded and what a category was are left out unless they say something, so every column written
-        // before them is written exactly as it was, and keeps its key.
+        // Excluded, what a category was and how a timestamp's moments are written are left out unless they say
+        // something, so every column written before them is written exactly as it was, and keeps its key; and only a
+        // category says what it was, only a timestamp how its moments are written.
         var declared = new ColumnDeclarationsParameter("columns", "The columns.", [new ColumnDeclaration("a", ColumnKind.Number, false)]);
 
-        Assert.Equal(["name", "kind", "optional", "excluded", "was"], declared.Parts.Select(part => part.Parameter.Key));
+        Assert.Equal(["name", "kind", "optional", "excluded", "was", "format"], declared.Parts.Select(part => part.Parameter.Key));
         Assert.Equal(["name", "kind", "optional"], declared.RequiredColumnKeys);
-        Assert.Equal([true, true, true, false, false], declared.Parts.Select(part => part.Required));
+        Assert.Equal([true, true, true, false, false, false], declared.Parts.Select(part => part.Required));
+        Assert.Equal([null, null, null, null, ColumnKind.Category, ColumnKind.Timestamp], declared.Parts.Select(part => part.Only));
     }
 
     [Fact]

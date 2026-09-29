@@ -752,10 +752,14 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
     public OneOfParameter<ColumnKind> Was { get; } = new(
         "was", "The kind a category column held before it was made one, so it can go back to it. Left out, there is none.", ColumnKind.Integer);
 
+    /// <summary>How one declared timestamp column's moments are written, as it is written inside the list.</summary>
+    public TextParameter Format { get; } = new(
+        "format", "How a timestamp column's moments are written, as .NET writes a date format: dd/MM/yyyy, say. Left out, they are read as ISO 8601 writes them.", "yyyy-MM-dd");
+
     /// <summary>The parts one declared column is written with, in the order they are written, each saying whether a file has to hold it.</summary>
     /// <remarks>
-    /// Whether it is excluded and what a category was are left out unless they say something, so a column written
-    /// before either existed is written exactly as it was, and keeps its key.
+    /// Whether it is excluded, what a category was and how a timestamp's moments are written are left out unless they say
+    /// something, so a column written before any of them existed is written exactly as it was, and keeps its key.
     /// </remarks>
     public IReadOnlyList<ColumnPart> Parts =>
     [
@@ -763,7 +767,8 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
         new(Kind, Required: true),
         new(Optional, Required: true),
         new(Excluded, Required: false),
-        new(Was, Required: false),
+        new(Was, Required: false, Only: ColumnKind.Category),
+        new(Format, Required: false, Only: ColumnKind.Timestamp),
     ];
 
     /// <summary>The keys a file has to hold for every declared column.</summary>
@@ -795,12 +800,13 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
             {
                 Excluded = column.TryGetProperty(Excluded.Key, out _) && Excluded.Read(column),
                 Was = column.TryGetProperty(Was.Key, out _) ? Was.Read(column) : null,
+                Format = column.TryGetProperty(Format.Key, out _) ? Format.Read(column) : null,
             };
         })];
     }
 
     /// <inheritdoc />
-    /// <remarks>Excluded and what a category was are written only where they say something.</remarks>
+    /// <remarks>Excluded, what a category was and how a timestamp's moments are written are written only where they say something.</remarks>
     public override void Write(Utf8JsonWriter writer, IReadOnlyList<ColumnDeclaration> value)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -823,6 +829,11 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
             if (column.Was is { } was)
             {
                 Was.Write(writer, was);
+            }
+
+            if (column.Format is { } format)
+            {
+                Format.Write(writer, format);
             }
 
             writer.WriteEndObject();
@@ -857,6 +868,21 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
                     $"'{column.Name}' says it was {Vocabulary<ColumnKind>.WordFor(was, Was.Key)}: only a category says which other kind it was before it became one.",
                     Key);
             }
+
+            // Only a column of moments says how they are written, and a format of nothing says nothing.
+            if (column.Format is { } format)
+            {
+                if (string.IsNullOrWhiteSpace(format))
+                {
+                    throw new ArgumentException($"'{column.Name}' says its moments are written as nothing: a format says how, dd/MM/yyyy, say.", Key);
+                }
+
+                if (column.Kind != ColumnKind.Timestamp)
+                {
+                    throw new ArgumentException(
+                        $"'{column.Name}' says its moments are written as {format}: only a timestamp column says how its moments are written.", Key);
+                }
+            }
         }
 
         var duplicate = value.GroupBy(column => column.Name).FirstOrDefault(group => group.Count() > 1);
@@ -879,10 +905,11 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
         one.SequenceEqual(other);
 }
 
-/// <summary>One part a declared column is written with, and whether a file has to hold it.</summary>
+/// <summary>One part a declared column is written with, whether a file has to hold it, and which column may.</summary>
 /// <param name="Parameter">The part, as the kind of value it holds.</param>
 /// <param name="Required">Whether every declared column is written with it; a part a file may leave out means something by its absence.</param>
-public readonly record struct ColumnPart(StepParameter Parameter, bool Required);
+/// <param name="Only">The one kind of column written with it — a category says what it was, a timestamp how its moments are written; nothing when any column may be.</param>
+public readonly record struct ColumnPart(StepParameter Parameter, bool Required, ColumnKind? Only = null);
 
 /// <summary>The kinds of column a step can work on, in the groups the steps share.</summary>
 public static class ColumnKinds

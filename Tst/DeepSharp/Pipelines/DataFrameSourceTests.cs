@@ -197,4 +197,19 @@ public class DataFrameSourceTests
         Assert.StartsWith("2016-12-08T14:30:00", row[0], StringComparison.Ordinal);
         Assert.Equal("111.5", row[1]);
     }
+
+    [Fact]
+    public void AMomentAFrameHoldsAsAMoment_IsReadWhateverFormatItsColumnSaysAFileWritesItIn()
+    {
+        // The format says how a file writes its moments; a frame or a database that holds them as moments hands each
+        // one over in the round-trip form, which no format mistakes for another moment.
+        var frame = new DataFrame(new PrimitiveDataFrameColumn<DateTime>(
+            "when", [new DateTime(2015, 11, 27, 9, 30, 0, DateTimeKind.Utc), new DateTime(2015, 3, 2, 0, 0, 0, DateTimeKind.Unspecified)]));
+        var declared = new DeclareStep([new ColumnDeclaration("when", ColumnKind.Timestamp, false) { Format = "dd/MM/yyyy" }]);
+
+        var when = (Column<DateTime>)SchemaBinding.Bind(declared, new DataFrameRowSource(frame))["when"];
+
+        Assert.Equal(new DateTime(2015, 11, 27, 9, 30, 0, DateTimeKind.Utc), when[0]);
+        Assert.Equal(new DateTime(2015, 3, 2, 0, 0, 0, DateTimeKind.Utc), when[1]);
+    }
 }

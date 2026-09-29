@@ -70,8 +70,10 @@ public enum ColumnRole
 /// Where the step that makes it stands, counting from nought, for a column a step makes; nothing for one the source
 /// brings. A column a step makes and a drop below leaves out is still made by that step.
 /// </param>
+/// <param name="Format">How the schema says a timestamp column's moments are written; nothing for ISO 8601, or for any other column.</param>
 public readonly record struct ColumnChoice(
-    string Name, ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, bool? Optional, ColumnOffers Offers, ColumnRole Role, int? MadeBy = null);
+    string Name, ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, bool? Optional, ColumnOffers Offers, ColumnRole Role, int? MadeBy = null,
+    string? Format = null);
 
 /// <summary>Every column asked about, as each stands.</summary>
 /// <param name="Rows">One row per column asked, in the order they were asked.</param>
@@ -355,7 +357,7 @@ public static class ColumnChoiceExtensions
 
         return new(
             column, Standing(declaration, declared, column), declared?.Kind ?? KnownKind(declaration, column), declared?.Was, declared?.Optional, offers, role,
-            made ? MadeAt(declaration, column) : null);
+            made ? MadeAt(declaration, column) : null, declared?.Format);
     }
 
     private static ColumnStanding Standing(PipelineDeclaration declaration, ColumnDeclaration? declared, string column)

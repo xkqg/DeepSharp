@@ -144,12 +144,14 @@ public sealed class FormTests : IDisposable
     {
         Assert.True(FormVocabulary.IsKind(FormVocabulary.Kind("columns", "a/b"), "columns", out var kind) && kind == "a/b");
         Assert.True(FormVocabulary.IsAbsent(FormVocabulary.Absent("columns", "x"), "columns", out var absent) && absent == "x");
+        Assert.True(FormVocabulary.IsFormat(FormVocabulary.Format("columns", "when"), "columns", out var written) && written == "when");
         Assert.True(FormVocabulary.IsMember(FormVocabulary.Member("columns", "age"), "columns", out var member) && member == "age");
         Assert.True(FormVocabulary.IsPlace(FormVocabulary.Place("columns", 2), "columns", out var place) && place == 2);
         Assert.Equal("with/value", FormVocabulary.StrategyValue("with"));
 
         Assert.False(FormVocabulary.IsKind("columns/optional/x", "columns", out _));
         Assert.False(FormVocabulary.IsAbsent("columns/kind/x", "columns", out _));
+        Assert.False(FormVocabulary.IsFormat("columns/kind/x", "columns", out _));
         Assert.False(FormVocabulary.IsMember("parts/x", "columns", out _));
         Assert.False(FormVocabulary.IsPlace("columns/first", "columns", out _));
         Assert.False(FormVocabulary.IsPlace("columns/-1", "columns", out _));
@@ -574,6 +576,39 @@ public sealed class FormTests : IDisposable
         await SaysAsync(2, "at", "NaN", "is not a number");
         await SaysAsync(3, "train", "abc", "is not a share");
         await SaysAsync(4, "columns/optional/b", true, "is not taken");
+        await SaysAsync(4, "columns/format/a", "dd/MM/yyyy", "only a timestamp column says how its moments are written");
+    }
+
+    [Fact]
+    public async Task ATakenTimestampColumn_SaysTheFormatItsMomentsAreWrittenIn_AndLeftEmptyTheyAreReadAsIso8601()
+    {
+        await using var notebook = await NotebookAsync(
+            """{"step": "read.csv", "path": "prices.csv"}""",
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "when", "kind": "timestamp", "optional": false}, {"name": "logged", "kind": "timestamp", "optional": false, "excluded": true}, {"name": "close", "kind": "number", "optional": false}]}""");
+        var declare = notebook.Scaffold.Cells[1];
+        var section = await SectionAsync(notebook, declare);
+        var format = Field(section, "columns/format/when");
+
+        Assert.Equal(PropertyFieldType.Text, format.FieldType);
+        Assert.Equal("when is written as", format.DisplayName);
+        Assert.Null(format.CurrentValue);
+        Assert.DoesNotContain(section.Fields, field => field.Name is "columns/format/close" or "columns/format/logged");
+
+        await ChangeAsync(notebook, declare, "columns/format/when", "dd/MM/yyyy");
+
+        Assert.Equal("dd/MM/yyyy", ((DeclareStep)Step(declare)).Columns[0].Format);
+        Assert.Equal("dd/MM/yyyy", Field(await SectionAsync(notebook, declare), "columns/format/when").CurrentValue);
+
+        await ChangeAsync(notebook, declare, "columns/format/when", " ");
+
+        Assert.Null(((DeclareStep)Step(declare)).Columns[0].Format);
+
+        var before = declare.Source;
+
+        await ChangeAsync(notebook, declare, "columns/format/logged", "dd/MM/yyyy");
+
+        Assert.Equal(before, declare.Source);
+        Assert.Contains("'logged' is not taken", (await SectionAsync(notebook, declare)).Description, StringComparison.Ordinal);
     }
 
     [Fact]

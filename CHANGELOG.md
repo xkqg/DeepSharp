@@ -20,6 +20,17 @@ with it. What a network is handed lies between minus one and one.
   `DeclarationException` with a fault at the schema's step, where a `FormatException` named only the first cell;
   `SchemaBinding.Bind` on its own still throws a `FormatException`, now naming every column at once.
 
+- **A timestamp column reads its moments as ISO 8601 writes them, or as its format says.** A column that names no
+  format reads `2015-02-18`, `2015-02-18 09:30` and `2015-02-18T09:30:15`, with a fraction of a second, a zone or an
+  offset or without; any other writing is refused at the schema, with its row, its column and the cell. It was read
+  by a reading that filled in whatever the text left out, so `7.25` became the twenty-fifth of July of whichever year
+  it ran in, `12:30` that time on the day it ran, and `02/03/2015` the third of February on every machine. A column
+  written another way says how: `schema.Column("when", ColumnKind.Timestamp, format: "dd/MM/yyyy")`, or
+  `"format": "dd/MM/yyyy"` on the column in the file.
+
+- **Files are written against version 3.** A file this version writes names version 3, which 0.3 refuses as newer
+  than itself; every file 0.3 wrote is read as it was.
+
 ### Added
 
 - **The operations a backward pass needs.** A matrix product, its transpose, a row added to every row of a matrix
@@ -34,6 +45,18 @@ with it. What a network is handed lies between minus one and one.
   tensor moved it, each gradient of its tensor's own shape. A tensor read twice gets the sum of both readings, and one
   the pass never read is refused rather than given a gradient of nothing. The way back runs on the wrapped backend's
   own operations, and every operation's rule is checked against the loss nudged a little either way.
+
+- **A timestamp column says how its moments are written.** `format` on a declared timestamp column, as .NET writes a
+  date format, from the chain, in the file and in the notebook's form, where a taken timestamp column has a field for
+  it; left empty, the moments are read as ISO 8601 writes them. A column with a format also reads the round-trip form a
+  database or a typed data frame hands its moments over in. A take-over lists a change of format like any other change
+  to a column, and a file holds a format only where one is said.
+
+### Fixed
+
+- **The pipeline file's JSON Schema refuses what the reader refuses of a column.** An editor checking a file against
+  it passed a `was` on a column that is not a category, and a category that says it was a category; the reader
+  refuses both, and so does the schema now, as it refuses a `format` on a column that holds no moments.
 
 ## [0.3.0]
 

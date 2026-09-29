@@ -483,6 +483,24 @@ public sealed class TakeOverActionTests : IDisposable
     }
 
     [Fact]
+    public async Task HowATimestampColumnsMomentsAreWritten_IsListed()
+    {
+        await using var notebook = await NotebookAsync(
+            Titanic[0],
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "boarded", "kind": "timestamp", "optional": true}]}""");
+        var saved = Blocks(notebook).Steps.Select(step => step is DeclareStep declare ? declare.WithColumnFormat("boarded", "dd/MM/yyyy") : step);
+
+        Saved([.. saved]);
+        await ListAsync(notebook);
+
+        Assert.Contains(
+            "<code>boarded</code>: taken, timestamp, the source may lack it → taken, timestamp written as dd/MM/yyyy, the source may lack it",
+            Card(notebook),
+            StringComparison.Ordinal);
+        Assert.NotNull(ApplyBox(notebook));
+    }
+
+    [Fact]
     public async Task UnderASchemaThatKeepsTheRest_ASavedDropIsMade_EvenOfAColumnTheSourceLacks()
     {
         await using var notebook = await NotebookAsync([Titanic[0], Titanic[1].Replace("\"remainder\": \"drop\"", "\"remainder\": \"keep\"", StringComparison.Ordinal), Titanic[2], Titanic[4]]);

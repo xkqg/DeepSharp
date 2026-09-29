@@ -159,7 +159,9 @@ internal static class VerbReference
         [
             new(parameter.Key, $"a list of columns, each with a `name`, a `kind` that is one of {Choices(parameter.Kind.Choices)}, "
                                + "and whether it is `optional`; a column may say it is `excluded` — named, its kind kept, and "
-                               + "read by nothing — and a category may say which kind it `was` before it became one"),
+                               + "read by nothing — a category may say which kind it `was` before it became one, and a timestamp "
+                               + "the `format` its moments are written in, as .NET writes a date format, without which they are "
+                               + "read as ISO 8601 writes them"),
         ];
 
         private static string Choices(IReadOnlyList<string> words) => Joined([.. words.Select(word => $"`{word}`")]);

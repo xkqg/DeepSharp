@@ -122,9 +122,11 @@ internal static class TakeOverCard
         _ => "not in the schema",
     };
 
-    // What the schema says of a column it names: its kind, what a category was, and whether the source may lack it.
+    // What the schema says of a column it names: its kind, what a category was, how a timestamp's moments are written,
+    // and whether the source may lack it.
     private static string Declared(ColumnChoice column) =>
         (column is { Kind: ColumnKind.Category, Was: { } was } ? $"category (was {was.Word()})" : column.Kind!.Value.Word())
+        + (column.Format is { } format ? $" written as {format}" : string.Empty)
         + (column.Optional == true ? ", the source may lack it" : string.Empty);
 
     // Why a saved drop cannot be made, without naming a step: a column may come from more than one.

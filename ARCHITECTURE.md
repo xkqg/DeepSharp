@@ -270,7 +270,7 @@ builder existed.
 
 ```
 {
-  "version": 2,
+  "version": 3,
   "declaration": [ { "step": "read.csv", "path": "titanic.csv" }, … ],
   "fitted": [
     { "step": "split.stratified", "prefix": "9e27e6…",
@@ -304,7 +304,8 @@ without exception: none was written before the second, and its output may be a w
 Taking a preset over lists before it applies. `TakeOver` makes the steps — the schema whole, in place of the one
 there or directly after the source; the drops made the preset's; the output the preset's, placed whole, or none — and
 lists every column whose decision that changes, from how it stood to how it stands after: every part the schema
-writes of it — how it stands, its kind, the kind a category was, whether the source may lack it. What a column offers
+writes of it — how it stands, its kind, the kind a category was, whether the source may lack it, how a timestamp's
+moments are written. What a column offers
 and what it is to the output follow from those, so they are not listed for themselves; the output is listed once,
 before and after, the schema's order when the columns both schemas name stand in another, and what the schema does
 with the columns it does not name when that changes. A column a step makes is never said to be missing from the
@@ -359,7 +360,9 @@ The file also names the version it was written against, and each verb the versio
 says now. A pipeline from a year ago either loads, or says precisely which step changed underneath it: when the
 splits began to divide rows by what they hold, a file from before names a split that no longer does what it was
 written to do, and it is refused by name rather than run the new way. A file newer than the library is refused
-whole, since it may hold words this one does not know.
+whole, since it may hold words this one does not know. The number goes up for that reason too: once a timestamp
+column could say how its moments are written, a file became able to say something an older library would not
+understand, and that library now names the newer version instead of stumbling over the word.
 
 ### The share you never write down
 
@@ -607,6 +610,18 @@ them: it reads text, and the column silently becomes categorical.
 Every scalar kind therefore has its accepted forms written down and parsed under the invariant culture —
 which also settles the decimal point, the thousands separator and the date order before they can settle
 themselves differently on somebody else's machine.
+
+A moment is the kind whose forms are too many to write down, so a timestamp column reads the forms ISO 8601 writes —
+a date, a time to the minute, the second or a fraction of it, a zone or an offset or none — or exactly the format its
+declaration says, as .NET writes one: `dd/MM/yyyy`. Nothing in between, but for the round-trip form a database or a
+typed frame hands its moments over in, which is ISO 8601 too and which no format mistakes for another moment, so a
+column with a format reads it as well. A reading that tries every form it knows
+fills in what the text leaves out: it read `7.25` as the twenty-fifth of July of whichever year it ran in, `12:30`
+as that time on the day it ran, and `02/03/2015` as the third of February whoever wrote the file. The first two
+change with the day the pipeline runs, which is the one thing a replayed pipeline cannot do, and the third is a
+guess about the order of day and month that the data cannot settle. A cell the column's forms do not read is refused
+at the schema, with its row, its column and the form it was expected in, so the format is said once, in the
+declaration, rather than guessed on every run.
 
 ### The samples read real files, landed in the repository
 

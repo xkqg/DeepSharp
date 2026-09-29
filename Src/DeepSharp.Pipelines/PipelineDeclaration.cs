@@ -108,10 +108,13 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// Every file names the version it was written against, and a file that names none is read as the first.
     /// The number goes up when a verb comes to mean something else — as the splits did when they began to divide
     /// rows by what they hold rather than by where they stand — and a step is refused from a file older than the
-    /// meaning it has now, rather than read as something it never meant. A property rather than a constant, so a
-    /// package compiled against this version reads the number the running library has.
+    /// meaning it has now, rather than read as something it never meant. It goes up too when a file can say
+    /// something an older library would not understand — as the schema did when a timestamp column began to say how
+    /// its moments are written — so that library names the newer version instead of the word it does not know. A
+    /// property rather than a constant, so a package compiled against this version reads the number the running
+    /// library has.
     /// </remarks>
-    public static int Version => 2;
+    public static int Version => 3;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;

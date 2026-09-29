@@ -351,6 +351,9 @@ internal static class PipelineFileSchema
                 column[property.Key] = property.Schema;
             }
 
+            // As the reader: a category was another kind before it became one, never a category.
+            column[parameter.Was.Key]!["not"] = AWord([Vocabulary<ColumnKind>.WordFor(ColumnKind.Category, parameter.Was.Key)]);
+
             return
             [
                 new(parameter.Key, new JsonObject
@@ -364,10 +367,21 @@ internal static class PipelineFileSchema
                         ["properties"] = column,
                         ["required"] = new JsonArray([.. parameter.RequiredColumnKeys.Select(key => (JsonNode)key)]),
                         ["additionalProperties"] = false,
+                        ["allOf"] = new JsonArray([.. parameter.Parts.Where(part => part.Only is not null).Select(part => OnlyOn(parameter.Kind, part))]),
                     },
                 }),
             ];
         }
+
+        // A part only one kind of column is written with, refused on a column of any other kind, as the reader refuses it.
+        private static JsonNode OnlyOn(OneOfParameter<ColumnKind> kind, ColumnPart part) => new JsonObject
+        {
+            ["if"] = new JsonObject
+            {
+                ["properties"] = new JsonObject { [kind.Key] = AWord([Vocabulary<ColumnKind>.WordFor(part.Only!.Value, kind.Key)]) },
+            },
+            ["else"] = new JsonObject { ["not"] = new JsonObject { ["required"] = new JsonArray(part.Parameter.Key) } },
+        };
 
         private static PropertySchema Words(StepParameter parameter)
         {

@@ -12,7 +12,8 @@ namespace DeepSharp.Verso.Notebooks;
 /// <remarks>
 /// A parameter with one value is one field under its own key. The others are named from their key and what the field
 /// is about — one column of a set, one place of a list of roles, the kind a schema gives one column, whether that
-/// column may be absent, the number a way of filling carries — so a field the form draws is always one it reads back.
+/// column may be absent, how its moments are written, the number a way of filling carries — so a field the form draws
+/// is always one it reads back.
 /// </remarks>
 internal static class FormVocabulary
 {
@@ -22,6 +23,8 @@ internal static class FormVocabulary
     private const string Kinds = "kind";
 
     private const string Absence = "optional";
+
+    private const string Written = "format";
 
     private const string Number = "value";
 
@@ -81,6 +84,19 @@ internal static class FormVocabulary
     /// <param name="column">The column, when it is.</param>
     /// <returns><see langword="true"/> when it is.</returns>
     public static bool IsAbsent(string field, string key, out string column) => After(field, $"{key}/{Absence}/", out column);
+
+    /// <summary>The field of how one declared timestamp column's moments are written.</summary>
+    /// <param name="key">The declarations' key.</param>
+    /// <param name="column">The column.</param>
+    /// <returns>The field's name.</returns>
+    public static string Format(string key, string column) => $"{key}/{Written}/{column}";
+
+    /// <summary>Whether a field is how a column's moments are written, and which column.</summary>
+    /// <param name="field">The field's name.</param>
+    /// <param name="key">The declarations' key.</param>
+    /// <param name="column">The column, when it is.</param>
+    /// <returns><see langword="true"/> when it is.</returns>
+    public static bool IsFormat(string field, string key, out string column) => After(field, $"{key}/{Written}/", out column);
 
     /// <summary>The field of the number a way of filling carries.</summary>
     /// <param name="key">The strategy's key.</param>

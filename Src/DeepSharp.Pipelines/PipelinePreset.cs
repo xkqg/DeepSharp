@@ -269,8 +269,9 @@ public sealed record PipelinePreset
         declaration.Steps.OfType<DeclareStep>().SelectMany(declare => declare.Columns.Select(column => column.Name));
 
     // What decides a column: every part the schema writes of it — how it stands, which says whether it is excluded, its
-    // kind, the kind a category was, and whether the source may lack it; the name is the row itself.
-    private static ColumnDecision Decided(ColumnChoice choice) => new(choice.Standing, choice.Kind, choice.Was, choice.Optional);
+    // kind, the kind a category was, whether the source may lack it, and how its moments are written; the name is the row
+    // itself.
+    private static ColumnDecision Decided(ColumnChoice choice) => new(choice.Standing, choice.Kind, choice.Was, choice.Optional, choice.Format);
 
     // The output, when it changes: by what each writes, as placing one decides.
     private static OutputChange? OutputChanged(INamesTheAnswer? before, INamesTheAnswer? after)
@@ -338,5 +339,6 @@ public sealed record PipelinePreset
     /// <param name="Kind">Its kind.</param>
     /// <param name="Was">The kind a category was.</param>
     /// <param name="Optional">Whether the source may lack it.</param>
-    private readonly record struct ColumnDecision(ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, bool? Optional);
+    /// <param name="Format">How its moments are written.</param>
+    private readonly record struct ColumnDecision(ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, bool? Optional, string? Format);
 }

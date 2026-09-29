@@ -127,7 +127,7 @@ public static class SchemaBinding
             ColumnKind.Number => new Column<double>(declared.Name, ColumnKind.Number, Values(declared, cells, CellTextExtensions.AsNumber, faults)),
             ColumnKind.Integer => new Column<long>(declared.Name, ColumnKind.Integer, Values(declared, cells, CellTextExtensions.AsWholeNumber, faults)),
             ColumnKind.Boolean => new Column<bool>(declared.Name, ColumnKind.Boolean, Values(declared, cells, CellTextExtensions.AsTrueOrFalse, faults)),
-            _ => new Column<DateTime>(declared.Name, ColumnKind.Timestamp, Values(declared, cells, CellTextExtensions.AsMoment, faults)),
+            _ => new Column<DateTime>(declared.Name, ColumnKind.Timestamp, Values(declared, cells, cell => cell.AsMoment(declared.Format), faults)),
         };
     }
 

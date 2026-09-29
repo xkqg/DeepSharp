@@ -112,8 +112,8 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
         parameter.Keys.Select(key => new PropertyField(
             key, key, PropertyFieldType.Text, Written(key), parameter.Description, IsReadOnly: key == SplitSharesParameter.TestKey));
 
-    // One pick per column the source has — the kind the schema gives it, or not taken — and whether each column
-    // taken may be absent from the rows.
+    // One pick per column the source has — the kind the schema gives it, or not taken — whether each column taken may
+    // be absent from the rows, and for each taken timestamp how its moments are written: empty for ISO 8601.
     public IEnumerable<PropertyField> Visit(ColumnDeclarationsParameter parameter)
     {
         // The columns as the schema reads them: one it excludes is not taken, and keeps its kind for when it is again.
@@ -123,7 +123,7 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
             .Where(column => !column.Second.Excluded)
             .ToDictionary(
                 column => column.Second.Name,
-                column => new Taken(column.First.GetProperty(parameter.Kind.Key).GetString()!, column.Second.Optional),
+                column => new Taken(column.First.GetProperty(parameter.Kind.Key).GetString()!, column.Second),
                 StringComparer.Ordinal);
         var names = (scope.Source ?? []).Concat(declared.Select(column => column.Name)).Distinct(StringComparer.Ordinal);
         var fields = new List<PropertyField>();
@@ -139,8 +139,15 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
             if (taken is not null)
             {
                 fields.Add(new(
-                    FormVocabulary.Absent(parameter.Key, name), $"{name} may be absent", PropertyFieldType.Toggle, taken.Optional,
+                    FormVocabulary.Absent(parameter.Key, name), $"{name} may be absent", PropertyFieldType.Toggle, taken.Declared.Optional,
                     parameter.Optional.Description));
+            }
+
+            if (taken?.Declared.Kind == ColumnKind.Timestamp)
+            {
+                fields.Add(new(
+                    FormVocabulary.Format(parameter.Key, name), $"{name} is written as", PropertyFieldType.Text, taken.Declared.Format,
+                    parameter.Format.Description));
             }
         }
 
@@ -165,8 +172,8 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
     private static IReadOnlyList<PropertyFieldOption> Options(IEnumerable<string> choices) =>
         [.. choices.Select(choice => new PropertyFieldOption(choice, choice))];
 
-    /// <summary>One column a schema takes, as the step wrote it.</summary>
+    /// <summary>One column a schema takes, as the step wrote it and as the schema reads it.</summary>
     /// <param name="Kind">The kind, as written.</param>
-    /// <param name="Optional">Whether it may be absent.</param>
-    private sealed record Taken(string Kind, bool Optional);
+    /// <param name="Declared">The column as the schema reads it: whether it may be absent, and how its moments are written.</param>
+    private sealed record Taken(string Kind, ColumnDeclaration Declared);
 }

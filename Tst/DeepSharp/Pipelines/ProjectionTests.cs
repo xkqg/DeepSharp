@@ -66,13 +66,16 @@ public class ProjectionTests
     }
 
     [Fact]
-    public void TheSchema_AcceptsAColumnThatIsExcluded_OrSaysWhatItWas_AndStillAsksForItsNameKindAndOptional()
+    public void TheSchema_AcceptsAColumnThatIsExcluded_SaysWhatItWas_OrHowItsMomentsAreWritten_AndStillAsksForItsNameKindAndOptional()
     {
         Assert.True(Valid("""
-            {"version":2,"declaration":[{"step":"declare","remainder":"drop","columns":[
+            {"version":3,"declaration":[{"step":"declare","remainder":"drop","columns":[
                 {"name":"a","kind":"number","optional":false},
                 {"name":"b","kind":"integer","optional":false,"excluded":true},
-                {"name":"c","kind":"category","optional":false,"was":"integer"}]}]}
+                {"name":"c","kind":"category","optional":false,"was":"integer"},
+                {"name":"d","kind":"Category","optional":false,"was":"integer"},
+                {"name":"e","kind":"timestamp","optional":false,"format":"dd/MM/yyyy"},
+                {"name":"f","kind":"TIMESTAMP","optional":false,"format":"dd/MM/yyyy"}]}]}
             """));
         Assert.False(Valid("""
             {"version":2,"declaration":[{"step":"declare","remainder":"drop","columns":[
@@ -124,12 +127,17 @@ public class ProjectionTests
     [InlineData("""{"declaration":[{"step":"fill.missing","column":"a","with":{"kind":"constant","value":1,"colour":"red"}}]}""")]
     [InlineData("""{"declaration":[{"step":"declare","remainder":"drop","columns":[]}]}""")]
     [InlineData("""{"declaration":[{"step":"declare","remainder":"drop","columns":[{"name":"a","kind":"number"}]}]}""")]
+    [InlineData("""{"version":3,"declaration":[{"step":"declare","remainder":"drop","columns":[{"name":"a","kind":"number","optional":false,"format":"dd/MM/yyyy"}]}]}""")]
+    [InlineData("""{"version":3,"declaration":[{"step":"declare","remainder":"drop","columns":[{"name":"a","kind":"timestamp","optional":false,"format":"  "}]}]}""")]
+    [InlineData("""{"version":2,"declaration":[{"step":"declare","remainder":"drop","columns":[{"name":"a","kind":"number","optional":false,"was":"integer"}]}]}""")]
+    [InlineData("""{"version":2,"declaration":[{"step":"declare","remainder":"drop","columns":[{"name":"a","kind":"category","optional":false,"was":"category"}]}]}""")]
+    [InlineData("""{"version":2,"declaration":[{"step":"declare","remainder":"drop","columns":[{"name":"a","kind":"category","optional":false,"was":"CATEGORY"}]}]}""")]
     [InlineData("""{"declaration":[{"step":"feature.timeParts","column":"t","asCategories":true,"parts":[]}]}""")]
     [InlineData("""{"version":2,"declaration":[{"step":"drop.columns","columns":["a", 3]}]}""")]
     [InlineData("""{"version":2,"declaration":[{"step":"drop.columns","columns":["a","b","a"]}]}""")]
     [InlineData("""{"declaration":[],"colour":"red"}""")]
     [InlineData("""{"fitted":{}}""")]
-    [InlineData("""{"version":3,"declaration":[]}""")]
+    [InlineData("""{"version":4,"declaration":[]}""")]
     [InlineData("""{"version":0,"declaration":[]}""")]
     [InlineData("""{"version":"2","declaration":[]}""")]
     [InlineData("""{"version":1.5,"declaration":[]}""")]
@@ -225,6 +233,16 @@ public class ProjectionTests
                 Assert.Contains($"`{key}`", reference, StringComparison.Ordinal);
             }
         }
+    }
+
+    [Fact]
+    public void TheVerbReference_NamesEveryPartADeclaredColumnIsWrittenWith()
+    {
+        var catalog = Everything();
+        var columns = catalog.Describe("declare").Parameters.OfType<ColumnDeclarationsParameter>().Single();
+        var reference = catalog.VerbReference();
+
+        Assert.All(columns.Parts, part => Assert.Contains($"`{part.Parameter.Key}`", reference, StringComparison.Ordinal));
     }
 
     [Fact]

@@ -30,6 +30,23 @@ internal static class CellTextExtensions
 
     private static readonly HashSet<string> SpellingsOfFalse = new(["false", "0", "no", "n", "f"], StringComparer.OrdinalIgnoreCase);
 
+    // The shapes ISO 8601 writes a date and a time in: a date alone, a time to the minute, the second or a fraction of it,
+    // with a T or a space between, and with a zone or an offset or none. Each reads the moment the earlier reading did.
+    private static readonly string[] Iso8601 =
+    [
+        "yyyy-MM-dd", "yyyy-MM-dd HH:mm", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-ddTHH:mm", "yyyy-MM-ddTHH:mm:ss",
+        "yyyy-MM-ddTHH:mm:ss.FFFFFFF", "yyyy-MM-ddTHH:mm:ssK", "yyyy-MM-ddTHH:mm:ss.FFFFFFFK", "yyyy-MM-dd HH:mm:ssK",
+        "yyyy-MM-dd HH:mm:ss.FFFFFFF",
+    ];
+
+    // The form a source that holds moments as moments — a database, a frame already typed — hands each one over in. A
+    // format says how a file writes its moments, and none mistakes this form for another moment, so it is read whatever
+    // the format says.
+    private const string RoundTrip = "O";
+
+    // In universal time, assumed when the text names no zone, with the spaces around a cell allowed as they are for a number.
+    private const DateTimeStyles MomentStyles = DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal | DateTimeStyles.AllowWhiteSpaces;
+
     /// <summary>Whether the cell is a gap for a kind that is not words: nothing, or nothing but spaces.</summary>
     /// <param name="cell">The cell's text.</param>
     /// <returns><see langword="true"/> for a gap.</returns>
@@ -81,16 +98,32 @@ internal static class CellTextExtensions
         : SpellingsOfFalse.Contains(cell!.Trim()) ? new(false, null)
         : new(null, "is not true or false");
 
-    /// <summary>The cell read as a moment in time.</summary>
+    /// <summary>The cell read as a moment in time, written in a format or as ISO 8601 writes one.</summary>
     /// <param name="cell">The cell's text.</param>
+    /// <param name="format">How the column's moments are written, as .NET writes a date format; nothing for ISO 8601.</param>
     /// <returns>The moment, a gap, or why the text is not one.</returns>
     /// <remarks>
-    /// Invariant and universal on purpose: the same file read on two machines has to produce the same moment, and a date
-    /// order that follows whoever is logged in is how that stops being true.
+    /// Read exactly as written, and in universal time, so the same file gives the same moment on every machine and on every
+    /// day: a reading that filled in what the text leaves out read 7.25 as the twenty-fifth of July of whichever year it
+    /// ran in, 12:30 as that time today, and 02/03/2015 as the third of February everywhere. A column with a format also
+    /// reads the round-trip form a database or a typed frame hands its moments over in, which is ISO 8601 as well.
     /// </remarks>
-    internal static CellRead<DateTime> AsMoment(this string? cell) =>
-        cell.IsGap() ? default
-        : DateTime.TryParse(cell, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var value)
-            ? new(value, null)
-            : new(null, "is not a moment in time");
+    internal static CellRead<DateTime> AsMoment(this string? cell, string? format)
+    {
+        if (cell.IsGap())
+        {
+            return default;
+        }
+
+        if (format is null)
+        {
+            return DateTime.TryParseExact(cell, Iso8601, CultureInfo.InvariantCulture, MomentStyles, out var iso)
+                ? new(iso, null)
+                : new(null, "is not a moment in time as ISO 8601 writes one, such as 2015-02-18 or 2015-02-18T09:30:15; a column of moments written another way declares its format");
+        }
+
+        return DateTime.TryParseExact(cell, [format, RoundTrip], CultureInfo.InvariantCulture, MomentStyles, out var written)
+            ? new(written, null)
+            : new(null, $"is not a moment in time written as {format}");
+    }
 }

@@ -60,6 +60,12 @@ public sealed record ColumnDeclaration(string Name, ColumnKind Kind, bool Option
 
     /// <summary>The kind a category column held before it was made one, so it can go back to it; nothing otherwise.</summary>
     public ColumnKind? Was { get; init; }
+
+    /// <summary>
+    /// How a timestamp column's moments are written, as .NET writes a date format — <c>dd/MM/yyyy</c>, say; nothing for a
+    /// column whose moments are written as ISO 8601 writes them.
+    /// </summary>
+    public string? Format { get; init; }
 }
 
 /// <summary>
@@ -130,11 +136,15 @@ public sealed class SchemaBuilder
     /// <param name="name">The column's name in the source.</param>
     /// <param name="kind">What it holds.</param>
     /// <param name="optional">Whether the source is allowed not to have it at all.</param>
+    /// <param name="format">
+    /// For a timestamp column, how its moments are written, as .NET writes a date format — <c>dd/MM/yyyy</c>, say; nothing
+    /// for moments written as ISO 8601 writes them.
+    /// </param>
     /// <returns>This schema, so the next column can be written after it.</returns>
-    public SchemaBuilder Column(string name, ColumnKind kind, bool optional = false) =>
-        Add([name], kind, optional);
+    public SchemaBuilder Column(string name, ColumnKind kind, bool optional = false, string? format = null) =>
+        Add([name], kind, optional, format);
 
-    private SchemaBuilder Add(string[] names, ColumnKind kind, bool optional = false)
+    private SchemaBuilder Add(string[] names, ColumnKind kind, bool optional = false, string? format = null)
     {
         ArgumentNullException.ThrowIfNull(names);
 
@@ -150,7 +160,7 @@ public sealed class SchemaBuilder
                 throw new ArgumentException($"The column '{name}' is declared twice.", nameof(names));
             }
 
-            _columns.Add(new ColumnDeclaration(name, kind, optional));
+            _columns.Add(new ColumnDeclaration(name, kind, optional) { Format = format });
         }
 
         return this;
@@ -254,7 +264,8 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
     /// <param name="kind">The kind.</param>
     /// <returns>
     /// The schema with the column of that kind: made a category, it remembers the kind it was; given any other kind,
-    /// it forgets it. This schema when the column is of that kind already.
+    /// it forgets it. A timestamp made another kind forgets how its moments were written, and a column made a timestamp
+    /// reads them as ISO 8601 until it is told otherwise. This schema when the column is of that kind already.
     /// </returns>
     /// <exception cref="ArgumentException">The schema does not name the column; taking one in is <see cref="WithColumn"/>.</exception>
     public DeclareStep WithColumnKind(string name, ColumnKind kind)
@@ -270,7 +281,33 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
 
         return column.Kind == kind
             ? this
-            : Replaced(at, kind == ColumnKind.Category ? column with { Kind = kind, Was = column.Kind } : column with { Kind = kind, Was = null });
+            : Replaced(at, column with
+            {
+                Kind = kind,
+                Was = kind == ColumnKind.Category ? column.Kind : null,
+
+                // Only a timestamp says how its moments are written, and a column changing kind is one no longer or not yet.
+                Format = null,
+            });
+    }
+
+    /// <summary>This schema with a timestamp column's moments read as written in a format, or as ISO 8601 writes them.</summary>
+    /// <param name="name">The column.</param>
+    /// <param name="format">How its moments are written, as .NET writes a date format; nothing for ISO 8601.</param>
+    /// <returns>The schema with the column read so; this schema when it is read so already.</returns>
+    /// <exception cref="ArgumentException">
+    /// The schema does not name the column, the column holds no moments, or the format is nothing but spaces.
+    /// </exception>
+    public DeclareStep WithColumnFormat(string name, string? format)
+    {
+        var at = IndexOf(name);
+
+        if (at < 0)
+        {
+            throw new ArgumentException($"The schema does not name '{name}', so there are no moments of it to read.", nameof(name));
+        }
+
+        return Columns[at].Format == format ? this : Replaced(at, Columns[at] with { Format = format });
     }
 
     private int IndexOf(string name)
