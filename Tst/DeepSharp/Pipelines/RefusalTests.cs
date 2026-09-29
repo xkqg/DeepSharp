@@ -73,9 +73,11 @@ public class RefusalTests
             FillMissingStep.Of("trades", With.Mean),
         ];
 
+        using var written = new MemoryStream();
+        using var writer = new Utf8JsonWriter(written);
+
         Assert.All(steps, step => Assert.Throws<ArgumentNullException>(() => step.WriteTo(null!)));
-        Assert.Throws<ArgumentNullException>(
-            () => ReadCsvStep.Parameters.Write(new Utf8JsonWriter(new MemoryStream()), null!));
+        Assert.Throws<ArgumentNullException>(() => ReadCsvStep.Parameters.Write(writer, null!));
     }
 
     [Fact]

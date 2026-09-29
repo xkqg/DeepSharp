@@ -41,9 +41,11 @@ jobs:
           # security-and-quality adds the maintainability rules on top of the security ones: an unused
           # parameter, a comparison that is always true, a disposable that escapes.
           queries: security-and-quality
-          # Build output is not code anyone wrote. Without this, the entry point xunit generates into obj/
-          # is reported as a style finding on every single run, and a list that always has something in it
-          # is a list nobody reads.
+          # Build output is not code anyone wrote. This keeps it out of the page script's analysis only: GitHub
+          # applies paths-ignore to a built language only when it is analysed without building, and C# is
+          # built here, so what a generator writes into obj/ during the build — xunit's entry point, the Regex
+          # source generator's code — is still reported, and is dismissed as generated, so the list of open
+          # findings holds only what somebody wrote.
           config: |
             paths-ignore:
               - '**/obj/**'

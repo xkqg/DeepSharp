@@ -21,7 +21,7 @@ public sealed class OpenNotebooks : IAsyncDisposable
 {
     // Windows and macOS compare file names without regard to case; every other system with it. Both are asked.
     private readonly ConcurrentDictionary<string, Lazy<Task<NotebookHost>>> _open =
-        new(FileNames(ignoringCase: OperatingSystem.IsWindows() | OperatingSystem.IsMacOS()));
+        new(FileNames(ignoringCase: OperatingSystem.IsWindows() || OperatingSystem.IsMacOS()));
 
     private readonly TimeSpan? _grace;
 

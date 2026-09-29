@@ -93,7 +93,7 @@ internal static class OutputBox
 
         try
         {
-            made = (INamesTheAnswer)catalog.Make(verb, new JsonObject { [answer.Key] = stated }, (IPipelineStep?)output);
+            made = (INamesTheAnswer)catalog.Make(verb, new JsonObject { [answer.Key] = stated }, output);
         }
         catch (PipelineFileException refused)
         {

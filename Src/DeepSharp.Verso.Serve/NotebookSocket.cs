@@ -293,6 +293,7 @@ internal sealed class NotebookSocket(WebSocket socket, NotebookHost host, OpenNo
 
             while ((await socket.ReceiveAsync(buffer.AsMemory(), patience.Token)).MessageType != WebSocketMessageType.Close)
             {
+                // Whatever the page still sends before its close is read and let go.
             }
         }
         catch (Exception gone) when (gone is OperationCanceledException or WebSocketException)

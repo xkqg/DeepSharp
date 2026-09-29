@@ -53,13 +53,14 @@ public sealed class ServeTests : IDisposable
 
     private static HttpClient Browser() => new(new HttpClientHandler { UseCookies = false });
 
-    private static Task<HttpResponseMessage> GetAsync(Uri address, string path, Action<HttpRequestMessage>? dress = null)
+    private static async Task<HttpResponseMessage> GetAsync(Uri address, string path, Action<HttpRequestMessage>? dress = null)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, new Uri(address, path));
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(address, path));
+        using var browser = Browser();
 
         dress?.Invoke(request);
 
-        return Browser().SendAsync(request, TestContext.Current.CancellationToken);
+        return await browser.SendAsync(request, TestContext.Current.CancellationToken);
     }
 
     private static string CookieFor(Uri address) => $"deepsharp-serve-{address.Port}";
@@ -352,13 +353,14 @@ public sealed class ServeTests : IDisposable
         Assert.False(File.Exists(Path.Join(_folder, "other.verso")));
     }
 
-    private static Task<HttpResponseMessage> PostAsync(Uri address, string path, string json, Action<HttpRequestMessage> dress)
+    private static async Task<HttpResponseMessage> PostAsync(Uri address, string path, string json, Action<HttpRequestMessage> dress)
     {
-        var request = new HttpRequestMessage(HttpMethod.Post, new Uri(address, path)) { Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json") };
+        using var request = new HttpRequestMessage(HttpMethod.Post, new Uri(address, path)) { Content = new StringContent(json, System.Text.Encoding.UTF8, "application/json") };
+        using var browser = Browser();
 
         dress(request);
 
-        return Browser().SendAsync(request, TestContext.Current.CancellationToken);
+        return await browser.SendAsync(request, TestContext.Current.CancellationToken);
     }
 
     // A new notebook asked of the server as a script asks it: the token carried by the cookie or by the address, and the

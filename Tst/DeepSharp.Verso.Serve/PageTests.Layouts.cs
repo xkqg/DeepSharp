@@ -46,7 +46,7 @@ public sealed partial class PageTests
         var x = box.X + (box.Width / 2);
         var y = box.Y + (box.Height / 2);
 
-        await page.Mouse.MoveAsync((float)x, (float)y);
+        await page.Mouse.MoveAsync(x, y);
         await page.Mouse.DownAsync();
         await page.Mouse.MoveAsync((float)(x + right), (float)(y + down), new() { Steps = 8 });
         await page.Mouse.UpAsync();

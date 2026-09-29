@@ -426,7 +426,7 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
         {
             { Depth: 1, IsKey: false } verb when verb.Key == StepCatalog.StepKey && catalog.Knows(verb.Text) => new HoverInfo(catalog.Describe(verb.Text).Purpose),
             { Depth: 1, IsKey: true } key when Parameter(text, key.Text, catalog) is { } parameter => new HoverInfo(parameter.Description),
-            _ => (HoverInfo?)null,
+            _ => null,
         });
     }
 
