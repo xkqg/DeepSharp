@@ -134,6 +134,12 @@ with it. What a network is handed lies between minus one and one.
 
 ### Fixed
 
+- **A column the training rows hold one value of is centred, not blown up.** The standard and power scales took the
+  rounding of their own arithmetic for a spread: two hundred of 0.1 came out with a spread of 6.9e-17, so every training
+  row became −1 and a later 0.2 became 1441151880758557.8. A spread no larger than that rounding is now nothing, for every
+  scale, as scikit-learn decides a feature is constant. A pipeline already fitted on such a column keeps the spread it
+  learned until it is fitted again.
+
 - **A kind is read from its word alone.** A control that carried `1`, or two kinds joined by a comma, was read as a
   kind in the notebook, where a file refuses both.
 

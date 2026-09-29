@@ -243,27 +243,27 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
         {
             case Scale.Standard:
                 learned.Learned("centre", training.Mean);
-                learned.Learned("spread", Spread(training.StandardDeviation));
+                learned.Learned("spread", Spread(training.StandardDeviation, training.Finite));
                 break;
 
             case Scale.MinMax:
                 learned.Learned("centre", training.Finite[0]);
-                learned.Learned("spread", Spread(training.Finite[^1] - training.Finite[0]));
+                learned.Learned("spread", Spread(training.Finite[^1] - training.Finite[0], training.Finite));
                 break;
 
             case Scale.MidRange:
                 learned.Learned("centre", (training.Finite[0] + training.Finite[^1]) / 2);
-                learned.Learned("spread", Spread((training.Finite[^1] - training.Finite[0]) / 2));
+                learned.Learned("spread", Spread((training.Finite[^1] - training.Finite[0]) / 2, training.Finite));
                 break;
 
             case Scale.MaxAbs:
                 learned.Learned("centre", 0);
-                learned.Learned("spread", Spread(training.Finite.Max(Math.Abs)));
+                learned.Learned("spread", Spread(training.Finite.Max(Math.Abs), training.Finite));
                 break;
 
             case Scale.Robust:
                 learned.Learned("centre", training.Median);
-                learned.Learned("spread", Spread(training.Quantile(0.75) - training.Quantile(0.25)));
+                learned.Learned("spread", Spread(training.Quantile(0.75) - training.Quantile(0.25), training.Finite));
                 break;
 
             case Scale.Quantile:
@@ -278,7 +278,7 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
                 var shaped = training.Finite.Select(value => YeoJohnson.Of(value, lambda)).ToArray();
                 var middle = shaped.Average();
                 learned.Learned("centre", middle);
-                learned.Learned("spread", Spread(Math.Sqrt(shaped.Average(value => (value - middle) * (value - middle)))));
+                learned.Learned("spread", Spread(Math.Sqrt(shaped.Average(value => (value - middle) * (value - middle))), shaped));
                 break;
         }
 
@@ -349,7 +349,14 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
     public static NormaliseStep ReadFrom(JsonElement element) =>
         new(ColumnKey.Read(element), ScaleKey.Read(element), OutOfRangeKey.Read(element));
 
-    private static double Spread(double spread) => spread == 0 ? 1 : spread;
+    // The rounding one sum of doubles carries, relative to the largest of them: the step from one to the next double.
+    private static readonly double Rounding = Math.BitIncrement(1.0) - 1.0;
+
+    // A spread no larger than the rounding its own arithmetic carries is nothing, and a column is then divided by one: as
+    // scikit-learn's StandardScaler decides a feature is constant. Two hundred of 0.1 average to 0.10000000000000007, and
+    // the deviation around that came out as 6.9e-17, which divided every other value into the quadrillions.
+    private static double Spread(double spread, IReadOnlyList<double> from) =>
+        spread <= from.Count * Rounding * from.Max(Math.Abs) ? 1 : spread;
 
     private static double Rank(IReadOnlyList<double> knots, double value)
     {

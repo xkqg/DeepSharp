@@ -474,6 +474,11 @@ back is the one every linear scale already has. Where each scale lands the train
 nothing and one for min-max and quantile, between minus one and one for max-abs and midrange, in no range for
 standard, robust and power, which centre a column and leave its extremes where they fall.
 
+A spread no larger than the rounding its own arithmetic carries — how many values, times the step between one double
+and the next, times the largest of them — is nothing, and the column is divided by one, as scikit-learn decides a
+feature is constant. Two hundred of 0.1 average to 0.10000000000000007, and the standard deviation around that came out
+as 6.9e-17: taken for a spread, it made every training row −1 and a later 0.2 more than a quadrillion.
+
 Row-wise normalisation is a different verb, not a member of this family: it works across a row, learns
 nothing, and is fitted nowhere.
 

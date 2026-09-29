@@ -147,4 +147,32 @@ public class ScaleTests
             [null, Form.Unit, Form.Signed, null, Form.Unit, null, Form.Signed],
             Enum.GetValues<Scale>().Select(scale => scale.Lands()));
     }
+
+    // A column the training rows hold one value of, 0.1, which no double writes exactly.
+    private static PreparedData Constant(Scale scale) => Pdd.Create()
+        .Read(CsvRowSource.FromText("id,x\n" + string.Join("\n", Enumerable.Repeat("1,0.1", 200)) + "\n"), "a column of one value")
+        .Declare(schema => schema.Integer("id").Number("x"))
+        .SplitStratified("id", train: 0.99, validation: 0.005)
+        .Normalise("x", scale)
+        .Build()
+        .Run();
+
+    [Theory]
+    [InlineData(Scale.Standard)]
+    [InlineData(Scale.Robust)]
+    [InlineData(Scale.Power)]
+    [InlineData(Scale.MinMax)]
+    [InlineData(Scale.MidRange)]
+    public void AColumnTheTrainingRowsHoldOneValueOf_IsCentredOnIt_AndALaterValueIsNotBlownUpByASpreadOfRoundingAlone(Scale scale)
+    {
+        // Averaged, two hundred of 0.1 are 0.10000000000000007, and the standard deviation around that came out as
+        // 6.9e-17 rather than nothing: every training row became -1, and a later 0.2 became 1441151880758557.8.
+        var prepared = Constant(scale);
+        var served = prepared.Served(CsvRowSource.FromText("id,x\n1,0.1\n1,0.2\n"));
+        var x = served.FeatureNames.ToList().IndexOf("x");
+
+        Assert.All(Values(prepared, "x", _ => true), value => Assert.Equal(0, value, 1e-9));
+        Assert.Equal(0, served.Features[0][x], 1e-9);
+        Assert.InRange(served.Features[1][x], 0.05, 0.2);
+    }
 }
