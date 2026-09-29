@@ -1,8 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using System.Globalization;
-
 namespace DeepSharp.Pipelines;
 
 /// <summary>
@@ -16,12 +14,18 @@ namespace DeepSharp.Pipelines;
 /// </remarks>
 public static class SchemaBinding
 {
+    // How many of a column's unreadable cells its sentence names.
+    private const int NamedCells = 3;
+
     /// <summary>Reads the rows of a source into the columns a schema declares.</summary>
     /// <param name="schema">The declared columns and the policy for the rest.</param>
     /// <param name="source">Where the rows come from.</param>
     /// <returns>The table the pipeline carries from here on.</returns>
     /// <exception cref="InvalidOperationException">A declared column is not in the source at all.</exception>
-    /// <exception cref="FormatException">A cell cannot be read as the kind its column was declared to be.</exception>
+    /// <exception cref="FormatException">
+    /// Cells cannot be read as the kind their column was declared to be: every such column is named, each with its row and
+    /// value, or with how many cells and the first three.
+    /// </exception>
     public static Table Bind(DeclareStep schema, IRowSource source)
     {
         ArgumentNullException.ThrowIfNull(schema);
@@ -30,6 +34,7 @@ public static class SchemaBinding
         var rows = source.Rows.ToArray();
         var positions = Positions(schema, source);
         var columns = new List<IColumn>();
+        var faults = new List<string>();
 
         foreach (var declared in schema.Taking)
         {
@@ -38,7 +43,12 @@ public static class SchemaBinding
                 continue;
             }
 
-            columns.Add(Read(declared, rows, at));
+            columns.Add(Read(declared, rows, at, faults));
+        }
+
+        if (faults.Count > 0)
+        {
+            throw new FormatException(string.Join(Environment.NewLine, faults));
         }
 
         if (schema.Remainder == Remainder.Keep)
@@ -50,7 +60,7 @@ public static class SchemaBinding
                 // A column the schema names, one it excludes too, is not the rest of the file.
                 if (schema.Columns.All(column => column.Name != name))
                 {
-                    columns.Add(Read(new ColumnDeclaration(name, ColumnKind.Text, Optional: true), rows, at));
+                    columns.Add(Read(new ColumnDeclaration(name, ColumnKind.Text, Optional: true), rows, at, faults));
                 }
             }
         }
@@ -103,95 +113,64 @@ public static class SchemaBinding
         return positions;
     }
 
-    private static IColumn Read(ColumnDeclaration declared, IReadOnlyList<string?>[] rows, int at)
+    // Reads one declared column. A cell that cannot be read as the column's kind is written down rather than thrown, so
+    // every such column can be named at once.
+    private static IColumn Read(ColumnDeclaration declared, IReadOnlyList<string?>[] rows, int at, List<string> faults)
     {
         var cells = rows.Select(row => at < row.Count ? row[at] : null).ToArray();
 
         return declared.Kind switch
         {
+            // Words keep a cell of spaces as the words it is; only an empty cell is a gap.
             ColumnKind.Text or ColumnKind.Category => new TextColumn(
                 declared.Name, declared.Kind, cells.Select(cell => string.IsNullOrEmpty(cell) ? null : cell)),
-            ColumnKind.Number => new Column<double>(
-                declared.Name, ColumnKind.Number, cells.Select((cell, row) => AsNumber(declared, cell, row))),
-            ColumnKind.Integer => new Column<long>(
-                declared.Name, ColumnKind.Integer, cells.Select((cell, row) => AsInteger(declared, cell, row))),
-            ColumnKind.Boolean => new Column<bool>(
-                declared.Name, ColumnKind.Boolean, cells.Select((cell, row) => AsBoolean(declared, cell, row))),
-            _ => new Column<DateTime>(
-                declared.Name, ColumnKind.Timestamp, cells.Select((cell, row) => AsTimestamp(declared, cell, row))),
+            ColumnKind.Number => new Column<double>(declared.Name, ColumnKind.Number, Values(declared, cells, CellTextExtensions.AsNumber, faults)),
+            ColumnKind.Integer => new Column<long>(declared.Name, ColumnKind.Integer, Values(declared, cells, CellTextExtensions.AsWholeNumber, faults)),
+            ColumnKind.Boolean => new Column<bool>(declared.Name, ColumnKind.Boolean, Values(declared, cells, CellTextExtensions.AsTrueOrFalse, faults)),
+            _ => new Column<DateTime>(declared.Name, ColumnKind.Timestamp, Values(declared, cells, CellTextExtensions.AsMoment, faults)),
         };
     }
 
-    private static double? AsNumber(ColumnDeclaration declared, string? cell, int row)
+    private static T?[] Values<T>(ColumnDeclaration declared, string?[] cells, Func<string?, CellRead<T>> read, List<string> faults)
+        where T : struct
     {
-        if (IsGap(cell))
+        var values = new T?[cells.Length];
+        var unreadable = new List<UnreadableCell>();
+
+        for (var row = 0; row < cells.Length; row++)
         {
-            return null;
+            var reading = read(cells[row]);
+
+            if (reading.Refusal is { } refusal)
+            {
+                unreadable.Add(new UnreadableCell(row, cells[row], refusal));
+            }
+
+            values[row] = reading.Value;
         }
 
-        if (!double.TryParse(cell, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        if (unreadable.Count > 0)
         {
-            throw Unreadable(declared, cell, row, "a number");
+            faults.Add(Unreadable(declared, unreadable));
         }
 
-        // A finite number, or one of the invariant spellings of a value that is not one: those are read as
-        // what they say, for fill.nan to deal with. Digits that make an infinity are a number too large to
-        // hold, and any other spelling of the words is not a number at all.
-        return double.IsFinite(value) || cell!.Trim() is "NaN" or "Infinity" or "-Infinity"
-            ? value
-            : throw (cell!.Any(char.IsDigit)
-                ? new FormatException($"Row {row + 1}, column '{declared.Name}': '{cell}' is a number too large to hold.")
-                : Unreadable(declared, cell, row, "a number"));
+        return values;
     }
 
-    private static long? AsInteger(ColumnDeclaration declared, string? cell, int row)
+    // One sentence for a column: the one cell as it always was, or how many and the first few of them.
+    private static string Unreadable(ColumnDeclaration declared, List<UnreadableCell> cells)
     {
-        if (IsGap(cell))
+        if (cells.Count == 1)
         {
-            return null;
+            return $"Row {cells[0].Row + 1}, column '{declared.Name}': '{cells[0].Cell}' {cells[0].Refusal}.";
         }
 
-        return long.TryParse(cell, NumberStyles.Integer, CultureInfo.InvariantCulture, out var value)
-            ? value
-            : throw Unreadable(declared, cell, row, "a whole number");
+        var named = string.Join(", ", cells.Take(NamedCells).Select(cell => $"row {cell.Row + 1} '{cell.Cell}' {cell.Refusal}"));
+        var more = cells.Count > NamedCells ? $", and {cells.Count - NamedCells} more" : string.Empty;
+
+        return $"Column '{declared.Name}': {cells.Count} cells cannot be read — {named}{more}.";
     }
 
-    private static bool? AsBoolean(ColumnDeclaration declared, string? cell, int row)
-    {
-        if (IsGap(cell))
-        {
-            return null;
-        }
-
-        // One tool writes True, another true, a third 1, and a database export says Y. A parser that knows
-        // only one of those does not fail on the others: it reads text, and the column quietly becomes a
-        // category nobody meant to make.
-        return cell!.Trim().ToLowerInvariant() switch
-        {
-            "true" or "1" or "yes" or "y" or "t" => true,
-            "false" or "0" or "no" or "n" or "f" => false,
-            _ => throw Unreadable(declared, cell, row, "true or false"),
-        };
-    }
-
-    private static DateTime? AsTimestamp(ColumnDeclaration declared, string? cell, int row)
-    {
-        if (IsGap(cell))
-        {
-            return null;
-        }
-
-        // Invariant and universal on purpose: the same file read on two machines has to produce the same
-        // moment, and a date order that follows whoever is logged in is how that stops being true.
-        return DateTime.TryParse(
-            cell, CultureInfo.InvariantCulture,
-            DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var value)
-            ? value
-            : throw Unreadable(declared, cell, row, "a moment in time");
-    }
-
-    private static bool IsGap(string? cell) => string.IsNullOrWhiteSpace(cell);
-
-    private static FormatException Unreadable(ColumnDeclaration declared, string? cell, int row, string wanted) =>
-        new($"Row {row + 1}, column '{declared.Name}': '{cell}' is not {wanted}.");
+    // A cell that could not be read as its column's kind, where it stood and why.
+    private readonly record struct UnreadableCell(int Row, string? Cell, string Refusal);
 }

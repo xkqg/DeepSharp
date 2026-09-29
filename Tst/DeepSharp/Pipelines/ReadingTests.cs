@@ -181,6 +181,63 @@ public class ReadingTests
     }
 
     [Fact]
+    public void UnreadableCellsInTwoColumns_AreNamedTogether()
+    {
+        var refused = Assert.Throws<FormatException>(
+            () => Read("age,flag\n22,yes\nmaybe,perhaps\n", schema => schema.Number("age").Boolean("flag")));
+
+        Assert.Contains("Row 2, column 'age': 'maybe' is not a number.", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Row 2, column 'flag': 'perhaps' is not true or false.", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ManyUnreadableCellsInOneColumn_AreCounted_AndTheFirstThreeNamed()
+    {
+        var refused = Assert.Throws<FormatException>(
+            () => Read("age\n1\nx\n2\ny\nz\nw\nv\n", schema => schema.Number("age")));
+
+        Assert.Contains("Column 'age': 5 cells cannot be read", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("row 2 'x' is not a number", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("row 5 'z' is not a number", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("and 2 more", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("'w'", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AFewUnreadableCellsInOneColumn_AreAllNamed()
+    {
+        var refused = Assert.Throws<FormatException>(() => Read("age\nx\ny\n", schema => schema.Number("age")));
+
+        Assert.Equal("Column 'age': 2 cells cannot be read — row 1 'x' is not a number, row 2 'y' is not a number.", refused.Message);
+    }
+
+    [Fact]
+    public void ThroughAPipeline_UnreadableCellsAreRefusedAtTheSchemasStep_AllAtOnce()
+    {
+        var refused = Assert.Throws<DeclarationException>(() => Pdd.Create()
+            .Read(new InMemoryRowSource(["age", "flag"], [["22", "yes"], ["maybe", "perhaps"]]), "two rows")
+            .Declare(schema => schema.Number("age").Boolean("flag"))
+            .Build()
+            .Prepare());
+
+        var fault = Assert.Single(refused.Faults);
+
+        Assert.Equal(1, fault.At);
+        Assert.Equal("declare", fault.Verb);
+        Assert.Contains("'maybe' is not a number", fault.Message, StringComparison.Ordinal);
+        Assert.Contains("'perhaps' is not true or false", fault.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACellOfSpaces_IsAWordInAColumnOfWords_AndAGapInAColumnOfNumbers()
+    {
+        var table = Read("name,age\n  ,  \n", schema => schema.Text("name").Number("age"));
+
+        Assert.Equal("  ", ((TextColumn)table["name"])[0]);
+        Assert.True(table["age"].IsMissing(0));
+    }
+
+    [Fact]
     public void ADeclaredColumnTheSourceDoesNotHave_IsRefusedUnlessItWasOptional()
     {
         var refused = Assert.Throws<InvalidOperationException>(

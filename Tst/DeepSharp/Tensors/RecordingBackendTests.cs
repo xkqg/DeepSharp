@@ -166,6 +166,12 @@ public class RecordingBackendTests
     }
 
     [Fact]
+    public void ARecordingWrapsABackend()
+    {
+        Assert.Throws<ArgumentNullException>(() => new RecordingBackend(null!));
+    }
+
+    [Fact]
     public void RecordingChangesNothingTheWrappedBackendWorksOut()
     {
         var pass = new RecordingBackend(_backend);

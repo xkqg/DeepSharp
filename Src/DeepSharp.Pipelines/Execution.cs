@@ -94,7 +94,9 @@ public sealed class Pipeline
     /// <exception cref="InvalidOperationException">
     /// The declaration names no source, or names no columns, or a declared column is not in the source.
     /// </exception>
-    /// <exception cref="FormatException">A cell cannot be read as the kind its column was declared to be.</exception>
+    /// <exception cref="DeclarationException">
+    /// Cells cannot be read as the kinds their columns were declared to be: every such column, at the schema's step.
+    /// </exception>
     public Table Prepare() => Prepare(Rows);
 
     /// <summary>Opens the given rows and reads them into the declared columns.</summary>

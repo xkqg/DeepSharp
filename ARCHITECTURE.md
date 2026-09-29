@@ -339,7 +339,10 @@ it leaves behind, so a column the schema left out or a step above took away is r
 it, not a whole run later as a column nobody could find. **Binding** — are the declared columns in the source,
 and do the steps still find theirs among the columns it actually bound — needs the source open, and runs
 before the first step does. Both report every fault at once with its position in the file. Someone who is
-handed one error at a time, five times over, stops using the thing.
+handed one error at a time, five times over, stops using the thing. A cell that cannot be read as its column's kind
+is named with every other such column, at the schema's step: one cell with its row and value, more with how many
+and the first three. Every cell is read by one reading for each kind, the same whoever asks what a column holds, so
+two parts of the library never disagree about whether a cell is a number.
 
 ```
 btceur.pipeline.json(9,5): Step 4: 'feature.indicator' is a step from DeepSharp.Pipelines.Indicators, which is not registered here. Reference the package and register its steps with the catalog that reads this file.

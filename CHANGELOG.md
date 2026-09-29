@@ -16,6 +16,10 @@ with it. What a network is handed lies between minus one and one.
   `AddRow`, `SumRows`, `Mean`, `Scale` and `Fill`, so a backend written against 0.3 has to implement them before it
   compiles again.
 
+- **Cells that cannot be read are refused all at once, at the schema.** Run through a pipeline, they come as a
+  `DeclarationException` with a fault at the schema's step, where a `FormatException` named only the first cell;
+  `SchemaBinding.Bind` on its own still throws a `FormatException`, now naming every column at once.
+
 ### Added
 
 - **The operations a backward pass needs.** A matrix product, its transpose, a row added to every row of a matrix

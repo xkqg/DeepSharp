@@ -87,10 +87,23 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
     /// <summary>Reads the rows into the declared columns.</summary>
     /// <param name="bind">How the step reads rows into columns.</param>
     /// <exception cref="InvalidOperationException">There are no rows: no source, and none handed in.</exception>
+    /// <exception cref="DeclarationException">Cells cannot be read as their columns' kinds: all of them, at this step.</exception>
     public void Bind(Func<IRowSource, Table> bind)
     {
-        var table = bind(mode.Prepare(declaration, _rows ?? throw new InvalidOperationException(
-            "This pipeline never says where its rows come from, so there is nothing to prepare.")));
+        var rows = mode.Prepare(declaration, _rows ?? throw new InvalidOperationException(
+            "This pipeline never says where its rows come from, so there is nothing to prepare."));
+        Table table;
+
+        try
+        {
+            table = bind(rows);
+        }
+        catch (FormatException unreadable)
+        {
+            // Every column whose cells cannot be read, at the step that declared them, so a file or a notebook puts the
+            // refusal where the columns are written.
+            throw new DeclarationException([new DeclarationFault(_at, declaration.Steps[_at].Verb, unreadable.Message)]);
+        }
 
         _table = table;
 
