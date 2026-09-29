@@ -7,10 +7,11 @@ using DeepSharp.Pipelines;
 
 namespace DeepSharp.Verso.Notebooks;
 
-/// <summary>The rows a notebook's source opens, and the bytes they were read from.</summary>
+/// <summary>The rows a notebook's source opens, the bytes they were read from, and what their cells say each column holds.</summary>
 /// <param name="Rows">The rows as the file reads them.</param>
 /// <param name="Fingerprint">A SHA-256 of the file's bytes.</param>
-internal readonly record struct SourceRows(IRowSource Rows, string Fingerprint);
+/// <param name="Proposal">What the rows' cells say each column holds, proposed once for these bytes.</param>
+internal readonly record struct SourceRows(IRowSource Rows, string Fingerprint, KindProposal Proposal);
 
 /// <summary>
 /// The rows a notebook's source opened last, kept for the next view.
@@ -19,15 +20,16 @@ internal readonly record struct SourceRows(IRowSource Rows, string Fingerprint);
 /// A view is worked out from the source up, and parsing the file was most of that work on a file of any size. Two
 /// things are kept, apart. The session keeps the last view worked out — one, under the key of the steps it comes
 /// from and a SHA-256 of the bytes it read, in memory only. This cache keeps the rows as the source reads them: the
-/// input to the first step and nothing more, so a view of other steps over the same bytes parses nothing again.
-/// Anything a step made of the rows, other than the one view kept, is worked out from the declaration each time.
+/// input to the first step, and what their cells say each column holds, so a view of other steps over the same bytes
+/// parses nothing again and a list drawn again proposes nothing again. Anything a step made of the rows, other than
+/// the one view kept, is worked out from the declaration each time.
 /// <para>
 /// One entry, keyed by the read step itself, the path the core's one rule resolves, and a SHA-256 of the file's
 /// bytes. The bytes are read and hashed on every use and the rows are parsed from those same bytes, so a file
 /// changed on disk is opened again and the rows kept are always the ones the fingerprint names. The entry lives as
-/// long as the notebook's session and is shared with nothing else. It is one value, put in place whole: two readers
-/// of new bytes at the same moment may both parse them, and the entry one of them made stays — the same rows either
-/// way.
+/// long as the notebook's session and is shared with nothing else. It is one value, put in place whole — the rows and
+/// the proposal of their kinds together, so the two never come from different bytes: two readers of new bytes at the
+/// same moment may both parse them, and the entry one of them made stays — the same rows either way.
 /// </para>
 /// <para>
 /// A notebook's rows come from a file: nothing hands rows in to a notebook, the way code hands them to a pipeline
@@ -64,15 +66,16 @@ internal sealed class SourceCache
 
         if (Volatile.Read(ref _kept) is { } kept && kept.Read == read && kept.Path == path && kept.Fingerprint == fingerprint)
         {
-            return new SourceRows(kept.Rows, fingerprint);
+            return new SourceRows(kept.Rows, fingerprint, kept.Proposal);
         }
 
         var rows = CsvRowSource.FromText(Decoded(bytes), path);
+        var proposal = KindProposal.Of(rows);
 
-        Volatile.Write(ref _kept, new Kept(read, path, fingerprint, rows));
+        Volatile.Write(ref _kept, new Kept(read, path, fingerprint, rows, proposal));
         Interlocked.Increment(ref _parsed);
 
-        return new SourceRows(rows, fingerprint);
+        return new SourceRows(rows, fingerprint, proposal);
     }
 
     /// <summary>What is known of the bytes the declaration's source holds now: read and hashed, never parsed.</summary>
@@ -98,13 +101,13 @@ internal sealed class SourceCache
 
     /// <summary>The rows kept for a read step, and the fingerprint of the bytes they were read from.</summary>
     /// <param name="read">The read step.</param>
-    /// <returns>The rows and their fingerprint, one entry, or nothing when no rows are kept for that step.</returns>
+    /// <returns>The rows, their fingerprint and their proposal, one entry, or nothing when no rows are kept for that step.</returns>
     /// <remarks>
     /// What a gesture knows of the source: it is handed no file, so the rows this session read last are the source's
     /// columns as the person saw them.
     /// </remarks>
     public SourceRows? KeptFor(ReadCsvStep read) =>
-        Volatile.Read(ref _kept) is { } kept && kept.Read == read ? new SourceRows(kept.Rows, kept.Fingerprint) : null;
+        Volatile.Read(ref _kept) is { } kept && kept.Read == read ? new SourceRows(kept.Rows, kept.Fingerprint, kept.Proposal) : null;
 
     private static string Fingerprint(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
@@ -117,5 +120,5 @@ internal sealed class SourceCache
     }
 
     /// <summary>The one source kept, and what it was kept under.</summary>
-    private sealed record Kept(ReadCsvStep Read, string Path, string Fingerprint, IRowSource Rows);
+    private sealed record Kept(ReadCsvStep Read, string Path, string Fingerprint, IRowSource Rows, KindProposal Proposal);
 }

@@ -318,7 +318,8 @@ public sealed class OutputParameterTests : IDisposable
 
         catalog.Register<NotedStep>();
 
-        var source = new SourceRows(CsvRowSource.FromText("survived,fare\n1,7.25\n0,8.05\n"), "fingerprint");
+        var rows = CsvRowSource.FromText("survived,fare\n1,7.25\n0,8.05\n");
+        var source = new SourceRows(rows, "fingerprint", KindProposal.Of(rows));
         var declaration = new PipelineDeclaration(
         [
             new ReadCsvStep("rows.csv"),

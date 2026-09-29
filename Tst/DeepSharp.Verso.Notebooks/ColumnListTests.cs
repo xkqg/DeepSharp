@@ -372,7 +372,8 @@ public sealed class ColumnListTests : IDisposable
     [Fact]
     public void AListDrawnOverStepsWithoutASchema_ShowsTheSourcesColumns_WithNothingToTick()
     {
-        var source = new SourceRows(CsvRowSource.FromText("a,b\n1,\n"), "fingerprint");
+        var rows = CsvRowSource.FromText("a,b\n1,\n");
+        var source = new SourceRows(rows, "fingerprint", KindProposal.Of(rows));
 
         var list = ColumnList.Of(NotebookVerbs.Catalog(), new PipelineDeclaration([new ReadCsvStep("rows.csv")]), source, [], stored: null, "key", ListPicks.None, whole: true).Content;
 

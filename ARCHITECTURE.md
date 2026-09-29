@@ -172,6 +172,12 @@ Everything else stays one `IRowSource` implementation away — rows plus a decla
 door the DataFrame opens for anything enumerable. Not shipping a reader is not the same as refusing a
 format, and that distinction is what keeps the list short.
 
+Read through the frame, a file is read as text, every column as the file writes it. Left to guess, the frame took
+each column's kind from its first ten rows and handed back its own spelling of what it read — `133.1285` where the
+file says `133.1284878`, in 3,661 of the price series' 4,554 numbers — and since a row is known by what it says, the
+same file made other rows, split otherwise, than the pipeline's own reader made of it. A query's columns come as the
+database types them, and that typing is kept as the database's statement of what they hold.
+
 ### A live source is fetched once, then read as a file
 
 Reading straight from an API is the obvious convenience and it quietly removes the one property a pipeline
@@ -622,6 +628,37 @@ change with the day the pipeline runs, which is the one thing a replayed pipelin
 guess about the order of day and month that the data cannot settle. A cell the column's forms do not read is refused
 at the schema, with its row, its column and the form it was expected in, so the format is said once, in the
 declaration, rather than guessed on every run.
+
+### What a column holds is proposed from every cell, and said by a person
+
+Nobody should have to type fifteen kinds a file already shows, and nobody should find a kind decided for them. So a
+source's cells are read into a proposal — `KindProposal.Of(source)`, or `ProposedKinds()` on the chain before the
+schema — and the schema is still what a person writes. The proposal is a value to decide from: nothing in the chain
+takes it in, no file holds it, and a notebook keeps it beside the rows it was worked out from, once for each state of
+the source's bytes. A pipeline that took a proposal in as its schema would work its schema out again from whatever the
+file held on the day it ran, which is the one thing a declaration exists to stop.
+
+It reads every cell of every row, before anything divides them. The schema comes before the split, and a kind is a
+declaration rather than something learned, so there are no training rows to read it from yet — and a verdict drawn
+from some rows is broken by a cell among the others. It reads them with the schema's own reading, so a kind proposed
+is a kind every row binds as. The first kind every value reads as is proposed: true or false in any of its spellings —
+but not noughts and ones alone, which are whole numbers, since a gap can be filled among whole numbers and not among
+true and false — then whole numbers, then numbers, then moments. Moments are read as ISO 8601 writes them, else by the
+one format among the usual ones that reads every cell. Every one of those names a year, a month and a day, so nothing
+is filled in from the day the proposal is made; cells that read day first and month first alike are not proposed as
+moments at all, but offered as moments with both formats named, for a person to say which. Words are proposed as a
+category when there are at most 64 different ones and each stands for twenty rows or more: libraries that make this
+call disagree sevenfold on the share, so the rule is this library's own, measured on the samples. Whole numbers that
+few are offered as a category and never proposed as one, since nothing in the cells tells a class from a count of
+siblings.
+
+A source may say what its columns hold, beside the text of its cells: `IStatesKinds`, asked for and never required. A
+database does, and what it states outranks what the cells look like — a code written in digits that the database
+holds as words stays words, where read as a whole number `007` would be `7`. A data frame handed in states nothing,
+since its kinds may be the guess of whatever loaded it. Whatever is stated, the text stays what a row is known by.
+
+What depends on how values are spread — which categories there are, where the extremes lie, what should not be there
+— is not in the proposal. That is measured on the training rows, by the steps and the profile that learn it.
 
 ### The samples read real files, landed in the repository
 

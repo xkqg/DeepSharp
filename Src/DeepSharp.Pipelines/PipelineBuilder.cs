@@ -10,7 +10,9 @@ namespace DeepSharp.Pipelines;
 /// Everything offered here is arithmetic on a row: where the data comes from, which columns are derived
 /// from which. Nothing here learns anything from the data as a whole — the operations that do are not
 /// methods on this type, and the one door that takes a step from another package refuses a step that says
-/// it learns. They arrive with <see cref="FittingBuilder"/>, which is only reachable by splitting.
+/// it learns. They arrive with <see cref="FittingBuilder"/>, which is only reachable by splitting. The one
+/// thing here that reads every row, <see cref="ProposedKinds"/>, hands a proposal back and puts nothing in
+/// the pipeline.
 /// </remarks>
 public sealed class PipelineBuilder
 {
@@ -64,6 +66,18 @@ public sealed class PipelineBuilder
 
         return Add(new ReadRowsStep(description));
     }
+
+    /// <summary>What the source's cells say each of its columns holds, for a person to write the schema from.</summary>
+    /// <returns>The proposal, worked out over every row the source holds.</returns>
+    /// <exception cref="InvalidOperationException">The pipeline does not say yet where its rows come from.</exception>
+    /// <remarks>
+    /// A value to read and decide from, and never a step: nothing in the chain takes it in, so the schema is written by a
+    /// person, once, and replayed as written — not worked out again from whatever the file holds on the day it runs.
+    /// </remarks>
+    public KindProposal ProposedKinds() =>
+        KindProposal.Of(_rows ?? (_steps is [IOpensRows source, ..]
+            ? source.Open(SourceFolder.WorkingDirectory)
+            : throw new InvalidOperationException("This pipeline never says where its rows come from, so there is nothing to propose.")));
 
     /// <summary>Declares which columns take part, what they hold, and what becomes of the rest.</summary>
     /// <param name="schema">Names the columns, in the order they should reach a model.</param>

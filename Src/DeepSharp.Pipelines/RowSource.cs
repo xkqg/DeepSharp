@@ -24,6 +24,21 @@ public interface IRowSource
 }
 
 /// <summary>
+/// A source that says what some of its columns hold, beside the text of their cells.
+/// </summary>
+/// <remarks>
+/// Asked for, never required: a file says nothing of the kind, a database does. What a source states is used by the
+/// proposal of kinds alone, where it outranks what the cells look like — a code written in digits that the database holds
+/// as words stays words — while the text stays what the row is known by, and the schema still says what each column
+/// holds.
+/// </remarks>
+public interface IStatesKinds : IRowSource
+{
+    /// <summary>The kind the source states for each column it says anything of; a column it says nothing of is not here.</summary>
+    IReadOnlyDictionary<string, ColumnKind> StatedKinds { get; }
+}
+
+/// <summary>
 /// Rows held in memory, for a caller who already has them.
 /// </summary>
 public sealed class InMemoryRowSource : IRowSource

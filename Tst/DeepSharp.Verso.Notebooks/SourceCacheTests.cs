@@ -48,6 +48,25 @@ public sealed class SourceCacheTests : IDisposable
     }
 
     [Fact]
+    public void WhatTheCellsSayEachColumnHolds_IsProposedOncePerBytes_AndKeptBesideTheirRows()
+    {
+        var path = Written("rows.csv", "a,b\n1,x\n2,y\n");
+        var cache = new SourceCache();
+
+        var first = cache.RowsFor(Reading(path), SourceFolder.WorkingDirectory);
+        var second = cache.RowsFor(Reading(path), SourceFolder.WorkingDirectory);
+
+        Assert.Same(first.Proposal, second.Proposal);
+        Assert.Same(first.Proposal, cache.KeptFor(new ReadCsvStep(path))!.Value.Proposal);
+        Assert.Equal(ColumnKind.Integer, first.Proposal["a"].Kind);
+
+        File.WriteAllText(path, "a,b\nx,1\n");
+
+        Assert.Equal(ColumnKind.Text, cache.RowsFor(Reading(path), SourceFolder.WorkingDirectory).Proposal["a"].Kind);
+        Assert.Equal(2, cache.Parsed);
+    }
+
+    [Fact]
     public void AFileChangedOnDisk_IsOpenedAgain()
     {
         var path = Written("rows.csv", "a\n1\n");
@@ -151,7 +170,7 @@ public sealed class SourceCacheTests : IDisposable
     public void TheCacheHandsOutRowsAsRead_NeverATable()
     {
         // What a step made of the rows is replayed every time; the only thing kept is the input to the first step,
-        // handed out with the name of the bytes it was read from.
+        // handed out with the name of the bytes it was read from and what their cells say each column holds.
         var handedOut = typeof(SourceCache).GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
             .Select(method => method.ReturnType)
             .Concat(typeof(SourceCache).GetProperties().Select(property => property.PropertyType))
@@ -159,7 +178,8 @@ public sealed class SourceCacheTests : IDisposable
             .SelectMany(type => type == typeof(SourceRows) ? typeof(SourceRows).GetProperties().Select(property => property.PropertyType) : [type]);
 
         Assert.All(handedOut, type => Assert.True(
-            type == typeof(IRowSource) || type == typeof(string) || type == typeof(IReadOnlyList<string>) || type == typeof(int), type.Name));
+            type == typeof(IRowSource) || type == typeof(string) || type == typeof(IReadOnlyList<string>) || type == typeof(int)
+            || type == typeof(KindProposal), type.Name));
     }
 
     [Fact]

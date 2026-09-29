@@ -59,6 +59,51 @@ public sealed class DataFrameRowSource : IRowSource
 }
 
 /// <summary>
+/// Rows read from a database query, with what the database says each column holds.
+/// </summary>
+/// <param name="frame">The query's results, loaded into a data frame.</param>
+/// <remarks>
+/// A database types its columns, so what it hands over is a statement rather than a guess, and the proposal of kinds
+/// takes it over what the cells look like: a code the database holds as words stays words however it is written. The
+/// cells are the frame's text, exactly as <see cref="DataFrameRowSource"/> hands them over.
+/// </remarks>
+internal sealed class DatabaseRowSource(DataFrame frame) : IStatesKinds
+{
+    // What each kind of value a frame holds is, as a column's kind.
+    private static readonly Dictionary<Type, ColumnKind> Kinds = new()
+    {
+        [typeof(string)] = ColumnKind.Text,
+        [typeof(char)] = ColumnKind.Text,
+        [typeof(bool)] = ColumnKind.Boolean,
+        [typeof(DateTime)] = ColumnKind.Timestamp,
+        [typeof(byte)] = ColumnKind.Integer,
+        [typeof(sbyte)] = ColumnKind.Integer,
+        [typeof(short)] = ColumnKind.Integer,
+        [typeof(ushort)] = ColumnKind.Integer,
+        [typeof(int)] = ColumnKind.Integer,
+        [typeof(uint)] = ColumnKind.Integer,
+        [typeof(long)] = ColumnKind.Integer,
+        [typeof(ulong)] = ColumnKind.Integer,
+        [typeof(float)] = ColumnKind.Number,
+        [typeof(double)] = ColumnKind.Number,
+        [typeof(decimal)] = ColumnKind.Number,
+    };
+
+    private readonly DataFrameRowSource _rows = new(frame);
+
+    /// <inheritdoc />
+    public IReadOnlyList<string> ColumnNames => _rows.ColumnNames;
+
+    /// <inheritdoc />
+    public IEnumerable<IReadOnlyList<string?>> Rows => _rows.Rows;
+
+    /// <inheritdoc />
+    public IReadOnlyDictionary<string, ColumnKind> StatedKinds { get; } = frame.Columns
+        .Where(column => Kinds.ContainsKey(column.DataType))
+        .ToDictionary(column => column.Name, column => Kinds[column.DataType], StringComparer.Ordinal);
+}
+
+/// <summary>
 /// Reading a pipeline's rows out of a data frame, or out of anything that can fill one.
 /// </summary>
 public static class DataFrameSourceExtensions
@@ -83,7 +128,8 @@ public static class DataFrameSourceExtensions
     /// The query runs here and the rows are read into memory before anything else happens, which is what a
     /// pipeline wants: a source that answers differently each time it is asked is the one thing a
     /// declaration cannot promise anything about. Reading a database is waiting, so this is the one verb in
-    /// the chain that is awaited — write it as <c>(await pipeline.ReadDbAsync(reader)).Declare(...)</c>.
+    /// the chain that is awaited — write it as <c>(await pipeline.ReadDbAsync(reader)).Declare(...)</c>. What the
+    /// database says each column holds is what <see cref="PipelineBuilder.ProposedKinds"/> proposes for it.
     /// </remarks>
     public static async Task<PipelineBuilder> ReadDbAsync(this PipelineBuilder pipeline, DbDataReader reader)
     {
@@ -92,7 +138,7 @@ public static class DataFrameSourceExtensions
 
         var frame = await DataFrame.LoadFrom(reader).ConfigureAwait(false);
 
-        return pipeline.Read(new DataFrameRowSource(frame), "a database query");
+        return pipeline.Read(new DatabaseRowSource(frame), "a database query");
     }
 
     /// <summary>Declares that the rows come from a comma-separated file, read by the data frame.</summary>
@@ -103,20 +149,25 @@ public static class DataFrameSourceExtensions
     /// The pipeline has a reader of its own for this; it is here so that a file, a query and a frame all
     /// arrive through the same door when a project has already chosen the data frame for everything else.
     /// <para>
-    /// Two things are said here that the shorter call does not say, and both were measured rather than
+    /// Three things are said here that the shorter call does not say, and each was measured rather than
     /// guessed. The file is opened for <b>sharing</b>: handed a path, the data frame opens it exclusively,
     /// and a second pipeline reading the same file at that moment fails on a lock rather than on anything
-    /// to do with the data. And the numbers are read with the <b>invariant culture</b>: left to the
-    /// machine's own, a fare of <c>7.25</c> was read as <c>725</c> on a culture where a dot groups
-    /// thousands — the same file, a hundred times wrong, with nothing going red.
+    /// to do with the data. Every column is read as <b>text</b>, as the file writes it: left to guess, the
+    /// frame took each column's kind from its first ten rows and handed back its own spelling of what it
+    /// read — 133.1285 where the file says 133.1284878, in 3,661 of the price series' 4,554 numbers — so the
+    /// same file made other rows, split otherwise, than the pipeline's own reader makes of it. And it is
+    /// read under the <b>invariant culture</b>: left to the machine's own, a fare of <c>7.25</c> was read
+    /// as <c>725</c> on a culture where a dot groups thousands.
     /// </para>
     /// </remarks>
     public static PipelineBuilder ReadCsvFrame(this PipelineBuilder pipeline, string path)
     {
         ArgumentNullException.ThrowIfNull(pipeline);
 
+        Type[] text = [.. Enumerable.Repeat(typeof(string), CsvRowSource.HeaderOf(path).Count)];
+
         using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-        var frame = DataFrame.LoadCsv(file, cultureInfo: CultureInfo.InvariantCulture);
+        var frame = DataFrame.LoadCsv(file, dataTypes: text, cultureInfo: CultureInfo.InvariantCulture);
 
         return pipeline.Read(new DataFrameRowSource(frame), $"the data frame from {path}");
     }

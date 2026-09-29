@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Data;
 using DeepSharp.Pipelines;
 using Microsoft.Data.Analysis;
 using Microsoft.Data.Sqlite;
@@ -118,6 +119,101 @@ public class DataFrameSourceTests
         Assert.Equal(ours.RowCount, theirs.RowCount);
         Assert.Equal(((Column<double>)ours["fare"])[0], ((Column<double>)theirs["fare"])[0]);
         Assert.Equal(((Column<long>)ours["survived"])[890], ((Column<long>)theirs["survived"])[890]);
+    }
+
+    [Theory]
+    [InlineData("titanic.csv")]
+    [InlineData("apple.csv")]
+    public void AFrameReadFromAFile_HandsOverTheFilesOwnText_SoItsRowsAreTheRowsOurOwnReaderReads(string file)
+    {
+        // The frame used to guess each column's kind from its first ten rows and hand back its own spelling of what it
+        // read — 133.1285 where the file says 133.1284878 — so the same file split differently through the two doors.
+        var path = Repository.Data(file);
+        var first = CsvRowSource.HeaderOf(path)[0];
+
+        Table Everything(PipelineBuilder source) => source.Declare(schema => schema.Text(first), Remainder.Keep).Build().Prepare();
+
+        var ours = Everything(Pdd.Create().ReadCsv(path));
+        var theirs = Everything(Pdd.Create().ReadCsvFrame(path));
+
+        Assert.Equal(ours.Identities, theirs.Identities);
+        Assert.All(ours.Columns, column => Assert.Equal(
+            Enumerable.Range(0, ours.RowCount).Select(row => ((TextColumn)column)[row]),
+            Enumerable.Range(0, theirs.RowCount).Select(row => ((TextColumn)theirs[column.Name])[row])));
+    }
+
+    [Fact]
+    public async Task ADatabaseStatesWhatItsColumnsHold_AndWhatItStatesOutranksWhatTheCellsLookLike()
+    {
+        await using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync(TestContext.Current.CancellationToken);
+
+        await using (var create = connection.CreateCommand())
+        {
+            create.CommandText =
+                "create table part (code text, stock integer, price real);"
+                + "insert into part values ('007', 3, 1.5), ('012', 4, 2.0), ('345', 5, 3.0);";
+
+            await create.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var query = connection.CreateCommand();
+        query.CommandText = "select code, stock, price from part";
+
+        await using var reader = await query.ExecuteReaderAsync(TestContext.Current.CancellationToken);
+
+        var proposal = (await Pdd.Create().ReadDbAsync(reader)).ProposedKinds();
+
+        // Codes written in digits are words to the database, and stay words: read as whole numbers, 007 would be 7.
+        Assert.Equal(ColumnKind.Text, proposal["code"].Kind);
+        Assert.Equal(ColumnKind.Text, proposal["code"].Stated);
+        Assert.Equal(ColumnKind.Integer, proposal["stock"].Kind);
+        Assert.Equal(ColumnKind.Integer, proposal["stock"].Stated);
+
+        // A price of 2.0 is handed over as 2, and is still the number with a fraction the database says it is.
+        Assert.Equal(ColumnKind.Number, proposal["price"].Kind);
+        Assert.Equal(ColumnKind.Number, proposal["price"].Stated);
+    }
+
+    [Fact]
+    public async Task EveryKindAReaderHandsOver_IsStated_AndBindsAsWhatItIs()
+    {
+        using var table = new DataTable();
+        table.Columns.Add("flag", typeof(bool));
+        table.Columns.Add("when", typeof(DateTime));
+        table.Columns.Add("count", typeof(int));
+        table.Columns.Add("share", typeof(decimal));
+        table.Columns.Add("name", typeof(string));
+        table.Columns.Add("grade", typeof(char));
+        table.Rows.Add(true, new DateTime(2015, 2, 18, 9, 30, 0, DateTimeKind.Utc), 3, 0.25m, "a", 'x');
+        table.Rows.Add(false, new DateTime(2015, 2, 19, 9, 30, 0, DateTimeKind.Utc), 4, 0.5m, "b", 'y');
+
+        await using var reader = table.CreateDataReader();
+
+        var pipeline = await Pdd.Create().ReadDbAsync(reader);
+        var proposal = pipeline.ProposedKinds();
+
+        Assert.Equal(
+            [ColumnKind.Boolean, ColumnKind.Timestamp, ColumnKind.Integer, ColumnKind.Number, ColumnKind.Text, ColumnKind.Text],
+            proposal.Columns.Select(column => column.Stated!.Value));
+        Assert.Equal(proposal.Columns.Select(column => column.Stated!.Value), proposal.Columns.Select(column => column.Kind));
+
+        var bound = pipeline
+            .Declare(schema => schema.Boolean("flag").Timestamp("when").Integer("count").Number("share").Text("name", "grade"))
+            .Build()
+            .Prepare();
+
+        Assert.Equal(new DateTime(2015, 2, 19, 9, 30, 0, DateTimeKind.Utc), ((Column<DateTime>)bound["when"])[1]);
+        Assert.False(((Column<bool>)bound["flag"])[1]);
+    }
+
+    [Fact]
+    public void AFrameHandedIn_StatesNothing_ForItsKindsMayBeAGuess()
+    {
+        var proposal = Pdd.Create().ReadDataFrame(Frame()).ProposedKinds();
+
+        Assert.All(proposal.Columns, column => Assert.Null(column.Stated));
+        Assert.Equal(ColumnKind.Number, proposal["fare"].Kind);
     }
 
     [Fact]

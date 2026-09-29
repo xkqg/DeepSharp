@@ -31,6 +31,12 @@ with it. What a network is handed lies between minus one and one.
 - **Files are written against version 3.** A file this version writes names version 3, which 0.3 refuses as newer
   than itself; every file 0.3 wrote is read as it was.
 
+- **A file read through the data frame keeps its own text.** `ReadCsvFrame` reads every column as text, as the file
+  writes it, where the frame guessed each column's kind from its first ten rows and handed back its own spelling of
+  what it read: `133.1285` for `133.1284878`, in 3,661 of the price series' 4,554 numbers. Its rows are now the rows
+  `ReadCsv` makes of the same file, known by the same keys, so a pipeline fitted through it before divides its rows
+  otherwise when it is fitted again.
+
 ### Added
 
 - **The operations a backward pass needs.** A matrix product, its transpose, a row added to every row of a matrix
@@ -51,6 +57,19 @@ with it. What a network is handed lies between minus one and one.
   it; left empty, the moments are read as ISO 8601 writes them. A column with a format also reads the round-trip form a
   database or a typed data frame hands its moments over in. A take-over lists a change of format like any other change
   to a column, and a file holds a format only where one is said.
+
+- **Each column's kind, proposed from every cell.** `KindProposal.Of(source)`, or `ProposedKinds()` on the chain
+  before the schema, reads every cell of every row with the schema's own reading and proposes a kind for each column —
+  true or false in any spelling, whole numbers, numbers, moments as ISO 8601 writes them or by the one usual format
+  that reads them all, a category for few words, and text — with how many cells hold a value, how many are gaps and how
+  many different values there are. Whole numbers few enough to be groups are offered as a category beside what is
+  proposed, and moments whose order of day and month the cells cannot settle are offered with every format that reads
+  them, never proposed as one. It is a value to decide from: nothing takes it in, and the schema is still written by a
+  person.
+
+- **A source can say what its columns hold.** `IStatesKinds`, beside `IRowSource`: a query read by `ReadDbAsync`
+  states each column's kind as the database types it, and the proposal takes that over what the cells look like, so a
+  code the database holds as words stays words however it is written.
 
 ### Fixed
 
