@@ -868,7 +868,7 @@
         main.append(section);
       }
 
-      arrangement.innerHTML = html ?? '';
+      arrangement.innerHTML = html === null ? '' : DOMPurify.sanitize(html, sanitizing);
       arrangement.hidden = html === null;
       main.hidden = html !== null;
 
@@ -936,6 +936,14 @@
 
     return katexLoading;
   }
+
+  // DOMPurify runs as the page starts, since every piece of HTML the page places passes it first: what a cell shows, what a
+  // layout draws, a button's icon. Opening a notebook is not running it, and an output its file carries once ran as the
+  // page itself — which holds the notebook's socket and can run its cells — from a handler on an element. What would run
+  // is taken out: handlers, script addresses, scripts and frames; the rest is placed as it was written.
+  new Function('define', 'exports', 'module', carried('carried-dompurify') + '\n//# sourceURL=purify.min.js')();
+
+  const sanitizing = { FORCE_BODY: true };
 
   const hasBox = node => node.checkVisibility ? node.checkVisibility() : node.offsetParent !== null;
 
@@ -1500,7 +1508,7 @@
     if (type === 'text/html' || type === 'image/svg+xml') {
       const html = element('div', 'html');
 
-      html.innerHTML = output.content;
+      html.innerHTML = DOMPurify.sanitize(output.content, sanitizing);
 
       return html;
     }
@@ -1835,7 +1843,8 @@
     window.addEventListener('message', function (event) {
       var data = event.data;
 
-      if (!data || data.type !== 'verso/widget-theme' || !data.values) {
+      // A look is taken only from the page that made the frame, never from another frame that can reach it.
+      if (event.source !== parent || !data || data.type !== 'verso/widget-theme' || !data.values) {
         return;
       }
 
@@ -2688,7 +2697,7 @@
     element.title = button.fault ? `${button.label} — it could not say whether it can be pressed: ${button.fault}` : button.label;
 
     if (button.icon?.trimStart().startsWith('<svg')) {
-      element.innerHTML = button.icon;
+      element.innerHTML = DOMPurify.sanitize(button.icon, sanitizing);
 
       if (!button.iconOnly) {
         element.append(` ${button.label}`);

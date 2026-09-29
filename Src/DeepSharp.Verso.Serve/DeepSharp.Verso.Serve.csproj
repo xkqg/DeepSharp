@@ -23,7 +23,9 @@
   <ItemGroup>
     <!-- The page travels inside the tool: nothing is ever served from the folder the tool runs in. -->
     <EmbeddedResource Include="Page\page.html" LogicalName="page.html" />
-    <!-- What it draws diagrams and formulas with travels inside it too, as its makers publish it: THIRD-PARTY-NOTICES.txt. -->
+    <!-- What it draws diagrams and formulas with, and what it takes out of HTML whatever would run with, travels inside it
+         too, as its makers publish it: THIRD-PARTY-NOTICES.txt. -->
+    <EmbeddedResource Include="Page\carried\dompurify\purify.min.js" LogicalName="carried/dompurify/purify.min.js" />
     <EmbeddedResource Include="Page\carried\mermaid\mermaid.min.js" LogicalName="carried/mermaid/mermaid.min.js" />
     <EmbeddedResource Include="Page\carried\katex\katex.min.js" LogicalName="carried/katex/katex.min.js" />
     <EmbeddedResource Include="Page\carried\katex\katex.min.css" LogicalName="carried/katex/katex.min.css" />

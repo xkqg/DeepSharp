@@ -1300,14 +1300,19 @@ file the server writes that a person did not save, made whole beside the others 
 
 The page is one file the tool carries — its markup, its style and its script, with no framework and nothing fetched
 from anywhere else. Mermaid 11.17.2 and KaTeX 0.18.9, which Verso's editor fetches from a network, are carried inside it
-as their packages publish them, KaTeX's faces written in, and each runs only once a diagram or a formula first shows; the
-tool's third-party notices name both, with their licences. Its icon is its own as well, so a browser asks the server for
-none. The page is put together once as the server starts and named by a tag, so a browser that has it is told it is
-unchanged, and asks each time it opens it. It draws a notebook as Verso's editors draw one: a block's output as the HTML
-its part wrote; a failure with its name and where it happened; standard error labelled, and no failure; JSON as a tree
-and CSV as a table; progress as a bar; a Mermaid diagram, and a Markdown cell's formulas typeset in KaTeX's own faces; a
-widget in a sandboxed frame of its own, which reaches nothing of the page, shown as the state it saved; cells shown
-rendered stay rendered until their text is opened. It sends what a person does the way Verso's own router means to,
+as their packages publish them, KaTeX's faces written in, and each runs only once a diagram or a formula first shows.
+DOMPurify 3.4.16 is carried the same way and runs as the page starts, because every piece of HTML the page places passes
+it first — what a cell shows, what a layout draws, a button's icon — and what would run is taken out: a handler on an
+element, an address that is script, a script, a frame. Opening a notebook is not running it, and Verso's editor places
+such HTML as it was written: an output a notebook file carried ran its handler as the page itself, which holds the
+notebook's socket and can run its cells. The tool's third-party notices name all three, with their licences. Its icon is
+its own as well, so a browser asks the server for none. The page is put together once as the server starts and named by
+a tag, so a browser that has it is told it is unchanged, and asks each time it opens it. It draws a notebook as Verso's
+editors draw one: a block's output as the HTML its part wrote, less what would run; a failure with its name and where
+it happened; standard error labelled, and no failure; JSON as a tree and CSV as a table; progress as a bar; a Mermaid
+diagram, and a Markdown cell's formulas typeset in KaTeX's own faces; a widget in a sandboxed frame of its own, which
+reaches nothing of the page and takes its look only from the page that made it, shown as the state it saved; cells
+shown rendered stay rendered until their text is opened. It sends what a person does the way Verso's own router means to,
 and not the way that router does it: a button on its click, a box or a select on its change, and nothing on a key —
 Verso's router sends on the click, the change and every key alike, so a tick went twice and a Tab on a focused button
 sent its gesture again (measured: six of twelve clauses failed, and none with the router the page carries). Typing is

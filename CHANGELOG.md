@@ -145,6 +145,13 @@ with it. What a network is handed lies between minus one and one.
   kept: on seventy small values either side of nought it kept 2, where scipy's `yeojohnson_normmax` puts the best at
   0.71, and now keeps 0.7. Fitted again, a pipeline may keep another shaping than it did.
 
+- **Opening a notebook in `deepsharp-serve` runs nothing its file carries.** An output a cell showed when it last ran is
+  kept in the notebook's file, and the page placed its HTML as it was written, as Verso's editor does: a handler on an
+  element in it ran as the page itself, which holds the notebook's socket and can run its cells. Every piece of HTML the
+  page places — what a cell shows, what a layout draws, a button's icon — now passes DOMPurify first, carried in the page
+  like Mermaid and KaTeX, and what would run is taken out. A widget, which runs code on purpose in a frame of its own,
+  takes its look only from the page that made it.
+
 - **Two different rows are never counted as one repeated row.** The profile joined each row's cells into one string,
   so two rows whose cells held the characters it joined with could come out alike; a row is now known there by the same
   digest a row key is made by, each cell with its length.

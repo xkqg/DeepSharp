@@ -11,9 +11,9 @@ namespace DeepSharp.Verso.Serve;
 
 /// <summary>
 /// The page the server serves: its own markup, with what it draws diagrams and formulas with carried inside it — Mermaid,
-/// and KaTeX with its stylesheet and fonts — held as text the page runs only once a diagram or a formula first shows, so
-/// the page fetches nothing from anywhere; and a tag that names it, so a browser that has it already is only told it is
-/// unchanged.
+/// and KaTeX with its stylesheet and fonts — held as text the page runs only once a diagram or a formula first shows, and
+/// DOMPurify, which the page runs as it starts, since every piece of HTML it places passes it first; so the page fetches
+/// nothing from anywhere. And a tag that names it, so a browser that has it already is only told it is unchanged.
 /// </summary>
 /// <remarks>
 /// Each library is held as a JSON string in a script the browser does not run, written with every character HTML reads as
@@ -39,6 +39,7 @@ internal sealed partial class ServedPage
     public static ServedPage Carrying()
     {
         var carried = string.Concat(
+            Held("carried-dompurify", Text("carried/dompurify/purify.min.js")),
             Held("carried-mermaid", Text("carried/mermaid/mermaid.min.js")),
             Held("carried-katex", Text("carried/katex/katex.min.js")),
             Held("carried-katex-css", Face().Replace(Text("carried/katex/katex.min.css"), face => Written(face.Groups["font"].Value))));
