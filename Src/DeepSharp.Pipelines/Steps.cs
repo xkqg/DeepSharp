@@ -356,7 +356,7 @@ public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingS
     {
         ArgumentNullException.ThrowIfNull(before);
 
-        var marked = before.With(MarkerColumn, ColumnKind.Number);
+        var marked = before.Filled(Column, Strategy).With(MarkerColumn, ColumnKind.Number, Form.Unit);
 
         return RefuseAbove is { } share
             ? marked.MaybeGone(

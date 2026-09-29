@@ -114,8 +114,61 @@ public class OutlierAndMathsTests
     {
         Assert.Throws<ArgumentException>(() => new ClipOutliersStep(" "));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ClipOutliersStep("a", Bounds.Iqr, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ClipOutliersStep("a", Bounds.Sigma, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ClipOutliersStep("a", Bounds.Iqr, double.NaN));
         Assert.Throws<ArgumentOutOfRangeException>(() => new ClipOutliersStep("a", Bounds.Quantile, 0.5));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new ClipOutliersStep("a", Bounds.Quantile, -0.1));
+    }
+
+    [Fact]
+    public void AQuantileBoundAtNothing_IsTheTrainingExtremes_AndRefusesAValueBeyondThem()
+    {
+        var refusing = new ClipOutliersStep("a", Bounds.Quantile, 0, Outlier.Refuse);
+        Part[] parts = [Part.Train, Part.Train, Part.Train, Part.Train, Part.Train, Part.Test];
+        var learned = refusing.Fit(Numbers(1, 2, 3, 4, 5, 6), parts);
+
+        Assert.Equal(1, learned.Number("lower"));
+        Assert.Equal(5, learned.Number("upper"));
+        Assert.Equal(0, learned.Number("outside"));
+
+        var refused = Assert.Throws<InvalidOperationException>(() => refusing.ApplyTo(Numbers(1, 2, 3, 4, 5, 6), learned));
+
+        Assert.Contains("Row 6 of 'a' is 6, outside the 1 to 5", refused.Message, StringComparison.Ordinal);
+
+        var holding = new ClipOutliersStep("a", Bounds.Quantile, 0);
+        var table = Numbers(1, 2, 3, 4, 5, 6);
+
+        holding.ApplyTo(table, holding.Fit(table, parts));
+
+        Assert.Equal(5, ((Column<double>)table["a"])[5]);
+    }
+
+    [Fact]
+    public void AQuantileBoundAtNothing_IsWrittenAndReadAsAnyOther_WhileAnotherBoundAtNothingIsRefused()
+    {
+        var catalog = StepCatalog.BuiltIn();
+
+        Assert.Equal(
+            new ClipOutliersStep("a", Bounds.Quantile, 0, Outlier.Refuse),
+            catalog.ReadStep("""{"step": "outliers.clip", "column": "a", "bounds": "quantile", "at": 0, "outlier": "refuse"}"""));
+        Assert.Contains(
+            "training extremes",
+            Assert.Throws<PipelineFileException>(() => catalog.ReadStep("""{"step": "outliers.clip", "column": "a", "bounds": "iqr", "at": 0, "outlier": "clip"}""")).Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ALaterPriceAboveEveryTrainingPrice_IsRefusedByAQuantileBoundAtNothing()
+    {
+        var refused = Assert.Throws<InvalidOperationException>(() => Pdd.Create()
+            .ReadCsv(Repository.Data("apple.csv"))
+            .Declare(schema => schema.Timestamp("Date").Number("AAPL.Close"))
+            .SplitByTime("Date", 0.70, 0.15)
+            .ClipOutliers("AAPL.Close", Bounds.Quantile, 0, Outlier.Refuse)
+            .Build()
+            .Run());
+
+        Assert.Contains("this pipeline was fitted on", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

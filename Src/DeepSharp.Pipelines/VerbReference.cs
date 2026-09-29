@@ -118,6 +118,7 @@ internal static class VerbReference
         public IReadOnlyList<Row> Visit(NumberParameter parameter) =>
             [new(parameter.Key, parameter.Above is { } above
                 ? string.Create(CultureInfo.InvariantCulture, $"a number above {above}")
+                : parameter.AtLeast is { } least ? string.Create(CultureInfo.InvariantCulture, $"a number, {least} or more")
                 : "a number")];
 
         public IReadOnlyList<Row> Visit(WholeNumberParameter parameter) =>

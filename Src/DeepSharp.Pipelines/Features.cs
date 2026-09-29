@@ -259,7 +259,7 @@ public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IAddsColumns, I
 
         return Stems.Aggregate(before, (state, stem) => Form == Form.SplitSign
             ? Form.Names(stem).Aggregate(state, (halves, half) => halves.WithHalf(half, stem))
-            : state.With(stem, ColumnKind.Number));
+            : state.With(stem, ColumnKind.Number, Form));
     }
 
     // The two values a moment becomes, before a form writes each of them down.

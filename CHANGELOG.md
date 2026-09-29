@@ -42,6 +42,11 @@ with it. What a network is handed lies between minus one and one.
   or refuses it: `pass` with it is refused, where it held the value at the edge whatever was said — write `clip` for
   what it did. A new `normalise` block starts with `midrange`.
 
+- **A step that writes a column says where its values land.** `ColumnState.With(name, kind)` writes the column
+  landing nowhere said, so a step from another package that lands a column in a range says so with
+  `With(name, kind, lands)`, and one that makes a family with `WithFamily(start, lands)`; until it does, a learner
+  that takes every feature on one scale refuses its columns.
+
 - **A file read through the data frame keeps its own text.** `ReadCsvFrame` reads every column as text, as the file
   writes it, where the frame guessed each column's kind from its first ten rows and handed back its own spelling of
   what it read: `133.1285` for `133.1284878`, in 3,661 of the price series' 4,554 numbers. Its rows are now the rows
@@ -68,6 +73,17 @@ with it. What a network is handed lies between minus one and one.
   it; left empty, the moments are read as ISO 8601 writes them. A column with a format also reads the round-trip form a
   database or a typed data frame hands its moments over in. A take-over lists a change of format like any other change
   to a column, and a file holds a format only where one is said.
+
+- **A learner that takes every feature on one scale says so where they are handed over.** `Batch(part,
+  Needs.OneScale)` and `Served(rows, Needs.OneScale)` refuse every feature not declared to land between minus one and
+  one, all at once. Where each column lands is followed down the steps with the columns — a scale's range, a moment's
+  form on its circle, an encoder's noughts and ones, true or false, a row divided by its size — as
+  `KnownColumn.Lands` and `ColumnState.LandsOf`, so the check reads the declaration and holds a pipeline loaded from
+  its file as it held the one that was fitted.
+
+- **A quantile bound at nothing is the training extremes.** `outliers.clip` with `bounds: quantile` takes `at: 0`, the
+  smallest and largest value the training rows hold, so `refuse` stops the run at a later row beyond anything the fit
+  saw; by spread or by the middle half, nothing is still refused. `NumberParameter` takes a least value, `atLeast`.
 
 - **Features between minus one and one.** `Scale.MidRange` centres a column on the middle of its training range
   and divides it by half its width, so the training rows land between minus one and one, as a network takes them —

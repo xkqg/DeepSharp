@@ -1465,9 +1465,9 @@
           "description": "How the bounds are worked out: by quantile, by spread, or by the middle half."
         },
         "at": {
-          "description": "How far out the bounds sit: a share for a quantile, a multiple of the spread or the middle half otherwise.",
+          "description": "How far out the bounds sit: a share for a quantile, nothing for the training extremes; a multiple of the spread or the middle half otherwise.",
           "type": "number",
-          "exclusiveMinimum": 0,
+          "minimum": 0,
           "maximum": 1.7976931348623157E+308
         },
         "outlier": {

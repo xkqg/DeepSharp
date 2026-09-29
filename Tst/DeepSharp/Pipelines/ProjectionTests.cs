@@ -119,7 +119,7 @@ public class ProjectionTests
     [InlineData("""{"version":2,"declaration":[{"step":"split.atRandom","train":0.7,"validation":0.15,"test":0.15,"seed":1e10}]}""")]
     [InlineData("""{"version":2,"declaration":[{"step":"split.atRandom","train":0,"validation":0.15,"test":0.85,"seed":1}]}""")]
     [InlineData("""{"version":2,"declaration":[{"step":"drop.warmup","atMost":-1}]}""")]
-    [InlineData("""{"declaration":[{"step":"outliers.clip","column":"a","bounds":"iqr","at":0,"outlier":"clip"}]}""")]
+    [InlineData("""{"declaration":[{"step":"outliers.clip","column":"a","bounds":"iqr","at":-1,"outlier":"clip"}]}""")]
     [InlineData("""{"declaration":[{"step":"normalise","column":"a","scale":"sideways","outOfRange":"pass"}]}""")]
     [InlineData("""{"declaration":[{"step":"normalise","column":"a","scale":"1","outOfRange":"pass"}]}""")]
     [InlineData("""{"declaration":[{"step":"fill.nan","column":"a","with":"previous"}]}""")]
@@ -192,6 +192,8 @@ public class ProjectionTests
         using var schema = JsonDocument.Parse(catalog.JsonSchema());
 
         Assert.Contains("scale.by", schema.RootElement.GetRawText(), StringComparison.Ordinal);
+        Assert.Equal(0, schema.RootElement.GetProperty("$defs").GetProperty("scale.by").GetProperty("properties").GetProperty("by").GetProperty("exclusiveMinimum").GetDouble());
+        Assert.Contains("a number above 0", catalog.VerbReference(), StringComparison.Ordinal);
         Assert.DoesNotContain("feature.indicator", schema.RootElement.GetRawText(), StringComparison.Ordinal);
         Assert.Contains("## `scale.by`", catalog.VerbReference(), StringComparison.Ordinal);
         Assert.Contains(ScaleByStep.Purpose, catalog.VerbReference(), StringComparison.Ordinal);

@@ -15,7 +15,7 @@ public sealed record ScaleByStep : IPipelineStep<ScaleByStep>, IAddsColumns
     private static readonly ColumnParameter ColumnKey = new(
         "column", "The column to multiply.", "column", ColumnKinds.Numbers);
 
-    private static readonly NumberParameter ByKey = new("by", "What every value is multiplied by.", 2);
+    private static readonly NumberParameter ByKey = new("by", "What every value is multiplied by: a number above nothing.", 2, above: 0);
 
     public ScaleByStep(string column, double by)
     {

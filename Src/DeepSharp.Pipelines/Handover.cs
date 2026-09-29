@@ -61,12 +61,22 @@ public readonly record struct ServedBatch(
     /// </summary>
     /// <remarks>
     /// The same record has the same key in any hand-in, whatever the order, which is how a way back that needs the
-    /// rows finds each one again. Nothing, for a batch <see cref="Handover.Served"/> did not make.
+    /// rows finds each one again. Nothing, for a batch <see cref="Handover.Served(PreparedData, IRowSource, Needs)"/> did not make.
     /// </remarks>
     public IReadOnlyList<RowKey>? Keys { get; init; }
 
     /// <summary>How many rows were served.</summary>
     public int RowCount => Features.Count;
+}
+
+/// <summary>What a learner needs of the features it is handed, said where they are handed over.</summary>
+public enum Needs
+{
+    /// <summary>Numbers, of any size: a learner indifferent to scale, as a tree is.</summary>
+    Numbers,
+
+    /// <summary>Every feature on one scale, between minus one and one, as a network takes them.</summary>
+    OneScale,
 }
 
 /// <summary>
@@ -89,7 +99,24 @@ public static class Handover
     /// A column still holds words, an answer column is not there, a value is a gap or not a finite number, or the
     /// output refuses a row's answers.
     /// </exception>
-    public static Batch Batch(this PreparedData prepared, Part part)
+    public static Batch Batch(this PreparedData prepared, Part part) => prepared.Batch(part, Needs.Numbers);
+
+    /// <summary>The numbers of one part, ready for a learner that needs them as it says.</summary>
+    /// <param name="prepared">The data as the pipeline left it.</param>
+    /// <param name="part">Which part of it to hand over.</param>
+    /// <param name="needs">What the learner needs of its features.</param>
+    /// <returns>The rows of that split, and their answers when the pipeline names an output.</returns>
+    /// <exception cref="ArgumentException">The part asked for is the gap a split keeps apart.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// A column still holds words, an answer column is not there, a value is a gap or not a finite number, the output
+    /// refuses a row's answers, or — for a learner that takes every feature on one scale — a feature is not declared to
+    /// land between minus one and one.
+    /// </exception>
+    /// <remarks>
+    /// Where a feature lands is read from the declaration, as the steps say, not from the rows: a feature that happens
+    /// to lie between minus one and one on these rows and is declared to land nowhere would not on the next ones.
+    /// </remarks>
+    public static Batch Batch(this PreparedData prepared, Part part, Needs needs)
     {
         ArgumentNullException.ThrowIfNull(prepared);
 
@@ -104,7 +131,7 @@ public static class Handover
             .Where(row => prepared.Parts[row] == part)
             .ToArray();
 
-        return HandedOver(prepared, prepared.Table, rows, withAnswers: true);
+        return HandedOver(prepared, prepared.Table, rows, withAnswers: true, needs);
     }
 
     /// <summary>Rows that arrived after training, replayed and handed over in the shape the training rows were.</summary>
@@ -119,14 +146,26 @@ public static class Handover
     /// Nothing is fitted: the rows are replayed with the numbers the training rows produced, which is the
     /// only way a model sees tomorrow's rows the way it saw the ones it learned from.
     /// </remarks>
-    public static ServedBatch Served(this PreparedData prepared, IRowSource rows)
+    public static ServedBatch Served(this PreparedData prepared, IRowSource rows) => prepared.Served(rows, Needs.Numbers);
+
+    /// <summary>Rows that arrived after training, replayed and handed over to a learner that needs them as it says.</summary>
+    /// <param name="prepared">The trained pipeline.</param>
+    /// <param name="rows">The rows to serve, without the answer — it is what is being asked.</param>
+    /// <param name="needs">What the learner needs of its features.</param>
+    /// <returns>Their numbers in the training order, and which handed-in row each is.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// A served row is refused for what a training row would be, or — for a learner that takes every feature on one
+    /// scale — a feature is not declared to land between minus one and one, which a pipeline loaded from its file says
+    /// as the one that was fitted does.
+    /// </exception>
+    public static ServedBatch Served(this PreparedData prepared, IRowSource rows, Needs needs)
     {
         ArgumentNullException.ThrowIfNull(prepared);
         ArgumentNullException.ThrowIfNull(rows);
 
         var table = prepared.Replay(rows);
         var all = Enumerable.Range(0, table.RowCount).ToArray();
-        var batch = HandedOver(prepared, table, all, withAnswers: false);
+        var batch = HandedOver(prepared, table, all, withAnswers: false, needs);
 
         return new ServedBatch(batch.FeatureNames, batch.Features, [.. all.Select(row => table.Identities[row].ReadAt)])
         {
@@ -134,7 +173,7 @@ public static class Handover
         };
     }
 
-    private static Batch HandedOver(PreparedData prepared, Table table, int[] rows, bool withAnswers)
+    private static Batch HandedOver(PreparedData prepared, Table table, int[] rows, bool withAnswers, Needs needs)
     {
         var answers = prepared.Declaration.Output?.Answers ?? [];
 
@@ -158,6 +197,21 @@ public static class Handover
             // nobody meant. Encode it, or leave it out of the schema.
             throw new InvalidOperationException(
                 $"'{words.Name}' still holds words. Encode it, or do not declare it.");
+        }
+
+        if (needs == Needs.OneScale)
+        {
+            // Where each feature lands, as the declaration says: every one of them at once.
+            var declared = prepared.Declaration.ColumnsBefore(prepared.Declaration.Steps.Count);
+            string[] off = [.. features.Where(column => declared.LandsOf(column.Name) is null).Select(column => $"'{column.Name}'")];
+
+            if (off.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    "A learner that takes every feature on one scale needs each between minus one and one, and these are not declared to "
+                    + $"land there: {string.Join(", ", off)}. Scale each with midrange, min-max or max-abs, write a moment on a circle in a "
+                    + "form, or encode a category one-hot.");
+            }
         }
 
         var values = features.Select(column => table.NumbersOf(column.Name)).ToArray();

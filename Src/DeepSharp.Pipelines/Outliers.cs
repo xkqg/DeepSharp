@@ -46,6 +46,10 @@ public enum Outlier
 /// column is roughly symmetric and is dragged around by exactly the values it is meant to catch. The
 /// interquartile range is the robust middle: it uses the middle half, which extremes cannot move.
 /// </para>
+/// <para>
+/// A quantile bound at nothing is the smallest and largest value the training rows hold, so a refusal there is a range
+/// check learned on the training rows: a later row beyond anything the fit saw stops the run and says how far out it was.
+/// </para>
 /// </remarks>
 public sealed record ClipOutliersStep : IFittedStep, IPipelineStep<ClipOutliersStep>, IDescribesColumns
 {
@@ -56,7 +60,10 @@ public sealed record ClipOutliersStep : IFittedStep, IPipelineStep<ClipOutliersS
         "bounds", "How the bounds are worked out: by quantile, by spread, or by the middle half.", Bounds.Iqr);
 
     private static readonly NumberParameter AtKey = new(
-        "at", "How far out the bounds sit: a share for a quantile, a multiple of the spread or the middle half otherwise.", 1.5, above: 0);
+        "at",
+        "How far out the bounds sit: a share for a quantile, nothing for the training extremes; a multiple of the spread or the middle half otherwise.",
+        1.5,
+        atLeast: 0);
 
     private static readonly OneOfParameter<Outlier> OutlierKey = new(
         "outlier", "What happens to a value outside the bounds: held at the edge, made a gap, or refused.", Outlier.Clip);
@@ -64,7 +71,10 @@ public sealed record ClipOutliersStep : IFittedStep, IPipelineStep<ClipOutliersS
     /// <summary>Declares that the extremes of a column are held to bounds.</summary>
     /// <param name="column">The column to hold.</param>
     /// <param name="bounds">How the bounds are worked out.</param>
-    /// <param name="at">How far out the bounds sit: a share for a quantile, a multiple otherwise.</param>
+    /// <param name="at">
+    /// How far out the bounds sit: a share for a quantile, and nothing for the smallest and largest value the training rows
+    /// hold; a multiple otherwise.
+    /// </param>
     /// <param name="outlier">What happens to a value outside them.</param>
     /// <exception cref="ArgumentException">The column has no name.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The distance is not one this kind of bound can use.</exception>
@@ -74,11 +84,18 @@ public sealed record ClipOutliersStep : IFittedStep, IPipelineStep<ClipOutliersS
         Column = ColumnKey.Require(column);
         At = AtKey.Require(at);
 
-        // A rule between two parameters, so it lives with the step that has both.
+        // Rules between two parameters, so they live with the step that has both.
         if (bounds == Bounds.Quantile && at >= 0.5)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(at), at, "A quantile bound sets aside less than half the column at each end.");
+        }
+
+        if (bounds != Bounds.Quantile && at == 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(at), at,
+                "Bounds at nothing are the training extremes, which a quantile bound says: by spread or by the middle half they would close on the middle itself.");
         }
 
         Bounds = BoundsKey.Require(bounds);

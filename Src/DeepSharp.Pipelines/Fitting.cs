@@ -503,7 +503,7 @@ public sealed class PreparedData
 
     /// <summary>Puts predictions for the rows of one part back into the units each answer was read in.</summary>
     /// <param name="predictions">
-    /// What a model said for the rows of the part, in the order <see cref="Handover.Batch"/> hands them over: one
+    /// What a model said for the rows of the part, in the order <see cref="Handover.Batch(PreparedData, Part, Needs)"/> hands them over: one
     /// number for each answer the output names, in its order.
     /// </param>
     /// <param name="part">The part the predictions are for.</param>
@@ -535,7 +535,7 @@ public sealed class PreparedData
     /// What a model said for each served row, in the order they were served: one number for each answer the output
     /// names, in its order.
     /// </param>
-    /// <param name="served">What <see cref="Handover.Served"/> handed over for these rows.</param>
+    /// <param name="served">What <see cref="Handover.Served(PreparedData, IRowSource, Needs)"/> handed over for these rows.</param>
     /// <param name="rows">The rows that were handed in to be served, in the order they were handed in.</param>
     /// <returns>The same numbers, each in the units of the column its answer comes back to.</returns>
     /// <exception cref="InvalidOperationException">

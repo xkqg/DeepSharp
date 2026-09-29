@@ -743,6 +743,16 @@ it. And a row whose answers its output could not have meant: each kind of output
 be — a distribution that sums to one, labels that are nought or one — and the handover asks it of every row it
 hands over.
 
+A learner also says what it needs of its features, where they are handed to it: `Batch(part, Needs.OneScale)` is a
+network's, every feature between minus one and one. Where each feature lands is followed down the steps with the
+columns — a scale's range, a moment's form on its circle, an encoder's noughts and ones, true or false, a row divided
+by its size — and a step that writes a column without saying where leaves it landing nowhere said. The handover then
+refuses every feature that is not declared to land between minus one and one, all of them at once. It reads the
+declaration, not the rows: a feature that happens to lie in range on these rows and is declared to land nowhere
+would not on the next ones, and a pipeline loaded from its file, which holds no rows, is held to the same answer as
+the one that was fitted. A value outside the range on a later row is what each scale's own choice decides — pass,
+clip or refuse — since that is where the range was declared.
+
 `Replay` is the same declaration over rows nobody had seen, with the numbers the training rows produced and
 nothing fitted again. That is what serving is, and `PreparedData.FromJson` loads both halves back from the
 saved file so a host with no data at all can do it — with the catalog of the verbs it may hold, because a

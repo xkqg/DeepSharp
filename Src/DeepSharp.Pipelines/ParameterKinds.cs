@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
@@ -288,11 +289,15 @@ public sealed class ColumnsParameter(
 /// <param name="description">What it means.</param>
 /// <param name="example">The value a new block starts with.</param>
 /// <param name="above">A bound the number has to be strictly above, when there is one.</param>
-public sealed class NumberParameter(string key, string description, double example, double? above = null)
+/// <param name="atLeast">The least value the number may hold, when there is one.</param>
+public sealed class NumberParameter(string key, string description, double example, double? above = null, double? atLeast = null)
     : StepParameter<double>(key, description, example)
 {
     /// <summary>The bound the number has to be strictly above, when there is one.</summary>
     public double? Above { get; } = above;
+
+    /// <summary>The least value the number may hold, when there is one.</summary>
+    public double? AtLeast { get; } = atLeast;
 
     /// <inheritdoc />
     public override double Read(JsonElement step) => step.RequiredNumber(Key);
@@ -306,11 +311,17 @@ public sealed class NumberParameter(string key, string description, double examp
     }
 
     /// <inheritdoc />
-    /// <exception cref="ArgumentOutOfRangeException">The number is not finite, or is not above its bound.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The number is not finite, or is not above its bound, or lies below its least value.</exception>
     public override double Require(double value) =>
-        double.IsFinite(value) && (Above is not { } bound || value > bound)
+        double.IsFinite(value) && (Above is not { } bound || value > bound) && (AtLeast is not { } least || value >= least)
             ? value
-            : throw new ArgumentOutOfRangeException(Key, value, $"'{Key}' is {(Above is { } floor ? $"a number above {floor}" : "a finite number")}: {Description}");
+            : throw new ArgumentOutOfRangeException(Key, value, $"'{Key}' is {Said()}: {Description}");
+
+    // What the number may be, in words.
+    private string Said() =>
+        Above is { } floor ? string.Create(CultureInfo.InvariantCulture, $"a number above {floor}")
+        : AtLeast is { } least ? string.Create(CultureInfo.InvariantCulture, $"a number, {least} or more")
+        : "a finite number";
 
     /// <inheritdoc />
     public override TResult Accept<TResult>(IStepParameterVisitor<TResult> visitor)

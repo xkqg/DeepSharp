@@ -246,7 +246,7 @@ internal static class PipelineFileSchema
             }
             else
             {
-                number["minimum"] = -double.MaxValue;
+                number["minimum"] = parameter.AtLeast ?? -double.MaxValue;
             }
 
             number["maximum"] = double.MaxValue;

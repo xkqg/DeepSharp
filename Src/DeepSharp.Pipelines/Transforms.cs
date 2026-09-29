@@ -202,7 +202,7 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
     {
         ArgumentNullException.ThrowIfNull(before);
 
-        return before.With(Column, ColumnKind.Number);
+        return before.With(Column, ColumnKind.Number, Scale.Lands());
     }
 
     /// <inheritdoc />
@@ -421,7 +421,8 @@ public sealed record NormaliseRowStep : IPipelineStep<NormaliseRowStep>, IAddsCo
     {
         ArgumentNullException.ThrowIfNull(before);
 
-        return Columns.Aggregate(before, (state, column) => state.With(column, ColumnKind.Number));
+        // Each value divided by the row's size lies between minus one and one, whichever size is taken.
+        return Columns.Aggregate(before, (state, column) => state.With(column, ColumnKind.Number, Form.Signed));
     }
 
     /// <inheritdoc />
@@ -558,9 +559,9 @@ public sealed record EncodeStep : IFittedStep, IPipelineStep<EncodeStep>, IDescr
         ArgumentNullException.ThrowIfNull(before);
 
         var without = before.Without(Column);
-        var encoded = How == As.Ordinal ? without.With(Column, ColumnKind.Number) : without.WithFamily($"{Column}_");
+        var encoded = How == As.Ordinal ? without.With(Column, ColumnKind.Number) : without.WithFamily($"{Column}_", Form.Unit);
 
-        return encoded.With(MarkerColumn, ColumnKind.Number);
+        return encoded.With(MarkerColumn, ColumnKind.Number, Form.Unit);
     }
 
     /// <inheritdoc />

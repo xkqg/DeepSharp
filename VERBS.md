@@ -383,12 +383,12 @@ Holds the extreme values of a column to bounds learned from the training rows.
 |---|---|---|
 | `column` | the name of a column holding a number, a whole number or true or false | `"column"` |
 | `bounds` | one of `quantile`, `sigma` or `iqr` | `"iqr"` |
-| `at` | a number above 0 | `1.5` |
+| `at` | a number, 0 or more | `1.5` |
 | `outlier` | one of `clip`, `blank` or `refuse` | `"clip"` |
 
 - **`column`**: The column whose extremes are held.
 - **`bounds`**: How the bounds are worked out: by quantile, by spread, or by the middle half.
-- **`at`**: How far out the bounds sit: a share for a quantile, a multiple of the spread or the middle half otherwise.
+- **`at`**: How far out the bounds sit: a share for a quantile, nothing for the training extremes; a multiple of the spread or the middle half otherwise.
 - **`outlier`**: What happens to a value outside the bounds: held at the edge, made a gap, or refused.
 
 Means what it says from version 1 of the file.

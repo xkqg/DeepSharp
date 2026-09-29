@@ -59,7 +59,12 @@ public sealed record FillNaNStep : IFittedStep, IPipelineStep<FillNaNStep>, IDes
     public string Verb => Name;
 
     /// <inheritdoc />
-    public ColumnState After(ColumnState before) => before;
+    public ColumnState After(ColumnState before)
+    {
+        ArgumentNullException.ThrowIfNull(before);
+
+        return before.Filled(Column, Strategy);
+    }
 
     /// <inheritdoc />
     public FittedStepValues Fit(Table table, IReadOnlyList<Part> parts)

@@ -80,6 +80,16 @@ public class ParameterKindTests
     }
 
     [Fact]
+    public void ANumberWithALeastValue_TakesItAndRefusesWhatLiesBelow()
+    {
+        var number = new NumberParameter("at", "How far out.", 1.5, atLeast: 0);
+
+        Assert.Equal(0, number.Require(0));
+        Assert.Equal(0, number.AtLeast);
+        Assert.Contains("a number, 0 or more", Assert.Throws<ArgumentOutOfRangeException>(() => number.Require(-0.5)).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AKindWithNoRuleOfItsOwn_TakesEveryValueItCanHold()
     {
         var choice = new OneOfParameter<Scale>("scale", "Which scale.", Scale.Standard);

@@ -16,7 +16,11 @@ namespace DeepSharp.Pipelines;
 /// The signed value this column is one half of, when a split by sign made it; nothing otherwise. A half is the
 /// last form its value takes, so a step that would scale it on its own asks for this.
 /// </param>
-public readonly record struct KnownColumn(string Name, ColumnKind Kind, bool Surely, string? HalfOf = null);
+/// <param name="Lands">
+/// Where the step that wrote the column last lands its values: between minus one and one, or between nothing and one;
+/// nothing when that step does not land them in a range.
+/// </param>
+public readonly record struct KnownColumn(string Name, ColumnKind Kind, bool Surely, string? HalfOf = null, Form? Lands = null);
 
 /// <summary>
 /// A column a step reads, and the kinds of column it can work on.
@@ -35,17 +39,22 @@ public readonly record struct ColumnRead(string Column, IReadOnlyList<ColumnKind
 /// does not say what it leaves behind, opens the set. The families an encoder makes, whose members are known by
 /// the start of their name alone until the training rows have been seen, with any member dropped by name
 /// remembered as gone. And which columns may turn out not to be there once the rows are read.
+/// <para>
+/// Where each column's values land is followed too: a step that writes a column says where, when it lands it in a
+/// range, and a step that writes it without saying leaves it landing in none — so a handover can tell a feature that
+/// lies between minus one and one from one that does not, from the declaration alone.
+/// </para>
 /// </remarks>
 public sealed class ColumnState
 {
     private readonly KnownColumn[] _columns;
-    private readonly string[] _families;
+    private readonly Family[] _families;
     private readonly string[] _gone;
     private readonly string[] _excluded;
     private readonly Dictionary<string, string> _conditions;
 
     private ColumnState(
-        KnownColumn[] columns, string[] families, string[] gone, bool open, Dictionary<string, string>? conditions = null, string[]? excluded = null)
+        KnownColumn[] columns, Family[] families, string[] gone, bool open, Dictionary<string, string>? conditions = null, string[]? excluded = null)
     {
         _columns = columns;
         _families = families;
@@ -77,7 +86,7 @@ public sealed class ColumnState
     public IReadOnlyList<KnownColumn> Columns => _columns;
 
     /// <summary>The starts of the names of columns an encoder makes, whose members only a fit knows.</summary>
-    public IReadOnlyList<string> Families => _families;
+    public IReadOnlyList<string> Families => [.. _families.Select(family => family.Start)];
 
     /// <summary>Whether columns nobody named may be there too.</summary>
     public bool Open { get; }
@@ -117,27 +126,57 @@ public sealed class ColumnState
     /// <returns><see langword="true"/> when it is a member nobody dropped.</returns>
     public bool InAFamily(string name) =>
         !_gone.Contains(name, StringComparer.Ordinal)
-        && _families.Any(family => name.StartsWith(family, StringComparison.Ordinal));
+        && _families.Any(family => name.StartsWith(family.Start, StringComparison.Ordinal));
+
+    /// <summary>Where a column's values land, as the steps down to here say.</summary>
+    /// <param name="name">The column's name.</param>
+    /// <returns>
+    /// Where the step that wrote it last lands it; between nothing and one for true or false, which reaches a learner as
+    /// noughts and ones, and for a member of a family that lands there; nothing when no step lands it in a range, or the
+    /// column is not known here.
+    /// </returns>
+    public Form? LandsOf(string name) => Find(name) is { } known
+        ? known.Lands ?? (known.Kind == ColumnKind.Boolean ? Form.Unit : null)
+        : InAFamily(name) ? _families.First(family => name.StartsWith(family.Start, StringComparison.Ordinal)).Lands : null;
 
     /// <summary>The same columns, with one added at the end or, when it is there, holding another kind in its place.</summary>
     /// <param name="name">The column's name.</param>
     /// <param name="kind">What it holds from here on.</param>
+    /// <returns>The state with the column, landing in no range said: a step that writes it and says where is <see cref="With(string, ColumnKind, Form?)"/>.</returns>
+    public ColumnState With(string name, ColumnKind kind) => With(name, kind, lands: null);
+
+    /// <summary>The same columns, with one added or written again, landing where the step writing it lands its values.</summary>
+    /// <param name="name">The column's name.</param>
+    /// <param name="kind">What it holds from here on.</param>
+    /// <param name="lands">Where its values land from here on; nothing for no range.</param>
     /// <returns>The state with the column.</returns>
-    public ColumnState With(string name, ColumnKind kind)
+    public ColumnState With(string name, ColumnKind kind, Form? lands)
     {
         var at = Array.FindIndex(_columns, column => column.Name == name);
 
         KnownColumn[] columns = at < 0
-            ? [.. _columns, new KnownColumn(name, kind, Surely: true)]
-            : [.. _columns[..at], _columns[at] with { Kind = kind }, .. _columns[(at + 1)..]];
+            ? [.. _columns, new KnownColumn(name, kind, Surely: true, Lands: lands)]
+            : [.. _columns[..at], _columns[at] with { Kind = kind, Lands = lands }, .. _columns[(at + 1)..]];
 
         return new(columns, _families, [.. _gone.Where(each => each != name)], Open, _conditions, [.. _excluded.Where(each => each != name)]);
     }
 
+    /// <summary>The same columns, one of them filled where it had gaps.</summary>
+    /// <param name="name">The column's name.</param>
+    /// <param name="strategy">What the gaps are filled with.</param>
+    /// <returns>
+    /// The state with the column landing where it did, since a fill writes a value the column already holds; nowhere
+    /// said when it writes a number of its own outside that range.
+    /// </returns>
+    public ColumnState Filled(string name, FillStrategy strategy) =>
+        Find(name) is { Lands: { } lands } known && strategy.Value is { } value && (value < lands.Floor() || value > 1)
+            ? With(name, known.Kind, lands: null)
+            : this;
+
     /// <summary>The same columns, with one added as a half of a signed value split by its sign.</summary>
     /// <param name="name">The half's name.</param>
     /// <param name="of">The signed value it is one half of.</param>
-    /// <returns>The state with the half, a number.</returns>
+    /// <returns>The state with the half, a number between nothing and one.</returns>
     /// <exception cref="ArgumentException">The value it is half of is not named.</exception>
     /// <remarks>
     /// A step writing the column again later — a fill, say — leaves it a half: what it is half of does not change
@@ -147,7 +186,7 @@ public sealed class ColumnState
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(of);
 
-        var state = With(name, ColumnKind.Number);
+        var state = With(name, ColumnKind.Number, Form.Unit);
 
         return new(
             [.. state._columns.Select(column => column.Name == name ? column with { HalfOf = of } : column)],
@@ -179,8 +218,10 @@ public sealed class ColumnState
 
     /// <summary>The same columns, and a family whose members are known by the start of their names.</summary>
     /// <param name="start">The start every member's name has.</param>
+    /// <param name="lands">Where every member's values land; nothing for no range.</param>
     /// <returns>The state with the family.</returns>
-    public ColumnState WithFamily(string start) => new(_columns, [.. _families, start], _gone, Open, _conditions, _excluded);
+    public ColumnState WithFamily(string start, Form? lands = null) =>
+        new(_columns, [.. _families, new Family(start, lands)], _gone, Open, _conditions, _excluded);
 
     /// <summary>The same columns, with others nobody named allowed beside them.</summary>
     /// <returns>The state, open.</returns>
@@ -210,6 +251,11 @@ public sealed class ColumnState
 
     private Dictionary<string, string> Except(string name) =>
         _conditions.Where(each => each.Key != name).ToDictionary(StringComparer.Ordinal);
+
+    /// <summary>Columns an encoder makes, known by the start of their names, and where their values land.</summary>
+    /// <param name="Start">The start every member's name has.</param>
+    /// <param name="Lands">Where every member's values land; nothing for no range.</param>
+    private readonly record struct Family(string Start, Form? Lands);
 }
 
 /// <summary>
