@@ -919,7 +919,7 @@
       "additionalProperties": false
     },
     "evidence.profile": {
-      "description": "Profiles the columns where it stands, on the rows the split trains on, and names the step that answers each thing it finds.",
+      "description": "Profiles the columns where it stands, on the rows the split trains on, and names what is wrong or should not be there, with how each is answered.",
       "type": "object",
       "properties": {
         "step": {

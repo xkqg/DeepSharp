@@ -13,7 +13,8 @@ namespace DeepSharp.Tests.Notebooks;
 /// The grid's boxes write the declaration, never a value. Every column has a box saying whether it is in: unticking a
 /// column no step reads excludes it in the schema with its kind, unticking one a step reads or made drops it after the
 /// last step that reads it, and ticking either brings it back as it was; a column the schema does not name comes in
-/// as text, where the source has it. Every column the schema takes has a box saying whether it is a category: ticking
+/// as the saved file declares it, else as its cells propose, else as text, where the source has it. Every column the
+/// schema takes has a box saying whether it is a category: ticking
 /// it makes one and remembers the kind it was, unticking gives that kind back. A box sends the state it is in, so the
 /// same state twice changes the notebook once; a box whose change would break a rule is drawn but cannot be clicked,
 /// and a change sent anyway is not made, and says which step.

@@ -20,10 +20,9 @@ too.
 
 **0.4.0 is the tensors with their gradients worked out automatically, the data half, and a notebook to see the
 data in and choose its columns — in Verso, in an application of your own, or in your browser from DeepSharp's own
-server.** Read, the data proposes what each column holds and names what should not be there. What learns from
-the gradients is next;
-the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says in which order, and the
-[changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release added.
+server.** As it is read, the data proposes what each column holds, and a profile names what should not be there.
+What learns from the gradients is next; the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says in which
+order, and the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release added.
 
 ```
 dotnet add package DeepSharp
@@ -62,11 +61,14 @@ one block per step, each block the step's own JSON — edited as text, or field 
 panel. "Show the data here" on a block runs the pipeline down to it and shows the rows there, each column
 coloured over the training rows and every row marked with the part it lands in. A box on the grid leaves a
 column out — it turns black — or makes it a category, and the notebook writes the step that does it. "Choose the
-columns" lists every column of the source with its first values: tick it in or out, pick its kind, make it the
-answer and set the answer's own values — or tick a range, and seventy bands of a flock are taken in, or made the
-answer, with two ticks. What the blocks decide about their columns is saved beside the notebook, and the toolbar
-takes a saved file over again, listing every change before it makes one and every saved decision it cannot make.
-It also runs the whole pipeline and exports it as the same file the chain writes.
+columns" lists every column of the source with its first values and what its cells propose it holds: tick it in, and
+it comes in so, or out; pick its kind, make it the answer and set the answer's own values — or tick a range, and
+seventy bands of a flock are taken in, or made the answer, with two ticks. A profile under a block names what should
+not be there, and where the answer is a change to the columns — a column that hands a model the answer left out, a
+fare of 0 said to stand for a gap — a box beside it makes it. What the blocks decide about their columns is saved
+beside the notebook, and the toolbar takes a saved file over again, listing every change before it makes one and
+every saved decision it cannot make. It also runs the whole pipeline and exports it as the same file the chain
+writes.
 
 Install it from Verso's Extensions panel. The same package runs in Verso's VS Code extension, in the browser
 editor `verso serve` opens, and inside an application of your own, through `DeepSharp.Verso.Api` — the
@@ -115,10 +117,10 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 | | |
 |---|---|
 | `DeepSharp` | The tensors, their shape, the backend the arithmetic runs on, and the gradients worked out through it. |
-| `DeepSharp.Pipelines` | The data half: readers, features, the split, gaps, scales, the answer in four kinds, the handover, and the column decisions saved on their own and taken over — saved as a file and replayed. |
-| `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). |
+| `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales, a profile that names what should not be there, the answer in four kinds, the handover, which holds every feature between minus one and one for a learner that needs it, and the column decisions saved on their own and taken over — saved as a file and replayed. |
+| `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). A CSV comes through as the text the file writes, and a query with the kinds the database gives its columns. |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
-| `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block, and its columns chosen from the grid or a list and saved beside it. It runs in Verso's VS Code extension, in `verso serve`, in DeepSharp's own server and in an application of your own. |
+| `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block, and its columns chosen from the grid or a list — which shows what each column's cells propose — and saved beside it; a box beside a profile's alert gives its answer. It runs in Verso's VS Code extension, in `verso serve`, in DeepSharp's own server and in an application of your own. |
 | `DeepSharp.Verso.Api` | An application of your own hosting the notebook: one open notebook for each file, however many views show it, with the notebook's parts registered by the package itself — so a program published as a single file has them too. Typing, running, a click on a block's controls and the toolbar's buttons take their turn one at a time; a cell is added after another or at the end, of any kind the engine has, taken away, moved past its neighbour or turned into another kind, each only where the notebook's layout allows it; as a cell's text is typed, its kernel offers what may come next and says what a word means, even while a run is under way; a new notebook is made as one block that reads a CSV file, never over a file that is there already; a run can be stopped, one that never ends or one that still waits for another notebook's C# run, a file a button hands over goes to whoever pressed it, the properties panel comes back field by field, the layout, the theme and the title are changed as Verso's editors change them, and what a person does to the dashboard's tiles goes to the layout's own part. The notebook opens and saves as Verso's browser editor does, writing nothing into it that the engine only falls back on; every view is told what changed, version by version — the cells, the run under way and what runs that no run owns, the toolbar, whether anything is unsaved, what became of the kernels, what the dashboard or the presentation draws, and what the notebook says of itself; a notebook no view shows can close by itself when nothing in it is unsaved, a close stops the run under way instead of waiting for it, and the cells, and what they show, come back as plain values. |
 | `DeepSharp.Verso.Serve` | DeepSharp's own server: `deepsharp-serve`, a .NET tool, shows a notebook or a folder of them in your browser, on Verso's engine and built on `DeepSharp.Verso.Api`, with nothing else to install. It listens on this computer alone, answers only the address it prints, makes a change only for its own page, and writes into its folder only the notebooks it serves, what they save beside themselves, and a new notebook a page asks for, never over a file that is there; Ctrl+C ends it at once, whatever a notebook runs. Its page does what Verso's editor does, over one connection a tab, and carries everything it draws with, so it fetches nothing: the blocks, failures, JSON, CSV, progress, Mermaid diagrams and KaTeX formulas drawn as Verso draws them, a widget in a sandboxed frame, the dashboard and the presentation as the engine arranges them; the Metadata, Properties and View panels; Verso's keys, and what a cell's kernel offers and what a word means as its text is typed; the kernels' status, a dot while anything is unsaved, and the Stop where Run All stood. A cell is added, taken away once you say yes, moved or turned into another kind there, where the notebook's layout allows it; a file a button hands over arrives as a download; a dropped connection comes back by itself, keeping what was typed; and a folder's page makes a new notebook. |
 

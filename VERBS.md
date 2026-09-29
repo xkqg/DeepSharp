@@ -15,7 +15,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`encode`](#encode) | Writes a column of words down as numbers, using the categories the training rows held. |
 | [`encode.categories`](#encodecategories) | Writes every column that stands for a group down as numbers, each by the categories the training rows held. |
 | [`evidence.correlation`](#evidencecorrelation) | Sets out the rows a correlation between columns is drawn from, on the rows the split trains on, and how many it kept. |
-| [`evidence.profile`](#evidenceprofile) | Profiles the columns where it stands, on the rows the split trains on, and names the step that answers each thing it finds. |
+| [`evidence.profile`](#evidenceprofile) | Profiles the columns where it stands, on the rows the split trains on, and names what is wrong or should not be there, with how each is answered. |
 | [`feature.add`](#featureadd) | Adds a column worked out from two others by plain arithmetic. |
 | [`feature.cyclical`](#featurecyclical) | Writes a moment in time as a place on a circle, so that the ends of a cycle meet. |
 | [`feature.indicator`](#featureindicator) | Adds a market indicator worked out from the rows that came before: an average, a strength index, a band. |
@@ -161,7 +161,7 @@ Means what it says from version 2 of the file.
 
 ## `evidence.profile`
 
-Profiles the columns where it stands, on the rows the split trains on, and names the step that answers each thing it finds.
+Profiles the columns where it stands, on the rows the split trains on, and names what is wrong or should not be there, with how each is answered.
 
 ```json
 {"step":"evidence.profile","columns":["column"]}

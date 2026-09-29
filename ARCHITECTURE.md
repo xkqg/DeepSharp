@@ -6,7 +6,8 @@ written down here is not a decision, it is a habit.
 ## The layout
 
 ```
-Src/DeepSharp/Tensors/            the engine side: Shape, Tensor, ITensorBackend, CpuBackend
+Src/DeepSharp/Tensors/            the engine side: Shape, Tensor, ITensorBackend, CpuBackend, and the RecordingBackend
+                                  gradients are worked out through
 Src/DeepSharp.Pipelines/          the data side
     IPipelineStep.cs                what a step is: a verb, how it writes itself, what it reads, what it does
     StepParameters.cs ParameterKinds.cs
@@ -28,6 +29,8 @@ Src/DeepSharp.Pipelines/          the data side
     Evidence.cs                     the profile and the correlation a run is declared to produce
     RowSource.cs SourceFolder.cs Binding.cs Table.cs RowIdentity.cs TrainingValues.cs
                                     rows, where a path is read from, typed columns, who a row is, what a fit sees
+    CellTextExtensions.cs KindProposal.cs
+                                    the one reading of a cell as each kind, and the kinds a source's cells propose
     Walk.cs Execution.cs Views.cs Fitting.cs Handover.cs
                                     the one walk every run is, the data after any step, what a fit learned, the handover
     Outputs.cs WayBack.cs           what a model is asked to predict, and how its answers come back into their units
@@ -325,8 +328,8 @@ Taking a preset over lists before it applies. `TakeOver` makes the steps — the
 there or directly after the source; the drops made the preset's; the output the preset's, placed whole, or none — and
 lists every column whose decision that changes, from how it stood to how it stands after: every part the schema
 writes of it — how it stands, its kind, the kind a category was, whether the source may lack it, how a timestamp's
-moments are written. What a column offers
-and what it is to the output follow from those, so they are not listed for themselves; the output is listed once,
+moments are written, which value stands for a gap. What a column offers and what it is to the output follow from
+those, so they are not listed for themselves; the output is listed once,
 before and after, the schema's order when the columns both schemas name stand in another, and what the schema does
 with the columns it does not name when that changes. A column a step makes is never said to be missing from the
 source. The source's columns the preset never showed are named new. A drop the preset saved can only be made of a
@@ -870,8 +873,8 @@ rules every door that changes the columns uses. Unticking a column nothing reads
 keeps its kind; unticking one a step reads, or one a step made, writes a `drop.columns` block below the last step
 that reads it and below the step that made it — never higher, even under a schema that keeps the rest of the file,
 where any name may be read from the schema down. Ticking either brings it back as it was, and a column the schema
-does not name comes in as text where the source has it — which only the source's own header says, so a tick made
-before anything read the source shows the source first and takes nothing in. Ticking a category remembers the kind
+does not name comes in by the rule the list's boxes keep, below, where the source has it — which only the source's own
+header says, so a tick made before anything read the source shows the source first and takes nothing in. Ticking a category remembers the kind
 the column was, and unticking gives that kind back. A box the rules would not let change is drawn but cannot be
 clicked: the answer cannot be left out, nor the last column a schema takes, and a category that does not say what it
 was keeps its box ticked. What the boxes say is what the grid draws: a column that is not in is black, and its values

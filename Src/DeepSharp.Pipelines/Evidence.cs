@@ -171,7 +171,8 @@ public readonly record struct ProfileAlert(IReadOnlyList<string> Columns, string
 }
 
 /// <summary>
-/// A profile of the columns where it stands: what they hold, what is wrong with them, and which step answers it.
+/// A profile of the columns where it stands: what they hold, what is wrong with them or should not be there, and how
+/// each is answered.
 /// </summary>
 public sealed class DataProfile : Evidence
 {
@@ -194,7 +195,7 @@ public sealed class DataProfile : Evidence
     /// <summary>Each column it profiled.</summary>
     public IReadOnlyList<ColumnProfile> Columns { get; }
 
-    /// <summary>What it found, each with the step that answers it.</summary>
+    /// <summary>What it found, each with how it is answered: a step, the column left out, or a value said to stand for a gap.</summary>
     public IReadOnlyList<ProfileAlert> Alerts { get; }
 
     /// <summary>The rows that are there more than once, among all the rows where it stands.</summary>
@@ -293,7 +294,7 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
     public static string Name => "evidence.profile";
 
     /// <inheritdoc />
-    public static string Purpose => "Profiles the columns where it stands, on the rows the split trains on, and names the step that answers each thing it finds.";
+    public static string Purpose => "Profiles the columns where it stands, on the rows the split trains on, and names what is wrong or should not be there, with how each is answered.";
 
     /// <inheritdoc />
     public static int Since => 2;

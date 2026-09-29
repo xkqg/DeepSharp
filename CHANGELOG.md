@@ -76,7 +76,8 @@ with it. What a network is handed lies between minus one and one.
   date format, from the chain, in the file and in the notebook's form, where a taken timestamp column has a field for
   it; left empty, the moments are read as ISO 8601 writes them. A column with a format also reads the round-trip form a
   database or a typed data frame hands its moments over in. A take-over lists a change of format like any other change
-  to a column, and a file holds a format only where one is said.
+  to a column, and a file holds a format only where one is said. `WithFormat(column, format)` on a declaration hands
+  back its steps with the format said, as the other column operations do, and `WithColumnFormat` on the schema.
 
 - **The notebook's list shows what each column's cells propose.** Beside a column the schema and the saved file leave
   to its cells, the list says what they propose — `category, proposed, 3 values`, with a category offered beside whole
@@ -115,7 +116,8 @@ with it. What a network is handed lies between minus one and one.
   and marks it. It is compared as the column's kind reads it when it reads as that kind, so `0` and `0.0` are one
   value, and as it is written otherwise, so a column of numbers can say that `?` is a gap. From the chain
   (`schema.Column("fare", ColumnKind.Number, missing: "0")`), in the file, and in the notebook's form, where every
-  taken column has a field for it; a take-over lists a change of it. The row is still known by what the file wrote.
+  taken column has a field for it; a take-over lists a change of it, and `WithMissing(column, value)` on a declaration
+  and `WithColumnMissing` on the schema say it. The row is still known by what the file wrote.
 
 - **Each column's kind, proposed from every cell.** `KindProposal.Of(source)`, or `ProposedKinds()` on the chain
   before the schema, reads every cell of every row with the schema's own reading and proposes a kind for each column —
