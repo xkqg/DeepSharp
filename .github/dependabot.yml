@@ -11,6 +11,11 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: "deps"
+    ignore:
+      # The notebook package is compiled against the oldest abstractions that carry what it calls, because Verso
+      # refuses an extension compiled against a newer minor than the one it runs. Raising that floor decides who can
+      # still load the package, so it is a decision rather than an update, and the notebook's tests refuse it.
+      - dependency-name: "Verso.Abstractions"
 
   - package-ecosystem: github-actions
     directory: "/"

@@ -122,4 +122,16 @@ public class PackageTests
         Assert.Contains("pdd", tags);
         Assert.Equal("[1.1.0, 2.0.0)", abstractions.Attribute("Version")!.Value);
     }
+
+    [Fact]
+    public void DependabotLeavesTheAbstractionsAtTheirFloor()
+    {
+        // Raising the floor decides which Verso the package still loads in, and the tests above refuse it. Left to
+        // itself, Dependabot proposes it for every version Verso publishes, as a pull request that can only fail.
+        var lines = File.ReadLines(Path.Join(Repository.Root, ".github", "dependabot.yml"))
+            .Select(line => line.Trim())
+            .Where(line => !line.StartsWith('#'));
+
+        Assert.Contains("- dependency-name: \"Verso.Abstractions\"", lines);
+    }
 }
