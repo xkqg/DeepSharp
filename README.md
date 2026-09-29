@@ -18,8 +18,10 @@ your data in, the layers, the training loop, the checkpoints and the pictures. A
 better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
-**0.3.0 is the tensors, the data half, and a notebook to see the data in and choose its columns — in Verso, in an
-application of your own, or in your browser from DeepSharp's own server.** What learns from them is next;
+**0.4.0 is the tensors with their gradients worked out automatically, the data half, and a notebook to see the
+data in and choose its columns — in Verso, in an application of your own, or in your browser from DeepSharp's own
+server.** Read, the data proposes what each column holds and names what should not be there. What learns from
+the gradients is next;
 the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says in which order, and the
 [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release added.
 

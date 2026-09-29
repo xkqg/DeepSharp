@@ -3,6 +3,13 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0]
+
+The first thing learning needs: a gradient, worked out automatically for the arithmetic a network does. And data
+that says what it holds as it is read: each column is proposed a kind — a date, a category, a number — from what
+every cell says, a person accepts or changes it, and what should not be there is named with the step that deals
+with it. What a network is handed lies between minus one and one.
+
 ## [0.3.0]
 
 A pipeline you can look at: every step written as a block of a notebook, and the data at any block shown on
