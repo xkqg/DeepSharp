@@ -36,7 +36,7 @@ public class PackageTests
     {
         // Everything the package references is installed with it into Verso's folder for it. The list is closed
         // so that a reference added for convenience is a decision somebody makes, not a surprise in every install.
-        string[] allowed = ["DeepSharp.Pipelines", "DeepSharp.Pipelines.Indicators", "MatPlotLibNet", "Verso.Abstractions"];
+        string[] allowed = ["DeepSharp.Charts", "DeepSharp.Pipelines", "DeepSharp.Pipelines.Indicators", "MatPlotLibNet", "Verso.Abstractions"];
         var runtime = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
 
         var outside = Package.GetReferencedAssemblies()

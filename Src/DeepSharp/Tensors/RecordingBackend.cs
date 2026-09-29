@@ -27,6 +27,12 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend
     /// <inheritdoc />
     public string Name => _inner.Name;
 
+    /// <summary>The backend the arithmetic runs on, which records nothing.</summary>
+    internal ITensorBackend Inner => _inner;
+
+    /// <summary>How many operations this pass has written down so far.</summary>
+    internal int Operations => _steps.Count;
+
     /// <inheritdoc />
     public Tensor Add(Tensor left, Tensor right) => Kept(new Added(left, right, _inner.Add(left, right)));
 
@@ -57,6 +63,46 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend
     /// <inheritdoc />
     /// <remarks>A filled tensor reads nothing, so there is nothing to send a gradient back to.</remarks>
     public Tensor Fill(Shape shape, float value) => _inner.Fill(shape, value);
+
+    /// <inheritdoc />
+    public Tensor Relu(Tensor values) => Kept(new Rectified(values, _inner.Relu(values)));
+
+    /// <inheritdoc />
+    public Tensor Positive(Tensor values) => Kept(new Stepped(values, _inner.Positive(values)));
+
+    /// <inheritdoc />
+    public Tensor Tanh(Tensor values) => Kept(new TanhOf(values, _inner.Tanh(values)));
+
+    /// <inheritdoc />
+    public Tensor Sigmoid(Tensor values) => Kept(new SigmoidOf(values, _inner.Sigmoid(values)));
+
+    /// <inheritdoc />
+    public Tensor Exp(Tensor values) => Kept(new Exponentiated(values, _inner.Exp(values)));
+
+    /// <inheritdoc />
+    public Tensor Log(Tensor values) => Kept(new LogarithmOf(values, _inner.Log(values)));
+
+    /// <inheritdoc />
+    public Tensor Sqrt(Tensor values) => Kept(new SquareRootOf(values, _inner.Sqrt(values)));
+
+    /// <inheritdoc />
+    public Tensor Softplus(Tensor values) => Kept(new SoftplusOf(values, _inner.Softplus(values)));
+
+    /// <inheritdoc />
+    public Tensor Divide(Tensor left, Tensor right) => Kept(new Divided(left, right, _inner.Divide(left, right)));
+
+    /// <inheritdoc />
+    public Tensor LogSoftmax(Tensor matrix) => Kept(new LogSharesOf(matrix, _inner.LogSoftmax(matrix)));
+
+    /// <inheritdoc />
+    public Tensor Reshape(Tensor values, Shape shape) => Kept(new Reshaped(values, _inner.Reshape(values, shape)));
+
+    /// <inheritdoc />
+    public Tensor Unfold(Tensor images, Window window) => Kept(new Unfolded(images, window, _inner.Unfold(images, window)));
+
+    /// <inheritdoc />
+    public Tensor Fold(Tensor patches, Shape images, Window window) =>
+        Kept(new Folded(patches, window, _inner.Fold(patches, images, window)));
 
     /// <summary>How much each of the given tensors moved a loss this pass worked out.</summary>
     /// <param name="loss">The loss: one value, with no axes, worked out in this pass.</param>
@@ -222,6 +268,125 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend
                 ? backend.Fill(new Shape(), 0f)
                 : backend.Scale(backend.Mean(backend.Multiply(gradient, Values)), backend.Fill(new Shape(), Values.Shape.Count))),
         ];
+    }
+
+    private sealed record Rectified(Tensor Values, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Values];
+
+        // The gradient passes where the value was above nothing, as PyTorch lets it: nothing at nothing itself.
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Values, backend.Multiply(gradient, backend.Positive(Values)))];
+    }
+
+    private sealed record Stepped(Tensor Values, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Values];
+
+        // A step is flat either side of where it steps, so it moves nothing it read.
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Values, backend.Fill(Values.Shape, 0f))];
+    }
+
+    private sealed record TanhOf(Tensor Values, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Values];
+
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Values, backend.Multiply(gradient, backend.Subtract(backend.Fill(Output.Shape, 1f), backend.Multiply(Output, Output))))];
+    }
+
+    private sealed record SigmoidOf(Tensor Values, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Values];
+
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Values, backend.Multiply(gradient, backend.Multiply(Output, backend.Subtract(backend.Fill(Output.Shape, 1f), Output))))];
+    }
+
+    private sealed record Exponentiated(Tensor Values, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Values];
+
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Values, backend.Multiply(gradient, Output))];
+    }
+
+    private sealed record LogarithmOf(Tensor Values, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Values];
+
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Values, backend.Divide(gradient, Values))];
+    }
+
+    private sealed record SquareRootOf(Tensor Values, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Values];
+
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Values, backend.Divide(gradient, backend.Add(Output, Output)))];
+    }
+
+    private sealed record SoftplusOf(Tensor Values, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Values];
+
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Values, backend.Multiply(gradient, backend.Sigmoid(Values)))];
+    }
+
+    private sealed record Divided(Tensor Left, Tensor Right, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Left, Right];
+
+        // The bottom is sent minus the quotient over itself, times the gradient.
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+        [
+            new(Left, backend.Divide(gradient, Right)),
+            new(Right, backend.Scale(backend.Divide(backend.Multiply(gradient, Output), Right), backend.Fill(new Shape(), -1f))),
+        ];
+    }
+
+    private sealed record LogSharesOf(Tensor Matrix, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Matrix];
+
+        // Every value of a row moved the row's shift, so each is sent its gradient less its share of the row's whole
+        // gradient: the row's total, laid across the row by turning the matrix round and adding it as a row.
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient)
+        {
+            var totals = backend.SumRows(backend.Transpose(gradient));
+            var across = backend.Transpose(backend.AddRow(backend.Fill(new Shape(Matrix.Shape[1], Matrix.Shape[0]), 0f), totals));
+
+            return [new(Matrix, backend.Subtract(gradient, backend.Multiply(backend.Exp(Output), across)))];
+        }
+    }
+
+    private sealed record Reshaped(Tensor Values, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Values];
+
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Values, backend.Reshape(gradient, Values.Shape))];
+    }
+
+    private sealed record Unfolded(Tensor Images, Window Window, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Images];
+
+        // Every patch value came from one place of the images, so folding the gradient back adds it there.
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Images, backend.Fold(gradient, Images.Shape, Window))];
+    }
+
+    private sealed record Folded(Tensor Patches, Window Window, Tensor Output) : Recorded(Output)
+    {
+        public override IEnumerable<Tensor> Inputs => [Patches];
+
+        // Every patch value was added into one place, so each is sent that place's gradient: the gradient unfolded.
+        public override IEnumerable<GradientShare> Back(ITensorBackend backend, Tensor gradient) =>
+            [new(Patches, backend.Unfold(gradient, Window))];
     }
 
     // What one operation sends back to one tensor it read.

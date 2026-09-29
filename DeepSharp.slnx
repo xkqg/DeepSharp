@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/Src/">
     <Project Path="Src/DeepSharp/DeepSharp.csproj" />
+    <Project Path="Src/DeepSharp.Charts/DeepSharp.Charts.csproj" />
+    <Project Path="Src/DeepSharp.Learners.Networks/DeepSharp.Learners.Networks.csproj" />
     <Project Path="Src/DeepSharp.Pipelines/DeepSharp.Pipelines.csproj" />
     <Project Path="Src/DeepSharp.Pipelines.DataFrame/DeepSharp.Pipelines.DataFrame.csproj" />
     <Project Path="Src/DeepSharp.Pipelines.Indicators/DeepSharp.Pipelines.Indicators.csproj" />
@@ -9,6 +11,7 @@
     <Project Path="Src/DeepSharp.Verso.Serve/DeepSharp.Verso.Serve.csproj" />
   </Folder>
   <Folder Name="/Samples/">
+    <Project Path="Samples/DeepSharp.Sample.Networks/DeepSharp.Sample.Networks.csproj" />
     <Project Path="Samples/DeepSharp.Sample.Pipelines/DeepSharp.Sample.Pipelines.csproj" />
   </Folder>
   <Folder Name="/Tst/" />

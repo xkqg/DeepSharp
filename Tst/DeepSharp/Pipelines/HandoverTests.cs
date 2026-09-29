@@ -52,6 +52,34 @@ public class HandoverTests
     }
 
     [Fact]
+    public void ABatchSaysWhichPartItWasHandedOverFrom_AndWhichRowEachIsByItsKey()
+    {
+        // What a model predicts for a batch has to find its way back to the rows it was made for: the part and the key of
+        // every row travel with the numbers, in the order the rows are handed over.
+        var prepared = Passengers();
+
+        foreach (var part in new[] { Part.Train, Part.Validation, Part.Test })
+        {
+            var batch = prepared.Batch(part, Needs.Numbers);
+            RowKey[] keys = [.. Enumerable.Range(0, prepared.Table.RowCount).Where(row => prepared.Parts[row] == part).Select(row => prepared.Table.Identities[row].Key)];
+
+            Assert.Equal(part, batch.Part);
+            Assert.Equal(keys, batch.Keys);
+        }
+
+        var unanswered = Pdd.Create().ReadCsv(Repository.Data("titanic.csv")).Declare(schema => schema.Integer("pclass")).SplitAtRandom(0.70, 0.15).Build().Run();
+
+        Assert.Equal(Part.Validation, unanswered.Batch(Part.Validation).Part);
+        Assert.Equal(unanswered.CountIn(Part.Validation), unanswered.Batch(Part.Validation).Keys!.Count);
+
+        // A batch made by hand was handed over from no part, and its rows are known by nothing.
+        var made = new Batch(["a"], [[1.0]], null);
+
+        Assert.Null(made.Part);
+        Assert.Null(made.Keys);
+    }
+
+    [Fact]
     public void EverySplitCanBeHandedOverOnItsOwn()
     {
         var prepared = Passengers();

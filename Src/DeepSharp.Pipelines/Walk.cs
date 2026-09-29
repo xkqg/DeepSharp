@@ -251,7 +251,8 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
         {
             ThrowIfAColumnItReadsIsGone(declaration.Steps[_at]);
 
-            // An output that names the answer acts on nothing; every other step does exactly one thing.
+            // An output that names the answer acts on nothing, nor does a report that names its measures; every other
+            // step does exactly one thing.
             if (declaration.Steps[_at] is IActsInAWalk acting)
             {
                 acting.ActOn(this);

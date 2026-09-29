@@ -19,6 +19,10 @@ namespace DeepSharp.Pipelines;
 /// histogram of weights — and in the order it names them, for the same reason. An output of one answer hands
 /// it over both ways: as the labels, one number a row, and as the answers.
 /// </para>
+/// <para>
+/// A batch also says which part it was handed over from and which row each is, by its key, so what a model predicts
+/// for it is measured against the rows it was made for.
+/// </para>
 /// </remarks>
 public readonly record struct Batch(
     IReadOnlyList<string> FeatureNames,
@@ -33,6 +37,19 @@ public readonly record struct Batch(
 
     /// <summary>The answers of each row, as many numbers as <see cref="AnswerNames"/> names; nothing when no answer is handed over.</summary>
     public IReadOnlyList<double[]>? Answers { get; init; }
+
+    /// <summary>The part these rows were handed over from; nothing, for a batch <see cref="Handover.Batch(PreparedData, Pipelines.Part, Needs)"/> did not make.</summary>
+    public Part? Part { get; init; }
+
+    /// <summary>
+    /// The key of each row, in the order the rows are handed over: a digest of the record it was read from; nothing, for a
+    /// batch <see cref="Handover.Batch(PreparedData, Pipelines.Part, Needs)"/> did not make.
+    /// </summary>
+    /// <remarks>
+    /// What a model predicts for these rows is measured against them only when the predictions are for these rows in this
+    /// order, which the keys are how to tell: predictions in another order would be measured against other rows' answers.
+    /// </remarks>
+    public IReadOnlyList<RowKey>? Keys { get; init; }
 
     /// <summary>How many rows this batch holds.</summary>
     public int RowCount => Features.Count;
@@ -131,7 +148,7 @@ public static class Handover
             .Where(row => prepared.Parts[row] == part)
             .ToArray();
 
-        return HandedOver(prepared, prepared.Table, rows, withAnswers: true, needs);
+        return HandedOver(prepared, prepared.Table, rows, withAnswers: true, needs) with { Part = part };
     }
 
     /// <summary>Rows that arrived after training, replayed and handed over in the shape the training rows were.</summary>
@@ -169,7 +186,7 @@ public static class Handover
 
         return new ServedBatch(batch.FeatureNames, batch.Features, [.. all.Select(row => table.Identities[row].ReadAt)])
         {
-            Keys = [.. all.Select(row => table.Identities[row].Key)],
+            Keys = batch.Keys,
         };
     }
 
@@ -255,14 +272,16 @@ public static class Handover
         }
 
         IReadOnlyList<string> names = [.. features.Select(column => column.Name)];
+        IReadOnlyList<RowKey> keys = [.. rows.Select(row => table.Identities[row].Key)];
 
         return output is null
-            ? new Batch(names, batch, null)
+            ? new Batch(names, batch, null) { Keys = keys }
             // The labels are one number a row, so they carry an output of one answer.
             : new Batch(names, batch, answers.Count == 1 ? [.. answered.Select(each => each[0])] : null)
             {
                 AnswerNames = [.. answers],
                 Answers = answered,
+                Keys = keys,
             };
     }
 

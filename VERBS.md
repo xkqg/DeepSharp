@@ -16,6 +16,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`encode.categories`](#encodecategories) | Writes every column that stands for a group down as numbers, each by the categories the training rows held. |
 | [`evidence.correlation`](#evidencecorrelation) | Sets out the rows a correlation between columns is drawn from, on the rows the split trains on, and how many it kept. |
 | [`evidence.profile`](#evidenceprofile) | Profiles the columns where it stands, on the rows the split trains on, and names what is wrong or should not be there, with how each is answered. |
+| [`evidence.report`](#evidencereport) | Names the measures a trained model is held to, the parts they are taken on and how they are shown, each in the answer's own units. |
 | [`feature.add`](#featureadd) | Adds a column worked out from two others by plain arithmetic. |
 | [`feature.cyclical`](#featurecyclical) | Writes a moment in time as a place on a circle, so that the ends of a cycle meet. |
 | [`feature.indicator`](#featureindicator) | Adds a market indicator worked out from the rows that came before: an average, a strength index, a band. |
@@ -174,6 +175,26 @@ Profiles the columns where it stands, on the rows the split trains on, and names
 - **`columns`**: The columns to profile; left out, every column where the step stands.
 
 Means what it says from version 2 of the file.
+
+## `evidence.report`
+
+Names the measures a trained model is held to, the parts they are taken on and how they are shown, each in the answer's own units.
+
+```json
+{"step":"evidence.report","metrics":["rmse"],"parts":["validation","test"],"shown":["numbers"]}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `metrics` | a list of one or more of `rmse`, `mae`, `r2`, `accuracy`, `precision`, `recall` or `confusionmatrix` | `["rmse"]` |
+| `parts` | a list of one or more of `train`, `validation` or `test` | `["validation","test"]` |
+| `shown` | a list of one or more of `drawn` or `numbers` | `["numbers"]` |
+
+- **`metrics`**: The measures, in the order they are shown: rmse, mae and r2 for amounts; accuracy, precision, recall and the confusion matrix for classes.
+- **`parts`**: The parts they are taken on, side by side: the rows a model learns from, the rows it is chosen on and the rows it is tested on. The rows held back to predict on, and the rows a split keeps apart, are measured on by nothing.
+- **`shown`**: How they are shown: drawn, as the numbers themselves, or both.
+
+Means what it says from version 3 of the file.
 
 ## `feature.add`
 

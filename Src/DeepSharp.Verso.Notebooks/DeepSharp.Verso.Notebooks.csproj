@@ -14,11 +14,12 @@
          the version compiled against. A range rather than an exact pin: an exact pin beside Verso's own engine
          in one test project is NU1608, an error here (measured). -->
     <PackageReference Include="Verso.Abstractions" Version="[1.1.0, 2.0.0)" />
-    <!-- The colour maps, the correlation and the heatmap are borrowed, as the indicators are. -->
+    <!-- The colour maps and the correlation are borrowed, as the indicators are; every figure is DeepSharp.Charts'. -->
     <PackageReference Include="MatPlotLibNet" Version="1.18.0" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DeepSharp.Charts\DeepSharp.Charts.csproj" />
     <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
     <ProjectReference Include="..\DeepSharp.Pipelines.Indicators\DeepSharp.Pipelines.Indicators.csproj" />
   </ItemGroup>

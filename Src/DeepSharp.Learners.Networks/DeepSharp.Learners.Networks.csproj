@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Learners.Networks</PackageId>
+    <Description>Where a DeepSharp network meets a DeepSharp pipeline: a network learns from the rows the pipeline hands over from its training split, every feature on one scale, is judged by its validation rows and never sees its test rows; the pipeline's report measures it in the answer's own units; what it predicts for a row served later comes back as a value, a probability, a price or a count, as the pipeline's way back gives it. The network and the pipeline it was trained behind are one file, which refuses to be read beside any other fit of that pipeline — and a checkpoint is the same file with what the run needs to go on.</Description>
+    <PackageTags>deepsharp;pipeline;pdd;neural-network;deep-learning;machine-learning;training;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp\DeepSharp.csproj" />
+    <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The walked networks' weights are handed in directly, to pin the served numbers to the references. -->
+    <InternalsVisibleTo Include="DeepSharp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

@@ -8,6 +8,8 @@
                      takes in every dependency sitting beside the tests, so the gate would judge
                      somebody else's code, and the number would move without a line of ours changing. -->
                 <ModulePath>.*DeepSharp[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Charts[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Learners[.]Networks[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]DataFrame[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]Indicators[.]dll$</ModulePath>

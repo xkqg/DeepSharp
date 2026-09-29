@@ -258,5 +258,7 @@ public class EvidenceTests
         public string Visit(DataProfile profile) => "profile";
 
         public string Visit(CorrelationInput correlation) => "correlation";
+
+        public string Visit(Measures measures) => "measures";
     }
 }

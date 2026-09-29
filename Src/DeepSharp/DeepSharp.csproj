@@ -3,12 +3,17 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <PackageId>DeepSharp</PackageId>
-    <Description>The best of three worlds: TensorFlow's way of describing a network, PyTorch's way of running it, and ML.NET's way of learning from a table. Deep learning in C#: the layer over the engines that already exist. Describe, train and use a network in C# while the arithmetic runs on .NET's own vector maths out of the box, or on libtorch through TorchSharp when the work gets bigger — swapping between them does not change a line of your model. And a table that a tree learns better than a network does not have to become one: the same prepared data is meant for ML.NET's trainers too. DeepSharp provides what an engine does not: the model's shape, the path your data takes into it, the training loop, the checkpoints and the charts.</Description>
+    <Description>The best of three worlds: TensorFlow's way of describing a network, PyTorch's way of running it, and ML.NET's way of learning from a table. Deep learning in C#: the layer over the engines that already exist. Describe, train and use a network in C# — layers, losses, optimizers and a training loop with early stopping and checkpoints, in Keras's words or written as code — while the arithmetic runs on .NET's own vector maths, behind a seam a heavier engine such as libtorch through TorchSharp can stand behind without a line of your model changing. And a table that a tree learns better than a network does not have to become one: the same prepared data is meant for ML.NET's trainers too. DeepSharp provides what an engine does not: the model's shape, the path your data takes into it, the training loop, the checkpoints and the charts.</Description>
     <PackageTags>deep-learning;machine-learning;neural-network;tensor;autograd;tensorflow;pytorch;torchsharp;keras;ml.net;dotnet</PackageTags>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="System.Numerics.Tensors" Version="10.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A slot's tensor is replaced by an optimizer, a restore and the reader alone; the tests reach that door directly. -->
+    <InternalsVisibleTo Include="DeepSharp.Tests" />
   </ItemGroup>
 
   <ItemGroup>

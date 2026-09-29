@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Charts</PackageId>
+    <Description>The charts of a DeepSharp run, drawn from what the training loop and the measures already keep, never from arrays anybody assembles: the loss curve of the training and the validation rows, the learning rate every epoch took, a confusion matrix as a heatmap of counts, what a model predicted against what was there, what was left over, every measure as bars beside the training rows' average, and a correlation as a heatmap. Each chart is handed out as the text of an SVG, drawn by MatPlotLibNet, and kept in a package of its own so a trainer on a machine with no screen never carries a renderer.</Description>
+    <PackageTags>deepsharp;charts;machine-learning;deep-learning;loss-curve;confusion-matrix;svg;matplotlibnet;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The drawing is borrowed, as the notebook's heatmap always was; nothing of it shows in what this package hands out. -->
+    <PackageReference Include="MatPlotLibNet" Version="1.18.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp\DeepSharp.csproj" />
+    <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- A chart is handed out as SVG text; the suite reads the figure it was drawn from, which only this package holds. -->
+    <InternalsVisibleTo Include="DeepSharp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

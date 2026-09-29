@@ -5,12 +5,9 @@ using System.Globalization;
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using DeepSharp.Charts;
 using DeepSharp.Pipelines;
-using MatPlotLibNet;
 using MatPlotLibNet.Numerics;
-using MatPlotLibNet.Rendering.TickFormatters;
-using MatPlotLibNet.Rendering.TickLocators;
-using MatPlotLibNet.Styling.ColorMaps;
 using Verso.Abstractions;
 
 namespace DeepSharp.Verso.Notebooks;
@@ -22,8 +19,10 @@ namespace DeepSharp.Verso.Notebooks;
 /// The core measures and this only draws: a profile as a table with its alerts and the rows that are there more
 /// than once, a correlation as a heatmap or as its coefficients, with how many rows it was drawn from, out of how
 /// many, and by which rule — a correlation needs a value in every column of a row, so the rows with a gap in any
-/// of them are left out, and how many is part of what it shows. The correlation itself is MatPlotLibNet's, as is
-/// the drawing. Every number is written in the invariant culture.
+/// of them are left out, and how many is part of what it shows. The correlation itself is MatPlotLibNet's. A
+/// trained model's measures are written as their numbers, each beside the training rows' average, or drawn. Every
+/// drawing is DeepSharp.Charts', so a figure is drawn one way wherever it is shown. Every number is written in the
+/// invariant culture.
 /// </remarks>
 internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
 {
@@ -100,10 +99,132 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
             return CellOutput.Html(html.Append("<div>That is too few rows to correlate anything.</div></div>").ToString());
         }
 
+        if (correlation.Shown != Shown.Numbers)
+        {
+            return CellOutput.Html(html.Append(correlation.Heatmap()).Append("</div>").ToString());
+        }
+
         var matrix = NpStats.Corrcoef([.. Enumerable.Range(0, names.Length).Select(column => correlation.Rows.Select(row => row[column]).ToArray())]);
 
-        return CellOutput.Html((correlation.Shown == Shown.Numbers ? Numbers(html, names, matrix) : Drawn(html, names, matrix))
-            .Append("</div>").ToString());
+        return CellOutput.Html(Numbers(html, names, matrix).Append("</div>").ToString());
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// As the report says they are shown. As numbers: a part to a row, each measure beside predicting the training rows'
+    /// average, then each confusion matrix, a class held to a row and a class predicted to a column, with the average's count
+    /// in brackets. Drawn: every measure as bars beside the average, each confusion matrix as a heatmap of counts, and — where
+    /// an amount is measured — what was predicted against what was there, and what was left over.
+    /// </remarks>
+    public CellOutput Visit(Measures measures)
+    {
+        ArgumentNullException.ThrowIfNull(measures);
+
+        var html = new StringBuilder(Style).Append("<div class=\"deepsharp-evidence\"><div class=\"deepsharp-summary\">Measures of ")
+            .Append(Encoded(string.Join(", ", measures.Answers)))
+            .Append(" in their own units, each beside predicting the training rows' average.</div>");
+
+        if (measures.Shown.Contains(Shown.Numbers))
+        {
+            Table(html, measures);
+        }
+
+        if (measures.Shown.Contains(Shown.Drawn))
+        {
+            Drawn(html, measures);
+        }
+
+        return CellOutput.Html(html.Append("</div>").ToString());
+    }
+
+    // The measures as numbers: a part to a row, then every confusion matrix, the average's count in brackets.
+    private static void Table(StringBuilder html, Measures measures)
+    {
+        html.Append("<table><thead><tr><th>part</th><th>rows</th>");
+
+        foreach (var metric in measures.Metrics.Where(metric => metric != Metric.ConfusionMatrix))
+        {
+            html.Append("<th>").Append(metric.Word()).Append("</th><th>baseline</th>");
+        }
+
+        html.Append("</tr></thead><tbody>");
+
+        foreach (var part in measures.Parts)
+        {
+            html.Append("<tr><td>").Append(part.Part.Word()).Append("</td><td class=\"deepsharp-number\">").Append(Invariant(part.Rows)).Append("</td>");
+
+            foreach (var measured in part.Values)
+            {
+                html.Append("<td class=\"deepsharp-number\">").Append(Number(measured.Value)).Append("</td>")
+                    .Append("<td class=\"deepsharp-number\">").Append(Number(measured.Baseline)).Append("</td>");
+            }
+
+            html.Append("</tr>");
+        }
+
+        html.Append("</tbody></table>");
+
+        if (measures.Parts[0].Confusions.Count > 0)
+        {
+            html.Append("<div>A confusion matrix counts the rows, a class held to a row and a class predicted to a column, the average's count in brackets.</div>");
+        }
+
+        foreach (var part in measures.Parts)
+        {
+            foreach (var confusion in part.Confusions)
+            {
+                Matrix(html, part.Part, confusion);
+            }
+        }
+    }
+
+    // The measures drawn: the bars of every number, the heatmap of every confusion matrix, and — where an amount is
+    // measured — what was predicted against what was there, and what was left over.
+    private static void Drawn(StringBuilder html, Measures measures)
+    {
+        if (measures.Parts[0].Values.Count > 0)
+        {
+            html.Append(measures.Bars());
+        }
+
+        if (measures.Parts[0].Confusions.Count > 0)
+        {
+            html.Append(measures.ConfusionMatrices());
+        }
+
+        if (measures.Metrics.Any(metric => metric is Metric.Rmse or Metric.Mae or Metric.R2))
+        {
+            html.Append(measures.PredictedAgainstActual()).Append(measures.Residuals());
+        }
+    }
+
+    // One confusion matrix: a class held to a row, a class predicted to a column, each count beside the average's.
+    private static void Matrix(StringBuilder html, Part part, Confusion confusion)
+    {
+        html.Append("<div>").Append(part.Word()).Append(confusion.Answer is { } answer ? $": {Encoded(answer)}" : string.Empty)
+            .Append("</div><table><thead><tr><th>held \\ predicted</th>");
+
+        foreach (var name in confusion.Classes)
+        {
+            html.Append("<th>").Append(Encoded(name)).Append("</th>");
+        }
+
+        html.Append("</tr></thead><tbody>");
+
+        for (var held = 0; held < confusion.Classes.Count; held++)
+        {
+            html.Append("<tr><th>").Append(Encoded(confusion.Classes[held])).Append("</th>");
+
+            for (var predicted = 0; predicted < confusion.Classes.Count; predicted++)
+            {
+                html.Append("<td class=\"deepsharp-number\">").Append(Invariant(confusion.Counts[held][predicted]))
+                    .Append(" (").Append(Invariant(confusion.Baseline[held][predicted])).Append(")</td>");
+            }
+
+            html.Append("</tr>");
+        }
+
+        html.Append("</tbody></table>");
     }
 
     private static StringBuilder Numbers(StringBuilder html, string[] names, Mat matrix)
@@ -130,41 +251,6 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
         }
 
         return html.Append("</tbody></table>");
-    }
-
-    // A heatmap of the coefficients from -1 to 1, blue to red, each cell labelled with its value.
-    private static StringBuilder Drawn(StringBuilder html, string[] names, Mat matrix)
-    {
-        var data = new double[names.Length, names.Length];
-        var positions = Enumerable.Range(0, names.Length).Select(position => (double)position).ToArray();
-
-        for (var row = 0; row < names.Length; row++)
-        {
-            for (var column = 0; column < names.Length; column++)
-            {
-                data[row, column] = matrix[row, column];
-            }
-        }
-
-        var size = 160 + (60 * names.Length);
-        var svg = new FigureBuilder()
-            .WithSize(size + 120, size)
-            .AddSubPlot(1, 1, 1, axes => axes
-                .Heatmap(data, series =>
-                {
-                    series.ColorMap = ColorMaps.Coolwarm;
-                    series.Normalizer = FromMinusOneToOne.Instance;
-                    series.ShowLabels = true;
-                    series.LabelFormat = "0.00";
-                })
-                .SetXTickLocator(new FixedLocator(positions))
-                .SetXTickFormatter(new CategoryFormatter(names))
-                .SetYTickLocator(new FixedLocator(positions))
-                .SetYTickFormatter(new CategoryFormatter(names, reversed: true))
-                .WithColorBar())
-            .ToSvg();
-
-        return html.Append(svg);
     }
 
     // An alert whose answer changes the columns has a box that gives it, drawn unticked: it carries its column, what

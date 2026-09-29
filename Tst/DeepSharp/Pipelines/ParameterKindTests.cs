@@ -148,6 +148,41 @@ public class ParameterKindTests
     }
 
     [Fact]
+    public void AChoice_IsNamedByTheWordAFileWritesItAs_OneRuleForEveryReader()
+    {
+        // What a chart, a notebook or a reference calls a part or a measure is the word the file holds, taken from the one
+        // rule the reader and the writer use, so no second spelling can drift from it.
+        Assert.Equal("validation", Part.Validation.Word());
+        Assert.Equal("confusionmatrix", Metric.ConfusionMatrix.Word());
+        Assert.Equal("drawn", Shown.Drawn.Word());
+        Assert.Throws<ArgumentOutOfRangeException>(() => ((Part)99).Word());
+    }
+
+    [Fact]
+    public void SeveralOfSomeOfAKind_OffersOnlyThose_AndRefusesTheRestInAFileAndInCode()
+    {
+        // A set some of whose words a step cannot take says so in its choices, so the schema, the reference and a form
+        // offer only those, and the reader and the step refuse the rest rather than one of them alone.
+        var parts = new SeveralOfParameter<TimePart>("parts", "Which pieces of a day.", [TimePart.Hour], [TimePart.Hour, TimePart.Minute]);
+
+        Assert.Equal(["minute", "hour"], parts.Choices);
+        Assert.Equal([TimePart.Hour, TimePart.Minute], parts.Read(Step("""{"parts":["Hour","minute"]}""")));
+        Assert.Equal([TimePart.Minute], parts.Require([TimePart.Minute]));
+
+        var read = Assert.Throws<FormatException>(() => parts.Read(Step("""{"parts":["hour","month"]}""")));
+
+        Assert.Contains("'month'", read.Message, StringComparison.Ordinal);
+        Assert.Contains("minute, hour", read.Message, StringComparison.Ordinal);
+
+        var required = Assert.ThrowsAny<ArgumentException>(() => parts.Require([TimePart.Hour, TimePart.Month]));
+
+        Assert.Contains("'parts'", required.Message, StringComparison.Ordinal);
+        Assert.Contains("minute, hour", required.Message, StringComparison.Ordinal);
+        Assert.Throws<ArgumentNullException>(() => new SeveralOfParameter<TimePart>("parts", "Which.", [TimePart.Hour], null!));
+        Assert.Throws<ArgumentException>(() => new SeveralOfParameter<TimePart>("parts", "Which.", [TimePart.Hour], []));
+    }
+
+    [Fact]
     public void ColumnsAreNames_AndOnlyNames()
     {
         var columns = new ColumnsParameter("columns", "Which columns.", ["a"], ColumnKinds.Numbers);

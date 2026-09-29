@@ -3,7 +3,7 @@
 
 using MatPlotLibNet.Styling.ColorMaps;
 
-namespace DeepSharp.Verso.Notebooks;
+namespace DeepSharp.Charts;
 
 /// <summary>
 /// Places a correlation on the whole of its scale, from minus one to one, whatever the coefficients drawn happen

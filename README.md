@@ -18,18 +18,24 @@ your data in, the layers, the training loop, the checkpoints and the pictures. A
 better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
-**0.4.0 is the tensors with their gradients worked out automatically, the data half, and a notebook to see the
-data in and choose its columns — in Verso, in an application of your own, or in your browser from DeepSharp's own
-server.** As it is read, the data proposes what each column holds, and a profile names what should not be there.
-What learns from the gradients is next; the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says in which
-order, and the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release added.
+**0.4.0 is where it learns.** Layers, losses and optimizers; a training loop that stops once the validation rows
+no longer improve; networks described in Keras's words or written as code, trained on the rows a pipeline prepares and
+saved with that pipeline as one file; the pipeline's report measuring what they learned, and the charts drawing it.
+Beneath them, tensors whose gradients are worked out automatically, the data half — which proposes what each column
+holds and names what should not be there — and a notebook to see the data in, in Verso, in an application of your own,
+or in your browser from DeepSharp's own server. The [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says
+what comes next, and the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each
+release added.
 
 ```
 dotnet add package DeepSharp
 dotnet add package DeepSharp.Pipelines
+dotnet add package DeepSharp.Learners.Networks
 ```
 
 ```csharp
+using DeepSharp.Learners.Networks;
+using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 
 var prepared = Pdd.Create()
@@ -38,16 +44,34 @@ var prepared = Pdd.Create()
         .Timestamp("timestamp")
         .Number("close")
         .Optional("trades", ColumnKind.Number))              // a column that may have gaps
-    .SplitByTime("timestamp", train: 0.70, validation: 0.15) // test is the rest
+    .OrderBy("timestamp")
+    .SplitByTime("timestamp", train: 0.70, validation: 0.15, gap: 1) // test is the rest
+    .Ahead("close", 1, AheadAs.Return)                       // the answer: tomorrow's return
     .FillMissing("trades", With.Mean)                        // only offered after the split
-    .Normalise("close")
+    .Normalise("close", Scale.MidRange)                      // every feature between -1 and 1
+    .Normalise("trades", Scale.MidRange)
+    .Drop("timestamp")
+    .Report(report => report.Measure(Metric.Rmse).On(Part.Validation, Part.Test).As(Shown.Numbers))
     .Build()
     .Run();
+
+var trained = new Sequential().Dense(8).Relu().Dense(1)     // Keras's words: the widths come from the rows
+    .Compile(new Adam(), new MeanSquaredError())
+    .Fit(prepared, new FitOptions(seed: 42) { Epochs = 20 });
+
+var file = trained.ToJson();                                 // the network and its pipeline, one file
 ```
 
 The course from raw data to a validated model is declared once as an artefact and replayed, and anything
 that learns from the data is fitted on the training rows alone. That is the whole idea, and
 [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) is where it is explained.
+
+The network learns from the training rows and is judged by the validation rows; the test rows reach it only when the
+report measures it, each measure beside what predicting the training rows' average would score. `trained.Predict(rows)`
+answers rows that arrive later in the answer's own units — here, a return comes back as a price — and
+`TrainedNetwork.FromJson(file, NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn())` reads the network and its pipeline back
+in a program that has never seen the data, refusing the network beside any other fit of its pipeline, however alike
+their columns are. `DeepSharp.Charts` draws the loss curve, the measures and a confusion matrix, as SVG.
 
 The steps and what they learned are one file: `prepared.ToJson()` writes it, and
 `PreparedData.FromJson(text, StepCatalog.BuiltIn())` reads it back in a program that has never seen the data.
@@ -101,9 +125,10 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 
 | | |
 |---|---|
-| [Getting started](https://github.com/xkqg/DeepSharp/wiki/Getting-Started) | Install it, add two tensors, prepare a real file. |
+| [Getting started](https://github.com/xkqg/DeepSharp/wiki/Getting-Started) | Install it, add two tensors, prepare a real file, train a network on it. |
 | [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) | The idea this library is built around, and the mistake it removes. |
 | [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) | Every verb in the order you write it: readers, features, the split, gaps, scales, what a model is asked to predict, the handover. |
+| [Networks](https://github.com/xkqg/DeepSharp/wiki/Networks) | Layers, losses, optimizers and the loop; a network in Keras's words or as code; trained behind a pipeline, measured, drawn and saved as one file. |
 | [Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook) | A pipeline written block by block in Verso, and the data at any block. |
 | [Architecture](https://github.com/xkqg/DeepSharp/wiki/Architecture) | The design decisions, and what was deliberately left out. |
 | [Next to TorchSharp, TensorFlow.NET and ML.NET](https://github.com/xkqg/DeepSharp/wiki#how-this-sits-next-to-torchsharp-tensorflownet-and-mlnet) | What those give you, what they do not, why the choice of engine stays a choice, and where a trainer from ML.NET fits. |
@@ -116,8 +141,10 @@ if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 
 | | |
 |---|---|
-| `DeepSharp` | The tensors, their shape, the backend the arithmetic runs on, and the gradients worked out through it. |
-| `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales, a profile that names what should not be there, the answer in four kinds, the handover, which holds every feature between minus one and one for a learner that needs it, and the column decisions saved on their own and taken over — saved as a file and replayed. |
+| `DeepSharp` | The tensors, their shape, the backend the arithmetic runs on, and the gradients worked out through it; the layers — dense, activations, dropout, normalisations, convolution — networks written as code or described in Keras's words, losses, optimizers and learning-rate schedules, the training loop with early stopping and checkpoints, and a network written down as the kinds it is made of and the numbers it learned. |
+| `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales, a profile that names what should not be there, the answer in four kinds, the report of what a trained model is measured by, the handover, which holds every feature between minus one and one for a learner that needs it, and the column decisions saved on their own and taken over — saved as a file and replayed. |
+| `DeepSharp.Learners.Networks` | Where a network meets a pipeline: trained on its training rows, judged by its validation rows, measured by its report, and saved with it as one file that refuses any other fit of it; what it predicts for rows served later comes back in the answer's own units, and a checkpoint is the same file with what the run needs to go on. |
+| `DeepSharp.Charts` | The charts, as SVG, drawn with [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) from what the training loop and the measures already keep: the loss curve, the learning rate, a confusion matrix, what was predicted against what was there, what was left over, every measure as bars beside the training rows' average, and a correlation as a heatmap. |
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). A CSV comes through as the text the file writes, and a query with the kinds the database gives its columns. |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
 | `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, with the data, a profile and a heatmap at any block, and its columns chosen from the grid or a list — which shows what each column's cells propose — and saved beside it; a box beside a profile's alert gives its answer. It runs in Verso's VS Code extension, in `verso serve`, in DeepSharp's own server and in an application of your own. |

@@ -185,19 +185,21 @@ public class DeclarationRulesTests
     {
         // Two capabilities on one step cannot compile outside this library — the run would not know which of
         // them the step is — so what is left to pin is that every step here has one, an output that only names
-        // its answers aside.
+        // its answers and a report that only names their measures aside.
         var steps = new[] { typeof(Pdd).Assembly, typeof(AddIndicatorStep).Assembly }
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type => type is { IsClass: true, IsAbstract: false } && typeof(IPipelineStep).IsAssignableFrom(type))
             .ToArray();
 
         Assert.NotEmpty(steps);
+        Assert.Contains(typeof(ReportStep), steps);
 
         foreach (var step in steps)
         {
             var acts = step.GetInterfaces().Count(face => face != typeof(IActsInAWalk) && typeof(IActsInAWalk).IsAssignableFrom(face));
 
-            var onlyNames = typeof(INamesTheAnswer).IsAssignableFrom(step) && !typeof(IActsInAWalk).IsAssignableFrom(step);
+            var onlyNames = (typeof(INamesTheAnswer).IsAssignableFrom(step) || typeof(INamesTheMeasures).IsAssignableFrom(step))
+                            && !typeof(IActsInAWalk).IsAssignableFrom(step);
 
             Assert.True(onlyNames ? acts == 0 : acts == 1, $"{step.Name} does {acts} things.");
         }

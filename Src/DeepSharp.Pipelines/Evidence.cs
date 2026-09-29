@@ -9,7 +9,7 @@ namespace DeepSharp.Pipelines;
 /// <summary>How a piece of evidence is shown: drawn, or as a grid of numbers.</summary>
 public enum Shown
 {
-    /// <summary>Drawn: a correlation as a coloured grid, a profile as bars.</summary>
+    /// <summary>Drawn: a correlation as a coloured grid, a profile as bars, a model's measures as charts.</summary>
     Drawn,
 
     /// <summary>As the numbers themselves.</summary>
@@ -65,6 +65,11 @@ public interface IEvidenceVisitor<out TResult>
     /// <param name="correlation">The rows, and how many were kept.</param>
     /// <returns>What the visitor builds for it.</returns>
     TResult Visit(CorrelationInput correlation);
+
+    /// <summary>The measures a trained model's predictions were held to, part by part, each beside predicting the training rows' average.</summary>
+    /// <param name="measures">The measures.</param>
+    /// <returns>What the visitor builds for them.</returns>
+    TResult Visit(Measures measures);
 }
 
 /// <summary>One column, as a profile measures it on the measured rows.</summary>

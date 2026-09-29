@@ -563,6 +563,32 @@ public sealed class FittingBuilder
     /// </exception>
     public FittingBuilder Ahead(string column, int ahead, AheadAs @as = AheadAs.Value) => Add(new AheadStep(column, ahead, @as));
 
+    /// <summary>Names the measures a trained model is held to, the parts they are taken on, and how they are shown.</summary>
+    /// <param name="report">
+    /// Says them: <c>report =&gt; report.Measure(Metric.Rmse, Metric.R2).On(Part.Validation, Part.Test).As(Shown.Numbers)</c>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">
+    /// It names no measure, no part or no way of showing them, or a part other than training, validation and test.
+    /// </exception>
+    /// <exception cref="DeclarationException">
+    /// No output stands above it, a report already does, or a measure that counts classes names an output whose answers
+    /// are amounts.
+    /// </exception>
+    /// <remarks>
+    /// Declared before any number exists, so every run is measured the same way. The run acts on nothing for it: the
+    /// measures are taken once a model has predicted, by <see cref="PreparedData.Measure"/>.
+    /// </remarks>
+    public FittingBuilder Report(Action<ReportBuilder> report)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        var builder = new ReportBuilder();
+        report(builder);
+
+        return Add(new ReportStep(builder.Metrics, builder.Parts, builder.Shown));
+    }
+
     /// <summary>
     /// Takes saved decisions over into the chain as it stands: their schema, the columns they drop and their output — and
     /// says what that changes.

@@ -29,6 +29,7 @@ internal static class StageExtensions
         [typeof(ISplitStep)] = "split",
         [typeof(IFittedStep)] = "learned from the training rows",
         [typeof(IProducesEvidence)] = "evidence",
+        [typeof(INamesTheMeasures)] = "evidence",
     };
 
     /// <summary>The capability this step acts through: the one thing it does in a run.</summary>

@@ -41,6 +41,7 @@
             "encode.categories",
             "evidence.correlation",
             "evidence.profile",
+            "evidence.report",
             "feature.add",
             "feature.cyclical",
             "feature.indicator",
@@ -186,6 +187,21 @@
           },
           "then": {
             "$ref": "#/$defs/evidence.profile"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "evidence.report"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/evidence.report"
           }
         },
         {
@@ -937,6 +953,85 @@
       },
       "required": [
         "step"
+      ],
+      "additionalProperties": false
+    },
+    "evidence.report": {
+      "description": "Names the measures a trained model is held to, the parts they are taken on and how they are shown, each in the answer's own units.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "evidence.report"
+        },
+        "metrics": {
+          "description": "The measures, in the order they are shown: rmse, mae and r2 for amounts; accuracy, precision, recall and the confusion matrix for classes.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "rmse",
+                  "mae",
+                  "r2",
+                  "accuracy",
+                  "precision",
+                  "recall",
+                  "confusionmatrix"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^(?:[Rr][Mm][Ss][Ee]|[Mm][Aa][Ee]|[Rr]2|[Aa][Cc][Cc][Uu][Rr][Aa][Cc][Yy]|[Pp][Rr][Ee][Cc][Ii][Ss][Ii][Oo][Nn]|[Rr][Ee][Cc][Aa][Ll][Ll]|[Cc][Oo][Nn][Ff][Uu][Ss][Ii][Oo][Nn][Mm][Aa][Tt][Rr][Ii][Xx])$"
+              }
+            ]
+          }
+        },
+        "parts": {
+          "description": "The parts they are taken on, side by side: the rows a model learns from, the rows it is chosen on and the rows it is tested on. The rows held back to predict on, and the rows a split keeps apart, are measured on by nothing.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "train",
+                  "validation",
+                  "test"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^(?:[Tt][Rr][Aa][Ii][Nn]|[Vv][Aa][Ll][Ii][Dd][Aa][Tt][Ii][Oo][Nn]|[Tt][Ee][Ss][Tt])$"
+              }
+            ]
+          }
+        },
+        "shown": {
+          "description": "How they are shown: drawn, as the numbers themselves, or both.",
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "anyOf": [
+              {
+                "enum": [
+                  "drawn",
+                  "numbers"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^(?:[Dd][Rr][Aa][Ww][Nn]|[Nn][Uu][Mm][Bb][Ee][Rr][Ss])$"
+              }
+            ]
+          }
+        }
+      },
+      "required": [
+        "step",
+        "metrics",
+        "parts",
+        "shown"
       ],
       "additionalProperties": false
     },
@@ -1830,6 +1925,7 @@
                       "encode.categories",
                       "evidence.correlation",
                       "evidence.profile",
+                      "evidence.report",
                       "order.by",
                       "split.atRandom",
                       "split.byTime",
@@ -1837,6 +1933,32 @@
                       "target.ahead",
                       "target.distribution",
                       "target.labels"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 3
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "declaration": {
+            "items": {
+              "properties": {
+                "step": {
+                  "not": {
+                    "enum": [
+                      "evidence.report"
                     ]
                   }
                 }

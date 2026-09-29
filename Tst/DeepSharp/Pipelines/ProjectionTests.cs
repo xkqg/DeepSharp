@@ -47,7 +47,8 @@ public class ProjectionTests
     [MemberData(nameof(EveryVerb))]
     public void TheSchema_AcceptsTheStepEveryNewBlockStartsWith(string verb)
     {
-        Assert.True(Valid($$"""{"version":2,"declaration":[{{Everything().Describe(verb).Template}}]}"""), verb);
+        // In a file of the version this library writes, which is the one a new block is written in.
+        Assert.True(Valid($$"""{"version":{{PipelineDeclaration.Version}},"declaration":[{{Everything().Describe(verb).Template}}]}"""), verb);
     }
 
     [Theory]
@@ -149,6 +150,10 @@ public class ProjectionTests
     [InlineData("""{"version":2,"declaration":[],"fitted":[{"step":"normalise","prefix":"0000000000000000000000000000000000000000000000000000000000000000"}]}""")]
     [InlineData("""{"version":2,"declaration":[],"fitted":[{"step":"normalise","prefix":"0000000000000000000000000000000000000000000000000000000000000000","learned":{"a":true}}]}""")]
     [InlineData("""{"version":2,"declaration":[],"fitted":[{"step":"normalise","prefix":"0000000000000000000000000000000000000000000000000000000000000000","learned":{"a":[1,"b"]}}]}""")]
+    [InlineData("""{"version":2,"declaration":[{"step":"evidence.report","metrics":["rmse"],"parts":["test"],"shown":["numbers"]}]}""")]
+    [InlineData("""{"version":3,"declaration":[{"step":"evidence.report","metrics":["rmse"],"parts":["predict"],"shown":["numbers"]}]}""")]
+    [InlineData("""{"version":3,"declaration":[{"step":"evidence.report","metrics":[],"parts":["test"],"shown":["numbers"]}]}""")]
+    [InlineData("""{"version":3,"declaration":[{"step":"evidence.report","metrics":["rmse"],"parts":["test"]}]}""")]
     public void TheSchema_RefusesWhatTheReaderRefuses(string json)
     {
         Assert.False(Valid(json), json);

@@ -41,6 +41,9 @@ reach for a test that pretends to cover it.
   `Helper` is a drawer nobody owns.
 - Several values out of a method is a `readonly record struct` with named members, never a tuple. A tuple
   loses its names in IntelliSense, in stack traces and in the documentation.
+- A method or a constructor takes four parameters at most. A fifth says some of them belong together, in a record or
+  an options object with names of its own. The public `PreparedData` constructor and two of the evidence's internal
+  constructors take five: they came before the rule, and keep them until changing them is worth what it breaks.
 - Nothing reaches for a shared mutable instance of its own accord. What a type needs is handed to it.
 
 ## The version is handed out, never invented

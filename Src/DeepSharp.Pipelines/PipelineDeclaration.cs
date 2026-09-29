@@ -42,6 +42,10 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         new OnlyAnOutputReadsAhead(),
         new RowsAheadAreKeptApart(),
         new AReturnIsMadeFromItsColumnAsRead(),
+        new AtMostOne<INamesTheMeasures>("report"),
+        new AReportStandsBelowItsOutput(),
+        new AReportMeasuresDividedRows(),
+        new ClassesAreCountedWhereTheAnswersAreClasses(),
         new ColumnsAreThereWhereTheyAreRead(),
     ];
 
@@ -71,6 +75,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         ColumnsAt = Array.FindIndex(_steps, step => step is IBindsColumns);
         SplitAt = Array.FindIndex(_steps, step => step is ISplitStep);
         OutputAt = Array.FindIndex(_steps, step => step is INamesTheAnswer);
+        Report = _steps.OfType<INamesTheMeasures>().FirstOrDefault();
     }
 
     /// <summary>Everything wrong with these steps as a declaration, without refusing them.</summary>
@@ -202,6 +207,13 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// a replay, the way back — whichever kind of output it is.
     /// </remarks>
     public INamesTheAnswer? Output => OutputAt < 0 ? null : (INamesTheAnswer)_steps[OutputAt];
+
+    /// <summary>The step that names the measures a trained model is held to, or nothing when the pipeline names none.</summary>
+    /// <remarks>
+    /// A declaration has at most one, below its output, so this is where measuring a model asks what to measure, on
+    /// which parts, and how it is shown.
+    /// </remarks>
+    public INamesTheMeasures? Report { get; }
 
     /// <summary>The columns there are before a step: the ones a block standing there can pick from.</summary>
     /// <param name="position">The step's place, counting from nought; the number of steps for after the last.</param>

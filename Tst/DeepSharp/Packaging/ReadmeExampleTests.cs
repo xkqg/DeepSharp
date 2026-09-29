@@ -5,6 +5,7 @@ using System.Globalization;
 using System.Runtime.Loader;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using DeepSharp.Learners.Networks;
 using DeepSharp.Pipelines;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -37,13 +38,19 @@ public sealed partial class ReadmeExampleTests : IDisposable
         File.WriteAllText(file, "timestamp,trades,close\n" + string.Concat(Enumerable.Range(1, 20).Select(day =>
             string.Create(CultureInfo.InvariantCulture, $"2024-01-{day:00},{(day % 5 == 0 ? string.Empty : (day * 3).ToString(CultureInfo.InvariantCulture))},{day + 0.5}\n"))));
 
-        var prepared = Assert.IsType<PreparedData>(Run(example.Replace("\"btceur-1d.csv\"", JsonSerializer.Serialize(file), StringComparison.Ordinal)));
+        var made = Assert.IsType<object[]>(Run(example.Replace("\"btceur-1d.csv\"", JsonSerializer.Serialize(file), StringComparison.Ordinal)));
+        var prepared = Assert.IsType<PreparedData>(made[0]);
+        var trained = Assert.IsType<TrainedNetwork>(made[1]);
 
+        // Twenty days, the last of the training part kept apart as the gap the answer read from tomorrow needs.
         Assert.Equal(20, prepared.Table.RowCount);
-        Assert.Equal(14, prepared.CountIn(Part.Train));
+        Assert.Equal(13, prepared.CountIn(Part.Train));
+        Assert.Equal(20, trained.History!.Epochs.Count);
+        Assert.Equal([Part.Validation, Part.Test], trained.Measures!.Parts.Select(part => part.Part));
+        Assert.Contains("\"trainedOn\"", Assert.IsType<string>(made[2]), StringComparison.Ordinal);
     }
 
-    // The example as a method: its usings above, its statements inside, and what it prepared handed back.
+    // The example as a method: its usings above, its statements inside, and what it prepared, trained and wrote handed back.
     private static object? Run(string example)
     {
         var lines = example.Split('\n');
@@ -55,7 +62,7 @@ public sealed partial class ReadmeExampleTests : IDisposable
                 public static object Run()
                 {
             {{string.Join('\n', lines.Where(line => !line.StartsWith("using ", StringComparison.Ordinal)))}}
-                    return prepared;
+                    return new object[] { prepared, trained, file };
                 }
             }
             """;

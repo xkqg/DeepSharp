@@ -10,7 +10,7 @@ namespace DeepSharp.Tests.Tensors;
 /// writes down every operation as it runs it on the backend it wraps, and then works back from the loss to how much
 /// each number the pass read moved it. Every gradient is checked against the loss nudged a little either way.
 /// </summary>
-public class RecordingBackendTests
+public partial class RecordingBackendTests
 {
     private const float Nudge = 1e-2f;
 

@@ -499,7 +499,7 @@ public sealed class OneOfParameter<TEnum>(string key, string description, TEnum 
     }
 }
 
-/// <summary>A parameter holding several of a named set of words.</summary>
+/// <summary>A parameter holding several of a named set of words, or of some of them.</summary>
 /// <typeparam name="TEnum">The set of words.</typeparam>
 /// <param name="key">The key it is written under.</param>
 /// <param name="description">What it means.</param>
@@ -508,8 +508,38 @@ public sealed class SeveralOfParameter<TEnum>(string key, string description, IR
     : StepParameter<IReadOnlyList<TEnum>>(key, description, example)
     where TEnum : struct, Enum
 {
+    // The words of the set it may hold, in the set's order, and as they are written; nothing when it may hold them all.
+    private readonly TEnum[]? _only;
+    private readonly IReadOnlyList<string>? _words;
+
+    /// <summary>A parameter holding several of some of a named set of words.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="only">The words of the set it may hold; the others are refused, and offered nowhere.</param>
+    /// <exception cref="ArgumentException">It may hold none of the set's words.</exception>
+    /// <remarks>
+    /// For a step that takes some of a set and not the rest — a report measures the parts a model is trained, chosen and
+    /// tested on, and no other rows. The words it may not hold are left out of its choices, so the schema, the reference
+    /// and a form offer only these, and a file or a call that names another is refused where it is written.
+    /// </remarks>
+    public SeveralOfParameter(string key, string description, IReadOnlyList<TEnum> example, IReadOnlyList<TEnum> only)
+        : this(key, description, example)
+    {
+        ArgumentNullException.ThrowIfNull(only);
+
+        _only = [.. Enum.GetValues<TEnum>().Where(only.Contains)];
+
+        if (_only.Length == 0)
+        {
+            throw new ArgumentException("A parameter that holds some of a set of words may hold at least one of them.", nameof(only));
+        }
+
+        _words = [.. _only.Select(each => Vocabulary<TEnum>.WordFor(each, Key))];
+    }
+
     /// <summary>The words it may hold, as they are written.</summary>
-    public IReadOnlyList<string> Choices => Vocabulary<TEnum>.Words;
+    public IReadOnlyList<string> Choices => _words ?? Vocabulary<TEnum>.Words;
 
     /// <inheritdoc />
     public override IReadOnlyList<TEnum> Read(JsonElement step)
@@ -520,9 +550,25 @@ public sealed class SeveralOfParameter<TEnum>(string key, string description, IR
         }
 
         return [.. list.EnumerateArray().Select(item => item.ValueKind == JsonValueKind.String
-            ? Vocabulary<TEnum>.Read(item.GetString()!, Key)
+            ? Word(item.GetString()!)
             : throw new FormatException(
                 $"'{item}' is not one of the things '{Key}' can hold: {string.Join(", ", Choices)}."))];
+    }
+
+    // One of the words it may hold, in whatever case it was typed, and nothing else: a word of the set it may not hold
+    // is refused as one it does not know, naming the ones it may.
+    private TEnum Word(string written)
+    {
+        if (_only is null)
+        {
+            return Vocabulary<TEnum>.Read(written, Key);
+        }
+
+        var at = Choices.ToList().FindIndex(word => string.Equals(word, written, StringComparison.OrdinalIgnoreCase));
+
+        return at >= 0
+            ? _only[at]
+            : throw new FormatException($"'{written}' is not one of the things '{Key}' can be: {string.Join(", ", Choices)}.");
     }
 
     /// <inheritdoc />
@@ -554,6 +600,11 @@ public sealed class SeveralOfParameter<TEnum>(string key, string description, IR
         foreach (var each in value)
         {
             Vocabulary<TEnum>.WordFor(each, Key);
+
+            if (_only is not null && !_only.Contains(each))
+            {
+                throw new ArgumentOutOfRangeException(Key, each, $"'{Key}' holds only {string.Join(", ", Choices)}: {Description}");
+            }
         }
 
         return value;
@@ -1011,4 +1062,19 @@ internal static class Vocabulary<TEnum>
             : throw new ArgumentOutOfRangeException(
                 key, value, $"'{key}' is one of: {string.Join(", ", Words)}.");
     }
+}
+
+/// <summary>The words a pipeline file writes its choices in.</summary>
+public static class WordExtensions
+{
+    /// <summary>
+    /// The word a pipeline file writes a choice as — <c>train</c>, <c>rmse</c>, <c>drawn</c> — by the one rule its reader and
+    /// its writer use, so a chart or a notebook that names the choice names it as the file does.
+    /// </summary>
+    /// <typeparam name="TEnum">The set of choices.</typeparam>
+    /// <param name="value">The choice.</param>
+    /// <returns>Its word.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The value is none of the set's: a number cast to it.</exception>
+    public static string Word<TEnum>(this TEnum value)
+        where TEnum : struct, Enum => Vocabulary<TEnum>.WordFor(value, typeof(TEnum).Name);
 }

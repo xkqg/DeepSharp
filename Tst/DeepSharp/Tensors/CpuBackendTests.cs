@@ -10,7 +10,7 @@ namespace DeepSharp.Tests.Tensors;
 /// heavy work somewhere else without a single line of the model changing. This is the one that ships: .NET's
 /// own SIMD tensor primitives, no native library behind it.
 /// </summary>
-public class CpuBackendTests
+public partial class CpuBackendTests
 {
     private readonly ITensorBackend _backend = new CpuBackend();
 

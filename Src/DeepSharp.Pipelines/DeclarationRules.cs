@@ -91,12 +91,14 @@ internal sealed class AtMostOne<TStep>(string what) : IDeclarationRule
 }
 
 /// <summary>
-/// Every step does something the run acts on, except an output that only names the answer.
+/// Every step does something the run acts on, except an output that only names the answer and a report that only names
+/// what a model's answers are measured by.
 /// </summary>
 /// <remarks>
 /// A step with no acting capability used to be carried along and ignored: it was in the file and in the
 /// chain, and in nothing the pipeline did. Two capabilities on one step cannot compile outside this library,
-/// so what this rule has left to find is a step that does nothing.
+/// so what this rule has left to find is a step that does nothing. Naming the answer and naming its measures change
+/// no row, and each is read by what comes after the pipeline: the handover, and the measures of a trained model.
 /// </remarks>
 internal sealed class EveryStepActs : IDeclarationRule
 {
@@ -104,7 +106,7 @@ internal sealed class EveryStepActs : IDeclarationRule
     {
         for (var at = 0; at < steps.Count; at++)
         {
-            if (steps[at] is not (IActsInAWalk or INamesTheAnswer))
+            if (steps[at] is not (IActsInAWalk or INamesTheAnswer or INamesTheMeasures))
             {
                 yield return new DeclarationFault(
                     at, steps[at].Verb,
@@ -392,6 +394,103 @@ internal sealed class RowsAheadAreKeptApart : IDeclarationRule
                     $"reads rows ahead in the order the rows stand in, and the split divides them by '{time.Column}': order them "
                     + $"by '{time.Column}' alone, so the rows after a row are the ones that came after it.");
             }
+        }
+    }
+}
+
+/// <summary>
+/// A report stands below the output whose answers it measures.
+/// </summary>
+/// <remarks>
+/// What it measures are that output's answers, so without an output it measures nothing, and above one it would name
+/// measures of an answer not named yet where it stands.
+/// </remarks>
+internal sealed class AReportStandsBelowItsOutput : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        var output = -1;
+
+        for (var at = 0; at < steps.Count && output < 0; at++)
+        {
+            if (steps[at] is INamesTheAnswer)
+            {
+                output = at;
+            }
+        }
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is not INamesTheMeasures || (output >= 0 && output < at))
+            {
+                continue;
+            }
+
+            yield return new DeclarationFault(
+                at, steps[at].Verb,
+                output < 0
+                    ? "names the measures of a model's answers, and this pipeline names no answer: a report stands below the output whose answers it measures."
+                    : $"measures the answers the output at step {output + 1} names, and stands above it: a report stands below the output whose answers it measures.");
+        }
+    }
+}
+
+/// <summary>
+/// A report measures the parts a split makes, so a pipeline with a report divides its rows.
+/// </summary>
+/// <remarks>
+/// Rows nothing divides are neither the rows a model learns from nor the rows it is chosen or tested on, so a report over
+/// them would name measures no part could ever be measured by.
+/// </remarks>
+internal sealed class AReportMeasuresDividedRows : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        if (NothingLearnsBeforeTheSplit.FirstSplit(steps) >= 0)
+        {
+            yield break;
+        }
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is INamesTheMeasures)
+            {
+                yield return new DeclarationFault(
+                    at, steps[at].Verb,
+                    "measures a model on the parts a split divides the rows into, and this pipeline never divides them: split the rows above it.");
+            }
+        }
+    }
+}
+
+/// <summary>
+/// A measure that counts classes is named only where the output's answers can be classes.
+/// </summary>
+/// <remarks>
+/// A share of a whole and a return are amounts: an accuracy of shares would count how often a share came out at exactly
+/// nought or one, which says nothing about the model. The output says whether its answers can be classes, so an output
+/// another package brings says it too.
+/// </remarks>
+internal sealed class ClassesAreCountedWhereTheAnswersAreClasses : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        if (steps.OfType<INamesTheAnswer>().FirstOrDefault() is not { AnswersCanBeClasses: false } output)
+        {
+            yield break;
+        }
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is not INamesTheMeasures report || !report.Metrics.Any(MetricExtensions.CountsClasses))
+            {
+                continue;
+            }
+
+            yield return new DeclarationFault(
+                at, steps[at].Verb,
+                $"counts classes with {report.Metrics.Where(MetricExtensions.CountsClasses).Listed()}, and the answers '{output.Verb}' "
+                + "names are amounts, not classes of nought or one: measure them with rmse, mae or r2.");
         }
     }
 }

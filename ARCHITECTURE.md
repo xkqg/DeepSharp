@@ -6,8 +6,22 @@ written down here is not a decision, it is a habit.
 ## The layout
 
 ```
-Src/DeepSharp/Tensors/            the engine side: Shape, Tensor, ITensorBackend, CpuBackend, and the RecordingBackend
-                                  gradients are worked out through
+Src/DeepSharp/Tensors/            the engine side: Shape, Tensor, Window, ITensorBackend, CpuBackend, and the
+                                  RecordingBackend gradients are worked out through
+Src/DeepSharp/Networks/           the model side
+    Layer.cs Slots.cs Pass.cs Network.cs
+                                    a layer, the numbers it learns and measures, one pass, a stack of layers
+    Dense.cs Activations.cs Dropout.cs Normalisations.cs Convolution.cs
+                                    the layers
+    Initialisers.cs RandomStream.cs Philox.cs Draws.cs
+                                    what a layer starts at, and the one source every draw is counted from
+    Losses.cs Optimizers.cs LearningRateSchedules.cs
+                                    what is brought down, what moves the parameters, how the rate changes
+    Sequential.cs                   a network in Keras's words, lowered onto a stack
+    CompiledNetwork.cs FitOptions.cs TrainingData.cs History.cs Checkpoint.cs
+                                    the training loop, early stopping, checkpoints, and what a run did
+    NetworkDocument.cs NetworkCatalog.cs Rebuilding.cs PartReader.cs NetworkText.cs TrainedOn.cs
+                                    a network written down as its kinds and its numbers, and read back
 Src/DeepSharp.Pipelines/          the data side
     IPipelineStep.cs                what a step is: a verb, how it writes itself, what it reads, what it does
     StepParameters.cs ParameterKinds.cs
@@ -26,7 +40,9 @@ Src/DeepSharp.Pipelines/          the data side
                                     what is worked out from a single row
     FillStrategy.cs FillNaN.cs Transforms.cs Outliers.cs DropColumns.cs DropWarmUp.cs
                                     what learns, and what takes rows or columns away
-    Evidence.cs                     the profile and the correlation a run is declared to produce
+    Evidence.cs Report.cs Measures.cs
+                                    the profile and the correlation a run is declared to produce, the report of what a
+                                    trained model is held to, and how it measured
     RowSource.cs SourceFolder.cs Binding.cs Table.cs RowIdentity.cs TrainingValues.cs
                                     rows, where a path is read from, typed columns, who a row is, what a fit sees
     CellTextExtensions.cs KindProposal.cs
@@ -36,6 +52,8 @@ Src/DeepSharp.Pipelines/          the data side
     Outputs.cs WayBack.cs           what a model is asked to predict, and how its answers come back into their units
 Src/DeepSharp.Pipelines.DataFrame/   a reader of Microsoft's DataFrame, through MatPlotLibNet.DataFrame
 Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
+Src/DeepSharp.Learners.Networks/     where a network meets a pipeline: trained behind it, serving, the one file
+Src/DeepSharp.Charts/                every chart, as the text of an SVG, drawn with MatPlotLibNet
 Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
 Src/DeepSharp.Verso.Api/             an application of your own that hosts the notebook
 Src/DeepSharp.Verso.Serve/           DeepSharp's own server, the notebook in a browser
@@ -48,7 +66,9 @@ Tst/DeepSharp.Verso.Serve.TestParts/  parts the server's tests carry beside it, 
 ```
 
 The tensor library and the pipeline library do not reference each other, and a test reads their assembly
-references to keep it that way.
+references to keep it that way. They meet in `DeepSharp.Learners.Networks`, which references both and which neither
+references, and the charts reference both and MatPlotLibNet; what each of those packages references is a closed list a
+test reads.
 
 The notebook's tests, the host's and the server's are suites of their own because Verso's engine and the
 validator the core's tests hold the pipeline schema to each need a different version of the C# compiler, and one
@@ -204,13 +224,28 @@ grid of numbers or drawn. Naming them before the numbers exist is the point: eve
 same evidence, two runs are comparable without anyone remembering what was shown last time, and the report
 cannot quietly shrink to whatever happened to look good.
 
-Two kinds are built, both about the data before anything learns from it: a profile of the columns, which
+Three kinds are built. Two are about the data before anything learns from it: a profile of the columns, which
 says for every problem it finds how it is answered, and the rows a correlation is drawn from. Each is
 measured on the rows the split trains on — the split below it as much as one above — because a profile over
-every row lets the rows a model will be measured on shape what it is shown. What they produce is output: it
-is kept with the run, in `PreparedData.Evidence`, and never written into the pipeline's file, since the file
-is what is replayed and a replay learns nothing. The measures of a trained model join them when there is a
-model to measure.
+every row lets the rows a model will be measured on shape what it is shown. The third is the report: which
+measures a trained model is held to, on which parts, and how they are shown. What they produce is output: it is
+kept with the run — in `PreparedData.Evidence`, or in the measures a trained model's predictions were given — and
+never written into the pipeline's file, since the file is what is replayed and a replay learns nothing.
+
+A report, `evidence.report`, is declared before any number exists, and the run acts on nothing for it, as it acts on
+nothing for an output that only names its answer. There is one at most, below the output whose answers it measures;
+a pipeline that names no answer, or never divides its rows, has nothing to measure and is refused where the report is
+written. It measures the rows a model learns from, is chosen on and is tested on, and no others. A measure that counts
+classes — accuracy, precision, recall, the confusion matrix — is refused where it is written against an output whose
+answers are amounts, a distribution's shares or a return; against one whose answers can be classes, a row whose answer
+is neither nought nor one is refused when it is measured, naming the row as it was read. `PreparedData.Measure` takes
+what a model predicted for each part and gives the measures in the answer's own units — the predictions and the
+answers both come back through the way back, because in normalised units every error is small and every model looks
+excellent — each beside the same measure of predicting, for every row, the average of the training rows' answers, and
+each by scikit-learn's definition, checked against it to a millionth of a millionth. Predictions are measured only when
+they are for the part's rows in the order the part hands them over, which the rows' keys are how to tell: answered in
+any other order, 346 of 349 price rows and 510 of 512 days of bikes were measured against another row's answer, and
+nothing in the numbers said so.
 
 What a profile finds is what should not be there, with the columns it is about and how it is answered — a step the
 column rules keep for the column's kind, the column left out as those rules leave one out, or a value the schema says
@@ -226,8 +261,10 @@ by more than one row and written as files write that nothing is known — 0, −
 schema saying so. An extreme is not something that should not be there: it is measured, and clipping or refusing one
 is a step somebody declares.
 
-The drawing lives in an optional package that draws with **MatPlotLibNet** — today the notebook's, which draws
-the correlation as a heatmap; the pipeline holds only the declaration and the numbers.
+Every figure is drawn by one package, `DeepSharp.Charts`, with **MatPlotLibNet**: a correlation as a heatmap, a
+report's measures as bars beside the average, each confusion matrix as a heatmap of counts, what was predicted against
+what was there, and what was left over. The pipeline holds only the declaration and the numbers, and the notebook draws
+through the same package, so a figure is drawn one way wherever it is shown.
 
 ### The rule that gives it meaning
 
@@ -385,7 +422,9 @@ splits began to divide rows by what they hold, a file from before names a split 
 written to do, and it is refused by name rather than run the new way. A file newer than the library is refused
 whole, since it may hold words this one does not know. The number goes up for that reason too: once a timestamp
 column could say how its moments are written, a file became able to say something an older library would not
-understand, and that library now names the newer version instead of stumbling over the word.
+understand, and that library now names the newer version instead of stumbling over the word. The report is such a
+word: new in the third version, so a file that says it was written against the second and names one was written by no
+library that meant it, and it is refused by name, as the schema refuses it.
 
 ### The share you never write down
 
@@ -411,7 +450,10 @@ a word from a set — and from that list the step is written and read, a key nob
 schema of the file and the template a new step starts from are generated, the reference of every verb is
 written, and the notebook builds a step's form. Add a step, and every one of those gains it without anyone
 remembering to go and edit it; the schema and the reference are committed files a test compares with what the
-steps say, so neither can fall behind in silence.
+steps say, so neither can fall behind in silence. A parameter may hold only some of its set — a report measures the
+parts a model is trained, chosen and tested on, and no other rows — and then the schema, the reference and the form
+offer only those, and the reader and the step refuse the rest where it is written. The word a choice is written as is
+one rule too, `Word()`, which the reader, the writer, the notebook and the charts all name a choice by.
 
 The property that keeps it honest is round-tripping. Build a pipeline in code, write it out, read it back,
 and the two declarations must be equal — a test that fails the moment one door learns something the other
@@ -530,20 +572,25 @@ A cut like this is not kept by intention, so it is pinned: a test reads the asse
 the moment the pipeline acquires one it is not allowed to have. Direction is easy to state and easy to
 break, and by the time it is broken the fix is no longer a line.
 
+The first learner is a network, and it meets the pipeline in a package of its own, `DeepSharp.Learners.Networks` —
+the one place both are referenced. The tensors never learn what a pipeline is and the pipeline never learns what a
+network is: the measures of a trained model are the pipeline's, since they are held to its parts and its way back, and
+the history of a run is the network's.
+
 ### A package is named after the role it plays, never after the vendor it brings
 
 The segment after `DeepSharp.` says which side of a seam a package sits on; the segment after that says
 which outside thing it carries.
 
 ```
-DeepSharp                   tensors, the backend seam, the light engine, the model, the training loop
+DeepSharp                   tensors, the backend seam, the light engine, the layers and networks, the training loop
 DeepSharp.Pipelines               the pipeline, ending at prepared splits and the declared evidence
 DeepSharp.Pipelines.<Format>      a reader: Parquet, Excel, Json
 DeepSharp.Pipelines.<Source>      a live source: it fetches and lands, it does not read during training
 DeepSharp.Learners.<Name>   something that learns from prepared data, behind the learner seam
 DeepSharp.Backends.<Name>   an engine behind ITensorBackend
 DeepSharp.Import.<Name>     reading weights or a model trained somewhere else
-DeepSharp.Charts            drawing, from the metrics the loop already keeps
+DeepSharp.Charts            drawing, from what the loop and the measures already keep
 DeepSharp.<Host>.<Part>     a front end inside a host: DeepSharp.Verso.Notebooks, .Serve, .Api
 ```
 
@@ -705,11 +752,14 @@ What depends on how values are spread — which categories there are, where the 
 
 ### The samples read real files, landed in the repository
 
-`Samples/data` holds two published datasets, fetched once and committed: one with gaps and categories and
-no time column at all, one that is a price series with a date. Invented numbers demonstrate the happy path
-and nothing else, while these two between them force the design to answer for a column that is three
-quarters empty, a boolean dialect, a category that is sometimes absent, and a split that cannot be made by
-time because there is no time in the file. Landed rather than downloaded at run time, for the same reason
+`Samples/data` holds three published datasets, fetched once and committed: one with gaps and categories and
+no time column at all, one that is a price series with a date, and two years of a bike-sharing scheme, a row a day,
+whose answer is how the day's rentals spread over its twenty-four hours. Invented numbers demonstrate the happy path
+and nothing else, while these three between them force the design to answer for a column that is three
+quarters empty, a boolean dialect, a category that is sometimes absent, a split that cannot be made by
+time because there is no time in the file, and a whole divided among its parts that comes back as counts by the day's
+own total. The networks sample trains a network on each of the three, through both doors, and a test runs it as it
+stands. Landed rather than downloaded at run time, for the same reason
 a live source is fetched and landed: a sample that reaches the network is a sample that behaves
 differently on the day the network does.
 
@@ -761,6 +811,11 @@ would not on the next ones, and a pipeline loaded from its file, which holds no 
 the one that was fitted. A value outside the range on a later row is what each scale's own choice decides — pass,
 clip or refuse — since that is where the range was declared.
 
+A batch also says which part it was handed over from and which row each is, by its key, so what a model predicts for
+it is measured against the rows it was made for. And a pipeline can be read in place from a larger file, as the value
+of one of its keys — `PreparedData.FromJson(json, catalog, "pipeline")` — read exactly as its own file is, with every
+fault placed at its line in the larger file: a trained network and the pipeline it was trained behind are one file.
+
 `Replay` is the same declaration over rows nobody had seen, with the numbers the training rows produced and
 nothing fitted again. That is what serving is, and `PreparedData.FromJson` loads both halves back from the
 saved file so a host with no data at all can do it — with the catalog of the verbs it may hold, because a
@@ -799,7 +854,9 @@ through its parameters — because most of what a step might do applies to only 
 `IOrdersRows` for an order, `IAddsColumns` for arithmetic on a row, `IDropsRows` and `IDropsColumns` for taking
 something away, `ISplitStep` for dividing the rows, `IFittedStep` for learning and replaying, and
 `IProducesEvidence` for proof. An output that only names the answer acts on nothing, because it names the answer
-rather than changing the data; `INamesTheAnswer` says it is an output, whichever kind, and a pipeline has one. An
+rather than changing the data; `INamesTheAnswer` says it is an output, whichever kind, and a pipeline has one. A
+report acts on nothing either, and `INamesTheMeasures` says so: it names what a trained model's answers are measured
+by. An
 output whose answer the rows do not bring makes it, and `IMakesTheAnswer` is that act: made from the rows when
 fitting, a gap in every row when replaying.
 What every step has belongs to its type — its name, its purpose, its parameters — and a step without one of
@@ -1421,12 +1478,35 @@ by mistake are still refused rather than stretched to fit. .NET's vector primiti
 light engine writes its own, and every total it adds up is kept in double precision: added up in single
 precision, ten million tenths came to a mean of 0.1087937.
 
+The layers, the losses and the convolution are written in the seam's operations as well, so the seam grows by what
+they need and nothing else: rectified and stepped values, tanh, the sigmoid, exp, log, a square root, softplus, a
+division, a row's log-shares, a reshape, and an image's windows unfolded into rows and folded back. There is no rule for
+stretching one shape over another: a row multiplied into every row is the row added to a tensor of noughts and then
+multiplied, and a statistic over rows is a transpose and a sum. Images are channels last, as Keras keeps them, so a
+batch of them needs no permuting between a convolution's unfolding and its matrix product. Softplus is an operation of
+its own, worked out in double precision and exact at both ends — .NET's `LogP1` is `Log(1 + x)`, and gave nought for
+the softplus of −40, which is 4.2e−18 — because a binary cross-entropy built from rectified values and magnitudes sent
+back nought or minus one at a logit of nought, where PyTorch sends back a half. A row's log-shares are shifted by its
+largest value, so logits of a thousand are as good as logits of one. The vector primitives do not promise the last
+bit — tanh of nought came to −5.96e−8, exp of nought to 1.0000001 — so a value is checked to a millionth, and every rule
+by nudging its inputs.
+
 ### A tensor never changes
 
 Handing the same tensor to two layers is safe, and a caller who reuses a scratch buffer cannot rewrite a
 tensor they already handed over — `Tensor.From` copies. An in-place variant will come when a measurement
 shows the copying costs something that matters; until then, the correctness is worth more than the
 allocation.
+
+This is what that costs, measured on one machine, an AMD Ryzen 9 9950X3D, for a training step as the loop takes it on
+one thread: the batch gathered, the forward pass, the loss, the backward pass and Adam's update. Thirty-two Titanic
+rows of 14 features, through a dense layer of 16, rectified, into one output with a binary cross-entropy: 40 µs a step
+on .NET 10 and 39 µs on .NET 8, and 53 KB allocated. Thirty-two images of 28 by 28 with one channel, through eight
+filters of 3 by 3, rectified, flattened, into a dense layer of 10 with a cross-entropy: 19.1 ms a step on .NET 10 and
+18.3 ms on .NET 8, and 13.7 MB allocated. The collector paused the first for less than half a per cent of its time and
+the second for between one and one and a half, so collecting what the copies leave behind is not where a step's time
+goes. Nothing is changed in place, and the matrix product stays the plain one — a row at a time, each total kept in
+double. These are one machine's numbers, not a promise about another's.
 
 ### A shape is a value with no meaningless default
 
@@ -1476,6 +1556,88 @@ An engine with its own way of working out gradients, as libtorch has, will need 
 tensor here is values the managed side owns, and an engine that keeps its own history needs its own storage behind
 the tensor. That is a cost for the row that brings such an engine, and it is not paid now.
 
+### Every draw is counted, and none is kept
+
+What a layer starts at, the order an epoch takes its rows in and which values a dropout leaves out are all drawn from
+one source, `RandomStream`, and it keeps nothing but its seed. A draw is counted from the seed, what it is for, the
+epoch and the step — Philox, the counter-based generator NumPy ships, its first words pinned against NumPy's — so
+asking for the same purpose at the same point gives the same numbers whatever was asked before, a run resumed at an
+epoch draws what it would have drawn, and a layer added to a network moves no other layer's start. `System.Random` gave
+the same numbers on both runtimes when measured, but promises nothing across versions and cannot write its state down,
+so it could not resume a run. The purposes are named: `initialise:` and the place a layer stands at, `shuffle`, and
+`dropout:` with the layer's path.
+
+### A layer is code, and a network is layers
+
+A layer takes a tensor and a pass and gives a tensor; its forward is the same for every layer, and what a layer does
+is its own. A network is a layer that holds layers — written as code, naming each layer it adds, or as a `LayerStack`,
+whose layers are named by their place — and every number it holds is a slot with a dotted path, `0.weight`,
+`2.running_mean`: its own slots first, then those of the layers it holds, as PyTorch lists a module's state. A slot
+either learns — a `Parameter`, which an optimizer moves — or is measured — a `RunningStatistic`, which only a training
+pass moves, so the validation rows never shape what the network keeps. A pass says what it is for — training, with the
+stream and the place in the run, or evaluation — so no layer carries a mode somebody forgets to switch. A layer belongs
+to one network and a network never holds itself, and a snapshot of every slot brings them all back, the running
+statistics included.
+
+### The layers start and work as PyTorch's do
+
+A dense layer's and a convolution's weights start uniform by their fan-in with a slope of √5 and their biases uniform
+within one over the square root of it — PyTorch's pair, whole; Glorot's and zeros can be named. A dense layer keeps its
+weights as inputs by outputs, the other way round from PyTorch, so its product needs no transpose. Dropout scales what
+it keeps, so an evaluation pass lets everything through unchanged, and it refuses to leave out every value, where
+PyTorch hands back zeros. Batch and layer normalisation work over the last axis, and batch normalisation's momentum is
+PyTorch's — the share a new batch takes — which is the complement of Keras's. A convolution unfolds its image's windows
+into rows and multiplies them by its kernel. Every layer's forward pass and its gradients were matched against PyTorch
+on the walked rows.
+
+### A loss says what a network's numbers mean
+
+A network gives numbers, and its loss says how they are read: mean squared error as they are, cross-entropy as shares
+through a softmax, binary cross-entropy as chances through a sigmoid. The loss takes the raw numbers, so there is no
+softmax layer to forget or to apply twice, and a prediction goes through the same activation — which is why a network's
+file names its loss. The loss is always named, never assumed, and each says which answers it could have meant — shares
+of a whole, answers between nought and one — so a row it could not have meant is refused, named, before anything is
+trained on it.
+
+### Optimizers and schedules as PyTorch writes them
+
+`Sgd`, with momentum, and `Adam` follow PyTorch's formulas in PyTorch's order, matched step by step. Weight decay,
+Nesterov momentum, AMSGrad and AdamW are not built: each does nothing by default in PyTorch, and nothing asks for one
+yet. An optimizer keeps what it remembers of each parameter by the parameter itself, and writes it by path under
+PyTorch's names — `momentum_buffer`; `exp_avg`, `exp_avg_sq` and the steps — so a checkpoint carries it. A
+learning-rate schedule is worked out from the epoch in closed form — constant, falling in steps, exponential, a cosine
+— and asked once an epoch. None watches the validation loss: the rows a model is chosen on would then shape the weights
+it is chosen for.
+
+### The loop is Keras's fit, and so is its judgement
+
+`Fit` takes the training rows, the validation rows and options that start from a seed nobody can leave out; the rest
+is Keras's: one epoch and batches of thirty-two unless said, the rows shuffled afresh every epoch and the last batch
+kept short — 623 rows are nineteen batches of thirty-two and one of fifteen. Every batch is worked out through a
+recorder of its own, and an epoch's loss is its batches' losses weighted by their rows, totalled in double. The
+validation rows are looked at once an epoch, by evaluation passes, and never trained on. Early stopping is Keras's to
+the letter: the first epoch judged is the best so far, a later one is better when it beats the best by more than the
+least fall that counts, and the run stops once it has waited as long as its patience; restoring the best brings back
+every slot, the running statistics too. A loss that is not a finite number — a batch's, or an epoch's on the validation
+rows — is refused with where it happened, since training or judging by it would learn nothing. A checkpoint holds
+everything the run needs to go on: resumed, six epochs are three, a checkpoint and three more, bit for bit, on one
+runtime; one taken under another seed, or of a network of other slots or other shapes, is refused before anything is
+put back.
+
+### A network is written down as its kinds and its numbers
+
+A network's file holds what it is made of — each layer by the name its kind is registered under, with the settings it
+is rebuilt from — every slot's numbers by its path, and its loss by name. Read back through a catalog of the kinds a
+reader knows, it is the same network to the last bit: every float is written in the shortest form that reads back to
+it, and one that is not a finite number is not written at all. A network written as code is saved and read by the name
+it is registered under, as a step from another package is. A kind nobody registered is refused, naming the package it
+came from or the nearest kind the catalog knows; a setting missing, of the wrong kind or read by no kind, a slot
+missing, extra, of the other kind or of another shape, and a value that is not a finite number are each refused at
+their line and column, all at once — the same form of refusal as a pipeline's file. A checkpoint adds what the run needs
+to go on: the seed, the optimizer with what it remembers, checked by the optimizer itself as it is read, the schedule,
+how far early stopping had got, and the epochs so far. Every object in the file holds only its own keys, so a misspelt
+one is refused rather than read as nothing.
+
 ### One model, two vocabularies
 
 There are two ways people already know how to describe a network, and neither is going to convince the other
@@ -1492,11 +1654,45 @@ step, and they diverge on the first unusual model — the one somebody builds de
 reach into. Lowering means there is nothing to keep in step: the builder is a translator that runs once, not
 a runtime that runs alongside.
 
+Lowering is `Lower(shape, stream)`: every width is worked out from the shape of one example — a row for a dense layer,
+an image of rows, columns and channels for a convolution — and every layer draws its start from the stream by the
+place it stands at, the draws a network written as code takes for the same place, so the two doors give the same
+network bit for bit, and the same file. A word an example cannot reach — an image handed to a dense layer, a window
+larger than the image — is refused naming the word, its place and the shape that reached it. `Compile` takes the
+description as it stands and draws nothing: a description whose input is stated is checked there, word by word, and the
+network is built at its first fit, from the shape of the rows it learns from and the run's seed, so one recorded number
+reproduces the whole run — the start, the shuffles and the dropouts. Keras builds a model whose input is stated at
+once, from a random source every model in its process shares, and nothing here shares one; a network wanted before any
+rows is lowered by hand and compiled. Before its first fit a compiled description has no network, and says how to have
+one now.
+
+### Where a network meets a pipeline, and the one file they are kept in
+
+`compiled.Fit(prepared, options)` hands the network the training rows the pipeline hands over, every feature between
+minus one and one, and judges it by the validation rows; the test rows never reach the loop, and a validation part of no
+rows leaves the run unjudged, which early stopping refuses. A row the loss could not have meant is named as it was read.
+What comes back is the network behind its pipeline: its history, its measures when the pipeline declares a report, and
+what it predicts for rows served later, through the loss's activation and the pipeline's way back — a value or the
+chance of one, a count for a share of a whole, a price for a return; never a class label.
+
+The network and the pipeline it was trained behind are one file: the network's part, which says what it was trained
+on — its features, its answers and the output that named them, the seed, the epoch its numbers come from, and the
+SHA-256 of the pipeline's own file as it was fitted — and the pipeline's file itself, as it writes itself. The same
+names are not the same fit: fitted again once the file had grown by a few passengers, all fourteen of Titanic's
+features kept their names while the numbers the fit learned moved, so a network is read only beside the very fit it
+was trained behind, and refused beside any other when it is loaded and when a run goes on. A checkpoint is the same
+file with the run's part added, and serves as a trained network too. What the run did and how the report measured it
+are output of the run, and stay out of the file.
+
 ### Charts come from the training loop, not from the caller
 
-When the training loop exists, the metrics it already keeps are what the charts are drawn from — the caller
-never assembles arrays to plot. The drawing itself is **MatPlotLibNet**, in a separate optional package,
-so a trainer on a headless machine does not carry a renderer.
+The metrics the training loop already keeps are what the charts are drawn from — the caller never assembles arrays
+to plot. `DeepSharp.Charts` draws a run's loss curve and the learning rate every epoch took from its history; the
+measures as bars beside the average, each confusion matrix as a heatmap of counts, what was predicted against what was
+there and what was left over from a report's measures; and a correlation from the rows it was drawn from — each as the
+text of an SVG. The drawing itself is **MatPlotLibNet**, in a package of its own, so a trainer on a headless machine
+does not carry a renderer, and nothing of MatPlotLibNet shows in what the package hands out, so the drawing library can
+change without a line of anybody's code changing with it.
 
 ## What is borrowed on purpose
 
@@ -1528,8 +1724,16 @@ borrowing a result.
   every part through the host that loaded it, never static and never shared. One thing is as wide as the process,
   because what it guards already is: the turn C# runs take in `DeepSharp.Verso.Api`. Verso's C# kernel takes over the
   process's console while it runs, so a turn held any narrower let two runs print into each other.
-- **A graph that is not a model.** The declarative front door will produce the same object the imperative
+- **A graph that is not a model.** The declarative front door produces the same object the imperative
   one does. Two representations of one network means two engines to keep in step, and they diverge on the
   first unusual model.
+- **A random source the process shares.** Every draw is counted from a seed that is handed in, which is why a network
+  described in Keras's words is built once the run's seed is known.
+- **A schedule that watches the validation loss**, and weight decay, Nesterov momentum, AMSGrad and AdamW. The first
+  would let the rows a model is chosen on shape its weights; each of the others does nothing by default in PyTorch, and
+  nothing asks for one yet.
+- **A class label from a prediction.** A network answers a chance or a share; where the line between classes lies is
+  a decision about the use. The measures that count classes read a chance of a half or more as the class, as
+  scikit-learn's do.
 - **A required engine.** No backend is mandatory. The core carries the light one; anything heavier is its
   own package, and a model cannot tell which is underneath it.

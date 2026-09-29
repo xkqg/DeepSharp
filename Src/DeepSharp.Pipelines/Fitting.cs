@@ -417,6 +417,33 @@ public sealed class PreparedData
         return new PreparedData(saved.Declaration, new Table([]), [], saved.Fitted);
     }
 
+    /// <summary>Loads a saved pipeline that stands inside a larger file, as the value of one of the keys at its top.</summary>
+    /// <param name="json">The larger file: one JSON object, holding the pipeline's file under one of its keys.</param>
+    /// <param name="catalog">The verbs that may appear in the pipeline, another package's included.</param>
+    /// <param name="property">The key the pipeline stands under.</param>
+    /// <returns>The pipeline, with no data and everything it learned.</returns>
+    /// <exception cref="ArgumentException">The key is empty.</exception>
+    /// <exception cref="PipelineFileException">
+    /// The larger file is not JSON, not one object, holds the key twice or not at all, or anything in the pipeline is wrong
+    /// as <see cref="FromJson(string, StepCatalog)"/> finds it — every fault named at its line and column in the larger file.
+    /// </exception>
+    /// <remarks>
+    /// For a file that carries a pipeline beside something else, such as a trained network and the pipeline it was trained
+    /// behind. The pipeline is read exactly as its own file is, and a fault is placed where it stands in the file a person
+    /// opens, not in the pipeline cut out of it: a fault on that file's line 313 is on line 313. What the rest of the file
+    /// holds is left to whatever reads it.
+    /// </remarks>
+    public static PreparedData FromJson(string json, StepCatalog catalog, string property)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentException.ThrowIfNullOrWhiteSpace(property);
+
+        var saved = PipelineDocument.ReadPipelineIn(json, catalog, property);
+
+        return new PreparedData(saved.Declaration, new Table([]), [], saved.Fitted);
+    }
+
     /// <summary>The steps, exactly as they were declared.</summary>
     public PipelineDeclaration Declaration { get; }
 
@@ -614,6 +641,39 @@ public sealed class PreparedData
 
     private static InvalidOperationException NothingToComeBackTo() =>
         new("This pipeline names no answer, so there is nothing to put back into any units.");
+
+    /// <summary>
+    /// Measures what a model predicted by this pipeline's report: on each part it names, in the answer's own units, each
+    /// measure beside the same measure of predicting the training rows' average answer.
+    /// </summary>
+    /// <param name="predictions">
+    /// For every part the report names, what the model predicted for the batch <see cref="Handover.Batch(PreparedData, Part, Needs)"/>
+    /// handed over for it: one row of predictions per row, in the batch's order, in the units the answers were handed over in.
+    /// </param>
+    /// <returns>The measures, part by part and measure by measure in the order the report names them.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// The pipeline declares no report; a part it names holds no rows, or the training part holds none; R² is asked of a part
+    /// of one row; or, where the report counts classes, a row's answer is neither nought nor one, or holds another number of
+    /// ones than its output says.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// A part the report names has no predictions, or two sets; predictions are for a part it does not name, for a batch the
+    /// pipeline did not hand over, or for other rows or another order than the part's; there is not one prediction per row
+    /// and per answer; or a prediction comes back as a number that is not finite.
+    /// </exception>
+    /// <remarks>
+    /// The predictions and the answers they are compared with both come back through the way back, because in the units
+    /// they were handed over in every error is small and every model looks excellent. Beside each measure stands what
+    /// predicting, for every row, the average of the training rows' answers measures — brought back and measured the same
+    /// way — so no number stands alone. What is measured is output, kept with whatever measured it and never written into
+    /// the pipeline's file.
+    /// </remarks>
+    public Measures Measure(IReadOnlyList<PartPredictions> predictions)
+    {
+        ArgumentNullException.ThrowIfNull(predictions);
+
+        return Measurement.Of(this, predictions);
+    }
 
     /// <summary>Writes the whole pipeline: the version, what was declared, and what the fit learned.</summary>
     /// <returns>The pipeline as one JSON document.</returns>

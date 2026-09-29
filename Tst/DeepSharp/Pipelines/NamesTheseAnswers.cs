@@ -19,6 +19,9 @@ internal sealed class NamesTheseAnswers(params string[] answers) : INamesTheAnsw
 
     public string? Refusal(IReadOnlyList<double> answers) => Refuses?.Invoke(answers);
 
+    /// <summary>How many of its answers this output says are one on every row; nought, unless it says otherwise.</summary>
+    public int Ones { get; init; }
+
     public ColumnState After(ColumnState before) => before;
 
     public void WriteTo(Utf8JsonWriter writer) => throw new NotSupportedException("A test step is never written down.");

@@ -131,6 +131,7 @@ public class BlockTests
     [InlineData("split.stratified", "split")]
     [InlineData("normalise", "learned from the training rows")]
     [InlineData("evidence.profile", "evidence")]
+    [InlineData("evidence.report", "evidence")]
     [InlineData("target", "output")]
     public async Task TheStageABlockBelongsTo_FollowsWhatItsStepDoes(string verb, string stage)
     {
@@ -155,6 +156,7 @@ public class BlockTests
     [InlineData("split.stratified", typeof(ISplitStep))]
     [InlineData("normalise", typeof(IFittedStep))]
     [InlineData("evidence.profile", typeof(IProducesEvidence))]
+    [InlineData("evidence.report", typeof(INamesTheMeasures))]
     [InlineData("target", typeof(INamesTheAnswer))]
     public void EveryStep_ActsThroughOneCapability_ThatItsStageIsNamedAfter(string verb, Type capability)
     {

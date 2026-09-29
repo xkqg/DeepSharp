@@ -2,9 +2,14 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Globalization;
+using DeepSharp.Charts;
 using DeepSharp.Verso.Notebooks;
 using DeepSharp.Pipelines;
+using MatPlotLibNet;
 using MatPlotLibNet.Numerics;
+using MatPlotLibNet.Rendering.TickFormatters;
+using MatPlotLibNet.Rendering.TickLocators;
+using MatPlotLibNet.Styling.ColorMaps;
 
 namespace DeepSharp.Tests.Notebooks;
 
@@ -106,6 +111,60 @@ public sealed class EvidenceDrawingTests : IDisposable
     }
 
     [Fact]
+    public async Task ACorrelation_IsDrawnAsItAlwaysWas_WhoeverDrawsIt()
+    {
+        const string evidence = """{"step": "evidence.correlation", "columns": ["age", "fare", "sibsp"], "shown": "drawn"}""";
+
+        var shown = await ShownAtAsync(evidence);
+        var input = Assert.IsType<CorrelationInput>(Measured(evidence));
+
+        Assert.Contains(AsTheNotebookDrewIt(input), shown, StringComparison.Ordinal);
+    }
+
+    // The heatmap the notebook drew a correlation as, kept here exactly as it was written: the picture a move of the drawing
+    // must leave as it stood.
+    private static string AsTheNotebookDrewIt(CorrelationInput correlation)
+    {
+        var names = correlation.Columns.ToArray();
+        var matrix = NpStats.Corrcoef([.. Enumerable.Range(0, names.Length).Select(column => correlation.Rows.Select(row => row[column]).ToArray())]);
+        var data = new double[names.Length, names.Length];
+        var positions = Enumerable.Range(0, names.Length).Select(position => (double)position).ToArray();
+
+        for (var row = 0; row < names.Length; row++)
+        {
+            for (var column = 0; column < names.Length; column++)
+            {
+                data[row, column] = matrix[row, column];
+            }
+        }
+
+        var size = 160 + (60 * names.Length);
+
+        return new FigureBuilder()
+            .WithSize(size + 120, size)
+            .AddSubPlot(1, 1, 1, axes => axes
+                .Heatmap(data, series =>
+                {
+                    series.ColorMap = ColorMaps.Coolwarm;
+                    series.Normalizer = new MinusOneToOne();
+                    series.ShowLabels = true;
+                    series.LabelFormat = "0.00";
+                })
+                .SetXTickLocator(new FixedLocator(positions))
+                .SetXTickFormatter(new CategoryFormatter(names))
+                .SetYTickLocator(new FixedLocator(positions))
+                .SetYTickFormatter(new CategoryFormatter(names, reversed: true))
+                .WithColorBar())
+            .ToSvg();
+    }
+
+    // The whole of a correlation's scale, minus one to one, whatever the coefficients span.
+    private sealed class MinusOneToOne : INormalizer
+    {
+        public double Normalize(double value, double min, double max) => Math.Clamp((value + 1) / 2, 0, 1);
+    }
+
+    [Fact]
     public async Task ACorrelationAskedForAsNumbers_WritesEachCoefficient()
     {
         const string evidence = """{"step": "evidence.correlation", "columns": ["age", "fare"], "shown": "numbers"}""";
@@ -135,6 +194,107 @@ public sealed class EvidenceDrawingTests : IDisposable
         Assert.Contains("1 of the 3 rows", shown, StringComparison.Ordinal);
         Assert.Contains("too few", shown, StringComparison.Ordinal);
         Assert.DoesNotContain("<svg", shown, StringComparison.Ordinal);
+    }
+
+    // Validation and test predicted by a guess from the class alone; the report as a pipeline declares it.
+    private static Measures Guessed(Shown shown, Shown? also = null, Metric? only = null)
+    {
+        Metric[] metrics = only is { } one ? [one] : [Metric.Accuracy, Metric.ConfusionMatrix, Metric.Rmse];
+        Shown[] ways = also is { } other ? [shown, other] : [shown];
+        var prepared = Pdd.Create()
+            .ReadCsv(Repository.Data("titanic.csv"))
+            .Declare(schema => schema.Integer("survived", "pclass"))
+            .SplitStratified("survived", 0.70, 0.15)
+            .Target("survived")
+            .Report(report => report.Measure(metrics).On(Part.Validation, Part.Test).As(ways))
+            .Build()
+            .Run();
+
+        return prepared.Measure([.. new[] { Part.Validation, Part.Test }.Select(part => Predicted(prepared.Batch(part), row => [row[0] == 1 ? 0.6 : 0.2]))]);
+    }
+
+    private static PartPredictions Predicted(Batch batch, Func<double[], double[]> model) => new(batch, [.. batch.Features.Select(model)]);
+
+    private static string Invariant(double value) => value.ToString("G6", CultureInfo.InvariantCulture);
+
+    [Fact]
+    public void AModelsMeasuresAskedForAsNumbers_AreWrittenEachBesideTheTrainingRowsAverage()
+    {
+        var measures = Guessed(Shown.Numbers);
+        var written = measures.Accept(new EvidenceView()).Content;
+        var validation = measures.Parts[0];
+        var confusion = Assert.Single(validation.Confusions);
+
+        Assert.Contains("Measures of survived", written, StringComparison.Ordinal);
+        Assert.Contains("<th>accuracy</th><th>baseline</th><th>rmse</th><th>baseline</th>", written, StringComparison.Ordinal);
+        Assert.Contains(
+            $"<td>validation</td><td class=\"deepsharp-number\">133</td><td class=\"deepsharp-number\">{Invariant(validation.Values[0].Value)}</td>"
+            + $"<td class=\"deepsharp-number\">{Invariant(validation.Values[0].Baseline)}</td>",
+            written,
+            StringComparison.Ordinal);
+        Assert.Contains("<td>test</td>", written, StringComparison.Ordinal);
+        Assert.Contains("<div>validation: survived</div>", written, StringComparison.Ordinal);
+        Assert.Contains(
+            string.Create(CultureInfo.InvariantCulture, $">{confusion.Counts[1][0]} ({confusion.Baseline[1][0]})<"),
+            written,
+            StringComparison.Ordinal);
+        Assert.DoesNotContain("<svg", written, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AModelsMeasuresAskedForDrawn_AreTheChartsPackagesCharts_AndAskedForBoth_AreBoth()
+    {
+        // Every measure as bars, the confusion matrices as heatmaps, and — rmse being an amount — what was predicted
+        // against what was there, and what was left over: the charts DeepSharp.Charts draws, wherever they are shown.
+        var measures = Guessed(Shown.Drawn);
+        var drawn = measures.Accept(new EvidenceView()).Content;
+        var charts = measures.Bars() + measures.ConfusionMatrices() + measures.PredictedAgainstActual() + measures.Residuals();
+
+        Assert.Contains(charts, drawn, StringComparison.Ordinal);
+        Assert.DoesNotContain("<table>", drawn, StringComparison.Ordinal);
+
+        var both = Guessed(Shown.Numbers, Shown.Drawn).Accept(new EvidenceView()).Content;
+
+        Assert.Contains("<th>accuracy</th><th>baseline</th>", both, StringComparison.Ordinal);
+        Assert.Contains(charts, both, StringComparison.Ordinal);
+
+        // A report of the confusion matrix alone has no number for bars, and no amount to draw against its answers.
+        var matrices = Guessed(Shown.Drawn, only: Metric.ConfusionMatrix);
+
+        Assert.Equal(matrices.ConfusionMatrices().TrimEnd(), Assert.Single(Svgs(matrices.Accept(new EvidenceView()).Content)));
+    }
+
+    // Every SVG a piece of output holds, in order.
+    private static IEnumerable<string> Svgs(string html)
+    {
+        for (var at = html.IndexOf("<svg", StringComparison.Ordinal); at >= 0; at = html.IndexOf("<svg", at + 1, StringComparison.Ordinal))
+        {
+            var end = html.IndexOf("</svg>", at, StringComparison.Ordinal) + "</svg>".Length;
+
+            yield return html[at..end];
+        }
+    }
+
+    [Fact]
+    public void LabelsOfWhichARowHoldsOne_AreCountedInOneMatrixAcrossThem()
+    {
+        var prepared = Pdd.Create()
+            .Read(new InMemoryRowSource(["t", "a", "b"], [.. Enumerable.Range(1, 8).Select(t => (IReadOnlyList<string?>)[$"{t}", t % 2 == 0 ? "1" : "0", t % 2 == 0 ? "0" : "1"])]), "eight rows")
+            .Declare(schema => schema.Integer("t", "a", "b"))
+            .SplitByTime("t", 0.50)
+            .Labels(["a", "b"], ones: 1)
+            .Report(report => report.Measure(Metric.ConfusionMatrix).On(Part.Test).As(Shown.Numbers))
+            .Build()
+            .Run();
+
+        // Every test row predicted b; the training rows hold a and b alike, so their average predicts a, the first of equals.
+        var measures = prepared.Measure([Predicted(prepared.Batch(Part.Test), _ => [0.3, 0.7])]);
+        var written = measures.Accept(new EvidenceView()).Content;
+
+        Assert.Contains("<div>test</div>", written, StringComparison.Ordinal);
+        Assert.Contains("<th>a</th><th>b</th>", written, StringComparison.Ordinal);
+        Assert.Contains("<tr><th>b</th><td class=\"deepsharp-number\">0 (2)</td><td class=\"deepsharp-number\">2 (0)</td></tr>", written, StringComparison.Ordinal);
+        Assert.Throws<ArgumentNullException>(() => new EvidenceView().Visit((Measures)null!));
     }
 
     [Fact]

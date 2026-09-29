@@ -5,16 +5,32 @@ as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.4.0]
 
-The first thing learning needs: a gradient, worked out automatically for the arithmetic a network does. And data
-that says what it holds as it is read: each column is proposed a kind — a date, a category, a number — from what
-every cell says, a person accepts or changes it, and what should not be there is named with the step that deals
-with it. What a network is handed lies between minus one and one.
+Where it learns. Layers, losses, optimizers and learning-rate schedules; a training loop that stops once the validation
+rows no longer improve, with checkpoints a run goes on from bit for bit; a network described in Keras's words or written
+as code, trained on the rows a pipeline prepares and kept with that pipeline as one file; the pipeline's report measuring
+it in the answer's own units, and the charts drawing it. Beneath them, a gradient worked out automatically for the
+arithmetic a network does, and data that says what it holds as it is read: each column is proposed a kind — a date, a
+category, a number — from what every cell says, a person accepts or changes it, and what should not be there is named
+with the step that deals with it. What a network is handed lies between minus one and one.
 
 ### Upgrading from 0.3
 
 - **A backend implements the new operations.** `ITensorBackend` gains `Subtract`, `MatMul`, `Transpose`,
-  `AddRow`, `SumRows`, `Mean`, `Scale` and `Fill`, so a backend written against 0.3 has to implement them before it
-  compiles again.
+  `AddRow`, `SumRows`, `Mean`, `Scale` and `Fill`, and the operations the layers, the losses and the convolution are
+  written in — `Relu`, `Positive`, `Tanh`, `Sigmoid`, `Exp`, `Log`, `Sqrt`, `Softplus`, `Divide`, `LogSoftmax`,
+  `Reshape`, `Unfold` and `Fold` — so a backend written against 0.3 has to implement them before it compiles again.
+
+- **A visitor of evidence visits measures too.** `IEvidenceVisitor<TResult>` gains `Visit(Measures)`, so a visitor
+  written outside the library implements it before it compiles again.
+
+- **A batch says which part it came from and which row each is.** `Batch` gains `Part` and `Keys`, set by
+  `Batch(part)` and nothing otherwise, so a batch made by hand is no longer equal to one the pipeline handed over.
+  `INamesTheAnswer` gains `AnswersCanBeClasses` and `Ones`, each with a default, so an output from another package
+  compiles as it is.
+
+- **The notebook package brings the charts.** `DeepSharp.Verso.Notebooks` draws through `DeepSharp.Charts`, which
+  brings `DeepSharp` with it, so an install of the notebook carries both; the correlation it draws is the picture it
+  drew.
 
 - **Cells that cannot be read are refused all at once, at the schema.** Run through a pipeline, they come as a
   `DeclarationException` with a fault at the schema's step, where a `FormatException` named only the first cell;
@@ -59,12 +75,82 @@ with it. What a network is handed lies between minus one and one.
 
 ### Added
 
+- **Layers.** `Dense`, `Relu`, `Tanh`, `Sigmoid`, `Dropout`, `BatchNorm`, `LayerNorm`, `Conv2D` over a `Window`,
+  `Flatten` and `Reshape`, each starting as PyTorch's starts — weights uniform by their fan-in, biases within one over
+  its square root — and each matched against PyTorch on the walked rows, forward and back. A layer is code: its numbers
+  are slots with dotted paths, `0.weight` and `2.running_mean`, a `Parameter` that an optimizer moves or a
+  `RunningStatistic` that only a training pass moves, and a `Pass` says whether it trains or evaluates, so no layer
+  carries a mode. `LayerStack` names its layers by their place, and a network written as code names its own.
+
+- **Losses that say what a network's numbers mean.** `MeanSquaredError`, `CrossEntropy` over shares through a softmax,
+  and `BinaryCrossEntropy` over chances through a sigmoid, each taking the raw numbers — binary cross-entropy is exact at
+  a logit of nought, where one built from rectified values sent back nought or minus one — and each refusing, by name,
+  a row whose answers it could not have meant.
+
+- **Optimizers and learning-rate schedules.** `Sgd`, with momentum, and `Adam`, as PyTorch writes them, matched step by
+  step; `ConstantRate`, `StepDecay`, `ExponentialDecay` and `CosineDecay`, worked out from the epoch and asked once an
+  epoch.
+
+- **A training loop.** `network.Compile(optimizer, loss, schedule)` and `Fit(train, validation, new FitOptions(seed))`:
+  Keras's defaults — one epoch, batches of thirty-two — the rows shuffled afresh every epoch, the validation rows judged
+  once an epoch and never trained on, `EarlyStopping` as Keras's to the letter, restoring every slot of the best epoch
+  when asked, and `Checkpoints` every epoch or only the best, from which a run goes on bit for bit. A loss that is not a
+  finite number is refused with the batch and the epoch it came from. `History` holds every epoch's losses and rate,
+  the seed, the best epoch and why the run stopped.
+
+- **Every draw counted from one seed.** `RandomStream` keeps nothing but its seed and counts every draw from it — what
+  a layer starts at, an epoch's order, what a dropout leaves out — so a run resumed at an epoch draws what it would
+  have, and a layer added moves no other's start.
+
+- **A network in Keras's words.** `new Sequential().Dense(16).Relu().Dense(1)` is read once and lowered onto the stack
+  a network written as code would be, every width worked out from the rows — `Lower(shape, stream)` by hand, or at the
+  first fit of `Compile`, from the rows' shape and the run's seed — so the two give the same network bit for bit and the
+  same file. `Input(shape)` states an example's shape, so every word is checked where it is compiled.
+
+- **A network written down.** `NetworkDocument` writes a network as the kinds it is made of, the numbers it learned
+  and its loss, and reads it back through a `NetworkCatalog` to the last bit; a checkpoint adds what the run needs to
+  go on. A kind nobody registered, a setting or a slot that is missing, extra or wrong, and a value that is not a finite
+  number are refused at their line and column, all at once. A network written as code is registered with
+  `Register<T>()` and read back by its name.
+
+- **A network trained behind a pipeline.** `DeepSharp.Learners.Networks`: `compiled.Fit(prepared, options)` trains on
+  the training rows the pipeline hands over, judged by its validation rows, never showing it the test rows, and gives
+  a `TrainedNetwork` — its history, its measures, and `Predict(rows)`, whose `Predictions` come back in the answer's own
+  units with where each row was handed in. `ToJson()` writes the network and its pipeline as one file, which
+  `TrainedNetwork.FromJson` reads back only beside the very fit the network was trained behind; `CheckpointFile` writes
+  and reads a checkpoint as the same file.
+
+- **A report of what a trained model is measured by.** `evidence.report`, or `.Report(report => report.Measure(...)
+  .On(...).As(...))` on the chain: RMSE, MAE, R², accuracy, precision, recall and the confusion matrix, on the
+  training, validation and test parts, shown as numbers, drawn or both. `PreparedData.Measure` measures a model's
+  predictions in the answer's own units, each beside predicting the training rows' average, by scikit-learn's
+  definitions, and only for predictions of the part's own rows in the part's order. New in the file's third version.
+
+- **Charts.** `DeepSharp.Charts` draws, as the text of an SVG, a run's loss curve and learning rate, a report's
+  measures as bars beside the average, each confusion matrix as a heatmap of counts, what was predicted against what
+  was there, what was left over, and a correlation as a heatmap. The notebook draws a report shown drawn with it.
+
+- **A pipeline read from inside a larger file.** `PreparedData.FromJson(json, catalog, property)` reads the pipeline
+  under one of the file's keys, every fault at its line in that file.
+
+- **The word a file writes a choice as.** `Word()` names a part, a measure or any other choice as a pipeline's file
+  writes it, by the one rule its reader and writer use.
+
+- **Two years of bike sharing, and a networks sample.** `Samples/data/bikes.csv`: a row a day, its weather and season,
+  and how its rentals spread over its twenty-four hours (Fanaee-T and Gama, CC BY 4.0). `Samples/DeepSharp.Sample.Networks`
+  trains a network on each of the three datasets, through both doors, measures, saves, reads back and serves each.
+
 - **The operations a backward pass needs.** A matrix product, its transpose, a row added to every row of a matrix
   — the way a bias reaches every example of a batch — and the rows summed, a subtraction, a mean that is one value
   with no axes, as a loss is, a scale by one value, and a tensor filled with one value. `Add` still takes two tensors
   of one shape. .NET's vector primitives hold no matrix product, so the one that ships is written here, and every
   total is kept in double precision: ten million tenths average to a tenth, where a single-precision total gave
-  0.1087937.
+  0.1087937. And the operations the layers, the losses and a convolution are written in, each with its rule for the
+  way back: rectified and stepped values, tanh, the sigmoid, exp, log, a square root, softplus, a division, a row's
+  log-shares, a reshape, and an image's windows unfolded into rows and folded back, channels last. Softplus is worked
+  out in double and exact at both ends — .NET's `LogP1` gave nought for the softplus of −40, which is 4.2e−18 — and a
+  row's log-shares are shifted by its largest value, so logits of a thousand are as good as logits of one. A `Window`
+  says how a convolution walks: its height and width, its stride and its border.
 
 - **Gradients, worked out automatically.** `RecordingBackend` wraps any backend for one pass and writes down each
   operation as it runs it; `GradientsOf(loss, parameters)` then works back from a loss of one value to how much each

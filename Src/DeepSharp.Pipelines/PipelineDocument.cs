@@ -32,6 +32,10 @@ internal readonly record struct SavedPipeline(PipelineDeclaration Declaration, I
 /// token first: that is where the places come from, and where a key written twice is caught, because the
 /// document the values are then read from keeps neither the places nor the second of two keys.
 /// </para>
+/// <para>
+/// A pipeline can also stand inside a larger file, as the value of a key at its top — a trained network beside the
+/// pipeline it was trained behind. It is read the same way, and its faults are placed in the larger file.
+/// </para>
 /// </remarks>
 internal sealed class PipelineDocument
 {
@@ -51,10 +55,16 @@ internal sealed class PipelineDocument
     private readonly int[] _lineStarts;
     private readonly List<Fault> _faults = [];
 
+    // The part of the text the document is: all of it, unless it stands inside a larger file as the value of one of its
+    // keys. Every place stays a place in the whole text, so a fault is at the line and column of the file a person opens.
+    private int _start;
+    private int _length;
+
     private PipelineDocument(string json)
     {
         _text = Encoding.UTF8.GetBytes(json);
         _lineStarts = LineStarts(_text);
+        _length = _text.Length;
     }
 
     /// <summary>Writes a pipeline: the version, the steps, and — when there is one — what the fit learned.</summary>
@@ -160,7 +170,7 @@ internal sealed class PipelineDocument
 
         ThrowIfFaulty();
 
-        using var document = JsonDocument.Parse(_text);
+        using var document = JsonDocument.Parse(_text.AsMemory(_start, _length));
         var root = document.RootElement;
 
         if (root.ValueKind != JsonValueKind.Object)
@@ -285,6 +295,87 @@ internal sealed class PipelineDocument
     public static SavedPipeline ReadPipeline(string json, StepCatalog catalog) =>
         new PipelineDocument(json).Read(catalog, withFit: true);
 
+    /// <summary>Reads a whole pipeline that stands inside a larger file, as the value of a key at its top.</summary>
+    /// <param name="json">The larger file.</param>
+    /// <param name="catalog">The verbs the pipeline may use.</param>
+    /// <param name="property">The key the pipeline stands under.</param>
+    /// <returns>The steps and what they learned.</returns>
+    /// <exception cref="PipelineFileException">
+    /// The larger file is not JSON, not one object, or holds the key not once; or anything in the pipeline is wrong. Every
+    /// fault is named at its line and column in the larger file.
+    /// </exception>
+    public static SavedPipeline ReadPipelineIn(string json, StepCatalog catalog, string property) =>
+        new PipelineDocument(json).Within(property).Read(catalog, withFit: true);
+
+    /// <summary>Narrows this document to the value of a key at the top of the larger one it stands in.</summary>
+    /// <remarks>
+    /// The whole file is read first, so text that stops being JSON anywhere in it is said where it stops; the value is then
+    /// read as a pipeline's own file is, its places kept as places in the whole file.
+    /// </remarks>
+    private PipelineDocument Within(string property)
+    {
+        var reader = new Utf8JsonReader(_text);
+        var root = 0;
+        var start = -1;
+        var end = -1;
+
+        try
+        {
+            reader.Read();
+            root = (int)reader.TokenStartIndex;
+
+            if (reader.TokenType != JsonTokenType.StartObject)
+            {
+                Add(root, $"A file that holds a pipeline in place is one JSON object, with the pipeline under '{property}'.");
+
+                throw Refused();
+            }
+
+            while (reader.Read())
+            {
+                if (reader.TokenType != JsonTokenType.PropertyName || reader.CurrentDepth != 1 || !reader.ValueTextEquals(property))
+                {
+                    continue;
+                }
+
+                var key = (int)reader.TokenStartIndex;
+
+                reader.Read();
+
+                if (start >= 0)
+                {
+                    Add(key, $"'{property}' is written twice here, and only one of the two would be read.");
+                    reader.Skip();
+
+                    continue;
+                }
+
+                start = (int)reader.TokenStartIndex;
+                reader.Skip();
+                end = (int)reader.BytesConsumed;
+            }
+        }
+        catch (JsonException fault)
+        {
+            // Nothing after this point can be read, so it is the last fault there is.
+            Add(OffsetOf(fault), $"The text stops being JSON here: {WithoutItsPlace(fault.Message)}");
+
+            throw Refused();
+        }
+
+        if (start < 0)
+        {
+            Add(root, $"This file holds no '{property}', which is where the pipeline in it stands.");
+        }
+
+        ThrowIfFaulty();
+
+        _start = start;
+        _length = end - start;
+
+        return this;
+    }
+
     /// <summary>Reads one step written on its own: a notebook block, say.</summary>
     /// <param name="json">The step, as the JSON object it was written as.</param>
     /// <param name="catalog">The verbs it may use.</param>
@@ -300,7 +391,7 @@ internal sealed class PipelineDocument
 
         ThrowIfFaulty();
 
-        using var document = JsonDocument.Parse(_text);
+        using var document = JsonDocument.Parse(_text.AsMemory(_start, _length));
 
         try
         {
@@ -320,7 +411,7 @@ internal sealed class PipelineDocument
 
         ThrowIfFaulty();
 
-        using var document = JsonDocument.Parse(_text);
+        using var document = JsonDocument.Parse(_text.AsMemory(_start, _length));
         var root = document.RootElement;
 
         if (root.ValueKind != JsonValueKind.Object)
@@ -507,10 +598,15 @@ internal sealed class PipelineDocument
     }
 
     /// <summary>Walks the text token by token: where everything stands, and every key written twice.</summary>
+    /// <remarks>
+    /// Of the part of the text the document is, each place counted from the start of the whole text. A part inside a larger
+    /// file is only ever set once the whole file has been read as JSON, so text that stops being JSON is met here in a
+    /// document that is the whole text.
+    /// </remarks>
     private Places Survey()
     {
         var places = new Places();
-        var reader = new Utf8JsonReader(_text);
+        var reader = new Utf8JsonReader(_text.AsSpan(_start, _length));
         var names = new Stack<HashSet<string>>();
         string? under = null;
 
@@ -518,7 +614,7 @@ internal sealed class PipelineDocument
         {
             while (reader.Read())
             {
-                var at = (int)reader.TokenStartIndex;
+                var at = _start + (int)reader.TokenStartIndex;
 
                 if (reader.CurrentDepth == 0 && reader.TokenType is not (JsonTokenType.EndObject or JsonTokenType.EndArray))
                 {

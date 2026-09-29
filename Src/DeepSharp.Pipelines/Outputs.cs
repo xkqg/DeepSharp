@@ -16,7 +16,7 @@ namespace DeepSharp.Pipelines;
 /// other.
 /// <para>
 /// Naming the answer is not doing something to the data, so an output that only names its answers acts on
-/// nothing, and it is the one kind of step the run is allowed to leave alone.
+/// nothing, and the run leaves it alone — as it leaves a report, which names what those answers are measured by.
 /// </para>
 /// </remarks>
 public interface INamesTheAnswer : IPipelineStep
@@ -42,6 +42,22 @@ public interface INamesTheAnswer : IPipelineStep
     /// by nothing else.
     /// </remarks>
     bool MakesItsAnswer => false;
+
+    /// <summary>Whether this output's answers can be classes, each nought or one, as the measures that count classes read them.</summary>
+    /// <remarks>
+    /// They can, unless the output says they are amounts: a share of a whole or a return is not a class, and a report
+    /// that counts classes of one is refused where it is written. Where they can be, a row whose answer is neither nought
+    /// nor one is refused when it is measured.
+    /// </remarks>
+    bool AnswersCanBeClasses => true;
+
+    /// <summary>How many of this output's answers are one on every row, when they are classes; nought for any number.</summary>
+    /// <remarks>
+    /// Which classes a prediction names follows from it. One on every row, a row is exactly one of its things and the
+    /// class predicted is the answer predicted likeliest, the first of equals; more, the answers predicted likeliest;
+    /// any number, each answer is predicted by itself, at a half or more — a column of noughts and ones among them.
+    /// </remarks>
+    int Ones => 0;
 }
 
 /// <summary>
@@ -225,6 +241,10 @@ public sealed record DistributionStep : IPipelineStep<DistributionStep>, INamesT
                 CultureInfo.InvariantCulture,
                 $"its shares sum to {sum}, not to one. Divide each row by its sum above this: normalise.row with L1.");
     }
+
+    /// <inheritdoc />
+    /// <remarks>Never: a share of a whole is an amount, measured by how far it is from the share there was.</remarks>
+    public bool AnswersCanBeClasses => false;
 
     /// <inheritdoc />
     /// <remarks>Every one of its columns, when it names what the shares are shares of; none otherwise.</remarks>
@@ -451,6 +471,10 @@ public sealed record AheadStep : IPipelineStep<AheadStep>, IMakesTheAnswer, IRea
 
     /// <summary>The column the answer is made into: the column's name and how far ahead.</summary>
     public string Answer => string.Create(CultureInfo.InvariantCulture, $"{Column}.ahead{Ahead}");
+
+    /// <inheritdoc />
+    /// <remarks>A value read ahead can be one, when the column holds noughts and ones; a return is an amount, and never.</remarks>
+    public bool AnswersCanBeClasses => As == AheadAs.Value;
 
     /// <inheritdoc />
     public IReadOnlyList<string> Answers => [Answer];
