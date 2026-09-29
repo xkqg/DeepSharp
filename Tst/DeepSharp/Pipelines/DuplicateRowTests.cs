@@ -54,6 +54,20 @@ public class DuplicateRowTests
     }
 
     [Fact]
+    public void TwoRowsThatSayDifferentThings_AreTwoRows_WhateverTheirCellsHold()
+    {
+        // Each row was once joined into one string, every cell marked and the cells parted by a control character, so a
+        // cell holding those characters joined two different rows alike. A row is known here by the digest every row
+        // key is made by, each cell with its length.
+        var table = new Table([
+            new TextColumn("a", ["x\u001F\u0001y", "x"]),
+            new TextColumn("b", ["z", "y\u001F\u0001z"]),
+        ]);
+
+        Assert.Equal(default, table.Duplicates());
+    }
+
+    [Fact]
     public void ATableWithoutRepeats_HasNone()
     {
         var table = new Table([new Column<double>("a", ColumnKind.Number, [1.0, 2.0, 3.0])]);

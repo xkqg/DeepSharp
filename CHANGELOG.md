@@ -145,6 +145,10 @@ with it. What a network is handed lies between minus one and one.
   kept: on seventy small values either side of nought it kept 2, where scipy's `yeojohnson_normmax` puts the best at
   0.71, and now keeps 0.7. Fitted again, a pipeline may keep another shaping than it did.
 
+- **Two different rows are never counted as one repeated row.** The profile joined each row's cells into one string,
+  so two rows whose cells held the characters it joined with could come out alike; a row is now known there by the same
+  digest a row key is made by, each cell with its length.
+
 - **A kind is read from its word alone.** A control that carried `1`, or two kinds joined by a comma, was read as a
   kind in the notebook, where a file refuses both.
 

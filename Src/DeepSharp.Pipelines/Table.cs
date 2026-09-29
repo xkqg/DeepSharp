@@ -268,13 +268,16 @@ public sealed class Table
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
 
-    private IEnumerable<RowIdentity> OwnIdentities()
+    private IEnumerable<RowIdentity> OwnIdentities() => WhatEachRowHolds().Select((key, row) => new RowIdentity(row, key));
+
+    // What each row holds here, digested as every row key is: its cells with the names of their columns.
+    private IEnumerable<RowKey> WhatEachRowHolds()
     {
         var digest = new RecordDigest([.. _columns.Select(column => column.Name)]);
 
         for (var row = 0; row < RowCount; row++)
         {
-            yield return new RowIdentity(row, digest.Of([.. _columns.Select(column => column.TextAt(row))]));
+            yield return digest.Of([.. _columns.Select(column => column.TextAt(row))]);
         }
     }
 
@@ -406,18 +409,17 @@ public sealed class Table
                 $"There are {parts.Count} parts for {RowCount} rows, and a row belongs to exactly one part.", nameof(parts));
         }
 
-        var groups = new Dictionary<string, List<int>>(StringComparer.Ordinal);
+        var groups = new Dictionary<RowKey, List<int>>();
+        var row = 0;
 
-        for (var row = 0; row < RowCount; row++)
+        foreach (var key in WhatEachRowHolds())
         {
-            var key = string.Join('\u001F', _columns.Select(column => column.TextAt(row) is { } text ? $"\u0001{text}" : "\u0000"));
-
             if (!groups.TryGetValue(key, out var rows))
             {
                 groups[key] = rows = [];
             }
 
-            rows.Add(row);
+            rows.Add(row++);
         }
 
         var repeated = groups.Values.Where(rows => rows.Count > 1).ToArray();

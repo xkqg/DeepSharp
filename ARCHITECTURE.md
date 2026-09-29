@@ -834,9 +834,12 @@ another order or served rows are handed in again to put their predictions back, 
 rows by. It identifies a row and nothing more; no value reaches a fit
 or a model through it, so the rule that an undeclared column is not carried still holds.
 
-The same key finds the rows that are there more than once. A repeated row in training and in test is one a
-model meets again after learning it, which reads as skill and is not, so a profile counts them, and a split
-keeps every copy of one in the same part.
+The same digest finds the rows that are there more than once, over two different things. A split ranks rows by the
+record they were read from, so every copy of one record lands in the same part. A profile counts the rows that hold the
+same where it stands — its columns, as they are there — because a repeated row in training and in test is one a model
+meets again after learning it, which reads as skill and is not, and two records that differ only in a column the schema
+left out are that to a model. Both are the same digest of cells with their column names, never a string the cells are
+joined into, which two different rows can share.
 
 ### The data after any step, standing where the split puts it
 
