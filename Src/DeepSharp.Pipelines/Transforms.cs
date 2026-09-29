@@ -810,13 +810,17 @@ internal static class YeoJohnson
         ? lambda == 0 ? Math.Exp(value) - 1 : Math.Pow((lambda * value) + 1, 1 / lambda) - 1
         : lambda == 2 ? 1 - Math.Exp(-value) : 1 - Math.Pow(1 - ((2 - lambda) * value), 1 / (2 - lambda));
 
+    // Every twentieth from minus two to two, each worked out from its whole count rather than added up: added up, the points
+    // near nought and two came out as 1.2e-15 and 2.000000000000002, so the search never measured the shaping it keeps
+    // there, and dividing by what rounding left of them took 2 for the best shaping of values scipy puts at 0.71.
     internal static double Lambda(double[] training)
     {
         var best = 1.0;
         var most = double.NegativeInfinity;
 
-        for (var lambda = -2.0; lambda <= 2.0001; lambda += 0.05)
+        for (var step = 0; step <= 80; step++)
         {
+            var lambda = Math.Round(-2 + (0.05 * step), 4);
             var likelihood = Likelihood(training, lambda);
 
             if (likelihood > most)
@@ -826,7 +830,7 @@ internal static class YeoJohnson
             }
         }
 
-        return Math.Round(best, 4);
+        return best;
     }
 
     private static double Likelihood(double[] training, double lambda)

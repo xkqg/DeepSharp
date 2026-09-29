@@ -175,4 +175,32 @@ public class ScaleTests
         Assert.Equal(0, served.Features[0][x], 1e-9);
         Assert.InRange(served.Features[1][x], 0.05, 0.2);
     }
+
+    [Fact]
+    public void ThePowerScale_KeepsTheShapingItsTrainingValuesAreMostNormalUnder_AsScipyFindsIt()
+    {
+        // Seventy-one small values either side of nought, seventy of which train. Over those seventy, scipy's
+        // yeojohnson_normmax puts the best shaping at 0.7145, and by its own log-likelihood 0.7 is the best point of the
+        // grid. The search added 0.05 at a time and reached 2 as 2.000000000000002, where shaping a negative value
+        // divides by -2e-15, and kept 2.
+        double[] values =
+        [
+            0.188, -0.063, -0.057, 0.198, 0.053, -0.125, 0.104, 0.071, 0.016, -0.06, 0.087, 0.17, 0.108, -0.157, 0.112, 0.046,
+            0.079, 0.035, 0.044, 0.149, -0.068, 0.164, -0.013, -0.037, 0.005, -0.112, 0.025, -0.053, -0.063, 0.058, 0.141,
+            0.142, 0.141, -0.069, 0.03, -0.101, -0.144, -0.149, -0.073, -0.159, -0.138, 0.047, 0.059, -0.107, -0.168, 0.108,
+            -0.165, -0.051, -0.157, 0.068, -0.022, 0.203, -0.125, -0.122, -0.024, -0.003, 0.114, 0.094, -0.097, -0.122,
+            -0.121, -0.033, 0.156, 0.132, 0.134, 0.112, 0.103, 0.044, 0.047, -0.092, -0.109,
+        ];
+
+        var prepared = Pdd.Create()
+            .Read(CsvRowSource.FromText("id,x\n" + string.Join("\n", values.Select(value => "1," + value.ToString("R", System.Globalization.CultureInfo.InvariantCulture))) + "\n"), "small values either side of nought")
+            .Declare(schema => schema.Integer("id").Number("x"))
+            .SplitStratified("id", train: 0.99, validation: 0.005)
+            .Normalise("x", Scale.Power)
+            .Build()
+            .Run();
+
+        Assert.Equal(70, prepared.Parts.Count(part => part == Part.Train));
+        Assert.Equal(0.7, prepared.Fitted[3].Number("lambda"));
+    }
 }

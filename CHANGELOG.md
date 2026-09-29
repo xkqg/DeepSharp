@@ -140,6 +140,11 @@ with it. What a network is handed lies between minus one and one.
   scale, as scikit-learn decides a feature is constant. A pipeline already fitted on such a column keeps the spread it
   learned until it is fitted again.
 
+- **The power scale keeps the shaping its training values are most normal under.** Its search added a twentieth at a
+  time and reached nought and two as 1.2e-15 and 2.000000000000002, so what it measured there was not the shaping it
+  kept: on seventy small values either side of nought it kept 2, where scipy's `yeojohnson_normmax` puts the best at
+  0.71, and now keeps 0.7. Fitted again, a pipeline may keep another shaping than it did.
+
 - **A kind is read from its word alone.** A control that carried `1`, or two kinds joined by a comma, was read as a
   kind in the notebook, where a file refuses both.
 
