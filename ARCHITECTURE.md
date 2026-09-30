@@ -758,10 +758,10 @@ whose answer is how the day's rentals spread over its twenty-four hours. Invente
 and nothing else, while these three between them force the design to answer for a column that is three
 quarters empty, a boolean dialect, a category that is sometimes absent, a split that cannot be made by
 time because there is no time in the file, and a whole divided among its parts that comes back as counts by the day's
-own total. The networks sample trains a network on each of the three, through both doors, and a test runs it as it
-stands. Landed rather than downloaded at run time, for the same reason
-a live source is fetched and landed: a sample that reaches the network is a sample that behaves
-differently on the day the network does.
+own total. The pipelines sample asks the passenger list what each of its columns holds and has a profile say what
+should not be there; the networks sample trains a network on each of the three, through both doors; and a test runs
+each as it stands. Landed rather than downloaded at run time, for the same reason a live source is fetched and
+landed: a sample that reaches the network is a sample that behaves differently on the day the network does.
 
 ### The pipeline ends at a handover, and the same one serves
 

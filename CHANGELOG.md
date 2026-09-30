@@ -139,6 +139,9 @@ with the step that deals with it. What a network is handed lies between minus on
 - **Two years of bike sharing, and a networks sample.** `Samples/data/bikes.csv`: a row a day, its weather and season,
   and how its rentals spread over its twenty-four hours (Fanaee-T and Gama, CC BY 4.0). `Samples/DeepSharp.Sample.Networks`
   trains a network on each of the three datasets, through both doors, measures, saves, reads back and serves each.
+  `Samples/DeepSharp.Sample.Pipelines` now asks the passenger list what each of its columns holds before anything is
+  declared and has a profile say what should not be there and how each is answered, prints its numbers the same on every
+  machine, and runs on .NET 8 as well; a test runs each sample as it stands.
 
 - **The operations a backward pass needs.** A matrix product, its transpose, a row added to every row of a matrix
   — the way a bias reaches every example of a batch — and the rows summed, a subtraction, a mean that is one value

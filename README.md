@@ -78,6 +78,19 @@ The steps and what they learned are one file: `prepared.ToJson()` writes it, and
 The catalog is the list of verbs the reader knows — add `.WithIndicators()` for a file that holds indicators,
 which read the rows in their order and so need that order said first, with `.OrderBy("timestamp")`.
 
+Two programs in [Samples](https://github.com/xkqg/DeepSharp/tree/main/Samples) run all of this on published data, and a
+test runs each as it stands:
+
+```
+dotnet run --project Samples/DeepSharp.Sample.Pipelines -c Release -f net10.0
+dotnet run --project Samples/DeepSharp.Sample.Networks -c Release -f net10.0
+```
+
+The first asks the Titanic passenger list what each of its columns holds before anything is declared, has a profile say
+what should not be there and how each is answered, and prepares the passengers and a price series. The second trains a
+network on each of three datasets — whether a passenger survived, a price five days on, a day's bikes hour by hour —
+has each pipeline's report measure it, saves it as its one file, reads it back and serves a row, and writes its charts.
+
 ## A notebook to see it in
 
 `DeepSharp.Verso.Notebooks` writes the same pipeline as a [Verso](https://www.versonotebooks.com/) notebook,

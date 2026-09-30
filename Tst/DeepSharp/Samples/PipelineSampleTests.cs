@@ -1,0 +1,40 @@
+// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
+using DeepSharp.Pipelines;
+using DeepSharp.Sample.Pipelines;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace DeepSharp.Tests.Samples;
+
+/// <summary>
+/// The pipelines sample is run as it stands, through a real container as its program reaches it, so the page a person
+/// reads cannot drift from the code: it asks the passenger list what each column holds before anything is declared, has a
+/// profile say what should not be there and how each is answered, prepares the passengers and the price series, and saves
+/// the passengers' pipeline and runs it again from its file.
+/// </summary>
+public class PipelineSampleTests
+{
+    [Fact]
+    public void TheSample_AsksTheFileWhatItHolds_SaysWhatShouldNotBeThere_AndPreparesBothShapes()
+    {
+        using var services = new ServiceCollection().AddDeepSharpPipelines().BuildServiceProvider();
+        using var output = new StringWriter();
+
+        PipelineSample.Run(services.GetRequiredService<IPipelineFactory>(), Path.GetDirectoryName(Repository.Data("titanic.csv"))!, output);
+
+        var said = output.ToString();
+
+        Assert.Contains("  alive        boolean, 2 values", said, StringComparison.Ordinal);
+        Assert.Contains("  pclass       integer, category offered, 3 values", said, StringComparison.Ordinal);
+        Assert.Contains("  deck         category, 7 values, 688 gaps", said, StringComparison.Ordinal);
+        Assert.Matches(@"  alive: .* so it hands a model the answer\. Answered by leaving it out\.", said);
+        Assert.Matches(@"  class: .* so it says again what pclass says\. Answered by leaving it out\.", said);
+        Assert.Matches(@"  fare: 12 of 623 rows hold 0, .* Answered by saying in the schema that 0 stands for a gap\.", said);
+        Assert.Contains("  age: 133 of 623 rows are gaps. Answered by fill.missing.", said, StringComparison.Ordinal);
+        Assert.Contains("=== Titanic ===", said, StringComparison.Ordinal);
+        Assert.Contains("=== Apple ===", said, StringComparison.Ordinal);
+        Assert.Contains("normalise[6] centre = 29.7392", said, StringComparison.Ordinal);
+        Assert.Contains("identical: True", said, StringComparison.Ordinal);
+    }
+}

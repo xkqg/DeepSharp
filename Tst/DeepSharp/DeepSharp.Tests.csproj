@@ -35,8 +35,9 @@
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.DataFrame\DeepSharp.Pipelines.DataFrame.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.Indicators\DeepSharp.Pipelines.Indicators.csproj" />
-    <!-- The networks sample is run as it stands, so the page cannot drift from the code. -->
+    <!-- The samples are run as they stand, so the page cannot drift from the code. -->
     <ProjectReference Include="..\..\Samples\DeepSharp.Sample.Networks\DeepSharp.Sample.Networks.csproj" />
+    <ProjectReference Include="..\..\Samples\DeepSharp.Sample.Pipelines\DeepSharp.Sample.Pipelines.csproj" />
   </ItemGroup>
 
   <ItemGroup>
