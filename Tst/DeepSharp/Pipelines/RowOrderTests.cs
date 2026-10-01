@@ -37,7 +37,7 @@ public class RowOrderTests
             .Read(Apple(reversed), "apple prices")
             .Declare(schema => schema.Timestamp("Date").Number("AAPL.Close"))
             .OrderBy("Date")
-            .AddIndicator("sma5", Indicator.Sma, ["AAPL.Close"], 5)
+            .Add(new AddIndicatorStep("sma5", Indicator.Sma, ["AAPL.Close"], 5))
             .Build()
             .Run();
 
@@ -124,7 +124,7 @@ public class RowOrderTests
         {
             _ = which switch
             {
-                "indicator" => start.AddIndicator("sma5", Indicator.Sma, ["AAPL.Close"], 5),
+                "indicator" => start.Add(new AddIndicatorStep("sma5", Indicator.Sma, ["AAPL.Close"], 5)),
                 "warm-up" => start.DropWarmUp(),
                 _ => (object)start.SplitByTime("Date", 0.70).FillMissing("AAPL.Close", With.Previous),
             };
@@ -195,7 +195,7 @@ public class RowOrderTests
             .Read(Days([.. Enumerable.Range(1, 60).Select(day => (string?)day.ToString(CultureInfo.InvariantCulture))]), "sixty days")
             .Declare(schema => schema.Timestamp("Date").Number("value"))
             .OrderBy("Date")
-            .AddIndicator("sma3", Indicator.Sma, ["value"], 3)
+            .Add(new AddIndicatorStep("sma3", Indicator.Sma, ["value"], 3))
             .DropWarmUp()
             .SplitByTime("Date", 0.70)
             .Normalise("value")

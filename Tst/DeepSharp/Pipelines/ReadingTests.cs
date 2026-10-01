@@ -175,7 +175,7 @@ public class ReadingTests
     public void EveryKindSaysWhatItWanted(ColumnKind kind, string written, string wanted)
     {
         var refused = Assert.Throws<FormatException>(
-            () => Read($"value\n{written}\n", schema => schema.Column("value", kind)));
+            () => Read($"value\n{written}\n", schema => schema.Column(new ColumnDeclaration("value", kind, Optional: false))));
 
         Assert.Contains(wanted, refused.Message);
     }

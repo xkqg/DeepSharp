@@ -49,7 +49,7 @@ public sealed class GridActionTests : IDisposable
     }
 
     private static IReadOnlyList<IPipelineStep> Steps(Notebook notebook) =>
-        [.. notebook.Scaffold.Cells.Where(cell => cell.Type == StepCellType.StepType).Select(cell => StepCatalog.BuiltIn().ReadStep(cell.Source))];
+        [.. notebook.Scaffold.Cells.Where(cell => cell.Type == StepCellType.StepType).Select(cell => NotebookVerbs.Catalog().ReadStep(cell.Source))];
 
     private static DeclareStep Declared(Notebook notebook) => Steps(notebook).OfType<DeclareStep>().Single();
 
@@ -142,6 +142,33 @@ public sealed class GridActionTests : IDisposable
     }
 
     [Fact]
+    public async Task AnEncodedCategory_CanBeUnticked_AndTickedAgain_GivingTheStepsBack()
+    {
+        // encode.categories turns the category into columns of its own and names none: its box is drawn ticked and can
+        // be clicked, and unticking it leaves it out in the schema with its kind.
+        await using var notebook = await NotebookAsync(
+            Titanic[0],
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "pclass", "kind": "category", "optional": false}, {"name": "sex", "kind": "category", "optional": false}, {"name": "fare", "kind": "number", "optional": false}]}""",
+            Titanic[2],
+            """{"step": "encode.categories", "as": "onehot", "unseen": "reserve"}""");
+        var start = Steps(notebook);
+
+        await notebook.GestureAsync(Declare(notebook), StepRenderer.Show);
+
+        Assert.True(Declare(notebook).Outputs[1].Content.Box(StepRenderer.Include, "sex") is { Ticked: true, Enabled: true });
+
+        var gesture = await notebook.TickAsync(Declare(notebook), StepRenderer.Include, "sex", ticked: false);
+
+        Assert.True(gesture.StateChanged);
+        Assert.Equal(new ColumnDeclaration("sex", ColumnKind.Category, Optional: false) { Excluded = true }, Declared(notebook).Columns[2]);
+
+        var back = await notebook.TickAsync(Declare(notebook), StepRenderer.Include, "sex", ticked: true);
+
+        Assert.True(back.StateChanged);
+        Assert.Equal(start, Steps(notebook));
+    }
+
+    [Fact]
     public async Task TickingAgainAColumnAStepReads_TakesItsDropAwayAgain()
     {
         await using var notebook = await NotebookAsync(Titanic);
@@ -162,6 +189,24 @@ public sealed class GridActionTests : IDisposable
     public async Task TickingAColumnTheSchemaDoesNotName_DeclaresItAsItsCellsPropose_WhereTheSourceHasIt_AsTheListWould()
     {
         await using var notebook = await NotebookAsync(Titanic);
+        var read = notebook.Scaffold.Cells[0];
+
+        await notebook.GestureAsync(read, StepRenderer.Show);
+        var box = read.Outputs[^1].Content.Box(StepRenderer.Include, "sex")!.Value;
+        var gesture = await notebook.GestureAsync(read, box.Action, "true");
+
+        Assert.True(gesture.StateChanged);
+        Assert.Equal(["survived", "pclass", "sex", "age", "fare"], Names(notebook));
+        Assert.Equal(new ColumnDeclaration("sex", ColumnKind.Category, Optional: false), Declared(notebook).Columns[2]);
+    }
+
+    [Fact]
+    public async Task TickingAColumnTheSchemaDoesNotName_TakesItInFromAParquetFile()
+    {
+        // Where the column stands among the file's columns is what the rows this session read say, whichever file the
+        // first block reads.
+        File.Copy(Repository.Fixture("titanic.parquet"), Path.Join(_folder, "titanic.parquet"));
+        await using var notebook = await NotebookAsync(["""{"step": "read.parquet", "path": "titanic.parquet"}""", .. Titanic[1..]]);
         var read = notebook.Scaffold.Cells[0];
 
         await notebook.GestureAsync(read, StepRenderer.Show);

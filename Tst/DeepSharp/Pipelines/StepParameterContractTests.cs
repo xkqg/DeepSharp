@@ -16,10 +16,10 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class StepParameterContractTests
 {
-    private static StepCatalog Everything() => StepCatalog.BuiltIn().WithIndicators();
+    private static StepCatalog Everything() => Shipped.Catalog();
 
     private static IEnumerable<Type> StepTypes() =>
-        new[] { typeof(Pdd).Assembly, typeof(AddIndicatorStep).Assembly }
+        Shipped.StepAssemblies
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type => type.IsClass && !type.IsAbstract)
             .Where(type => type.GetInterfaces().Any(

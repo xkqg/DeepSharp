@@ -82,8 +82,11 @@ public class ScaleTests
 
         var training = Values(prepared, "AAPL.Close", part => part == Part.Train);
 
-        Assert.Equal(-1, training.Min(), 12);
-        Assert.Equal(1, training.Max(), 12);
+        // Exactly, not to twelve places: the training minimum and maximum are the ends of the range this
+        // scale learned, and a value within the rounding building centre and spread apart carries lands on
+        // the end itself rather than a hair beyond it (measured before this landed: 1.0000000000000004).
+        Assert.Equal(-1, training.Min());
+        Assert.Equal(1, training.Max());
 
         // After the training days, prices and volumes move on: four closes and one volume of the 152 land outside.
         Assert.Equal(152, Values(prepared, "AAPL.Close", part => part != Part.Train).Length);
@@ -106,7 +109,51 @@ public class ScaleTests
 
         var refused = Assert.Throws<InvalidOperationException>(() => Prices(fitting => fitting.Normalise("AAPL.Close", Scale.MidRange, OutOfRange.Refuse)));
 
+        // Row 503 (2017-02-13), the first close the training range never reached -- not row 5, the training
+        // maximum itself (2015-02-23), which the rounding building centre and spread apart once refused.
+        Assert.Contains("Row 503 of 'AAPL.Close'", refused.Message, StringComparison.Ordinal);
         Assert.Contains("outside the range this pipeline was fitted on", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(Scale.MinMax)]
+    [InlineData(Scale.MaxAbs)]
+    [InlineData(Scale.MidRange)]
+    public void EveryBoundedScale_LandsItsTrainingMaximumExactlyOnTheEndItReaches(Scale scale)
+    {
+        var prepared = Prices(fitting => fitting.Normalise("AAPL.Close", scale));
+        var training = Values(prepared, "AAPL.Close", part => part == Part.Train);
+
+        // AAPL.Close never goes below nought, so all three place the training maximum on the same end:
+        // min-max and midrange because it is the top of their range, max-abs because the largest close is
+        // also the largest magnitude.
+        Assert.Equal(1, training.Max());
+    }
+
+    [Fact]
+    public void TheMinMaxScale_LandsItsTrainingMinimumExactlyOnNothing()
+    {
+        var prepared = Prices(fitting => fitting.Normalise("AAPL.Close", Scale.MinMax));
+        var training = Values(prepared, "AAPL.Close", part => part == Part.Train);
+
+        Assert.Equal(0, training.Min());
+    }
+
+    [Fact]
+    public void TheMaxAbsScale_LandsATrainingExtremeBelowNothingExactlyOnMinusOne()
+    {
+        // AAPL.Close never reaches max-abs's lower end, so the low side is checked on its own column: the
+        // largest magnitude here is the -10, and it comes back exactly where a value divided by its own
+        // magnitude always does.
+        var table = SchemaBinding.Bind(
+            new DeclareStep([new ColumnDeclaration("a", ColumnKind.Number, false)]),
+            CsvRowSource.FromText("a\n3\n-10\n5\n-2\n"));
+        var parts = new[] { Part.Train, Part.Train, Part.Train, Part.Train };
+        var step = new NormaliseStep("a", Scale.MaxAbs);
+
+        step.ApplyTo(table, step.Fit(table, parts));
+
+        Assert.Equal(-1, ((Column<double>)table["a"])[1]);
     }
 
     [Fact]

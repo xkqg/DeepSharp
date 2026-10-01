@@ -56,7 +56,7 @@ public sealed class FormTests : IDisposable
 
     private static PropertyField Field(PropertySection section, string name) => section.Fields.Single(field => field.Name == name);
 
-    private static IPipelineStep Step(CellModel cell) => StepCatalog.BuiltIn().WithIndicators().ReadStep(cell.Source);
+    private static IPipelineStep Step(CellModel cell) => NotebookVerbs.Catalog().ReadStep(cell.Source);
 
     [Fact]
     public async Task TheFormIsAPartVersoLoads_ForBlocksAlone()
@@ -107,8 +107,7 @@ public sealed class FormTests : IDisposable
                 // A field the form draws is one it takes back: some kind of the step claims it.
                 if (field.Name != "step")
                 {
-                    var json = System.Text.Json.Nodes.JsonNode.Parse(cell.Source)!.AsObject();
-                    var edit = new FormEdit(field.Name, FieldValue.Of(field.CurrentValue), json, FormScope.Unknown, Step(cell));
+                    var edit = new FormEdit(field.Name, FieldValue.Of(field.CurrentValue), FormScope.Unknown, Step(cell));
 
                     Assert.True(description.Parameters.Any(parameter => parameter.Accept(edit)), $"{description.Verb}.{field.Name} is claimed by no kind");
                 }
@@ -137,6 +136,27 @@ public sealed class FormTests : IDisposable
         var verbs = Field(await SectionAsync(notebook, notebook.Scaffold.Cells[5]), "step").Options!.Select(option => option.Value);
 
         Assert.Equal(["drop.columns"], verbs);
+    }
+
+    [Fact]
+    public async Task ASourceBlocksVerbField_OffersEveryReaderOfAFile_AndASwapKeepsThePath()
+    {
+        // The readers the notebook brings act as the comma-separated one does, so its verb field offers each of them, and
+        // a swap keeps the path it was given, as any swap keeps what both verbs take.
+        await using var notebook = await NotebookAsync(Titanic);
+        var read = notebook.Scaffold.Cells[0];
+
+        var verbs = Field(await SectionAsync(notebook, read), "step").Options!.Select(option => option.Value);
+
+        Assert.Equal(["read.csv", "read.excel", "read.json", "read.parquet", "read.rows"], verbs);
+
+        foreach (var verb in new[] { "read.parquet", "read.excel", "read.json", "read.csv" })
+        {
+            await ChangeAsync(notebook, read, "step", verb);
+
+            Assert.Equal(verb, Step(read).Verb);
+            Assert.Equal("titanic.csv", Assert.IsAssignableFrom<IReadsAFile>(Step(read)).Path);
+        }
     }
 
     [Fact]
@@ -424,6 +444,22 @@ public sealed class FormTests : IDisposable
         await ChangeAsync(notebook, declare, "columns/kind/extra", "number");
 
         Assert.Equal("extra", ((DeclareStep)Step(declare)).Columns[^1].Name);
+    }
+
+    [Fact]
+    public async Task TheSchemasForm_OffersEveryColumnAParquetFileHas()
+    {
+        File.Copy(Repository.Fixture("titanic.parquet"), Path.Join(_folder, "titanic.parquet"));
+        await using var notebook = await NotebookAsync(["""{"step": "read.parquet", "path": "titanic.parquet"}""", .. Titanic[1..]]);
+        var declare = notebook.Scaffold.Cells[1];
+
+        await notebook.GestureAsync(notebook.Scaffold.Cells[0], StepRenderer.Show);
+
+        var section = await SectionAsync(notebook, declare);
+
+        Assert.Equal(15, section.Fields.Count(field => field.Name.StartsWith("columns/kind/", StringComparison.Ordinal)));
+        Assert.Equal(FormVocabulary.NotTaken, Field(section, "columns/kind/alive").CurrentValue);
+        Assert.Equal("integer", Field(section, "columns/kind/pclass").CurrentValue);
     }
 
     [Fact]

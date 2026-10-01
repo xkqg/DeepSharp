@@ -115,11 +115,11 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// rows by what they hold rather than by where they stand — and a step is refused from a file older than the
     /// meaning it has now, rather than read as something it never meant. It goes up too when a file can say
     /// something an older library would not understand — as the schema did when a timestamp column began to say how
-    /// its moments are written — so that library names the newer version instead of the word it does not know. A
-    /// property rather than a constant, so a package compiled against this version reads the number the running
-    /// library has.
+    /// its moments are written, and as a run for a learner did when it began to write down the steps it left out — so
+    /// that library names the newer version instead of the word it does not know. A property rather than a constant,
+    /// so a package compiled against this version reads the number the running library has.
     /// </remarks>
-    public static int Version => 3;
+    public static int Version => 4;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;
@@ -224,12 +224,12 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         ArgumentOutOfRangeException.ThrowIfNegative(position);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(position, _steps.Length);
 
-        return ColumnFlow.Follow(_steps, ColumnState.None, from: 0, until: position, declared: false).State;
+        return ColumnFlow.Follow(_steps, ColumnState.None, ..position, declared: false).State;
     }
 
     /// <summary>Writes the declaration as JSON: the machine's copy, which diffs and travels.</summary>
     /// <returns>The version it is written against and the steps, as one JSON document.</returns>
-    public string ToJson() => PipelineDocument.Write(this, fitted: null);
+    public string ToJson() => PipelineDocument.Write(Course.Whole(this), fitted: null);
 
     /// <summary>Reads a declaration back, using the verbs a given catalog knows.</summary>
     /// <param name="json">The file a declaration was written as. What a fit learned, when the file holds it, is left to the fit.</param>

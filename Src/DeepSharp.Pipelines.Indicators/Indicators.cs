@@ -81,11 +81,17 @@ public sealed record AddIndicatorStep : IPipelineStep<AddIndicatorStep>, IAddsCo
         "indicator", "Which indicator, worked out from the rows that came before.", Indicator.Sma);
 
     private static readonly WholeNumberParameter PeriodKey = new(
-        "period", "The look-back in rows, for an indicator that takes one.", 14, atLeast: 1);
+        "period", "The look-back in rows, for an indicator that takes one.", 14)
+    {
+        AtLeast = 1,
+    };
 
     // Each place is a role — high, low, close — so rows with one price may name it in every place.
     private static readonly ColumnsParameter ColumnsKey = new(
-        "columns", "The columns it reads, in the order the indicator expects them.", ["close"], ColumnKinds.Numbers, repeatable: true);
+        "columns", "The columns it reads, in the order the indicator expects them.", ["close"], ColumnKinds.Numbers)
+    {
+        Repeatable = true,
+    };
 
     /// <summary>Declares an indicator over the named columns.</summary>
     /// <param name="name">What the new column is called; a many-valued indicator adds a suffix per part.</param>
@@ -310,6 +316,8 @@ public static class IndicatorExtensions
     /// <param name="columns">The columns it reads, in the order the indicator expects them.</param>
     /// <param name="period">The look-back, for an indicator that takes one.</param>
     /// <returns>The pipeline, so the next verb can be written after it.</returns>
+    /// <remarks>The step itself says all of it: <c>.Add(new AddIndicatorStep(name, indicator, columns, period))</c>.</remarks>
+    [Obsolete("Use .Add(new AddIndicatorStep(name, indicator, columns, period)).")]
     public static PipelineBuilder AddIndicator(
         this PipelineBuilder pipeline, string name, Indicator indicator, string[] columns, int period = 14)
     {

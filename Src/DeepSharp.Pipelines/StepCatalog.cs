@@ -111,6 +111,9 @@ public sealed class StepCatalog
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["feature.indicator"] = "DeepSharp.Pipelines.Indicators",
+            ["read.excel"] = "DeepSharp.Pipelines.Excel",
+            ["read.json"] = "DeepSharp.Pipelines.Json",
+            ["read.parquet"] = "DeepSharp.Pipelines.Parquet",
         };
 
     /// <summary>The package that brings a verb, when it is one of DeepSharp's own packages.</summary>
@@ -229,7 +232,7 @@ public sealed class StepCatalog
             if (property.Name != StepKey && !description.Keys.Contains(property.Name))
             {
                 throw new FormatException(
-                    $"The step '{verb}' has no parameter called '{property.Name}'. It takes: "
+                    $"The step '{verb}' has no parameter called '{property.Name.Quoted()}'. It takes: "
                     + $"{string.Join(", ", description.Parameters.SelectMany(parameter => parameter.Keys))}.");
             }
         }
@@ -362,15 +365,15 @@ public sealed class StepCatalog
     {
         if (PackageThatBrings(verb) is { } package)
         {
-            return $"'{verb}' is a step from {package}, which is not registered here. Reference the package and "
+            return $"'{verb.Quoted()}' is a step from {package}, which is not registered here. Reference the package and "
                    + "register its steps with the catalog that reads this file.";
         }
 
         var nearest = _verbs.Keys.MinBy(known => Distance(verb, known));
 
         return nearest is null
-            ? $"'{verb}' is not a step anything here knows."
-            : $"'{verb}' is not a step anything here knows. The nearest one it knows is '{nearest}'.";
+            ? $"'{verb.Quoted()}' is not a step anything here knows."
+            : $"'{verb.Quoted()}' is not a step anything here knows. The nearest one it knows is '{nearest}'.";
     }
 
     /// <summary>How many single-character edits turn one word into the other.</summary>
@@ -400,9 +403,9 @@ public sealed class StepCatalog
     // with the value it may add after it, which the runtime writes in the culture of the machine. The words it
     // names a parameter in are asked of the runtime itself, so they are whatever it says.
     internal static string InTheFilesWords(Exception fault) =>
-        fault is ArgumentException { ParamName: { } parameter }
+        (fault is ArgumentException { ParamName: { } parameter }
             ? fault.Message.Split(new ArgumentException(string.Empty, parameter).Message, 2)[0]
-            : fault.Message;
+            : fault.Message).Quoted();
 
     /// <summary>How one verb is read, and what it is.</summary>
     private readonly record struct Verb(Func<JsonElement, IPipelineStep> Read, StepDescription Description);

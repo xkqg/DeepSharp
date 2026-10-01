@@ -10,17 +10,18 @@ namespace DeepSharp.Pipelines;
 /// A run, a replay and the grid under one block of a notebook are this walk. There used to be two: the run
 /// lifted every feature above every dropped row, the replay dropped nothing, and the same rows came out as
 /// fifty-six from one and sixty from the other. The only difference left is the mode — whether the steps
-/// that learn are fitted here or replay what was fitted before.
+/// that learn are fitted here or replay what was fitted before. The steps are the run's course: a run for a learner and
+/// every replay of it walk the same steps, each as that learner takes it.
 /// <para>
 /// The walk hands each step to itself and never asks what it is: each capability says what doing it means
 /// in terms of what the walk holds — the rows, the table, the parts, what was learned. A new capability is a
 /// new interface that does that, and nothing here changes.
 /// </para>
 /// </remarks>
-/// <param name="declaration">The steps, in the order they were written.</param>
+/// <param name="course">The steps as the run takes them: every one as it was declared, or as a learner takes it.</param>
 /// <param name="mode">Fitting on the training rows, or replaying what was fitted.</param>
 /// <param name="folder">Where a relative path a source holds is read from.</param>
-internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, SourceFolder folder)
+internal sealed class Walk(Course course, WalkMode mode, SourceFolder folder)
 {
     private readonly List<Witnessed> _evidence = [];
     private IRowSource? _rows;
@@ -31,6 +32,9 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
     private int _captureAfter = -1;
     private int _at;
     private int _through;
+
+    // The steps as they were declared: where the schema, the split and the output stand, which no course moves.
+    private PipelineDeclaration Declaration => course.Declaration;
 
     /// <summary>The table as it stands at the step being walked.</summary>
     /// <remarks>
@@ -43,7 +47,7 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
     /// <param name="rows">Rows handed in, or nothing to open the declared source.</param>
     /// <returns>The table as the last step left it, and where every row landed.</returns>
     /// <exception cref="InvalidOperationException">The declaration cannot be walked over these rows.</exception>
-    public Walked Through(IRowSource? rows) => Walking(rows, declaration.Steps.Count);
+    public Walked Through(IRowSource? rows) => Walking(rows, course.Steps.Count);
 
     /// <summary>The rows as they stand after some of the steps, joined to the split wherever it is declared.</summary>
     /// <param name="rows">Rows handed in, or nothing to open the declared source.</param>
@@ -56,9 +60,9 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
     public PipelineView Viewed(IRowSource? rows, int steps)
     {
         _captureAfter = steps;
-        var walked = Walking(rows, declaration.WalkedFor(steps));
+        var walked = Walking(rows, Declaration.WalkedFor(steps));
 
-        return new PipelineView(_captured!, Standings.Of(_captured!, _divided, _parts), Measured, walked.Evidence, ViewedColumns.Of(declaration));
+        return View(_captured!, walked.Evidence);
     }
 
     /// <summary>Walks to the split, when there is one, so rows read elsewhere can be told where they stand.</summary>
@@ -68,16 +72,16 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
     /// <returns>Those rows, and where each stands.</returns>
     public PipelineView Placed(IRowSource? rows, Table read, int steps)
     {
-        var evidence = declaration.SplitAt >= 0 ? Walking(rows, declaration.WalkedFor(steps)).Evidence : NothingProduced;
+        var evidence = Declaration.SplitAt >= 0 ? Walking(rows, Declaration.WalkedFor(steps)).Evidence : NothingProduced;
 
-        return new PipelineView(read, Standings.Of(read, _divided, _parts), Measured, evidence, ViewedColumns.Of(declaration));
+        return View(read, evidence);
     }
 
     /// <summary>Walks as far as the step that turns the rows into columns, and stops there.</summary>
     /// <param name="rows">Rows handed in, or nothing to open the declared source.</param>
     /// <returns>The rows as they were read into the declared columns.</returns>
     /// <exception cref="InvalidOperationException">The declaration names no columns, or no source.</exception>
-    public Table Bound(IRowSource? rows) => Walking(rows, declaration.ColumnsAt + 1).Table;
+    public Table Bound(IRowSource? rows) => Walking(rows, Declaration.ColumnsAt + 1).Table;
 
     /// <summary>Takes the rows the declaration's source opens, unless rows were handed in to take their place.</summary>
     /// <param name="open">How the source opens its rows, reading a relative path from the pipeline's folder.</param>
@@ -90,7 +94,7 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
     /// <exception cref="DeclarationException">Cells cannot be read as their columns' kinds: all of them, at this step.</exception>
     public void Bind(Func<IRowSource, Table> bind)
     {
-        var rows = mode.Prepare(declaration, _rows ?? throw new InvalidOperationException(
+        var rows = mode.Prepare(Declaration, _rows ?? throw new InvalidOperationException(
             "This pipeline never says where its rows come from, so there is nothing to prepare."));
         Table table;
 
@@ -102,7 +106,7 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
         {
             // Every column whose cells cannot be read, at the step that declared them, so a file or a notebook puts the
             // refusal where the columns are written.
-            throw new DeclarationException([new DeclarationFault(_at, declaration.Steps[_at].Verb, unreadable.Message)]);
+            throw new DeclarationException([new DeclarationFault(_at, course.Steps[_at].Verb, unreadable.Message)]);
         }
 
         _table = table;
@@ -111,14 +115,14 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
         // goes through: a column the schema allowed to be absent, and the rows lack, is refused at every one of
         // them that reads it. A run goes through every step; a view through those it is worked out from, so a
         // step below it is refused at its own view and at the run, and two views with one key show one thing.
-        var followed = ColumnFlow.Follow(declaration.Steps, ColumnState.Of(table), _at + 1, _through, declared: true);
+        var followed = ColumnFlow.Follow(course.Steps, ColumnState.Of(table), (_at + 1).._through, declared: true);
 
         if (followed.Faults.Count > 0)
         {
             throw new DeclarationException(followed.Faults);
         }
 
-        mode.Bound(declaration, table);
+        mode.Bound(Declaration, table);
     }
 
     /// <summary>Divides the rows, when this walk divides them, and writes down what the division saw.</summary>
@@ -187,7 +191,7 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
     /// to count a warm-up. A fit awaits nothing and judges every column: a training row without its answer cannot
     /// be learned from.
     /// </remarks>
-    public Table Judged => mode.Awaited(declaration) is { Count: > 0 } awaited ? Table.Without(awaited) : Table;
+    public Table Judged => mode.Awaited(Declaration) is { Count: > 0 } awaited ? Table.Without(awaited) : Table;
 
     /// <summary>Takes note of the rows here, for evidence produced once the walk knows where every row lands.</summary>
     /// <param name="produce">How the step produces its evidence from the rows and their standings.</param>
@@ -221,7 +225,7 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
         {
             if (!table.Has(read.Column))
             {
-                var why = declaration.ColumnsBefore(_at).WhyItMayBeGone(read.Column)
+                var why = course.ColumnsBefore(_at).WhyItMayBeGone(read.Column)
                           ?? "no step above left it here";
 
                 throw new InvalidOperationException(
@@ -230,15 +234,16 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
         }
     }
 
-    // What a view measures: the training rows of a pipeline that divides its rows, the rest when it does not.
-    private Standing Measured => declaration.SplitAt >= 0 ? Standing.Train : Standing.Undivided;
+    // Rows as they stand at some place, each told the part the split gave it, with the evidence produced on the way there.
+    private PipelineView View(Table rows, IReadOnlyDictionary<int, Evidence> evidence) =>
+        new(rows, Standings.Of(rows, _divided, _parts), evidence, ViewedDeclaration.Of(Declaration));
 
     // What a view carries where no step on its way produced any evidence.
     private static readonly IReadOnlyDictionary<int, Evidence> NothingProduced = new Dictionary<int, Evidence>();
 
     private Walked Walking(IRowSource? rows, int through)
     {
-        if (declaration.ColumnsAt < 0)
+        if (Declaration.ColumnsAt < 0)
         {
             throw new InvalidOperationException(
                 "This pipeline never says which columns take part. Declare them, and the rest is dropped.");
@@ -249,11 +254,11 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
 
         for (_at = 0; _at < through; _at++)
         {
-            ThrowIfAColumnItReadsIsGone(declaration.Steps[_at]);
+            ThrowIfAColumnItReadsIsGone(course.Steps[_at]);
 
             // An output that names the answer acts on nothing, nor does a report that names its measures; every other
             // step does exactly one thing.
-            if (declaration.Steps[_at] is IActsInAWalk acting)
+            if (course.Steps[_at] is IActsInAWalk acting)
             {
                 acting.ActOn(this);
             }
@@ -266,8 +271,7 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
 
         var evidence = _evidence.ToDictionary(
             witnessed => witnessed.At,
-            witnessed => witnessed.Produce(new PipelineView(
-                witnessed.Rows, Standings.Of(witnessed.Rows, _divided, _parts), Measured, NothingProduced, ViewedColumns.Of(declaration))));
+            witnessed => witnessed.Produce(View(witnessed.Rows, NothingProduced)));
 
         // A pipeline that learns nothing needs no split, and rows nothing divided are not training rows.
         return new Walked(Table, _parts ?? [.. Enumerable.Repeat(Part.Undivided, Table.RowCount)], evidence);
@@ -278,7 +282,7 @@ internal sealed class Walk(PipelineDeclaration declaration, WalkMode mode, Sourc
 /// <param name="Table">The table as the last step left it.</param>
 /// <param name="Parts">Which part each row belongs to.</param>
 /// <param name="Evidence">What each step that produces evidence produced, by its place.</param>
-internal readonly record struct Walked(Table Table, Part[] Parts, IReadOnlyDictionary<int, Evidence> Evidence);
+internal readonly record struct Walked(Table Table, IReadOnlyList<Part> Parts, IReadOnlyDictionary<int, Evidence> Evidence);
 
 /// <summary>The rows a step producing evidence saw, and how it produces its evidence from them.</summary>
 /// <param name="At">The step's place.</param>
@@ -405,6 +409,9 @@ internal sealed class RowsAwaitingAnAnswer(IRowSource rows, IReadOnlyList<string
 {
     /// <inheritdoc />
     public IReadOnlyList<string> ColumnNames { get; } = [.. rows.ColumnNames, .. answers];
+
+    /// <summary>The columns the rows were handed in with, without the answers they await: what they offer.</summary>
+    public IReadOnlyList<string> HandedIn => rows.ColumnNames;
 
     /// <inheritdoc />
     public IEnumerable<IReadOnlyList<string?>> Rows =>

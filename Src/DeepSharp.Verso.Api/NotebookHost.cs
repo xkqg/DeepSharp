@@ -36,7 +36,7 @@ namespace DeepSharp.Verso.Api;
 /// reads slower than it changes is kept one change behind.
 /// </para>
 /// </remarks>
-public sealed class NotebookHost
+public sealed class NotebookHost : IRunListener
 {
     private const string CSharp = "csharp";
 
@@ -95,18 +95,19 @@ public sealed class NotebookHost
     // Whether a turn that publishes what the engine said outside any turn is queued already.
     private int _telling;
 
-    private NotebookHost(
-        string filePath, ExtensionHost extensions, Scaffold scaffold, NotebookModel saved, IReadOnlyList<HostedToolbarAction> buttons, bool unsaved, HostedArrangement arrangement)
+    private NotebookHost(string filePath, ExtensionHost extensions, Scaffold scaffold, Opening opening)
     {
         FilePath = filePath;
         Extensions = extensions;
         Scaffold = scaffold;
         _blocks = ((IExtensionHostContext)extensions).GetLoadedExtensions().OfType<StepCellType>().First();
         Kinds = KindsOf(extensions);
-        _saved = saved;
+        _saved = opening.Saved;
         Layouts = LayoutsOf(extensions);
         Themes = ThemesOf(extensions);
-        _published = new(new NotebookVersion(0, [.. scaffold.Cells.Select(cell => cell.Hosted([]))], null, [], Layout, buttons, Restarts.None.Hosted, unsaved, ThemeId, arrangement, Metadata));
+        _published = new(new NotebookVersion(
+            0, [.. scaffold.Cells.Select(cell => cell.Hosted([]))], null, [], Layout, opening.Buttons, Restarts.None.Hosted, opening.Unsaved, ThemeId,
+            opening.Arrangement, Metadata));
         scaffold.OnCellExecuting += Began;
         scaffold.OnCellExecuted += Ended;
         scaffold.OnCellOutputUpdated += Showed;
@@ -796,7 +797,7 @@ public sealed class NotebookHost
             await FlushAsync(scaffold);
 
             return new NotebookHost(
-                filePath, extensions, scaffold, saved, await ButtonsAsync(extensions, scaffold), Differs(saved, scaffold, filePath, extensions), arrangement);
+                filePath, extensions, scaffold, new Opening(saved, await ButtonsAsync(extensions, scaffold), Differs(saved, scaffold, filePath, extensions), arrangement));
         }
         catch
         {
@@ -1501,7 +1502,13 @@ public sealed class NotebookHost
     /// <param name="runsCSharp">Whether it runs C#.</param>
     /// <returns>The run.</returns>
     /// <remarks>Its stop tells the notebook in the step that stops it, so what it asks for from then on writes nothing.</remarks>
-    internal Run RunFor(Guid? cell, bool runsCSharp) => new(Interlocked.Increment(ref _runs), cell, takesTheCSharpTurn: runsCSharp, Said, _blocks.StoppedAsync);
+    internal Run RunFor(Guid? cell, bool runsCSharp) => new(Interlocked.Increment(ref _runs), cell, takesTheCSharpTurn: runsCSharp, this);
+
+    // A run tells every view whenever what it runs now changes.
+    void IRunListener.Moved() => Said();
+
+    // A run's stop tells the notebook's blocks, in the step that stops it.
+    Task IRunListener.StoppedAsync() => _blocks.StoppedAsync();
 
     /// <summary>
     /// A run a change asks for, run as every run is — told to every view from its ask, in the C# turn when it runs C#, and
@@ -1679,6 +1686,10 @@ public sealed class NotebookHost
 
     // What a button's part answered when asked whether it can be pressed: whether it can, or why it could not say.
     private readonly record struct Answer(bool Pressable, string? Fault);
+
+    // How the notebook stands as it opens: what its file holds, the toolbar's buttons, whether it differs from the file
+    // already, and how its layout arranges it.
+    private readonly record struct Opening(NotebookModel Saved, IReadOnlyList<HostedToolbarAction> Buttons, bool Unsaved, HostedArrangement Arrangement);
 
     // Who views the notebook, since when nobody has, and whether it is closed.
     private sealed class Audience(ImmutableArray<NotebookSubscription> views, bool closed, long aloneSince)

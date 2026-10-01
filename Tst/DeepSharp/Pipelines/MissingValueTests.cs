@@ -82,7 +82,7 @@ public class MissingValueTests
     {
         var prepared = Pdd.Create()
             .ReadCsv(Repository.Data("titanic.csv"))
-            .Declare(schema => schema.Integer("survived").Column("fare", ColumnKind.Number, missing: "0"))
+            .Declare(schema => schema.Integer("survived").Column(new ColumnDeclaration("fare", ColumnKind.Number, Optional: false) { Missing = "0" }))
             .SplitStratified("survived", 0.70, 0.15)
             .FillMissing("fare", With.Median)
             .Build()
@@ -97,7 +97,7 @@ public class MissingValueTests
     {
         var declaration = Pdd.Create()
             .ReadCsv("titanic.csv")
-            .Declare(schema => schema.Column("fare", ColumnKind.Number, missing: "0").Number("age"))
+            .Declare(schema => schema.Column(new ColumnDeclaration("fare", ColumnKind.Number, Optional: false) { Missing = "0" }).Number("age"))
             .Declaration;
 
         var json = declaration.ToJson();
@@ -135,7 +135,7 @@ public class MissingValueTests
         string[] header = ["fare"];
 
         PipelineDeclaration Declared(string? missing) =>
-            Pdd.Create().ReadCsv("fares.csv").Declare(schema => schema.Column("fare", ColumnKind.Number, missing: missing)).Declaration;
+            Pdd.Create().ReadCsv("fares.csv").Declare(schema => schema.Column(new ColumnDeclaration("fare", ColumnKind.Number, Optional: false) { Missing = missing })).Declaration;
 
         var fare = Assert.Single(PipelinePreset.Of(Declared("0"), header).TakeOver(Declared(null), header).Changes);
 

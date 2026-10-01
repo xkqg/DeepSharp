@@ -59,7 +59,8 @@ public class OneScaleTests
         Assert.DoesNotContain("'alone'", refused.Message, StringComparison.Ordinal);
         Assert.Contains("between minus one and one", refused.Message, StringComparison.Ordinal);
 
-        // A learner indifferent to scale takes them as they are.
+        // A learner indifferent to scale takes them as they are, and so does one that takes every step as declared.
+        Assert.Equal(prepared.CountIn(Part.Train), prepared.Batch(Part.Train, Needs.NoScale).RowCount);
         Assert.Equal(prepared.CountIn(Part.Train), prepared.Batch(Part.Train, Needs.Numbers).RowCount);
     }
 

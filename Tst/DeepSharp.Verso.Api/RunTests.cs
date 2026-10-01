@@ -18,12 +18,7 @@ public sealed class RunTests
     private static readonly Guid Cell = Guid.NewGuid();
 
     // A run whose stop tells the notebook by doing what is given.
-    private static Run Telling(Action tell) => new(1, cell: null, takesTheCSharpTurn: true, told: () => { }, tell: () =>
-    {
-        tell();
-
-        return Task.CompletedTask;
-    });
+    private static Run Telling(Action tell) => new(1, cell: null, takesTheCSharpTurn: true, new Told(tell));
 
     [Fact]
     public async Task AStopTakesWhatRunsAtTheStop_ThoughItEndsBeforeAnyoneLooks()
@@ -156,5 +151,20 @@ public sealed class RunTests
         run.Began(Cell, "csharp");
         await stop.Drained.WaitAsync(AtOnce, TestContext.Current.CancellationToken);
         resetting.Dispose();
+    }
+
+    // The notebook of such a run: hears nothing of what it runs now, and is told of its stop by doing what is given.
+    private sealed class Told(Action tell) : IRunListener
+    {
+        public void Moved()
+        {
+        }
+
+        public Task StoppedAsync()
+        {
+            tell();
+
+            return Task.CompletedTask;
+        }
     }
 }

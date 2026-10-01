@@ -4,6 +4,7 @@
 using DeepSharp.Pipelines;
 using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
+using Verso.Abstractions;
 using Verso.Serializers;
 
 namespace DeepSharp.Tests.Api;
@@ -42,6 +43,27 @@ public sealed class CreateTests : IDisposable
         Assert.Equal([block.Source], saved.Cells.Select(cell => cell.Source));
         Assert.Equal("new", saved.Title);
         Assert.Equal([At("new.verso")], Directory.GetFiles(_folder));
+
+        // It names no extension it needs: Verso's browser editor would wait on a consent no page can give while it opens it.
+        Assert.Empty(saved.RequiredExtensions);
+    }
+
+    [Fact]
+    public async Task ANotebookOfBlocksThatNamesNoExtension_SavedHere_NamesNoneStill()
+    {
+        var notebook = new NotebookModel();
+
+        notebook.Cells.Add(new CellModel { Type = StepCellType.StepType, Language = StepKernel.Language, Source = StepCatalog.BuiltIn().Describe(ReadCsvStep.Name).Template });
+        await File.WriteAllTextAsync(At("old.verso"), await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+        await using var notebooks = new OpenNotebooks();
+
+        var host = await notebooks.OpenAsync(At("old.verso"), TestContext.Current.CancellationToken);
+
+        await host.SaveAsync();
+
+        var saved = await new VersoSerializer().DeserializeAsync(await File.ReadAllTextAsync(At("old.verso"), TestContext.Current.CancellationToken));
+
+        Assert.Empty(saved.RequiredExtensions);
     }
 
     [Fact]

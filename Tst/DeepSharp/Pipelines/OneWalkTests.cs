@@ -38,7 +38,7 @@ public class OneWalkTests
     public void Replay_DropsTheWarmUpRowsRunDrops()
     {
         var trained = Days()
-            .AddIndicator("sma5", Indicator.Sma, ["close"], 5)
+            .Add(new AddIndicatorStep("sma5", Indicator.Sma, ["close"], 5))
             .DropWarmUp()
             .SplitByTime("Date", 0.70)
             .Normalise("close")
@@ -59,9 +59,9 @@ public class OneWalkTests
         // ten-day average written after it is worked out over what is left, with its own warm-up still
         // showing. The run used to lift every feature above every drop and cut to the longest.
         var prepared = Days()
-            .AddIndicator("sma5", Indicator.Sma, ["close"], 5)
+            .Add(new AddIndicatorStep("sma5", Indicator.Sma, ["close"], 5))
             .DropWarmUp()
-            .AddIndicator("sma10", Indicator.Sma, ["close"], 10)
+            .Add(new AddIndicatorStep("sma10", Indicator.Sma, ["close"], 10))
             .Build()
             .Run();
 
@@ -84,7 +84,7 @@ public class OneWalkTests
                 .Category("direction"))
             .OrderBy("Date")
             .AddFeature("range", "AAPL.High", Arithmetic.Minus, "AAPL.Low")
-            .AddIndicator("rsi", Indicator.Rsi, ["AAPL.Close"], 14)
+            .Add(new AddIndicatorStep("rsi", Indicator.Rsi, ["AAPL.Close"], 14))
             .DropWarmUp()
             .TimeParts("Date", TimePart.Quarter)
             .SplitByTime("Date", 70, 15)
@@ -134,6 +134,39 @@ public class OneWalkTests
     }
 
     [Fact]
+    public void APipelineMadeAgainWithTheEvidenceItsRunProduced_CarriesThatEvidence()
+    {
+        // A run held somewhere else is made again from its parts, and the evidence its run produced comes with it; a
+        // pipeline made from the same parts without it has none.
+        var run = Days().Profile("close").SplitByTime("Date", 0.70).Normalise("close").Build().Run();
+
+        var again = new PreparedData(run.Declaration, run.Table, run.Parts, run.Fitted) { Evidence = run.Evidence };
+
+        Assert.Same(run.Evidence, again.Evidence);
+        Assert.IsType<DataProfile>(Assert.Single(again.Evidence).Value);
+        Assert.Empty(new PreparedData(run.Declaration, run.Table, run.Parts, run.Fitted).Evidence);
+        Assert.Throws<ArgumentNullException>(() => new PreparedData(run.Declaration, run.Table, run.Parts, run.Fitted) { Evidence = null! });
+    }
+
+    [Fact]
+    public void TheLongFormAnEarlierReleasePublished_MakesThePipelineTheShortFormMakes()
+    {
+        // 0.4.0 published a constructor taking the evidence as a fifth parameter, and code written against it still calls
+        // it. It is kept, obsolete in favour of the evidence said beside the other four, and this is the one place that
+        // calls it.
+        var run = Days().Profile("close").SplitByTime("Date", 0.70).Normalise("close").Build().Run();
+
+#pragma warning disable CS0618
+        var again = new PreparedData(run.Declaration, run.Table, run.Parts, run.Fitted, run.Evidence);
+
+        Assert.Throws<ArgumentNullException>(() => new PreparedData(run.Declaration, run.Table, run.Parts, run.Fitted, null!));
+#pragma warning restore CS0618
+
+        Assert.Same(run.Evidence, again.Evidence);
+        Assert.Same(run.Table, again.Table);
+    }
+
+    [Fact]
     public void ServingARowWithoutTheAnswer_PreparesTheRestOfIt()
     {
         // The row a model is asked about has no answer yet: that is why it is asked. It used to be refused
@@ -159,7 +192,7 @@ public class OneWalkTests
         // With rows dropped at the start, the check compared the first row as read with a row four places
         // further on, and refused a pipeline whose way back was perfectly sound.
         var prepared = Days()
-            .AddIndicator("sma5", Indicator.Sma, ["close"], 5)
+            .Add(new AddIndicatorStep("sma5", Indicator.Sma, ["close"], 5))
             .DropWarmUp()
             .SplitByTime("Date", 0.70)
             .Normalise("close")

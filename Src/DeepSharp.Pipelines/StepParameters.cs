@@ -75,7 +75,7 @@ public abstract class StepParameter
     internal string AsWrittenIn(JsonElement step) =>
         string.Join(", ", Keys
             .Where(key => step.TryGetProperty(key, out _))
-            .Select(key => $"\"{key}\": {step.GetProperty(key).GetRawText()}"));
+            .Select(key => $"\"{key}\": {step.GetProperty(key).GetRawText().Quoted()}"));
 
     /// <summary>The one rule a name is held to: it is there, and it is more than spaces.</summary>
     /// <param name="value">The name.</param>

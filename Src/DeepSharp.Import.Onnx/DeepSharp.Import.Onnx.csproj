@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Import.Onnx</PackageId>
+    <Description>Reads an ONNX graph into a DeepSharp network: the one PyTorch's torch.onnx.export writes, by either of its exporters, the one Keras writes with model.export(format="onnx"), or the one tf2onnx converts a TensorFlow SavedModel into. A stack of dense layers — a Gemm, or a MatMul and the Add of its bias — convolutions, batch and layer normalisations, flattens and activations is lowered onto DeepSharp's layers as DeepSharp's words build them, the loss it answers through handed in. The numbers go in turned as each node declares them — a weight matrix outputs by inputs where Gemm says so, a kernel channels first, an image's values flattened channel by channel — and images go in and come out with their channels last, as TensorFlow's already are; they are widened from half precision, rounded from double, read from the file the exporter keeps beside the graph, strictly, every fault named at once where the graph holds it. A branch, and any node no network here is built of — pooling, a stride of its own for each axis, a dilated window, channels in groups — is refused at its node.</Description>
+    <PackageTags>deepsharp;onnx;pytorch;keras;tensorflow;tf2onnx;import;neural-network;deep-learning;machine-learning;dotnet</PackageTags>
+    <!-- A graph is read by hand from the messages protobuf parses, never through a serializer that needs reflection, which
+         an application that trims itself or is compiled ahead of time has none of. The analyser makes any call that needs
+         such reflection a warning, and so a failed build. -->
+    <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- OnnxSharp 0.3.2, MIT (github.com/nietras/OnnxSharp): the messages of ONNX's own onnx.proto, generated for .NET,
+         borrowed rather than written — 118 KB. It is dormant: eleven commits, none since the one this version was built
+         from, which a reader of a format that grows only by addition can be; a field a later ONNX adds is skipped as
+         protobuf skips any it does not know. It brings Google.Protobuf 3.29.3, BSD-3-Clause (github.com/protocolbuffers/protobuf),
+         which names nothing for .NET 5 and later. Onnxify was weighed and not taken: 10.4 MB, a builder of graphs where only a
+         reader is wanted. -->
+    <PackageReference Include="OnnxSharp" Version="0.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp\DeepSharp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

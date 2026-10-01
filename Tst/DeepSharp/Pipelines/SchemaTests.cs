@@ -86,6 +86,41 @@ public class SchemaTests
     }
 
     [Fact]
+    public void AColumnSaidInFull_IsDeclaredAsItsDeclarationSaysIt()
+    {
+        // One column with everything it can say — whether the source may lack it, how its moments are written, which value
+        // stands for a gap — is the declaration itself, handed to the schema whole.
+        var when = new ColumnDeclaration("when", ColumnKind.Timestamp, Optional: true) { Format = "dd/MM/yyyy" };
+        var fare = new ColumnDeclaration("fare", ColumnKind.Number, Optional: false) { Missing = "0" };
+
+        var declared = (DeclareStep)Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Column(when).Column(fare)).Declaration.Steps[1];
+
+        Assert.Equal([when, fare], declared.Columns);
+        Assert.Throws<ArgumentNullException>(() => Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Column(null!)));
+        Assert.Throws<ArgumentException>(() => Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Column(when).Column(when)));
+        Assert.Throws<ArgumentException>(() => Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Column(new ColumnDeclaration(" ", ColumnKind.Text, false))));
+    }
+
+    [Fact]
+    public void TheLongFormOfAColumnAnEarlierReleasePublished_DeclaresWhatTheDeclarationDoes()
+    {
+        // 0.4.0 published a column said in five parameters, and code written against it still calls it. It is kept,
+        // obsolete in favour of the column handed over as its declaration, and this is the one place that calls it.
+#pragma warning disable CS0618
+        var declared = (DeclareStep)Pdd.Create().ReadCsv("x.csv")
+            .Declare(schema => schema.Column("when", ColumnKind.Timestamp, true, "dd/MM/yyyy", "never").Column("fare", ColumnKind.Number))
+            .Declaration.Steps[1];
+#pragma warning restore CS0618
+
+        Assert.Equal(
+            [
+                new ColumnDeclaration("when", ColumnKind.Timestamp, Optional: true) { Format = "dd/MM/yyyy", Missing = "never" },
+                new ColumnDeclaration("fare", ColumnKind.Number, Optional: false),
+            ],
+            declared.Columns);
+    }
+
+    [Fact]
     public void ASchemaWithoutColumns_IsRefused()
     {
         Assert.Throws<ArgumentException>(() => Pdd.Create().ReadCsv("x.csv").Declare(_ => { }));

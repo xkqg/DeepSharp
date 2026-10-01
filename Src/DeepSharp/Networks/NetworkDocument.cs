@@ -22,8 +22,21 @@ namespace DeepSharp.Networks;
 /// </remarks>
 public static class NetworkDocument
 {
-    /// <summary>The version of the network's part of a file this library writes and reads up to.</summary>
-    public const int Version = 1;
+    /// <summary>The version of the network's part of a file — and of a checkpoint's training part — this library writes and reads up to.</summary>
+    /// <remarks>
+    /// It goes up when a part can say something an older library would not understand, so that library names the newer
+    /// version rather than the key it does not know. In the second, the network's part says which features held one value on
+    /// every training row, and a convolution whose window is padded as 'same' says so with the word; a checkpoint's training
+    /// part says the batch size, the early stopping and the engine its run went under. A part of the first, which 0.4.0
+    /// wrote, is read as it was written and says nothing of them, every window's padding a number.
+    /// </remarks>
+    public const int Version = 2;
+
+    /// <summary>
+    /// The version 0.4.0 wrote, whose training part records neither the batch size nor the early stopping of its run: the one
+    /// a part may hold neither in, and the one a checkpoint that records neither is written again with.
+    /// </summary>
+    internal const int FirstVersion = 1;
 
     internal const string KindKey = "kind";
     internal const string PackageKey = "package";
@@ -57,9 +70,20 @@ public static class NetworkDocument
     internal const string OutputKey = "output";
     internal const string TrainedBehindKey = "trainedBehind";
     internal const string EpochKey = "epoch";
+    internal const string UnvariedKey = "unvaried";
+    internal const string BatchSizeKey = "batchSize";
+    internal const string EarlyStoppingKey = "earlyStopping";
+    internal const string PatienceKey = "patience";
+    internal const string MinDeltaKey = "minDelta";
+    internal const string RestoreBestKey = "restoreBest";
+    internal const string EngineKey = "engine";
+    internal const string NameKey = "name";
+    internal const string DeviceKey = "device";
 
     private static readonly string[] NetworkKeys = [VersionKey, LayersKey, ParametersKey, StateKey, LossKey, TrainedOnKey];
-    private static readonly string[] TrainingKeys = [VersionKey, SeedKey, OptimizerKey, ScheduleKey, MemoryKey, JudgementKey, HistoryKey];
+
+    private static readonly string[] TrainingKeys =
+        [VersionKey, SeedKey, BatchSizeKey, EarlyStoppingKey, EngineKey, OptimizerKey, ScheduleKey, MemoryKey, JudgementKey, HistoryKey];
     private static readonly Assembly OwnAssembly = typeof(NetworkDocument).Assembly;
 
     /// <summary>Writes a network and its loss as one object, and what it was trained on when that is said.</summary>
@@ -67,7 +91,11 @@ public static class NetworkDocument
     /// <param name="network">The network: a stack, or a network written as code that is registered under a kind.</param>
     /// <param name="loss">What it was trained to bring down, whose output activation a prediction goes through.</param>
     /// <param name="trainedOn">What it was trained on, written beside it for whatever serves it to check; nothing, unless said.</param>
-    /// <exception cref="InvalidOperationException">A layer is of no kind that can be written, or a slot holds a value that is not a finite number.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// A layer is of no kind that can be written, or a slot holds a value that is not a finite number; or what it was
+    /// trained on says a feature held one value on every training row that is no feature of it, or a value that is not a
+    /// finite number.
+    /// </exception>
     public static void WriteNetwork(Utf8JsonWriter writer, Network network, Loss loss, TrainedOn? trainedOn = null)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -100,6 +128,13 @@ public static class NetworkDocument
     /// The network has moved on since the checkpoint was taken, so the network written beside it would not be the one the
     /// checkpoint goes on from; or a value is not a finite number.
     /// </exception>
+    /// <remarks>
+    /// Beside the seed it records the batch size and the early stopping the run went under — its patience, its least fall
+    /// that counts and whether it restores the best, or null for a run that had none — and the engine it was on, by its name
+    /// and, where the engine names them, its version and its device: what a run going on from it is handed again or refused.
+    /// A checkpoint that records none of them, read from a file 0.4.0 wrote, is written as that version wrote it, still
+    /// saying nothing of them, rather than with values nobody recorded.
+    /// </remarks>
     public static void WriteTraining(Utf8JsonWriter writer, CompiledNetwork compiled, Checkpoint checkpoint)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -116,8 +151,19 @@ public static class NetworkDocument
         }
 
         writer.WriteStartObject();
-        writer.WriteNumber(VersionKey, Version);
+        writer.WriteNumber(VersionKey, state.Pace is null ? FirstVersion : Version);
         writer.WriteNumber(SeedKey, state.Seed);
+
+        if (state.Pace is { } pace)
+        {
+            WritePace(writer, pace);
+        }
+
+        if (state.Engine is { } engine)
+        {
+            WriteEngine(writer, engine);
+        }
+
         writer.WritePropertyName(OptimizerKey);
         WriteKind(writer, compiled.Optimizer);
         writer.WritePropertyName(ScheduleKey);
@@ -178,9 +224,52 @@ public static class NetworkDocument
         ArgumentNullException.ThrowIfNull(property);
         ArgumentNullException.ThrowIfNull(catalog);
 
-        var text = new NetworkText(json);
+        var text = TextOf(json);
         using var document = text.Parsed();
-        var reader = new PartReader(text, property, PartOf(document.RootElement, property, text, NetworkKeys));
+
+        return NetworkIn(ReaderOf(document.RootElement, property, text, NetworkKeys), text, catalog);
+    }
+
+    /// <summary>
+    /// Reads a checkpoint from a file that holds its network and what its run needs to go on under two keys at its top, the
+    /// text read once for both.
+    /// </summary>
+    /// <param name="json">The whole file.</param>
+    /// <param name="network">The key the network stands under.</param>
+    /// <param name="training">The key the training part stands under.</param>
+    /// <param name="catalog">The kinds the network, the optimizer and the schedule may be.</param>
+    /// <returns>
+    /// The network as the checkpoint left it, with its loss and what it was trained on, and the run to go on from it: as
+    /// <see cref="ReadNetwork"/> and <see cref="ReadTraining"/> read them.
+    /// </returns>
+    /// <exception cref="NetworkFileException">
+    /// Anything in the network's part is wrong, or — the network read — anything in the training part: every fault, at its
+    /// line and column in the file, in the words each part's own door refuses it with.
+    /// </exception>
+    /// <remarks>
+    /// Reading the two parts through their own doors reads the text twice. A checkpoint holds, beside every parameter, what
+    /// the optimizer remembers of it, and the best epoch's slots when its run keeps them; read once, a checkpoint of four
+    /// million parameters under Adam allocates, beside its own copy of the text, the numbers it holds and little else.
+    /// </remarks>
+    public static SavedCheckpoint ReadCheckpoint(string json, string network, string training, NetworkCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(network);
+        ArgumentNullException.ThrowIfNull(training);
+        ArgumentNullException.ThrowIfNull(catalog);
+
+        var text = TextOf(json);
+        using var document = text.Parsed();
+        var saved = NetworkIn(ReaderOf(document.RootElement, network, text, NetworkKeys), text, catalog);
+
+        return new SavedCheckpoint(saved, TrainingIn(ReaderOf(document.RootElement, training, text, TrainingKeys), text, catalog, saved));
+    }
+
+    // The text of a file, surveyed for the network's parts: a tensor's values read where they stand.
+    private static NetworkText TextOf(string json) => new(json, PartReader.ReadsApart);
+
+    // The network and its loss a reader of a network's part reads; refused when anything in that part is wrong.
+    private static SavedNetwork NetworkIn(PartReader reader, NetworkText text, NetworkCatalog catalog)
+    {
         var rebuilding = new Rebuilding(catalog, text);
         var network = reader.NetworkOf(rebuilding);
         var loss = reader.Rebuilt<Loss>(LossKey, NetworkCatalog.Role.Loss, rebuilding, "loss");
@@ -204,26 +293,43 @@ public static class NetworkDocument
     /// <param name="network">The network read from the same file, as the checkpoint left it.</param>
     /// <returns>
     /// The network compiled with the optimizer and schedule written — the optimizer remembering what the checkpoint says it
-    /// did of each parameter — and the checkpoint to go on from.
+    /// did of each parameter — and the checkpoint to go on from, holding a run that goes on from it to the seed, the batch
+    /// size, the early stopping and the engine it records.
     /// </returns>
     /// <exception cref="NetworkFileException">Anything in the training part is wrong: every fault, at its line and column in the file.</exception>
+    /// <remarks>
+    /// A training part records the batch size and the early stopping its run went under, and one that holds only one of them,
+    /// or — from the second version — neither, is refused where it stands. A part of the first version, which 0.4.0 wrote, may
+    /// hold neither: its checkpoint says nothing of them, and goes on under whatever it is handed. The engine its run was on
+    /// is read where the part names one; a part that names none, as none 0.4.0 wrote does, says nothing of it, and its
+    /// checkpoint goes on on whatever engine it is handed.
+    /// </remarks>
     public static ResumedRun ReadTraining(string json, string property, NetworkCatalog catalog, SavedNetwork network)
     {
         ArgumentNullException.ThrowIfNull(property);
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(network.Network);
 
-        var text = new NetworkText(json);
+        var text = TextOf(json);
         using var document = text.Parsed();
-        var reader = new PartReader(text, property, PartOf(document.RootElement, property, text, TrainingKeys));
+
+        return TrainingIn(ReaderOf(document.RootElement, property, text, TrainingKeys), text, catalog, network);
+    }
+
+    // What a run needs to go on, as a reader of a training part reads it beside the network read from the same file;
+    // refused when anything in that part is wrong.
+    private static ResumedRun TrainingIn(PartReader reader, NetworkText text, NetworkCatalog catalog, SavedNetwork network)
+    {
         var rebuilding = new Rebuilding(catalog, text);
         var optimizer = reader.Rebuilt<Optimizer>(OptimizerKey, NetworkCatalog.Role.Optimizer, rebuilding, "optimizer");
         var schedule = reader.Rebuilt<LearningRateSchedule>(ScheduleKey, NetworkCatalog.Role.Schedule, rebuilding, "learning-rate schedule");
         var slots = network.Network.Slots().ToDictionary(named => named.Path, named => named.Slot);
         var seed = reader.Seed();
+        var pace = reader.PaceOf();
+        var engine = reader.EngineOf();
         var memory = reader.MemoryOf(slots);
         var history = reader.HistoryOf();
-        var judgement = reader.JudgementOf(slots, history?.Count);
+        var judgement = reader.JudgementOf(network.Network, history?.Count);
 
         if (optimizer is not null)
         {
@@ -232,8 +338,14 @@ public static class NetworkDocument
 
         text.ThrowIfFaulty();
 
-        var compiled = network.Network.Compile(optimizer!, network.Loss, schedule);
-        var resumable = new Resumable(seed, history!, slots.ToDictionary(named => named.Key, named => named.Value.Value), memory) { Judgement = judgement };
+        // Compiled as it was written: a file keeps the loss its network was compiled with, 0.4.0's pairs included.
+        var compiled = new CompiledNetwork(network.Network, optimizer!, network.Loss, schedule);
+        var resumable = new Resumable(seed, history!, slots.ToDictionary(named => named.Key, named => named.Value.Value), memory)
+        {
+            Judgement = judgement,
+            Pace = pace,
+            Engine = engine,
+        };
 
         return new ResumedRun(compiled, new Checkpoint(resumable));
     }
@@ -310,6 +422,13 @@ public static class NetworkDocument
 
     private static void WriteTrainedOn(Utf8JsonWriter writer, TrainedOn trainedOn)
     {
+        var unvaried = trainedOn.Unvaried;
+
+        if (unvaried is not null)
+        {
+            ThrowIfUnwritable(trainedOn.Features, unvaried);
+        }
+
         writer.WriteStartObject(TrainedOnKey);
         WriteNames(writer, FeaturesKey, trainedOn.Features);
         WriteNames(writer, AnswersKey, trainedOn.Answers);
@@ -317,7 +436,43 @@ public static class NetworkDocument
         writer.WriteString(TrainedBehindKey, trainedOn.TrainedBehind);
         writer.WriteNumber(SeedKey, trainedOn.Seed);
         writer.WriteNumber(EpochKey, trainedOn.Epoch);
+
+        // Written whenever it is said — that none held one value included — in the order the network takes the features: a
+        // part without it is one that does not say.
+        if (unvaried is not null)
+        {
+            writer.WriteStartObject(UnvariedKey);
+
+            foreach (var feature in trainedOn.Features.Where(unvaried.ContainsKey))
+            {
+                writer.WriteNumber(feature, unvaried[feature]);
+            }
+
+            writer.WriteEndObject();
+        }
+
         writer.WriteEndObject();
+    }
+
+    // A feature said to have held one value is one the network was trained on, and its value a finite number: what the file's
+    // own reader would refuse is never written.
+    private static void ThrowIfUnwritable(IReadOnlyList<string> features, IReadOnlyDictionary<string, double> unvaried)
+    {
+        foreach (var (feature, value) in unvaried)
+        {
+            if (!features.Contains(feature))
+            {
+                throw new InvalidOperationException(
+                    $"'{feature}' is said to have held one value on every training row, and it is no feature the network was trained on.");
+            }
+
+            if (!double.IsFinite(value))
+            {
+                throw new InvalidOperationException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"'{feature}' is said to have held {value} on every training row, which is not a finite number, and a file cannot hold one."));
+            }
+        }
     }
 
     private static void WriteNames(Utf8JsonWriter writer, string key, IReadOnlyList<string> names)
@@ -330,6 +485,45 @@ public static class NetworkDocument
         }
 
         writer.WriteEndArray();
+    }
+
+    // The batch size and the early stopping the run went under: its patience, its least fall that counts and whether it
+    // restores the best — or null, which says the run had none, where a part without the key says nothing of it.
+    private static void WritePace(Utf8JsonWriter writer, Pace pace)
+    {
+        writer.WriteNumber(BatchSizeKey, pace.BatchSize);
+
+        if (pace.EarlyStopping is not { } stopping)
+        {
+            writer.WriteNull(EarlyStoppingKey);
+
+            return;
+        }
+
+        writer.WriteStartObject(EarlyStoppingKey);
+        writer.WriteNumber(PatienceKey, stopping.Patience);
+        writer.WriteNumber(MinDeltaKey, stopping.MinDelta);
+        writer.WriteBoolean(RestoreBestKey, stopping.RestoreBest);
+        writer.WriteEndObject();
+    }
+
+    // The engine the run was on, as it names itself: its name, and its version and its device where it names them.
+    private static void WriteEngine(Utf8JsonWriter writer, Engine engine)
+    {
+        writer.WriteStartObject(EngineKey);
+        writer.WriteString(NameKey, engine.Name);
+
+        if (engine.Version is { } version)
+        {
+            writer.WriteString(VersionKey, version);
+        }
+
+        if (engine.Device is { } device)
+        {
+            writer.WriteString(DeviceKey, device);
+        }
+
+        writer.WriteEndObject();
     }
 
     private static void WriteJudgement(Utf8JsonWriter writer, Judgement judgement, NamedSlot[] slots)
@@ -350,8 +544,9 @@ public static class NetworkDocument
         writer.WriteEndObject();
     }
 
-    // The part of the file under its key: an object of a version this library reads, holding only the keys it knows.
-    private static JsonElement PartOf(JsonElement root, string property, NetworkText text, string[] keys)
+    // The reader of the part of the file under its key: an object of a version this library reads, holding only the keys it
+    // knows, read as a part of the version it names.
+    private static PartReader ReaderOf(JsonElement root, string property, NetworkText text, string[] keys)
     {
         if (root.Member(property) is not { ValueKind: JsonValueKind.Object } part)
         {
@@ -377,10 +572,10 @@ public static class NetworkDocument
 
         foreach (var unknown in part.EnumerateObject().Select(each => each.Name).Where(name => !keys.Contains(name)))
         {
-            text.Fault([property, unknown], $"The '{property}' part has no '{unknown}'. It holds: {string.Join(", ", keys)}.");
+            text.Fault([property, unknown], $"The '{property}' part has no '{unknown.Quoted()}'. It holds: {string.Join(", ", keys)}.");
         }
 
-        return part;
+        return new PartReader(text, property, part, number);
     }
 }
 
@@ -397,3 +592,8 @@ public readonly record struct SavedNetwork(Network Network, Loss Loss)
 /// <param name="Compiled">The network with its optimizer, loss and schedule.</param>
 /// <param name="Checkpoint">The checkpoint, handed to <see cref="FitOptions.ResumeFrom"/>.</param>
 public readonly record struct ResumedRun(CompiledNetwork Compiled, Checkpoint Checkpoint);
+
+/// <summary>A checkpoint read back from a file: its network as the checkpoint left it, and the run to go on from it.</summary>
+/// <param name="Network">The network and its loss, with what it was trained on when the file says.</param>
+/// <param name="Run">The same network compiled as it was, and the checkpoint to go on from.</param>
+public readonly record struct SavedCheckpoint(SavedNetwork Network, ResumedRun Run);

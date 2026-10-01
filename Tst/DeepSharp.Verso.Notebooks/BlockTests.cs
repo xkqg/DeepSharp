@@ -17,7 +17,7 @@ namespace DeepSharp.Tests.Notebooks;
 /// </summary>
 public class BlockTests
 {
-    private static StepCatalog Verbs() => StepCatalog.BuiltIn().WithIndicators();
+    private static StepCatalog Verbs() => NotebookVerbs.Catalog();
 
     private static IReadOnlyList<Type> Parts() =>
         [.. typeof(StepCellType).Assembly.GetTypes().Where(type => type.GetCustomAttribute<VersoExtensionAttribute>() is not null)];
@@ -39,6 +39,37 @@ public class BlockTests
         Assert.False(string.IsNullOrWhiteSpace(cell.DisplayName));
         Assert.False(string.IsNullOrWhiteSpace(cell.Icon));
         Assert.Equal("read.csv", Verbs().ReadStep(cell.GetDefaultContent()).Verb);
+    }
+
+    [Theory]
+    [InlineData("""{"step": "read.parquet", "path": "titanic.parquet"}""", "read.parquet")]
+    [InlineData("""{"step": "read.excel", "path": "titanic.xlsx", "sheet": "passengers"}""", "read.excel")]
+    [InlineData("""{"step": "read.json", "path": "titanic.json"}""", "read.json")]
+    public void ABlockThatReadsAParquetFileAWorkbookOrAJsonFile_IsAStepOfTheNotebook(string block, string verb)
+    {
+        // The notebook is a front end of the one declaration, so a first block may read any file a pipeline file names.
+        CellModel[] cells =
+        [
+            new() { Type = StepCellType.StepType, Source = block },
+            new() { Type = StepCellType.StepType, Source = """{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}]}""" },
+        ];
+
+        var assembled = NotebookPipeline.Of(cells);
+
+        Assert.True(assembled.Whole, string.Join("; ", assembled.Stopping));
+        Assert.Equal(verb, assembled.Readable.Steps[0].Verb);
+        Assert.IsAssignableFrom<IReadsAFile>(assembled.Readable.Steps[0]);
+    }
+
+    [Fact]
+    public void EveryVerbAnotherDeepSharpPackageBrings_IsAVerbOfTheNotebook()
+    {
+        // The notebook's catalog is the package's own and the same wherever it runs, so no verb one of DeepSharp's packages
+        // brings reaches a block unknown: the advice to register that package, meant for code, is never what a block says.
+        var catalog = NotebookVerbs.Catalog();
+
+        Assert.NotEmpty(StepCatalog.VerbsOtherPackagesBring);
+        Assert.All(StepCatalog.VerbsOtherPackagesBring.Keys, verb => Assert.True(catalog.Knows(verb), verb));
     }
 
     [Fact]
@@ -191,8 +222,9 @@ public class BlockTests
     public void EveryPublicConstantOfAPart_IsAnIdOrAKeyOfItsContract()
     {
         // What a part publishes is what another program relies on: its id, the language and block type Verso
-        // stores, and the keys a C# cell reads. A word a button or a form uses is the package's own business.
-        string[] contract = ["Id", "Language", "StepType", "HandOver", "Folder"];
+        // stores, the keys a C# cell reads, and the one it hands a model's predictions back under. A word a button or a
+        // form uses is the package's own business.
+        string[] contract = ["Id", "Language", "StepType", "HandOver", "Folder", "HandedBack"];
         var constants = Parts()
             .SelectMany(type => type.GetFields(BindingFlags.Public | BindingFlags.Static).Where(field => field.IsLiteral))
             .Select(field => $"{field.DeclaringType!.Name}.{field.Name}");

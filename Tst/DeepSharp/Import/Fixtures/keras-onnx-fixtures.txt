@@ -1,0 +1,4 @@
+keras 3.15.1 on torch 2.10.0+cpu, onnx 1.23.1, numpy 2.5.3, Python 3.14.7
+keras-titanic-export.onnx: 2154 bytes; opset 20; Cast Cast Cast MatMul Cast Add Cast Cast Relu Cast MatMul Cast Add Cast Sigmoid
+test: 135 rows, the graph within 5.96e-08 of Keras's chances
+served: 2 rows, the graph within 1.19e-07 of Keras's chances

@@ -264,3 +264,335 @@ Package integrity: sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/K
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+
+The server itself runs on the libraries below, which the tool carries beside its own code, each as its makers built it:
+Verso's engine and what it brings, the readers of a Parquet file and an Excel workbook, the charts, and the parts of .NET
+that are packages of their own. Each is named with the version the tool carries, where it comes from, its copyright
+and its licence. The text of each licence follows the list; the Apache License 2.0's is given above, under DOMPurify.
+
+
+Apache.Arrow 14.0.2
+The NuGet package Apache.Arrow, its Apache.Arrow.dll (github.com/apache/arrow), which Microsoft's DataFrame
+brings.
+Copyright 2016-2019 The Apache Software Foundation. Apache License 2.0.
+
+
+CommunityToolkit.HighPerformance 8.4.2
+The NuGet package CommunityToolkit.HighPerformance, its CommunityToolkit.HighPerformance.dll
+(github.com/CommunityToolkit/dotnet). Parquet.Net reads with it.
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+ExcelDataReader 3.9.0
+The NuGet package ExcelDataReader, its ExcelDataReader.dll (github.com/ExcelDataReader/ExcelDataReader): what an Excel
+workbook is read with.
+Copyright (c) 2014 ExcelDataReader. MIT License.
+
+
+Humanizer.Core 2.14.1
+The NuGet package Humanizer.Core, its Humanizer.dll (github.com/Humanizr/Humanizer), which the C# compiler's features bring.
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+K4os.Compression.LZ4 1.3.8
+The NuGet package K4os.Compression.LZ4, its K4os.Compression.LZ4.dll (github.com/MiloszKrajewski/K4os.Compression.LZ4).
+Parquet.Net reads LZ4 with it.
+Copyright (c) 2017 Milosz Krajewski. MIT License.
+
+
+Markdig 0.37.0
+The NuGet package Markdig, its Markdig.dll (github.com/xoofx/markdig), which draws Verso's Markdown.
+Copyright (c) 2018-2019, Alexandre Mutel. BSD 2-Clause License.
+
+
+MatPlotLibNet 1.18.0
+The NuGet package MatPlotLibNet, its MatPlotLibNet.dll (github.com/xkqg/MatPlotLibNet): the charts and colour maps.
+Copyright (c) 2026 H.P. Gansevoort (xkqg). MIT License.
+
+
+MatPlotLibNet.DataFrame 1.18.0
+The NuGet package MatPlotLibNet.DataFrame, its MatPlotLibNet.DataFrame.dll (github.com/xkqg/MatPlotLibNet).
+Copyright (c) 2026 H.P. Gansevoort (xkqg). MIT License.
+
+
+Microsoft.CodeAnalysis.AnalyzerUtilities 3.3.0
+The NuGet package Microsoft.CodeAnalysis.AnalyzerUtilities, its Microsoft.CodeAnalysis.AnalyzerUtilities.dll
+(github.com/dotnet/roslyn-analyzers), which the C# compiler's features bring.
+Copyright (c) Microsoft Corporation. Apache License 2.0, as the package states it.
+
+
+Microsoft.CodeAnalysis.Common 4.12.0
+The NuGet package Microsoft.CodeAnalysis.Common, its Microsoft.CodeAnalysis.dll and the translations of its messages
+(github.com/dotnet/roslyn): the C# compiler Verso's C# kernel runs on.
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.CodeAnalysis.CSharp 4.12.0
+The NuGet package Microsoft.CodeAnalysis.CSharp, its Microsoft.CodeAnalysis.CSharp.dll and the translations of its
+messages (github.com/dotnet/roslyn).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.CodeAnalysis.CSharp.Features 4.12.0
+The NuGet package Microsoft.CodeAnalysis.CSharp.Features, its Microsoft.CodeAnalysis.CSharp.Features.dll and the
+translations of its messages (github.com/dotnet/roslyn).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.CodeAnalysis.CSharp.Scripting 4.12.0
+The NuGet package Microsoft.CodeAnalysis.CSharp.Scripting, its Microsoft.CodeAnalysis.CSharp.Scripting.dll and the
+translations of its messages (github.com/dotnet/roslyn).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.CodeAnalysis.CSharp.Workspaces 4.12.0
+The NuGet package Microsoft.CodeAnalysis.CSharp.Workspaces, its Microsoft.CodeAnalysis.CSharp.Workspaces.dll and the
+translations of its messages (github.com/dotnet/roslyn).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.CodeAnalysis.Elfie 1.0.0
+The NuGet package Microsoft.CodeAnalysis.Elfie, its Microsoft.CodeAnalysis.Elfie.dll (github.com/microsoft/elfie-arriba).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.CodeAnalysis.Features 4.12.0
+The NuGet package Microsoft.CodeAnalysis.Features, its Microsoft.CodeAnalysis.Features.dll and the translations of its
+messages (github.com/dotnet/roslyn).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.CodeAnalysis.Scripting.Common 4.12.0
+The NuGet package Microsoft.CodeAnalysis.Scripting.Common, its Microsoft.CodeAnalysis.Scripting.dll and the translations
+of its messages (github.com/dotnet/roslyn).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.CodeAnalysis.Workspaces.Common 4.12.0
+The NuGet package Microsoft.CodeAnalysis.Workspaces.Common, its Microsoft.CodeAnalysis.Workspaces.dll and the
+translations of its messages (github.com/dotnet/roslyn).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.Data.Analysis 0.23.0
+The NuGet package Microsoft.Data.Analysis, its Microsoft.Data.Analysis.dll (github.com/dotnet/machinelearning):
+Microsoft's DataFrame.
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.DiaSymReader 2.0.0
+The NuGet package Microsoft.DiaSymReader, its Microsoft.DiaSymReader.dll (github.com/dotnet/symreader).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.Extensions.DependencyInjection.Abstractions 10.0.12
+The NuGet package Microsoft.Extensions.DependencyInjection.Abstractions, its
+Microsoft.Extensions.DependencyInjection.Abstractions.dll (github.com/dotnet/dotnet), carried by the build for .NET 8.
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Microsoft.IO.RecyclableMemoryStream 3.0.1
+The NuGet package Microsoft.IO.RecyclableMemoryStream, its Microsoft.IO.RecyclableMemoryStream.dll
+(github.com/microsoft/Microsoft.IO.RecyclableMemoryStream). Parquet.Net reads with it.
+Copyright (c) 2015-2016 Microsoft. MIT License.
+
+
+Microsoft.ML.DataView 5.0.0
+The NuGet package Microsoft.ML.DataView, its Microsoft.ML.DataView.dll (github.com/dotnet/machinelearning).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Newtonsoft.Json 13.0.3
+The NuGet package Newtonsoft.Json, its Newtonsoft.Json.dll (github.com/JamesNK/Newtonsoft.Json), which NuGet's
+packages bring.
+Copyright (c) 2007 James Newton-King. MIT License.
+
+
+NuGet.Common 6.9.1
+The NuGet package NuGet.Common, its NuGet.Common.dll (github.com/NuGet/NuGet.Client), which Verso brings.
+Copyright (c) .NET Foundation and Contributors. Apache License 2.0.
+
+
+NuGet.Configuration 6.9.1
+The NuGet package NuGet.Configuration, its NuGet.Configuration.dll (github.com/NuGet/NuGet.Client).
+Copyright (c) .NET Foundation and Contributors. Apache License 2.0.
+
+
+NuGet.Frameworks 6.9.1
+The NuGet package NuGet.Frameworks, its NuGet.Frameworks.dll (github.com/NuGet/NuGet.Client).
+Copyright (c) .NET Foundation and Contributors. Apache License 2.0.
+
+
+NuGet.Packaging 6.9.1
+The NuGet package NuGet.Packaging, its NuGet.Packaging.dll (github.com/NuGet/NuGet.Client).
+Copyright (c) .NET Foundation and Contributors. Apache License 2.0.
+
+
+NuGet.Protocol 6.9.1
+The NuGet package NuGet.Protocol, its NuGet.Protocol.dll (github.com/NuGet/NuGet.Client).
+Copyright (c) .NET Foundation and Contributors. Apache License 2.0.
+
+
+NuGet.Versioning 6.9.1
+The NuGet package NuGet.Versioning, its NuGet.Versioning.dll (github.com/NuGet/NuGet.Client).
+Copyright (c) .NET Foundation and Contributors. Apache License 2.0.
+
+
+Parquet.Net 6.1.0
+The NuGet package Parquet.Net, its Parquet.dll (github.com/aloneguid/parquet-dotnet): what a Parquet file is read with.
+Copyright (c) 2017 Ivan Gavryliuk. MIT License.
+
+
+Snappier 1.3.1
+The NuGet package Snappier, its Snappier.dll (github.com/brantburnett/Snappier). Parquet.Net reads Snappy with it.
+Copyright 2011-2024, Google, Inc. and Snappier Authors. BSD 3-Clause License.
+
+
+System.Collections.Immutable 9.0.4
+The NuGet package System.Collections.Immutable, its System.Collections.Immutable.dll (github.com/dotnet/runtime), carried
+by the build for .NET 8.
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+System.Composition.AttributedModel 8.0.0
+The NuGet package System.Composition.AttributedModel, its System.Composition.AttributedModel.dll
+(github.com/dotnet/runtime).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+System.Composition.Convention 8.0.0
+The NuGet package System.Composition.Convention, its System.Composition.Convention.dll (github.com/dotnet/runtime).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+System.Composition.Hosting 8.0.0
+The NuGet package System.Composition.Hosting, its System.Composition.Hosting.dll (github.com/dotnet/runtime).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+System.Composition.Runtime 8.0.0
+The NuGet package System.Composition.Runtime, its System.Composition.Runtime.dll (github.com/dotnet/runtime).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+System.Composition.TypedParts 8.0.0
+The NuGet package System.Composition.TypedParts, its System.Composition.TypedParts.dll (github.com/dotnet/runtime).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+System.Configuration.ConfigurationManager 8.0.0
+The NuGet package System.Configuration.ConfigurationManager, its System.Configuration.ConfigurationManager.dll
+(github.com/dotnet/runtime).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+System.IO.Hashing 10.0.12
+The NuGet package System.IO.Hashing, its System.IO.Hashing.dll (github.com/dotnet/dotnet).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+System.Numerics.Tensors 10.0.12
+The NuGet package System.Numerics.Tensors, its System.Numerics.Tensors.dll (github.com/dotnet/dotnet).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+System.Security.Cryptography.ProtectedData 8.0.0
+The NuGet package System.Security.Cryptography.ProtectedData, its System.Security.Cryptography.ProtectedData.dll
+(github.com/dotnet/runtime).
+Copyright (c) .NET Foundation and Contributors. MIT License.
+
+
+Verso 1.2.2
+The NuGet package Verso, its Verso.dll (github.com/DataficationSDK/Verso): the notebook engine the server runs on.
+Copyright (c) 2026 Datafication. MIT License.
+
+
+Verso.Abstractions 1.2.2
+The NuGet package Verso.Abstractions, its Verso.Abstractions.dll (github.com/DataficationSDK/Verso).
+Copyright (c) 2026 Datafication. MIT License.
+
+
+ZstdSharp.Port 0.8.8
+The NuGet package ZstdSharp.Port, its ZstdSharp.dll (github.com/oleg-st/ZstdSharp). Parquet.Net reads Zstandard with it.
+Copyright (c) 2021 Oleg Stepanischev. MIT License.
+
+
+The MIT License, under which each library above that names it is carried, with the copyright given with it:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+The BSD 2-Clause License, under which Markdig is carried:
+
+Copyright (c) 2018-2019, Alexandre Mutel
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without modification
+, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this 
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice, 
+   this list of conditions and the following disclaimer in the documentation 
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED 
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE 
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL 
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR 
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER 
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE 
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+The BSD 3-Clause License, under which Snappier is carried:
+
+Copyright 2011-2024, Google, Inc. and Snappier Authors.
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+    * Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+    * Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+    * Neither the name of Google, Inc., any Snappier authors, nor the 
+names of its contributors may be used to endorse or promote products 
+derived from this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.

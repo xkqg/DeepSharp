@@ -19,7 +19,8 @@ public sealed class CompiledNetwork
 {
     private const string NotBuilt =
         "A network described in Keras's words is built at its first Fit, from the shape of the rows it learns from and the run's seed, and this one has not been fitted yet. "
-        + "To hold it now, lower the description with Lower(shape, new RandomStream(seed)) and compile that: fitted under the same seed, it starts and trains as this one would.";
+        + "To hold it now, lower the description with Lower(shape, new RandomStream(seed)) — without a last activation its loss applies itself, which compiling leaves out — "
+        + "and compile that: fitted under the same seed, it starts and trains as this one would.";
 
     private readonly Sequential? _description;
     private Network? _network;
@@ -54,13 +55,17 @@ public sealed class CompiledNetwork
     /// <summary>Trains the network on the training rows, looking at the validation rows once an epoch.</summary>
     /// <param name="train">The rows it learns from.</param>
     /// <param name="validation">The rows it is judged by at the end of every epoch, and never trained on; nothing for none.</param>
-    /// <param name="options">The seed, the epochs, the batches, early stopping, checkpoints, a checkpoint to go on from.</param>
+    /// <param name="options">
+    /// The seed, the epochs, the batches, early stopping, the engine, checkpoints, a checkpoint to go on from — under the seed,
+    /// the batch size and the early stopping it was taken under, on the engine it was taken on, and to as many epochs as asked.
+    /// </param>
     /// <returns>What the run did, epoch by epoch.</returns>
     /// <exception cref="ArgumentException">
     /// There are no training rows; early stopping or keeping only the best checkpoints is asked for without validation rows,
     /// which is what judges an epoch; a row's answers are not ones the loss could have meant; the rows' examples are of
     /// another shape than a network described in Keras's words takes; or the checkpoint to go on from was taken under another
-    /// seed, or of another network. Nothing is built, restored or trained before all of that is checked.
+    /// seed, another batch size or other early stopping, or on another engine — each difference named — or of another
+    /// network. Nothing is built, restored or trained before all of that is checked.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// A batch's loss, or an epoch's validation loss, is not a finite number: something upstream went wrong, and training on it
@@ -93,10 +98,9 @@ public sealed class CompiledNetwork
 
         var takes = Takes(train, validation);
 
-        if (options.ResumeFrom is { State.Seed: var seed } && seed != options.Seed)
+        if (options.ResumeFrom?.State.Unlike(options) is { } unlike)
         {
-            throw new ArgumentException(
-                $"The checkpoint was taken of a run seeded {seed}, and going on under {options.Seed} would draw other numbers.", nameof(options));
+            throw new ArgumentException(unlike, nameof(options));
         }
 
         var network = _network ?? _description!.Lower(takes!.Value, new RandomStream(options.Seed));
@@ -157,12 +161,13 @@ public sealed class CompiledNetwork
     /// <param name="features">The rows, as the network takes them.</param>
     /// <param name="backend">Where the arithmetic runs.</param>
     /// <returns>A row of predictions for each row: numbers, shares or probabilities, as the loss has them.</returns>
+    /// <remarks>The network's own <see cref="Network.Predict"/>, through this loss.</remarks>
     public Tensor Predict(Tensor features, ITensorBackend backend)
     {
         ArgumentNullException.ThrowIfNull(features);
         ArgumentNullException.ThrowIfNull(backend);
 
-        return Loss.Predictions(Network.Forward(features, Pass.Evaluation(backend)), backend);
+        return Network.Predict(features, Loss, backend);
     }
 
     // The shape of one example a network described in Keras's words takes — its input, stated; or taken from the rows of its
@@ -236,7 +241,7 @@ public sealed class CompiledNetwork
     // One run of the loop: the backend, the stream and the parameters it moves, fixed for the run.
     private sealed class Loop(CompiledNetwork compiled, FitOptions options)
     {
-        private readonly ITensorBackend _backend = options.Backend ?? new CpuBackend();
+        private readonly ITensorBackend _backend = options.Backend;
         private readonly RandomStream _stream = new(options.Seed);
         private readonly Parameter[] _parameters = [.. compiled.Network.Parameters()];
 
@@ -314,11 +319,17 @@ public sealed class CompiledNetwork
                 }
             }
 
-            return new Checkpoint(new Resumable(options.Seed, [.. epochs], Slots(), memory) { Judgement = judgement });
+            return new Checkpoint(new Resumable(options.Seed, [.. epochs], Slots(), memory)
+            {
+                Judgement = judgement,
+                Pace = Pace.Of(options),
+                Engine = Engine.Of(options.Backend),
+            });
         }
 
         // Puts the network, the optimizer and the history back where the checkpoint left them — a checkpoint already found to be
-        // of this run's seed and this network's slots; the judgement goes on only where this run is judged too.
+        // of this run's seed, batch size, early stopping and engine, as far as it records them, and of this network's slots; the
+        // judgement goes on only where this run is judged too.
         internal Judgement? Resume(Resumable state, List<Epoch> epochs, bool watched)
         {
             Restore(state.Slots);

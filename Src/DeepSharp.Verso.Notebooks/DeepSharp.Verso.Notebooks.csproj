@@ -3,7 +3,7 @@
   <PropertyGroup>
     <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
     <PackageId>DeepSharp.Verso.Notebooks</PackageId>
-    <Description>A DeepSharp pipeline written as a notebook in Verso, one block per step. Each block is the step's own JSON, edited as text or in Verso's properties panel, and shows the data at that point on request: a grid coloured per column over the training rows, a profile that names what should not be there and how each is answered, with a box that gives an answer which changes the columns, and a heatmap of the complete training rows. Columns are chosen from the grid or from a list of the source's columns, which says what each column's cells propose it holds, and the decisions are saved beside the notebook and taken over again. The notebook is the declaration — exported as the same pipeline file, and handed to C# cells as text. It runs in Verso's VS Code extension, in verso serve, in DeepSharp's own server deepsharp-serve and in an application of your own.</Description>
+    <Description>A DeepSharp pipeline written as a notebook in Verso, one block per step. The first block reads a comma-separated file, a Parquet file, a sheet of an Excel workbook or a JSON file, and the package brings those readers with it. Each block is the step's own JSON, edited as text or in Verso's properties panel, and shows the data at that point on request: a grid coloured per column over the training rows, a profile that names what should not be there and how each is answered, with a box that gives an answer which changes the columns, and a heatmap of the complete training rows. Columns are chosen from the grid or from a list of the source's columns, which says what each column's cells propose it holds, and the decisions are saved beside the notebook and taken over again. The notebook is the declaration — exported as the same pipeline file, and handed to C# cells as text. It runs in Verso's VS Code extension, in verso serve, in DeepSharp's own server deepsharp-serve and in an application of your own.</Description>
     <PackageTags>deepsharp;pipeline;pdd;machine-learning;data-preparation;verso;notebook;dotnet</PackageTags>
   </PropertyGroup>
 
@@ -22,6 +22,10 @@
     <ProjectReference Include="..\DeepSharp.Charts\DeepSharp.Charts.csproj" />
     <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
     <ProjectReference Include="..\DeepSharp.Pipelines.Indicators\DeepSharp.Pipelines.Indicators.csproj" />
+    <!-- The readers a first block can name, carried as the indicators are: an extension Verso installs is loaded apart, so the notebook's verbs are only what this package brings. -->
+    <ProjectReference Include="..\DeepSharp.Pipelines.Parquet\DeepSharp.Pipelines.Parquet.csproj" />
+    <ProjectReference Include="..\DeepSharp.Pipelines.Excel\DeepSharp.Pipelines.Excel.csproj" />
+    <ProjectReference Include="..\DeepSharp.Pipelines.Json\DeepSharp.Pipelines.Json.csproj" />
   </ItemGroup>
 
   <ItemGroup>

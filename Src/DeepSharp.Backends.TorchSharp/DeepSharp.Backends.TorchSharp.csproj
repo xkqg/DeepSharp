@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Backends.TorchSharp</PackageId>
+    <Description>A DeepSharp network's arithmetic on libtorch, through TorchSharp: TorchBackend.OnCpu() on the processor or TorchBackend.OnGpu(0) on a graphics card, handed to a run as FitOptions.Backend and to a trained network as it serves. The model does not change a line: every layer, loss, optimizer and gradient is the one DeepSharp runs on its light engine, held to the same contract, operation by operation. The engine keeps what it makes in libtorch's memory and lets it go when nothing holds it. It brings TorchSharp alone; the application brings the libtorch it runs on — libtorch-cpu for its platform, TorchSharp-cpu, or TorchSharp-cuda-windows or TorchSharp-cuda-linux for an NVIDIA card — and the engine names those packages when none is there.</Description>
+    <PackageTags>deepsharp;torchsharp;libtorch;pytorch;cuda;gpu;deep-learning;neural-network;tensor;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp\DeepSharp.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- TorchSharp alone, the .NET side of libtorch, at the version whose libtorch the engine is tested on. The native
+         library itself is the application's to bring, for the processor or a graphics card and for each platform it runs
+         on: a package that brought one would bring every platform's, and a card's is gigabytes. -->
+    <PackageReference Include="TorchSharp" Version="0.107.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The engine's own suite reads where a tensor's values live and the words a missing libtorch is named in. -->
+    <InternalsVisibleTo Include="DeepSharp.Backends.TorchSharp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

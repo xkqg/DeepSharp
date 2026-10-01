@@ -50,6 +50,30 @@ public sealed partial class ReadmeExampleTests : IDisposable
         Assert.Contains("\"trainedOn\"", Assert.IsType<string>(made[2]), StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void TheReadme_SaysWhereTheFileItsExampleReadsComesFrom_NamingEveryColumnTheExampleDeclares()
+    {
+        // The file the example reads ships nowhere, so the words under the example say whose it is and what it holds: a
+        // column the example comes to declare, and the words do not name, is a file nobody can make.
+        var readme = File.ReadAllText(Path.Join(Repository.Root, "README.md")).ReplaceLineEndings("\n");
+        var example = CSharpBlock().Matches(readme).Select(match => match.Groups["code"].Value)
+            .Single(code => code.Contains("Pdd.Create()", StringComparison.Ordinal));
+        var file = ReadFile().Match(example).Groups["file"].Value;
+        string[] columns = [.. DeclaredColumn().Matches(example).Select(match => match.Groups["column"].Value)];
+        var below = readme[(readme.IndexOf(example, StringComparison.Ordinal) + example.Length)..];
+        var said = below.Split("\n\n").FirstOrDefault(paragraph => paragraph.Contains($"`{file}`", StringComparison.Ordinal));
+
+        Assert.Equal(["timestamp", "close", "trades"], columns);
+        Assert.True(said is not null, $"Nothing below the README's example says where {file} comes from.");
+        Assert.All(columns, column => Assert.Contains($"`{column}`", said, StringComparison.Ordinal));
+    }
+
+    [GeneratedRegex("\\.ReadCsv\\(\"(?<file>[^\"]+)\"\\)")]
+    private static partial Regex ReadFile();
+
+    [GeneratedRegex("\\.(?:Timestamp|Number|Integer|Category|Text|Boolean|Optional)\\(\"(?<column>[^\"]+)\"")]
+    private static partial Regex DeclaredColumn();
+
     // The example as a method: its usings above, its statements inside, and what it prepared, trained and wrote handed back.
     private static object? Run(string example)
     {

@@ -2,6 +2,8 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Text;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using DeepSharp.Pipelines;
 using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
@@ -280,6 +282,65 @@ public sealed class ToolbarTests : IDisposable
     }
 
     [Fact]
+    public async Task ExportingAfterARunOverAParquetFile_KeepsTheFitOnlyWhileTheFileHoldsTheBytesItLearnedFrom()
+    {
+        var file = Path.Join(_folder, "titanic.parquet");
+        File.Copy(Repository.Fixture("titanic.parquet"), file);
+        await using var notebook = await NotebookAsync(["""{"step": "read.parquet", "path": "titanic.parquet"}""", .. Titanic[1..]]);
+
+        await notebook.PressAsync(RunPipelineAction.Id);
+
+        var saved = Text(await notebook.PressAsync(ExportPipelineAction.Id));
+
+        Assert.Equal(HandedOver(notebook), saved);
+        Assert.Contains("\"fitted\"", saved, StringComparison.Ordinal);
+
+        // One byte more: the file no longer holds the bytes the fit was learned from.
+        using (var appended = File.Open(file, FileMode.Append))
+        {
+            appended.WriteByte(0);
+        }
+
+        Assert.Equal(NotebookPipelineText(notebook), Text(await notebook.PressAsync(ExportPipelineAction.Id)));
+    }
+
+    [Theory]
+    [InlineData("titanic.parquet", """{"step": "read.parquet", "path": "titanic.parquet"}""")]
+    [InlineData("titanic.xlsx", """{"step": "read.excel", "path": "titanic.xlsx"}""")]
+    [InlineData("titanic.json", """{"step": "read.json", "path": "titanic.json"}""")]
+    public async Task ThePassengerListRunFromAParquetFileAWorkbookOrJson_SplitsAsItsCommaSeparatedFileDoes(string file, string block)
+    {
+        // The same cells in another file are the same rows: the toolbar's run hands over the fit of the same split, learned
+        // from the same training rows, as the notebook that reads the comma-separated file hands over.
+        File.Copy(Repository.Fixture(file), Path.Join(_folder, file));
+        await using var csv = await NotebookAsync(Titanic);
+        await using var other = await Notebook.OpenAsync(Path.Join(_folder, "other.verso"));
+
+        foreach (var each in (string[])[block, .. Titanic[1..]])
+        {
+            other.AddBlock(each);
+        }
+
+        await csv.PressAsync(RunPipelineAction.Id);
+        await other.PressAsync(RunPipelineAction.Id);
+
+        var handed = PreparedData.FromJson(HandedOver(other)!, NotebookVerbs.Catalog());
+        var run = new Pipeline(handed.Declaration, rows: null, SourceFolder.Of(_folder)).Run();
+        // The file's second line: the first row under its header.
+        var second = run.Table.Identities.Select(identity => identity.ReadAt).ToList().IndexOf(0);
+
+        Assert.Equal(run.ToJson(), HandedOver(other));
+        Assert.Equal([623, 133, 135], new[] { Part.Train, Part.Validation, Part.Test }.Select(run.CountIn));
+        Assert.StartsWith("7195ecd6", run.Table.Identities[second].Key.ToString(), StringComparison.Ordinal);
+        Assert.Equal(Part.Train, run.Parts[second]);
+        Assert.Equal(Learned(HandedOver(csv)!), Learned(HandedOver(other)!));
+    }
+
+    // What each step learned, as the handed-over text writes it, without the key of the steps above it.
+    private static IReadOnlyList<string> Learned(string pipeline) =>
+        [.. JsonNode.Parse(pipeline)!["fitted"]!.AsArray().Select(entry => entry!["learned"]!.ToJsonString())];
+
+    [Fact]
     public async Task APipelineWhoseRowsAreHandedIn_ExportsItsDeclaration_ForCodeThatHandsRowsIn()
     {
         // A notebook shows no rows of it, since it hands none in; the file is what code that does hand rows in runs.
@@ -339,6 +400,33 @@ public sealed class ToolbarTests : IDisposable
 
         Assert.Equal(NotebookPipelineText(notebook), saved);
         Assert.Contains("mean", saved, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TheReadmesCSharpCell_RunsThePipelineANotebookOfAParquetFileHandsOver()
+    {
+        // The README's C# cell as it stands on the page, run in the notebook after the toolbar's run over a Parquet file: its
+        // catalog knows every verb a block can hold, so it reads the pipeline the blocks hand over and runs it over the file.
+        // A package the page takes from NuGet is the one this suite was built with.
+        File.Copy(Repository.Fixture("titanic.parquet"), Path.Join(_folder, "titanic.parquet"));
+        await using var notebook = await NotebookAsync(["""{"step": "read.parquet", "path": "titanic.parquet"}""", .. Titanic[1..]]);
+        var readme = File.ReadAllText(Path.Join(Repository.Root, "README.md")).ReplaceLineEndings("\n");
+        var cell = Regex.Matches(readme, "```csharp\\n(?<code>.*?)```", RegexOptions.Singleline)
+            .Select(match => match.Groups["code"].Value)
+            .Single(code => code.Contains(StepKernel.HandOver, StringComparison.Ordinal));
+        var local = Regex.Replace(
+            cell, "#r \"nuget: (?<package>[^\"]+)\"", match => $"#r \"{Path.Join(AppContext.BaseDirectory, match.Groups["package"].Value + ".dll")}\"");
+        var source = $"#r \"{Path.Join(AppContext.BaseDirectory, "DeepSharp.Pipelines.dll")}\"\n"
+            + local.Replace(".Run();", ".Run();\n    Variables.Set(\"readme.rows\", prepared.Table.RowCount);", StringComparison.Ordinal);
+
+        await notebook.PressAsync(RunPipelineAction.Id);
+
+        // The engine calls a cell that met an exception a run that ended, so what the cell wrote is read too.
+        var outputs = await notebook.RunAsync(notebook.Scaffold.AddCell("code", "csharp", source));
+
+        Assert.NotNull(HandedOver(notebook));
+        Assert.DoesNotContain(outputs, output => output.Content.Contains("Exception", StringComparison.Ordinal));
+        Assert.Equal(891, notebook.Scaffold.Variables.Get<int>("readme.rows"));
     }
 
     [Fact]

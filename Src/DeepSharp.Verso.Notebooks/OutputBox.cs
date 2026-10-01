@@ -31,39 +31,34 @@ internal readonly record struct ListOutputChange(IReadOnlyList<IPipelineStep>? S
 /// output of another kind than the one picked is not changed from here. A range of an output of many puts every column
 /// of it in the same way, in one change, and takes them in with the range's one kind — a column the schema gives a kind
 /// the output does not read is made that kind, since the range asks for its answers as that kind.
+/// <para>
+/// One list's boxes share everything but their row: the verbs the notebook knows, the declaration the blocks make, the kind
+/// of output the list's boxes make, and the source's columns in their order.
+/// </para>
 /// </remarks>
-internal static class OutputBox
+/// <param name="catalog">The verbs the notebook knows.</param>
+/// <param name="declaration">The declaration the blocks make.</param>
+/// <param name="verb">The kind of output the list's boxes make.</param>
+/// <param name="header">The source's columns, in their order.</param>
+internal sealed class OutputBox(StepCatalog catalog, PipelineDeclaration declaration, string verb, IReadOnlyList<string> header)
 {
     /// <summary>What a row's output box asks for.</summary>
-    /// <param name="catalog">The verbs the notebook knows.</param>
-    /// <param name="declaration">The declaration the blocks make.</param>
-    /// <param name="verb">The kind of output the list's boxes make.</param>
     /// <param name="column">The row's column.</param>
     /// <param name="kind">The kind a tick takes the column in with, when the schema does not take it.</param>
-    /// <param name="header">The source's columns, in their order.</param>
     /// <param name="ticked">Whether the box is ticked.</param>
     /// <returns>The steps, or why not.</returns>
-    public static ListOutputChange Change(
-        StepCatalog catalog, PipelineDeclaration declaration, string verb, string column, ColumnKind kind, IReadOnlyList<string> header, bool ticked) =>
-        Change(catalog, declaration, verb, [column], kind, header, ticked, reads: null);
+    public ListOutputChange Change(string column, ColumnKind kind, bool ticked) => Change([column], kind, ticked, reads: null);
 
     /// <summary>What a range of an output of many asks for: every column of it put in, in one change.</summary>
-    /// <param name="catalog">The verbs the notebook knows.</param>
-    /// <param name="declaration">The declaration the blocks make.</param>
-    /// <param name="verb">The kind of output the list's boxes make; its answer is a list of columns.</param>
-    /// <param name="columns">The range's columns, in the source's order.</param>
+    /// <param name="columns">The range's columns, in the source's order; the list's kind of output takes a list of columns.</param>
     /// <param name="kind">The range's kind.</param>
-    /// <param name="header">The source's columns, in their order.</param>
     /// <returns>The steps, or why not.</returns>
-    public static ListOutputChange Ranged(
-        StepCatalog catalog, PipelineDeclaration declaration, string verb, IReadOnlyList<string> columns, ColumnKind kind, IReadOnlyList<string> header) =>
-        Change(catalog, declaration, verb, columns, kind, header, ticked: true, reads: ((ColumnsParameter)AnswerOf(catalog, verb)!).Accepts);
+    public ListOutputChange Ranged(IReadOnlyList<string> columns, ColumnKind kind) =>
+        Change(columns, kind, ticked: true, reads: ((ColumnsParameter)AnswerOf(catalog, verb)!).Accepts);
 
     // Puts columns into the output, or takes them out; for a range, a column the schema gives a kind the output does not
     // read is made the range's kind.
-    private static ListOutputChange Change(
-        StepCatalog catalog, PipelineDeclaration declaration, string verb, IReadOnlyList<string> columns, ColumnKind kind, IReadOnlyList<string> header,
-        bool ticked, IReadOnlyList<ColumnKind>? reads)
+    private ListOutputChange Change(IReadOnlyList<string> columns, ColumnKind kind, bool ticked, IReadOnlyList<ColumnKind>? reads)
     {
         var output = declaration.Output;
 
@@ -86,7 +81,7 @@ internal static class OutputBox
         }
 
         JsonNode stated = answer is ColumnsParameter
-            ? new JsonArray([.. (ticked ? asked.Aggregate(held, (each, column) => Inserted(each, column, header)) : [.. held.Except(asked)]).Select(each => (JsonNode)each)])
+            ? new JsonArray([.. (ticked ? asked.Aggregate(held, Inserted) : [.. held.Except(asked)]).Select(each => (JsonNode)each)])
             : ticked ? asked[0] : string.Empty;
 
         INamesTheAnswer made;
@@ -105,7 +100,7 @@ internal static class OutputBox
 
         try
         {
-            taken = ticked ? TakenIn(declaration, asked, kind, header, reads) : declaration.Steps;
+            taken = ticked ? TakenIn(asked, kind, reads) : declaration.Steps;
         }
         catch (DeclarationException refused)
         {
@@ -121,8 +116,7 @@ internal static class OutputBox
 
     // The columns taken in with the kind given; for a range, one the schema then gives a kind the output does not read is
     // made that kind. A column whose change breaks a rule stops the rest, and the rule is said.
-    private static IReadOnlyList<IPipelineStep> TakenIn(
-        PipelineDeclaration declaration, IReadOnlyList<string> columns, ColumnKind kind, IReadOnlyList<string> header, IReadOnlyList<ColumnKind>? reads) =>
+    private IReadOnlyList<IPipelineStep> TakenIn(IReadOnlyList<string> columns, ColumnKind kind, IReadOnlyList<ColumnKind>? reads) =>
         reads is null
             ? declaration.Including(columns, kind, header)
             : columns.Aggregate(declaration.Including(columns, kind, header), (steps, column) =>
@@ -141,22 +135,17 @@ internal static class OutputBox
     /// Whether a row's output box can be clicked, as the include box's offers are: what the click asks for changes the
     /// steps and keeps the rules.
     /// </summary>
-    /// <param name="catalog">The verbs the notebook knows.</param>
-    /// <param name="declaration">The declaration the blocks make.</param>
-    /// <param name="verb">The kind of output the list's boxes make.</param>
     /// <param name="column">The row's column.</param>
     /// <param name="kind">The kind a tick takes the column in with.</param>
-    /// <param name="header">The source's columns.</param>
     /// <param name="ticked">Whether the box is drawn ticked.</param>
     /// <returns>Why the click is not offered, the first reason; nothing when it is.</returns>
     /// <remarks>
     /// A column an answer is made from is drawn ticked, since the answer comes back to it, while the output names the
     /// column made: unticking it takes out nothing the output names, so it is not offered.
     /// </remarks>
-    public static string? NotOffered(
-        StepCatalog catalog, PipelineDeclaration declaration, string verb, string column, ColumnKind kind, IReadOnlyList<string> header, bool ticked)
+    public string? NotOffered(string column, ColumnKind kind, bool ticked)
     {
-        var change = Change(catalog, declaration, verb, column, kind, header, !ticked);
+        var change = Change(column, kind, !ticked);
 
         return change.Steps is not { } steps ? change.NotMade[0]
             : steps.SequenceEqual(declaration.Steps) ? "nothing changes."
@@ -193,7 +182,7 @@ internal static class OutputBox
 
     // A column put into an output of many: after the nearest column the output holds before it in the source's order,
     // or first when none does.
-    private static IReadOnlyList<string> Inserted(IReadOnlyList<string> held, string column, IReadOnlyList<string> header)
+    private IReadOnlyList<string> Inserted(IReadOnlyList<string> held, string column)
     {
         var place = header.PlaceOf(column);
         var before = held.Where(each => header.PlaceOf(each) < place).MaxBy(header.PlaceOf);

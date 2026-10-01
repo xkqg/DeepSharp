@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Pipelines.Json</PackageId>
+    <Description>Reads a DeepSharp pipeline's rows out of a JSON file holding an array of records, as an API hands them back: .ReadJson(path) in the chain, read.json in a pipeline file, replayed like any other file the pipeline reads. Every value as the file writes it — a number in its own spelling, so 22.0 stays 22.0 — a key a record leaves out and a null both a gap, and a value that is itself an object or a list refused by name, with its record.</Description>
+    <PackageTags>machine-learning;pipeline;json;data-preparation;etl;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <!-- System.Text.Json, which reads the file, comes with .NET itself: this package brings the reader and nothing else. -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

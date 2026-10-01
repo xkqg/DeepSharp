@@ -291,6 +291,25 @@ public sealed class TakeOverActionTests : IDisposable
     }
 
     [Fact]
+    public async Task TheTakeOverOfAParquetFilesNotebook_NamesTheColumnsTheSavedFileNeverShowed()
+    {
+        // A Parquet file names its columns as its reader says them, so a take-over over one says what it says over the
+        // comma-separated file of the same columns.
+        File.Copy(Repository.Fixture("titanic.parquet"), Path.Join(_folder, "titanic.parquet"));
+        await using var notebook = await NotebookAsync([
+            """{"step": "read.parquet", "path": "titanic.parquet"}""", Titanic[1], Titanic[2], Titanic[3], Titanic[4]]);
+        string[] shown = ["survived", "pclass", "sex", "age", "sibsp", "parch", "fare", "embarked", "class", "who", "adult_male", "deck", "embark_town", "alive"];
+
+        Saved(Blocks(notebook).Steps, shown);
+        await ListAsync(notebook);
+
+        var card = Card(notebook);
+
+        Assert.Contains("The blocks already hold every column decision saved beside the notebook.", card, StringComparison.Ordinal);
+        Assert.Contains("New in the source: alone", card, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AColumnAStepMakes_IsNamedByThatStep_AndOneTheSourceLacksIsSaidToBeMissingFromIt()
     {
         await using var notebook = await NotebookAsync(Titanic);

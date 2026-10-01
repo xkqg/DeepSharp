@@ -48,24 +48,20 @@ public readonly record struct ColumnRead(string Column, IReadOnlyList<ColumnKind
 public sealed class ColumnState
 {
     private readonly KnownColumn[] _columns;
-    private readonly Family[] _families;
-    private readonly string[] _gone;
+    private readonly Unnamed _unnamed;
     private readonly string[] _excluded;
     private readonly Dictionary<string, string> _conditions;
 
-    private ColumnState(
-        KnownColumn[] columns, Family[] families, string[] gone, bool open, Dictionary<string, string>? conditions = null, string[]? excluded = null)
+    private ColumnState(KnownColumn[] columns, Unnamed unnamed, Dictionary<string, string>? conditions = null, string[]? excluded = null)
     {
         _columns = columns;
-        _families = families;
-        _gone = gone;
-        Open = open;
+        _unnamed = unnamed;
         _conditions = conditions ?? new Dictionary<string, string>(StringComparer.Ordinal);
         _excluded = excluded ?? [];
     }
 
     /// <summary>Nothing known, and nothing else there: the state before the columns are declared.</summary>
-    public static ColumnState None { get; } = new([], [], [], open: false);
+    public static ColumnState None { get; } = new([], Unnamed.Nothing);
 
     /// <summary>The columns a table holds, each surely there.</summary>
     /// <param name="table">The table.</param>
@@ -74,7 +70,7 @@ public sealed class ColumnState
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        return new([.. table.Columns.Select(column => new KnownColumn(column.Name, column.Kind, Surely: true))], [], [], open: false);
+        return new([.. table.Columns.Select(column => new KnownColumn(column.Name, column.Kind, Surely: true))], Unnamed.Nothing);
     }
 
     /// <summary>Why a known column may turn out not to be there, when it may.</summary>
@@ -86,10 +82,10 @@ public sealed class ColumnState
     public IReadOnlyList<KnownColumn> Columns => _columns;
 
     /// <summary>The starts of the names of columns an encoder makes, whose members only a fit knows.</summary>
-    public IReadOnlyList<string> Families => [.. _families.Select(family => family.Start)];
+    public IReadOnlyList<string> Families => [.. _unnamed.Families.Select(family => family.Start)];
 
     /// <summary>Whether columns nobody named may be there too.</summary>
-    public bool Open { get; }
+    public bool Open => _unnamed.Open;
 
     /// <summary>The column of that name, when it is known to be there.</summary>
     /// <param name="name">The column's name.</param>
@@ -113,8 +109,7 @@ public sealed class ColumnState
     /// <see langword="true"/> when it is known, or it was not taken away by name and belongs to a family or the
     /// set is open.
     /// </returns>
-    public bool Allows(string name) =>
-        Find(name) is not null || (!_gone.Contains(name, StringComparer.Ordinal) && (InAFamily(name) || Open));
+    public bool Allows(string name) => Find(name) is not null || _unnamed.Allows(name);
 
     /// <summary>Whether the schema names a column of that name and excludes it, and no step since has made one.</summary>
     /// <param name="name">The column's name.</param>
@@ -124,9 +119,7 @@ public sealed class ColumnState
     /// <summary>Whether a name belongs to one of the families, and was not taken away by name.</summary>
     /// <param name="name">The column's name.</param>
     /// <returns><see langword="true"/> when it is a member nobody dropped.</returns>
-    public bool InAFamily(string name) =>
-        !_gone.Contains(name, StringComparer.Ordinal)
-        && _families.Any(family => name.StartsWith(family.Start, StringComparison.Ordinal));
+    public bool InAFamily(string name) => _unnamed.InAFamily(name);
 
     /// <summary>Where a column's values land, as the steps down to here say.</summary>
     /// <param name="name">The column's name.</param>
@@ -137,7 +130,7 @@ public sealed class ColumnState
     /// </returns>
     public Form? LandsOf(string name) => Find(name) is { } known
         ? known.Lands ?? (known.Kind == ColumnKind.Boolean ? Form.Unit : null)
-        : InAFamily(name) ? _families.First(family => name.StartsWith(family.Start, StringComparison.Ordinal)).Lands : null;
+        : _unnamed.LandsOf(name);
 
     /// <summary>The same columns, with one added at the end or, when it is there, holding another kind in its place.</summary>
     /// <param name="name">The column's name.</param>
@@ -158,7 +151,7 @@ public sealed class ColumnState
             ? [.. _columns, new KnownColumn(name, kind, Surely: true, Lands: lands)]
             : [.. _columns[..at], _columns[at] with { Kind = kind, Lands = lands }, .. _columns[(at + 1)..]];
 
-        return new(columns, _families, [.. _gone.Where(each => each != name)], Open, _conditions, [.. _excluded.Where(each => each != name)]);
+        return new(columns, _unnamed.Named(name), _conditions, [.. _excluded.Where(each => each != name)]);
     }
 
     /// <summary>The same columns, one of them filled where it had gaps.</summary>
@@ -190,14 +183,14 @@ public sealed class ColumnState
 
         return new(
             [.. state._columns.Select(column => column.Name == name ? column with { HalfOf = of } : column)],
-            state._families, state._gone, state.Open, state._conditions, state._excluded);
+            state._unnamed, state._conditions, state._excluded);
     }
 
     /// <summary>The same columns without one, remembered as gone: no family and no open set brings it back.</summary>
     /// <param name="name">The column's name.</param>
     /// <returns>The state without the column.</returns>
     public ColumnState Without(string name) =>
-        new([.. _columns.Where(column => column.Name != name)], _families, [.. _gone, name], Open, Except(name), _excluded);
+        new([.. _columns.Where(column => column.Name != name)], _unnamed.TakenAway(name), Except(name), _excluded);
 
     /// <summary>The same columns, one of them no longer surely there, and why.</summary>
     /// <param name="name">The column's name.</param>
@@ -213,7 +206,7 @@ public sealed class ColumnState
 
         var conditions = new Dictionary<string, string>(_conditions, StringComparer.Ordinal) { [name] = why };
 
-        return new([.. _columns.Select(column => column.Name == name ? column with { Surely = false } : column)], _families, _gone, Open, conditions, _excluded);
+        return new([.. _columns.Select(column => column.Name == name ? column with { Surely = false } : column)], _unnamed, conditions, _excluded);
     }
 
     /// <summary>The same columns, and a family whose members are known by the start of their names.</summary>
@@ -221,11 +214,11 @@ public sealed class ColumnState
     /// <param name="lands">Where every member's values land; nothing for no range.</param>
     /// <returns>The state with the family.</returns>
     public ColumnState WithFamily(string start, Form? lands = null) =>
-        new(_columns, [.. _families, new Family(start, lands)], _gone, Open, _conditions, _excluded);
+        new(_columns, _unnamed.With(new Family(start, lands)), _conditions, _excluded);
 
     /// <summary>The same columns, with others nobody named allowed beside them.</summary>
     /// <returns>The state, open.</returns>
-    public ColumnState Opened() => new(_columns, _families, _gone, open: true, _conditions, _excluded);
+    public ColumnState Opened() => new(_columns, _unnamed with { Open = true }, _conditions, _excluded);
 
     /// <summary>The columns a schema declares, with the rest kept or not.</summary>
     /// <param name="columns">The declared columns, those it excludes included.</param>
@@ -241,9 +234,7 @@ public sealed class ColumnState
 
         return new(
             [.. taking.Select(column => new KnownColumn(column.Name, column.Kind, !column.Optional))],
-            [],
-            excluded,
-            remainder == Remainder.Keep,
+            new Unnamed([], Gone: excluded, Open: remainder == Remainder.Keep),
             taking.Where(column => column.Optional).ToDictionary(
                 column => column.Name, _ => "the schema allows the rows not to have it", StringComparer.Ordinal),
             excluded);
@@ -256,6 +247,41 @@ public sealed class ColumnState
     /// <param name="Start">The start every member's name has.</param>
     /// <param name="Lands">Where every member's values land; nothing for no range.</param>
     private readonly record struct Family(string Start, Form? Lands);
+
+    /// <summary>
+    /// Which columns nobody named may be there: members of a family an encoder makes, or any at all when the set is open,
+    /// except those taken away by name, which neither brings back.
+    /// </summary>
+    /// <param name="Families">The families, each known by the start of its members' names.</param>
+    /// <param name="Gone">The names taken away: dropped by a step, or excluded by the schema.</param>
+    /// <param name="Open">Whether columns nobody named may be there beside the families.</param>
+    private readonly record struct Unnamed(Family[] Families, string[] Gone, bool Open)
+    {
+        /// <summary>No family, nothing taken away, and nothing else there.</summary>
+        public static Unnamed Nothing => new([], [], Open: false);
+
+        /// <summary>Whether a column of that name may be there although nobody named it.</summary>
+        public bool Allows(string name) => !IsGone(name) && (InAFamily(name) || Open);
+
+        /// <summary>Whether a name belongs to one of the families, and was not taken away by name.</summary>
+        public bool InAFamily(string name) => !IsGone(name) && Families.Any(family => Starts(family, name));
+
+        /// <summary>Where a member of a family lands; nothing for a name that is no member, or a family landing in no range.</summary>
+        public Form? LandsOf(string name) => InAFamily(name) ? Families.First(family => Starts(family, name)).Lands : null;
+
+        /// <summary>The same, with a name made again: no longer taken away.</summary>
+        public Unnamed Named(string name) => this with { Gone = [.. Gone.Where(each => each != name)] };
+
+        /// <summary>The same, with a name taken away.</summary>
+        public Unnamed TakenAway(string name) => this with { Gone = [.. Gone, name] };
+
+        /// <summary>The same, with one family more.</summary>
+        public Unnamed With(Family family) => this with { Families = [.. Families, family] };
+
+        private bool IsGone(string name) => Gone.Contains(name, StringComparer.Ordinal);
+
+        private static bool Starts(Family family, string name) => name.StartsWith(family.Start, StringComparison.Ordinal);
+    }
 }
 
 /// <summary>
@@ -294,17 +320,17 @@ internal static class ColumnFlow
     /// <summary>Follows the columns from one step to another.</summary>
     /// <param name="steps">The steps, in the order they were written.</param>
     /// <param name="start">The columns before the first step followed.</param>
-    /// <param name="from">The first step to follow.</param>
-    /// <param name="until">The step to stop before.</param>
+    /// <param name="followed">The steps to follow: from the first, up to the one it stops before.</param>
     /// <param name="declared">Whether the columns are already declared before the first step followed.</param>
     /// <returns>The columns there are before the step it stopped at, and every fault met on the way.</returns>
-    internal static ColumnsFollowed Follow(IReadOnlyList<IPipelineStep> steps, ColumnState start, int from, int until, bool declared)
+    internal static ColumnsFollowed Follow(IReadOnlyList<IPipelineStep> steps, ColumnState start, Range followed, bool declared)
     {
         var faults = new List<DeclarationFault>();
         var state = start;
         IReadOnlyList<string> answers = [];
+        var until = followed.End.GetOffset(steps.Count);
 
-        for (var at = from; at < until; at++)
+        for (var at = followed.Start.GetOffset(steps.Count); at < until; at++)
         {
             var step = steps[at];
 

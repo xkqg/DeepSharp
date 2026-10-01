@@ -279,7 +279,7 @@ public class TransformTests
 
         foreach (var name in source.ColumnNames)
         {
-            schema.Column(name, kind, optional: true);
+            schema.Column(new ColumnDeclaration(name, kind, Optional: true));
         }
 
         return SchemaBinding.Bind(new DeclareStep(schema.Columns), source);

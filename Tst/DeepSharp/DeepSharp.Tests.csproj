@@ -31,17 +31,44 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Src\DeepSharp\DeepSharp.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Charts\DeepSharp.Charts.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Import.PyTorch\DeepSharp.Import.PyTorch.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Learners.Networks\DeepSharp.Learners.Networks.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.DataFrame\DeepSharp.Pipelines.DataFrame.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.Excel\DeepSharp.Pipelines.Excel.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.Indicators\DeepSharp.Pipelines.Indicators.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.Json\DeepSharp.Pipelines.Json.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.Parquet\DeepSharp.Pipelines.Parquet.csproj" />
     <!-- The samples are run as they stand, so the page cannot drift from the code. -->
     <ProjectReference Include="..\..\Samples\DeepSharp.Sample.Networks\DeepSharp.Sample.Networks.csproj" />
     <ProjectReference Include="..\..\Samples\DeepSharp.Sample.Pipelines\DeepSharp.Sample.Pipelines.csproj" />
+    <!-- The reader of what Keras saved, a package of its own. -->
+    <ProjectReference Include="..\..\Src\DeepSharp.Import.Keras\DeepSharp.Import.Keras.csproj" />
+    <!-- The reader of the ONNX graphs PyTorch exports, a package of its own. -->
+    <ProjectReference Include="..\..\Src\DeepSharp.Import.Onnx\DeepSharp.Import.Onnx.csproj" />
+    <!-- Importers written outside the core's internals, so what they put into a network is what a reader of somebody else's can. -->
+    <ProjectReference Include="..\DeepSharp.Import.TestParts\DeepSharp.Import.TestParts.csproj" />
+    <!-- Engines written outside the core's internals, so what they do is what an engine of somebody else's can do. -->
+    <ProjectReference Include="..\DeepSharp.Backends.TestParts\DeepSharp.Backends.TestParts.csproj" />
+    <!-- What every engine is held to, run here on the light engine and on the tests' own native one. -->
+    <ProjectReference Include="..\DeepSharp.Backends.Contract\DeepSharp.Backends.Contract.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The files the readers' tests read, and the two programs that wrote them once; those are not part of this build. -->
+    <Compile Remove="Pipelines\Fixtures\**" />
+    <!-- What PyTorch and Keras saved and the ONNX graphs exported that the importers' tests read, and the programs that
+         wrote the rows they trained on; those programs are not part of this build. -->
+    <Compile Remove="Import\Fixtures\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Files an earlier release wrote, read by this one as a person's application would read them. -->
+    <None Update="Learners\Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

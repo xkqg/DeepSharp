@@ -36,6 +36,11 @@ jobs:
         with:
           ref: ${{ inputs.tag || github.ref }}
 
+      # The wiki's code is compiled by a test, as the README's is. GitHub keeps a wiki as a repository of its own, so it
+      # is cloned beside this one, where it stands on a contributor's machine and where the test looks for it.
+      - name: Clone the wiki beside the repository
+        run: git clone --depth 1 "https://github.com/${{ github.repository }}.wiki.git" ../DeepSharp.wiki
+
       # A tag publishes, and a package on NuGet cannot be taken back: a tag naming another version than the build
       # declares would put that build's packages on NuGet under a release that says otherwise.
       - name: The tag names the version the packages carry
@@ -86,6 +91,20 @@ jobs:
       - name: Start deepsharp-serve from its package
         timeout-minutes: 10
         run: bash tools/serve/check.sh nupkgs
+
+      # Verso installs the notebook package into a folder of its own and loads it apart from everything else: the package
+      # about to be pushed is installed by Verso's own installer and a notebook is run in it, on .NET 8 and on the newest
+      # runtime, before it leaves.
+      - name: Install the notebook from its package as Verso installs it
+        timeout-minutes: 10
+        run: bash tools/verso/check.sh nupkgs
+
+      # An application referencing DeepSharp.Backends.TorchSharp from the package about to be pushed, and nothing of
+      # DeepSharp's source, finds what that package alone gives it: refused by name where it brings no libtorch, and a
+      # real step of the networks sample's Titanic pipeline where it brings the processor's.
+      - name: Check DeepSharp.Backends.TorchSharp from its package
+        timeout-minutes: 10
+        run: bash tools/torch/check.sh nupkgs
 
       # The key this returns is valid for one hour, so it is asked for here rather than at the top of the job.
       # `user` is the nuget.org profile name that owns the trusted-publishing policy — not an email address,

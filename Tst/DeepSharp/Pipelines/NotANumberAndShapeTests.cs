@@ -19,7 +19,7 @@ public class NotANumberAndShapeTests
 
         foreach (var name in source.ColumnNames)
         {
-            schema.Column(name, ColumnKind.Number, optional: true);
+            schema.Column(new ColumnDeclaration(name, ColumnKind.Number, Optional: true));
         }
 
         return SchemaBinding.Bind(new DeclareStep(schema.Columns), source);
@@ -123,6 +123,19 @@ public class NotANumberAndShapeTests
         Assert.Throws<ArgumentException>(() => new FillNaNStep("a", With.Previous));
         Assert.Throws<ArgumentException>(() => new FillNaNStep(" "));
         Assert.Throws<ArgumentException>(() => new FillNaNStep("a", new FillStrategy("sideways")));
+    }
+
+    [Fact]
+    public void AStrategyAStepDoesNotTake_IsRefusedInAFile_InTheWordsOfWhatTheStepFills()
+    {
+        // Each step that fills says what its filling is, and a way it does not take is refused in those words.
+        var nan = Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(
+            """{"declaration":[{"step":"fill.nan","column":"a","with":"previous"}]}""", StepCatalog.BuiltIn()));
+        var gap = Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(
+            """{"declaration":[{"step":"fill.missing","column":"a","with":"sideways"}]}""", StepCatalog.BuiltIn()));
+
+        Assert.Contains("'previous' is not a way of dealing with a value that is not a number", nan.Message, StringComparison.Ordinal);
+        Assert.Contains("'sideways' is not a way of filling a gap", gap.Message, StringComparison.Ordinal);
     }
 
     [Fact]

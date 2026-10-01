@@ -30,13 +30,13 @@ public class TimestampFormatTests
     private static PipelineDeclaration Prices(string? format) =>
         Pdd.Create()
             .ReadCsv("prices.csv")
-            .Declare(schema => schema.Column("when", ColumnKind.Timestamp, format: format).Number("close"))
+            .Declare(schema => schema.Column(new ColumnDeclaration("when", ColumnKind.Timestamp, Optional: false) { Format = format }).Number("close"))
             .Declaration;
 
     [Fact]
     public void ADateWrittenDayFirst_IsReadByTheFormatItsColumnDeclares()
     {
-        var table = Read("when\n27/11/2015\n02/03/2015\n", schema => schema.Column("when", ColumnKind.Timestamp, format: "dd/MM/yyyy"));
+        var table = Read("when\n27/11/2015\n02/03/2015\n", schema => schema.Column(new ColumnDeclaration("when", ColumnKind.Timestamp, Optional: false) { Format = "dd/MM/yyyy" }));
 
         Assert.Equal("2015-11-27T00:00:00.0000000Z", Moment(table, "when"));
         Assert.Equal("2015-03-02T00:00:00.0000000Z", Moment(table, "when", 1));
@@ -46,7 +46,7 @@ public class TimestampFormatTests
     public void ACellWrittenAnotherWayThanItsColumnsFormat_IsRefusedSayingHowItShouldBeWritten()
     {
         var refused = Assert.Throws<FormatException>(
-            () => Read("when\n27/11/2015\n7.25\n", schema => schema.Column("when", ColumnKind.Timestamp, format: "dd/MM/yyyy")));
+            () => Read("when\n27/11/2015\n7.25\n", schema => schema.Column(new ColumnDeclaration("when", ColumnKind.Timestamp, Optional: false) { Format = "dd/MM/yyyy" })));
 
         Assert.Equal("Row 2, column 'when': '7.25' is not a moment in time written as dd/MM/yyyy.", refused.Message);
     }
@@ -91,7 +91,7 @@ public class TimestampFormatTests
     {
         var declaration = Pdd.Create()
             .ReadCsv("prices.csv")
-            .Declare(schema => schema.Column("when", ColumnKind.Timestamp, format: "dd/MM/yyyy").Timestamp("logged").Number("close"))
+            .Declare(schema => schema.Column(new ColumnDeclaration("when", ColumnKind.Timestamp, Optional: false) { Format = "dd/MM/yyyy" }).Timestamp("logged").Number("close"))
             .Declaration;
 
         var json = declaration.ToJson();
@@ -102,9 +102,9 @@ public class TimestampFormatTests
     }
 
     [Fact]
-    public void AFileIsWrittenAgainstTheThirdVersion_AndOneWrittenAgainstTheSecondIsReadStill()
+    public void AFileIsWrittenAgainstTheFourthVersion_AndOneWrittenAgainstTheSecondIsReadStill()
     {
-        Assert.Equal(3, PipelineDeclaration.Version);
+        Assert.Equal(4, PipelineDeclaration.Version);
 
         var second = """{"version":2,"declaration":[{"step":"read.csv","path":"x.csv"},{"step":"declare","remainder":"drop","columns":[{"name":"when","kind":"timestamp","optional":false}]}]}""";
 

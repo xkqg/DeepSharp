@@ -41,9 +41,7 @@ public abstract class Normalisation : Layer
     public double Epsilon
     {
         get => _epsilon;
-        init => _epsilon = double.IsFinite(value) && value > 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "What is added to a variance is a number above nothing.");
+        init => _epsilon = RequireEpsilon(value, nameof(value));
     }
 
     /// <inheritdoc />
@@ -76,6 +74,13 @@ public abstract class Normalisation : Layer
         backend.Sqrt(backend.Add(variance, backend.Fill(variance.Shape, (float)Epsilon)));
 
     private protected static Tensor Filled(int count, float value) => Tensor.From(new Shape(count), [.. Enumerable.Repeat(value, count)]);
+
+    /// <summary>What may be added to a variance before its root is taken: a finite number above nothing, refused otherwise.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is not one.</exception>
+    internal static double RequireEpsilon(double value, string parameter) =>
+        double.IsFinite(value) && value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(parameter, value, "What is added to a variance is a number above nothing.");
 }
 
 /// <summary>
@@ -86,7 +91,9 @@ public abstract class Normalisation : Layer
 /// The running statistics are kept as PyTorch keeps them: moved a tenth of the way to each training batch's mean, and to
 /// its variance counted over one row fewer. They are measured on the training rows alone, so the rows a network is
 /// measured on shape nothing it learned — the same rule the pipeline keeps for everything it learns — and an evaluation
-/// pass uses them without moving them.
+/// pass uses them without moving them. Keras moves its running variance towards the batch's variance counted over every
+/// row, so one described in Keras's words keeps the running mean Keras keeps, and a running variance that takes each
+/// batch's in a share larger by the batch's rows over one fewer; what it answers from them is Keras's.
 /// </remarks>
 public sealed class BatchNorm : Normalisation, ISaved<BatchNorm>
 {
@@ -112,12 +119,16 @@ public sealed class BatchNorm : Normalisation, ISaved<BatchNorm>
     public RunningStatistic RunningVariance { get; }
 
     /// <summary>How far the running statistics move towards each training batch's: a tenth, unless said, as PyTorch leaves it.</summary>
-    /// <remarks>PyTorch's meaning of the word, the share of the new measurement; Keras's momentum is the share of the old one.</remarks>
+    /// <remarks>
+    /// PyTorch's meaning of the word, the share of the new measurement; Keras's momentum is the share of the old one, and a
+    /// description in Keras's words, <see cref="Sequential.BatchNorm(double, double)"/>, takes Keras's and keeps its
+    /// complement here.
+    /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">It is not a share between nothing and one.</exception>
     public double Momentum
     {
         get => _momentum;
-        init => _momentum = value is >= 0 and <= 1
+        init => _momentum = IsShare(value)
             ? value
             : throw new ArgumentOutOfRangeException(nameof(value), value, "Momentum is a share between nothing and one.");
     }
@@ -177,6 +188,9 @@ public sealed class BatchNorm : Normalisation, ISaved<BatchNorm>
 
         return backend.Divide(backend.Subtract(rows, backend.RowsOf(mean, count)), backend.RowsOf(Spread(backend, variance), count));
     }
+
+    /// <summary>Whether a momentum is a share, between nothing and one: PyTorch's, or Keras's, its complement, alike.</summary>
+    internal static bool IsShare(double momentum) => momentum is >= 0 and <= 1;
 
     // The running statistic moved towards what this batch measured, the measurement first corrected by the given factor.
     private Tensor Moved(ITensorBackend backend, Tensor running, Tensor measured, double correction) =>

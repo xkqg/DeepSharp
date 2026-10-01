@@ -27,10 +27,12 @@ public interface IRowSource
 /// A source that says what some of its columns hold, beside the text of their cells.
 /// </summary>
 /// <remarks>
-/// Asked for, never required: a file says nothing of the kind, a database does. What a source states is used by the
-/// proposal of kinds alone, where it outranks what the cells look like — a code written in digits that the database holds
-/// as words stays words — while the text stays what the row is known by, and the schema still says what each column
-/// holds.
+/// Asked for, never required: a comma-separated file, a workbook and a JSON file say nothing of the kind; a database
+/// and a Parquet file, which type their columns, do. What a source states is used by the proposal of kinds alone, where
+/// it outranks what the cells look like — a code written in digits that the database holds as words stays words — while
+/// the text stays what the row is known by, and the schema still says what each column holds. A source that holds values
+/// rather than text — a database, a Parquet file, a workbook — hands them over by one rule,
+/// <see cref="TypedValueExtensions.AsCell"/>.
 /// </remarks>
 public interface IStatesKinds : IRowSource
 {

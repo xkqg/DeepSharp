@@ -22,6 +22,82 @@ public class CategoryTests
                 .Number("fare")
                 .Category("sex", "embarked"));
 
+    // Ten rows in time, eight of them training rows: the categories a, b and one more, and a gap, then two later rows.
+    private static FittingBuilder Grouped(string held, string later) =>
+        Pdd.Create()
+            .Read(
+                new InMemoryRowSource(
+                    ["t", "g"],
+                    [["1", "a"], ["2", held], ["3", "b"], ["4", null], ["5", "a"], ["6", "b"], ["7", held], ["8", "a"], ["9", later], ["10", "a"]]),
+                "ten rows")
+            .Declare(schema => schema.Integer("t").Category("g"))
+            .SplitByTime("t", 0.80);
+
+    [Fact]
+    public void ACategoryCalledOther_IsRefusedByAnEncoderKeepingAPlaceOfThatNameForWhatTheTrainingRowsNeverHeld()
+    {
+        // The place kept for a category the training rows never held is written as g_other, and so would be the trained
+        // category 'other': one would take the other's column, and its rows would lose their category without a word.
+        foreach (var fitting in new Func<PreparedData>[]
+                 {
+                     () => Grouped("other", "zzz").EncodeCategories().Build().Run(),
+                     () => Grouped("other", "zzz").Encode("g").Build().Run(),
+                     () => Grouped("other", "zzz").EncodeCategories().Build().RunFor(Needs.Categories),
+                 })
+        {
+            var refused = Assert.Throws<InvalidOperationException>(fitting);
+
+            Assert.Contains("'g' holds the category 'other' on its training rows", refused.Message, StringComparison.Ordinal);
+            Assert.Contains("'g_other'", refused.Message, StringComparison.Ordinal);
+            Assert.Contains("unseen: refuse", refused.Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ACategoryCalledOther_IsWrittenDown_WhereNoPlaceIsKeptUnderItsName()
+    {
+        // Refusing what the training rows never held keeps no place, and places written as numbers name none.
+        var refusing = Grouped("other", "a").EncodeCategories(unseen: Unseen.Refuse).Build().Run();
+        var placed = Grouped("other", "zzz").EncodeCategories(As.Ordinal).Build().Run();
+
+        Assert.Equal(["t", "g_a", "g_b", "g_other", "g_was_missing"], refusing.Table.Columns.Select(column => column.Name));
+        Assert.Equal([0, 1, 0, 0, 0, 0, 1, 0, 0, 0], Values(refusing.Table, "g_other"));
+        Assert.Equal([0, 2, 1, 0, 0, 1, 2, 0, 3, 0], Values(placed.Table, "g"));
+    }
+
+    [Fact]
+    public void ACategoryCalledWasMissing_IsRefusedByAnEncoderWritingOneColumnForEachCategory()
+    {
+        // Its column would be g_was_missing, the column that marks where the cell was empty.
+        foreach (var unseen in new[] { Unseen.Reserve, Unseen.Refuse })
+        {
+            var refused = Assert.Throws<InvalidOperationException>(() => Grouped("was_missing", "a").EncodeCategories(unseen: unseen).Build().Run());
+
+            Assert.Contains("'g' holds the category 'was_missing' on its training rows", refused.Message, StringComparison.Ordinal);
+            Assert.Contains("'g_was_missing'", refused.Message, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(["t", "g", "g_was_missing"], Grouped("was_missing", "a").EncodeCategories(As.Ordinal).Build().Run().Table.Columns.Select(column => column.Name));
+    }
+
+    [Fact]
+    public void AFileWhoseEncoderLearnedACategoryCalledOther_IsReplayedAsItWasWritten()
+    {
+        // A fit before this refusal could learn 'other', and a file it wrote replays as it always did: nothing is fitted in
+        // a replay, so nothing is refused there, and a served row lands where that file's network was trained to take it.
+        var written = Grouped("x", "zzz").EncodeCategories().Build().Run().ToJson().Replace("\"x\"", "\"other\"", StringComparison.Ordinal);
+        var loaded = PreparedData.FromJson(written, StepCatalog.BuiltIn());
+
+        var replayed = loaded.Replay(new InMemoryRowSource(["t", "g"], [["11", "other"], ["12", "zzz"], ["13", "a"]]));
+
+        Assert.Equal(["a", "b", "other"], loaded.Fitted[loaded.Declaration.Steps.Count - 1].List("g"));
+        Assert.Equal(["t", "g_a", "g_b", "g_other", "g_was_missing"], replayed.Columns.Select(column => column.Name));
+        Assert.Equal([0, 1, 0], Values(replayed, "g_other"));
+    }
+
+    private static double[] Values(Table table, string column) =>
+        [.. Enumerable.Range(0, table.RowCount).Select(row => ((Column<double>)table[column])[row]!.Value)];
+
     [Fact]
     public void AColumnSaidToBeACategory_IsOneFromTheMomentItIsRead()
     {

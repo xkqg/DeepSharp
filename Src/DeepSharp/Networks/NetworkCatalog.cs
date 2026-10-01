@@ -70,15 +70,19 @@ public sealed class NetworkCatalog
         return this;
     }
 
-    /// <summary>Rebuilds the kind a file names where one of the given role stands.</summary>
+    /// <summary>How the kind a file names is rebuilt, where one of the given role stands.</summary>
+    /// <param name="kind">The name the file gives the kind.</param>
+    /// <param name="package">The package the file says the kind comes from, when it says.</param>
+    /// <param name="role">What stands where the kind is written: a layer, a loss, an optimizer or a schedule.</param>
+    /// <returns>The kind's own way back from what it wrote, handed its settings and the rebuilding under way.</returns>
     /// <exception cref="FormatException">The name is not one of a kind this catalog knows, or it is a kind of another role.</exception>
-    internal object Rebuild(string kind, string? package, Role role, JsonElement settings, Rebuilding rebuilding)
+    internal Func<JsonElement, Rebuilding, object> Rebuilder(string kind, string? package, Role role)
     {
         if (!_kinds.TryGetValue(kind, out var registered))
         {
             throw new FormatException(package is not null
-                ? $"'{kind}' comes from {package}, which this catalog does not know: register it with Register<T>() on the catalog that reads this file."
-                : $"'{kind}' is not a kind this catalog knows. The nearest one it knows is '{Nearest(kind)}'.");
+                ? $"'{kind.Quoted()}' comes from {package.Quoted()}, which this catalog does not know: register it with Register<T>() on the catalog that reads this file."
+                : $"'{kind.Quoted()}' is not a kind this catalog knows. The nearest one it knows is '{Nearest(kind)}'.");
         }
 
         if (registered.Role != role)
@@ -86,7 +90,7 @@ public sealed class NetworkCatalog
             throw new FormatException($"'{kind}' is {registered.Role.Named()}, and {role.Named()} stands here.");
         }
 
-        return registered.Rebuild(settings, rebuilding);
+        return registered.Rebuild;
     }
 
     private string Nearest(string kind) => _kinds.Keys.MinBy(known => Distance(kind, known))!;

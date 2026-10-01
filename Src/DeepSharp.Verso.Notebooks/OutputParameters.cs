@@ -28,20 +28,20 @@ internal readonly record struct OutputParameter(string Key, string Current, IRea
 /// column rules place one, and offered only when the pipeline keeps every rule. A value a file may leave out is offered
 /// as not said. A value neither the form's choices nor the rules bound is set in the output block's form.
 /// </remarks>
-internal static class OutputParameters
+/// <param name="catalog">The verbs the notebook knows.</param>
+/// <param name="declaration">The declaration the blocks make, or the one a pick is made from.</param>
+/// <param name="header">The source's columns, when they are known.</param>
+internal sealed class OutputParameters(StepCatalog catalog, PipelineDeclaration declaration, IReadOnlyList<string>? header)
 {
     // How far a whole number is counted before no rule is taken to bound it.
     private const int Counted = 1000;
 
     /// <summary>The standing output's own values, each with what the list offers for it.</summary>
-    /// <param name="catalog">The verbs the notebook knows.</param>
-    /// <param name="declaration">The declaration the blocks make.</param>
-    /// <param name="output">Its output.</param>
-    /// <param name="header">The source's columns, when they are known.</param>
+    /// <param name="output">The declaration's output.</param>
     /// <returns>Every value the output's kind takes but its answer, in the order the kind writes them.</returns>
-    public static IReadOnlyList<OutputParameter> Of(StepCatalog catalog, PipelineDeclaration declaration, INamesTheAnswer output, IReadOnlyList<string>? header)
+    public IReadOnlyList<OutputParameter> Of(INamesTheAnswer output)
     {
-        var scope = ScopeOf(declaration, output, header);
+        var scope = ScopeOf(output);
         using var written = JsonDocument.Parse(output.AsBlockText());
         var fields = new FormFields(written.RootElement, scope);
         var answer = OutputBox.AnswerOf(catalog, output.Verb);
@@ -54,7 +54,7 @@ internal static class OutputParameters
                     ? value.ValueKind == JsonValueKind.String ? value.GetString()! : value.GetRawText()
                     : string.Empty;
 
-                bool Keeps(string text) => Kept(catalog, declaration, output, parameter.Key, text, scope);
+                bool Keeps(string text) => Kept(new FormEdit(parameter.Key, FieldValue.Of(text), scope, output));
 
                 IReadOnlyList<string>? said = parameter is WholeNumberParameter whole ? Whole(whole, Keeps)
                     : parameter.Accept(fields).ToArray() is [{ FieldType: PropertyFieldType.Select, Options: { } options }]
@@ -70,19 +70,16 @@ internal static class OutputParameters
         ];
     }
 
-    /// <summary>What a value picked for one of the output's own values asks for.</summary>
-    /// <param name="catalog">The verbs the notebook knows.</param>
-    /// <param name="drawn">The declaration the pick is made from.</param>
+    /// <summary>What a value picked for one of the output's own values asks for, of the declaration the pick is made from.</summary>
     /// <param name="key">The value's key.</param>
     /// <param name="text">The value, as the select sends it; empty for not said.</param>
-    /// <param name="header">The source's columns, when they are known.</param>
     /// <returns>
     /// The steps with the output holding that value, placed as the column rules place one; why not, in the form's words,
     /// for a value the output cannot hold; nothing for a key that is none of the output's values beside its answer.
     /// </returns>
-    public static ListOutputChange Picked(StepCatalog catalog, PipelineDeclaration drawn, string key, string? text, IReadOnlyList<string>? header)
+    public ListOutputChange Picked(string key, string? text)
     {
-        if (drawn.Output is not { } output
+        if (declaration.Output is not { } output
             || !catalog.Describe(output.Verb).Parameters.Any(parameter => parameter.Key == key && parameter != OutputBox.AnswerOf(catalog, output.Verb)))
         {
             return new ListOutputChange(null, []);
@@ -90,9 +87,9 @@ internal static class OutputParameters
 
         try
         {
-            var edited = (INamesTheAnswer)StepForm.Edited(output, key, FieldValue.Of(text), ScopeOf(drawn, output, header), catalog)!;
+            var edited = (INamesTheAnswer)StepForm.Edited(new FormEdit(key, FieldValue.Of(text), ScopeOf(output), output), catalog)!;
 
-            return new ListOutputChange(drawn.WithOutput(edited), []);
+            return new ListOutputChange(declaration.WithOutput(edited), []);
         }
         catch (FormatException refused)
         {
@@ -122,11 +119,11 @@ internal static class OutputParameters
     }
 
     // Whether a value, read into the output as the form reads it, leaves a pipeline that keeps every rule.
-    private static bool Kept(StepCatalog catalog, PipelineDeclaration declaration, INamesTheAnswer output, string key, string text, FormScope scope)
+    private bool Kept(FormEdit edit)
     {
         try
         {
-            var edited = (INamesTheAnswer)StepForm.Edited(output, key, FieldValue.Of(text), scope, catalog)!;
+            var edited = (INamesTheAnswer)StepForm.Edited(edit, catalog)!;
 
             return PipelineDeclaration.FaultsIn(declaration.WithOutput(edited)).Count == 0;
         }
@@ -137,6 +134,6 @@ internal static class OutputParameters
     }
 
     // What the form knows around the output: the columns before it, and the source's.
-    private static FormScope ScopeOf(PipelineDeclaration declaration, INamesTheAnswer output, IReadOnlyList<string>? header) =>
+    private FormScope ScopeOf(INamesTheAnswer output) =>
         new(declaration.ColumnsBefore(declaration.Steps.ToList().IndexOf(output)).Columns, header);
 }

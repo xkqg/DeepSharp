@@ -98,7 +98,9 @@ public sealed class PipelineBuilder
     /// <param name="preset">The saved decisions.</param>
     /// <param name="declared">
     /// What taking the schema over decides, before anything runs: every column it names, from not declared to how it
-    /// stands; and the source's columns the saved decisions never showed, when the source's first line can be read now.
+    /// stands; and the source's columns the saved decisions never showed, when the columns the source names can be read now
+    /// (a comma-separated file's first line, a Parquet file's schema, a workbook's first row, every key a JSON file's
+    /// records use).
     /// </param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
     /// <exception cref="DeclarationException">The schema cannot stand here: it comes directly after the source.</exception>
@@ -339,9 +341,14 @@ public sealed class PipelineBuilder
     /// <param name="steps">The chain's steps.</param>
     /// <param name="rows">The rows handed in, when they are.</param>
     /// <returns>
-    /// The rows' columns; else the first line of the file the chain reads, from the working directory for a relative
-    /// path; nothing when there is no file to read yet, or it has no header.
+    /// The rows' columns; else the columns of the file the chain reads, from the working directory for a relative path —
+    /// a comma-separated file's first line, a Parquet file's, a workbook's or a JSON file's columns as its reader says
+    /// them; nothing when the source is no file that says them, or the file cannot be read.
     /// </returns>
+    /// <remarks>
+    /// Every reader of a file is asked the same question, so a take-over says the same of a Parquet file, a workbook or a
+    /// JSON file as of the comma-separated file holding the same columns.
+    /// </remarks>
     internal static IReadOnlyList<string>? HeaderOf(IReadOnlyList<IPipelineStep> steps, IRowSource? rows)
     {
         if (rows is not null)
@@ -349,14 +356,14 @@ public sealed class PipelineBuilder
             return rows.ColumnNames;
         }
 
-        if (steps is not [ReadCsvStep read, ..])
+        if (steps is not [INamesItsColumns file, ..])
         {
             return null;
         }
 
         try
         {
-            return CsvRowSource.HeaderOf(SourceFolder.WorkingDirectory.Resolve(read.Path));
+            return file.ColumnNamesIn(SourceFolder.WorkingDirectory);
         }
         catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException or FormatException)
         {

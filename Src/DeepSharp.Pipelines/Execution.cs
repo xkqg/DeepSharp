@@ -24,6 +24,47 @@ public interface IOpensRows : IActsInAWalk
 }
 
 /// <summary>
+/// A source that can say what its columns are before anything runs: a file, whose columns can be looked at where it lies.
+/// </summary>
+/// <remarks>
+/// What a preset taken over in the chain compares its saved columns with, so it can say which of the file's columns it
+/// never showed. Rows said to be handed in are not here yet and say nothing; a source of your own says nothing unless it
+/// implements this, since looking at it means opening it. It says something of a step that opens rows, and is no second
+/// thing the step does in a walk.
+/// </remarks>
+public interface INamesItsColumns : IPipelineStep
+{
+    /// <summary>The names of the source's columns, in its order.</summary>
+    /// <param name="folder">Where a relative path the step holds is read from: the pipeline's folder.</param>
+    /// <returns>The names.</returns>
+    IReadOnlyList<string> ColumnNamesIn(SourceFolder folder);
+}
+
+/// <summary>
+/// A source that is a file: where it lies, and its rows read from the file's bytes once they are in hand.
+/// </summary>
+/// <remarks>
+/// What lets a caller that read a file's bytes — to fingerprint them, say — have the rows parsed from those very bytes,
+/// never from a second read that could find the file changed in between. Every reader of a file this library ships opens
+/// its rows through it: <see cref="IOpensRows.Open(SourceFolder)"/> reads the bytes of <see cref="Path"/>, resolved by the
+/// one rule, and hands them here. Like <see cref="INamesItsColumns"/>, it says something of a step that opens rows, and is
+/// no second thing the step does in a walk.
+/// </remarks>
+public interface IReadsAFile : INamesItsColumns
+{
+    /// <summary>Where the file will be, when the pipeline runs, as it was written.</summary>
+    string Path { get; }
+
+    /// <summary>The rows a file's bytes hold, read as this step reads its file.</summary>
+    /// <param name="bytes">Every byte of the file.</param>
+    /// <param name="file">What a refusal names the file as: the path its bytes were read from, say.</param>
+    /// <returns>The rows, as text, with their column names.</returns>
+    /// <exception cref="ArgumentException">The file is not named.</exception>
+    /// <exception cref="FormatException">The bytes are not a file this step can read.</exception>
+    IRowSource Open(byte[] bytes, string file);
+}
+
+/// <summary>
 /// A step that turns rows of text into named, typed columns.
 /// </summary>
 public interface IBindsColumns : IActsInAWalk
@@ -105,7 +146,7 @@ public sealed class Pipeline
     /// <exception cref="InvalidOperationException">
     /// The declaration names no source, or names no columns, or a declared column is not in the source.
     /// </exception>
-    public Table Prepare(IRowSource? rows) => new Walk(Declaration, new FitOnTheTrainingRows(), Folder).Bound(rows);
+    public Table Prepare(IRowSource? rows) => new Walk(Course.Whole(Declaration), new FitOnTheTrainingRows(), Folder).Bound(rows);
 
     /// <summary>The data as it stands after the first so many steps, with where each row stands.</summary>
     /// <param name="steps">How many steps from the start: at least one, at most all of them.</param>
@@ -130,7 +171,7 @@ public sealed class Pipeline
 
         if (steps > Declaration.ColumnsAt && Declaration.ColumnsAt >= 0)
         {
-            return new Walk(Declaration, new FitOnTheTrainingRows(), Folder).Viewed(rows, steps);
+            return new Walk(Course.Whole(Declaration), new FitOnTheTrainingRows(), Folder).Viewed(rows, steps);
         }
 
         // Before the schema: the rows as the source holds them, every column as words.
@@ -138,7 +179,7 @@ public sealed class Pipeline
         var asText = new DeclareStep(
             [.. source.ColumnNames.Select(name => new ColumnDeclaration(name, ColumnKind.Text, Optional: false))]);
 
-        return new Walk(Declaration, new FitOnTheTrainingRows(), Folder).Placed(source, SchemaBinding.Bind(asText, source), steps);
+        return new Walk(Course.Whole(Declaration), new FitOnTheTrainingRows(), Folder).Placed(source, SchemaBinding.Bind(asText, source), steps);
     }
 
     /// <summary>Runs the whole declaration: reads, divides the rows, fits on training, replays everywhere.</summary>
@@ -160,13 +201,45 @@ public sealed class Pipeline
     /// <remarks>
     /// Every step acts where it was written: rows are dropped where the drop stands, divided where the split
     /// stands, and each step that learns is fitted on the training rows as they stand at its place. The run
-    /// up to any one step — the grid under a notebook block — is this same walk over the steps up to it.
+    /// up to any one step — the grid under a notebook block — is this same walk over the steps up to it. Every
+    /// declared step is taken, whatever a step says of the learners that do without it.
     /// </remarks>
-    public PreparedData Run(IRowSource? rows)
+    public PreparedData Run(IRowSource? rows) => Ran(Course.Whole(Declaration), rows);
+
+    /// <summary>Runs the declaration for the learner that learns from it, leaving out the steps that learner does without.</summary>
+    /// <param name="needs">What the learner needs of the features it is handed.</param>
+    /// <returns>The data as that learner takes it, where every row landed, what each step learned, and which steps were left out.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">No need is named by the value.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The declaration is not one that can be run, or a step offers in its place a step written otherwise than it is.
+    /// </exception>
+    /// <remarks>
+    /// A step that only scales a feature is left out for a learner indifferent to scale, and each encoder hands its categories
+    /// over as themselves — each as its place in the list the training rows held — to a learner that takes categories,
+    /// learning the list it learns for every learner. A step is taken whatever the learner needs wherever leaving it out
+    /// would change more than what the learner does without: an answer's way back runs through it, a step below reads a
+    /// column it read, made or changed, or it refuses what it was not fitted on. What is left out is decided from the
+    /// declaration and the need alone, never from the rows, and <see cref="PreparedData.Skipped"/> says which, as the run's
+    /// file does. A learner that does without nothing is handed the run of every step, byte for byte.
+    /// </remarks>
+    public PreparedData RunFor(Needs needs) => RunFor(Rows, needs);
+
+    /// <summary>Runs the declaration over the given rows for the learner that learns from them.</summary>
+    /// <param name="rows">The rows to read, or nothing to use the source the declaration names.</param>
+    /// <param name="needs">What the learner needs of the features it is handed.</param>
+    /// <returns>The data as that learner takes it, where every row landed, what each step learned, and which steps were left out.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">No need is named by the value.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The declaration is not one that can be run, or a step offers in its place a step written otherwise than it is.
+    /// </exception>
+    /// <remarks>What <see cref="RunFor(Needs)"/> does, over rows handed in.</remarks>
+    public PreparedData RunFor(IRowSource? rows, Needs needs) => Ran(Course.For(Declaration, needs), rows);
+
+    private PreparedData Ran(Course course, IRowSource? rows)
     {
         var fitting = new FitOnTheTrainingRows();
-        var walked = new Walk(Declaration, fitting, Folder).Through(rows);
-        var prepared = new PreparedData(Declaration, walked.Table, walked.Parts, fitting.Fitted, walked.Evidence)
+        var walked = new Walk(course, fitting, Folder).Through(rows);
+        var prepared = new PreparedData(course, walked, fitting.Fitted)
         {
             AsRead = fitting.AsRead,
         };

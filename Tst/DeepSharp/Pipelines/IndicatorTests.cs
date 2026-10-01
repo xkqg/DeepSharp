@@ -69,7 +69,7 @@ public class IndicatorTests
     public void EveryIndicatorStartsWithAnAbsenceRatherThanANumberNobodyTook(
         Indicator indicator, string[] columns, int period)
     {
-        var table = Prices().AddIndicator("made", indicator, columns, period).Build().Run().Table;
+        var table = Prices().Add(new AddIndicatorStep("made", indicator, columns, period)).Build().Run().Table;
         var made = table.Columns
             .Where(column => column.Name.StartsWith("made", StringComparison.Ordinal))
             .ToArray();
@@ -95,9 +95,9 @@ public class IndicatorTests
     public void AManyValuedIndicatorBecomesAColumnPerPart()
     {
         var table = Prices()
-            .AddIndicator("macd", Indicator.Macd, ["AAPL.Close"])
-            .AddIndicator("bb", Indicator.BollingerBands, ["AAPL.Close"], 20)
-            .AddIndicator("stoch", Indicator.Stochastic, ["AAPL.High", "AAPL.Low", "AAPL.Close"])
+            .Add(new AddIndicatorStep("macd", Indicator.Macd, ["AAPL.Close"]))
+            .Add(new AddIndicatorStep("bb", Indicator.BollingerBands, ["AAPL.Close"], 20))
+            .Add(new AddIndicatorStep("stoch", Indicator.Stochastic, ["AAPL.High", "AAPL.Low", "AAPL.Close"]))
             .Build()
             .Run()
             .Table;
@@ -116,7 +116,7 @@ public class IndicatorTests
     public void AMovingAverageIsTheAverageOfItsWindow()
     {
         // Against arithmetic anybody can check by hand, on the file's own numbers.
-        var table = Prices().AddIndicator("sma3", Indicator.Sma, ["AAPL.Close"], 3).Build().Run().Table;
+        var table = Prices().Add(new AddIndicatorStep("sma3", Indicator.Sma, ["AAPL.Close"], 3)).Build().Run().Table;
 
         var close = (Column<double>)table["AAPL.Close"];
         var sma = (Column<double>)table["sma3"];
@@ -130,7 +130,7 @@ public class IndicatorTests
     public void AnIndicatorBelongsBeforeTheSplit_AndTheChainSaysSo()
     {
         var declaration = Prices()
-            .AddIndicator("rsi", Indicator.Rsi, ["AAPL.Close"])
+            .Add(new AddIndicatorStep("rsi", Indicator.Rsi, ["AAPL.Close"]))
             .SplitByTime("Date", 0.70, 0.15)
             .Normalise("rsi")
             .Declaration;
@@ -145,7 +145,7 @@ public class IndicatorTests
     public void TheVerbSurvivesTheFileOnceTheCatalogKnowsIt()
     {
         var declaration = Prices()
-            .AddIndicator("atr", Indicator.Atr, ["AAPL.High", "AAPL.Low", "AAPL.Close"], 21)
+            .Add(new AddIndicatorStep("atr", Indicator.Atr, ["AAPL.High", "AAPL.Low", "AAPL.Close"], 21))
             .Declaration;
 
         // The verb comes from a package, so a catalog that has not been told about it refuses the file
@@ -169,8 +169,23 @@ public class IndicatorTests
         Assert.Throws<ArgumentException>(() => new AddIndicatorStep("x", Indicator.Sma, [" "]));
         Assert.Throws<ArgumentOutOfRangeException>(() => new AddIndicatorStep("x", Indicator.Sma, ["a"], 0));
         Assert.Throws<ArgumentNullException>(() => new AddIndicatorStep("x", Indicator.Sma, null!));
-        Assert.Throws<ArgumentNullException>(() => IndicatorExtensions.AddIndicator(null!, "x", Indicator.Sma, ["a"]));
         Assert.Throws<ArgumentNullException>(() => IndicatorExtensions.WithIndicators(null!));
+    }
+
+    [Fact]
+    public void TheIndicatorWordAnEarlierReleasePublished_DeclaresTheStepItNames()
+    {
+        // 0.4.0 published an indicator said in five parameters, and code written against it still calls it. It is kept,
+        // obsolete in favour of the step handed to Add, and this is the one place that calls it.
+#pragma warning disable CS0618
+        var said = Prices().AddIndicator("atr", Indicator.Atr, ["AAPL.High", "AAPL.Low", "AAPL.Close"], 21).Declaration;
+        var defaulted = Prices().AddIndicator("rsi", Indicator.Rsi, ["AAPL.Close"]).Declaration;
+
+        Assert.Throws<ArgumentNullException>(() => IndicatorExtensions.AddIndicator(null!, "x", Indicator.Sma, ["a"]));
+#pragma warning restore CS0618
+
+        Assert.Equal(new AddIndicatorStep("atr", Indicator.Atr, ["AAPL.High", "AAPL.Low", "AAPL.Close"], 21), said.Steps[^1]);
+        Assert.Equal(new AddIndicatorStep("rsi", Indicator.Rsi, ["AAPL.Close"], 14), defaulted.Steps[^1]);
     }
 
     [Fact]

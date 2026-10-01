@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Text.Json;
 using System.Xml.Linq;
 using DeepSharp.Verso.Serve;
 using Microsoft.AspNetCore.Builder;
@@ -30,6 +31,31 @@ public class PackageTests
         Assert.Equal("deepsharp-serve", Property(project, "ToolCommandName"));
         Assert.Equal("Major", Property(project, "RollForward"));
         Assert.Equal("DeepSharp.Verso.Serve", Property(project, "PackageId"));
+    }
+
+    [Fact]
+    public void EveryLibraryTheToolCarries_IsNamedInItsThirdPartyNotices_AtTheVersionItCarries()
+    {
+        // A tool package carries the libraries it runs on beside its own code, and each licence asks for its notice to
+        // travel with it. So every package whose assemblies the tool carries is named in the notices, at the version it
+        // carries: a library that comes in later, through another one as much as directly, is a notice somebody writes.
+        using var deps = JsonDocument.Parse(File.ReadAllText(Path.Join(AppContext.BaseDirectory, "DeepSharp.Verso.Serve.deps.json")));
+        var target = deps.RootElement.GetProperty("targets").EnumerateObject().First().Value;
+        var notices = File.ReadAllText(Path.Join(Repository.Root, "Src", "DeepSharp.Verso.Serve", "THIRD-PARTY-NOTICES.txt")).ReplaceLineEndings("\n");
+        string[] carried =
+        [
+            .. deps.RootElement.GetProperty("libraries").EnumerateObject()
+                .Where(library => library.Value.GetProperty("type").GetString() == "package"
+                                  && target.TryGetProperty(library.Name, out var assets) && assets.TryGetProperty("runtime", out _))
+                .Select(library => library.Name.Replace('/', ' ')),
+        ];
+
+        Assert.Contains("Parquet.Net 6.1.0", carried);
+        Assert.Contains("Verso 1.2.2", carried);
+
+        var unnamed = carried.Where(library => !notices.Contains($"\n\n{library}\n", StringComparison.Ordinal)).ToArray();
+
+        Assert.True(unnamed.Length == 0, $"The notices name none of: {string.Join(", ", unnamed)}.");
     }
 
     [Fact]

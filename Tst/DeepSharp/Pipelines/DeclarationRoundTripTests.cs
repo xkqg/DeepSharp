@@ -106,15 +106,20 @@ public class DeclarationRoundTripTests
         // a misspelling, and a verb the core says comes from a package that no longer brings it would send
         // somebody to install the wrong thing.
         var core = StepCatalog.BuiltIn();
-        var everything = StepCatalog.BuiltIn();
-        new IndicatorSteps().AddTo(everything);
+        var brought = new List<string>();
 
-        var brought = everything.Descriptions.Select(description => description.Verb)
-            .Where(verb => !core.Knows(verb))
-            .ToArray();
+        foreach (var contribution in Shipped.Contributions)
+        {
+            var everything = StepCatalog.BuiltIn();
+            contribution.AddTo(everything);
 
-        Assert.NotEmpty(brought);
-        Assert.All(brought, verb => Assert.Equal(typeof(IndicatorSteps).Assembly.GetName().Name, StepCatalog.PackageThatBrings(verb)));
+            var own = everything.Descriptions.Select(description => description.Verb).Where(verb => !core.Knows(verb)).ToArray();
+
+            Assert.NotEmpty(own);
+            Assert.All(own, verb => Assert.Equal(contribution.GetType().Assembly.GetName().Name, StepCatalog.PackageThatBrings(verb)));
+            brought.AddRange(own);
+        }
+
         Assert.Equal(brought.Order(StringComparer.Ordinal), StepCatalog.VerbsOtherPackagesBring.Keys.Order(StringComparer.Ordinal));
     }
 

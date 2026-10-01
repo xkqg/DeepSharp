@@ -29,6 +29,9 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`order.by`](#orderby) | Puts the rows in order by one or more columns, smallest first, for the steps that read the rows before a row. |
 | [`outliers.clip`](#outliersclip) | Holds the extreme values of a column to bounds learned from the training rows. |
 | [`read.csv`](#readcsv) | Reads the rows from a comma-separated file. |
+| [`read.excel`](#readexcel) | Reads the rows from a sheet of an Excel workbook, the first unless one is named, its first row naming the columns. |
+| [`read.json`](#readjson) | Reads the rows from a JSON file holding an array of records, one object a row, every value as the file writes it. |
+| [`read.parquet`](#readparquet) | Reads the rows from an Apache Parquet file, which says what each of its columns holds. |
 | [`read.rows`](#readrows) | Takes rows that are handed in rather than opened: a table already in memory, a reader over a query. |
 | [`split.atRandom`](#splitatrandom) | Divides the rows at random, the same way every time for the same seed. |
 | [`split.byTime`](#splitbytime) | Divides the rows by when they happened: the earliest to learn from, the latest to be measured on. |
@@ -427,6 +430,56 @@ Reads the rows from a comma-separated file.
 | `path` | the path of a file; a relative one is read from the pipeline's folder | `"data.csv"` |
 
 - **`path`**: Where the comma-separated file will be, when the pipeline runs.
+
+Means what it says from version 1 of the file.
+
+## `read.excel`
+
+Reads the rows from a sheet of an Excel workbook, the first unless one is named, its first row naming the columns.
+
+```json
+{"step":"read.excel","path":"data.xlsx"}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `path` | the path of a file; a relative one is read from the pipeline's folder | `"data.xlsx"` |
+| `sheet` | words; may be left out | left out |
+
+- **`path`**: Where the workbook will be, when the pipeline runs: .xlsx, .xls or .xlsb.
+- **`sheet`**: The sheet the rows are on. Left out, the first sheet.
+
+Means what it says from version 1 of the file.
+
+## `read.json`
+
+Reads the rows from a JSON file holding an array of records, one object a row, every value as the file writes it.
+
+```json
+{"step":"read.json","path":"data.json"}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `path` | the path of a file; a relative one is read from the pipeline's folder | `"data.json"` |
+
+- **`path`**: Where the JSON file will be, when the pipeline runs: an array of records, one object a row.
+
+Means what it says from version 1 of the file.
+
+## `read.parquet`
+
+Reads the rows from an Apache Parquet file, which says what each of its columns holds.
+
+```json
+{"step":"read.parquet","path":"data.parquet"}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `path` | the path of a file; a relative one is read from the pipeline's folder | `"data.parquet"` |
+
+- **`path`**: Where the Parquet file will be, when the pipeline runs.
 
 Means what it says from version 1 of the file.
 

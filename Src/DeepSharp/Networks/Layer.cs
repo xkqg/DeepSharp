@@ -68,6 +68,28 @@ public abstract class Layer
         }
     }
 
+    /// <summary>Every layer this layer holds, and every layer those hold, each with its path from this layer down.</summary>
+    /// <returns>
+    /// Each held layer in the order it was added, followed at once by the layers it holds: the order <see cref="Slots"/>
+    /// walks them in, so the layer holding a slot is the one named by the slot's path without its last name.
+    /// </returns>
+    /// <remarks>
+    /// What a layer holds is what it said it holds as it was built; nothing is found by looking the class over. A network
+    /// written as code shows its layers here, and keeps to itself only the order its forward pass runs them in.
+    /// </remarks>
+    public IEnumerable<NamedLayer> HeldLayers()
+    {
+        foreach (var held in _layers)
+        {
+            yield return new NamedLayer(held.Name, held.Layer);
+
+            foreach (var below in held.Layer.HeldLayers())
+            {
+                yield return below with { Path = Joined(held.Name, below.Path) };
+            }
+        }
+    }
+
     /// <summary>What this layer computes of its input: the forward pass, written in the pass's backend.</summary>
     /// <param name="input">What the layer is handed.</param>
     /// <param name="pass">The backend the arithmetic runs on, and whether this pass trains.</param>
@@ -172,3 +194,8 @@ public abstract class Layer
 /// <param name="Path">The names on the way down to the slot.</param>
 /// <param name="Slot">The slot.</param>
 public readonly record struct NamedSlot(string Path, Slot Slot);
+
+/// <summary>A layer another holds, and its path from the layer that was asked, dotted: <c>1.hidden</c>.</summary>
+/// <param name="Path">The names on the way down to the layer.</param>
+/// <param name="Layer">The layer.</param>
+public readonly record struct NamedLayer(string Path, Layer Layer);

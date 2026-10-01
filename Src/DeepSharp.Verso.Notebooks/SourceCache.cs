@@ -2,7 +2,6 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Security.Cryptography;
-using System.Text;
 using DeepSharp.Pipelines;
 
 namespace DeepSharp.Verso.Notebooks;
@@ -24,9 +23,10 @@ internal readonly record struct SourceRows(IRowSource Rows, string Fingerprint, 
 /// parses nothing again and a list drawn again proposes nothing again. Anything a step made of the rows, other than
 /// the one view kept, is worked out from the declaration each time.
 /// <para>
-/// One entry, keyed by the read step itself, the path the core's one rule resolves, and a SHA-256 of the file's
-/// bytes. The bytes are read and hashed on every use and the rows are parsed from those same bytes, so a file
-/// changed on disk is opened again and the rows kept are always the ones the fingerprint names. The entry lives as
+/// One entry, keyed by the read step itself — compared by what it says — the path the core's one rule resolves, and a
+/// SHA-256 of the file's bytes. The bytes are read and hashed on every use and the step that reads the file parses the
+/// rows from those same bytes, whichever of the files a pipeline file names it reads, so a file changed on disk is
+/// opened again and the rows kept are always the ones the fingerprint names. The entry lives as
 /// long as the notebook's session and is shared with nothing else. It is one value, put in place whole — the rows and
 /// the proposal of their kinds together, so the two never come from different bytes: two readers of new bytes at the
 /// same moment may both parse them, and the entry one of them made stays — the same rows either way.
@@ -50,13 +50,17 @@ internal sealed class SourceCache
     /// <returns>The rows as read and the fingerprint of the bytes they were read from.</returns>
     /// <exception cref="InvalidOperationException">The pipeline reads no file: its rows are handed in, or it has no source.</exception>
     /// <exception cref="IOException">The file cannot be read: it is not there, say.</exception>
-    /// <exception cref="FormatException">The file has no header, or a row has the wrong number of cells.</exception>
+    /// <exception cref="FormatException">The file cannot be read as its first block reads it.</exception>
+    /// <remarks>
+    /// The file's bytes are read once, hashed, and handed to the first block to parse, whichever of the files a pipeline
+    /// file names it reads: the rows kept are always the ones the fingerprint names.
+    /// </remarks>
     public SourceRows RowsFor(PipelineDeclaration declaration, SourceFolder folder)
     {
-        if (declaration.Steps is not [ReadCsvStep read, ..])
+        if (FileOf(declaration) is not { } read)
         {
             throw new InvalidOperationException(
-                $"A notebook reads its rows from a file, with '{ReadCsvStep.Name}' as its first block, and hands none in; "
+                $"A notebook reads its rows from a file, with {Readers()} as its first block, and hands none in; "
                 + "these blocks read no file, so there are no rows to show.");
         }
 
@@ -64,12 +68,13 @@ internal sealed class SourceCache
         var bytes = File.ReadAllBytes(path);
         var fingerprint = Fingerprint(bytes);
 
-        if (Volatile.Read(ref _kept) is { } kept && kept.Read == read && kept.Path == path && kept.Fingerprint == fingerprint)
+        // A step is known by what it says, never by which object says it: every gesture reads the blocks afresh.
+        if (Volatile.Read(ref _kept) is { } kept && kept.Read.Equals(read) && kept.Path == path && kept.Fingerprint == fingerprint)
         {
             return new SourceRows(kept.Rows, fingerprint, kept.Proposal);
         }
 
-        var rows = CsvRowSource.FromText(Decoded(bytes), path);
+        var rows = read.Open(bytes, path);
         var proposal = KindProposal.Of(rows);
 
         Volatile.Write(ref _kept, new Kept(read, path, fingerprint, rows, proposal));
@@ -84,7 +89,7 @@ internal sealed class SourceCache
     /// <returns>Their fingerprint; unreadable when the file cannot be read; unknown when the source is not a file.</returns>
     public static SourceBytes BytesOf(PipelineDeclaration declaration, SourceFolder folder)
     {
-        if (declaration.Steps is not [ReadCsvStep read, ..])
+        if (FileOf(declaration) is not { } read)
         {
             return SourceBytes.Unknown;
         }
@@ -99,26 +104,37 @@ internal sealed class SourceCache
         }
     }
 
-    /// <summary>The rows kept for a read step, and the fingerprint of the bytes they were read from.</summary>
-    /// <param name="read">The read step.</param>
-    /// <returns>The rows, their fingerprint and their proposal, one entry, or nothing when no rows are kept for that step.</returns>
+    /// <summary>The rows kept for the blocks' source, and the fingerprint of the bytes they were read from.</summary>
+    /// <param name="declaration">The blocks, as the notebook reads them now.</param>
+    /// <returns>
+    /// The rows, their fingerprint and their proposal, one entry, or nothing when no rows are kept for the step that reads
+    /// the file, or the blocks read no file.
+    /// </returns>
     /// <remarks>
     /// What a gesture knows of the source: it is handed no file, so the rows this session read last are the source's
     /// columns as the person saw them.
     /// </remarks>
-    public SourceRows? KeptFor(ReadCsvStep read) =>
-        Volatile.Read(ref _kept) is { } kept && kept.Read == read ? new SourceRows(kept.Rows, kept.Fingerprint, kept.Proposal) : null;
+    public SourceRows? KeptFor(PipelineDeclaration declaration) =>
+        FileOf(declaration) is { } read && Volatile.Read(ref _kept) is { } kept && kept.Read.Equals(read)
+            ? new SourceRows(kept.Rows, kept.Fingerprint, kept.Proposal)
+            : null;
+
+    /// <summary>The block that reads the notebook's file: its first, when that reads a file.</summary>
+    /// <param name="declaration">The blocks, as the notebook reads them.</param>
+    /// <returns>The step, or nothing when the rows are handed in or there is no step at all.</returns>
+    internal static IReadsAFile? FileOf(PipelineDeclaration declaration) => declaration.Steps is [IReadsAFile read, ..] ? read : null;
 
     private static string Fingerprint(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
-    // As the file door reads text: the encoding its byte-order mark names, and UTF-8 when it names none.
-    private static string Decoded(byte[] bytes)
+    // Every verb of the notebook's own that reads a file, as its catalog knows them, in the order of their names.
+    private static string Readers()
     {
-        using var reader = new StreamReader(new MemoryStream(bytes), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+        var catalog = NotebookVerbs.Catalog();
+        string[] verbs = [.. catalog.Descriptions.Where(each => catalog.ReadStep(each.Template) is IReadsAFile).Select(each => $"'{each.Verb}'")];
 
-        return reader.ReadToEnd();
+        return $"{string.Join(", ", verbs[..^1])} or {verbs[^1]}";
     }
 
     /// <summary>The one source kept, and what it was kept under.</summary>
-    private sealed record Kept(ReadCsvStep Read, string Path, string Fingerprint, IRowSource Rows, KindProposal Proposal);
+    private sealed record Kept(IReadsAFile Read, string Path, string Fingerprint, IRowSource Rows, KindProposal Proposal);
 }

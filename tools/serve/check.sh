@@ -42,8 +42,9 @@ tool=("$packages"/DeepSharp.Verso.Serve.*.nupkg)
 [ ${#tool[@]} -eq 1 ] || fail "$packages holds ${#tool[@]} packages of deepsharp-serve, and this starts one"
 
 # From these packages alone: with the feed as a second source, a version already published would install as well, and
-# this would start that one.
-dotnet tool install DeepSharp.Verso.Serve --tool-path "$work/tool" --source "$packages"
+# this would start that one. Extracted into a folder of its own, never the machine's package cache: a version is extracted
+# there once, and a later check of the same version would start the build left there rather than the one just packed.
+NUGET_PACKAGES="$work/packages" dotnet tool install DeepSharp.Verso.Serve --tool-path "$work/tool" --source "$packages"
 unzip -q "${tool[0]}" -d "$work/package"
 
 # A notebook with one step reading the sample's passengers, the file it reads, and beside them a file that is not a

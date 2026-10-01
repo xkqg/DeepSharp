@@ -22,6 +22,14 @@
          interactions loaded into Verso's extension host and run by Verso's scaffold — rather than against a
          description of one. The package itself compiles against the abstractions alone. -->
     <PackageReference Include="Verso" Version="1.2.2" />
+    <!-- Verso's browser editor, which `verso serve` starts, is in the command-line tool's package and nowhere else: it is
+         downloaded, never referenced, and its assembly laid beside the suite, so a test reads what the editor calls when
+         it opens and saves a file. -->
+    <PackageDownload Include="Verso.Cli" Version="[1.2.2]" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="$(NuGetPackageRoot)verso.cli/1.2.2/tools/net8.0/any/Verso.Blazor.dll" Link="verso-editor/Verso.Blazor.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>
@@ -29,11 +37,19 @@
     <!-- The notebook is tested in the host an application of your own uses, rather than one written for the tests:
          its contexts, its turns, and a click settling as long as it does anywhere else. -->
     <ProjectReference Include="..\..\Src\DeepSharp.Verso.Api\DeepSharp.Verso.Api.csproj" />
+    <!-- Built first and never referenced: a C# cell the tests run names it as a person's cell names a package, and the
+         cell is handed the assembly the repository built for it. Referenced, it would stand among the notebook's own
+         assemblies beside this suite, which a notebook's install does not carry. -->
+    <ProjectReference Include="..\..\Src\DeepSharp.Learners.Networks\DeepSharp.Learners.Networks.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- One way to find the repository and the data the samples read, shared with the library's suite. -->
     <Compile Include="..\DeepSharp\Repository.cs" Link="Repository.cs" />
+    <!-- One way to read the wiki's C# blocks, shared with the library's suite, which compiles the rest of them. -->
+    <Compile Include="..\DeepSharp\Packaging\Wiki.cs" Link="Wiki.cs" />
+    <!-- The parameter rule, read from the packages this suite references: each suite reads its own. -->
+    <Compile Include="..\DeepSharp\ParameterListTests.cs" Link="ParameterListTests.cs" />
   </ItemGroup>
 
   <ItemGroup>

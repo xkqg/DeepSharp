@@ -21,6 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # The wiki's code is compiled by a test, as the README's is. GitHub keeps a wiki as a repository of its own, so it
+      # is cloned beside this one, where it stands on a contributor's machine and where the test looks for it.
+      - name: Clone the wiki beside the repository
+        run: git clone --depth 1 "https://github.com/${{ github.repository }}.wiki.git" ../DeepSharp.wiki
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
@@ -72,3 +77,42 @@ jobs:
       - name: Start deepsharp-serve from its package
         timeout-minutes: 10
         run: bash tools/serve/check.sh nupkgs
+
+      # Verso installs the notebook package into a folder of its own and loads it apart from everything else, so a
+      # dependency the package does not declare is missing there while every suite, which runs the build, finds it. The
+      # package just made is installed by Verso's own installer and loaded by its own loader, in a host holding nothing of
+      # DeepSharp, and a notebook is run in it — on .NET 8, and on the newest runtime, as Verso's VS Code extension runs.
+      - name: Install the notebook from its package as Verso installs it
+        timeout-minutes: 10
+        run: bash tools/verso/check.sh nupkgs
+
+      # An application referencing DeepSharp.Backends.TorchSharp from the package just made, and nothing of DeepSharp's
+      # source, finds what that package alone gives it: refused by name where it brings no libtorch, and a real step of
+      # the networks sample's Titanic pipeline where it brings the processor's.
+      - name: Check DeepSharp.Backends.TorchSharp from its package
+        timeout-minutes: 10
+        run: bash tools/torch/check.sh nupkgs
+
+  # The engine's own suite, on libtorch, proven on both the platforms a person runs it on: the packages it references
+  # for the processor's libtorch differ by platform, and native interop the suite's own run above never leaves
+  # untried on Windows.
+  torch-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+          dotnet-quality: 'preview'
+
+      - name: Run the TorchSharp backend suite
+        shell: bash
+        run: |
+          for framework in net8.0 net10.0; do
+            dotnet run --project Tst/DeepSharp.Backends.TorchSharp/DeepSharp.Backends.TorchSharp.Tests.csproj --configuration Release --framework "$framework" || exit 1
+          done

@@ -1,0 +1,3 @@
+sibsp,parch,age,fare,age_was_missing,pclass_1,pclass_2,pclass_3,pclass_other,pclass_was_missing,sex_female,sex_male,sex_other,sex_was_missing
+-0.75,-1,-0.4576527,-0.97169787,0,0,0,1,0,0,0,1,0,0
+-0.75,-1,-0.055541594,-0.7217285,0,1,0,0,0,0,1,0,0,0

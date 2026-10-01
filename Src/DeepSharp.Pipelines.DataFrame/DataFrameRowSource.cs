@@ -45,17 +45,12 @@ public sealed class DataFrameRowSource : IRowSource
         {
             for (long row = 0; row < _frame.Rows.Count; row++)
             {
-                yield return [.. _frame.Columns.Select(column => AsText(column[row]))];
+                // The one rule every typed source hands a value over by, so a frame's values are spelled as a Parquet
+                // file's or a workbook's are.
+                yield return [.. _frame.Columns.Select(column => column[row].AsCell())];
             }
         }
     }
-
-    private static string? AsText(object? value) => value switch
-    {
-        null => null,
-        DateTime moment => moment.ToString("O", CultureInfo.InvariantCulture),
-        _ => Convert.ToString(value, CultureInfo.InvariantCulture),
-    };
 }
 
 /// <summary>
@@ -69,26 +64,6 @@ public sealed class DataFrameRowSource : IRowSource
 /// </remarks>
 internal sealed class DatabaseRowSource(DataFrame frame) : IStatesKinds
 {
-    // What each kind of value a frame holds is, as a column's kind.
-    private static readonly Dictionary<Type, ColumnKind> Kinds = new()
-    {
-        [typeof(string)] = ColumnKind.Text,
-        [typeof(char)] = ColumnKind.Text,
-        [typeof(bool)] = ColumnKind.Boolean,
-        [typeof(DateTime)] = ColumnKind.Timestamp,
-        [typeof(byte)] = ColumnKind.Integer,
-        [typeof(sbyte)] = ColumnKind.Integer,
-        [typeof(short)] = ColumnKind.Integer,
-        [typeof(ushort)] = ColumnKind.Integer,
-        [typeof(int)] = ColumnKind.Integer,
-        [typeof(uint)] = ColumnKind.Integer,
-        [typeof(long)] = ColumnKind.Integer,
-        [typeof(ulong)] = ColumnKind.Integer,
-        [typeof(float)] = ColumnKind.Number,
-        [typeof(double)] = ColumnKind.Number,
-        [typeof(decimal)] = ColumnKind.Number,
-    };
-
     private readonly DataFrameRowSource _rows = new(frame);
 
     /// <inheritdoc />
@@ -98,9 +73,10 @@ internal sealed class DatabaseRowSource(DataFrame frame) : IStatesKinds
     public IEnumerable<IReadOnlyList<string?>> Rows => _rows.Rows;
 
     /// <inheritdoc />
+    /// <remarks>What each column's type says it holds, by the one rule every typed source states its kinds by.</remarks>
     public IReadOnlyDictionary<string, ColumnKind> StatedKinds { get; } = frame.Columns
-        .Where(column => Kinds.ContainsKey(column.DataType))
-        .ToDictionary(column => column.Name, column => Kinds[column.DataType], StringComparer.Ordinal);
+        .Where(column => column.DataType.AsColumnKind() is not null)
+        .ToDictionary(column => column.Name, column => column.DataType.AsColumnKind()!.Value, StringComparer.Ordinal);
 }
 
 /// <summary>

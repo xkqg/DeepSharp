@@ -12,7 +12,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- A slot's tensor is replaced by an optimizer, a restore and the reader alone; the tests reach that door directly. -->
+    <!-- A slot's tensor is replaced by an optimizer, a restore and a load by path alone; the tests reach that door directly. -->
     <InternalsVisibleTo Include="DeepSharp.Tests" />
   </ItemGroup>
 

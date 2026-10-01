@@ -14,10 +14,14 @@ namespace DeepSharp.Networks;
 /// Images are laid out with their channels last — image, row, column, channel — as Keras lays them out, so a batch is
 /// the patches of every image one after another and nothing has to be turned round. The kernel is as many rows as the
 /// window holds values — its rows, its columns and the channels in — by as many columns as channels out; PyTorch keeps the
-/// same numbers channels first. It starts as PyTorch's does, within one over the root of the values a window holds.
+/// same numbers channels first. It starts as PyTorch's does, within one over the root of the values a window holds. Its
+/// window pads each image by the border it states for every side, or as TensorFlow's 'same' does.
 /// </remarks>
 public sealed class Conv2D : Layer, ISaved<Conv2D>
 {
+    // How a window padded as 'same' writes its padding: Keras's word for it.
+    private const string SamePadding = "same";
+
     /// <summary>A convolution that starts as PyTorch's does.</summary>
     /// <param name="inChannels">How many channels each place of an image holds.</param>
     /// <param name="outChannels">How many channels the layer makes of each place its window stands.</param>
@@ -30,7 +34,7 @@ public sealed class Conv2D : Layer, ISaved<Conv2D>
         ArgumentOutOfRangeException.ThrowIfLessThan(inChannels, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(outChannels, 1);
         ArgumentNullException.ThrowIfNull(draws);
-        RequireWindow(window);
+        window.RequireStanding();
 
         var places = window.Height * window.Width;
         var fans = new Fans(places * inChannels, places * outChannels);
@@ -52,7 +56,7 @@ public sealed class Conv2D : Layer, ISaved<Conv2D>
     {
         ArgumentNullException.ThrowIfNull(kernel);
         ArgumentNullException.ThrowIfNull(bias);
-        RequireWindow(window);
+        window.RequireStanding();
 
         var places = window.Height * window.Width;
 
@@ -88,20 +92,25 @@ public sealed class Conv2D : Layer, ISaved<Conv2D>
     public static string Name => "conv2d";
 
     /// <inheritdoc />
+    /// <remarks>Its padding is the number of rows and columns on every side, or the word <c>same</c>.</remarks>
     public static Conv2D Rebuild(JsonElement settings, Rebuilding rebuilding)
     {
         ArgumentNullException.ThrowIfNull(rebuilding);
 
-        var window = new Window(rebuilding.Whole(settings, "height"), rebuilding.Whole(settings, "width"))
-        {
-            Stride = rebuilding.Whole(settings, "stride"),
-            Padding = rebuilding.Whole(settings, "padding"),
-        };
+        var window = new Window(rebuilding.Whole(settings, "height"), rebuilding.Whole(settings, "width")) { Stride = rebuilding.Whole(settings, "stride") };
+
+        window = rebuilding.Says(settings, "padding", SamePadding, "a whole number, or 'same',")
+            ? window with { PaddingMode = PaddingMode.Same }
+            : window with { Padding = rebuilding.Whole(settings, "padding") };
 
         return new(rebuilding.Whole(settings, "inChannels"), rebuilding.Whole(settings, "outChannels"), window, rebuilding.Draws);
     }
 
     /// <inheritdoc />
+    /// <remarks>
+    /// Its padding is written as the number of rows and columns on every side, as 0.4.0 wrote it, or — for a window padded
+    /// as 'same' — as the word <c>same</c>, as Keras writes it.
+    /// </remarks>
     public void WriteSettings(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -111,7 +120,15 @@ public sealed class Conv2D : Layer, ISaved<Conv2D>
         writer.WriteNumber("height", Window.Height);
         writer.WriteNumber("width", Window.Width);
         writer.WriteNumber("stride", Window.Stride);
-        writer.WriteNumber("padding", Window.Padding);
+
+        if (Window.PaddingMode == PaddingMode.Same)
+        {
+            writer.WriteString("padding", SamePadding);
+        }
+        else
+        {
+            writer.WriteNumber("padding", Window.Padding);
+        }
     }
 
     /// <inheritdoc />
@@ -129,17 +146,6 @@ public sealed class Conv2D : Layer, ISaved<Conv2D>
         var values = backend.AddRow(backend.MatMul(backend.Unfold(input, Window), Weight.Value), Bias.Value);
 
         return backend.Reshape(values, new Shape(input.Shape[0], Window.RowsOver(input.Shape[1]), Window.ColumnsOver(input.Shape[2]), OutChannels));
-    }
-
-    /// <summary>Refuses a window that cannot stand anywhere.</summary>
-    /// <exception cref="ArgumentException">A side or the stride is below one, or the border below nothing.</exception>
-    internal static void RequireWindow(Window window)
-    {
-        if (window.Height < 1 || window.Width < 1 || window.Stride < 1 || window.Padding < 0)
-        {
-            throw new ArgumentException(
-                $"A {window} cannot stand anywhere: its sides and its stride are at least one, and its border at least nothing.", nameof(window));
-        }
     }
 }
 

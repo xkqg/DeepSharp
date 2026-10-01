@@ -54,14 +54,19 @@ dotnet run --project Tst/DeepSharp/DeepSharp.Tests.csproj -c Release -f net10.0
 dotnet run --project Tst/DeepSharp.Verso.Notebooks/DeepSharp.Verso.Notebooks.Tests.csproj -c Release -f net10.0
 dotnet run --project Tst/DeepSharp.Verso.Api/DeepSharp.Verso.Api.Tests.csproj -c Release -f net10.0
 dotnet run --project Tst/DeepSharp.Verso.Serve/DeepSharp.Verso.Serve.Tests.csproj -c Release -f net10.0
+dotnet run --project Tst/DeepSharp.Backends.TorchSharp/DeepSharp.Backends.TorchSharp.Tests.csproj -c Release -f net10.0
 ./tools/coverage/run.ps1 -Check                  # every suite, 90/90 per class, as CI runs it
 dotnet pack DeepSharp.slnx -c Release -o nupkgs  # every package, as the release makes them
 bash tools/serve/check.sh nupkgs                 # deepsharp-serve from its package, started as CI starts it
+bash tools/verso/check.sh nupkgs                 # the notebook installed by Verso's own installer, and run, as CI does
+bash tools/torch/check.sh nupkgs                 # an application on the libtorch engine's package, with and without libtorch
 ```
 
-There are four suites: the notebook's runs in the host an application of your own uses, `DeepSharp.Verso.Api`, the
+There are five suites: the notebook's runs in the host an application of your own uses, `DeepSharp.Verso.Api`, the
 host's own beside it, and the server's, which starts DeepSharp's server for real — all on Verso's engine, which needs
-another version of the C# compiler than the core suite's schema validator. Every package and every suite is built for
+another version of the C# compiler than the core suite's schema validator — and the libtorch engine's, which brings
+the processor's libtorch, or a graphics card's when it is built with `-p:Libtorch=cuda`, so the core's suite never
+carries a native library. Every package and every suite is built for
 .NET 8 and .NET 10, so `dotnet run` is told which with `-f net8.0` or `-f net10.0`; without it, it refuses to start. The
 gate measures on .NET 10 and runs every suite on .NET 8 as well. Each test project is an executable — xunit v3 runs
 in-process, so `dotnet test` is not how a suite is run here. Pass `-- -class <full name>` or

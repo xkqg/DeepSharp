@@ -71,7 +71,7 @@ public class PipelineFileTests
         using var declaration = JsonDocument.Parse(trained.Declaration.ToJson());
         using var whole = JsonDocument.Parse(trained.ToJson());
 
-        Assert.Equal(3, PipelineDeclaration.Version);
+        Assert.Equal(4, PipelineDeclaration.Version);
         Assert.Equal(["version", "declaration"], declaration.RootElement.EnumerateObject().Select(property => property.Name));
         Assert.Equal(["version", "declaration", "fitted"], whole.RootElement.EnumerateObject().Select(property => property.Name));
         Assert.Equal(PipelineDeclaration.Version, declaration.RootElement.GetProperty("version").GetInt32());
@@ -98,7 +98,7 @@ public class PipelineFileTests
         // A newer file may use words this version never had, so none of it is read: the one thing said is
         // that it is newer, rather than a list of faults that are only faults to an older reader.
         const string json = """
-            {"version": 4,
+            {"version": 5,
              "declaration": [{"step": "read.nowhere"}],
              "colour": "red"}
             """;
@@ -107,9 +107,33 @@ public class PipelineFileTests
         var fault = Assert.Single(refused.Faults);
 
         Assert.Equal(Where(json, "\"version\""), At(fault));
+        Assert.Contains("version 5", fault.Message, StringComparison.Ordinal);
         Assert.Contains("version 4", fault.Message, StringComparison.Ordinal);
-        Assert.Contains("version 3", fault.Message, StringComparison.Ordinal);
         Assert.Contains("newer", fault.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnUnrecognisedKeyHoldingAForgedLineBreak_IsShownEscaped_NeverBreakingTheMessageIntoASecondLine()
+    {
+        const string json = "{\"version\": 4, \"declaration\": [], \"x\\r\\nFAKE LINE\": 1}";
+
+        var refused = Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
+        var fault = Assert.Single(refused.Faults);
+
+        Assert.Equal("A pipeline file has no 'x\\r\\nFAKE LINE'. It holds: version, declaration, fitted, skipped.", fault.Message);
+    }
+
+    [Fact]
+    public void AnUnrecognisedKeyOfExtremeLength_IsCutShortInTheRefusal_SayingHowLongItWas()
+    {
+        var huge = new string('m', 10_000);
+        var json = "{\"version\": 4, \"declaration\": [], \"" + huge + "\": 1}";
+
+        var refused = Assert.Throws<PipelineFileException>(() => PipelineDeclaration.FromJson(json, StepCatalog.BuiltIn()));
+        var fault = Assert.Single(refused.Faults);
+
+        Assert.True(fault.Message.Length < 1000, $"The message is {fault.Message.Length} characters long.");
+        Assert.Contains("(10000 characters)", fault.Message, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -167,7 +191,7 @@ public class PipelineFileTests
         Assert.Equal("read.csv", catalog.Read(source.RootElement, writtenAgainst: 1).Verb);
         Assert.Equal("split.atRandom", catalog.Read(split.RootElement, writtenAgainst: 2).Verb);
         Assert.Throws<ArgumentOutOfRangeException>(() => catalog.Read(source.RootElement, writtenAgainst: 0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.Read(source.RootElement, writtenAgainst: 4));
+        Assert.Throws<ArgumentOutOfRangeException>(() => catalog.Read(source.RootElement, writtenAgainst: 5));
     }
 
     [Fact]

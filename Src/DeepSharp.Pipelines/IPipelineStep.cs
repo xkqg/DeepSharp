@@ -135,6 +135,34 @@ public interface IFittedStep : IActsInAWalk
 }
 
 /// <summary>
+/// A step that learns from the training rows and that some learners do without: a run for such a learner leaves it out,
+/// or takes in its place the step it offers.
+/// </summary>
+/// <remarks>
+/// A scale is nothing to a learner indifferent to scale, and a category written one column per category is harm to a
+/// learner that splits on categories itself. The step says which learners need it, and what stands in its place for the
+/// others; the run decides the rest from the declaration alone, and takes the step whatever the learner needs wherever
+/// leaving it out would change more than what that learner does without: an answer's way back runs through it, or a step
+/// below reads a column it read, made or changed (<see cref="Pipeline.RunFor(Needs)"/>). Only a step that learns can be
+/// one: a split, a source, a drop, an order, an added column or a piece of evidence decides what the data says for every
+/// learner alike, and a type that is one of those cannot also be this.
+/// </remarks>
+public interface IMeetsANeed : IFittedStep
+{
+    /// <summary>Whether a learner with this need needs this step as it is declared.</summary>
+    /// <param name="needs">What the learner needs of the features it is handed.</param>
+    /// <returns><see langword="true"/> when the run for that learner takes this step as declared.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">No need is named by the value.</exception>
+    bool NeededBy(Needs needs);
+
+    /// <summary>
+    /// What a run for a learner that does without this step takes in its place: a step that learns what this one learns,
+    /// under the same entry, and is written as this one is; nothing, when the step is simply left out.
+    /// </summary>
+    IFittedStep? Instead { get; }
+}
+
+/// <summary>
 /// A step that divides the rows into training, validation, test and a part to predict on.
 /// </summary>
 /// <remarks>

@@ -106,6 +106,27 @@ public sealed class ColumnListTests : IDisposable
     }
 
     [Fact]
+    public async Task TheColumnsOfAParquetFile_AreListedWithWhatTheFileStates_AndTickedIn()
+    {
+        // The file holds whether a passenger lived as the words "yes" and "no", and says it holds words: its row proposes
+        // what the file states — few words, a category — where the comma-separated file's cells propose true or false.
+        File.Copy(Repository.Fixture("titanic.parquet"), Path.Join(_folder, "titanic.parquet"));
+        await using var notebook = await NotebookAsync(["""{"step": "read.parquet", "path": "titanic.parquet"}""", .. Titanic[1..]]);
+
+        await ChooseAsync(notebook);
+
+        Assert.Equal(Header, List(notebook).Rows().Select(row => row.Column));
+        Assert.Equal("category, proposed, 2 values", List(notebook).Row("alive").Proposed);
+        Assert.True(List(notebook).Row("survived").Included.Ticked);
+
+        var taken = await TickAsync(notebook, Schema(notebook), "alive", ticked: true);
+
+        Assert.True(taken.StateChanged);
+        Assert.Equal(new ColumnDeclaration("alive", ColumnKind.Category, Optional: false), Declared(notebook).Columns.Single(column => column.Name == "alive"));
+        Assert.True(List(notebook).Row("alive").Included.Ticked);
+    }
+
+    [Fact]
     public async Task AColumnTheSchemaDeclaresAndTheSourceLacks_IsListedAfterTheSourcesColumns_AsNotInTheSource()
     {
         await using var notebook = await NotebookAsync(
@@ -416,7 +437,7 @@ public sealed class ColumnListTests : IDisposable
         var rows = CsvRowSource.FromText("a,b\n1,\n");
         var source = new SourceRows(rows, "fingerprint", KindProposal.Of(rows));
 
-        var list = ColumnList.Of(NotebookVerbs.Catalog(), new PipelineDeclaration([new ReadCsvStep("rows.csv")]), source, [], stored: null, "key", ListPicks.None, whole: true).Content;
+        var list = new ColumnList(NotebookVerbs.Catalog(), new PipelineDeclaration([new ReadCsvStep("rows.csv")]), source, stored: null).Drawn(ListPicks.None, whole: true).Content;
 
         Assert.Equal(["a", "b"], list.Rows().Select(row => row.Column));
         Assert.Equal("∅", WebUtility.HtmlDecode(list.Row("b").Values));

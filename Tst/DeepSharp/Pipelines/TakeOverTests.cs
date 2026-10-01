@@ -524,10 +524,10 @@ public class TakeOverTests
 
         static PipelineDeclaration Boarded(string? format) =>
             WithMaker(columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Number("fare")
-                .Column("boarded", ColumnKind.Timestamp, optional: true, format: format));
+                .Column(new ColumnDeclaration("boarded", ColumnKind.Timestamp, Optional: true) { Format = format }));
 
         static PipelineDeclaration Fares(string? missing) =>
-            WithMaker(columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Column("fare", ColumnKind.Number, missing: missing));
+            WithMaker(columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Column(new ColumnDeclaration("fare", ColumnKind.Number, Optional: false) { Missing = missing }));
 
         var blocks = WithMaker();
         var category = new PipelineDeclaration(blocks.WithKind("pclass", ColumnKind.Category));

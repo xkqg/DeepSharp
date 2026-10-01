@@ -131,17 +131,18 @@ public sealed class TakeOverAction : NotebookExtension, IToolbarAction
         return TakeOverCard.Of(blocks, preset.TakeOver(blocks, HeaderOf(blocks, folder)), saved);
     }
 
-    // The source's columns, read from its first line alone; nothing when the rows are handed in or the file will not read.
+    // The source's columns, as the chain's take-over reads them: what the file's reader names, from a comma-separated
+    // file's first line or a Parquet file's schema; nothing when the rows are handed in or the file will not read.
     private static IReadOnlyList<string>? HeaderOf(PipelineDeclaration blocks, SourceFolder folder)
     {
-        if (blocks.Steps is not [ReadCsvStep read, ..])
+        if (blocks.Steps is not [INamesItsColumns source, ..])
         {
             return null;
         }
 
         try
         {
-            return CsvRowSource.HeaderOf(folder.Resolve(read.Path));
+            return source.ColumnNamesIn(folder);
         }
         catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException or FormatException)
         {

@@ -255,13 +255,13 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         switch (context.InteractionType)
         {
             case Show:
-                return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Show, page: 0);
+                return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Show);
 
             case Page:
-                return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Page, PageOf(context.Payload));
+                return await StepCommit.PageAsync(gesture, assembled, PageOf(context.Payload));
 
             case Columns:
-                return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Show, page: 0, ListPicks.None);
+                return await StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Show, ListPicks.None);
 
             default:
                 if (ControlAction.Read(context.InteractionType) is not { } action)
@@ -269,32 +269,34 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
                     return null;
                 }
 
+                var sent = new Sent(gesture, assembled, context, action);
+
                 // A select sends the value it is at; a box, whether it is ticked.
                 if (action.Gesture == ListKind)
                 {
-                    return await KindPickedAsync(gesture, assembled, context, action);
+                    return await KindPickedAsync(sent);
                 }
 
                 if (action.Gesture == ListType)
                 {
-                    return await PickedAsync(gesture, assembled, context, PicksOf(action) with { Type = context.Payload });
+                    return await PickedAsync(sent, sent.Picks with { Type = context.Payload });
                 }
 
                 if (action.Gesture == ListRange)
                 {
-                    return await PickedAsync(gesture, assembled, context, Ranging(PicksOf(action), context.Payload == "range"));
+                    return await PickedAsync(sent, Ranging(sent.Picks, context.Payload == "range"));
                 }
 
                 if (action.Gesture == ListRangeKind)
                 {
-                    return await PickedAsync(gesture, assembled, context, action.Text(ForKey) == "output"
-                        ? PicksOf(action) with { OutputKind = context.Payload.AsKind() }
-                        : PicksOf(action) with { IncludeKind = context.Payload.AsKind() });
+                    return await PickedAsync(sent, action.Text(ForKey) == "output"
+                        ? sent.Picks with { OutputKind = context.Payload.AsKind() }
+                        : sent.Picks with { IncludeKind = context.Payload.AsKind() });
                 }
 
                 if (action.Gesture == ListParameter)
                 {
-                    return await ParameterPickedAsync(gesture, assembled, context, action);
+                    return await ParameterPickedAsync(sent);
                 }
 
                 if (StateOf(context.Payload) is not { } ticked)
@@ -304,21 +306,21 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
                 return action.Gesture switch
                 {
-                    Apply => await AppliedAsync(gesture, assembled, context, action, ticked),
-                    ListInclude => await ListedAsync(gesture, assembled, context, action, ticked),
-                    ListOutput => await AnsweredAsync(gesture, assembled, context, action, ticked),
-                    ListRemoveOutput => await RemovedAsync(gesture, assembled, context, action, ticked),
-                    Answer => await AnsweredAlertAsync(gesture, assembled, context, action, ticked),
-                    _ => action.Text(ColumnKey) is { } column ? await TickedAsync(gesture, assembled, context, action, column, ticked) : null,
+                    Apply => await AppliedAsync(sent, ticked),
+                    ListInclude => await ListedAsync(sent, ticked),
+                    ListOutput => await AnsweredAsync(sent, ticked),
+                    ListRemoveOutput => await RemovedAsync(sent, ticked),
+                    Answer => await AnsweredAlertAsync(sent, ticked),
+                    _ => action.Text(ColumnKey) is { } column ? await TickedAsync(sent, column, ticked) : null,
                 };
         }
     }
 
     // A pick on the list — the kind of output, ticking one column or a range, a range's kind. It commits nothing; the list
     // is drawn again with it, keeping the others.
-    private static async Task<string?> PickedAsync(Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ListPicks picks) =>
-        assembled.SchemaBlock is { } schema && !string.IsNullOrEmpty(context.Payload)
-            ? await StepCommit.ShowAsync(gesture with { Cell = schema }, assembled, ViewTrigger.Show, page: 0, picks)
+    private static async Task<string?> PickedAsync(Sent sent, ListPicks picks) =>
+        sent.Assembled.SchemaBlock is { } schema && !string.IsNullOrEmpty(sent.Context.Payload)
+            ? await StepCommit.ShowAsync(sent.Gesture with { Cell = schema }, sent.Assembled, ViewTrigger.Show, picks)
             : null;
 
     // Ticking one column or a range: leaving ranges forgets where one started; staying in them keeps it.
@@ -330,15 +332,16 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     // the output of the kind the box makes, or taken out, as the output box's one rule says. In a range of an output of
     // many, the first tick says where the range starts and changes nothing, and the second puts every column between in,
     // with the range's kind; a range refused keeps its start, so another end can be ticked.
-    private static async Task<string?> AnsweredAsync(
-        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    private static async Task<string?> AnsweredAsync(Sent sent, bool ticked)
     {
-        if (await RowOfAsync(gesture, assembled, action) is not { } row)
+        var (_, assembled, context, action) = sent;
+
+        if (await sent.RowAsync() is not { } row)
         {
             return null;
         }
 
-        var picks = PicksOf(action);
+        var picks = sent.Picks;
 
         if (!assembled.Whole)
         {
@@ -347,9 +350,9 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return null;
         }
 
-        if (!DrawnOver(action, assembled, row.Source))
+        if (!sent.DrawnOver(row.Source))
         {
-            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, picks.Afresh());
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, picks.Afresh());
 
             return null;
         }
@@ -361,14 +364,15 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
 
         if (kinds is not null && picks.OutputFrom is null)
         {
-            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, picks with { OutputFrom = row.Column });
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, picks with { OutputFrom = row.Column });
 
             return null;
         }
 
+        var boxes = new OutputBox(catalog, assembled.Readable, verb, header);
         var change = kinds is not null
-            ? OutputBox.Ranged(catalog, assembled.Readable, verb, header.Between(picks.OutputFrom!, row.Column), picks.OutputKind ?? kinds[0], header)
-            : OutputBox.Change(catalog, assembled.Readable, verb, row.Column, action.Text(KindKey).AsKind() ?? ColumnKind.Text, header, ticked);
+            ? boxes.Ranged(header.Between(picks.OutputFrom!, row.Column), picks.OutputKind ?? kinds[0])
+            : boxes.Change(row.Column, action.Text(KindKey).AsKind() ?? ColumnKind.Text, ticked);
 
         if (change.Steps is not { } steps)
         {
@@ -385,15 +389,16 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     // The list's box that takes the output away. Ticked with no output there — the click's echo — it changes nothing;
     // otherwise it needs a session that read the source, blocks that make one pipeline, and a list that still says what
     // holds.
-    private static async Task<string?> RemovedAsync(
-        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    private static async Task<string?> RemovedAsync(Sent sent, bool ticked)
     {
-        if (!ticked || assembled.Readable.Output is null || await ListOfAsync(gesture, assembled) is not { } list)
+        var assembled = sent.Assembled;
+
+        if (!ticked || assembled.Readable.Output is null || await sent.ListAsync() is not { } list)
         {
             return null;
         }
 
-        var picks = PicksOf(action);
+        var picks = sent.Picks;
 
         if (!assembled.Whole)
         {
@@ -402,20 +407,17 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return null;
         }
 
-        if (!DrawnOver(action, assembled, list.Source))
+        if (!sent.DrawnOver(list.Source))
         {
-            await StepCommit.ShowAsync(list.On, assembled, ViewTrigger.Show, page: 0, picks.Afresh());
+            await StepCommit.ShowAsync(list.On, assembled, ViewTrigger.Show, picks.Afresh());
 
             return null;
         }
 
-        context.StateChanged = await StepCommit.CommitAsync(list.On, assembled, assembled.Readable.WithoutOutput(), picks);
+        sent.Context.StateChanged = await StepCommit.CommitAsync(list.On, assembled, assembled.Readable.WithoutOutput(), picks);
 
         return null;
     }
-
-    // What a list's control was drawn with: the kind of output its boxes make.
-    private static ListPicks PicksOf(ControlAction action) => ListPicks.Of(action);
 
     // Why a change to the output is not made while the blocks make no pipeline, naming the block that stops them.
     private static string NotWhole(NotebookPipeline assembled) => $"the blocks do not make a pipeline yet: {string.Join("; ", assembled.Stopping)}";
@@ -424,26 +426,27 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     // changed draws the list again and changes nothing; otherwise ticked takes the column in with the kind its row showed,
     // and unticked leaves it out. In a range, the first tick says where it starts and changes nothing, and the second
     // takes every column between in, with the range's one kind; unticking leaves one column out.
-    private static async Task<string?> ListedAsync(
-        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    private static async Task<string?> ListedAsync(Sent sent, bool ticked)
     {
-        if (await RowOfAsync(gesture, assembled, action) is not { } row)
+        var (_, assembled, context, action) = sent;
+
+        if (await sent.RowAsync() is not { } row)
         {
             return null;
         }
 
-        var picks = PicksOf(action);
+        var picks = sent.Picks;
 
-        if (!DrawnOver(action, assembled, row.Source))
+        if (!sent.DrawnOver(row.Source))
         {
-            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, picks.Afresh());
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, picks.Afresh());
 
             return null;
         }
 
         if (ticked && picks.Range && picks.IncludeFrom is null)
         {
-            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, picks with { IncludeFrom = row.Column });
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, picks with { IncludeFrom = row.Column });
 
             return null;
         }
@@ -474,21 +477,23 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     // a send is fresh when the list still says what holds, and goes on from the select's own last change when nothing
     // else changed since; anything else is stale, draws the list again and changes nothing, an echo included. The select
     // commits the value it ends on, and a category walked away from and back to still remembers the kind it was.
-    private static async Task<string?> KindPickedAsync(Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action)
+    private static async Task<string?> KindPickedAsync(Sent sent)
     {
-        if (await RowOfAsync(gesture, assembled, action) is not { } row)
+        var (gesture, assembled, context, _) = sent;
+
+        if (await sent.RowAsync() is not { } row)
         {
             return null;
         }
 
         var now = assembled.Readable;
-        var drawn = DrawnOver(action, assembled, row.Source)
+        var drawn = sent.DrawnOver(row.Source)
             ? now.Steps
             : gesture.Session.ContinuationOf(context.InteractionType, NotebookSession.KeyOf(now), row.Source.Fingerprint);
 
         if (drawn is null)
         {
-            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, page: 0, PicksOf(action).Afresh());
+            await StepCommit.ShowAsync(row.List, assembled, ViewTrigger.Show, sent.Picks.Afresh());
 
             return null;
         }
@@ -499,7 +504,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return null;
         }
 
-        if (await StepCommit.CommitAsync(row.List, assembled, steps, PicksOf(action)))
+        if (await StepCommit.CommitAsync(row.List, assembled, steps, sent.Picks))
         {
             gesture.Session.SelectCommitted(context.InteractionType, drawn, NotebookSession.KeyOf(new PipelineDeclaration(steps)), row.Source.Fingerprint);
             context.StateChanged = true;
@@ -513,14 +518,16 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     // stale otherwise, drawing the list again and changing nothing, an echo included. The value is read into the output
     // as its block's form reads it, from the state the list was drawn in, and the output placed as the column rules place
     // one. It needs blocks that make one pipeline.
-    private static async Task<string?> ParameterPickedAsync(Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action)
+    private static async Task<string?> ParameterPickedAsync(Sent sent)
     {
-        if (await ListOfAsync(gesture, assembled) is not { } list)
+        var (gesture, assembled, context, action) = sent;
+
+        if (await sent.ListAsync() is not { } list)
         {
             return null;
         }
 
-        var picks = PicksOf(action);
+        var picks = sent.Picks;
 
         if (!assembled.Whole)
         {
@@ -530,19 +537,19 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         }
 
         var now = assembled.Readable;
-        var drawn = DrawnOver(action, assembled, list.Source)
+        var drawn = sent.DrawnOver(list.Source)
             ? now.Steps
             : gesture.Session.ContinuationOf(context.InteractionType, NotebookSession.KeyOf(now), list.Source.Fingerprint);
 
         if (drawn is null)
         {
-            await StepCommit.ShowAsync(list.On, assembled, ViewTrigger.Show, page: 0, picks.Afresh());
+            await StepCommit.ShowAsync(list.On, assembled, ViewTrigger.Show, picks.Afresh());
 
             return null;
         }
 
-        var pick = OutputParameters.Picked(
-            NotebookVerbs.Catalog(), new PipelineDeclaration(drawn), action.Text(ParameterKey) ?? string.Empty, context.Payload, list.Source.Rows.ColumnNames);
+        var pick = new OutputParameters(NotebookVerbs.Catalog(), new PipelineDeclaration(drawn), list.Source.Rows.ColumnNames)
+            .Picked(action.Text(ParameterKey) ?? string.Empty, context.Payload);
 
         if (pick.Steps is not { } steps)
         {
@@ -590,43 +597,14 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             : drawn.Including(column, kind, header);
     }
 
-    // The row a list's control is about: nothing when the control names no column.
-    private static async Task<ListRow?> RowOfAsync(Gesture gesture, NotebookPipeline assembled, ControlAction action) =>
-        action.Text(ColumnKey) is { } column && await ListOfAsync(gesture, assembled) is { } list ? new ListRow(list.On, column, list.Source) : null;
-
-    // The list a control is on: the schema's block the blocks hold now — found by what the control carries, whichever
-    // block the send names, since a change writes that block anew — with the rows this session read the source as.
-    // Nothing when the blocks hold no schema; the list drawn again, saying why, in a session that has not read the source.
-    private static async Task<ListOn?> ListOfAsync(Gesture gesture, NotebookPipeline assembled)
-    {
-        if (assembled.SchemaBlock is not { } schema)
-        {
-            return null;
-        }
-
-        var list = gesture with { Cell = schema };
-
-        if (assembled.Readable.Steps[0] is not ReadCsvStep read || gesture.Session.Sources.KeptFor(read) is not { } source)
-        {
-            await StepCommit.NotMadeAsync(list, assembled, [ListSourceNotRead], ListPicks.None);
-
-            return null;
-        }
-
-        return new ListOn(list, source);
-    }
-
-    // Whether a list's control was drawn over the blocks and the source's bytes as they are now.
-    private static bool DrawnOver(ControlAction action, NotebookPipeline assembled, SourceRows source) =>
-        action.Text(DrawnKey) == NotebookSession.KeyOf(assembled.Readable) && action.Text(SourceKey) == source.Fingerprint;
-
     // A take-over's list, sent with the saved columns it listed and the key of the blocks it listed them for. Ticked,
     // what it listed is made, in one commit; asked again — the click's echo — the blocks hold it already, and nothing
     // happens. The blocks must still make the whole pipeline the list was worked out for, or the change is not made and
     // the block says why.
-    private static async Task<string?> AppliedAsync(
-        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    private static async Task<string?> AppliedAsync(Sent sent, bool ticked)
     {
+        var (gesture, assembled, context, action) = sent;
+
         if (!ticked || action.Text(PresetKey) is not { } saved || action.Text(DrawnKey) is not { } drawn)
         {
             return null;
@@ -671,9 +649,9 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     // A grid's box, sent with the state it is in: the steps the column rules make of that state, written when they
     // differ from the steps there are. A box asks for a state, so a change the rules refuse is said at the block, and
     // one asked for again changes nothing.
-    private static async Task<string?> TickedAsync(
-        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, string column, bool ticked)
+    private static async Task<string?> TickedAsync(Sent sent, string column, bool ticked)
     {
+        var (gesture, assembled, context, action) = sent;
         var declaration = assembled.Readable;
         var position = assembled.PositionOf(gesture.Cell);
 
@@ -725,12 +703,12 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return declaration.Including(column, ColumnKind.Text, []);
         }
 
-        if (declaration.Steps[0] is not ReadCsvStep read)
+        if (SourceCache.FileOf(declaration) is null)
         {
             return null;
         }
 
-        if (gesture.Session.Sources.KeptFor(read)?.Rows.ColumnNames is not { } header)
+        if (gesture.Session.Sources.KeptFor(declaration)?.Rows.ColumnNames is not { } header)
         {
             await StepCommit.NotMadeAsync(gesture, assembled, [SourceNotRead]);
 
@@ -743,9 +721,9 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     // An alert's box under a profile: ticked, its answer is given through the column rules — the column left out, or the
     // value said to stand for a gap on the schema; unticked, nothing, since the box only ever asks for its answer. What the
     // rules refuse is said at the block. Given twice, an answer changes nothing the second time.
-    private static async Task<string?> AnsweredAlertAsync(
-        Gesture gesture, NotebookPipeline assembled, CellInteractionContext context, ControlAction action, bool ticked)
+    private static async Task<string?> AnsweredAlertAsync(Sent sent, bool ticked)
     {
+        var (gesture, assembled, context, action) = sent;
         var position = assembled.PositionOf(gesture.Cell);
 
         if (!ticked || position < 0 || position >= assembled.Readable.Steps.Count
@@ -809,4 +787,53 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     /// <param name="On">The gesture, at the list's block.</param>
     /// <param name="Source">The rows this session read the source as, and their fingerprint.</param>
     private readonly record struct ListOn(Gesture On, SourceRows Source);
+
+    /// <summary>What one control sent: the gesture it made, the blocks as they stood, what Verso delivered it in, and what it carries.</summary>
+    /// <param name="Gesture">The gesture, on the block it was made on.</param>
+    /// <param name="Assembled">The pipeline the blocks made when it was sent.</param>
+    /// <param name="Context">What Verso delivered it in: what it sent, and where a change to the notebook is said.</param>
+    /// <param name="Action">The control's gesture and what it carries.</param>
+    private readonly record struct Sent(Gesture Gesture, NotebookPipeline Assembled, CellInteractionContext Context, ControlAction Action)
+    {
+        /// <summary>What the list the control is on was drawn with: the kind of output its boxes make, and the picks.</summary>
+        public ListPicks Picks => ListPicks.Of(Action);
+
+        /// <summary>Whether the control was drawn over the blocks and the source's bytes as they are now.</summary>
+        /// <param name="source">The rows this session read the source as, and their fingerprint.</param>
+        /// <returns><see langword="true"/> while the list it is on still says what holds.</returns>
+        public bool DrawnOver(SourceRows source) =>
+            Action.Text(DrawnKey) == NotebookSession.KeyOf(Assembled.Readable) && Action.Text(SourceKey) == source.Fingerprint;
+
+        /// <summary>The row the control is about: nothing when it names no column, or is on no list.</summary>
+        /// <returns>The row.</returns>
+        public async Task<ListRow?> RowAsync() =>
+            Action.Text(ColumnKey) is { } column && await ListAsync() is { } list ? new ListRow(list.On, column, list.Source) : null;
+
+        /// <summary>
+        /// The list the control is on: the schema's block the blocks hold now — found by what the control carries, whichever
+        /// block the send names, since a change writes that block anew — with the rows this session read the source as.
+        /// </summary>
+        /// <returns>
+        /// The list; nothing when the blocks hold no schema, and nothing — the list drawn again, saying why — in a session that has
+        /// not read the source.
+        /// </returns>
+        public async Task<ListOn?> ListAsync()
+        {
+            if (Assembled.SchemaBlock is not { } schema)
+            {
+                return null;
+            }
+
+            var list = Gesture with { Cell = schema };
+
+            if (Gesture.Session.Sources.KeptFor(Assembled.Readable) is not { } source)
+            {
+                await StepCommit.NotMadeAsync(list, Assembled, [ListSourceNotRead], ListPicks.None);
+
+                return null;
+            }
+
+            return new ListOn(list, source);
+        }
+    }
 }

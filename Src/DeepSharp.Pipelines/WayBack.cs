@@ -86,10 +86,11 @@ internal sealed class ColumnsAsRead
     public double? At(string column, int readAt) => _columns[column][readAt];
 }
 
-/// <summary>A step on a way back, and what it learned.</summary>
+/// <summary>A step on a way back, where it stands, and what it learned.</summary>
+/// <param name="At">The step's place in the declaration: a run takes it for every learner.</param>
 /// <param name="Step">The step.</param>
 /// <param name="Fitted">What it learned, when it learned anything.</param>
-internal readonly record struct UndoLink(IUndoesItself Step, FittedStepValues? Fitted);
+internal readonly record struct UndoLink(int At, IUndoesItself Step, FittedStepValues? Fitted);
 
 /// <summary>
 /// The way back for one answer: every step that changed it, the last one first, and the column as read it comes
@@ -135,7 +136,7 @@ internal sealed class UndoChain
         {
             if (declaration.Steps[at] is IUndoesItself step && step.Undoes(followed))
             {
-                links.Add(new UndoLink(step, fitted.GetValueOrDefault(at)));
+                links.Add(new UndoLink(at, step, fitted.GetValueOrDefault(at)));
                 followed = step.From(followed);
             }
         }

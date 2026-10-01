@@ -369,7 +369,7 @@ public class HandoverTests
             .ReadCsv(Repository.Data("apple.csv"))
             .Declare(schema => schema.Timestamp("Date").Number("AAPL.Close"))
             .OrderBy("Date")
-            .AddIndicator("sma5", Indicator.Sma, ["AAPL.Close"], 5)
+            .Add(new AddIndicatorStep("sma5", Indicator.Sma, ["AAPL.Close"], 5))
             .DropWarmUp()
             .SplitByTime("Date", 0.70, 0.15)
             .Normalise("sma5")
@@ -385,6 +385,27 @@ public class HandoverTests
         Assert.Equal(trained.Declaration, loaded.Declaration);
         Assert.Equal(trained.Fitted.Keys, loaded.Fitted.Keys);
         Assert.Throws<ArgumentNullException>(() => PreparedData.FromJson(trained.ToJson(), null!));
+    }
+
+    [Fact]
+    public void APipelineReadFromItsFile_HandsNoPartOver_SayingItHoldsNoRows()
+    {
+        // Its file keeps what the steps learned and not the rows they learned from, so there is no part to hand over: asked
+        // for one, it says so — the one refusal the report's measuring gives it too — rather than that the answer never
+        // reached the end of the pipeline, or handing over a part of no rows.
+        var loaded = PreparedData.FromJson(Passengers().ToJson(), StepCatalog.BuiltIn());
+        var answerless = PreparedData.FromJson(Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Number("x")).SplitAtRandom(0.5, 0).Build().Run(new InMemoryRowSource(["x"], [["1"], ["2"]])).ToJson(), StepCatalog.BuiltIn());
+
+        foreach (var refused in new Func<object>[]
+                 {
+                     () => loaded.Batch(Part.Train),
+                     () => loaded.Batch(Part.Test, Needs.OneScale),
+                     () => answerless.Batch(Part.Validation),
+                 }.Select(asked => Assert.Throws<InvalidOperationException>(asked)))
+        {
+            Assert.StartsWith("This pipeline holds no rows: one read from its file keeps what its steps learned", refused.Message, StringComparison.Ordinal);
+            Assert.Contains("new Pipeline(declaration, rows, folder).Run()", refused.Message, StringComparison.Ordinal);
+        }
     }
 
     [Fact]

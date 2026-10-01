@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A Verso host of its own, holding Verso's engine and nothing of DeepSharp: tools/verso/check.sh has it install the
+       notebook package just made with Verso's own installer and run a notebook in it. Built for .NET 8 alone, as the host
+       Verso's VS Code extension starts is, and started on .NET 8 and on the newest runtime, as that host is. Not a
+       package, and not a suite: nothing ships it and nothing measures it. -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Verso" Version="1.2.2" />
+  </ItemGroup>
+
+</Project>

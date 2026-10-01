@@ -4,6 +4,7 @@
 using System.Text.Json;
 using Corvus.Json;
 using DeepSharp.Pipelines;
+using DeepSharp.Tests.Learners;
 using Schema = Corvus.Json.Validator.JsonSchema;
 
 namespace DeepSharp.Tests.Pipelines;
@@ -22,7 +23,7 @@ public class ProjectionTests
     private static readonly Lazy<Schema> TheSchema = new(() =>
         Schema.FromText(Everything().JsonSchema(), "https://github.com/xkqg/DeepSharp/pipeline.schema.json"));
 
-    private static StepCatalog Everything() => StepCatalog.BuiltIn().WithIndicators();
+    private static StepCatalog Everything() => Shipped.Catalog();
 
     private static bool Valid(string json)
     {
@@ -105,6 +106,9 @@ public class ProjectionTests
 
         Assert.True(Valid(prepared.Declaration.ToJson()));
         Assert.True(Valid(prepared.ToJson()));
+
+        // A run for a learner that left steps out, which says so under 'skipped'.
+        Assert.True(Valid(WikiTitanic.In(WikiTitanic.DataFolder).RunFor(Needs.Categories).ToJson()));
     }
 
     [Theory]
@@ -139,7 +143,13 @@ public class ProjectionTests
     [InlineData("""{"version":2,"declaration":[{"step":"drop.columns","columns":["a","b","a"]}]}""")]
     [InlineData("""{"declaration":[],"colour":"red"}""")]
     [InlineData("""{"fitted":{}}""")]
-    [InlineData("""{"version":4,"declaration":[]}""")]
+    [InlineData("""{"version":5,"declaration":[]}""")]
+    [InlineData("""{"version":3,"declaration":[],"skipped":[]}""")]
+    [InlineData("""{"declaration":[],"skipped":[]}""")]
+    [InlineData("""{"version":4,"declaration":[],"skipped":"normalise"}""")]
+    [InlineData("""{"version":4,"declaration":[],"skipped":[{"step":"normalise"}]}""")]
+    [InlineData("""{"version":4,"declaration":[],"skipped":[{"step":"normalise","prefix":"ab"}]}""")]
+    [InlineData("""{"version":4,"declaration":[],"skipped":[{"step":"normalise","prefix":"0000000000000000000000000000000000000000000000000000000000000000","learned":{}}]}""")]
     [InlineData("""{"version":0,"declaration":[]}""")]
     [InlineData("""{"version":"2","declaration":[]}""")]
     [InlineData("""{"version":1.5,"declaration":[]}""")]
@@ -203,14 +213,16 @@ public class ProjectionTests
         Assert.Contains("## `scale.by`", catalog.VerbReference(), StringComparison.Ordinal);
         Assert.Contains(ScaleByStep.Purpose, catalog.VerbReference(), StringComparison.Ordinal);
 
-        // A catalog whose verbs all mean what they meant in the first version holds no file to an earlier one.
+        // A catalog whose verbs all mean what they meant in the first version holds no file to an earlier one for its
+        // verbs: the one rule left is that what a run left out is written from the fourth version on.
         var first = new StepCatalog();
         first.Register<ScaleByStep>();
 
         using var firstSchema = JsonDocument.Parse(first.JsonSchema());
 
-        Assert.False(firstSchema.RootElement.TryGetProperty("allOf", out _));
-        Assert.True(schema.RootElement.TryGetProperty("allOf", out _));
+        Assert.Equal(1, firstSchema.RootElement.GetProperty("allOf").GetArrayLength());
+        Assert.Contains("skipped", firstSchema.RootElement.GetProperty("allOf")[0].GetRawText(), StringComparison.Ordinal);
+        Assert.True(schema.RootElement.GetProperty("allOf").GetArrayLength() > 1);
     }
 
     [Fact]

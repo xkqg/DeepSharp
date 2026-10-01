@@ -46,7 +46,7 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
         var current = parameter.Read(step);
         var names = scope.Of(parameter.Accepts);
 
-        return [names.Count == 0 ? Text(parameter, current) : Pick(parameter.Key, parameter.Key, parameter.Description, current, names)];
+        return [names.Count == 0 ? Text(parameter, current) : Field.Of(parameter).Pick(current, names)];
     }
 
     public IEnumerable<PropertyField> Visit(NewColumnParameter parameter) => [Text(parameter, parameter.Read(step))];
@@ -64,7 +64,7 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
         if (parameter.Repeatable)
         {
             return current.Select((name, place) =>
-                Pick(FormVocabulary.Place(parameter.Key, place), $"{parameter.Key} {place + 1}", parameter.Description, name, names));
+                new Field(FormVocabulary.Place(parameter.Key, place), $"{parameter.Key} {place + 1}", parameter.Description).Pick(name, names));
         }
 
         return names.Concat(current.Except(names, StringComparer.Ordinal)).Select(name => new PropertyField(
@@ -85,7 +85,7 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
 
     public IEnumerable<PropertyField> Visit<TEnum>(OneOfParameter<TEnum> parameter)
         where TEnum : struct, Enum =>
-        [Choose(parameter.Key, parameter.Key, parameter.Description, step.GetProperty(parameter.Key).GetString(), parameter.Choices)];
+        [Field.Of(parameter).Choose(step.GetProperty(parameter.Key).GetString(), parameter.Choices)];
 
     public IEnumerable<PropertyField> Visit<TEnum>(SeveralOfParameter<TEnum> parameter)
         where TEnum : struct, Enum =>
@@ -98,7 +98,7 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
     public IEnumerable<PropertyField> Visit(FillStrategyParameter parameter)
     {
         var strategy = parameter.Read(step);
-        var name = Choose(parameter.Key, parameter.Key, parameter.Description, strategy.Name, parameter.Allowed);
+        var name = Field.Of(parameter).Choose(strategy.Name, parameter.Allowed);
 
         return strategy.Value is null
             ? [name]
@@ -133,9 +133,8 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
         {
             var taken = taking.GetValueOrDefault(name);
 
-            fields.Add(Choose(
-                FormVocabulary.Kind(parameter.Key, name), name, parameter.Kind.Description, taken?.Kind ?? FormVocabulary.NotTaken,
-                [FormVocabulary.NotTaken, .. parameter.Kind.Choices]));
+            fields.Add(new Field(FormVocabulary.Kind(parameter.Key, name), name, parameter.Kind.Description).Choose(
+                taken?.Kind ?? FormVocabulary.NotTaken, [FormVocabulary.NotTaken, .. parameter.Kind.Choices]));
 
             if (taken is not null)
             {
@@ -170,15 +169,26 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
     private static PropertyField Text(StepParameter parameter, string? value) =>
         new(parameter.Key, parameter.Key, PropertyFieldType.Text, value, parameter.Description);
 
-    // A pick among columns: the current one is always among them, so the field shows what the step holds.
-    private static PropertyField Pick(string name, string label, string description, string current, IReadOnlyList<string> columns) =>
-        Choose(name, label, description, current, columns.Contains(current, StringComparer.Ordinal) ? columns : [.. columns, current]);
-
-    private static PropertyField Choose(string name, string label, string description, string? current, IReadOnlyList<string> choices) =>
-        new(name, label, PropertyFieldType.Select, current, description, Options(choices));
-
     private static IReadOnlyList<PropertyFieldOption> Options(IEnumerable<string> choices) =>
         [.. choices.Select(choice => new PropertyFieldOption(choice, choice))];
+
+    /// <summary>One field of the form: the name a change to it comes back under, the label it shows, and what it means.</summary>
+    /// <param name="Name">The name a change to it comes back under.</param>
+    /// <param name="Label">The label it shows.</param>
+    /// <param name="Description">What it means.</param>
+    private readonly record struct Field(string Name, string Label, string Description)
+    {
+        /// <summary>The field of a parameter: named and labelled by its key.</summary>
+        public static Field Of(StepParameter parameter) => new(parameter.Key, parameter.Key, parameter.Description);
+
+        /// <summary>The field as a pick among some choices, at the one it holds.</summary>
+        public PropertyField Choose(string? current, IReadOnlyList<string> choices) =>
+            new(Name, Label, PropertyFieldType.Select, current, Description, Options(choices));
+
+        /// <summary>The field as a pick among columns: the current one is always among them, so the field shows what the step holds.</summary>
+        public PropertyField Pick(string current, IReadOnlyList<string> columns) =>
+            Choose(current, columns.Contains(current, StringComparer.Ordinal) ? columns : [.. columns, current]);
+    }
 
     /// <summary>One column a schema takes, as the step wrote it and as the schema reads it.</summary>
     /// <param name="Kind">The kind, as written.</param>

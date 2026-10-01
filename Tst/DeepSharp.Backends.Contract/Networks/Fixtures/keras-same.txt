@@ -1,0 +1,19 @@
+keras 3.15.1 on torch 2.10.0+cpu, numpy 2.5.3, Python 3.14.7
+0.weight         <- sequential/conv2d/kernel                 [4, 3, 2, 4]
+0.bias           <- sequential/conv2d/bias                   [4]
+1.weight         <- sequential/batch_normalization/gamma     [4]
+1.bias           <- sequential/batch_normalization/beta      [4]
+1.running_mean   <- sequential/batch_normalization/moving_mean [4]
+1.running_var    <- sequential/batch_normalization/moving_variance [4]
+3.weight         <- sequential/conv2d_1/kernel               [2, 2, 4, 3]
+3.bias           <- sequential/conv2d_1/bias                 [3]
+5.weight         <- sequential/dense/kernel                  [48, 5]
+5.bias           <- sequential/dense/bias                    [5]
+6.weight         <- sequential/layer_normalization/gamma     [5]
+6.bias           <- sequential/layer_normalization/beta      [5]
+8.weight         <- sequential/dense_1/kernel                [5, 1]
+8.bias           <- sequential/dense_1/bias                  [1]
+logits       0.72920465 -0.36922812 -0.47682846 0.01434722 0.89007401 -0.01925383
+predictions  0.67463070 0.40872756 0.38300130 0.50358677 0.70890546 0.49518669
+moved mean   -0.03387913 0.00642997 -0.01010747 0.16421089
+moved var    0.05850389 0.04992956 0.05541119 0.08315109

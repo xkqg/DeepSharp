@@ -215,85 +215,19 @@ public sealed class EvidenceDrawingTests : IDisposable
 
     private static PartPredictions Predicted(Batch batch, Func<double[], double[]> model) => new(batch, [.. batch.Features.Select(model)]);
 
-    private static string Invariant(double value) => value.ToString("G6", CultureInfo.InvariantCulture);
-
     [Fact]
-    public void AModelsMeasuresAskedForAsNumbers_AreWrittenEachBesideTheTrainingRowsAverage()
+    public void AModelsMeasures_AreDrawnAsTheChartsPackageRendersTheReport_TheOneRenderingACellShowsToo()
     {
-        var measures = Guessed(Shown.Numbers);
-        var written = measures.Accept(new EvidenceView()).Content;
-        var validation = measures.Parts[0];
-        var confusion = Assert.Single(validation.Confusions);
-
-        Assert.Contains("Measures of survived", written, StringComparison.Ordinal);
-        Assert.Contains("<th>accuracy</th><th>baseline</th><th>rmse</th><th>baseline</th>", written, StringComparison.Ordinal);
-        Assert.Contains(
-            $"<td>validation</td><td class=\"deepsharp-number\">133</td><td class=\"deepsharp-number\">{Invariant(validation.Values[0].Value)}</td>"
-            + $"<td class=\"deepsharp-number\">{Invariant(validation.Values[0].Baseline)}</td>",
-            written,
-            StringComparison.Ordinal);
-        Assert.Contains("<td>test</td>", written, StringComparison.Ordinal);
-        Assert.Contains("<div>validation: survived</div>", written, StringComparison.Ordinal);
-        Assert.Contains(
-            string.Create(CultureInfo.InvariantCulture, $">{confusion.Counts[1][0]} ({confusion.Baseline[1][0]})<"),
-            written,
-            StringComparison.Ordinal);
-        Assert.DoesNotContain("<svg", written, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void AModelsMeasuresAskedForDrawn_AreTheChartsPackagesCharts_AndAskedForBoth_AreBoth()
-    {
-        // Every measure as bars, the confusion matrices as heatmaps, and — rmse being an amount — what was predicted
-        // against what was there, and what was left over: the charts DeepSharp.Charts draws, wherever they are shown.
-        var measures = Guessed(Shown.Drawn);
-        var drawn = measures.Accept(new EvidenceView()).Content;
-        var charts = measures.Bars() + measures.ConfusionMatrices() + measures.PredictedAgainstActual() + measures.Residuals();
-
-        Assert.Contains(charts, drawn, StringComparison.Ordinal);
-        Assert.DoesNotContain("<table>", drawn, StringComparison.Ordinal);
-
-        var both = Guessed(Shown.Numbers, Shown.Drawn).Accept(new EvidenceView()).Content;
-
-        Assert.Contains("<th>accuracy</th><th>baseline</th>", both, StringComparison.Ordinal);
-        Assert.Contains(charts, both, StringComparison.Ordinal);
-
-        // A report of the confusion matrix alone has no number for bars, and no amount to draw against its answers.
-        var matrices = Guessed(Shown.Drawn, only: Metric.ConfusionMatrix);
-
-        Assert.Equal(matrices.ConfusionMatrices().TrimEnd(), Assert.Single(Svgs(matrices.Accept(new EvidenceView()).Content)));
-    }
-
-    // Every SVG a piece of output holds, in order.
-    private static IEnumerable<string> Svgs(string html)
-    {
-        for (var at = html.IndexOf("<svg", StringComparison.Ordinal); at >= 0; at = html.IndexOf("<svg", at + 1, StringComparison.Ordinal))
+        // The notebook renders no report of its own: numbers, drawings or both, it shows what DeepSharp.Charts renders, so
+        // the report under a block and the one a C# cell ends with are one and the same.
+        foreach (var measures in new[] { Guessed(Shown.Numbers), Guessed(Shown.Drawn), Guessed(Shown.Numbers, Shown.Drawn) })
         {
-            var end = html.IndexOf("</svg>", at, StringComparison.Ordinal) + "</svg>".Length;
+            var drawn = measures.Accept(new EvidenceView());
 
-            yield return html[at..end];
+            Assert.Equal("text/html", drawn.MimeType);
+            Assert.Equal(measures.Report().ToHtml(), drawn.Content);
         }
-    }
 
-    [Fact]
-    public void LabelsOfWhichARowHoldsOne_AreCountedInOneMatrixAcrossThem()
-    {
-        var prepared = Pdd.Create()
-            .Read(new InMemoryRowSource(["t", "a", "b"], [.. Enumerable.Range(1, 8).Select(t => (IReadOnlyList<string?>)[$"{t}", t % 2 == 0 ? "1" : "0", t % 2 == 0 ? "0" : "1"])]), "eight rows")
-            .Declare(schema => schema.Integer("t", "a", "b"))
-            .SplitByTime("t", 0.50)
-            .Labels(["a", "b"], ones: 1)
-            .Report(report => report.Measure(Metric.ConfusionMatrix).On(Part.Test).As(Shown.Numbers))
-            .Build()
-            .Run();
-
-        // Every test row predicted b; the training rows hold a and b alike, so their average predicts a, the first of equals.
-        var measures = prepared.Measure([Predicted(prepared.Batch(Part.Test), _ => [0.3, 0.7])]);
-        var written = measures.Accept(new EvidenceView()).Content;
-
-        Assert.Contains("<div>test</div>", written, StringComparison.Ordinal);
-        Assert.Contains("<th>a</th><th>b</th>", written, StringComparison.Ordinal);
-        Assert.Contains("<tr><th>b</th><td class=\"deepsharp-number\">0 (2)</td><td class=\"deepsharp-number\">2 (0)</td></tr>", written, StringComparison.Ordinal);
         Assert.Throws<ArgumentNullException>(() => new EvidenceView().Visit((Measures)null!));
     }
 

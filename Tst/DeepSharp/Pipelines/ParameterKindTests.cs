@@ -40,7 +40,7 @@ public class ParameterKindTests
     {
         // The keys inside a way of filling, the share worked out from the others, and the key a step's verb is
         // written under: each is said once, publicly, so a form or an editor never types it again.
-        var with = new FillStrategyParameter("with", "How a gap is filled.", With.Constant(1), ["constant", "mean"], "filling a gap");
+        var with = new FillStrategyParameter("with", "How a gap is filled.", With.Constant(1), ["constant", "mean"]) { What = "filling a gap" };
         var strategy = Step(Written(with, With.Constant(2.5))).GetProperty("with");
 
         Assert.Equal("constant", strategy.GetProperty(FillStrategyParameter.KindKey).GetString());
@@ -72,17 +72,19 @@ public class ParameterKindTests
     [Fact]
     public void ANumberWithABound_RefusesTheBoundItself()
     {
-        var number = new NumberParameter("at", "How far out.", 1.5, above: 0);
+        var number = new NumberParameter("at", "How far out.", 1.5) { Above = 0 };
 
         var refused = Assert.Throws<ArgumentOutOfRangeException>(() => number.Require(0));
 
         Assert.Contains("a number above 0", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(0, number.Above);
+        Assert.Null(number.AtLeast);
     }
 
     [Fact]
     public void ANumberWithALeastValue_TakesItAndRefusesWhatLiesBelow()
     {
-        var number = new NumberParameter("at", "How far out.", 1.5, atLeast: 0);
+        var number = new NumberParameter("at", "How far out.", 1.5) { AtLeast = 0 };
 
         Assert.Equal(0, number.Require(0));
         Assert.Equal(0, number.AtLeast);
@@ -119,11 +121,14 @@ public class ParameterKindTests
     {
         // A column a step can do without — what a distribution's shares are shares of — is left out of a file as
         // nothing at all: no name, which no column can have, so it never stands for one.
-        var scale = new ColumnParameter("scaleBy", "What the shares are shares of.", "count", ColumnKinds.Numbers, optional: true);
+        var scale = new ColumnParameter("scaleBy", "What the shares are shares of.", ColumnKinds.Numbers);
         var column = new ColumnParameter("column", "What it reads.", "column", ColumnKinds.Any);
 
         Assert.True(scale.Optional);
         Assert.False(column.Optional);
+        Assert.Equal(string.Empty, scale.Example);
+        Assert.Equal("column", column.Example);
+        Assert.Equal(ColumnKinds.Numbers, scale.Accepts);
         Assert.Empty(scale.RequiredKeys);
         Assert.Equal(["column"], column.RequiredKeys);
         Assert.Equal(string.Empty, scale.Read(Step("""{"step":"x"}""")));
@@ -132,6 +137,29 @@ public class ParameterKindTests
         Assert.Equal("""{"scaleBy":"birds"}""", Written(scale, "birds"));
         Assert.Equal(string.Empty, scale.Require(" "));
         Assert.Throws<ArgumentException>(() => column.Require(" "));
+    }
+
+    [Fact]
+    public void AnOptionalTextLeftOut_SaysNothing_NeitherRequiredNorWritten()
+    {
+        // Words a step can do without — which sheet of a workbook, when the first will do — are left out of a file as
+        // nothing, and a new block starts without them; words a step needs are still refused when they are only spaces.
+        var sheet = new TextParameter("sheet", "Which sheet.", "Sheet1", optional: true);
+        var description = new TextParameter("description", "What it is.", "rows");
+
+        Assert.True(sheet.Optional);
+        Assert.False(description.Optional);
+        Assert.Empty(sheet.RequiredKeys);
+        Assert.Equal(["description"], description.RequiredKeys);
+        Assert.Equal(string.Empty, sheet.Example);
+        Assert.Equal(string.Empty, sheet.Read(Step("""{"step":"x"}""")));
+        Assert.Equal("pets", sheet.Read(Step("""{"step":"x","sheet":"pets"}""")));
+        Assert.Equal("{}", Written(sheet, string.Empty));
+        Assert.Equal("""{"sheet":"pets"}""", Written(sheet, "pets"));
+        Assert.Equal(string.Empty, sheet.Require(" "));
+        Assert.Equal("pets", sheet.Require("pets"));
+        Assert.Throws<ArgumentException>(() => description.Require(" "));
+        Assert.Throws<ArgumentNullException>(() => sheet.Write(null!, "pets"));
     }
 
     [Fact]
@@ -208,11 +236,76 @@ public class ParameterKindTests
     public void AListWhosePlacesAreRoles_MayNameOneColumnInMoreThanOne()
     {
         // An indicator's columns are its high, its low and its close: rows with one price have it as all three.
-        var roles = new ColumnsParameter("columns", "Roles.", ["high", "low", "close"], ColumnKinds.Numbers, repeatable: true);
+        var roles = new ColumnsParameter("columns", "Roles.", ["high", "low", "close"], ColumnKinds.Numbers) { Repeatable = true };
 
         Assert.True(roles.Repeatable);
+        Assert.False(roles.Optional);
         Assert.Equal(["close", "close", "close"], roles.Require(["close", "close", "close"]));
         Assert.False(new ColumnsParameter("columns", "Which.", ["a"], ColumnKinds.Any).Repeatable);
+    }
+
+    [Fact]
+    public void AListThatMayNameNone_IsLeftOutOfAFileWhenItNamesNone()
+    {
+        // Which columns to profile, when every column will do: none named is the key left out, and a file that leaves it
+        // out names none.
+        var columns = new ColumnsParameter("columns", "Which columns.", ["column"], ColumnKinds.Any) { Optional = true };
+
+        Assert.True(columns.Optional);
+        Assert.False(columns.Repeatable);
+        Assert.Empty(columns.RequiredKeys);
+        Assert.Empty(columns.Read(Step("""{"step":"x"}""")));
+        Assert.Empty(columns.Require([]));
+        Assert.Equal("{}", Written(columns, []));
+        Assert.Equal(["column"], columns.Example);
+        Assert.Throws<ArgumentException>(() => new ColumnsParameter("columns", "Which columns.", ["column"], ColumnKinds.Any).Require([]));
+    }
+
+    [Fact]
+    public void AWholeNumberWithALeastValueAndOneAFileMayLeaveOut_HoldsToBoth()
+    {
+        // How many moments a split keeps apart: none unless said, which is never written, and never fewer than none.
+        var gap = new WholeNumberParameter("gap", "How many are kept apart.", 0) { AtLeast = 0, LeftOut = 0 };
+
+        Assert.Equal(0, gap.AtLeast);
+        Assert.Equal(0, gap.LeftOut);
+        Assert.Empty(gap.RequiredKeys);
+        Assert.Equal(0, gap.Read(Step("""{"step":"x"}""")));
+        Assert.Equal("{}", Written(gap, 0));
+        Assert.Equal("""{"gap":2}""", Written(gap, 2));
+        Assert.Contains("at least 0", Assert.Throws<ArgumentOutOfRangeException>(() => gap.Require(-1)).Message, StringComparison.Ordinal);
+        Assert.Equal(["seed"], new WholeNumberParameter("seed", "The seed.", 1).RequiredKeys);
+    }
+
+    [Fact]
+    public void TheLongFormsAnEarlierReleasePublished_MakeTheParametersTheShortFormsMake()
+    {
+        // 0.4.0 published these constructors with five and six parameters, and code written against it still calls them.
+        // They are kept, obsolete in favour of the shorter forms above, and this is the one place that calls them: to
+        // hold each to making the very parameter its shorter form makes.
+#pragma warning disable CS0618
+        var column = new ColumnParameter("scaleBy", "What the shares are shares of.", "count", ColumnKinds.Numbers, optional: true);
+        var needed = new ColumnParameter("column", "What it reads.", "column", ColumnKinds.Any, optional: false);
+        var columns = new ColumnsParameter("columns", "Roles.", ["close"], ColumnKinds.Numbers, optional: true, repeatable: true);
+        var number = new NumberParameter("at", "How far out.", 1.5, above: 0, atLeast: 1);
+        var whole = new WholeNumberParameter("gap", "How many.", 0, atLeast: 0, leftOut: 0);
+        var with = new FillStrategyParameter("with", "What goes in.", With.Mean, ["mean", "zero"], "filling a gap");
+#pragma warning restore CS0618
+
+        Assert.True(column.Optional);
+        Assert.Equal(string.Empty, column.Example);
+        Assert.Equal(ColumnKinds.Numbers, column.Accepts);
+        Assert.False(needed.Optional);
+        Assert.Equal("column", needed.Example);
+        Assert.True(columns.Optional);
+        Assert.True(columns.Repeatable);
+        Assert.Equal(0, number.Above);
+        Assert.Equal(1, number.AtLeast);
+        Assert.Equal(0, whole.AtLeast);
+        Assert.Equal(0, whole.LeftOut);
+        Assert.Equal("filling a gap", with.What);
+        Assert.Equal(["mean", "zero"], with.Allowed);
+        Assert.Contains("is not a way of filling a gap", Assert.Throws<ArgumentException>(() => with.Require(With.Median)).Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -256,10 +349,12 @@ public class ParameterKindTests
     [Fact]
     public void AFillStrategySaysWhichNamesItAllows()
     {
-        var with = new FillStrategyParameter("with", "What goes in.", With.Mean, ["mean", "zero"], "filling a gap");
+        var with = new FillStrategyParameter("with", "What goes in.", With.Mean, ["mean", "zero"]) { What = "filling a gap" };
 
         Assert.Equal(["mean", "zero"], with.Allowed);
-        Assert.Throws<ArgumentException>(() => with.Require(With.Median));
+        Assert.Equal("filling a gap", with.What);
+        Assert.Contains("'median' is not a way of filling a gap", Assert.Throws<ArgumentException>(() => with.Require(With.Median)).Message, StringComparison.Ordinal);
+        Assert.Contains("Filling a gap needs a strategy", Assert.Throws<ArgumentException>(() => with.Require(default)).Message, StringComparison.Ordinal);
         Assert.Equal("""{"with":{"kind":"constant","value":-1}}""", Written(with, With.Constant(-1)));
     }
 
@@ -369,7 +464,7 @@ public class ParameterKindTests
             new ShareParameter("share", "A share."),
             new OneOfParameter<Scale>("scale", "A scale.", Scale.Standard),
             new SeveralOfParameter<TimePart>("parts", "Parts.", [TimePart.Month]),
-            new FillStrategyParameter("with", "A strategy.", With.Mean, ["mean"], "filling a gap"),
+            new FillStrategyParameter("with", "A strategy.", With.Mean, ["mean"]) { What = "filling a gap" },
             new SplitSharesParameter(),
             new ColumnDeclarationsParameter("columns", "Declared columns.", [new ColumnDeclaration("x", ColumnKind.Text, false)]),
         ];

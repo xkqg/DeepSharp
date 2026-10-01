@@ -2,7 +2,6 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Text.Json;
-using System.Text.Json.Nodes;
 using DeepSharp.Pipelines;
 using Verso.Abstractions;
 
@@ -100,55 +99,22 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
 
         var session = RequiredSession;
 
-        return session.OneAtATimeAsync(context.CancellationToken, turn => Task.FromResult(Changed(session, turn, cell, propertyName, value, context.Variables)));
-    }
-
-    // Makes the change on a block that stands; says whether the field was one of the step's.
-    private static bool Changed(NotebookSession session, NotebookTurn turn, CellModel cell, string field, object? value, IVariableStore variables)
-    {
-        var catalog = NotebookVerbs.Catalog();
-
-        if (!session.Stands(cell.Id) || catalog.TryReadStep(cell.Source) is not { } step)
-        {
-            return false;
-        }
-
-        try
-        {
-            if (Edited(step, field, FieldValue.Of(value), ScopeOf(session, cell.Id), catalog) is not { } edited)
-            {
-                return false;
-            }
-
-            session.Accepted(cell.Id);
-
-            if (!edited.Equals(step))
-            {
-                Write(session, turn, variables, cell, edited, catalog);
-            }
-        }
-        catch (FormatException refused)
-        {
-            session.Refused(cell.Id, cell.Source, refused.Message);
-        }
-
-        return true;
+        return session.OneAtATimeAsync(
+            context.CancellationToken, turn => Task.FromResult(new PropertyChange(session, turn, cell, context.Variables).Made(propertyName, value)));
     }
 
     // The step as the field changes it, read back through the catalog; nothing when the field is none of the step's.
-    internal static IPipelineStep? Edited(IPipelineStep step, string field, FieldValue value, FormScope scope, StepCatalog catalog)
+    internal static IPipelineStep? Edited(FormEdit edit, StepCatalog catalog)
     {
-        var json = JsonNode.Parse(step.AsBlockText())!.AsObject();
+        var step = edit.Read;
 
-        if (field == StepCatalog.StepKey)
+        if (edit.Field == StepCatalog.StepKey)
         {
-            return Switched(step, value.Text, catalog);
+            return Switched(step, edit.Value.Text, catalog);
         }
 
-        var edit = new FormEdit(field, value, json, scope, step);
-
         return catalog.Describe(step.Verb).Parameters.Any(parameter => parameter.Accept(edit))
-            ? catalog.ReadStep(json.ToJsonString())
+            ? catalog.ReadStep(edit.Json.ToJsonString())
             : null;
     }
 
@@ -169,38 +135,6 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
         return catalog.Make(verb, [], step);
     }
 
-    // Writes the step, and clears what was worked out from the block as it was: its own card, and every view shown
-    // that the change made stale. No gesture saw the change, so it goes through the rule every such change does, which
-    // takes back what was handed to C# cells. The edit is the person's and stands whatever else happens; what it made
-    // stale elsewhere is caught up with as one write for the change's turn, each view cleared before it is forgotten.
-    private static void Write(NotebookSession session, NotebookTurn turn, IVariableStore variables, CellModel cell, IPipelineStep edited, StepCatalog catalog)
-    {
-        cell.Source = edited.AsBlockText();
-        cell.Outputs.Clear();
-        session.Hidden(cell.Id);
-
-        session.LetThrough(turn, () =>
-        {
-            if (session.Assembled is { } before)
-            {
-                // A view of a block deleted since, or of a cell turned into another kind, is forgotten with the rest, and
-                // nothing of such a cell's is cleared.
-                var now = NotebookPipeline.Of(before.Cells);
-
-                foreach (var stale in session.StaleIn(now, except: null))
-                {
-                    before.Cells.First(each => each.Id == stale).Outputs.Clear();
-                }
-
-                session.CaughtUp(now, variables, except: null);
-            }
-            else
-            {
-                NotebookSession.Withdraw(variables);
-            }
-        });
-    }
-
     // What the form knows around a block: the columns before it, when the last gesture assembled it into the
     // pipeline, and the columns the source has, when its rows were read.
     private static FormScope ScopeOf(NotebookSession? session, Guid cell)
@@ -213,7 +147,7 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
         var position = assembled.PositionOf(cell);
         var declaration = assembled.Readable;
         var columns = position >= 0 && position < declaration.Steps.Count ? declaration.ColumnsBefore(position).Columns : null;
-        var source = declaration.Steps.Count > 0 && declaration.Steps[0] is ReadCsvStep read ? session.Sources.KeptFor(read)?.Rows.ColumnNames : null;
+        var source = session.Sources.KeptFor(declaration)?.Rows.ColumnNames;
 
         return new FormScope(columns, source);
     }
@@ -226,4 +160,82 @@ public sealed class StepForm : NotebookExtension, ICellPropertyProvider
         catalog.Descriptions
             .Where(description => catalog.ReadStep(description.Template).ActingCapability() == step.ActingCapability())
             .Select(description => description.Verb);
+
+    /// <summary>A change made in one block's panel, in its turn on the notebook.</summary>
+    /// <param name="Session">The notebook's session.</param>
+    /// <param name="Turn">The change's turn: what it writes beyond the block is let through for it.</param>
+    /// <param name="Cell">The block.</param>
+    /// <param name="Variables">The values the notebook's cells share, from which what was handed to C# cells is taken back.</param>
+    private readonly record struct PropertyChange(NotebookSession Session, NotebookTurn Turn, CellModel Cell, IVariableStore Variables)
+    {
+        /// <summary>Makes the change on a block that stands.</summary>
+        /// <param name="field">The field that changed.</param>
+        /// <param name="value">What it was set to.</param>
+        /// <returns>Whether the field was one of the step's.</returns>
+        public bool Made(string field, object? value)
+        {
+            var catalog = NotebookVerbs.Catalog();
+
+            if (!Session.Stands(Cell.Id) || catalog.TryReadStep(Cell.Source) is not { } step)
+            {
+                return false;
+            }
+
+            try
+            {
+                if (Edited(new FormEdit(field, FieldValue.Of(value), ScopeOf(Session, Cell.Id), step), catalog) is not { } edited)
+                {
+                    return false;
+                }
+
+                Session.Accepted(Cell.Id);
+
+                if (!edited.Equals(step))
+                {
+                    Write(edited);
+                }
+            }
+            catch (FormatException refused)
+            {
+                Session.Refused(Cell.Id, Cell.Source, refused.Message);
+            }
+
+            return true;
+        }
+
+        // Writes the step, and clears what was worked out from the block as it was: its own card, and every view shown
+        // that the change made stale. No gesture saw the change, so it goes through the rule every such change does, which
+        // takes back what was handed to C# cells. The edit is the person's and stands whatever else happens; what it made
+        // stale elsewhere is caught up with as one write for the change's turn, each view cleared before it is forgotten.
+        private void Write(IPipelineStep edited)
+        {
+            var session = Session;
+            var variables = Variables;
+
+            Cell.Source = edited.AsBlockText();
+            Cell.Outputs.Clear();
+            session.Hidden(Cell.Id);
+
+            session.LetThrough(Turn, () =>
+            {
+                if (session.Assembled is { } before)
+                {
+                    // A view of a block deleted since, or of a cell turned into another kind, is forgotten with the rest, and
+                    // nothing of such a cell's is cleared.
+                    var now = NotebookPipeline.Of(before.Cells);
+
+                    foreach (var stale in session.StaleIn(now, except: null))
+                    {
+                        before.Cells.First(each => each.Id == stale).Outputs.Clear();
+                    }
+
+                    session.CaughtUp(now, variables, except: null);
+                }
+                else
+                {
+                    NotebookSession.Withdraw(variables);
+                }
+            });
+        }
+    }
 }

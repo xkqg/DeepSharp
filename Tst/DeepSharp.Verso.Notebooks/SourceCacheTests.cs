@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Reflection;
+using System.Security.Cryptography;
 using DeepSharp.Verso.Notebooks;
 using DeepSharp.Pipelines;
 
@@ -21,6 +22,26 @@ public sealed class SourceCacheTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
     private static PipelineDeclaration Reading(string path) => new([new ReadCsvStep(path)]);
+
+    // The reader a first block names for a file, by what the file is.
+    private static IPipelineStep ReaderOf(string path) => Path.GetExtension(path) switch
+    {
+        ".parquet" => new ReadParquetStep(path),
+        ".xlsx" => new ReadExcelStep(path),
+        ".json" => new ReadJsonStep(path),
+        _ => new ReadCsvStep(path),
+    };
+
+    public static TheoryData<string> ThePassengerListInEveryOtherFormat() => new() { "titanic.parquet", "titanic.xlsx", "titanic.json" };
+
+    // A copy of one of the files the readers' tests read, in this test's own folder.
+    private string Copied(string file)
+    {
+        var path = Path.Join(_folder, file);
+        File.Copy(file == "titanic.csv" ? Repository.Data(file) : Repository.Fixture(file), path);
+
+        return path;
+    }
 
     private string Written(string name, string text)
     {
@@ -57,7 +78,7 @@ public sealed class SourceCacheTests : IDisposable
         var second = cache.RowsFor(Reading(path), SourceFolder.WorkingDirectory);
 
         Assert.Same(first.Proposal, second.Proposal);
-        Assert.Same(first.Proposal, cache.KeptFor(new ReadCsvStep(path))!.Value.Proposal);
+        Assert.Same(first.Proposal, cache.KeptFor(Reading(path))!.Value.Proposal);
         Assert.Equal(ColumnKind.Integer, first.Proposal["a"].Kind);
 
         File.WriteAllText(path, "a,b\nx,1\n");
@@ -138,19 +159,115 @@ public sealed class SourceCacheTests : IDisposable
     }
 
     [Fact]
-    public void APipelineWhoseRowsAreNotInAFile_IsRefused_ForANotebookHandsNoRowsIn()
+    public void APipelineWhoseRowsAreNotInAFile_IsRefused_NamingEveryFileANotebookReads()
     {
         // Rows handed in, or a declaration with nothing to read: a notebook hands no rows in, so there is nothing to
-        // open, and it says what would be — not the advice meant for code, which can hand rows in.
+        // open, and it says what would be — every verb of its own that reads a file, as its catalog knows them — not the
+        // advice meant for code, which can hand rows in.
         var cache = new SourceCache();
+        var catalog = NotebookVerbs.Catalog();
+        string[] files = [.. catalog.Descriptions.Where(each => catalog.ReadStep(each.Template) is IReadsAFile).Select(each => each.Verb)];
 
         var handed = Assert.Throws<InvalidOperationException>(
             () => cache.RowsFor(new PipelineDeclaration([new ReadRowsStep("handed in")]), SourceFolder.WorkingDirectory));
         var none = Assert.Throws<InvalidOperationException>(() => cache.RowsFor(new PipelineDeclaration([]), SourceFolder.WorkingDirectory));
 
+        Assert.Equal(["read.csv", "read.excel", "read.json", "read.parquet"], files);
         Assert.Equal(handed.Message, none.Message);
-        Assert.Contains($"'{ReadCsvStep.Name}'", handed.Message, StringComparison.Ordinal);
+        Assert.All(files, verb => Assert.Contains($"'{verb}'", handed.Message, StringComparison.Ordinal));
+        Assert.Equal(
+            "A notebook reads its rows from a file, with 'read.csv', 'read.excel', 'read.json' or 'read.parquet' as its first block, "
+            + "and hands none in; these blocks read no file, so there are no rows to show.",
+            handed.Message);
         Assert.Equal(0, cache.Parsed);
+    }
+
+    [Theory]
+    [MemberData(nameof(ThePassengerListInEveryOtherFormat))]
+    public void ThePassengerListInEachFormat_IsParsedOnceFromTheBytesItsFingerprintNames(string file)
+    {
+        // A fresh step each time, as every gesture reads the blocks afresh: a step is known by what it says, never by which
+        // object says it.
+        var path = Copied(file);
+        var cache = new SourceCache();
+
+        var first = cache.RowsFor(new PipelineDeclaration([ReaderOf(path)]), SourceFolder.WorkingDirectory);
+        var second = cache.RowsFor(new PipelineDeclaration([ReaderOf(path)]), SourceFolder.WorkingDirectory);
+
+        Assert.Equal(1, cache.Parsed);
+        Assert.Same(first.Rows, second.Rows);
+        Assert.Equal(15, first.Rows.ColumnNames.Count);
+        Assert.Equal(891, first.Rows.Rows.Count());
+        Assert.Equal(Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))).ToLowerInvariant(), first.Fingerprint);
+        Assert.Equal(first.Fingerprint, second.Fingerprint);
+    }
+
+    [Fact]
+    public void AWorkbookReadAtANamedSheet_IsAnotherEntry_OverTheSameBytes()
+    {
+        // The first sheet and the sheet named as the first are one sheet, read by two steps that say different things.
+        var path = Copied("titanic.xlsx");
+        var cache = new SourceCache();
+
+        var first = cache.RowsFor(new PipelineDeclaration([new ReadExcelStep(path)]), SourceFolder.WorkingDirectory);
+        var named = cache.RowsFor(new PipelineDeclaration([new ReadExcelStep(path, "titanic")]), SourceFolder.WorkingDirectory);
+
+        Assert.Equal(2, cache.Parsed);
+        Assert.Equal(first.Fingerprint, named.Fingerprint);
+        Assert.Equal(first.Rows.Rows, named.Rows.Rows);
+    }
+
+    [Fact]
+    public void AParquetFilesRows_ProposeWhatTheFileStates_WhereItsCommaSeparatedFileProposesWhatItsCellsLookLike()
+    {
+        // The Parquet file holds the ages as the words the comma-separated file spells them in, and says so; what a file
+        // states outranks cells that read as numbers.
+        var parquet = new SourceCache().RowsFor(new PipelineDeclaration([ReaderOf(Copied("titanic.parquet"))]), SourceFolder.WorkingDirectory);
+        var csv = new SourceCache().RowsFor(Reading(Copied("titanic.csv")), SourceFolder.WorkingDirectory);
+
+        Assert.Equal(ColumnKind.Text, parquet.Proposal["age"].Stated);
+        Assert.Equal(ColumnKind.Text, parquet.Proposal["age"].Kind);
+        Assert.Equal(ColumnKind.Integer, parquet.Proposal["survived"].Stated);
+        Assert.Null(csv.Proposal["age"].Stated);
+        Assert.Equal(ColumnKind.Number, csv.Proposal["age"].Kind);
+    }
+
+    [Theory]
+    [MemberData(nameof(ThePassengerListInEveryOtherFormat))]
+    public void WhatIsKnownOfTheBytes_IsTheirFingerprint_WhateverFileTheFirstBlockReads(string file)
+    {
+        // What an export compares a fit's bytes with, read and hashed as the rows were, whatever the file is.
+        var path = Copied(file);
+        var declaration = new PipelineDeclaration([ReaderOf(path)]);
+        var read = new SourceCache().RowsFor(declaration, SourceFolder.WorkingDirectory);
+
+        Assert.Equal(SourceBytes.Of(read.Fingerprint), SourceCache.BytesOf(declaration, SourceFolder.WorkingDirectory));
+        Assert.Equal(
+            SourceBytes.Unreadable,
+            SourceCache.BytesOf(new PipelineDeclaration([ReaderOf(Path.Join(_folder, "gone" + Path.GetExtension(file)))]), SourceFolder.WorkingDirectory));
+    }
+
+    [Fact]
+    public void TheRowsKeptForTheBlocks_AreFoundByTheBlockThatReadsTheFile()
+    {
+        // What a gesture knows of the source: the rows this session read last, found by the block that reads the file,
+        // whatever stands below it — and nothing for another reader of the same path, for rows handed in, or for none.
+        var path = Copied("titanic.parquet");
+        var cache = new SourceCache();
+
+        Assert.Null(cache.KeptFor(new PipelineDeclaration([ReaderOf(path)])));
+
+        var read = cache.RowsFor(new PipelineDeclaration([ReaderOf(path)]), SourceFolder.WorkingDirectory);
+        var kept = cache.KeptFor(new PipelineDeclaration(
+            [ReaderOf(path), new DeclareStep([new ColumnDeclaration("survived", ColumnKind.Integer, Optional: false)])]));
+
+        Assert.NotNull(kept);
+        Assert.Same(read.Rows, kept.Value.Rows);
+        Assert.Same(read.Proposal, kept.Value.Proposal);
+        Assert.Equal(read.Fingerprint, kept.Value.Fingerprint);
+        Assert.Null(cache.KeptFor(new PipelineDeclaration([new ReadCsvStep(path)])));
+        Assert.Null(cache.KeptFor(new PipelineDeclaration([new ReadRowsStep("handed in")])));
+        Assert.Null(cache.KeptFor(new PipelineDeclaration([])));
     }
 
     [Fact]

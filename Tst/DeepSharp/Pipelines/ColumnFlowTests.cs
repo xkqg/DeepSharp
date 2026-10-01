@@ -311,7 +311,7 @@ public class ColumnFlowTests
     [Fact]
     public void EveryStepThisLibraryShips_SaysWhatItLeavesBehind()
     {
-        var undescribed = new[] { typeof(Pdd).Assembly, typeof(AddIndicatorStep).Assembly }
+        var undescribed = Shipped.StepAssemblies
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type => type is { IsClass: true, IsAbstract: false } && typeof(IPipelineStep).IsAssignableFrom(type))
             .Where(type => !typeof(IDescribesColumns).IsAssignableFrom(type))
@@ -325,7 +325,7 @@ public class ColumnFlowTests
     {
         var verbs = new TheoryData<string>();
 
-        foreach (var description in StepCatalog.BuiltIn().WithIndicators().Descriptions)
+        foreach (var description in Shipped.Catalog().Descriptions)
         {
             verbs.Add(description.Verb);
         }
@@ -385,7 +385,7 @@ public class ColumnFlowTests
 
     private static IPipelineStep StepFor(string verb)
     {
-        var catalog = StepCatalog.BuiltIn().WithIndicators();
+        var catalog = Shipped.Catalog();
 
         return verb switch
         {

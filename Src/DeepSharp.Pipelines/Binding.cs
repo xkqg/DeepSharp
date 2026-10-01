@@ -95,9 +95,12 @@ public static class SchemaBinding
 
         if (absent.Length > 0)
         {
+            // Rows served to a model carry the answers they await as gaps, and offer only what they were handed in with.
+            var offered = source is RowsAwaitingAnAnswer awaiting ? awaiting.HandedIn : source.ColumnNames;
+
             throw new InvalidOperationException(
                 $"The source has no column called {string.Join(" or ", absent.Select(name => $"'{name}'"))}. "
-                + $"It offers: {string.Join(", ", source.ColumnNames)}.");
+                + $"It offers: {string.Join(", ", offered)}.");
         }
 
         var unexpected = source.ColumnNames

@@ -16,10 +16,20 @@ namespace DeepSharp.Tensors;
 /// offer. A layer, a loss or a convolution is not an operation here: each is written in these, so a backend has nothing
 /// to add for it.
 /// </para>
+/// <para>
+/// A backend that keeps its values somewhere of its own hands back what it makes on a <see cref="TensorStorage"/> of its
+/// own, with <see cref="Tensor.On(Shape, TensorStorage)"/>, and takes in a tensor on any other storage where an operation
+/// reads it; nothing here says where values live, so nothing here changes for it. Every operation asks first what
+/// <see cref="TensorOperandExtensions"/> asks of its tensors, so every backend refuses what the light one refuses, in the
+/// same words.
+/// </para>
 /// </remarks>
 public interface ITensorBackend
 {
-    /// <summary>Which backend this is, for a log line or an error message. Lowercase, one word.</summary>
+    /// <summary>
+    /// Which backend this is, for a log line or an error message, and what a checkpoint records its run was on, with the version
+    /// and the device a backend names through <see cref="INamesItsVersionAndDevice"/>. Lowercase, one word.
+    /// </summary>
     string Name { get; }
 
     /// <summary>Adds two tensors of the same shape, value by value.</summary>
@@ -174,9 +184,14 @@ public interface ITensorBackend
     /// </returns>
     /// <exception cref="ArgumentException">
     /// The images are not a batch of rows, columns and channels, or the window cannot stand on them: a side or a stride
-    /// below one, a border below nothing, or a window larger than the image with its border.
+    /// below one, a border below nothing, a border given to a window padded as 'same', or a window larger than the image
+    /// with its border.
     /// </exception>
-    /// <remarks>A convolution is these patches times a kernel, one column for each channel it makes.</remarks>
+    /// <remarks>
+    /// A convolution is these patches times a kernel, one column for each channel it makes. The window's border, on each
+    /// side, is what <see cref="Window.BordersOver"/> says for the images' rows and columns — the one rule every engine
+    /// reads, so a window padded as 'same' stands at the same places on every engine.
+    /// </remarks>
     Tensor Unfold(Tensor images, Window window);
 
     /// <summary>
@@ -191,6 +206,6 @@ public interface ITensorBackend
     /// The shape is not one of images, the window cannot stand on them, or the patches are not the ones such a window takes
     /// of such images.
     /// </exception>
-    /// <remarks>Unfolding turned around, which is why each is the other's way back.</remarks>
+    /// <remarks>Unfolding turned around, which is why each is the other's way back: the window stands where <see cref="Window.BordersOver"/> puts it.</remarks>
     Tensor Fold(Tensor patches, Shape images, Window window);
 }

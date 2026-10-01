@@ -7,6 +7,7 @@ using DeepSharp.Learners.Networks;
 using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 using DeepSharp.Tensors;
+using DeepSharp.Tests.Backends.Parts;
 using DeepSharp.Tests.Networks;
 
 namespace DeepSharp.Tests.Learners;
@@ -82,6 +83,19 @@ public class NetworkBridgeTests
     }
 
     [Fact]
+    public void APipelineReadFromItsFile_HasNoRowsToTrainANetworkOn_AndFitSaysSo()
+    {
+        // A notebook's export, or any pipeline's file, keeps the fit and not the rows: fitting a network behind it says the
+        // rows are missing and how to have them, rather than that the answer never reached the end of the pipeline.
+        var exported = PreparedData.FromJson(Passengers(Repository.Data("titanic.csv")).ToJson(), StepCatalog.BuiltIn());
+
+        var refused = Assert.Throws<InvalidOperationException>(() => Small().Fit(exported, new FitOptions(seed: 3)));
+
+        Assert.StartsWith("This pipeline holds no rows: one read from its file", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("reached the end", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ThePipelinesReport_MeasuresTheTrainedNetwork_OnEveryPartItNames()
     {
         var prepared = Pdd.Create()
@@ -100,6 +114,29 @@ public class NetworkBridgeTests
 
         Assert.Equal([Part.Train, Part.Test], trained.Measures!.Parts.Select(part => part.Part));
         Assert.Equal(expected.Parts.SelectMany(part => part.Values), trained.Measures.Parts.SelectMany(part => part.Values));
+    }
+
+    [Fact]
+    public void WhatTheReportMeasuredANetworkFrom_HandedBackAsText_IsMeasuredAgainToTheSameMeasures()
+    {
+        // A notebook's C# cell hands the text back to the notebook, which runs the same pipeline and measures it there; the
+        // run the network was trained behind measures it to the numbers the report took, what it learned nothing about too.
+        var prepared = Pdd.Create()
+            .Read(CsvRowSource.FromText("t,x,y\n" + string.Join('\n', Enumerable.Range(1, 20).Select(t => string.Create(CultureInfo.InvariantCulture, $"{t},{Math.Sin(t)},{(Math.Sin(t) > 0 ? 1 : 0)}"))) + "\n"), "twenty rows")
+            .Declare(schema => schema.Integer("t", "y").Number("x"))
+            .SplitByTime("t", 0.50, 0.25)
+            .Normalise("x", Scale.MidRange)
+            .Drop("t")
+            .Target("y")
+            .Report(report => report.Measure(Metric.Accuracy, Metric.Rmse).On(Part.Train, Part.Validation, Part.Test).As(Shown.Numbers))
+            .Build()
+            .Run();
+        var trained = Small().Fit(prepared, new FitOptions(seed: 3) { Epochs = 2 });
+
+        var again = prepared.MeasureAgain(trained.Measures!.PredictionsToJson());
+
+        Assert.Equal(trained.Measures.Parts.SelectMany(part => part.Values), again.Parts.SelectMany(part => part.Values));
+        Assert.Equal<int?>([0, 0, 0], again.Parts.Select(part => part.UnfamiliarRows));
     }
 
     [Fact]
@@ -221,6 +258,91 @@ public class NetworkBridgeTests
     }
 
     [Fact]
+    public void TheOneFileAndACheckpoint_EndEveryLineWithALineFeed_OnEverySystem()
+    {
+        // One line ending for the whole file, the one a pipeline's own file has on every system: the network's part is no
+        // longer written with the line endings of the machine that wrote it beside a pipeline written with line feeds.
+        var prepared = Passengers(Repository.Data("titanic.csv"));
+        var compiled = Small();
+        var files = new List<string>();
+
+        var trained = compiled.Fit(prepared, new FitOptions(seed: 7) { Epochs = 1, Checkpoints = new Checkpoints(checkpoint => files.Add(CheckpointFile.Write(compiled, prepared, checkpoint))) });
+
+        foreach (var file in (string[])[trained.ToJson(), Assert.Single(files)])
+        {
+            Assert.DoesNotContain('\r', file);
+            Assert.True(file.Split('\n').Length > 100, "The file is indented, a key to a line.");
+        }
+    }
+
+    [Fact]
+    public void ACheckpointFile_GoneOnInBatchesOfSixteen_IsRefused_NamingTheBatchesItWasTakenIn()
+    {
+        var prepared = Passengers(Repository.Data("titanic.csv"));
+        var compiled = Small();
+        var files = new List<string>();
+        compiled.Fit(prepared, new FitOptions(seed: 20260929) { Epochs = 2, Checkpoints = new Checkpoints(checkpoint => files.Add(CheckpointFile.Write(compiled, prepared, checkpoint))) });
+        var resumed = CheckpointFile.Read(files[0], NetworkCatalog.BuiltIn(), prepared);
+
+        var wrong = Assert.Throws<ArgumentException>(
+            () => resumed.Compiled.Fit(prepared, new FitOptions(seed: 20260929) { Epochs = 4, BatchSize = 16, ResumeFrom = resumed.Checkpoint }));
+
+        Assert.Equal(
+            "The checkpoint was taken of a run in batches of 32, and going on in batches of 16 would take other rows into every step. (Parameter 'options')",
+            wrong.Message);
+    }
+
+    [Fact]
+    public void ACheckpointFile_GoneOnOnAnotherEngine_IsRefused_NamingTheEngineItWasTakenOnAndTheOneHanded_BeforeAnySlotIsPutBack()
+    {
+        var prepared = Passengers(Repository.Data("titanic.csv"));
+        var compiled = Small();
+        var files = new List<string>();
+        compiled.Fit(prepared, new FitOptions(seed: 20260929) { Epochs = 2, Checkpoints = new Checkpoints(checkpoint => files.Add(CheckpointFile.Write(compiled, prepared, checkpoint))) });
+        var resumed = CheckpointFile.Read(files[0], NetworkCatalog.BuiltIn(), prepared);
+        var before = resumed.Compiled.Network.Slots().Select(named => named.Slot.Value).ToArray();
+
+        var native = new NativeMemoryBackend();
+        var light = new CpuBackend();
+
+        var wrong = Assert.Throws<ArgumentException>(
+            () => resumed.Compiled.Fit(prepared, new FitOptions(seed: 20260929) { Epochs = 4, Backend = native, ResumeFrom = resumed.Checkpoint }));
+
+        Assert.Equal(
+            $"The checkpoint was taken of a run on the engine 'cpu' {light.Version} on cpu, and going on under the engine 'nativememory' {native.Version} on cpu would round every step otherwise. (Parameter 'options')",
+            wrong.Message);
+        Assert.Equal(before, resumed.Compiled.Network.Slots().Select(named => named.Slot.Value));
+        Assert.Equal(
+            $$"""{"name":"cpu","version":"{{light.Version}}","device":"cpu"}""",
+            JsonNode.Parse(files[0])!["training"]!["engine"]!.ToJsonString());
+    }
+
+    [Fact]
+    public void ACheckpointFile_OfARunOnAnEngineOfSomebodyElsesThatNamesOnlyItself_RecordsItByName_AndGoesOnOnThatEngineAlone()
+    {
+        var prepared = Passengers(Repository.Data("titanic.csv"));
+        var straight = Small().Fit(prepared, new FitOptions(seed: 7) { Epochs = 3, Backend = new CopyCountingBackend() });
+        var compiled = Small();
+        var files = new List<string>();
+        compiled.Fit(prepared, new FitOptions(seed: 7)
+        {
+            Epochs = 2, Backend = new CopyCountingBackend(), Checkpoints = new Checkpoints(checkpoint => files.Add(CheckpointFile.Write(compiled, prepared, checkpoint))),
+        });
+
+        var refused = CheckpointFile.Read(files[^1], NetworkCatalog.BuiltIn(), prepared);
+        var wrong = Assert.Throws<ArgumentException>(() => refused.Compiled.Fit(prepared, new FitOptions(seed: 7) { Epochs = 3, ResumeFrom = refused.Checkpoint }));
+        var resumed = CheckpointFile.Read(files[^1], NetworkCatalog.BuiltIn(), prepared);
+        var goneOn = resumed.Compiled.Fit(prepared, new FitOptions(seed: 7) { Epochs = 3, Backend = new CopyCountingBackend(), ResumeFrom = resumed.Checkpoint });
+
+        Assert.Equal("""{"name":"copycounting"}""", JsonNode.Parse(files[^1])!["training"]!["engine"]!.ToJsonString());
+        Assert.Contains(
+            $"a run on the engine 'copycounting', and going on under the engine 'cpu' {new CpuBackend().Version} on cpu would round every step otherwise.",
+            wrong.Message,
+            StringComparison.Ordinal);
+        Assert.Equal(straight.History!.Epochs, goneOn.History!.Epochs);
+    }
+
+    [Fact]
     public void ANetworkBesideAnotherFitOfItsPipeline_IsRefused_WhereItIsReadAndWhereItGoesOn()
     {
         var path = Path.Join(Directory.CreateTempSubdirectory("deepsharp-bridge-").FullName, "titanic.csv");
@@ -245,6 +367,15 @@ public class NetworkBridgeTests
         Assert.Contains("another fit", Assert.Throws<NetworkFileException>(() => TrainedNetwork.FromJson(swapped.ToJsonString(), NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn())).Message, StringComparison.Ordinal);
         Assert.Contains("another fit", Assert.Throws<ArgumentException>(() => CheckpointFile.Read(files[^1], NetworkCatalog.BuiltIn(), refitted)).Message, StringComparison.Ordinal);
         Assert.NotNull(CheckpointFile.Read(files[^1], NetworkCatalog.BuiltIn(), fitted).Checkpoint);
+
+        // The file is read whole before it is held to the pipeline handed over: one that is itself wrong is refused for that,
+        // at its place, whichever pipeline it is handed.
+        var broken = JsonNode.Parse(files[^1])!;
+        broken["training"]!["seed"] = "seven";
+
+        var refused = Assert.Throws<NetworkFileException>(() => CheckpointFile.Read(broken.ToJsonString(), NetworkCatalog.BuiltIn(), refitted));
+
+        Assert.Equal("The seed is the whole number the run was worked out from, under 'seed'.", Assert.Single(refused.Faults).Message);
     }
 
     [Fact]
@@ -272,6 +403,8 @@ public class NetworkBridgeTests
     [Theory]
     [InlineData("""{"version": 2, "network": {}, "pipeline": {}}""", "version 2")]
     [InlineData("""{"version": 1, "network": {}, "pipeline": {}, "weights": {}}""", "'weights'")]
+    [InlineData("""{"version": 1, "network": {}, "pipeline": {}, "weights": [1]}""", "'weights'")]
+    [InlineData("""{"version": 1, "network": {}, "pipeline": {}, "pipeline": {}}""", "'pipeline' is written twice")]
     [InlineData("""[]""", "one JSON object")]
     public void AFileOfNoVersionThisReads_OrHoldingWhatNoPartIs_IsRefusedWhole(string json, string says)
     {
@@ -336,6 +469,7 @@ public class NetworkBridgeTests
     [InlineData("""{"version": 1, "network": """, "stops being JSON")]
     [InlineData("""{"network": {}, "pipeline": {}}""", "names the whole number of the version")]
     [InlineData("""{"version": "one", "network": {}, "pipeline": {}}""", "names the whole number of the version")]
+    [InlineData("""{"version": 1.5, "network": {}, "pipeline": {}}""", "names the whole number of the version")]
     public void AFileThatIsNotJson_OrNamesNoVersion_IsRefusedWhere(string json, string says)
     {
         Assert.Contains(says, Assert.Throws<NetworkFileException>(() => TrainedNetwork.FromJson(json, NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn())).Message, StringComparison.Ordinal);
@@ -352,6 +486,60 @@ public class NetworkBridgeTests
         Assert.Throws<ArgumentNullException>(() => TrainedNetwork.FromJson(null!, NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn()));
         Assert.Throws<ArgumentNullException>(() => TrainedNetwork.FromJson("{}", null!, StepCatalog.BuiltIn()));
         Assert.Throws<ArgumentNullException>(() => TrainedNetwork.FromJson("{}", NetworkCatalog.BuiltIn(), null!));
+    }
+
+    [Theory]
+    [InlineData(Needs.NoScale, "step 6, 'normalise'; step 7, 'normalise'; step 8, 'normalise'; step 9, 'normalise'")]
+    [InlineData(Needs.Categories, "step 5, 'encode.categories'; step 6, 'normalise'")]
+    public void ANetwork_IsRefusedARunMadeForALearnerThatDoesWithoutItsScalesOrItsCategories_NamingEachStep(Needs needs, string steps)
+    {
+        var run = WikiTitanic.In(WikiTitanic.DataFolder).RunFor(needs);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => Small().Fit(run, new FitOptions(seed: 3) { Epochs = 1 }));
+
+        Assert.Contains(steps, refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Needs.OneScale", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACheckpoint_DoesNotGoOnBehindARunThatLeftOutItsScales()
+    {
+        // The 0.4.0 checkpoint goes on behind the run of every step (FilesWrittenBy040Tests); a run for a learner indifferent
+        // to scale is another fit, whose rows reach a network unscaled.
+        var checkpoint = File.ReadAllText(Path.Join(AppContext.BaseDirectory, "Learners", "Fixtures", "titanic-0.4.0.checkpoint.json"));
+        var noScale = WikiTitanic.In(WikiTitanic.DataFolder).RunFor(Needs.NoScale);
+
+        var refused = Assert.Throws<ArgumentException>(() => CheckpointFile.Read(checkpoint, NetworkCatalog.BuiltIn(), noScale));
+
+        Assert.Contains("another fit", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(4, CheckpointFile.Read(checkpoint, NetworkCatalog.BuiltIn(), WikiTitanic.In(WikiTitanic.DataFolder).Run()).Checkpoint.Epochs);
+    }
+
+    [Fact]
+    public void ANetworkInKerasWords_PaddedAsSameAndEndingInItsLossesSigmoid_IsTrainedBehindAPipeline_AndServedFromItsFileAlike()
+    {
+        // The passenger's fourteen features as an image of two rows by seven, through a window of three by two that walks two
+        // places at a time and pads as 'same': one row and one column of nothing after the image. The last sigmoid is the
+        // loss's, so the file holds none, and the network read back from it answers as the one trained.
+        var prepared = WikiTitanic.In(WikiTitanic.DataFolder).Run();
+        var passenger = new InMemoryRowSource(["pclass", "sex", "age", "sibsp", "parch", "fare"], [["3", "male", "22", "1", "0", "7.25"]]);
+        var trained = new Sequential()
+            .Reshape(new Shape(2, 7, 1))
+            .Conv2D(3, new Window(3, 2) { Stride = 2, PaddingMode = PaddingMode.Same })
+            .Relu()
+            .Flatten()
+            .Dense(1)
+            .Sigmoid()
+            .Compile(new Adam(0.01), new BinaryCrossEntropy())
+            .Fit(prepared, new FitOptions(seed: 3) { Epochs = 2 });
+
+        var file = trained.ToJson();
+        var read = TrainedNetwork.FromJson(file, NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn());
+
+        Assert.Contains("\"padding\": \"same\"", file, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"sigmoid\"", file, StringComparison.Ordinal);
+        Assert.Equal(new Window(3, 2) { Stride = 2, PaddingMode = PaddingMode.Same }, Assert.IsType<Conv2D>(Assert.IsType<LayerStack>(read.Network).Layers[1]).Window);
+        Assert.Equal(trained.Predict(passenger).Answers, read.Predict(passenger).Answers);
     }
 
     // Titanic as the walks prepared it: fourteen features on one scale, and whether the passenger survived.

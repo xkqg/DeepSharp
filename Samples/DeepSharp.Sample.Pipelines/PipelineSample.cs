@@ -137,9 +137,9 @@ public static class PipelineSample
             .AddFeature("range", "AAPL.High", Arithmetic.Minus, "AAPL.Low")
             // Indicators are borrowed from MatPlotLibNet rather than written again, and they stand above the line
             // because they learn nothing: arithmetic over the rows that came before, looking only backwards.
-            .AddIndicator("rsi", Indicator.Rsi, ["AAPL.Close"], 14)
-            .AddIndicator("atr", Indicator.Atr, ["AAPL.High", "AAPL.Low", "AAPL.Close"], 14)
-            .AddIndicator("bb", Indicator.BollingerBands, ["AAPL.Close"], 20)
+            .Add(new AddIndicatorStep("rsi", Indicator.Rsi, ["AAPL.Close"], 14))
+            .Add(new AddIndicatorStep("atr", Indicator.Atr, ["AAPL.High", "AAPL.Low", "AAPL.Close"], 14))
+            .Add(new AddIndicatorStep("bb", Indicator.BollingerBands, ["AAPL.Close"], 20))
             // A month is not a quantity and Tuesday is not two of anything, so the pieces of a moment arrive as
             // categories and the encoder takes them from there. Where time wraps round, a circle says it better.
             .TimeParts("Date", TimePart.Season, TimePart.Quarter)

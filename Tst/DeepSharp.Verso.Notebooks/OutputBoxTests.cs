@@ -25,7 +25,7 @@ public sealed class OutputBoxTests
             new SumStep(),
         ]);
 
-        var change = OutputBox.Change(catalog, declaration, "target", "name", ColumnKind.Text, ["survived", "name", "fare"], ticked: true);
+        var change = new OutputBox(catalog, declaration, "target", ["survived", "name", "fare"]).Change("name", ColumnKind.Text, ticked: true);
 
         Assert.Null(change.Steps);
         Assert.Equal(["Step 4, 'sum.all': adds every column up, and 'name' is text."], change.NotMade);

@@ -77,7 +77,7 @@ internal static class StepCommit
 
         List<BlockChange> changes = [.. Enumerable.Range(0, start).Select(at => new BlockChange(BlockChangeKind.Kept, at, null))];
 
-        changes.AddRange(Between(before, after, start, before.Count - end, after.Count - end));
+        changes.AddRange(Between(before, after, start, end));
         changes.AddRange(Enumerable.Range(before.Count - end, end).Select(at => new BlockChange(BlockChangeKind.Kept, at, null)));
 
         return changes;
@@ -133,7 +133,7 @@ internal static class StepCommit
             await gesture.Operations.ExecuteCellAsync(block);
         }
 
-        await ShowAsync(shown, now, ViewTrigger.Commit, page: 0, list);
+        await ShowAsync(shown, now, ViewTrigger.Commit, list);
 
         return true;
     }
@@ -155,10 +155,21 @@ internal static class StepCommit
     /// <param name="gesture">The gesture.</param>
     /// <param name="assembled">The pipeline the blocks make.</param>
     /// <param name="trigger">What asked for it.</param>
-    /// <param name="page">Which page of rows, counting from nought.</param>
-    /// <param name="list">The list of the source's columns to show in place of the grid, with its picks; nothing for the grid.</param>
+    /// <param name="list">The list of the source's columns to show in place of the grid, with its picks; nothing for the grid's first page.</param>
     /// <returns>Nothing; or why a cell that is not a block shows nothing.</returns>
-    internal static async Task<string?> ShowAsync(Gesture gesture, NotebookPipeline assembled, ViewTrigger trigger, int page, ListPicks? list = null)
+    internal static Task<string?> ShowAsync(Gesture gesture, NotebookPipeline assembled, ViewTrigger trigger, ListPicks? list = null) =>
+        AskAsync(gesture, assembled, assembled.RequestFor(gesture.Cell, trigger, page: 0) with { List = list });
+
+    /// <summary>Shows another page of the data at the block a gesture was made on.</summary>
+    /// <param name="gesture">The gesture.</param>
+    /// <param name="assembled">The pipeline the blocks make.</param>
+    /// <param name="page">Which page of rows, counting from nought.</param>
+    /// <returns>Nothing; or why a cell that is not a block shows nothing.</returns>
+    internal static Task<string?> PageAsync(Gesture gesture, NotebookPipeline assembled, int page) =>
+        AskAsync(gesture, assembled, assembled.RequestFor(gesture.Cell, ViewTrigger.Page, page));
+
+    // Leaves the block's kernel what the gesture asked of it and runs the block, once the pipeline is kept and handed over.
+    private static async Task<string?> AskAsync(Gesture gesture, NotebookPipeline assembled, ViewRequest request)
     {
         if (assembled.PositionOf(gesture.Cell) < 0)
         {
@@ -171,18 +182,18 @@ internal static class StepCommit
             gesture.Session.Publish(assembled);
             gesture.Session.HandOver(gesture.Variables, assembled);
         });
-        await gesture.Session.AskAsync(gesture.Cell, assembled.RequestFor(gesture.Cell, trigger, page) with { List = list }, gesture.Turn, gesture.Operations);
+        await gesture.Session.AskAsync(gesture.Cell, request, gesture.Turn, gesture.Operations);
 
         return null;
     }
 
-    // Between the steps both lists start and end with: the old and the new steps matched by verb, in order, the longest
-    // run of them — a pair that is the same step is kept, any other pair rewritten in its place; a new step matched with
-    // nothing is inserted, an old one matched with nothing removed.
-    private static IEnumerable<BlockChange> Between(IReadOnlyList<IPipelineStep> before, IReadOnlyList<IPipelineStep> after, int start, int oldEnd, int newEnd)
+    // Between the steps both lists start with (start of them) and end with (end of them): the old and the new steps matched
+    // by verb, in order, the longest run of them — a pair that is the same step is kept, any other pair rewritten in its
+    // place; a new step matched with nothing is inserted, an old one matched with nothing removed.
+    private static IEnumerable<BlockChange> Between(IReadOnlyList<IPipelineStep> before, IReadOnlyList<IPipelineStep> after, int start, int end)
     {
-        var old = oldEnd - start;
-        var made = newEnd - start;
+        var old = before.Count - end - start;
+        var made = after.Count - end - start;
         var matched = new int[old + 1, made + 1];
 
         for (var i = old - 1; i >= 0; i--)

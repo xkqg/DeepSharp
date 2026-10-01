@@ -19,8 +19,8 @@ public sealed partial class HostContractTests : IDisposable
 {
     private readonly string _folder = Directory.CreateTempSubdirectory("deepsharp-host-").FullName;
 
-    // Where a package is installed: beside the suite, each run laying it out over the last. A package loaded into a
-    // context of its own keeps its files locked until the process ends, so no test can remove it after itself.
+    // Where the package is laid out as Verso installs it: beside the suite, each run laying it out over the last. A package
+    // loaded into a context of its own keeps its files locked until the process ends, so no test can remove it after itself.
     private static readonly string Installs = Path.Join(AppContext.BaseDirectory, "installed");
 
     private static readonly string[] Titanic =
@@ -96,20 +96,23 @@ public sealed partial class HostContractTests : IDisposable
         Assert.Equal(Notebook.BoxAction(StepRenderer.Category, "pclass"), grid.Box(StepRenderer.Category, "pclass")!.Value.Action);
     }
 
-    // The package as an install lays it out: the notebook's assembly and the ones it brings, in one folder.
-    private static string Installed(string folder)
+    [Fact]
+    public void ThePackageTheseTestsLoad_IsLaidOutAsVersosInstallerLaysItOut()
     {
-        Directory.CreateDirectory(folder);
+        // What the tests below load stands in a folder as a real install stands in Verso's: every file Verso's installer lays
+        // out for the package, as this build has it — the engine's tensors among them, and no package an install never holds.
+        // A library the build leaves to the runtime is not here, as the runtime carries it.
+        var folder = Path.Join(Installs, "listed");
 
-        foreach (var file in Directory.GetFiles(AppContext.BaseDirectory, "*.dll")
-                     .Where(file => Path.GetFileName(file) is var name
-                                    && (name.StartsWith("MatPlotLibNet", StringComparison.Ordinal)
-                                        || (name.StartsWith("DeepSharp.", StringComparison.Ordinal) && !name.Contains("Tests", StringComparison.Ordinal)))))
-        {
-            File.Copy(file, Path.Join(folder, Path.GetFileName(file)), overwrite: true);
-        }
+        VersoInstall.LayOut(folder);
 
-        return Path.Join(folder, "DeepSharp.Verso.Notebooks.dll");
+        var laidOut = Directory.GetFiles(folder).Select(Path.GetFileName).Order(StringComparer.Ordinal).ToArray();
+        var built = VersoInstall.Listed.Where(file => File.Exists(Path.Join(AppContext.BaseDirectory, file))).ToArray();
+
+        Assert.Equal(built, laidOut);
+        Assert.All(VersoInstall.Listed.Except(built), file => Assert.True(VersoInstall.CarriedByTheRuntime(file), file));
+        Assert.Contains("System.Numerics.Tensors.dll", laidOut);
+        Assert.DoesNotContain("DeepSharp.Verso.Api.dll", laidOut);
     }
 
     [Fact]
@@ -119,7 +122,7 @@ public sealed partial class HostContractTests : IDisposable
         // notebook is driven through Verso's own contracts alone, as the host drives it.
         await using var host = new ExtensionHost();
 
-        await host.LoadFromAssemblyAsync(Installed(Path.Join(Installs, "package")));
+        await host.LoadFromAssemblyAsync(VersoInstall.LayOut(Path.Join(Installs, "package")));
 
         var scaffold = new Scaffold(new NotebookModel(), host, Path.Join(_folder, "titanic.verso"));
         scaffold.InitializeSubsystems();
@@ -170,8 +173,8 @@ public sealed partial class HostContractTests : IDisposable
         // The panel keeps one install per runtime, in a folder named after the runtime it was made for.
         var runtime = $"net{Environment.Version.Major}.0";
 
-        Installed(top);
-        Installed(Path.Join(managed, "DeepSharp.Verso.Notebooks", version, runtime));
+        VersoInstall.LayOut(top);
+        VersoInstall.LayOut(Path.Join(managed, "DeepSharp.Verso.Notebooks", version, runtime));
 
         await using var scanningTop = new ExtensionHost();
         await using var scanningManaged = new ExtensionHost();

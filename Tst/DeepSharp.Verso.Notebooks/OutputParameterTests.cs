@@ -328,7 +328,7 @@ public sealed class OutputParameterTests : IDisposable
             new NotedStep("survived", "kept apart", 1),
         ]);
 
-        var list = ColumnList.Of(catalog, declaration, source, [], stored: null, "key", ListPicks.None, whole: true).Content;
+        var list = new ColumnList(catalog, declaration, source, stored: null).Drawn(ListPicks.None, whole: true).Content;
 
         Assert.Equal(["note: kept apart — set in the output block's form", "window: 1 — set in the output block's form"], list.ParametersSetElsewhere());
         Assert.Empty(list.ParameterSelects());

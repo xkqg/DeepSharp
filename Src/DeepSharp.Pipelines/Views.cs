@@ -44,15 +44,14 @@ public enum Standing
 /// </remarks>
 public sealed class PipelineView
 {
-    internal PipelineView(
-        Table table, IReadOnlyList<Standing> standings, Standing measured, IReadOnlyDictionary<int, Evidence> evidence, ViewedColumns columns)
+    internal PipelineView(Table table, IReadOnlyList<Standing> standings, IReadOnlyDictionary<int, Evidence> evidence, ViewedDeclaration declared)
     {
         Table = table;
         Standings = standings;
-        Measured = measured;
+        Measured = declared.Measured;
         Evidence = evidence;
-        Answers = columns.Answers;
-        OrderedBy = columns.OrderedBy;
+        Answers = declared.Answers;
+        OrderedBy = declared.OrderedBy;
     }
 
     /// <summary>The data as it stands here.</summary>
@@ -92,19 +91,28 @@ public sealed class PipelineView
     /// <returns>Every value the measured rows hold, once, in ordinal order; a gap is none.</returns>
     public IReadOnlyList<string> MeasuredCategories(string column) =>
         Table.CategoriesOf(column, row => Standings[row] == Measured);
+
+    /// <summary>The rows everything here is measured on, by their place in the table, in row order.</summary>
+    /// <returns>The place of every measured row.</returns>
+    internal int[] MeasuredRows() => [.. Enumerable.Range(0, Table.RowCount).Where(row => Standings[row] == Measured)];
 }
 
-/// <summary>What a view knows of the declaration's columns beyond the rows: the answers, and the order.</summary>
+/// <summary>What a view knows of the declaration beyond the rows: the answers, the order, and which rows are measured.</summary>
 /// <param name="Answers">The columns the output names as its answers, as the rows hold them; none for an output that makes its answer.</param>
 /// <param name="OrderedBy">The columns the rows are put in order by, or divided in time by.</param>
-internal readonly record struct ViewedColumns(IReadOnlyList<string> Answers, IReadOnlyList<string> OrderedBy)
+/// <param name="Measured">The rows everything is measured on: the training rows when a split divides them, the undivided ones otherwise.</param>
+internal readonly record struct ViewedDeclaration(IReadOnlyList<string> Answers, IReadOnlyList<string> OrderedBy, Standing Measured)
 {
-    /// <summary>What a declaration says of its answers and its order.</summary>
+    /// <summary>What a declaration says of its answers, its order and the rows it measures on.</summary>
     /// <param name="declaration">The declaration.</param>
-    /// <returns>Its answers, unless its output makes them from later rows, and the columns its rows are ordered or divided by.</returns>
-    public static ViewedColumns Of(PipelineDeclaration declaration) => new(
+    /// <returns>
+    /// Its answers, unless its output makes them from later rows; the columns its rows are ordered or divided by; and the
+    /// training rows when it declares a split, the undivided ones when it does not.
+    /// </returns>
+    public static ViewedDeclaration Of(PipelineDeclaration declaration) => new(
         declaration.Output is { MakesItsAnswer: false } output ? output.Answers : [],
-        [.. declaration.Steps.OfType<IOrdersRows>().SelectMany(order => order.OrderedBy), .. declaration.Steps.OfType<IDividesInTime>().Select(split => split.Column)]);
+        [.. declaration.Steps.OfType<IOrdersRows>().SelectMany(order => order.OrderedBy), .. declaration.Steps.OfType<IDividesInTime>().Select(split => split.Column)],
+        declaration.SplitAt >= 0 ? Standing.Train : Standing.Undivided);
 }
 
 /// <summary>

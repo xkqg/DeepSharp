@@ -94,6 +94,37 @@ internal static class StepCard
     /// <returns>The explanation, marked as an error; the data below it is as it was.</returns>
     public static CellOutput NotMade(IEnumerable<string> faults) => Listed("This change is not made:", faults);
 
+    /// <summary>
+    /// What a report's block shows under its grid while nothing is handed back to it: the measures the report names, on which
+    /// parts and shown how, and where they come from — a C# cell that trains a model, since the notebook trains none.
+    /// </summary>
+    /// <param name="report">The report.</param>
+    /// <returns>The card, which is no error: nothing is wrong, and nothing is measured yet.</returns>
+    public static CellOutput NotMeasured(INamesTheMeasures report)
+    {
+        var html = new StringBuilder(Style);
+
+        html.Append("<div class=\"deepsharp-block deepsharp-report\"><div class=\"deepsharp-head\">This report measures ")
+            .Append(Encoded(Phrase(report.Metrics.Select(metric => metric.Word())))).Append(" on ")
+            .Append(Encoded(Phrase(report.Parts.Select(part => part.Word())))).Append(", shown as ")
+            .Append(Encoded(Phrase(report.Shown.Select(shown => shown.Word())))).Append(".</div>")
+            .Append("<div class=\"deepsharp-purpose\">It measures a trained model, and the notebook trains none. A C# cell that trains one ")
+            .Append("hands its predictions back with <code>")
+            .Append(Encoded($"Variables.Set(\"{StepKernel.HandedBack}\", trained.Measures!.PredictionsToJson())"))
+            .Append("</code>; showing the data here then measures them on this notebook's own rows and draws them below. A cell that ")
+            .Append("ends with <code>").Append(Encoded("trained.Measures!.Report()")).Append("</code> shows the same report where it stands.</div></div>");
+
+        return CellOutput.Html(html.ToString());
+    }
+
+    /// <summary>Why the predictions handed back to a report's block are not measured: what refused them, and what to do.</summary>
+    /// <param name="why">What refused them, in the words of the measuring, or of the text they were handed back as.</param>
+    /// <returns>The explanation, marked as an error; the grid above it is as it was.</returns>
+    public static CellOutput PredictionsRefused(string why) =>
+        Listed(
+            $"The predictions handed back under {StepKernel.HandedBack} are not measured here:",
+            [why, "Run the C# cell that trains again: what it hands back is then made behind the blocks as they stand, and measured here."]);
+
     /// <summary>Why what the blocks decided was not saved: the file beside the notebook cannot be read.</summary>
     /// <param name="faults">What is wrong with the file.</param>
     /// <returns>The explanation, marked as an error; the file is as it was.</returns>
@@ -134,4 +165,12 @@ internal static class StepCard
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append("\">").Append(label).Append("</button>");
 
     private static string Encoded(string text) => WebUtility.HtmlEncode(text);
+
+    // Words as a sentence lists them: "rmse", "rmse and mae", "rmse, mae and r2".
+    private static string Phrase(IEnumerable<string> words)
+    {
+        string[] listed = [.. words];
+
+        return listed.Length == 1 ? listed[0] : $"{string.Join(", ", listed[..^1])} and {listed[^1]}";
+    }
 }

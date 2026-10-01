@@ -1,0 +1,73 @@
+torch 2.10.0+cpu, safetensors 0.8.0, Python 3.14.7
+titanic.pt: 3293 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '2.weight', '2.bias']; the same bits as expected: True
+  opcodes: BINGET BININT1 BINPERSID BINPUT BINUNICODE BUILD EMPTY_DICT EMPTY_TUPLE GLOBAL MARK NEWFALSE PROTO REDUCE SETITEM SETITEMS STOP TUPLE TUPLE1 TUPLE2
+titanic-f16.pt: 2845 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '2.weight', '2.bias']; the same bits as expected: True
+  opcodes: BINGET BININT1 BINPERSID BINPUT BINUNICODE BUILD EMPTY_DICT EMPTY_TUPLE GLOBAL MARK NEWFALSE PROTO REDUCE SETITEM SETITEMS STOP TUPLE TUPLE1 TUPLE2
+titanic-bf16.pt: 2845 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '2.weight', '2.bias']; the same bits as expected: True
+  opcodes: BINGET BININT1 BINPERSID BINPUT BINUNICODE BUILD EMPTY_DICT EMPTY_TUPLE GLOBAL MARK NEWFALSE PROTO REDUCE SETITEM SETITEMS STOP TUPLE TUPLE1 TUPLE2
+titanic-f64.pt: 4317 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '2.weight', '2.bias']; the same bits as expected: True
+  opcodes: BINGET BININT1 BINPERSID BINPUT BINUNICODE BUILD EMPTY_DICT EMPTY_TUPLE GLOBAL MARK NEWFALSE PROTO REDUCE SETITEM SETITEMS STOP TUPLE TUPLE1 TUPLE2
+batchnorm.pt: 4169 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '1.weight', '1.bias', '1.running_mean', '1.running_var', '1.num_batches_tracked', '3.weight', '3.bias']; the same bits as expected: True
+  opcodes: BINGET BININT1 BINPERSID BINPUT BINUNICODE BUILD EMPTY_DICT EMPTY_TUPLE GLOBAL MARK NEWFALSE PROTO REDUCE SETITEM SETITEMS STOP TUPLE TUPLE1 TUPLE2
+convolution.pt: 7661 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '1.weight', '1.bias', '1.running_mean', '1.running_var', '1.num_batches_tracked', '3.weight', '3.bias', '5.weight', '5.bias', '5.running_mean', '5.running_var', '5.num_batches_tracked', '6.weight', '6.bias', '8.weight', '8.bias']; the same bits as expected: True
+  opcodes: BINGET BININT1 BINPERSID BINPUT BINUNICODE BUILD EMPTY_DICT EMPTY_TUPLE GLOBAL MARK NEWFALSE PROTO REDUCE SETITEM SETITEMS STOP TUPLE TUPLE1 TUPLE2
+titanic-parameters.pt: 3293 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '2.weight', '2.bias']; the same bits as expected: True
+  opcodes: BINGET BININT1 BINPERSID BINPUT BINUNICODE EMPTY_DICT EMPTY_TUPLE GLOBAL MARK NEWFALSE NEWTRUE PROTO REDUCE SETITEMS STOP TUPLE TUPLE1 TUPLE2 TUPLE3
+titanic-views.pt: 3105 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '2.weight', '2.bias']; the same bits as expected: True
+  opcodes: BINGET BININT1 BINPERSID BINPUT BINUNICODE EMPTY_TUPLE GLOBAL MARK NEWFALSE PROTO REDUCE SETITEMS STOP TUPLE TUPLE1 TUPLE2
+titanic-values.pt: 3357 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '2.weight', '2.bias']; the same bits as expected: True
+  opcodes: APPEND APPENDS BINFLOAT BINGET BININT BININT1 BININT2 BINPERSID BINPUT BINUNICODE BUILD EMPTY_DICT EMPTY_LIST EMPTY_TUPLE GLOBAL LONG1 MARK NEWFALSE NEWTRUE NONE PROTO REDUCE SETITEM SETITEMS STOP TUPLE TUPLE1 TUPLE2 TUPLE3
+titanic-big-endian.pt: 2697 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '2.weight', '2.bias']; the same bits as expected: True
+  opcodes: BINGET BININT1 BINPERSID BINPUT BINUNICODE BUILD EMPTY_DICT EMPTY_TUPLE GLOBAL MARK NEWFALSE PROTO REDUCE SETITEM SETITEMS STOP TUPLE TUPLE1 TUPLE2
+deep.pt: 24051 bytes; torch.load(weights_only=True) reads ['0.weight', '0.bias', '1.weight', '1.bias', '2.weight', '2.bias', '3.weight', '3.bias', '4.weight', '4.bias', '5.weight', '5.bias', '6.weight', '6.bias', '7.weight', '7.bias', '8.weight', '8.bias', '9.weight', '9.bias', '10.weight', '10.bias', '11.weight', '11.bias', '12.weight', '12.bias', '13.weight', '13.bias', '14.weight', '14.bias', '15.weight', '15.bias', '16.weight', '16.bias', '17.weight', '17.bias', '18.weight', '18.bias', '19.weight', '19.bias', '20.weight', '20.bias', '21.weight', '21.bias', '22.weight', '22.bias', '23.weight', '23.bias', '24.weight', '24.bias', '25.weight', '25.bias', '26.weight', '26.bias', '27.weight', '27.bias', '28.weight', '28.bias', '29.weight', '29.bias', '30.weight', '30.bias', '31.weight', '31.bias', '32.weight', '32.bias', '33.weight', '33.bias', '34.weight', '34.bias', '35.weight', '35.bias', '36.weight', '36.bias', '37.weight', '37.bias', '38.weight', '38.bias', '39.weight', '39.bias']; the same bits as expected: True
+  opcodes: BINGET BININT1 BINPERSID BINPUT BINUNICODE BUILD EMPTY_DICT EMPTY_TUPLE GLOBAL LONG_BINGET LONG_BINPUT MARK NEWFALSE PROTO REDUCE SETITEM SETITEMS STOP TUPLE TUPLE1 TUPLE2
+os.system, as pickle writes a call to it: refuses: UnpicklingError: Trying to load unsupported GLOBAL nt.system whose module nt is blocked.
+os.system, named by hand: refuses: UnpicklingError: Trying to load unsupported GLOBAL os.system whose module os is blocked.
+builtins.eval, as pickle writes a call to it: refuses: UnpicklingError: Unsupported global: GLOBAL eval was not an allowed global by default. Please use `torch.serialization.add_safe_globals([eval])` or the `torch.serialization.safe_globals([eval])` context manager to allowlist this global if you trust this class/function.
+builtins.eval, named by hand: refuses: UnpicklingError: Unsupported global: GLOBAL eval was not an allowed global by default. Please use `torch.serialization.add_safe_globals([eval])` or the `torch.serialization.safe_globals([eval])` context manager to allowlist this global if you trust this class/function.
+subprocess.Popen, as pickle writes a call to it: refuses: UnpicklingError: Unsupported global: GLOBAL commands.Popen was not an allowed global by default. Please use `torch.serialization.add_safe_globals([commands.Popen])` or the `torch.serialization.safe_globals([commands.Popen])` context manager to allowlist this global if you trust this class/function.
+subprocess.Popen, named by hand: refuses: UnpicklingError: Unsupported global: GLOBAL subprocess.Popen was not an allowed global by default. Please use `torch.serialization.add_safe_globals([subprocess.Popen])` or the `torch.serialization.safe_globals([subprocess.Popen])` context manager to allowlist this global if you trust this class/function.
+subprocess.Popen, named on the stack as protocol 4 writes it: refuses: UnpicklingError: Unsupported operand 149
+subprocess.Popen, named on the stack by hand: refuses: UnpicklingError: Unsupported operand 147
+os.system, named by an old instruction: refuses: UnpicklingError: Unsupported operand 105
+a .NET type, named by hand: refuses: UnpicklingError: Unsupported global: GLOBAL System.Diagnostics.Process was not an allowed global by default. Please use `torch.serialization.add_safe_globals([System.Diagnostics.Process])` or the `torch.serialization.safe_globals([System.Diagnostics.Process])` context manager to allowlist this global if you trust this class/function.
+a type of the tests, named by hand: refuses: UnpicklingError: Unsupported global: GLOBAL DeepSharp.Tests.Import.Tripwire was not an allowed global by default. Please use `torch.serialization.add_safe_globals([DeepSharp.Tests.Import.Tripwire])` or the `torch.serialization.safe_globals([DeepSharp.Tests.Import.Tripwire])` context manager to allowlist this global if you trust this class/function.
+an allowed class, built by an old instruction: refuses: UnpicklingError: Unsupported operand 111
+torch.Size, which PyTorch allows: reads Size
+bytes, which PyTorch allows through _codecs.encode: reads bytes
+collections.Counter, which PyTorch allows: reads a
+an opcode pickle does not have: refuses: UnpicklingError: Unsupported operand 255
+BUILD on a list: refuses: UnpicklingError: Can only build Tensor, Parameter, OrderedDict or types allowlisted via `add_safe_globals`, but got <class 'list'>
+APPEND to a dict: refuses: UnpicklingError: Can only append to lists, but got <class 'dict'>
+SETITEM on a list: refuses: UnpicklingError: Can only SETITEM for dict, collections.OrderedDict, collections.Counter, but got <class 'list'>
+a memo never put: refuses: KeyError: 5
+a persistent id that is no storage: refuses: UnpicklingError: Only persistent_load of storage is allowed, but got <class 'str'>
+a persistent id that is a number: refuses: AssertionError: 
+REDUCE on text: refuses: UnpicklingError: Trying to call reduce for unrecognized function a
+a tuple with no mark before it: refuses: IndexError: pop from empty list
+STOP with nothing made: refuses: IndexError: pop from empty list
+no pickle at all: refuses: EOFError: 
+a pickle cut short: refuses: IndexError: index out of range
+a storage the archive does not hold: refuses: RuntimeError: PytorchStreamReader failed locating file data/9: file not found
+a tensor reaching past its storage: refuses: RuntimeError: Trying to resize storage that is not resizable
+the state made by NEWOBJ: reads 0.weight, 0.bias, 2.weight, 2.bias
+a name written as a short byte string: reads 0.weight, 0.bias, 2.weight, 2.bias
+os.system, among the state's tensors: refuses: UnpicklingError: Trying to load unsupported GLOBAL nt.system whose module nt is blocked.
+a state saved with pickle protocol 3: reads 0.weight, 0.bias, 2.weight, 2.bias
+a state saved with pickle protocol 4: refuses: UnpicklingError: Unsupported operand 149
+a state saved in the format before PyTorch 1.6: reads 0.weight, 0.bias, 2.weight, 2.bias
+a checkpoint holding the state under a key: reads model, epoch
+a bias saved as a negated view: reads 0.weight, 0.bias, 2.weight, 2.bias
+a bias saved as whole numbers: reads 0.weight, 0.bias, 2.weight, 2.bias
+a TorchScript archive: refuses: RuntimeError: Cannot use ``weights_only=True`` with TorchScript archives passed to ``torch.load``. In PyTorch 2.6, we changed the default value of the `weights_only` argument in `torch.load` from `False` to `True`. Re-running `torch.load` with `weights_only` set to `False` will likely succeed, but it can result in arbitrary code execution. Do it only if you got the file from a trusted source.
+no archive at all: refuses: UnpicklingError: Unsupported operand 110
+an archive holding nothing: refuses: UnpicklingError: Unsupported operand 80
+an archive whose files are in no folder: refuses: RuntimeError: [enforce fail at inline_container.cc:180] . file in archive is not in a subdirectory: data.pkl
+an archive of version 11: refuses: RuntimeError: [enforce fail at inline_container.cc:236] . Attempted to read a PyTorch file with version 11, but the maximum supported version for reading is 10. The version of your PyTorch installation may be too old, please upgrade PyTorch to latest version to mitigate this issue.
+an archive of version 0: refuses: RuntimeError: [enforce fail at inline_container.cc:225] . Attempted to read a PyTorch file with version 0, but the minimum supported version for reading is 1. Your PyTorch script module file is too old. Please regenerate it with latest version of PyTorch to mitigate this issue.
+an archive with no version: refuses: RuntimeError: Expected hasRecord("version") to be true, but got false.  (Could this error message be improved?  If so, please report an enhancement request to PyTorch.)
+an archive with no data.pkl: refuses: RuntimeError: PytorchStreamReader failed locating file data.pkl: file not found
+an archive of a byte order nobody has: refuses: ValueError: Unknown endianness type: middle
+an archive with no byte order: reads 0.weight, 0.bias, 2.weight, 2.bias
+a storage of fewer bytes than it says: refuses: RuntimeError: record size (892 bytes) does not match expected size (896 bytes = 896 elements * 1 bytes/element) for dtype Byte
+marker file written by anything: False

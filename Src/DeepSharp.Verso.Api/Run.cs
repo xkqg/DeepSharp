@@ -12,21 +12,14 @@ namespace DeepSharp.Verso.Api;
 /// <param name="number">Which run it is, counted from one for each open notebook.</param>
 /// <param name="cell">The cell it runs; none for a button's run.</param>
 /// <param name="takesTheCSharpTurn">Whether it takes its turn among the process's C# runs.</param>
-/// <param name="told">
-/// Asked to tell every view whenever what the run runs now changes — code it runs in no cell among it, of which the engine
-/// says nothing — so a run that runs on after it was stopped is told as it ends.
-/// </param>
-/// <param name="tell">
-/// Tells the notebook of the run's stop, in the step that stops it, so what the run asks for from then on writes nothing;
-/// it hands back what ends once every write let through before the stop has landed.
-/// </param>
+/// <param name="listener">The notebook the run is of, told what it runs now and of its stop.</param>
 /// <remarks>
 /// A stop is one step, in this order: it takes the run's end, unless the run already ended by itself; it marks the run,
 /// which the engine and every part the run acts through read; it tells the notebook; and only then does it take what runs
 /// now as the kernel to start afresh. So what the engine lets begin after the stop began before it, and the decision is
 /// one value handed to the run's own flow whole, never read again once what runs has moved on.
 /// </remarks>
-internal sealed class Run(long number, Guid? cell, bool takesTheCSharpTurn, Action told, Func<Task> tell)
+internal sealed class Run(long number, Guid? cell, bool takesTheCSharpTurn, IRunListener listener)
 {
     // The stop's decision, set once by the stop that takes the run.
     private readonly TaskCompletionSource<RunStop> _stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -126,7 +119,7 @@ internal sealed class Run(long number, Guid? cell, bool takesTheCSharpTurn, Acti
         // Marked at once; what listens to the mark is told elsewhere, so a stop never waits for it.
         _ = _stop.CancelAsync();
 
-        var written = tell();
+        var written = listener.StoppedAsync();
         Underway? ran = null;
 
         if (taken.Phase == Phase.Stopping)
@@ -173,7 +166,7 @@ internal sealed class Run(long number, Guid? cell, bool takesTheCSharpTurn, Acti
         LandedIfDone(Exchanged(state => state.Resetting
             ? state with { Underway = underway, InFlight = state.InFlight - 1, Resetting = false }
             : state with { Underway = underway })!);
-        told();
+        listener.Moved();
     }
 
     // What ran ended — a cell, by its id, or code with no cell, by none — when that is what runs now.
@@ -181,7 +174,7 @@ internal sealed class Run(long number, Guid? cell, bool takesTheCSharpTurn, Acti
     {
         if (Exchanged(state => state.Underway is { } now && now.Cell == ended ? state with { Underway = null } : null) is not null)
         {
-            told();
+            listener.Moved();
         }
     }
 
@@ -256,6 +249,23 @@ internal sealed class Run(long number, Guid? cell, bool takesTheCSharpTurn, Acti
 
     // The run at one moment.
     private sealed record State(Phase Phase, Underway? Underway, int InFlight, bool Resetting);
+}
+
+/// <summary>The notebook a run is of, as the run tells it what it does.</summary>
+internal interface IRunListener
+{
+    /// <summary>
+    /// What the run runs now changed: every view is to be told — code it runs in no cell among it, of which the engine says
+    /// nothing — so a run that runs on after it was stopped is told as it ends.
+    /// </summary>
+    void Moved();
+
+    /// <summary>
+    /// The run was stopped: the notebook is told, in the step that stops it, so what the run asks for from then on writes
+    /// nothing.
+    /// </summary>
+    /// <returns>What ends once every write let through before the stop has landed.</returns>
+    Task StoppedAsync();
 }
 
 /// <summary>What a run runs now: a cell, or code with no cell, the kernel that runs it, and since when.</summary>

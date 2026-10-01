@@ -22,6 +22,11 @@ internal static class Repository
     /// <returns>Its full path.</returns>
     public static string Data(string file) => Path.Join(Root, "Samples", "data", file);
 
+    /// <summary>A file the readers' tests read, written once from the published data and kept beside those tests.</summary>
+    /// <param name="file">The file's name, such as <c>titanic.parquet</c>.</param>
+    /// <returns>Its full path.</returns>
+    public static string Fixture(string file) => Path.Join(Root, "Tst", "DeepSharp", "Pipelines", "Fixtures", file);
+
     private static string FindRoot()
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

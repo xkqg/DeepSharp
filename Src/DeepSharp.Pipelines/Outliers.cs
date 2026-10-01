@@ -62,8 +62,10 @@ public sealed record ClipOutliersStep : IFittedStep, IPipelineStep<ClipOutliersS
     private static readonly NumberParameter AtKey = new(
         "at",
         "How far out the bounds sit: a share for a quantile, nothing for the training extremes; a multiple of the spread or the middle half otherwise.",
-        1.5,
-        atLeast: 0);
+        1.5)
+    {
+        AtLeast = 0,
+    };
 
     private static readonly OneOfParameter<Outlier> OutlierKey = new(
         "outlier", "What happens to a value outside the bounds: held at the edge, made a gap, or refused.", Outlier.Clip);

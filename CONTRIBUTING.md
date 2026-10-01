@@ -41,9 +41,16 @@ reach for a test that pretends to cover it.
   `Helper` is a drawer nobody owns.
 - Several values out of a method is a `readonly record struct` with named members, never a tuple. A tuple
   loses its names in IntelliSense, in stack traces and in the documentation.
-- A method or a constructor takes four parameters at most. A fifth says some of them belong together, in a record or
-  an options object with names of its own. The public `PreparedData` constructor and two of the evidence's internal
-  constructors take five: they came before the rule, and keep them until changing them is worth what it breaks.
+- A method or a constructor takes four parameters at most, public or not, and the receiver of an extension method is
+  one of them. A fifth says something is missing. Ask first which object owns what the method does, and which of the
+  parameters is really a collaborator with behaviour of its own; only values that are set once and do nothing belong
+  together in a `readonly record struct`, named for what they are, never an options bag named after the method.
+  Three things are not counted: what the compiler writes on its own (the method behind a lambda or a local function, an
+  iterator, the members a record is given, such as its `Deconstruct`), what the runtime implements (a delegate's
+  `Invoke`, `BeginInvoke` and `EndInvoke`), and the primary constructor of a positional record, which lists the record's
+  members rather than a call's arguments. `ParameterListTests` reads every package and holds it to this. The only members
+  that take more are forms an earlier release published: each is kept so that code written against it still compiles,
+  marked obsolete in favour of its shorter form, and named in that test, so no other can join them.
 - Nothing reaches for a shared mutable instance of its own accord. What a type needs is handed to it.
 
 ## The version is handed out, never invented
@@ -61,6 +68,11 @@ you touched. A change whose documents lag is not finished.
 
 Product text — README, changelog, XML comments, the wiki — is written for people, in plain language, and
 carries measurements rather than dates.
+
+The code in the README and on the wiki is code a person copies, so tests compile it against the packages as built and
+fail on a warning: the README's example runs, every C# block of the wiki compiles, and a block the wiki marks as a
+notebook's cell runs in Verso's own engine. The wiki is a repository of its own; clone it beside this one, as
+`DeepSharp.wiki`, where those tests and the build machine read it.
 
 ## Commits
 

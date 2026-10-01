@@ -291,7 +291,10 @@ public sealed class PreparedData
     /// <remarks>
     /// Public because a saved pipeline has to be usable without the data it was fitted on: a serving host
     /// loads the declaration and what it learned, hands in a row, and gets it prepared the way the training
-    /// rows were. See <see cref="FromJson(string, StepCatalog)"/>.
+    /// rows were. See <see cref="FromJson(string, StepCatalog)"/>. A run made again with the evidence it produced says it
+    /// beside these: <c>new PreparedData(declaration, table, parts, fitted) { Evidence = evidence }</c>. Every declared step
+    /// is taken to have been run as it was declared: a run that left steps out for a learner is made by
+    /// <see cref="Pipeline.RunFor(Needs)"/>, or read back from the file it wrote.
     /// </remarks>
     /// <exception cref="ArgumentException">
     /// A step that learns has nothing it learned here, or something is here for a step that learns nothing.
@@ -301,7 +304,7 @@ public sealed class PreparedData
         Table table,
         IReadOnlyList<Part> parts,
         IReadOnlyDictionary<int, FittedStepValues> fitted)
-        : this(declaration, table, parts, fitted, new Dictionary<int, Evidence>())
+        : this(Course.Whole(declaration), new Walked(table, parts, new Dictionary<int, Evidence>()), fitted)
     {
     }
 
@@ -314,66 +317,83 @@ public sealed class PreparedData
     /// <exception cref="ArgumentException">
     /// A step that learns has nothing it learned here, or something is here for a step that learns nothing.
     /// </exception>
+    /// <remarks>
+    /// Every declared step is taken to have been run as it was declared: a run that left steps out for a learner is made by
+    /// <see cref="Pipeline.RunFor(Needs)"/>, or read back from the file it wrote.
+    /// </remarks>
+    [Obsolete("Use new PreparedData(declaration, table, parts, fitted) { Evidence = evidence }.")]
     public PreparedData(
         PipelineDeclaration declaration,
         Table table,
         IReadOnlyList<Part> parts,
         IReadOnlyDictionary<int, FittedStepValues> fitted,
         IReadOnlyDictionary<int, Evidence> evidence)
+        : this(Course.Whole(declaration), new Walked(table, parts, evidence), fitted)
     {
-        ArgumentNullException.ThrowIfNull(declaration);
-        ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(parts);
-        ArgumentNullException.ThrowIfNull(fitted);
-        ArgumentNullException.ThrowIfNull(evidence);
-
-        ThrowIfTheFitsDoNotMatch(declaration, fitted);
-
-        Declaration = declaration;
-        Table = table;
-        Parts = parts;
-        Fitted = fitted;
-        Evidence = evidence;
     }
 
-    /// <summary>Refuses fits that are not exactly one per step that learns, and one for the split.</summary>
+    /// <summary>A pipeline run through a course: the steps as it took them, what the walk left, and what each step learned.</summary>
+    /// <param name="course">The steps as the run took them, and which it left out.</param>
+    /// <param name="walked">The data as the last step left it, where each row landed, and the evidence.</param>
+    /// <param name="fitted">What each step learned, by its position in the declaration.</param>
+    /// <exception cref="ArgumentException">
+    /// A step the run took that learns has nothing it learned here, or something is here for a step that learned nothing in
+    /// this run: a step that learns nothing, or one the run left out.
+    /// </exception>
+    internal PreparedData(Course course, Walked walked, IReadOnlyDictionary<int, FittedStepValues> fitted)
+    {
+        ArgumentNullException.ThrowIfNull(walked.Table, "table");
+        ArgumentNullException.ThrowIfNull(walked.Parts, "parts");
+        ArgumentNullException.ThrowIfNull(fitted);
+        ArgumentNullException.ThrowIfNull(walked.Evidence, "evidence");
+
+        ThrowIfTheFitsDoNotMatch(course, fitted);
+
+        Course = course;
+        Declaration = course.Declaration;
+        Table = walked.Table;
+        Parts = walked.Parts;
+        Fitted = fitted;
+        Evidence = walked.Evidence;
+    }
+
+    /// <summary>Refuses fits that are not exactly one per step the run took that learns, and one for the split.</summary>
     /// <remarks>
     /// A step that learns and has nothing it learned used to be skipped when the pipeline was replayed, so a
     /// saved declaration without its fitted half served every value unscaled and said nothing about it. The
-    /// split's entry is what the fit saw, and a fitted half without it is one nobody can trace to its data.
+    /// split's entry is what the fit saw, and a fitted half without it is one nobody can trace to its data. The fits
+    /// are held to the steps as the run took them: a step it left out learned nothing.
     /// </remarks>
-    private static void ThrowIfTheFitsDoNotMatch(
-        PipelineDeclaration declaration, IReadOnlyDictionary<int, FittedStepValues> fitted)
+    private static void ThrowIfTheFitsDoNotMatch(Course course, IReadOnlyDictionary<int, FittedStepValues> fitted)
     {
         foreach (var at in fitted.Keys)
         {
-            if (at < 0 || at >= declaration.Steps.Count || !WritesAnEntry(declaration.Steps[at]))
+            if (at < 0 || at >= course.Steps.Count || !WritesAnEntry(course.Steps[at]))
             {
                 throw new ArgumentException(
-                    at < 0 || at >= declaration.Steps.Count
+                    at < 0 || at >= course.Steps.Count
                         ? $"There is no step {at + 1} for anything to have been learned at."
-                        : $"Step {at + 1}, '{declaration.Steps[at].Verb}', learns nothing, so nothing it learned can be here.",
+                        : $"Step {at + 1}, '{course.Steps[at].Verb}', learns nothing, so nothing it learned can be here.",
                     nameof(fitted));
             }
         }
 
-        if (FitsMissing(declaration, fitted).ToArray() is [var missing, ..])
+        if (FitsMissing(course, fitted).ToArray() is [var missing, ..])
         {
             throw new ArgumentException(missing.ToString(), nameof(fitted));
         }
     }
 
-    /// <summary>Every step that writes an entry and has none among these fits.</summary>
-    /// <param name="declaration">The steps.</param>
+    /// <summary>Every step the run took that writes an entry and has none among these fits.</summary>
+    /// <param name="course">The steps as the run took them.</param>
     /// <param name="fitted">What was learned, by position.</param>
     /// <returns>A fault for each step whose entry is missing, in the order of the steps.</returns>
     /// <remarks>One rule for this constructor and for the file a pipeline is read from, which says where each is.</remarks>
-    internal static IEnumerable<DeclarationFault> FitsMissing(
-        PipelineDeclaration declaration, IReadOnlyDictionary<int, FittedStepValues> fitted)
+    internal static IEnumerable<DeclarationFault> FitsMissing(Course course, IReadOnlyDictionary<int, FittedStepValues> fitted)
     {
-        for (var at = 0; at < declaration.Steps.Count; at++)
+        for (var at = 0; at < course.Steps.Count; at++)
         {
-            var step = declaration.Steps[at];
+            var step = course.Steps[at];
 
             if (WritesAnEntry(step) && !fitted.ContainsKey(at))
             {
@@ -412,9 +432,7 @@ public sealed class PreparedData
         ArgumentNullException.ThrowIfNull(json);
         ArgumentNullException.ThrowIfNull(catalog);
 
-        var saved = PipelineDocument.ReadPipeline(json, catalog);
-
-        return new PreparedData(saved.Declaration, new Table([]), [], saved.Fitted);
+        return Loaded(PipelineDocument.ReadPipeline(json, catalog));
     }
 
     /// <summary>Loads a saved pipeline that stands inside a larger file, as the value of one of the keys at its top.</summary>
@@ -439,13 +457,28 @@ public sealed class PreparedData
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentException.ThrowIfNullOrWhiteSpace(property);
 
-        var saved = PipelineDocument.ReadPipelineIn(json, catalog, property);
-
-        return new PreparedData(saved.Declaration, new Table([]), [], saved.Fitted);
+        return Loaded(PipelineDocument.ReadPipelineIn(json, catalog, property));
     }
+
+    // A saved pipeline as it was read: the steps as its run took them, what they learned, and no rows.
+    private static PreparedData Loaded(SavedPipeline saved) =>
+        new(Course.Of(saved.Declaration, saved.Skipped), new Walked(new Table([]), [], new Dictionary<int, Evidence>()), saved.Fitted);
 
     /// <summary>The steps, exactly as they were declared.</summary>
     public PipelineDeclaration Declaration { get; }
+
+    /// <summary>
+    /// The places of the steps the run left out for the learner it was run for, in ascending order, counting from nought:
+    /// each a step that learner does without, left out or taken in the form it offers; empty for a run of every step.
+    /// </summary>
+    /// <remarks>
+    /// What <see cref="Pipeline.RunFor(Needs)"/> decided from the declaration and the need, kept with the run and written into
+    /// its file, so a replay leaves out the same steps and a learner is handed the run only when it does without each of them.
+    /// </remarks>
+    public IReadOnlyList<int> Skipped => Course.Skipped;
+
+    /// <summary>The steps as the run took them: every one as it was declared, or as the learner it was run for takes it.</summary>
+    internal Course Course { get; }
 
     /// <summary>The data, as the last step left it.</summary>
     public Table Table { get; }
@@ -466,14 +499,34 @@ public sealed class PreparedData
     /// <summary>What each step that produces evidence produced when the pipeline was run, by its position.</summary>
     /// <remarks>
     /// Output, not the pipeline: it is kept with the run and never written into the pipeline's file, so a
-    /// pipeline loaded from one has none, and a replay produces none.
+    /// pipeline loaded from one has none, and a replay produces none. A run made again from its parts is handed the
+    /// evidence it produced here; one made without it has none.
     /// </remarks>
-    public IReadOnlyDictionary<int, Evidence> Evidence { get; }
+    /// <exception cref="ArgumentNullException">The evidence handed in is nothing.</exception>
+    public IReadOnlyDictionary<int, Evidence> Evidence
+    {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(Evidence));
+    }
 
     /// <summary>How many rows landed in one split.</summary>
     /// <param name="part">The part to count.</param>
     /// <returns>The number of rows.</returns>
     public int CountIn(Part part) => Parts.Count(each => each == part);
+
+    /// <summary>Refuses a pipeline that holds no rows, as one read from its file holds none: it has no part to hand over and nothing to measure.</summary>
+    /// <exception cref="InvalidOperationException">The pipeline holds no rows.</exception>
+    /// <remarks>The one refusal for it, wherever a part's rows are asked for — handed to a learner, or measured by the report.</remarks>
+    internal void RequireRows()
+    {
+        if (Table.RowCount == 0)
+        {
+            throw new InvalidOperationException(
+                "This pipeline holds no rows: one read from its file keeps what its steps learned, not the rows they learned it from, "
+                + "so it has no part to hand over and nothing to measure. Run its declaration over the rows — "
+                + "new Pipeline(declaration, rows, folder).Run() — and hand that run over; rows that arrive later are served through this one.");
+        }
+    }
 
     /// <summary>Runs the same declaration over new rows, with the same numbers it learned before.</summary>
     /// <param name="rows">The rows to prepare — one of them, or a million.</param>
@@ -483,13 +536,14 @@ public sealed class PreparedData
     /// This is what serving is. Nothing is fitted again and nothing is learned: the means, the fill values
     /// and the category lists are the ones the training rows produced, so a row arriving a year from now
     /// meets exactly the numbers the model was trained on. It is also why a model without its pipeline
-    /// cannot be used at all.
+    /// cannot be used at all. The steps are replayed as the run took them: a step it left out for its learner
+    /// (<see cref="Skipped"/>) is left out here too, so a served row is handed over as the training rows were.
     /// </remarks>
     public Table Replay(IRowSource rows)
     {
         ArgumentNullException.ThrowIfNull(rows);
 
-        return new Walk(Declaration, new ReplayWhatWasFitted(Fitted), SourceFolder.WorkingDirectory).Through(rows).Table;
+        return new Walk(Course, new ReplayWhatWasFitted(Fitted), SourceFolder.WorkingDirectory).Through(rows).Table;
     }
 
     /// <summary>Puts predictions back into the units the target was read in.</summary>
@@ -587,7 +641,7 @@ public sealed class PreparedData
         }
 
         // Read the way the replay read them, so each row is keyed as it was when it was served.
-        var read = new Walk(Declaration, new ReplayWhatWasFitted(Fitted), SourceFolder.WorkingDirectory).Bound(rows);
+        var read = new Walk(Course, new ReplayWhatWasFitted(Fitted), SourceFolder.WorkingDirectory).Bound(rows);
         var asRead = ColumnsAsRead.Of(Declaration, read);
         var found = new RowAsRead[keys.Count];
 
@@ -652,21 +706,24 @@ public sealed class PreparedData
     /// </param>
     /// <returns>The measures, part by part and measure by measure in the order the report names them.</returns>
     /// <exception cref="InvalidOperationException">
-    /// The pipeline declares no report; a part it names holds no rows, or the training part holds none; R² is asked of a part
-    /// of one row; or, where the report counts classes, a row's answer is neither nought nor one, or holds another number of
-    /// ones than its output says.
+    /// The pipeline declares no report; it holds no rows, as one read from its file holds none; a part it names holds no rows,
+    /// or the training part holds none; R² is asked of a part of one row; or, where the report counts classes, a row's answer
+    /// is neither nought nor one, or holds another number of ones than its output says.
     /// </exception>
     /// <exception cref="ArgumentException">
     /// A part the report names has no predictions, or two sets; predictions are for a part it does not name, for a batch the
     /// pipeline did not hand over, or for other rows or another order than the part's; there is not one prediction per row
-    /// and per answer; or a prediction comes back as a number that is not finite.
+    /// and per answer; a prediction comes back as a number that is not finite; or what the predictions say is unfamiliar is
+    /// not said of one row each.
     /// </exception>
     /// <remarks>
     /// The predictions and the answers they are compared with both come back through the way back, because in the units
     /// they were handed over in every error is small and every model looks excellent. Beside each measure stands what
     /// predicting, for every row, the average of the training rows' answers measures — brought back and measured the same
-    /// way — so no number stands alone. What is measured is output, kept with whatever measured it and never written into
-    /// the pipeline's file.
+    /// way — so no number stands alone; and beside a part's rows, when the predictions say it, how many of them the model
+    /// learned nothing about (<see cref="PartPredictions.Unfamiliar"/>). What is measured is output, kept with whatever
+    /// measured it and never written into the pipeline's file. Only the rows' keys and answers are read, never the features a
+    /// learner was handed, so a learner handed each category as its place is measured on the same rows as any other.
     /// </remarks>
     public Measures Measure(IReadOnlyList<PartPredictions> predictions)
     {
@@ -675,14 +732,85 @@ public sealed class PreparedData
         return Measurement.Of(this, predictions);
     }
 
-    /// <summary>Writes the whole pipeline: the version, what was declared, and what the fit learned.</summary>
+    /// <summary>
+    /// Measures again, by this pipeline's report and on this run, what a model predicted for the parts the report names,
+    /// handed over as the text <see cref="Measures.PredictionsToJson"/> writes.
+    /// </summary>
+    /// <param name="predictions">
+    /// The text: for each part, the key of each row, what was predicted for it in the units the answers were handed over in,
+    /// and what the model said it learned nothing about.
+    /// </param>
+    /// <returns>The measures, part by part and measure by measure in the order the report names them.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// As <see cref="Measure"/> refuses: the pipeline declares no report, a part holds no rows, R² of one row, or answers
+    /// that are not the classes the report counts.
+    /// </exception>
+    /// <exception cref="ArgumentException">
+    /// The text is not what <see cref="Measures.PredictionsToJson"/> writes, or a newer DeepSharp wrote it; the predictions
+    /// answer other answers than this pipeline's output names; they were made behind another fit than this one, behind a
+    /// pipeline of a version of the pipeline file no comparison knows, or behind a run that took a step this run left out; or,
+    /// as <see cref="Measure"/> refuses them, they are for other rows than this run's parts hand over — known by the rows'
+    /// keys — or in another order, or are not one for each row and answer.
+    /// </exception>
+    /// <remarks>
+    /// This is how predictions made where this library's types are other types — a notebook's C# cell — are measured where
+    /// they are shown: the one measurement <see cref="Measure"/> makes, on the run that reads the text, and only beside the
+    /// very fit they were made behind. That is judged as a network's file is held to its pipeline: both pipelines through one
+    /// writer, the version each names left out (<see cref="PipelineText"/>), so predictions made behind other steps, or behind
+    /// numbers learned from other rows — a feature scaled another way, or the answer — are refused before anything is
+    /// measured, as are those of another output, by the names of its answers. Predictions made behind a run for a learner
+    /// that left steps out (<see cref="Pipeline.RunFor(Needs)"/>) say which, and are measured again on a run of every step of
+    /// the same declaration, which learned all they were made behind, as well as on the very run they were made behind.
+    /// </remarks>
+    public Measures MeasureAgain(string predictions)
+    {
+        ArgumentNullException.ThrowIfNull(predictions);
+
+        var written = PredictionsDocument.Read(predictions);
+
+        if (Declaration.Output is { } output && !output.Answers.SequenceEqual(written.Answers))
+        {
+            throw new ArgumentException(
+                $"These predictions answer {Quoted(written.Answers)}, and this pipeline answers {Quoted(output.Answers)}: they were made for another pipeline's output.",
+                nameof(predictions));
+        }
+
+        written.Behind.ThrowIfNotBehind(this);
+
+        return Measurement.Of(this, [.. written.Parts.Select(part => part.ToPartPredictions())]);
+    }
+
+    private static string Quoted(IEnumerable<string> names) => string.Join(", ", names.Select(name => $"'{name}'"));
+
+    /// <summary>
+    /// This run's file as a run of the same declaration that left out these steps would have written it: each of them that
+    /// learns nothing in the form the run takes it has no entry, and they are named under <c>skipped</c>.
+    /// </summary>
+    /// <param name="skipped">The places of the steps left out, which <see cref="Course.FaultsIn"/> finds nothing wrong with, and among which every step this run left out stands.</param>
+    /// <returns>The text, as <see cref="ToJson"/> writes a run's.</returns>
+    /// <remarks>
+    /// A run for a learner learns what the run of every step learns, but for what it left out, so predictions made behind it
+    /// are held to the run of every step through this text.
+    /// </remarks>
+    internal string TextWithout(IReadOnlyList<int> skipped)
+    {
+        var course = Course.Of(Declaration, skipped);
+
+        return PipelineDocument.Write(course, Fitted.Where(entry => WritesAnEntry(course.Steps[entry.Key])).ToDictionary());
+    }
+
+    /// <summary>
+    /// Writes the whole pipeline: the version, what was declared, what the fit learned, and — for a run that left steps out
+    /// for its learner — which it left out.
+    /// </summary>
     /// <returns>The pipeline as one JSON document.</returns>
     /// <remarks>
     /// Both halves in one file, because a model without what its pipeline learned cannot be used: the
     /// numbers reaching it would not be the numbers it was trained on. Each entry of the fitted half names
     /// the step that learned it and the key of the steps it was learned behind
     /// (<see cref="PipelineDeclaration.KeyAt"/>), which is what keeps a fit from being served under steps
-    /// that changed after it.
+    /// that changed after it. A run that left steps out names each under <c>skipped</c>, by its verb and the same key, so a
+    /// replay leaves out the same steps; a run of every step writes nothing more than it always did.
     /// </remarks>
-    public string ToJson() => PipelineDocument.Write(Declaration, Fitted);
+    public string ToJson() => PipelineDocument.Write(Course, Fitted);
 }

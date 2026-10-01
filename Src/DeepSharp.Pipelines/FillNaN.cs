@@ -25,8 +25,10 @@ public sealed record FillNaNStep : IFittedStep, IPipelineStep<FillNaNStep>, IDes
         "with",
         "What happens to a value that is not a number: refuse, which is the default and usually the right answer, or mean, median, zero or constant.",
         With.Refuse,
-        ["refuse", "mean", "median", "zero", "constant"],
-        "dealing with a value that is not a number");
+        ["refuse", "mean", "median", "zero", "constant"])
+    {
+        What = "dealing with a value that is not a number",
+    };
 
     /// <summary>Declares what happens to a value in this column that is not a number.</summary>
     /// <param name="column">The column to watch.</param>

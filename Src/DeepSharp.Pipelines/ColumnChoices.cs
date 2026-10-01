@@ -172,9 +172,10 @@ public static class ColumnChoiceExtensions
     /// <param name="declaration">The pipeline.</param>
     /// <param name="column">The column.</param>
     /// <returns>
-    /// The steps without it: a declared column no step reads is excluded in the schema, keeping its kind; any other is
-    /// dropped after the last step that reads it, or after the step that makes it, as another name in a drop standing
-    /// there. The steps as they are when the column does not reach the end.
+    /// The steps without it: a declared column no step names is excluded in the schema, keeping its kind — a category
+    /// the step that encodes every category turns into columns of its own among them, though it never reaches the end
+    /// itself; any other is dropped after the last step that reads it, or after the step that makes it, as another name
+    /// in a drop standing there. The steps as they are when a column a step names does not reach the end.
     /// </returns>
     /// <exception cref="DeclarationException">
     /// The column is the last one the schema takes, and the schema does not keep the rest: it would take no column.
@@ -185,16 +186,21 @@ public static class ColumnChoiceExtensions
 
         var steps = declaration.Steps;
 
-        if (Schema(declaration) is not { } declare || !Reaches(declaration, column))
+        if (Schema(declaration) is not { } declare)
         {
             return steps;
         }
 
         var readers = Enumerable.Range(0, steps.Count).Where(at => steps[at].ColumnsRead.Any(read => read.Column == column)).ToArray();
 
-        if (readers.Length == 0 && declare.Columns.Any(each => each.Name == column))
+        if (readers.Length == 0 && declare.Columns.Any(each => each is { Excluded: false } && each.Name == column))
         {
             return Replaced(steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnExcluded(column)));
+        }
+
+        if (!Reaches(declaration, column))
+        {
+            return steps;
         }
 
         var after = Math.Max(readers.DefaultIfEmpty(-1).Max(), MadeAt(declaration, column)) + 1;

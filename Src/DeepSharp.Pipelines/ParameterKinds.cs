@@ -1,31 +1,64 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
 
 /// <summary>A parameter holding words: a description, a name that is not a column.</summary>
-/// <param name="key">The key it is written under.</param>
-/// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
-public sealed class TextParameter(string key, string description, string example)
-    : StepParameter<string>(key, description, example)
+public sealed class TextParameter : StepParameter<string>
 {
-    /// <inheritdoc />
-    public override string Read(JsonElement step) => step.RequiredString(Key);
+    /// <summary>Words a step needs.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    public TextParameter(string key, string description, string example)
+        : this(key, description, example, optional: false)
+    {
+    }
+
+    /// <summary>Words a step needs, or can do without.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with, when the step needs the words.</param>
+    /// <param name="optional">
+    /// Whether the step can do without them — which sheet of a workbook, when the first will do. Left out, they are the
+    /// empty text: nothing is written for them, nothing is read, and a new block starts without them.
+    /// </param>
+    public TextParameter(string key, string description, string example, bool optional)
+        : base(key, description, optional ? string.Empty : example) =>
+        Optional = optional;
+
+    /// <summary>Whether the step can do without the words.</summary>
+    public bool Optional { get; }
 
     /// <inheritdoc />
+    public override IReadOnlyList<string> RequiredKeys => Optional ? [] : Keys;
+
+    /// <inheritdoc />
+    public override string Read(JsonElement step) =>
+        Optional && !step.TryGetProperty(Key, out _) ? string.Empty : step.RequiredString(Key);
+
+    /// <inheritdoc />
+    /// <remarks>Nothing is written for words a step can do without and was not given.</remarks>
     public override void Write(Utf8JsonWriter writer, string value)
     {
         ArgumentNullException.ThrowIfNull(writer);
+
+        if (Optional && string.IsNullOrEmpty(value))
+        {
+            return;
+        }
 
         writer.WriteString(Key, value);
     }
 
     /// <inheritdoc />
-    public override string Require(string value) => Required(value);
+    /// <remarks>Optional words of nothing but spaces are none, which is what leaving them out of a file means too.</remarks>
+    public override string Require(string value) =>
+        Optional && string.IsNullOrWhiteSpace(value) ? string.Empty : Required(value);
 
     /// <inheritdoc />
     public override TResult Accept<TResult>(IStepParameterVisitor<TResult> visitor)
@@ -71,26 +104,52 @@ public sealed class FilePathParameter(string key, string description, string exa
 }
 
 /// <summary>A parameter naming a column the step reads.</summary>
-/// <param name="key">The key it is written under.</param>
-/// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
-/// <param name="accepts">The kinds of column the step can work on.</param>
-/// <param name="optional">
-/// Whether the step can do without it. Left out, it names no column: the empty name, which no column can have, so it
-/// never stands for one. Nothing is written for it, and nothing is read.
-/// </param>
 /// <remarks>
 /// A name, said to be a column so that a form can offer the columns there are rather than an empty box,
 /// and so that a column the source does not have is found before anything runs.
 /// </remarks>
-public sealed class ColumnParameter(string key, string description, string example, IReadOnlyList<ColumnKind> accepts, bool optional = false)
-    : StepParameter<string>(key, description, optional ? string.Empty : example)
+public sealed class ColumnParameter : StepParameter<string>
 {
+    /// <summary>A column the step needs.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="accepts">The kinds of column the step can work on.</param>
+    public ColumnParameter(string key, string description, string example, IReadOnlyList<ColumnKind> accepts)
+        : base(key, description, example) =>
+        Accepts = accepts;
+
+    /// <summary>A column the step can do without.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means, and what leaving it out means.</param>
+    /// <param name="accepts">The kinds of column the step can work on.</param>
+    /// <remarks>
+    /// Left out, it names no column: the empty name, which no column can have, so it never stands for one. Nothing is
+    /// written for it, nothing is read, and a new block starts without it — which is why it has no example to start with.
+    /// </remarks>
+    public ColumnParameter(string key, string description, IReadOnlyList<ColumnKind> accepts)
+        : base(key, description, string.Empty)
+    {
+        Accepts = accepts;
+        Optional = true;
+    }
+
+    /// <summary>A column the step reads, said with whether the step can do without it.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with, when the step needs the column.</param>
+    /// <param name="accepts">The kinds of column the step can work on.</param>
+    /// <param name="optional">Whether the step can do without it.</param>
+    [Obsolete("Use ColumnParameter(key, description, example, accepts) for a column the step needs, and ColumnParameter(key, description, accepts) for one it can do without.")]
+    public ColumnParameter(string key, string description, string example, IReadOnlyList<ColumnKind> accepts, bool optional = false)
+        : this(key, description, optional ? string.Empty : example, accepts) =>
+        Optional = optional;
+
     /// <summary>The kinds of column the step can work on.</summary>
-    public IReadOnlyList<ColumnKind> Accepts { get; } = accepts;
+    public IReadOnlyList<ColumnKind> Accepts { get; }
 
     /// <summary>Whether the step can do without it.</summary>
-    public bool Optional { get; } = optional;
+    public bool Optional { get; }
 
     /// <inheritdoc />
     public override IReadOnlyList<string> RequiredKeys => Optional ? [] : Keys;
@@ -172,30 +231,47 @@ public sealed class NewColumnParameter(string key, string description, string ex
 }
 
 /// <summary>A parameter naming several columns.</summary>
-/// <param name="key">The key it is written under.</param>
-/// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
-/// <param name="accepts">The kinds of column the step can work on.</param>
-/// <param name="optional">
-/// Whether none may be named, in which case the step decides — every column, say. None named is written as
-/// the key left out.
-/// </param>
-/// <param name="repeatable">
-/// Whether one column may stand in more than one place: when each place is a role of its own, as an indicator's
-/// high, low and close are. Otherwise the list is a set of columns, and a column is named in it once.
-/// </param>
-public sealed class ColumnsParameter(
-    string key, string description, IReadOnlyList<string> example, IReadOnlyList<ColumnKind> accepts, bool optional = false, bool repeatable = false)
-    : StepParameter<IReadOnlyList<string>>(key, description, example)
+public sealed class ColumnsParameter : StepParameter<IReadOnlyList<string>>
 {
+    /// <summary>Columns the step reads: at least one, each named once, unless said otherwise.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="accepts">The kinds of column the step can work on.</param>
+    public ColumnsParameter(string key, string description, IReadOnlyList<string> example, IReadOnlyList<ColumnKind> accepts)
+        : base(key, description, example) =>
+        Accepts = accepts;
+
+    /// <summary>Columns the step reads, said with whether none may be named and whether one may stand in several places.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="accepts">The kinds of column the step can work on.</param>
+    /// <param name="optional">Whether none may be named.</param>
+    /// <param name="repeatable">Whether one column may stand in more than one place.</param>
+    [Obsolete("Use ColumnsParameter(key, description, example, accepts) with { Optional = …, Repeatable = … }.")]
+    public ColumnsParameter(
+        string key, string description, IReadOnlyList<string> example, IReadOnlyList<ColumnKind> accepts, bool optional = false, bool repeatable = false)
+        : this(key, description, example, accepts)
+    {
+        Optional = optional;
+        Repeatable = repeatable;
+    }
+
     /// <summary>The kinds of column the step can work on.</summary>
-    public IReadOnlyList<ColumnKind> Accepts { get; } = accepts;
+    public IReadOnlyList<ColumnKind> Accepts { get; }
 
-    /// <summary>Whether none may be named.</summary>
-    public bool Optional { get; } = optional;
+    /// <summary>
+    /// Whether none may be named, in which case the step decides — every column, say. None named is written as the key
+    /// left out.
+    /// </summary>
+    public bool Optional { get; init; }
 
-    /// <summary>Whether one column may stand in more than one place, each place being a role of its own.</summary>
-    public bool Repeatable { get; } = repeatable;
+    /// <summary>
+    /// Whether one column may stand in more than one place: when each place is a role of its own, as an indicator's high,
+    /// low and close are. Otherwise the list is a set of columns, and a column is named in it once.
+    /// </summary>
+    public bool Repeatable { get; init; }
 
     /// <inheritdoc />
     public override IReadOnlyList<string> RequiredKeys => Optional ? [] : Keys;
@@ -285,19 +361,36 @@ public sealed class ColumnsParameter(
 }
 
 /// <summary>A parameter holding a number that may have a fraction.</summary>
-/// <param name="key">The key it is written under.</param>
-/// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
-/// <param name="above">A bound the number has to be strictly above, when there is one.</param>
-/// <param name="atLeast">The least value the number may hold, when there is one.</param>
-public sealed class NumberParameter(string key, string description, double example, double? above = null, double? atLeast = null)
-    : StepParameter<double>(key, description, example)
+public sealed class NumberParameter : StepParameter<double>
 {
+    /// <summary>A number, any finite one unless a bound or a least value is said.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    public NumberParameter(string key, string description, double example)
+        : base(key, description, example)
+    {
+    }
+
+    /// <summary>A number, said with the bound it has to be above and the least value it may hold.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="above">A bound the number has to be strictly above, when there is one.</param>
+    /// <param name="atLeast">The least value the number may hold, when there is one.</param>
+    [Obsolete("Use NumberParameter(key, description, example) with { Above = …, AtLeast = … }.")]
+    public NumberParameter(string key, string description, double example, double? above = null, double? atLeast = null)
+        : this(key, description, example)
+    {
+        Above = above;
+        AtLeast = atLeast;
+    }
+
     /// <summary>The bound the number has to be strictly above, when there is one.</summary>
-    public double? Above { get; } = above;
+    public double? Above { get; init; }
 
     /// <summary>The least value the number may hold, when there is one.</summary>
-    public double? AtLeast { get; } = atLeast;
+    public double? AtLeast { get; init; }
 
     /// <inheritdoc />
     public override double Read(JsonElement step) => step.RequiredNumber(Key);
@@ -333,22 +426,39 @@ public sealed class NumberParameter(string key, string description, double examp
 }
 
 /// <summary>A parameter holding a whole number: a seed, a limit, a period.</summary>
-/// <param name="key">The key it is written under.</param>
-/// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
-/// <param name="atLeast">The smallest value it may hold, when there is one.</param>
-/// <param name="leftOut">
-/// The value a file means by leaving the key out, when it may: that value is never written, so a step that gained
-/// the parameter writes itself as it did before, and keeps its keys.
-/// </param>
-public sealed class WholeNumberParameter(string key, string description, int example, int? atLeast = null, int? leftOut = null)
-    : StepParameter<int>(key, description, example)
+public sealed class WholeNumberParameter : StepParameter<int>
 {
-    /// <summary>The smallest value it may hold, when there is one.</summary>
-    public int? AtLeast { get; } = atLeast;
+    /// <summary>A whole number a file always writes, any one unless a least value is said.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    public WholeNumberParameter(string key, string description, int example)
+        : base(key, description, example)
+    {
+    }
 
-    /// <summary>The value a file means by leaving the key out, or nothing when the key is required.</summary>
-    public int? LeftOut { get; } = leftOut;
+    /// <summary>A whole number, said with the least value it may hold and the value leaving it out means.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="atLeast">The smallest value it may hold, when there is one.</param>
+    /// <param name="leftOut">The value a file means by leaving the key out, when it may.</param>
+    [Obsolete("Use WholeNumberParameter(key, description, example) with { AtLeast = …, LeftOut = … }.")]
+    public WholeNumberParameter(string key, string description, int example, int? atLeast = null, int? leftOut = null)
+        : this(key, description, example)
+    {
+        AtLeast = atLeast;
+        LeftOut = leftOut;
+    }
+
+    /// <summary>The smallest value it may hold, when there is one.</summary>
+    public int? AtLeast { get; init; }
+
+    /// <summary>
+    /// The value a file means by leaving the key out, or nothing when the key is required. That value is never written, so
+    /// a step that gained the parameter writes itself as it did before, and keeps its keys.
+    /// </summary>
+    public int? LeftOut { get; init; }
 
     /// <inheritdoc />
     public override IReadOnlyList<string> RequiredKeys => LeftOut is null ? Keys : [];
@@ -623,14 +733,7 @@ public sealed class SeveralOfParameter<TEnum>(string key, string description, IR
 }
 
 /// <summary>A parameter holding how a value is filled: a strategy by name, and its number when it takes one.</summary>
-/// <param name="key">The key it is written under.</param>
-/// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
-/// <param name="allowed">The strategies this step may use.</param>
-/// <param name="what">What the strategy does, for the message: "filling a gap".</param>
-public sealed class FillStrategyParameter(
-    string key, string description, FillStrategy example, IReadOnlyList<string> allowed, string what)
-    : StepParameter<FillStrategy>(key, description, example)
+public sealed class FillStrategyParameter : StepParameter<FillStrategy>
 {
     /// <summary>The key a strategy carrying a number writes its name under.</summary>
     public const string KindKey = "kind";
@@ -638,8 +741,32 @@ public sealed class FillStrategyParameter(
     /// <summary>The key a strategy carrying a number writes the number under.</summary>
     public const string ValueKey = "value";
 
+    /// <summary>A strategy, one of those a step allows; what filling does there is said as <see cref="What"/>.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="allowed">The strategies this step may use.</param>
+    public FillStrategyParameter(string key, string description, FillStrategy example, IReadOnlyList<string> allowed)
+        : base(key, description, example) =>
+        Allowed = allowed;
+
+    /// <summary>A strategy, said with what filling does there.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means.</param>
+    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="allowed">The strategies this step may use.</param>
+    /// <param name="what">What the strategy does, for the message: "filling a gap".</param>
+    [Obsolete("Use FillStrategyParameter(key, description, example, allowed) with { What = … }.")]
+    [SetsRequiredMembers]
+    public FillStrategyParameter(string key, string description, FillStrategy example, IReadOnlyList<string> allowed, string what)
+        : this(key, description, example, allowed) =>
+        What = what;
+
     /// <summary>The strategies this step may use, as they are written.</summary>
-    public IReadOnlyList<string> Allowed { get; } = allowed;
+    public IReadOnlyList<string> Allowed { get; }
+
+    /// <summary>What the strategy does, in the words a refusal says it in: "filling a gap".</summary>
+    public required string What { get; init; }
 
     /// <summary>The keys a strategy carrying a number is written with.</summary>
     public IReadOnlyList<string> StrategyKeys { get; } = [KindKey, ValueKey];
@@ -702,12 +829,12 @@ public sealed class FillStrategyParameter(
     {
         if (string.IsNullOrWhiteSpace(value.Name))
         {
-            throw new ArgumentException($"{char.ToUpperInvariant(what[0])}{what[1..]} needs a strategy; With has the names.", Key);
+            throw new ArgumentException($"{char.ToUpperInvariant(What[0])}{What[1..]} needs a strategy; With has the names.", Key);
         }
 
         if (!With.Knows(value.Name) || !Allowed.Contains(value.Name, StringComparer.Ordinal))
         {
-            throw new ArgumentException($"'{value.Name}' is not a way of {what}. With has the names.", Key);
+            throw new ArgumentException($"'{value.Name}' is not a way of {What}. With has the names.", Key);
         }
 
         if (With.TakesAValue(value.Name) != value.Value.HasValue)

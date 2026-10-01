@@ -543,6 +543,32 @@ public class ColumnChoiceTests
     }
 
     [Fact]
+    public void ACategoryEncodedIntoColumnsOfItsOwn_OffersToBeLeftOut_InTheSchema_AndComesBackAsItWas()
+    {
+        // The category never reaches the end itself — the columns made of it do — and the step that encodes every
+        // category names none, so it is left out where the schema takes it in, and ticked in again as it was. The last
+        // category is not offered: the step that encodes every category would have none to encode.
+        PipelineDeclaration Encoding(Action<SchemaBuilder> columns) => Pdd.Create()
+            .ReadCsv("titanic.csv")
+            .Declare(columns)
+            .SplitStratified("survived", 0.70, 0.15)
+            .EncodeCategories()
+            .Declaration;
+
+        var encoded = Encoding(schema => schema.Integer("survived").Category("pclass", "sex").Number("fare"));
+
+        Assert.Equal(ColumnOffers.Exclude, Row(encoded, "sex").Offers & ColumnOffers.Exclude);
+        Assert.Equal(ColumnOffers.None, Row(Encoding(schema => schema.Integer("survived").Category("sex").Number("fare")), "sex").Offers & ColumnOffers.Exclude);
+
+        var excluded = encoded.Excluding("sex");
+
+        Assert.Equal(new ColumnDeclaration("sex", ColumnKind.Category, Optional: false) { Excluded = true }, Declared(excluded, "sex"));
+        Assert.Equal(encoded.Steps.Where(step => step is not DeclareStep), excluded.Where(step => step is not DeclareStep));
+        Assert.Empty(PipelineDeclaration.FaultsIn(excluded));
+        Assert.Equal(encoded.Steps, Then(excluded).Including("sex", ColumnKind.Text, Header));
+    }
+
+    [Fact]
     public void ACategory_OffersTheWayBack_OnlyWhenItSaysWhatItWas()
     {
         var madeOne = Then(Titanic().WithKind("pclass", ColumnKind.Category));

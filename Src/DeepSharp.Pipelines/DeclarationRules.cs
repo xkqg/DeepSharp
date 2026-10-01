@@ -241,7 +241,7 @@ internal sealed class NothingLearnsBeforeTheSplit : IDeclarationRule
 internal sealed class ColumnsAreThereWhereTheyAreRead : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps) =>
-        ColumnFlow.Follow(steps, ColumnState.None, from: 0, until: steps.Count, declared: false).Faults;
+        ColumnFlow.Follow(steps, ColumnState.None, .., declared: false).Faults;
 }
 
 /// <summary>

@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using DeepSharp.Pipelines;
+using DeepSharp.Tests.Learners;
 
 namespace DeepSharp.Tests.Pipelines;
 
@@ -429,6 +430,36 @@ public class MeasureTests
     }
 
     [Fact]
+    public void WhatAModelSaysItWasHandedAndLearnedNothingAbout_IsCountedPartByPart_AndWhatItDoesNotSay_IsNotCountedAtAll()
+    {
+        // A model may say, of each row it predicted, which features it was handed a value of that it learned nothing about;
+        // the report counts the rows of each part that name any, and leaves a part whose predictions say nothing uncounted.
+        var prepared = Guessing(report => report.Measure(Metric.Accuracy).On(Part.Validation, Part.Test).As(Shown.Numbers));
+        var validation = Predicted(prepared, Part.Validation, Guessed);
+        var test = Predicted(prepared, Part.Test, Guessed);
+        IReadOnlyList<string>[] said = [.. Enumerable.Range(0, validation.Batch.RowCount).Select(row => row % 40 == 0 ? (IReadOnlyList<string>)["sex_other", "pclass_other"] : [])];
+
+        var measures = prepared.Measure([validation with { Unfamiliar = said }, test]);
+
+        Assert.Equal(133, measures.Parts[0].Rows);
+        Assert.Equal<int?>([4, null], measures.Parts.Select(part => part.UnfamiliarRows));
+        Assert.Equal(prepared.Measure([validation, test]).Parts.SelectMany(part => part.Values), measures.Parts.SelectMany(part => part.Values));
+    }
+
+    [Fact]
+    public void WhatAModelSaysOfOtherRowsThanThePartHandsOver_IsRefused()
+    {
+        var prepared = Guessing(report => report.Measure(Metric.Accuracy).On(Part.Test).As(Shown.Numbers));
+        var test = Predicted(prepared, Part.Test, Guessed);
+
+        var refused = Assert.Throws<ArgumentException>(() => prepared.Measure([test with { Unfamiliar = [[], ["sex_other"]] }]));
+
+        Assert.Contains("'test'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("2 rows", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("135", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void APredictionThatIsNotAFiniteNumber_IsRefused_NamingItsRow()
     {
         var prepared = Guessing(report => report.Measure(Metric.Accuracy).On(Part.Test).As(Shown.Numbers));
@@ -537,6 +568,48 @@ public class MeasureTests
 
         Assert.Contains("holds no rows", refused.Message, StringComparison.Ordinal);
         Assert.Contains("file", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARunForALearnerThatTakesCategories_IsMeasuredOnTheSameRows_ToTheSameMeasures()
+    {
+        // The report reads the rows' keys and answers, never the features a learner was handed: the same guess, made from the
+        // sex handed over one-hot or as its place, measures the same on both runs.
+        var titanic = WikiTitanic.In(WikiTitanic.DataFolder);
+        var every = titanic.Run();
+        var places = titanic.RunFor(Needs.Categories);
+
+        var oneHot = every.Measure([.. ThreeParts.Select(part => Guess(every.Batch(part), "sex_female", female: 1))]);
+        var asPlaces = places.Measure([.. ThreeParts.Select(part => Guess(places.Batch(part, Needs.Categories), "sex", female: 0))]);
+
+        Assert.Equal([623, 133, 135], asPlaces.Parts.Select(part => part.Rows));
+        Assert.Equal(oneHot.Parts.SelectMany(part => part.Values), asPlaces.Parts.SelectMany(part => part.Values));
+
+        static PartPredictions Guess(Batch batch, string sex, double female) =>
+            new(batch, [.. batch.Features.Select(row => new[] { row[At(batch, sex)] == female ? 0.74 : 0.19 })]);
+    }
+
+    [Fact]
+    public void APartAFeatureOfWhichStillHoldsWords_IsMeasured_ForTheReportReadsNoFeature()
+    {
+        // No learner of numbers is handed a column of words, and the report is none: what a learner handed something else
+        // predicted is measured on the rows' keys and answers alone.
+        var words = Pdd.Create()
+            .ReadCsv(Repository.Data("titanic.csv"))
+            .Declare(schema => schema.Integer("survived").Category("sex"))
+            .SplitStratified("survived", 0.70, 0.15)
+            .Target("survived")
+            .Report(report => report.Measure(Metric.Accuracy).On(Part.Test).As(Shown.Numbers))
+            .Build()
+            .Run();
+        RowKey[] keys = [.. Enumerable.Range(0, words.Table.RowCount).Where(row => words.Parts[row] == Part.Test).Select(row => words.Table.Identities[row].Key)];
+        var batch = new Batch(["sex"], [.. keys.Select(_ => new[] { 0.0 })], null) { Part = Part.Test, Keys = keys };
+
+        var measures = words.Measure([new PartPredictions(batch, [.. keys.Select(_ => new[] { 0.0 })])]);
+
+        Assert.Contains("still holds words", Assert.Throws<InvalidOperationException>(() => words.Batch(Part.Test)).Message, StringComparison.Ordinal);
+        Assert.Equal(135, Assert.Single(measures.Parts).Rows);
+        Assert.InRange(Assert.Single(measures.Parts[0].Values).Value, 0.5, 0.7);
     }
 
     [Fact]

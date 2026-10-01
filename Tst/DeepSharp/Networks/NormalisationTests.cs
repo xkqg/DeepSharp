@@ -10,7 +10,9 @@ namespace DeepSharp.Tests.Networks;
 /// The two normalisations, over the last axis — a row's features, or an image's channels when they come last. A batch
 /// normalisation measures each feature over the batch while it trains and keeps a running mean and variance, measured on
 /// the training batches alone, to use afterwards; a layer normalisation measures each row on its own and keeps nothing.
-/// Every number is PyTorch's for the same batch, the same scale and the same shift.
+/// Every number is PyTorch's for the same batch, the same scale and the same shift — put into the slots by the door the
+/// library keeps to itself, which is why these run on the light engine alone; what a normalisation does on any engine
+/// otherwise runs from the contract.
 /// </summary>
 public class NormalisationTests
 {
@@ -100,40 +102,6 @@ public class NormalisationTests
     }
 
     [Fact]
-    public void ABatchNormalisation_StartsAtAScaleOfOneAndAShiftOfNothing_AndSaysWhatItKeeps()
-    {
-        var norm = new BatchNorm(3);
-
-        Assert.Equal([1f, 1f, 1f], norm.Weight.Value.Values.ToArray());
-        Assert.Equal([0f, 0f, 0f], norm.Bias.Value.Values.ToArray());
-        Assert.Equal([0f, 0f, 0f], norm.RunningMean.Value.Values.ToArray());
-        Assert.Equal([1f, 1f, 1f], norm.RunningVariance.Value.Values.ToArray());
-        Assert.Equal(["weight", "bias", "running_mean", "running_var"], norm.Slots().Select(slot => slot.Path));
-        Assert.Equal(0.1, norm.Momentum);
-        Assert.Equal(1e-5, norm.Epsilon);
-    }
-
-    [Fact]
-    public void ABatchOfOneRow_CannotBeMeasured_InATrainingPass()
-    {
-        var norm = new BatchNorm(3);
-
-        Assert.Throws<ArgumentException>(() => norm.Forward(Tensor.Zeros(new Shape(1, 3)), Training()));
-    }
-
-    [Fact]
-    public void ANormalisationOfFeaturesItDoesNotHave_OrOfNone_IsRefused()
-    {
-        Assert.Throws<ArgumentException>(() => new BatchNorm(3).Forward(Tensor.Zeros(new Shape(4, 2)), Training()));
-        Assert.Throws<ArgumentException>(() => new LayerNorm(3).Forward(Tensor.Zeros(new Shape(4, 2)), Training()));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new BatchNorm(0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new LayerNorm(0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new BatchNorm(3) { Momentum = 1.5 });
-        Assert.Throws<ArgumentOutOfRangeException>(() => new BatchNorm(3) { Epsilon = 0 });
-        Assert.Throws<ArgumentOutOfRangeException>(() => new LayerNorm(3) { Epsilon = -1 });
-    }
-
-    [Fact]
     public void ALayerNormalisation_IsPyTorchs_InEitherPass_AndSoAreItsGradients()
     {
         var norm = Started(new LayerNorm(3));
@@ -158,15 +126,6 @@ public class NormalisationTests
             gradients[batch]);
         AssertClose([-0.8556914329528809, -1.0850647687911987, -1.2868590354919434], gradients[norm.Weight.Value]);
         AssertClose([0, 0.30000001192092896, 1.0], gradients[norm.Bias.Value]);
-    }
-
-    [Fact]
-    public void ALayerNormalisation_KeepsAScaleAndAShift_AndNoRunningStatistic()
-    {
-        var norm = new LayerNorm(3);
-
-        Assert.Equal(["weight", "bias"], norm.Slots().Select(slot => slot.Path));
-        Assert.Equal(1e-5, norm.Epsilon);
     }
 
     private static TNorm Started<TNorm>(TNorm norm)

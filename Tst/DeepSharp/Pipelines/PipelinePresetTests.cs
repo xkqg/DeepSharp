@@ -88,7 +88,7 @@ public class PipelinePresetTests
 
         Assert.Equal(["version", "declare"], RootKeys(bare.ToJson()));
         Assert.Equal(["version", "source", "declare", "drop", "output"], RootKeys(full.ToJson()));
-        Assert.Contains("\"version\": 3", bare.ToJson(), StringComparison.Ordinal);
+        Assert.Contains("\"version\": 4", bare.ToJson(), StringComparison.Ordinal);
         Assert.DoesNotContain("\r", full.ToJson(), StringComparison.Ordinal);
     }
 
@@ -143,7 +143,7 @@ public class PipelinePresetTests
     [Fact]
     public void APresetFromANewerVersion_IsRefusedWhole()
     {
-        var fault = Assert.Single(Refused($$"""{"version":4,"colour":"red","declare":{{Schema}}}"""));
+        var fault = Assert.Single(Refused($$"""{"version":5,"colour":"red","declare":{{Schema}}}"""));
 
         Assert.Contains("newer DeepSharp", fault.Message, StringComparison.Ordinal);
     }

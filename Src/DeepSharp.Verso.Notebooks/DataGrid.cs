@@ -88,10 +88,7 @@ internal static class DataGrid
         HashSet<string> unnamed = takenIn is null ? []
             : [.. declaration.ChoicesFor([.. table.Columns.Select(column => column.Name)]).Rows
                 .Where(choice => choice.Standing == ColumnStanding.NotDeclared).Select(choice => choice.Name)];
-        var pages = Math.Max(1, (table.RowCount + PageSize - 1) / PageSize);
-        var shown = Math.Clamp(page, 0, pages - 1);
-        var first = shown * PageSize;
-        var last = Math.Min(first + PageSize, table.RowCount);
+        var paged = new GridPage(page, table.RowCount);
 
         // The header asks about the table's columns in their order, and says in that order how each stands.
         Colouring[] columns = [.. table.Columns.Select((column, at) => Colouring.Of(view, column, header.Columns[at].Included.Ticked))];
@@ -104,11 +101,11 @@ internal static class DataGrid
         foreach (var column in header.Columns)
         {
             html.Append("<th>").Append(Encoded(column.Name));
-            Box(html, StepRenderer.Include, column.Name, column.Included, "included", unnamed.Contains(column.Name) ? takenIn!(column.Name) : null);
+            Box(html, BoxAction(StepRenderer.Include, column.Name, unnamed.Contains(column.Name) ? takenIn!(column.Name) : null), column.Included, "included");
 
             if (column.Category is { } category)
             {
-                Box(html, StepRenderer.Category, column.Name, category, "category");
+                Box(html, BoxAction(StepRenderer.Category, column.Name), category, "category");
             }
 
             html.Append("</th>");
@@ -116,7 +113,7 @@ internal static class DataGrid
 
         html.Append("</tr></thead><tbody>");
 
-        for (var row = first; row < last; row++)
+        for (var row = paged.First; row < paged.Last; row++)
         {
             html.Append("<tr><td>").Append(Invariant(row + 1)).Append("</td><td>")
                 .Append(Word(view.Standings[row])).Append("</td>");
@@ -130,7 +127,7 @@ internal static class DataGrid
         }
 
         html.Append("</tbody></table></div>");
-        Pager(html, shown, pages, first, last, table.RowCount);
+        Pager(html, paged);
 
         return new DrawnGrid(CellOutput.Html(html.Append("</div>").ToString()), header);
     }
@@ -170,36 +167,41 @@ internal static class DataGrid
             .Append("</div>");
     }
 
-    private static void Pager(StringBuilder html, int shown, int pages, int first, int last, int rows)
+    private static void Pager(StringBuilder html, GridPage page)
     {
-        if (rows == 0)
+        if (page.Rows == 0)
         {
             html.Append("<div class=\"deepsharp-pages\">no rows</div>");
 
             return;
         }
 
-        html.Append("<div class=\"deepsharp-pages\">rows ").Append(Invariant(first + 1)).Append('–').Append(Invariant(last))
-            .Append(" of ").Append(Invariant(rows));
+        html.Append("<div class=\"deepsharp-pages\">rows ").Append(Invariant(page.First + 1)).Append('–').Append(Invariant(page.Last))
+            .Append(" of ").Append(Invariant(page.Rows));
 
-        if (shown > 0)
+        if (page.Shown > 0)
         {
-            Button(html, shown - 1, "previous");
+            Button(html, page.Shown - 1, "previous");
         }
 
-        if (shown < pages - 1)
+        if (page.Shown < page.Pages - 1)
         {
-            Button(html, shown + 1, "next");
+            Button(html, page.Shown + 1, "next");
         }
 
         html.Append("</div>");
     }
 
-    // A box carries its gesture and its column in its data-action — and, taking a column the schema does not name in, how
-    // it is taken in — and no data-payload, so Verso's router sends the state it is in with them: whether it is ticked.
-    private static void Box(StringBuilder html, string gesture, string column, HeaderBox box, string label, TakenIn? taken = null) =>
+    // What a box carries in its data-action: its gesture and its column — and, taking a column the schema does not name in,
+    // how it is taken in.
+    private static string BoxAction(string gesture, string column, TakenIn? taken = null) =>
+        ControlAction.Of(gesture, taken?.Into(new JsonObject { [StepRenderer.ColumnKey] = column }) ?? new JsonObject { [StepRenderer.ColumnKey] = column });
+
+    // A box carries what it sends in its data-action and no data-payload, so Verso's router sends the state it is in with
+    // it: whether it is ticked.
+    private static void Box(StringBuilder html, string action, HeaderBox box, string label) =>
         html.Append(" <label><input type=\"checkbox\" data-action=\"")
-            .Append(Encoded(ControlAction.Of(gesture, taken?.Into(new JsonObject { [StepRenderer.ColumnKey] = column }) ?? new JsonObject { [StepRenderer.ColumnKey] = column })))
+            .Append(Encoded(action))
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id).Append('"')
             .Append(box.Ticked ? " checked" : string.Empty)
             .Append(box.Enabled ? string.Empty : " disabled")
@@ -219,6 +221,24 @@ internal static class DataGrid
 
     /// <summary>How many rows stand one way.</summary>
     private readonly record struct StandingCount(Standing Standing, int Rows);
+
+    /// <summary>A page of a grid's rows: the one asked for, of how many rows.</summary>
+    /// <param name="Asked">The page asked for, counting from nought; one beyond the last is the last.</param>
+    /// <param name="Rows">How many rows there are.</param>
+    private readonly record struct GridPage(int Asked, int Rows)
+    {
+        /// <summary>How many pages the rows fill: one, when there are none.</summary>
+        public int Pages => Math.Max(1, (Rows + PageSize - 1) / PageSize);
+
+        /// <summary>The page shown, counting from nought.</summary>
+        public int Shown => Math.Clamp(Asked, 0, Pages - 1);
+
+        /// <summary>The first row on it, counting from nought.</summary>
+        public int First => Shown * PageSize;
+
+        /// <summary>One past the last row on it.</summary>
+        public int Last => Math.Min(First + PageSize, Rows);
+    }
 
     /// <summary>One column as the grid writes it: its values as text, coloured the way its kind is, or black when it is not in.</summary>
     /// <param name="column">The column.</param>

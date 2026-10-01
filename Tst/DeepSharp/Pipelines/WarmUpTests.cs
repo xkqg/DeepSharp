@@ -27,7 +27,7 @@ public class WarmUpTests
     public void FiveHundredAndSixRowsWithATwentyPeriodAverage_AreFourHundredAndEightySeven()
     {
         var prepared = Prices()
-            .AddIndicator("sma20", Indicator.Sma, ["AAPL.Close"], 20)
+            .Add(new AddIndicatorStep("sma20", Indicator.Sma, ["AAPL.Close"], 20))
             .DropWarmUp()
             .SplitByTime("Date", 0.70, 0.15)
             .Build()
@@ -44,9 +44,9 @@ public class WarmUpTests
     {
         // Three indicators with three warm-ups; the table has to stay rectangular, so the slowest wins.
         var prepared = Prices()
-            .AddIndicator("sma5", Indicator.Sma, ["AAPL.Close"], 5)
-            .AddIndicator("sma20", Indicator.Sma, ["AAPL.Close"], 20)
-            .AddIndicator("rsi", Indicator.Rsi, ["AAPL.Close"], 14)
+            .Add(new AddIndicatorStep("sma5", Indicator.Sma, ["AAPL.Close"], 5))
+            .Add(new AddIndicatorStep("sma20", Indicator.Sma, ["AAPL.Close"], 20))
+            .Add(new AddIndicatorStep("rsi", Indicator.Rsi, ["AAPL.Close"], 14))
             .DropWarmUp()
             .SplitByTime("Date", 0.70, 0.15)
             .Build()
@@ -65,7 +65,7 @@ public class WarmUpTests
     {
         var whole = Prices().Build().Prepare();
         var kept = Prices()
-            .AddIndicator("sma20", Indicator.Sma, ["AAPL.Close"], 20)
+            .Add(new AddIndicatorStep("sma20", Indicator.Sma, ["AAPL.Close"], 20))
             .DropWarmUp()
             .Build()
             .Run()
@@ -86,7 +86,7 @@ public class WarmUpTests
         // dataset with it, and a run that shrank to nothing should stop rather than succeed.
         var refused = Assert.Throws<InvalidOperationException>(
             () => Prices()
-                .AddIndicator("sma100", Indicator.Sma, ["AAPL.Close"], 100)
+                .Add(new AddIndicatorStep("sma100", Indicator.Sma, ["AAPL.Close"], 100))
                 .DropWarmUp(atMost: 50)
                 .Build()
                 .Run());

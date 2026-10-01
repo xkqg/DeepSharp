@@ -160,9 +160,7 @@ public sealed record DistributionStep : IPipelineStep<DistributionStep>, INamesT
     private static readonly ColumnParameter ScaleByKey = new(
         "scaleBy",
         "The column saying how many the shares are shares of, so predictions come back as how many fell in each; left out, they come back as shares.",
-        "count",
-        ColumnKinds.Numbers,
-        optional: true);
+        ColumnKinds.Numbers);
 
     /// <summary>Declares the columns an answer is divided among.</summary>
     /// <param name="columns">The columns, in their order.</param>
@@ -311,9 +309,11 @@ public sealed record LabelsStep : IPipelineStep<LabelsStep>, INamesTheAnswer, ID
     private static readonly WholeNumberParameter OnesKey = new(
         "ones",
         "How many of the columns hold a one on every row: one when a row is exactly one of its things; left out, any number.",
-        0,
-        atLeast: 0,
-        leftOut: 0);
+        0)
+    {
+        AtLeast = 0,
+        LeftOut = 0,
+    };
 
     /// <summary>Declares the columns holding an answer of labels.</summary>
     /// <param name="columns">The columns, in their order.</param>
@@ -436,7 +436,10 @@ public sealed record AheadStep : IPipelineStep<AheadStep>, IMakesTheAnswer, IRea
         "column", "The column the answer is read from, rows later.", "close", ColumnKinds.Numbers);
 
     private static readonly WholeNumberParameter AheadKey = new(
-        "ahead", "How many rows later the answer is read, in the declared order: at least one.", 1, atLeast: 1);
+        "ahead", "How many rows later the answer is read, in the declared order: at least one.", 1)
+    {
+        AtLeast = 1,
+    };
 
     private static readonly OneOfParameter<AheadAs> AsKey = new(
         "as", "What the answer is: the value itself then, or the return on the row's own value by then.", AheadAs.Value);

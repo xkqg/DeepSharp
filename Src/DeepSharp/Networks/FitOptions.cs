@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Diagnostics.CodeAnalysis;
 using DeepSharp.Tensors;
 
 namespace DeepSharp.Networks;
@@ -43,13 +44,34 @@ public sealed class FitOptions
     /// <summary>When the run stops before its last epoch, judged by the validation rows; never, unless said.</summary>
     public EarlyStopping? EarlyStopping { get; init; }
 
-    /// <summary>Where the arithmetic runs; a light engine of the run's own, unless said.</summary>
-    public ITensorBackend? Backend { get; init; }
+    /// <summary>
+    /// Where the arithmetic runs — the training passes, the looks at the validation rows and the report's measures; the light
+    /// engine that ships with DeepSharp and needs nothing installed, unless said.
+    /// </summary>
+    /// <remarks>
+    /// Which engine a run takes when none is named is said here and nowhere else: the options hold the light engine from the
+    /// start, and one handed in as nothing leaves them holding it.
+    /// </remarks>
+    [AllowNull]
+    public ITensorBackend Backend
+    {
+        get;
+        init => field = value ?? new CpuBackend();
+    } = new CpuBackend();
 
     /// <summary>Where a checkpoint goes at the end of an epoch, and which epochs keep one; none, unless said.</summary>
     public Checkpoints? Checkpoints { get; init; }
 
     /// <summary>A checkpoint to go on from, as if the run had never stopped there; a run from its first epoch, unless said.</summary>
+    /// <remarks>
+    /// The run goes on under the seed, the batch size and the early stopping the checkpoint was taken under, on the engine it
+    /// was taken on, and is refused under any other, each difference named, since it would be another run: the batch size
+    /// decides which rows every step takes, the early stopping where the run ends, and the engine how every step's totals are
+    /// rounded — the same engine, in the same version, on the same device, as far as the engine names them. It goes on to as
+    /// many epochs as <see cref="Epochs"/> says, more than the checkpoint's run was given too. A checkpoint read from a file
+    /// 0.4.0 wrote records only its seed, and goes on under whatever batch size and early stopping, and on whatever engine,
+    /// it is handed.
+    /// </remarks>
     public Checkpoint? ResumeFrom { get; init; }
 }
 
@@ -93,9 +115,10 @@ public sealed class EarlyStopping
 /// <summary>Where a run's checkpoints go, and which epochs keep one: every epoch, or those that improved on the best.</summary>
 /// <param name="keep">What is done with each checkpoint: kept in a list, written to a file.</param>
 /// <remarks>
-/// A checkpoint is taken at the end of an epoch and is everything the run needs to go on from there, as Keras's
-/// <c>ModelCheckpoint</c> keeps the model and its optimizer; every epoch keeps one, unless only the best are asked for, which
-/// the validation rows judge.
+/// A checkpoint is taken at the end of an epoch and holds what the run needs to go on from there, as Keras's
+/// <c>ModelCheckpoint</c> keeps the model and its optimizer, with the seed, the batch size and the early stopping the run
+/// went under and the engine it was on, which a run going on from it is held to; every epoch keeps one, unless only the
+/// best are asked for, which the validation rows judge.
 /// </remarks>
 public sealed class Checkpoints(Action<Checkpoint> keep)
 {

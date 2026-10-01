@@ -3,6 +3,706 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0]
+
+Where it runs on libtorch and reads what others trained, and where every gap 0.4.0 left between a trained network and a
+person using it is closed. A network trains, is measured and serves on the engine you hand it — the light one, or
+libtorch on the processor or a graphics card — and a model saved by PyTorch, Keras or an ONNX exporter is read into the
+same network. A pipeline reads Parquet files, Excel workbooks and JSON files, and is run for the learner that learns
+from it, saying which steps that learner does without. The notebook's report block draws what the cell that trains a
+model hands back, and a sample notebook ships.
+
+### Upgrading from 0.4
+
+- **`CheckpointFile.Read` holds a checkpoint's network to the pipeline the file carries, as `TrainedNetwork.FromJson`
+  always has.** A checkpoint whose pipeline was taken out or replaced by hand went on whenever the pipeline handed over
+  was the one its network was trained behind; it is now refused with a `NetworkFileException` at its pipeline. So is a
+  checkpoint whose pipeline names a version of the pipeline file below the third, which no network's file ever carried,
+  or above the one this DeepSharp reads. A checkpoint `CheckpointFile.Write` wrote is read as before.
+
+- **`CheckpointFile.Read` reads the whole file before it holds it to the pipeline handed over.** A checkpoint whose own
+  training part is wrong, handed a pipeline that names other answers than its network was trained for, is refused with
+  the `NetworkFileException` that names the file's fault, where 0.4 refused it with the `ArgumentException` that names
+  the pipeline. A file that is right is held to the pipeline as before.
+
+- **An engine handed to a run is asked for the report's measures too.** The engine in `FitOptions.Backend` was asked for
+  the run's training passes and its looks at the validation rows; it is now also asked to evaluate each part the report
+  names, once the last epoch is over, a chunk of the part's rows at a time. An engine of your own whose arithmetic
+  differs from the light one's can move the measures in their last digits from what 0.4 reported for the same run.
+
+- **The report and a trained network serving rows ask an engine of your own a chunk of rows at a time, never all of
+  them in one pass.** The report's chunks are the run's own `FitOptions.BatchSize`; a served row's are thirty-two,
+  Keras's own default for a model's `predict`. Answering twenty sine rows with a report of two parts made an engine that
+  counts what it is asked twelve operations under the run's default batch size, as before; under a batch size of three
+  the same report makes it thirty-six, and a hundred rows served at once, which made an engine one pass regardless of
+  how many rows they were, now make it four. No answer moves: on the light engine a chunked answer comes to the bit what
+  one whole pass over the same rows makes, and every engine's own contract now holds that within the tolerance it is
+  already held to against the light one.
+
+- **A network's file is written with the second version of its network's part, which 0.4 refuses as newer.** The part
+  now records which features held one value on every training row, and a reader that does not know the record names the
+  newer version rather than a key it cannot read; a checkpoint's training part names the same version. A file 0.4.0
+  wrote is read as before and records nothing of it: its `TrainedOn.Unvaried`, and the `Unfamiliar` of what it predicts,
+  are null — not recorded, which is not the same as nothing unfamiliar — until the network is trained again, or goes on
+  from its checkpoint, under this DeepSharp. `TrainedOn`, `Predictions`, `PartPredictions` and `PartMeasures` each gain
+  a member, which the first three, being records, compare as well when asked whether two are equal.
+
+- **A run goes on from a checkpoint only under the batch size and the early stopping it was taken under.** A checkpoint
+  records them beside its seed, kept in memory or written to its file, and `Fit` refuses a run whose options differ from
+  what its `ResumeFrom` records with an `ArgumentException` that names each difference, both values of it, before
+  anything is put back. Such a run went on without a word, as another run than the one the checkpoint was taken of: hand
+  it the batch size and the early stopping the first run had. The epochs are not among them, since going on to more of
+  them is what a resume is for. A checkpoint 0.4.0 wrote records neither, and goes on under whatever it is handed, as it
+  did; the checkpoints of the run that goes on record what that run was handed.
+
+- **A run goes on from a checkpoint only on the engine it was taken on.** A checkpoint records the engine its run was
+  on — its name, and, for an engine that names them, the version of what works its arithmetic out and the device it
+  works it out on — and `Fit` refuses a run handed another engine than its `ResumeFrom` records with an
+  `ArgumentException` that names both, before anything is put back. The light engine names DeepSharp's own version, so
+  a checkpoint a run on it took is refused by the light engine of another release of DeepSharp; the libtorch engine
+  names the libtorch it runs on and its device, so a checkpoint taken on libtorch is refused on another libtorch, and
+  one taken on the processor on a graphics card. Hand the run that goes on the engine the first run had. A checkpoint
+  0.4.0 wrote names no engine, and goes on on any, as it did; the checkpoints of the run that goes on name the engine
+  that run was handed.
+
+- **`Needs.Numbers` is the need of a learner that takes every step as declared; a tree states `Needs.NoScale`.** The
+  description of `Numbers` named two needs at once, and its half about scale is now `NoScale`. `Numbers` and `OneScale`
+  keep their values, 0 and 1, and a batch handed over for `Numbers` holds what it held. For a tree whose scales should be
+  left out, run the pipeline with `RunFor(Needs.NoScale)` and hand the batch over with `NoScale`.
+
+- **Test a need by what it says.** `Needs` gains `NoScale` (2) and `Categories` (3). A `switch` that named only two
+  members now meets values it did not name. `NeedsOneScale()`, `DoesWithoutScaling()` and `TakesCategories()` say what
+  each member means. A value no member names is refused with `ArgumentOutOfRangeException`; 0.4 handed such a batch over
+  as for `Numbers`.
+
+- **A pipeline file, and the file of saved columns beside a notebook, name version 4, which 0.4 refuses as newer.** A run
+  that leaves no step out writes nothing but the new number, so its fit is the fit 0.4.0 wrote, and networks and
+  checkpoints from 0.4.0 go on behind it. Every file 0.4.0 wrote is read as before. A file of an earlier version that
+  names `skipped` is refused at that key.
+
+- **The report reads only the keys and the answers of the rows it measures.** It used to go through `Batch(part)`, which
+  refused words or gaps among the features although the report measures none of them.
+
+- **Eight members 0.4.0 published with five or six parameters have a shorter form, and the long one is obsolete.** No
+  method or constructor in a DeepSharp package takes more than four parameters now, and a test reads every package to
+  keep it so. The long forms still compile and do what they did, with a warning that names the form to call instead; a
+  build that treats warnings as errors stops at each until it is moved:
+  - `new PreparedData(declaration, table, parts, fitted, evidence)` → `new PreparedData(declaration, table, parts, fitted)
+    { Evidence = evidence }`.
+  - `schema.Column(name, kind, optional, format, missing)` → `schema.Column(new ColumnDeclaration(name, kind, optional)
+    { Format = format, Missing = missing })`: the column is its declaration.
+  - `pipeline.AddIndicator(name, indicator, columns, period)` → `pipeline.Add(new AddIndicatorStep(name, indicator, columns,
+    period))`: the step says all of it.
+  - `new ColumnParameter(key, description, example, accepts, optional: true)` → `new ColumnParameter(key, description,
+    accepts)`, a column the step can do without, which starts a new block with none; a column the step needs is
+    `new ColumnParameter(key, description, example, accepts)`.
+  - `new ColumnsParameter(key, description, example, accepts, optional, repeatable)` → `new ColumnsParameter(key,
+    description, example, accepts) { Optional = optional, Repeatable = repeatable }`.
+  - `new NumberParameter(key, description, example, above, atLeast)` → `new NumberParameter(key, description, example)
+    { Above = above, AtLeast = atLeast }`.
+  - `new WholeNumberParameter(key, description, example, atLeast, leftOut)` → `new WholeNumberParameter(key, description,
+    example) { AtLeast = atLeast, LeftOut = leftOut }`.
+  - `new FillStrategyParameter(key, description, example, allowed, what)` → `new FillStrategyParameter(key, description,
+    example, allowed) { What = what }`, which a new form must say.
+
+- **An application that references `DeepSharp.Verso.Notebooks`, or `DeepSharp.Verso.Api`, takes the three readers with
+  it**, and with them Parquet.Net 6.1.0, ExcelDataReader 3.9.0 and the libraries they bring. An application that pins
+  another version of either decides which one it runs, as with any package it shares.
+
+- **A Jupyter or Markdown file Verso's converter made of a notebook of blocks is refused when it is opened**, as a file
+  of another format holding steps as code cells already was; 0.4 opened it with every block turned into text that runs
+  nothing.
+
+- **`FitOptions.Backend` is never null: options hold the light engine unless they name another.** It read null when no
+  engine was named, and the loop and the report each made a light engine of their own. The options now say which engine
+  a run takes, the light one from the start, and null handed to them leaves them holding it. Code that read null as "the
+  light engine" reads that engine.
+
+- **A part of a pipeline read from its file is refused, saying the pipeline holds no rows.** Its file keeps what the
+  steps learned, not the rows, and `Batch` on it said that the answer's column never reached the end of the pipeline —
+  or, for a pipeline that names no answer, handed over a part of no rows without a word — and `Fit` behind it said "This
+  pipeline predicts 'survived', and no column of that name reached the end of it", which sent a person looking for a
+  column that was there. Both now say that the pipeline holds no rows and how to have them — run its declaration over
+  them, `new Pipeline(declaration, rows, folder).Run()`, and train behind that run — as the report's measuring already
+  said; serving rows through it is unchanged.
+
+- **A fit whose encoder writes one column per category refuses a category that would take a column of the encoder's
+  own.** Keeping a place for a category the training rows never held, the encoder names that place's column after the
+  encoded one and `other`, and the column that marks a gap after it and `was_missing`. A category called `other` shared
+  its column with the kept place, and one called `was_missing` with the mark, and their rows lost their category without
+  a word: a training row holding `other` came out as a row with no category. Such a fit is now refused, naming `unseen: refuse`
+  and `as: ordinal`, which write no such column. A pipeline file fitted before this replays as it was written.
+
+- **Working back from a loss asks the engine only for the way back to what was asked for.** `RecordingBackend.GradientsOf`
+  worked out a share for every tensor the pass read, the rows of a batch among them, though nobody asks how the rows
+  moved the loss: a convolution's way back folded a gradient onto its images, and a dense layer's took a product for its
+  rows. A share is now worked out only for a tensor asked for, or one the pass made from such a tensor — as libtorch
+  records an operation only when one of the tensors it reads wants a gradient. Every gradient asked for is the same, to
+  the bit. An engine of your own that counts what it is asked sees fewer operations: a Titanic training step's way back
+  asks for 19 where it asked for 22, a convolution step's for 25 where it asked for 33, and no fold among them. On the
+  light engine the Titanic step takes 19.5 µs where it took 27, and the convolution step 11.9 ms where it took 15.2 on
+  .NET 10 and 11.8 where it took 14.2 on .NET 8.
+
+- **A stack that ends in the sigmoid its loss applies itself is refused where it is compiled.** `network.Compile(optimizer,
+  new BinaryCrossEntropy())` on a stack whose last layer is a `Sigmoid` — a stack within it read down to its own last
+  layer — throws an `ArgumentException` that names the layer. Leave that layer out: the loss takes the logits and applies
+  the sigmoid itself, so the predictions still come out as chances. A network written as code is compiled as it is
+  written, since nothing here reads its forward pass. A file that holds such a pair, as 0.4.0 wrote it, is read, served and
+  gone on from as it was written.
+
+- **A description in Keras's words that ends in `.Sigmoid()` before `BinaryCrossEntropy` builds its network without
+  it.** Compiling the description lifts the last sigmoid into the loss, so the network ends at the layer before it and its
+  file holds no sigmoid; before any other loss the sigmoid stays. `Lower(shape, stream)` still keeps every word, so a
+  description lowered by hand to be compiled with such a loss is written without its last `.Sigmoid()`. A description of
+  nothing but that sigmoid is refused at `Compile`.
+
+### Added
+
+- **A trained network serves on the engine you hand it.** `trained.Predict(rows, engine)` works its answers out on that
+  engine, for that call alone, and `trained.Predict(rows)` goes on serving on a light engine of its own. The engine is
+  the caller's and nothing keeps it: the network holds none and its file names none, so a network trained on one engine
+  is read back from its file and served on another, and a trained network's file is the same whichever engine did its
+  arithmetic; only a checkpoint names the engine its run was on.
+
+- **An engine of your own keeps a tensor's values where it keeps them.** `TensorStorage` is where a tensor's values live
+  — how many it holds, and `CopyTo`, which copies them into memory you own. An engine that keeps its values somewhere of
+  its own, memory it allocated outside .NET or a graphics card, derives one and hands back what it makes as
+  `Tensor.On(shape, storage)` — a name of its own, so every call that makes a tensor from values compiles as it did;
+  `tensor.Storage` says where a tensor's values live, so an engine knows its own when a tensor comes back to it and
+  takes any other in. `tensor.Values` copies the values of a tensor on such a storage into
+  this machine's memory the first time they are read, once — whoever reads them first, while any reading at the same
+  moment waits for that copy — and keeps the copy, so reading them again copies nothing; it is never a view of the
+  engine's own memory. Nothing is added to `ITensorBackend`, and a tensor made here holds its values as it did, at
+  sixteen bytes more: 1.8 KB more of what a Titanic training step on the light engine allocates, in the same time.
+
+- **What the seam refuses is public, and every engine says it first.** `TensorOperandExtensions` holds each check an
+  operation of `ITensorBackend` makes of the tensors it is handed, in the words the light engine refuses them with —
+  `left.RequireSameShape(right, "Add")`, `left.RequireMatrixProduct(right)`, `matrix.RequireRow(row)`,
+  `values.RequireValues()` for a mean, `patches.RequirePatchesOf(images, window)` and the rest. The light engine calls
+  them, and an engine of your own that calls them before its arithmetic refuses what the light one refuses, with the
+  same exception, in the same words, naming the same argument — a column added to one value, or the mean of nothing, is
+  refused there as it is on the light engine, rather than stretched to fit or answered with something that is not a
+  number.
+
+- **What every engine is held to is written once, and measured.** The tests of the seam, the layers, the losses, the
+  optimizers, the loop and the network's file take the engine they run on, and run on the light engine and on one whose
+  every value lives in memory allocated outside .NET and whose totals are single precision, as libtorch's are. An
+  engine's totals lie within three roundings of the size of their terms of the light engine's — three times 2⁻²⁴ times
+  the sum of the terms' sizes — and a value worked out value by value within PyTorch's float tolerance, a relative
+  1.3e−6 and an absolute 1e−5. One Titanic training step is held the same way: on that engine its gradients came within
+  1.07 roundings and its parameters after Adam within 1.5e−8. The promise is per step, not per run: the networks
+  sample's Titanic run kept the same epoch on both engines and ended with weights 0.08 apart. What stays alive of an
+  engine's memory is what something holds — the network's slots, what the optimizer remembers, the best epoch's slots
+  and the checkpoints you keep, each with the best epoch's slots as they stood when it was taken: at the tenth and the
+  fiftieth epoch of a Titanic run keeping every fifth checkpoint, exactly those were alive.
+
+- **A network runs on libtorch, on the processor or a graphics card, without a line of it changing.**
+  `DeepSharp.Backends.TorchSharp` is an engine on libtorch through TorchSharp 0.107.0: `TorchBackend.OnCpu()` or
+  `TorchBackend.OnGpu(0)`, handed to a run as `new FitOptions(seed) { Backend = engine }` — which trains the network,
+  judges it by its validation rows and takes its report's measures on it — and to a trained network as it serves,
+  `trained.Predict(rows, engine)`. The network holds no engine and its file names none, so one trained on libtorch is read
+  back and served on the light engine, and one trained on the light engine is served on libtorch. Every engine contract
+  holds on it: on the processor a product came to 2.24 roundings of its terms' size at most, and every contract held on
+  an RTX 5070 Ti as well. The networks sample's Titanic run went the same way on it as on the light engine — forty-six
+  epochs, the thirty-sixth kept, 0.815 of the test passengers right — its weights 0.08 apart at the end, the promise being
+  per step, not per run. What the engine makes stays in libtorch's memory, taken out of any dispose scope of TorchSharp's
+  the moment it exists, so a scope of yours around a run ends without touching the network's slots or a checkpoint you
+  keep; it is let go of once nothing holds it, the collector told how many bytes each tensor holds, so five hundred
+  dropped tensors of four megabytes were at most eleven alive at once. The package brings TorchSharp alone; your
+  application brings libtorch — `libtorch-cpu-win-x64`, `-linux-x64` or `-osx-arm64` 2.10.0 for the processor,
+  `TorchSharp-cpu` for all three, or `TorchSharp-cuda-windows` or `TorchSharp-cuda-linux` for an NVIDIA card — and
+  making the engine where there is none says which to add. It never sets libtorch's threads, which stay yours, nor draws
+  from libtorch's generator; two hundred Titanic steps came to the same bits at 1, 4, 16 and 32 threads. Measured side by
+  side on one machine, a Titanic training step took nearly nine times as long on libtorch as on the light engine, which
+  stays the faster at that size; a convolution's step took under a third of the light engine's time on one thread, and
+  under a fifth on sixteen. On an RTX 5070 Ti the sample's run ended 2.4e−7 from the light engine's weights; a Titanic
+  step there took thirty times the light engine's time and a small convolution's about what libtorch's sixteen threads
+  take on the processor, while a convolution over eight times the images with four times the filters took under a fifth of
+  libtorch's time on the processor and a sixty-ninth of the light engine's. Two thousand convolution steps left the
+  card's memory where the first thirty had.
+
+- **An engine names its version and the device it works on: `INamesItsVersionAndDevice`.** An engine that implements
+  it, beside `ITensorBackend`, which it extends, says `Version` — the version of what works its arithmetic out — and
+  `Device` — where it works it out — and a checkpoint of a run on it records both with its name. `CpuBackend` names
+  DeepSharp's own version and `cpu`; `TorchBackend` names the libtorch it runs on as TorchSharp states it, 2.10.0.0 for
+  TorchSharp 0.107.0, and `cpu`, or `cuda:0` for the first graphics card. An engine of your own that does not implement
+  it is recorded by its name alone, and held to that.
+
+- **A served row that moves a feature every training row held at one value is named, and the report counts such rows.**
+  A network learns nothing about a feature its training rows never varied: on the wiki's Titanic network `pclass_other`,
+  `pclass_was_missing`, `sex_other` and `sex_was_missing` are nought on all 623 training rows, and the first layer's
+  weights for them are still the random start's after training. A passenger written 'Male', of a fourth class or of no
+  sex given was answered from that start, by the seed rather than by anything learned — across six seeds the same
+  passenger was given 0.257 to 0.495 as 'Male' and 0.290 to 0.509 with no sex, against 0.162 to 0.186 as 'male', while
+  test accuracy stayed between 0.785 and 0.815 — and nothing said so. `TrainedOn.Unvaried` now records each such feature
+  with its value, and the network's file keeps it; `trained.Predict(rows).Unfamiliar` names, for each served row, the
+  features it moves away from that value — `sex_other`, `pclass_other`, `sex_was_missing` — and an empty list for a row
+  that moves none; and each part the report measures counts its rows that do, as `PartMeasures.UnfamiliarRows` beside
+  its `Rows`. A learner of your own says the same of its rows through `PartPredictions.Unfamiliar`. The answer itself is
+  unchanged: a pipeline that should answer no category its training rows never held declares
+  `EncodeCategories(unseen: Unseen.Refuse)`.
+
+- **A notebook's report block draws the measures of a model a C# cell trained.** `Measures.PredictionsToJson()` writes
+  what a report's measures were taken from as text — the fit the predictions were made behind, and for each part the key
+  of each row, what was predicted for it in the units the answers were handed over in, and what the model said it learned
+  nothing about — and `PreparedData.MeasureAgain(text)` measures that text again, by the report, on another run of the
+  same pipeline, and only beside the very fit the predictions were made behind: held to it as a network's file is held to
+  its pipeline, predictions made behind other steps or other learned numbers — a feature or the answer scaled another way,
+  another split — are refused, as are those of another output, named by its answers, and of other rows, known by their
+  keys. In a notebook, the cell that trains hands them back with
+  `Variables.Set("deepsharp.predictions", trained.Measures!.PredictionsToJson())`, and "Show the data here" at the
+  `evidence.report` block measures them on the notebook's own run of its blocks and draws them under the grid, as the
+  report says they are shown; a hand-back from before a block was edited is refused there, saying to run the cell that
+  trains again, and with nothing handed back the block names its measures and says where they come from. Shown again, or
+  paged, it measures nothing again while the blocks, the file and the predictions stay as they were, and the toolbar's run
+  ending at the report fits the pipeline once for the fit it hands over and the measures it draws.
+
+- **`PipelineText`, in `DeepSharp.Pipelines`.** A pipeline's text as the one writer writes it, and the rule two pipelines
+  are held to one fit by, public beside the pipeline: `Text`, its `Version`, the `Digest` a network records, the
+  `FitDigest` two pipelines are compared by — the digest of the text with its version left out — `IsTheFitOf`, and
+  `IsComparable`, the versions of the pipeline file two texts may be compared across, from `FirstComparable`, the one the
+  first network's files carry, to the one this library writes. A network's file, a checkpoint and predictions handed back
+  are all held to a fit by it.
+
+- **The report, rendered once.** `measures.Report()`, in `DeepSharp.Charts`, is the measures as their report says they
+  are shown — the numbers, the charts or both — as one value whose `ToHtml()` gives the HTML. Verso shows such a value as
+  HTML, so a C# cell that ends with `trained.Measures!.Report()` shows the report, and the report block draws the same
+  rendering. A cell that ends with a chart, such as `trained.History!.LossCurve()`, shows the picture, as Verso shows the
+  text of any SVG.
+
+- **A pipeline is run for the learner that learns from it, leaving out the steps that learner does without and saying
+  which.** `Needs` states each thing a learner can need of its features. Besides `Numbers`, every feature a number on the
+  scale its steps declare, and `OneScale`, a learner indifferent to scale states `NoScale`, and one that takes categories
+  itself, as a boosted tree that splits on them does, states `Categories`. `pipeline.RunFor(needs)` runs the declaration
+  for that learner. A step that only scales a feature is left out for a learner indifferent to scale. Each encoder hands
+  its categories over as themselves: the place of each in the list the training rows held, the place after the last for
+  one they never held, and minus one for a gap. It learns the same list it learns for every learner. A step an answer's
+  way back runs through, a step whose column a step below reads, and a scale that refuses what it was not fitted on are
+  always taken. A step of your own that some learners do without says so by `IMeetsANeed`: `NeededBy(needs)`, whether a
+  learner of that need takes it as declared, and `Instead`, what a run for the others takes in its place, or nothing.
+  `PreparedData.Skipped` lists the steps a run left out. Its file writes them under `skipped`, so a replay
+  leaves out the same steps. On the wiki's Titanic pipeline, a run for `Categories` leaves out `encode.categories` and the
+  four `normalise` steps. A passenger is handed over as nine numbers: age 29, fare 8.4583, class as place 2 of 3, sex as
+  place 1 of 2. The network's run hands over fourteen. Both runs share the split, the filled age and the categories
+  learned, so the report measures both learners on the same 623, 133 and 135 rows. `Batch.Categories` and
+  `ServedBatch.Categories` name each feature handed over as a place, with the categories the training rows held.
+  Predictions handed back as text from such a learner are measured again on a run of every step. `Run()` takes every
+  step, as before.
+
+- **A learner is handed only a run it can take.** `Batch` and `Served` refuse a run that left out a step the learner
+  needs, naming each step. A network is refused a run made for `NoScale` or `Categories`. A run of every step goes to
+  every learner.
+
+- **Parquet files, read.** `DeepSharp.Pipelines.Parquet` adds `.ReadParquet(path)` to the chain and `read.parquet` to
+  the pipeline's file, a file the pipeline reads and replays as it does a comma-separated one, from the pipeline's
+  folder when its path is relative. A Parquet file types its columns, so it says what each holds, as a database does,
+  and the proposal of kinds takes what it says. Its values reach the pipeline by the one rule the database door already
+  handed a value over in — a number in its shortest exact form, a moment or a day as ISO 8601 writes it — now public
+  as `TypedValueExtensions.AsCell` and `AsColumnKind` for a reader of your own; a column of lists, of groups of fields
+  or of raw bytes is refused by name. The passenger list written as a Parquet file with the cells its comma-separated
+  file holds gives the same keys, the same split and the same batches.
+
+- **Excel workbooks, read.** `DeepSharp.Pipelines.Excel` adds `.ReadExcel(path)` and `.ReadExcel(path, sheet)` to the
+  chain and `read.excel` to the pipeline's file, for `.xlsx`, `.xls` and `.xlsb`: the first sheet unless one is named,
+  its first row naming the columns, a sheet it does not have refused with the names of those it has. A cell is read as
+  the sheet types it, never as the text a culture shows it as — a date as a moment — an empty cell is empty text, as
+  the same sheet saved as comma-separated text holds it, and a formula's error is spelled as Excel spells it there. The
+  library it reads with asks .NET for a Windows code page before it opens any workbook, `.xlsx` too, so the package
+  offers .NET's own code pages, once for the whole program, and every encoding the program had stays as it was. A step
+  of your own can take words it does not need, as the sheet is: `new TextParameter(key, description, example,
+  optional: true)`. The passenger list saved by Excel as `.xlsx` and as `.xls` gives the same keys, the same split and
+  the same batches as its comma-separated file.
+
+- **JSON files, read.** `DeepSharp.Pipelines.Json` adds `.ReadJson(path)` to the chain and `read.json` to the pipeline's
+  file, for an array of records, one object a row, as an API hands them back; .NET reads JSON itself, so the package
+  brings nothing else. A value is read as the file writes it — `22.0` stays `22.0` — the columns are the keys in the
+  order they first appear, a key a record leaves out and a null are both gaps, and a value that is itself an object or a
+  list is refused by name, with its record. The passenger list written as JSON gives the same keys, the same split and
+  the same batches as its comma-separated file.
+
+- **Taking a preset over lists the columns every reader's file has.** A chain that takes saved decisions over at a
+  Parquet file, a workbook or a JSON file names the file's columns the decisions never showed, as it did for rows
+  handed in and for a comma-separated file; a source step of your own says its columns by `INamesItsColumns`, and one
+  that does not is asked nothing, as before.
+
+- **A notebook reads a Parquet file, an Excel workbook and a JSON file.** A notebook's first block can be `read.parquet`,
+  `read.excel` or `read.json`, as a pipeline file's can: `DeepSharp.Verso.Notebooks` brings the three readers with it, as
+  it brings the indicators and the charts, in every place it runs. The data at a block, the list of the columns, the
+  grid's boxes, the form, the take-over, the run, the export and the report work over them as over a comma-separated
+  file, and the passenger list in each of the four formats shows the same rows under the same keys in the same parts.
+  The notebook parses the rows from the very bytes it fingerprints, whichever file it reads, so an export keeps a fit
+  only while the file holds the bytes it was learned from, and a Parquet file's list says what the file states each
+  column holds. `IReadsAFile` is how a reader of a file does that: `step.Open(bytes, file)` reads the rows from bytes
+  already in hand, and `bytes.AsText()` reads them as a file is read as text; a Parquet file's columns are named from
+  its schema, without reading a row. The readers add about 1.8 MB of managed code to an install of the notebook, 1.5 MB
+  of it Parquet.Net and the compression libraries it reads with. A C# cell that reads the pipeline the blocks hand over
+  brings the same packages and teaches its catalog their verbs:
+  `StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson()`.
+
+- **One evaluation for every door, in the core: `network.Predict(features, loss, engine)`.** What a network answers for
+  rows is one evaluation pass on the engine handed in, through the loss's output activation. A compiled network's
+  `Predict`, the report's measures and a trained network serving rows all answer through it — the last two a chunk of
+  rows at a time — so no door writes the evaluation its own way.
+
+- **Numbers trained somewhere else go into a network by the path of each slot, and `IImporter` is the seam that reads
+  them.** `network.Load(entries)` puts a tensor into each slot its path names — `1.weight`, `1.running_mean` — as
+  PyTorch's `load_state_dict` does with `strict=True`: every slot of the network once, none it does not have, each of
+  its slot's shape and holding finite numbers. It puts in all of them or none: whatever is wrong — a slot left out, a
+  path the network has no slot at, a path handed twice, another shape, a value that is not a finite number — is refused
+  at once with a `SlotLoadException`, whose `Faults` name each by where its file holds it, the slot and what is wrong,
+  and the network keeps what it held. From outside the library a batch normalisation's scale and shift could be set only
+  by writing a network's own file and reading it back; now any reader puts them in.
+  `IImporter` is what a reader of another framework's files implements: `importer.Read(stream)` hands back a
+  `SavedNetwork`, as reading a network's own file does, whether the importer is handed the network the numbers belong to
+  or builds it from the file's own description. A network's own file is held to the same rule, and refuses in the same
+  words.
+
+- **Models Keras saved, read: `DeepSharp.Import.Keras`.** `new KerasFile().Read(stream)` reads the `.keras` archive Keras
+  3 saves a model to, or the HDF5 file, `.h5`, it saved one to before, and hands back a `SavedNetwork` — the network the
+  file describes, every slot holding Keras's numbers, and the loss the model was compiled with — as any importer does.
+  Each layer is built as Keras's words build it here: a batch normalisation keeping Keras's epsilon and the complement of
+  its momentum, a window padded as TensorFlow's 'same', the activation a Keras layer carries a layer of its own after it,
+  and a last sigmoid or softmax the loss applies itself lifted into that loss. A layer's numbers are found by the name the
+  file gives them, since Keras files them under the layer's class rather than its name. The networks sample's Titanic
+  network, trained in Keras 3 on the pipeline's training rows and saved both ways, answers the 135 test passengers within
+  five roundings of a single-precision number of Keras's chances, and the two passengers the sample serves within two; a
+  network of every kind the reader builds answers within six. What no network here is built of is refused at the layer
+  that says it, every such layer at once — a stride of its own for each axis, a dilated window, channels in groups,
+  pooling, any other kind of layer or activation, a layer without a bias, a model of another kind than a Sequential, in
+  another precision, or saved without its loss — and numbers that do not fit its layers are refused by `network.Load` at
+  their datasets' paths. The package brings PureHDF 2.2.0 (MIT), a managed HDF5 reader, and nothing else; the models the
+  tests read are kept with them, with the scripts that made them.
+
+- **Networks exported to ONNX, read: `DeepSharp.Import.Onnx`.** `new OnnxFile(loss).Read(stream)` reads the graph
+  PyTorch's `torch.onnx.export` writes — by its default exporter or by the TorchScript one before it — the graph Keras
+  writes with `model.export(format="onnx")`, and the graph tf2onnx converts a TensorFlow SavedModel into, and hands back a
+  `SavedNetwork`: the network the graph is, every slot holding its numbers, and the loss handed in, since a graph names
+  none. The graph is lowered onto the layers it is — a Gemm, or a MatMul and the Add of its bias, a dense layer; a Conv; a
+  BatchNormalization with its momentum and epsilon; a LayerNormalization; a Flatten or a Reshape that flattens each
+  example; a Relu, a Tanh or a Sigmoid — a Cast into single-precision numbers is nothing, and a last Sigmoid or Softmax the
+  loss applies itself is lifted into that loss. The numbers are turned as each node declares them: a weight matrix Gemm
+  says is written outputs by inputs turned round, a kernel written channels first laid out as the slot keeps it, and the
+  numbers along an image flattened channel by channel, as ONNX flattens one, turned into this library's order, place by
+  place. Images go in, and come out, with their channels last: a graph that takes them channels last, as tf2onnx's does,
+  declares so with the Transpose that moves them after the batch for its convolutions, and the one moving them back before
+  its flatten is nothing here; a convolution's pads written out one side at a time are read as TensorFlow's 'same' when
+  they are the border 'same' gives the image reaching it. Numbers of half precision or bfloat16 are widened exactly,
+  numbers of double precision rounded to the nearest single one, and those PyTorch's default exporter keeps in a file
+  beside the graph are read from beside the graph's own file. Measured: the Titanic network PyTorch trained on the
+  pipeline's training rows answers the README's passenger within one rounding of a single-precision number of PyTorch's
+  chance, and all 135 test passengers within five, from either PyTorch exporter's file; the Titanic network Keras trained,
+  exported by Keras or converted by tf2onnx 1.17.0 from TensorFlow 2.21.0's SavedModel, answers the 135 within five of
+  Keras's chances and puts the numbers Keras saved into the slots its `.keras` archive does, bit for bit; a network of
+  convolutions, batch normalisations and a flatten gives each image PyTorch's output within 4.5e−8, and one of 'same' and
+  strided convolutions and a flatten tf2onnx converted from a SavedModel of a fixed batch gives each TensorFlow's within
+  2.4e−7. What no network here is built of is refused at its node, every one at once: a branch — a node taking another
+  value than the one the node before it made, or two — pooling, a stride of its own for each axis, a dilated window,
+  channels in groups, a Cast into another type, a Transpose other than those two, any other operator — among them the Mul
+  tf2onnx writes a batch normalisation as, and the Shape, Gather, Slice and Concat it works a flatten's target out with for
+  a SavedModel of batches of any length. Numbers that do not fit are refused by `network.Load` at the initializer that
+  holds each. The package brings OnnxSharp 0.3.2 (MIT), the messages of ONNX's own format for .NET, and the
+  Google.Protobuf 3.29.3 (BSD-3-Clause) it reads them with; the graphs the tests read are kept with them, with the scripts
+  that exported them.
+
+- **A sample notebook, `Samples/titanic.verso`.** It reads the Titanic passenger list from the samples' data beside it,
+  block by block — the columns declared, the split, the gaps filled, the categories encoded, the scales, the answer and
+  the report — and its C# cell trains a network on the pipeline the blocks hand over and hands the predictions back, for
+  the report block to draw. `deepsharp-serve Samples/titanic.verso`, from the repository's folder, opens it, and a test
+  runs it as a person does.
+
+- **A window pads as TensorFlow's 'same' does.** `new Window(3, 3) { Stride = 2, PaddingMode = PaddingMode.Same }`
+  works its border out from each image as TensorFlow's and Keras's `padding='same'` does: along each axis as many places
+  as the stride fits into the image, the rows or columns those need beyond it split in two, the odd one after. No border
+  stated for every side gives that: through a window of three at a stride of two over 28 by 28, TensorFlow pads none before
+  and one after, and a stated border of one gives the same fourteen by fourteen places with values up to 4.56 away;
+  through a window of two, a stated border gives 27 rows or 29 where 'same' keeps 28. The convolution comes within 1.2e−7
+  of TensorFlow's rule on the light engine. `window.BordersOver(rows, columns)` says the border on each side, as a `Borders`
+  of `Top`, `Bottom`, `Left` and `Right` — the one rule every engine's unfolding and folding reads, so an engine of your
+  own honours 'same' by starting its first patch where it says, and the tests' native engine, written outside the
+  library, does. A network's file writes such a window's padding as the word `"same"`, as Keras writes it. What a window
+  covers otherwise is one stride down and across alike, a patch of neighbouring places and every channel at once: a file
+  that says a stride for each axis, a dilation or groups of channels is refused at that setting, and a pooling layer at its
+  kind.
+
+- **Keras's words take Keras's settings for the normalisations.** `.BatchNorm(momentum, epsilon)` takes Keras's momentum
+  — the share of the running statistics a training batch leaves as they were, 0.99 in Keras — and the layer keeps its
+  complement, PyTorch's meaning of the word, with Keras's epsilon; `.LayerNorm(epsilon)` takes Keras's epsilon.
+  `.BatchNorm()` and `.LayerNorm()` stay PyTorch's: a momentum of a tenth and an epsilon of a hundred-thousandth. A network
+  Keras 3 described and ran — windows padded as 'same' at strides of two and one, a batch normalisation of momentum 0.9 and
+  epsilon 0.001, a layer normalisation of epsilon 0.001 and a last sigmoid — written here in Keras's words, holding Keras's
+  numbers in Keras's own order, answers as Keras did within 1.8e−7 on every logit and 9e−8 on every chance, on the light
+  engine and on the tests' native one; with PyTorch's epsilons its chances lay up to 0.0099 away. The fixture is kept with
+  the tests, with the script that made it. Trained here, such a batch normalisation still counts each batch's variance
+  over one row fewer, as PyTorch does, where Keras counts it over every row: after one batch of 96 places its running mean
+  came within 1.9e−9 of Keras's and its running variance lay up to 8.4e−4 above it.
+
+- **A network PyTorch trained runs here: `DeepSharp.Import.PyTorch` reads a safetensors file into the same network.**
+  `new SafetensorsFile(network, loss).Read(stream)` puts every tensor of a file PyTorch saved a network's state in into
+  the slot its name names — a `LayerStack` in Keras's words or written by hand, its layers numbered as PyTorch's
+  `Sequential` numbers its modules, or a network written as code, its layers named as the PyTorch module named them — and
+  hands back the network and its loss as a `SavedNetwork`, to serve, to measure, to train further or to save as a
+  network's own file. Each number is turned into the layout its slot keeps, as the layer
+  holding the slot says, never as its shape suggests: a linear layer's weights turned round, a convolution's kernel laid out
+  channels last, biases and a normalisation's numbers as they are, and the count of batches PyTorch keeps beside a batch
+  normalisation left out by its name. The rows a flatten makes of images PyTorch orders channel by channel, so the numbers
+  the next linear layer and any normalisation before it keep for them are put in their places here once the reader knows
+  what the flatten is handed — an `Example` the network takes, which it runs through as zeros, or `Flattened`, stating it
+  by the flatten's path; told neither, it refuses them. Numbers held in 16 bits are widened exactly, those in 64 bits
+  rounded to the nearest 32-bit float as PyTorch rounds them, and whole numbers refused. The file is read by
+  Onnxify.Safetensors 0.3.11 (MIT), a port of safetensors' own reader: every file that reader refuses — twenty written
+  wrongly on purpose, eighteen of them refused — is refused here as a `FormatException`, and so is one whose note names
+  another framework's layout than `"format": "pt"`; one with no note, as `safetensors.torch.save_model` writes, is read as
+  PyTorch's. Every fault among the tensors — a kind of number that is no float, another shape than PyTorch keeps the slot
+  in, a tensor for no slot, a slot no tensor is for, a value that is not finite — is named at once by the tensor's name, in
+  one `SlotLoadException`, and the network keeps what it held. A network written as code keeps to itself only the order
+  its forward pass runs its layers in, so wherever rows made of images could reach one of its linear layers or
+  normalisations, what that layer reads is taken only as `Flattened` states it by the layer's path, and refused
+  otherwise; a layer of a kind the reader does not know has none of its numbers read. The Titanic network PyTorch trained
+  answers a man of 22 in third class within one rounding of PyTorch's chance and all 135 test passengers within five,
+  written in Keras's words or as code; one with a batch normalisation within ten; convolutions flattened into a linear
+  layer within 3e−8, as a stack and as code, where reading the flattened rows unturned lands 0.043 away. The files and
+  what PyTorch answered are kept with the tests, with the scripts that made them.
+
+- **…and the file `torch.save(model.state_dict(), file)` writes: `new TorchSaveFile(network, loss).Read(stream)`.** The
+  `.pt` or `.pth` archive torch.save has written since PyTorch 1.6 goes into the same network, every number into the same
+  slot, in the same layout and to the same bit as `SafetensorsFile` puts the same numbers there — the Titanic network in
+  32-bit floats, 16-bit floats, bfloat16 and 64-bit floats, the network with a batch normalisation, the convolutions
+  flattened into a linear layer, the parameters saved on their own, tensors saved as views of longer storages, and a file
+  written as a big-endian machine writes it; and forty layers in a row, whose pickle is long enough to number its memo
+  past 255, to the bit PyTorch holds them. Both readers are a `PyTorchFile` now, and share
+  its `Example` and `Flattened`. The pickle torch.save writes the state into is a program, so no pickle library reads it:
+  an interpreter written here carries out only the instructions PyTorch's own weights-only reader,
+  `torch.load(weights_only=True)`, carries out, and builds nothing a file names but what a state dictionary is made of — an
+  `OrderedDict`, a tensor rebuilt by `torch._utils._rebuild_tensor_v2` or `_rebuild_parameter`, and the storages of a kind
+  of number. Every other name — `os.system`, `builtins.eval`, `subprocess.Popen`, a type of .NET's — is refused where the
+  file names it, at its byte, before anything is looked up, built or run, and nothing in the package finds a type or a
+  member by a name. Of 49 files written wrongly or with hostile intent on purpose, each handed to PyTorch's own reader
+  first, every one it refuses is refused here too; of those it reads, six are refused here by name: a pickle of
+  `torch.Size`, of bytes or of a `Counter`, none of which is a state dictionary; the format before PyTorch 1.6; a
+  checkpoint that keeps the state under a key of its own; and a tensor saved as a negated view. What a file can make the
+  reader do is bounded by the file and the network: a view that repeats its storage's numbers is refused, a dict is keyed
+  by nothing deeper than a tuple of plain values, and a tensor's numbers are gathered only for a slot that takes them — a
+  hundred views of a megabyte storage for no slot cost 4.6 MB to refuse, where gathering them took 109 MB. The records a
+  file's archive holds together hold no more bytes than the file itself, as torch.save, storing each as it is, writes
+  them: an archive of one megabyte inflating to a gigabyte is refused with 2 MB taken, before a byte of it is inflated, and
+  a record whose bytes are other than its headers and its check say is refused. The archive is taken for one only when it
+  begins as a zip archive does, as PyTorch tells one — bytes before it, or the format before 1.6 in front of it, are
+  refused — and a name it holds twice, in the same case of its letters or another, is refused rather than read as either.
+  A dict's keys are hashed as no file can aim at: eighty thousand keys chosen to share the runtime's own hash take a
+  tenth of a second, where they took a minute and a half. Text is decoded as PyTorch decodes it, half of a surrogate pair
+  standing alone included. A file longer than one array holds, 2,147,483,591 bytes, is refused by name — before a byte of
+  it is read when its stream can say its length. Every name a file holds is shown in a refusal as `Quoted()` shows it.
+  Razorvine.Pickle, the reader first chosen for these files, was measured and set aside: it learns PyTorch's names only
+  in a dictionary every reader in the process shares, and it builds something for every name a file holds before
+  anything could refuse it.
+
+- **A file's text is shown in a message as words and nothing else: `text.Quoted()`.** Each character that would break
+  the message's line, hide what follows it or turn it round — a control or format character, such as a bidirectional
+  override, a line or paragraph separator, half of a surrogate pair standing alone — is written as a backslash and its
+  code, the backslash itself doubled, and past 200 characters the text is cut short and says how long it was. The load of
+  a network's slots shows every name a file holds this way, in a fault and in the place it names, and so do the PyTorch
+  readers' refusals: a name written with a line break can no longer start a line of its own in a log, and a name of fifty
+  million letters makes a refusal of a few hundred characters. The same rule reaches every reader that echoes a file's own
+  words in a refusal: a Keras model's class, layer and activation names, a loss's name and how it reduces a batch, and
+  what a setting is written as; an ONNX graph's, node's and value's names, an operator, a kernel's or a weight's name, and
+  where a tensor's bytes are kept beside the graph; a network file's own key, parameter, feature and remembered-tensor
+  names, and a kind's name where a file names one this library does not know; and a pipeline file's key, step verb and
+  parameter names, and a value written for one. `DeepSharp.Pipelines` carries no dependency on the deep-learning core, so
+  it keeps the same rule as its own internal `FileTextExtensions.Quoted()`, reached the same way.
+
+- **A layer lists the layers it holds: `layer.HeldLayers()`.** Every layer a layer holds, and every one those hold, each as a
+  `NamedLayer` with its dotted path from the layer asked — `1.hidden` — in the order `Slots()` walks them, so the layer
+  holding any slot is named by the slot's path, in a network written as code as much as in a stack. A stack's own
+  `Layers` property stays the list of its layers in the order they run.
+
+- **A checkpoint read from one reading of its file: `NetworkDocument.ReadCheckpoint(json, network, training, catalog)`.**
+  It reads the network a file holds under one key and what its run needs to go on under another, from the text read
+  once, and hands both back as a `SavedCheckpoint` — its `Network`, as `ReadNetwork` reads it, and its `Run`, as
+  `ReadTraining` reads it — refusing either part in the words and at the places those refuse it. `CheckpointFile.Read`
+  reads through it, where it read the text twice, once through each of the other two.
+
+- **A model trained somewhere else is trained further behind a pipeline, and kept with it as the one file.** An import
+  is a `SavedNetwork` — a network and its loss, which records no fit of a pipeline — so it stands behind one as any
+  network does: `saved.Network.Compile(new Adam(0.001), saved.Loss).Fit(prepared, options)` trains it on the rows the
+  pipeline prepares, for one epoch or for as many as training it further takes, and the network behind its pipeline is
+  written as the one file and read back beside that fit alone. The networks sample's Titanic network Keras trained,
+  fitted one epoch further behind the wiki's pipeline, was read back from its file holding the same numbers to the bit
+  and giving the passengers the same chances.
+
+### Fixed
+
+- **A notebook of blocks can be saved in VS Code.** Verso names its own format twice — its writer says `verso`, and the
+  name its extensions are told when Verso's VS Code host saves a notebook as .verso is `verso-native` — and the guard
+  that keeps a notebook of blocks in .verso knew only the first, so in VS Code it refused every save of such a notebook,
+  in its own format too. It takes both names as Verso's own; measured in the host Verso's VS Code extension starts, the
+  notebook is written as .verso, and saving it as Jupyter or Markdown is still refused.
+
+- **A category the step that encodes categories turns into columns can be left out again.** Its box in the grid and the
+  list stood ticked and could not be clicked — the sample notebook's `pclass` and `sex`, and any column ticked in and made
+  a category — since the category never reaches the end of the pipeline itself, only the columns made of it do, and a
+  column that does not reach the end was taken to be out already. A declared column no step names is now left out in the
+  schema with its kind, wherever it goes after, and ticked in again as it was; the last category is not offered, since the
+  step would then have none to encode. A profile's answer that leaves such a column out, which changed nothing, now
+  leaves it out too.
+
+- **A notebook converted to Jupyter by `verso convert` is refused when it is opened.** Verso's Jupyter writer turns a
+  block into a raw cell, and Markdown into text that fences the block's text in, while the guard read code cells alone,
+  so the file the converter wrote opened with its blocks as inert text. The guard now reads a raw cell, a code cell and a
+  fenced Markdown cell alike, and a test holds it to refusing whatever each of Verso's formats makes of a block. It is
+  asked in VS Code, in `deepsharp-serve` and in an application on `DeepSharp.Verso.Api`; the browser editor `verso serve`
+  starts asks no extension when it opens or saves a file, so there the converted file opens, and saving it writes a
+  `.verso` file over the notebook it came from — keep a converted copy away from its notebook, or open it where the
+  guard is asked. A test reads that editor's code, so a Verso whose editor starts asking is noticed.
+
+- **`deepsharp-serve` names every library it carries in its third-party notices.** Its package carries the libraries
+  the server runs on — Verso and its engine, the C# compiler, NuGet's client, Markdig, and from this release the readers'
+  Parquet.Net, its compression libraries and ExcelDataReader — while its notices named only the three scripts its page
+  carries. Each is now named with its version, where it comes from, its copyright and its licence, and a test fails the
+  day a library is carried that the notices do not name.
+
+- **0.4.0's notebook drew no report.** Its changelog says the notebook draws a report shown drawn; it did not. An
+  `evidence.report` block showed its card and its grid and nothing else — measured in Verso's own loader on .NET 8 and
+  .NET 10 — because the notebook trains nothing, and no measures ever reached it: the drawing it had for them was reached
+  by its tests alone. The block now draws what the C# cell that trains a model hands back, and says where its measures
+  come from while nothing is.
+
+- **The notebook is checked as Verso installs it.** 0.4.0 says an install of the notebook carries the charts and the
+  engine with it, and nothing had installed one to see. The test that stood for an install laid out a folder from the
+  suite's own build — without `System.Numerics.Tensors`, with `DeepSharp.Verso.Api`, which no install holds — and loaded
+  it into a process that hands over any file such a folder lacks. Verso's own installer, run on 0.4.0's package since,
+  found that its install did carry both, and loaded. Now, before a package leaves a run of the workflows, the notebook
+  package just made is installed by Verso's own installer and loaded by its own loader in a host that holds nothing of
+  DeepSharp, on .NET 8 as `verso serve` runs and on the newest runtime as Verso's VS Code extension runs. There the
+  sample notebook's report block shows the data, its C# cell trains a network on DeepSharp's packages named by their
+  NuGet ids and draws the loss, and the report block then draws the measures handed back. The files Verso lays out are a
+  list the notebook's tests hold to what the build resolves for the package, so what it claims and what Verso installs
+  cannot part without a test failing; everything the notebook refers to is found in the folder Verso installed it to —
+  DeepSharp itself and System.Numerics.Tensors 10 as well, on both runtimes, where nothing had looked for either before —
+  and every method of DeepSharp's compiles against what is there. `bash tools/verso/check.sh nupkgs` runs the same after
+  a pack.
+
+- **A network's file from 0.4.0 still loads once the pipeline file's version moves.** What a network records of the fit
+  it was trained behind — the SHA-256 of its pipeline's own file — was checked against that pipeline written again by the
+  DeepSharp reading the file, which writes its own version of the pipeline file into it: the first version after 0.4.0's
+  would have made every network's file and checkpoint 0.4.0 wrote "trained behind another fit", with nothing changed but
+  that number. The record is now checked against the pipeline's text as the file carries it, laid out as a pipeline's
+  file is, so a file another writer indented otherwise, put on one line, gave other line endings or escaped otherwise
+  loads too, and a network read from its file writes that text back as it was. A checkpoint goes on behind its fit run
+  again under a later version: both pipelines pass through that one writer, the version each names left out. The wiki's
+  Titanic network and a checkpoint of it, written by the published 0.4.0, are kept with the tests: they serve the
+  passenger at a logit of −1.7700741 and go on to the eight epochs 0.4.0 went on to.
+
+- **The report measures a network on the engine its run was handed.** With `new FitOptions(seed) { Backend = engine }`
+  the engine trained the network and judged it by the validation rows, and the report's measures were still worked out
+  on a light engine made for them: handed an engine that counts what it is asked, a run of twenty sine rows made as many
+  operations on it with a report of two parts as without one. The report is part of the run, and its measures are now
+  taken on the run's engine — the twelve operations of its two evaluation passes reach it — by the same evaluation pass
+  `Predict` serves with.
+
+- **`Scale.MidRange` with `OutOfRange.Refuse` no longer refuses the pipeline's own training extremes.** Its centre is
+  the middle of the training range and its spread half that range's width, two numbers built by different sums from the
+  same two training extremes, so the training maximum mapped back a shade past one rather than onto it — measured on a
+  published price series, 1.0000000000000004 — and a refusal read that as a value outside the range the fit had just
+  been given. A value within the rounding that arithmetic carries, of an end the training rows reached, now lands
+  exactly on that end; min-max and max-abs were checked the same way and already landed there exactly, because each
+  builds its centre from one training extreme alone rather than an average of both. A refusal also now names the row
+  by where it stood in the file, as every other refusal already does, rather than by its place among rows a split may
+  have put in another order.
+
+- **An encoder refusing a category the training rows never held names the row where the file has it.** It named the
+  row by its place among the rows it was handed, which after a split is another number than the line a person looks
+  up; it now names the row as it was read, as the handover and every other refusal do.
+
+- **A checkpoint records the batch size and the early stopping its run went under, and a run going on under others is
+  refused.** It recorded the seed alone, and a run went on from it bit for bit only when handed the same batch size and
+  early stopping, which nothing held it to: the batch size decides which rows each step takes, and a dropout's draws are
+  counted by the step, while the early stopping decides where the run ends and which weights it ends holding. On the
+  networks sample's Titanic run — seed 20260929, early stopping of patience 10 that restores the best, 46 epochs keeping
+  the 36th — its checkpoint after the 20th epoch went on in batches of 16 to 35 epochs keeping the 25th, with a
+  patience of 3 to 31 epochs, with a patience of 30 through all 100, and without early stopping to the network of the
+  100th epoch rather than the best, each accepted without a word; only another seed was refused. The file's training
+  part now holds `batchSize` and `earlyStopping` — its `patience`, `minDelta` and `restoreBest`, or null for a run that
+  had none — and a refusal names every difference at once, the seed's among them.
+
+- **A checkpoint records the engine its run was on, and a run going on on another is refused.** A checkpoint named no
+  engine, and a run went on from it on any engine it was handed without a word, as another run: the networks sample's
+  Titanic run on the light engine, gone on from its file on libtorch or on the tests' native engine after its 1st, 5th,
+  10th or 20th epoch alike, kept the same epoch and ended with weights up to 3.0e−7 from those of the run the checkpoint
+  was taken of, which the light engine goes on to the bit — under the same seed, with nothing to tell the two runs
+  apart. The file's training part now holds `engine` — its `name`, and its `version` and `device` where the engine
+  names them — and a refusal names both engines, with every other difference at once.
+
+- **A served row refused for a column it lacks is told what its rows offer.** The refusal listed the answers the
+  pipeline awaits among the columns the rows offered — `survived` for the Titanic passengers, the twenty-four hours for
+  a day of bikes — though nobody handed them in; it lists the columns handed in.
+
+- **What `ServedBatch.Keys` says of a served row's key.** It said that the answers a row awaits count as gaps in its
+  key. A row handed in with its answer is keyed by the cell it carries, so the same passenger handed in with and without
+  `survived` has two keys, and is served alike under both.
+
+- **A network's file and a checkpoint end every line with a line feed, on every system.** The network's part was
+  written with the line endings of the machine it ran on — a carriage return before every line feed on Windows — beside
+  the pipeline's part, written with line feeds everywhere. Every such file is read as it stands, and one written again
+  comes out with line feeds throughout.
+
+- **0.4.0's changelog says that what a network is handed lies between minus one and one; it is declared to land
+  there.** A scale fitted on the training rows lands them between minus one and one, and the handover refuses a network
+  any feature not declared to land there. A row that arrives later and lies beyond what the training rows held passes
+  outside, unless its scale is declared to clip it or refuse it: on the Apple prices, four closes and one volume of the
+  152 days after the training rows do.
+
+- **The README says where its example's file comes from.** It read `btceur-1d.csv`, which ships nowhere, without a word
+  about it; it now says that it is a file of your own and names the columns it holds, and a test holds those to the
+  columns the example declares.
+
+- **The wiki's code compiles as it stands, and a test holds it to that.** Every C# block on its pages is compiled
+  against the packages as built, and fails on a warning, an obsolete form among them; a notebook's cell is run in
+  Verso's own engine. The Networks page's network written as code trained and could not be saved: it now says the name
+  its file knows it by and how it is built again, and the page names the catalog it is read back with. The pages use the
+  forms that take four parameters at most.
+
+- **A network in Keras's words that ends in `.Sigmoid()` before `BinaryCrossEntropy` answers through one sigmoid.** The
+  loss takes the logits and applies the sigmoid itself, and 0.4.0's words kept the sigmoid layer too, so every prediction
+  went through it twice and the training read the sigmoid's outputs as logits: logits of −20, −1, 1 and 20 came out
+  0.5000, 0.5668, 0.6750 and 0.7311, every one a half or more, so every measure that counts classes counted every row as a
+  one. The words now leave that sigmoid to the loss, and the same logits come out 0.0000, 0.2689, 0.7311 and 1.0000.
+
+- **Reading a network's file takes a twelfth of the memory it took, a checkpoint's a third, in under half the time.** To
+  place a fault at its line and column, the reader kept where every number of every slot stood in the file, and counted
+  every line: a network of four million parameters — one dense layer of 2000 by 2000, a file of 95.6 MB — took 430 bytes
+  a parameter to read. Where a number stands is now worked out only when a fault is placed there, and the lines are
+  counted only then; and a tensor's numbers are read from the text where they stand, rather than parsed with the rest of
+  it into a document that keeps a row for each, taken from .NET's pool of arrays at the size of the whole text. The same
+  read takes 36 bytes a parameter: the file's own text once more, as UTF-8, and the numbers. The one file of a network of
+  four million parameters behind the Titanic pipeline took 501 bytes a parameter: its top and the pipeline it carries
+  were each read from a copy of the whole file as well, each counting its every line. Both are now read a piece of the
+  file at a time, keeping only the pipeline's own bytes, and the one file takes 36 bytes a parameter. A checkpoint of the
+  same network under Adam, whose file holds three numbers a parameter, took 372 bytes a parameter to read, and 432 with
+  the best epoch's slots besides, since its network and its run were each read from the whole text; read once, it takes
+  96 and 128. Every fault is placed where it was, and every file reads as it did.
+
+- **The largest network the one file holds is the same on every system: about 45 million parameters.** The file is one
+  text, .NET makes no text longer than 1,073,741,791 characters, and a network's numbers take between 23.6 and 24
+  characters a parameter; a network of 45 million parameters is refused with the `OutOfMemoryException` .NET refuses so
+  long a text with. On Windows the writer ended every line with a carriage return and the text was made before they were
+  taken out, a character longer for every line, so a network of 43.7 million parameters could not be written there,
+  though its file fits; the carriage returns are now left out before the text is made, and that network is written and
+  read back on Windows too. A checkpoint holds, beside every parameter, what Adam remembers of it, and the best epoch's
+  number when its run keeps it — 76 and 104 characters a parameter — so it holds a network of about 14 million
+  parameters, or about 10 million: one of ten million keeping the best epoch's was written and read back, and one of 10.6
+  million refused.
+
+- **The build proves what a person runs, not only what every suite built.** `dotnet pack` now checks each of the sixteen
+  packages' public surface against the one nuget.org already carries, for the nine 0.4.0 already shipped there, so a
+  change nobody meant to make fails the build instead of somebody's upgrade — measured with a property taken from public
+  to internal: the pack refuses it, naming the member and both builds. The seven packages new this release take the same
+  check with nothing to compare against yet. An application referencing `DeepSharp.Backends.TorchSharp` from the package just made,
+  and none of this repository's source, is started from it twice, the way `deepsharp-serve` and the notebook already are:
+  brought no libtorch, it is refused, naming every package that brings one; brought the processor's, it fits a step of
+  the networks sample's Titanic pipeline on it. And the engine's own suite, proven so far only on the platform it was
+  built on, now runs on Windows in CI as well as on Linux, on both frameworks it ships for, so the native interop under
+  it is not left untried on one of the two platforms a person runs it on.
+
 ## [0.4.0]
 
 Where it learns. Layers, losses, optimizers and learning-rate schedules; a training loop that stops once the validation

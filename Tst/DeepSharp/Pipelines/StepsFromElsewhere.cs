@@ -15,7 +15,7 @@ public sealed record ScaleByStep : IPipelineStep<ScaleByStep>, IAddsColumns
     private static readonly ColumnParameter ColumnKey = new(
         "column", "The column to multiply.", "column", ColumnKinds.Numbers);
 
-    private static readonly NumberParameter ByKey = new("by", "What every value is multiplied by: a number above nothing.", 2, above: 0);
+    private static readonly NumberParameter ByKey = new("by", "What every value is multiplied by: a number above nothing.", 2) { Above = 0 };
 
     public ScaleByStep(string column, double by)
     {
@@ -170,4 +170,78 @@ public sealed record ForgetStep : IPipelineStep<ForgetStep>, IDropsColumns
     public static ForgetStep ReadFrom(JsonElement element) => new(ColumnKey.Read(element));
 
     public void DropFrom(Table table) => table.Remove(Column);
+}
+
+/// <summary>
+/// A step from elsewhere that a learner indifferent to scale does without — a column less its training mean — and that
+/// offers in its place a step written as another verb, which no run can name in its file as the step it stands for.
+/// </summary>
+public sealed record CentreStep : IPipelineStep<CentreStep>, IMeetsANeed
+{
+    private static readonly ColumnParameter ColumnKey = new("column", "The column to centre.", "column", ColumnKinds.Numbers);
+
+    public CentreStep(string column) => Column = ColumnKey.Require(column);
+
+    public string Column { get; }
+
+    public static string Name => "centre";
+
+    public static string Purpose => "Takes the training rows' mean off a column.";
+
+    public static StepParameters<CentreStep> Parameters { get; } =
+        new StepParameters<CentreStep>().With(ColumnKey, step => step.Column);
+
+    public string Verb => Name;
+
+    IFittedStep? IMeetsANeed.Instead => new LearnNothingStep();
+
+    public static CentreStep ReadFrom(JsonElement element) => new(ColumnKey.Read(element));
+
+    public bool NeededBy(Needs needs) => !needs.DoesWithoutScaling();
+
+    public FittedStepValues Fit(Table table, IReadOnlyList<Part> parts)
+    {
+        var learned = new FittedStepValues();
+        learned.Learned("mean", table.NumbersOf(Column).Where((_, row) => parts[row] == Part.Train).Average() ?? 0);
+
+        return learned;
+    }
+
+    public void ApplyTo(Table table, FittedStepValues fitted) =>
+        table.Put(new Column<double>(Column, ColumnKind.Number, table.NumbersOf(Column).Select(value => value - fitted.Number("mean"))));
+}
+
+/// <summary>
+/// A step from elsewhere that says every learner does without it, and that its column lands between minus one and one once
+/// it has squashed it there: left out, the column lands nowhere said.
+/// </summary>
+public sealed record SquashStep : IPipelineStep<SquashStep>, IMeetsANeed, IDescribesColumns
+{
+    private static readonly ColumnParameter ColumnKey = new("column", "The column to squash.", "column", ColumnKinds.Numbers);
+
+    public SquashStep(string column) => Column = ColumnKey.Require(column);
+
+    public string Column { get; }
+
+    public static string Name => "squash";
+
+    public static string Purpose => "Squashes a column between minus one and one.";
+
+    public static StepParameters<SquashStep> Parameters { get; } =
+        new StepParameters<SquashStep>().With(ColumnKey, step => step.Column);
+
+    public string Verb => Name;
+
+    IFittedStep? IMeetsANeed.Instead => null;
+
+    public static SquashStep ReadFrom(JsonElement element) => new(ColumnKey.Read(element));
+
+    public bool NeededBy(Needs needs) => false;
+
+    public ColumnState After(ColumnState before) => before.With(Column, ColumnKind.Number, Form.Signed);
+
+    public FittedStepValues Fit(Table table, IReadOnlyList<Part> parts) => new();
+
+    public void ApplyTo(Table table, FittedStepValues fitted) =>
+        table.Put(new Column<double>(Column, ColumnKind.Number, table.NumbersOf(Column).Select(value => value is { } number ? Math.Tanh(number) : (double?)null)));
 }

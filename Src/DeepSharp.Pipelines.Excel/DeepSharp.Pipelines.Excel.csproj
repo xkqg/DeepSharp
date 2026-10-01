@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Pipelines.Excel</PackageId>
+    <Description>Reads a DeepSharp pipeline's rows out of an Excel workbook, .xlsx, .xls or .xlsb: .ReadExcel(path) in the chain, read.excel in a pipeline file, replayed like any other file the pipeline reads. The first sheet unless one is named, its first row naming the columns; every cell as the sheet types it — a number, true or false, a date as a moment, never the text a culture happens to show — an empty cell empty, as the same sheet saved as comma-separated text would be, and an error as Excel spells it.</Description>
+    <PackageTags>machine-learning;pipeline;excel;xlsx;xls;spreadsheet;data-preparation;etl;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ExcelDataReader 3.9.0, MIT (github.com/ExcelDataReader/ExcelDataReader), with nothing of its own beside it on .NET 8
+         and later. The code pages it asks for, even of a workbook that has none, come with .NET itself. -->
+    <PackageReference Include="ExcelDataReader" Version="3.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

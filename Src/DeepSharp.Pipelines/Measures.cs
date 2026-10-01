@@ -21,7 +21,18 @@ namespace DeepSharp.Pipelines;
 /// the part's rows in the order the part hands them over: in any other order each would be measured against another
 /// row's answer, and nothing about the numbers would say so.
 /// </remarks>
-public readonly record struct PartPredictions(Batch Batch, IReadOnlyList<double[]> Predictions);
+public readonly record struct PartPredictions(Batch Batch, IReadOnlyList<double[]> Predictions)
+{
+    /// <summary>
+    /// What the model says of each row, in the batch's order: the features it was handed a value of that it learned nothing
+    /// about, named — empty for a row it knows. Nothing when the model says nothing of it.
+    /// </summary>
+    /// <remarks>
+    /// The model is the one that knows: a network learns nothing about a feature its training rows held at one value, and
+    /// says so of a row that moves it. The report counts the rows of each part that name any, beside its measures.
+    /// </remarks>
+    public IReadOnlyList<IReadOnlyList<string>>? Unfamiliar { get; init; }
+}
 
 /// <summary>One measure of one part, beside the same measure of predicting the training rows' average answer.</summary>
 /// <param name="Metric">The measure.</param>
@@ -80,6 +91,12 @@ public sealed class PartMeasures
     public int Rows => Actual.Count;
 
     /// <summary>
+    /// How many of them the model said it was handed a value of that it learned nothing about, which it answered by nothing
+    /// it learned; nothing when the predictions measured said nothing of it.
+    /// </summary>
+    public int? UnfamiliarRows { get; internal init; }
+
+    /// <summary>
     /// Every measure the report names that is a number, in the order it names them, each beside the same measure of
     /// predicting the training rows' average answer.
     /// </summary>
@@ -102,16 +119,21 @@ public sealed class PartMeasures
 /// <remarks>
 /// Output, like every piece of evidence: kept with whatever measured it, and never written into the pipeline's file,
 /// since the file is what is replayed. The numbers are all here, the rows' answers and predictions among them, for
-/// whatever shows them to draw from.
+/// whatever shows them to draw from; and what they were measured from crosses, as text, to wherever the same pipeline
+/// runs (<see cref="PredictionsToJson"/>).
 /// </remarks>
 public sealed class Measures : Evidence
 {
-    internal Measures(INamesTheMeasures report, IReadOnlyList<string> answers, IReadOnlyList<PartMeasures> parts)
+    // A report stands below an output, so the pipeline it was measured on names the answers: the declaration refuses one that
+    // does not.
+    internal Measures(INamesTheMeasures report, PreparedData measuredOn, IReadOnlyList<PartMeasures> parts, IReadOnlyList<WrittenPart> predicted)
     {
         Metrics = report.Metrics;
         Shown = report.Shown;
-        Answers = answers;
+        Answers = measuredOn.Declaration.Output!.Answers;
         Parts = parts;
+        Predicted = predicted;
+        MeasuredOn = measuredOn;
     }
 
     /// <summary>The measures, in the order the report names them.</summary>
@@ -125,6 +147,31 @@ public sealed class Measures : Evidence
 
     /// <summary>Each part measured, in the order the report names them.</summary>
     public IReadOnlyList<PartMeasures> Parts { get; }
+
+    // What they were measured from: for each part the report names, once and in its order, the keys of its rows, what was
+    // predicted for each and what the model said of each — none of the rows' numbers, which the text never carries.
+    internal IReadOnlyList<WrittenPart> Predicted { get; }
+
+    // The run they were measured on: the fit the predictions were made behind, which their text names.
+    private PreparedData MeasuredOn { get; }
+
+    /// <summary>
+    /// What these measures were taken from, as text: the fit the predictions were made behind; and for each part the report
+    /// names, the key of each of its rows, what was predicted for each in the units the answers were handed over in, and —
+    /// when the model said it — the features of each row it learned nothing about.
+    /// </summary>
+    /// <returns>The text, as one JSON object, which <see cref="PreparedData.MeasureAgain"/> measures again.</returns>
+    /// <remarks>
+    /// The way predictions cross to wherever the same pipeline runs, where the types of this library are other types even when
+    /// their names are the same: a notebook's C# cell that trains a model hands it back to the notebook with
+    /// <c>Variables.Set("deepsharp.predictions", trained.Measures!.PredictionsToJson())</c>, and the notebook's report block
+    /// measures it on the notebook's own run and draws it. Only what the model gave crosses, with the fit it was made behind
+    /// — its pipeline's <see cref="PipelineText.FitDigest"/>, the version of the pipeline file that names and, for a run made
+    /// for a learner that left steps out, which it left out — so it is measured only beside that very fit, by the rule a
+    /// network's file is held to its pipeline by, or on a run of every step of the same declaration; what it is measured
+    /// against, and the way back to the answers' own units, are the run's that measures it.
+    /// </remarks>
+    public string PredictionsToJson() => PredictionsDocument.Write(new WrittenPredictions(WrittenFit.Of(MeasuredOn), Answers, Predicted));
 
     /// <inheritdoc />
     public override TResult Accept<TResult>(IEvidenceVisitor<TResult> visitor)
@@ -311,11 +358,7 @@ internal sealed class Measurement
         var report = prepared.Declaration.Report ?? throw new InvalidOperationException(
             "This pipeline declares no report, so nothing says what a model is measured by: declare one below its output, with evidence.report.");
 
-        if (prepared.Table.RowCount == 0)
-        {
-            throw new InvalidOperationException(
-                "This pipeline holds no rows — one loaded from its file keeps none — so there is nothing to measure: what a model predicted is measured on the run that fitted it.");
-        }
+        prepared.RequireRows();
 
         var given = Given(report, predictions);
 
@@ -323,7 +366,11 @@ internal sealed class Measurement
         var output = prepared.Declaration.Output!;
         var measurement = new Measurement(prepared, report, output, Average(prepared));
 
-        return new Measures(report, output.Answers, [.. report.Parts.Select(part => measurement.On(part, given[part]))]);
+        return new Measures(
+            report,
+            prepared,
+            [.. report.Parts.Select(part => measurement.On(part, given[part]))],
+            [.. report.Parts.Distinct().Select(part => WrittenPart.Of(part, given[part]))]);
     }
 
     // The predictions by the part they were made for: one set for every part the report names, and for none else.
@@ -361,18 +408,19 @@ internal sealed class Measurement
         return given;
     }
 
-    // The average of the training rows' answers as they were handed over: the prediction a measure stands beside.
+    // The average of the training rows' answers as they were handed over: the prediction a measure stands beside. Only the
+    // answers are read, never the features, whatever a learner was handed of them.
     private static double[] Average(PreparedData prepared)
     {
-        var train = prepared.Batch(Part.Train);
+        var train = Handover.AnswersOf(prepared, Part.Train);
 
-        if (train.RowCount == 0)
+        if (train.Keys.Count == 0)
         {
             throw new InvalidOperationException(
                 "The training part holds no rows, so there is no average of its answers for a model's measures to stand beside.");
         }
 
-        var average = new double[train.AnswerNames!.Count];
+        var average = new double[train.Names!.Count];
 
         foreach (var answers in train.Answers!)
         {
@@ -382,25 +430,35 @@ internal sealed class Measurement
             }
         }
 
-        return [.. average.Select(total => total / train.RowCount)];
+        return [.. average.Select(total => total / train.Keys.Count)];
     }
 
-    // The measures of one part: its rows as handed over, checked against the rows the predictions were made for, both
+    // The measures of one part: its rows' answers and keys, checked against the rows the predictions were made for, both
     // brought back into the answer's units, and measured beside the training rows' average brought back the same way.
     private PartMeasures On(Part part, PartPredictions given)
     {
-        var handed = _prepared.Batch(part);
+        var handed = Handover.AnswersOf(_prepared, part);
+        var rows = handed.Keys.Count;
 
-        if (handed.RowCount == 0)
+        if (rows == 0)
         {
             throw new InvalidOperationException($"The report measures '{Word(part)}', and it holds no rows: there is nothing to measure there.");
         }
 
-        ThrowIfOtherRows(part, handed.Keys!, given.Batch.Keys!);
+        ThrowIfOtherRows(part, handed.Keys, given.Batch.Keys!);
+
+        if (given.Unfamiliar is { } said && said.Count != rows)
+        {
+            throw new ArgumentException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The predictions for '{Word(part)}' say what is unfamiliar of {said.Count} rows, and the part holds {rows}: say it of every row Batch hands over, in its order."),
+                "predictions");
+        }
 
         int[] readAt = [.. Enumerable.Range(0, _prepared.Table.RowCount).Where(row => _prepared.Parts[row] == part).Select(row => _prepared.Table.Identities[row].ReadAt)];
         var model = new Answered(_prepared.BackToOriginal(handed.Answers!, part), _prepared.BackToOriginal(given.Predictions, part));
-        var average = new Answered(model.Actual, _prepared.BackToOriginal([.. Enumerable.Repeat(_average, handed.RowCount)], part));
+        var average = new Answered(model.Actual, _prepared.BackToOriginal([.. Enumerable.Repeat(_average, rows)], part));
 
         ThrowIfNotFinite(model.Predicted, readAt);
 
@@ -409,7 +467,7 @@ internal sealed class Measurement
             ThrowIfNotClasses(model.Actual, readAt);
         }
 
-        if (_report.Metrics.Contains(Metric.R2) && handed.RowCount < 2)
+        if (_report.Metrics.Contains(Metric.R2) && rows < 2)
         {
             throw new InvalidOperationException(
                 $"R² compares a part's answers with their own mean, and '{Word(part)}' holds one row, whose mean is its answer: measure it with rmse or mae, or divide more rows into it.");
@@ -427,7 +485,10 @@ internal sealed class Measurement
             part,
             model,
             values,
-            _report.Metrics.Contains(Metric.ConfusionMatrix) ? model.Classes(ones).Confusions(average.Classes(ones), _output.Answers, ones) : []);
+            _report.Metrics.Contains(Metric.ConfusionMatrix) ? model.Classes(ones).Confusions(average.Classes(ones), _output.Answers, ones) : [])
+        {
+            UnfamiliarRows = given.Unfamiliar?.Count(names => names.Count > 0),
+        };
     }
 
     // The part's rows in the order the part hands them over, known by their keys: anything else is measured against other rows.

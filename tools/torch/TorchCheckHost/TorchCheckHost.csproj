@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- An application of its own, holding nothing of DeepSharp's source: tools/torch/check.sh has it reference
+       DeepSharp.Backends.TorchSharp, and what it needs to fit a step, from the packages just packed. Restored from that
+       folder at its own version, $(Version), rather than a number invented here. Built for .NET 8 alone, as the
+       Tst project's suite is when its own restore is checked, and never added to DeepSharp.slnx: unlike a project
+       reference, this package does not exist anywhere before `dotnet pack` has made it, so the plain `dotnet build
+       DeepSharp.slnx` that runs before Pack would fail to restore it. Not a package, and not a suite: nothing ships it
+       and nothing measures it. -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DeepSharp" Version="$(Version)" />
+    <PackageReference Include="DeepSharp.Pipelines" Version="$(Version)" />
+    <PackageReference Include="DeepSharp.Learners.Networks" Version="$(Version)" />
+    <PackageReference Include="DeepSharp.Backends.TorchSharp" Version="$(Version)" />
+  </ItemGroup>
+
+  <!-- The libtorch an application brings, as one brings it: the processor's build for the platform it runs on. Absent
+       unless asked for, so the same project proves both what an application without one is told and what one with it
+       runs. -->
+  <ItemGroup Condition="'$(Libtorch)' == 'cpu'">
+    <PackageReference Include="libtorch-cpu-win-x64" Version="2.10.0" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <PackageReference Include="libtorch-cpu-linux-x64" Version="2.10.0" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+    <PackageReference Include="libtorch-cpu-osx-arm64" Version="2.10.0" Condition="$([MSBuild]::IsOSPlatform('OSX'))" />
+  </ItemGroup>
+
+</Project>

@@ -103,7 +103,11 @@ public enum AlertAction
     /// <summary>A step is written for the column, one the column rules keep for its kind: its verb says which.</summary>
     Step,
 
-    /// <summary>The column is left out, as the column rules leave one out: excluded in the schema when no step reads it.</summary>
+    /// <summary>
+    /// The column is left out, as the column rules leave one out: excluded in the schema when it is declared and no step
+    /// names it — a category the step encoding every category turns into columns among them — and dropped after the last
+    /// step that reads it otherwise.
+    /// </summary>
     LeaveOut,
 
     /// <summary>The schema says a value stands for a gap in the column, so every cell holding it is read as one.</summary>
@@ -181,11 +185,10 @@ public readonly record struct ProfileAlert(IReadOnlyList<string> Columns, string
 /// </summary>
 public sealed class DataProfile : Evidence
 {
-    internal DataProfile(
-        Standing over, int rows, IReadOnlyList<ColumnProfile> columns, IReadOnlyList<ProfileAlert> alerts, DuplicateRows duplicates)
+    internal DataProfile(PipelineView view, IReadOnlyList<ColumnProfile> columns, IReadOnlyList<ProfileAlert> alerts, DuplicateRows duplicates)
     {
-        Over = over;
-        Rows = rows;
+        Over = view.Measured;
+        Rows = view.MeasuredRows().Length;
         Columns = columns;
         Alerts = alerts;
         Duplicates = duplicates;
@@ -225,12 +228,12 @@ public sealed class DataProfile : Evidence
 /// </remarks>
 public sealed class CorrelationInput : Evidence
 {
-    internal CorrelationInput(Standing over, IReadOnlyList<string> columns, IReadOnlyList<double[]> rows, int total, Shown shown)
+    internal CorrelationInput(PipelineView view, IReadOnlyList<string> columns, IReadOnlyList<double[]> rows, Shown shown)
     {
-        Over = over;
+        Over = view.Measured;
         Columns = columns;
         Rows = rows;
-        Total = total;
+        Total = view.MeasuredRows().Length;
         Shown = shown;
     }
 
@@ -284,7 +287,10 @@ public sealed class CorrelationInput : Evidence
 public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence, IDescribesColumns
 {
     private static readonly ColumnsParameter ColumnsKey = new(
-        "columns", "The columns to profile; left out, every column where the step stands.", ["column"], ColumnKinds.Any, optional: true);
+        "columns", "The columns to profile; left out, every column where the step stands.", ["column"], ColumnKinds.Any)
+    {
+        Optional = true,
+    };
 
     /// <summary>Declares a profile of these columns, or of every column where it stands.</summary>
     /// <param name="columns">The columns to profile; none, for every column.</param>
@@ -336,12 +342,12 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
         ArgumentNullException.ThrowIfNull(view);
 
         var table = view.Table;
-        var measured = Enumerable.Range(0, table.RowCount).Where(row => view.Standings[row] == view.Measured).ToArray();
+        var measured = view.MeasuredRows();
         var names = Columns.Count > 0 ? Columns : [.. table.Columns.Select(column => column.Name)];
         var profiles = names.Select(name => Profiled(view, table[name], measured)).ToArray();
         ProfileAlert[] alerts = [.. profiles.SelectMany(profile => Alerts(view, profile)), .. Pairs(view, names, measured)];
 
-        return new DataProfile(view.Measured, measured.Length, profiles, alerts, Duplicates(view));
+        return new DataProfile(view, profiles, alerts, Duplicates(view));
     }
 
     /// <summary>Reads this step back out of a file.</summary>
@@ -720,14 +726,14 @@ public sealed record CorrelationStep : IPipelineStep<CorrelationStep>, IProduces
 
         var table = view.Table;
         var values = Columns.Select(table.NumbersOf).ToArray();
-        var measured = Enumerable.Range(0, table.RowCount).Where(row => view.Standings[row] == view.Measured).ToArray();
+        var measured = view.MeasuredRows();
 
         var complete = measured
             .Where(row => values.All(column => column[row] is { } value && double.IsFinite(value)))
             .Select(row => values.Select(column => column[row]!.Value).ToArray())
             .ToArray();
 
-        return new CorrelationInput(view.Measured, Columns, complete, measured.Length, Shown);
+        return new CorrelationInput(view, Columns, complete, Shown);
     }
 
     /// <summary>Reads this step back out of a file.</summary>

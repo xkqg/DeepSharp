@@ -1,0 +1,8 @@
+tensorflow 2.21.0, keras 3.15.1, tf2onnx 1.17.0, onnx 1.23.1, numpy 2.5.3, Python 3.12.14
+tf2onnx-titanic.onnx: 2784 bytes; opset 15; producer tf2onnx 1.17.0 None; MatMul Add Relu MatMul Add Sigmoid
+titanic test: 135 rows; the graph within 5.96e-08 of Keras's chances on PyTorch, TensorFlow within 1.19e-07
+titanic served: 2 rows; the graph within 1.19e-07 of Keras's chances on PyTorch, TensorFlow within 5.96e-08
+tf2onnx-convolution.onnx: 4456 bytes; opset 15; producer tf2onnx 1.17.0 None; Transpose Conv Relu Conv Transpose Reshape Gemm Tanh Gemm
+convolution: the graph within 2.68e-07 of TensorFlow's outputs
+convolution outputs: 0.36464524 1.44308245 0.13541043 0.43708181 -1.25113761 0.85092211
+tf2onnx-convolution-batches.onnx: 8735 bytes; opset 15; producer tf2onnx 1.17.0 None; Transpose Conv Mul Add Relu Conv Mul Add Transpose Shape Gather Cast Slice Concat Cast Reshape Mul Add MatMul Add Tanh MatMul Add

@@ -185,18 +185,23 @@ public class DeclarationRulesTests
     {
         // Two capabilities on one step cannot compile outside this library — the run would not know which of
         // them the step is — so what is left to pin is that every step here has one, an output that only names
-        // its answers and a report that only names their measures aside.
-        var steps = new[] { typeof(Pdd).Assembly, typeof(AddIndicatorStep).Assembly }
+        // its answers and a report that only names their measures aside. A capability that refines another is the
+        // same one thing: a step some learners do without is a step that learns. The steps are those a person
+        // declares, each knowing its own name; what a run takes in the place of one it left out is not declared.
+        var steps = Shipped.StepAssemblies
             .SelectMany(assembly => assembly.GetTypes())
-            .Where(type => type is { IsClass: true, IsAbstract: false } && typeof(IPipelineStep).IsAssignableFrom(type))
+            .Where(type => type is { IsClass: true, IsAbstract: false }
+                           && type.GetInterfaces().Any(face => face.IsGenericType && face.GetGenericTypeDefinition() == typeof(IPipelineStep<>)))
             .ToArray();
 
         Assert.NotEmpty(steps);
         Assert.Contains(typeof(ReportStep), steps);
 
+        static bool Acts(Type face) => face != typeof(IActsInAWalk) && typeof(IActsInAWalk).IsAssignableFrom(face);
+
         foreach (var step in steps)
         {
-            var acts = step.GetInterfaces().Count(face => face != typeof(IActsInAWalk) && typeof(IActsInAWalk).IsAssignableFrom(face));
+            var acts = step.GetInterfaces().Count(face => Acts(face) && !face.GetInterfaces().Any(Acts));
 
             var onlyNames = (typeof(INamesTheAnswer).IsAssignableFrom(step) || typeof(INamesTheMeasures).IsAssignableFrom(step))
                             && !typeof(IActsInAWalk).IsAssignableFrom(step);
@@ -301,7 +306,7 @@ public class DeclarationRulesTests
                 .ReadCsv(Repository.Data("apple.csv"))
                 .Declare(schema => schema.Timestamp("Date").Number("Open", "High", "Low", "Close", "Volume"))
                 .OrderBy("Date")
-                .AddIndicator("sma5", Indicator.Sma, ["Close"], 5)
+                .Add(new AddIndicatorStep("sma5", Indicator.Sma, ["Close"], 5))
                 .DropWarmUp()
                 .TimeParts("Date", TimePart.Month)
                 .SplitByTime("Date", 0.70, 0.15)

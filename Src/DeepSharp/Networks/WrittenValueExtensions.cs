@@ -11,8 +11,9 @@ namespace DeepSharp.Networks;
 /// </summary>
 /// <remarks>
 /// A <see cref="JsonElement"/> asked for a number it does not hold throws, and one that is not an object throws when asked
-/// for a key; a file is text anybody may have edited, so every read of it goes through these, and a number read is always
-/// a finite one.
+/// for a key; a file is text anybody may have edited, so every read of its parsed text goes through these, and a number
+/// read is always a finite one. A tensor's values are not parsed: the file's text reads them where they stand, by the same
+/// rule.
 /// </remarks>
 internal static class WrittenValueExtensions
 {
@@ -31,10 +32,6 @@ internal static class WrittenValueExtensions
         /// <summary>The finite number written here; nothing when it is not one.</summary>
         public double? AsNumber() =>
             element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out var number) && double.IsFinite(number) ? number : null;
-
-        /// <summary>The finite number written here, as a float holds it; nothing when it is not one, or past what a float holds.</summary>
-        public float? AsFloat() =>
-            element.ValueKind == JsonValueKind.Number && element.TryGetSingle(out var number) && float.IsFinite(number) ? number : null;
 
         /// <summary>The true or false written here; nothing when it is neither.</summary>
         public bool? AsTruth() => element.ValueKind switch

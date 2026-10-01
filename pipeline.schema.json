@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 3
+      "maximum": 4
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -20,6 +20,9 @@
     },
     "fitted": {
       "$ref": "#/$defs/fitted"
+    },
+    "skipped": {
+      "$ref": "#/$defs/skipped"
     }
   },
   "required": [
@@ -54,6 +57,9 @@
             "order.by",
             "outliers.clip",
             "read.csv",
+            "read.excel",
+            "read.json",
+            "read.parquet",
             "read.rows",
             "split.atRandom",
             "split.byTime",
@@ -388,6 +394,51 @@
           "if": {
             "properties": {
               "step": {
+                "const": "read.excel"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/read.excel"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "read.json"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/read.json"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "read.parquet"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/read.parquet"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
                 "const": "read.rows"
               }
             },
@@ -551,6 +602,29 @@
           "step",
           "prefix",
           "learned"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "skipped": {
+      "description": "The steps a run for a learner left out, written by the run rather than by a person: an entry for each, filed under the key of the steps up to it; written only when a run left one out.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": {
+            "type": "string",
+            "pattern": "\\S"
+          },
+          "prefix": {
+            "description": "The key of the steps up to the one left out: a SHA-256 digest, in hexadecimal.",
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          }
+        },
+        "required": [
+          "step",
+          "prefix"
         ],
         "additionalProperties": false
       }
@@ -1610,6 +1684,68 @@
       ],
       "additionalProperties": false
     },
+    "read.excel": {
+      "description": "Reads the rows from a sheet of an Excel workbook, the first unless one is named, its first row naming the columns.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "read.excel"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Where the workbook will be, when the pipeline runs: .xlsx, .xls or .xlsb."
+        },
+        "sheet": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The sheet the rows are on. Left out, the first sheet."
+        }
+      },
+      "required": [
+        "step",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "read.json": {
+      "description": "Reads the rows from a JSON file holding an array of records, one object a row, every value as the file writes it.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "read.json"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Where the JSON file will be, when the pipeline runs: an array of records, one object a row."
+        }
+      },
+      "required": [
+        "step",
+        "path"
+      ],
+      "additionalProperties": false
+    },
+    "read.parquet": {
+      "description": "Reads the rows from an Apache Parquet file, which says what each of its columns holds.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "read.parquet"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Where the Parquet file will be, when the pipeline runs."
+        }
+      },
+      "required": [
+        "step",
+        "path"
+      ],
+      "additionalProperties": false
+    },
     "read.rows": {
       "description": "Takes rows that are handed in rather than opened: a table already in memory, a reader over a query.",
       "type": "object",
@@ -1903,6 +2039,22 @@
     }
   },
   "allOf": [
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 4
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "skipped"
+          ]
+        }
+      }
+    },
     {
       "if": {
         "properties": {

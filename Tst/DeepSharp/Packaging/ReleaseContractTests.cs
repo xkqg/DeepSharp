@@ -271,6 +271,113 @@ public class ReleaseContractTests
         Assert.Contains("dotnet tool install DeepSharp.Verso.Serve --tool-path \"$work/tool\" --source \"$packages\"", Read("tools", "serve", "check.sh"), StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("ci.yml")]
+    [InlineData("publish.yml")]
+    public void TheNotebook_IsInstalledByVersoFromThePackageJustMade_BeforeAnyPackageLeavesTheRun(string file)
+    {
+        // Verso installs the notebook package into a folder of its own and loads it apart from everything else, while every
+        // suite runs the build, where a dependency the package never declared is found all the same. So the package just
+        // made is installed by Verso's own installer, loaded by its own loader and run by its own kernel, in a host that
+        // holds nothing of DeepSharp — on .NET 8, and on the newest runtime, where Verso's VS Code extension runs that same
+        // build — after the pack and before anything is pushed.
+        string workflow = Read(".github", "workflows", file);
+        var check = workflow.IndexOf("bash tools/verso/check.sh nupkgs", StringComparison.Ordinal);
+        var push = workflow.IndexOf("dotnet nuget push", StringComparison.Ordinal);
+
+        Assert.True(check > workflow.IndexOf("dotnet pack DeepSharp.slnx", StringComparison.Ordinal), $"{file} does not install the notebook from the package it made");
+        Assert.True(push < 0 || check < push, $"{file} pushes the packages before Verso installs the notebook from one");
+        Assert.Contains("dotnet exec --roll-forward LatestMajor", Read("tools", "verso", "check.sh"), StringComparison.Ordinal);
+        Assert.Contains("MarketplaceLoader.InstallLocalFileAsync", Read("tools", "verso", "VersoHost", "Program.cs"), StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("serve")]
+    [InlineData("verso")]
+    [InlineData("torch")]
+    public void ACheckOfThePackagesJustMade_ExtractsThemIntoAFolderOfItsOwn_NeverIntoTheMachinesPackageCache(string check)
+    {
+        // A version is extracted into the machine's package cache once, and never again: a check run on packages packed
+        // earlier in the same work leaves that build there, and a later check of the same version would then start the build
+        // it found rather than the one just packed — green over code that is no longer there. So each check hands NuGet a
+        // folder of its own for the packages it extracts, inside the folder it removes when it ends.
+        var script = Read("tools", check, "check.sh");
+
+        Assert.Matches(@"NUGET_PACKAGES=""(\$\(native "")?\$(work|run)/", script);
+    }
+
+    [Theory]
+    [InlineData("ci.yml")]
+    [InlineData("publish.yml")]
+    public void TheTorchBackend_IsCheckedFromThePackageJustMade_BeforeAnyPackageLeavesTheRun(string file)
+    {
+        // An application referencing DeepSharp.Backends.TorchSharp is checked against the package just made, not the
+        // build every suite ran: refused by name where it brings no libtorch, and a real step of the networks sample's
+        // Titanic pipeline where it brings the processor's — after the pack and before anything is pushed.
+        string workflow = Read(".github", "workflows", file);
+        var check = workflow.IndexOf("bash tools/torch/check.sh nupkgs", StringComparison.Ordinal);
+        var push = workflow.IndexOf("dotnet nuget push", StringComparison.Ordinal);
+
+        Assert.True(check > workflow.IndexOf("dotnet pack DeepSharp.slnx", StringComparison.Ordinal), $"{file} does not check the engine package from the package it made");
+        Assert.True(push < 0 || check < push, $"{file} pushes the packages before checking the engine package from one");
+        Assert.Contains("PackageReference Include=\"DeepSharp.Backends.TorchSharp\"", Read("tools", "torch", "TorchCheckHost", "TorchCheckHost.csproj"), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheTorchSharpBackendSuite_RunsOnUbuntuAndWindows_BothFrameworks()
+    {
+        // The suite's own csproj brings the processor's libtorch for whichever platform it is built on, so `ci.yml`'s
+        // one ubuntu job already reaches it through the coverage gate; a second, Windows-only job reaches the native
+        // interop a Linux run never touches, on both frameworks a package ships, without repeating the whole gate there.
+        string workflow = Read(".github", "workflows", "ci.yml");
+
+        Assert.Contains("windows-latest", workflow, StringComparison.Ordinal);
+        Assert.Contains("Tst/DeepSharp.Backends.TorchSharp/DeepSharp.Backends.TorchSharp.Tests.csproj", workflow, StringComparison.Ordinal);
+        Assert.Contains("net8.0", workflow, StringComparison.Ordinal);
+        Assert.Contains("net10.0", workflow, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EveryPackageThatExistedAtTheLastRelease_ValidatesAgainstItsBaseline_AndANewOneDoesNot()
+    {
+        // A package nuget.org already carries is checked against that build's own public surface, so a change nobody
+        // meant to make breaks the build instead of somebody's upgrade; a package new this release has nothing yet to
+        // compare against, and asking for a baseline that was never published would refuse the build for a package
+        // that never shipped one.
+        string[] existedAtTheLastRelease =
+        [
+            "DeepSharp", "DeepSharp.Charts", "DeepSharp.Learners.Networks", "DeepSharp.Pipelines",
+            "DeepSharp.Pipelines.DataFrame", "DeepSharp.Pipelines.Indicators", "DeepSharp.Verso.Api",
+            "DeepSharp.Verso.Notebooks", "DeepSharp.Verso.Serve",
+        ];
+        var props = Read("Directory.Build.props");
+        var listed = Regex.Match(props, @"<PublishedAt040>(?<list>[^<]*)</PublishedAt040>").Groups["list"].Value
+            .Split(';', StringSplitOptions.RemoveEmptyEntries);
+
+        Assert.Contains("<EnablePackageValidation>true</EnablePackageValidation>", props, StringComparison.Ordinal);
+        Assert.Contains("PackageValidationBaselineVersion", props, StringComparison.Ordinal);
+        Assert.Equal(existedAtTheLastRelease.Order(StringComparer.Ordinal), listed.Order(StringComparer.Ordinal));
+
+        var newThisRelease = PackableProjects().Select(project => Path.GetFileNameWithoutExtension(project)).Except(existedAtTheLastRelease).ToArray();
+
+        Assert.NotEmpty(newThisRelease);
+        Assert.All(newThisRelease, package => Assert.DoesNotContain($";{package};", props, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TheVersoTheNotebookIsInstalledIn_IsTheVersoItsHostsAreBuiltOn()
+    {
+        // A Verso that installs or loads a package otherwise is checked the day DeepSharp's own hosts move to it, not after:
+        // the host the notebook is installed in takes the engine the application host and the notebook's suite take.
+        static string Verso(params string[] project) => XDocument.Load(Path.Join([Root, .. project])).Descendants("PackageReference")
+            .Single(reference => reference.Attribute("Include")!.Value == "Verso").Attribute("Version")!.Value;
+
+        var installedIn = Verso("tools", "verso", "VersoHost", "VersoHost.csproj");
+
+        Assert.Equal(Verso("Src", "DeepSharp.Verso.Api", "DeepSharp.Verso.Api.csproj"), installedIn);
+        Assert.Equal(Verso("Tst", "DeepSharp.Verso.Notebooks", "DeepSharp.Verso.Notebooks.Tests.csproj"), installedIn);
+    }
+
     [Fact]
     public void EveryScriptBashRuns_IsCheckedOutWithTheLineEndingsBashReads()
     {

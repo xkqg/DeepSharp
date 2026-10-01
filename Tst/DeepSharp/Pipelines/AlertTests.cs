@@ -74,6 +74,28 @@ public class AlertTests
     }
 
     [Fact]
+    public void LeavingOutACategoryTheStepBelowEncodes_LeavesItOutInTheSchema_WithItsKind()
+    {
+        // The step that encodes every category names none, and the category never reaches the end itself, so the
+        // answer leaves it out where the schema takes it in.
+        var @class = Assert.Single(Passengers().Alerts, alert => alert.Column == "class" && alert.Answer.Action == AlertAction.LeaveOut);
+        var encoded = Pdd.Create()
+            .ReadCsv(Titanic)
+            .Declare(schema => schema.Integer("survived", "pclass").Category("sex", "class").Number("fare"))
+            .SplitStratified("survived", 0.70, 0.15)
+            .EncodeCategories()
+            .Target("survived")
+            .Declaration;
+
+        var answered = @class.Answer.AppliedTo(encoded);
+
+        Assert.Equal(
+            new ColumnDeclaration("class", ColumnKind.Category, Optional: false) { Excluded = true },
+            answered.OfType<DeclareStep>().Single().Columns.Single(column => column.Name == "class"));
+        Assert.Empty(PipelineDeclaration.FaultsIn(answered));
+    }
+
+    [Fact]
     public void AValueThatIsHowTheFileWritesNothingIsKnown_IsFound_AndAnsweredBySayingSoInTheSchema()
     {
         var fare = Assert.Single(Passengers().Alerts, alert => alert.Answer.Action == AlertAction.SayMissing);
@@ -115,7 +137,7 @@ public class AlertTests
     [InlineData(ColumnKind.Timestamp, "2015-02-18")]
     public void AGapInAColumnNoFillTakes_IsAnsweredByDroppingTheRowsItIsIn(ColumnKind kind, string value)
     {
-        var profile = Profiled(Rows("x", value, "", value), schema => schema.Column("x", kind));
+        var profile = Profiled(Rows("x", value, "", value), schema => schema.Column(new ColumnDeclaration("x", kind, Optional: false)));
 
         Assert.Contains(profile.Alerts, alert => alert.Answer == AlertAnswer.Step("drop.gaps", "x"));
     }
@@ -190,7 +212,7 @@ public class AlertTests
     [Fact]
     public void AValueTheSchemaAlreadySaysStandsForAGap_IsNotFoundAgain()
     {
-        var profile = Profiled(Rows("x", "-999", "-999", "10.5", "11", "11.25", "12"), schema => schema.Column("x", ColumnKind.Number, missing: "-999"));
+        var profile = Profiled(Rows("x", "-999", "-999", "10.5", "11", "11.25", "12"), schema => schema.Column(new ColumnDeclaration("x", ColumnKind.Number, Optional: false) { Missing = "-999" }));
 
         Assert.DoesNotContain(profile.Alerts, alert => alert.Answer.Action == AlertAction.SayMissing);
     }

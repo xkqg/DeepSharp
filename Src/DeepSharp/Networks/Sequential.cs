@@ -75,6 +75,11 @@ public sealed class Sequential
 
     /// <summary>Bends each value into the span between nothing and one.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
+    /// <remarks>
+    /// Last, before a loss that applies the sigmoid itself — <see cref="BinaryCrossEntropy"/> — it is Keras's habit, the
+    /// activation on the network and a loss that takes what it gives, and compiling the description lifts it into the loss:
+    /// the network ends before it, and every prediction goes through one sigmoid, the loss's.
+    /// </remarks>
     public Sequential Sigmoid() => Add(new PlainWord(() => new Sigmoid()));
 
     /// <summary>Leaves out a share of the values while training, each afresh on every pass.</summary>
@@ -85,11 +90,49 @@ public sealed class Sequential
 
     /// <summary>Normalises each feature — the last axis of an example — over the batch.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
+    /// <remarks>As PyTorch leaves it: a momentum of a tenth, in PyTorch's meaning, and an epsilon of a hundred-thousandth.</remarks>
     public Sequential BatchNorm() => Add(new NormalisationWord(features => new BatchNorm(features)));
+
+    /// <summary>Normalises each feature — the last axis of an example — over the batch, with Keras's momentum and epsilon.</summary>
+    /// <param name="momentum">
+    /// Keras's momentum: the share of the running statistics each training batch leaves as they were, between nothing and
+    /// one — 0.99, unless Keras is told otherwise. The layer keeps its complement, PyTorch's meaning of the word.
+    /// </param>
+    /// <param name="epsilon">What is added to each variance before its root is taken, above nothing — 0.001 in Keras.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The momentum is not a share, or the epsilon not a finite number above nothing.</exception>
+    /// <remarks>
+    /// A batch normalisation Keras trained answers here as it answered there, from its scale, its shift and its running
+    /// statistics. Trained here, its running variance takes each batch's variance as PyTorch counts it, over one row fewer.
+    /// </remarks>
+    public Sequential BatchNorm(double momentum, double epsilon)
+    {
+        if (!global::DeepSharp.Networks.BatchNorm.IsShare(momentum))
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(momentum), momentum, "Keras's momentum is the share of the running statistics a training batch leaves as they were, between nothing and one.");
+        }
+
+        Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
+
+        return Add(new NormalisationWord(features => new BatchNorm(features) { Momentum = 1 - momentum, Epsilon = epsilon }));
+    }
 
     /// <summary>Normalises each example over its features — the last axis.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
+    /// <remarks>As PyTorch leaves it: an epsilon of a hundred-thousandth.</remarks>
     public Sequential LayerNorm() => Add(new NormalisationWord(features => new LayerNorm(features)));
+
+    /// <summary>Normalises each example over its features — the last axis — with Keras's epsilon.</summary>
+    /// <param name="epsilon">What is added to each variance before its root is taken, above nothing — 0.001 in Keras.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The epsilon is not a finite number above nothing.</exception>
+    public Sequential LayerNorm(double epsilon)
+    {
+        Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
+
+        return Add(new NormalisationWord(features => new LayerNorm(features) { Epsilon = epsilon }));
+    }
 
     /// <summary>Lays each example out in another shape holding as many values: a row of pixels as an image, say.</summary>
     /// <param name="shape">The shape of one example, without the batch's axis.</param>
@@ -106,7 +149,7 @@ public sealed class Sequential
     public Sequential Conv2D(int filters, Window window)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
-        global::DeepSharp.Networks.Conv2D.RequireWindow(window);
+        window.RequireStanding();
 
         return Add(new ConvolutionWord(filters, window));
     }
@@ -127,6 +170,10 @@ public sealed class Sequential
     /// handed to a convolution, an image to a dense layer, a window larger than the image.
     /// </exception>
     /// <exception cref="InvalidOperationException">The description holds no layer.</exception>
+    /// <remarks>
+    /// Every word is lowered, a last activation as well: it is <see cref="Compile"/> that leaves out one the loss applies
+    /// itself, since only the loss says which that is.
+    /// </remarks>
     public LayerStack Lower(Shape input, RandomStream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -153,13 +200,22 @@ public sealed class Sequential
     /// <param name="schedule">How the optimizer's rate changes from epoch to epoch; it stays as it is, unless said.</param>
     /// <returns>
     /// The compiled network. Its layers are built at its first fit, from the shape of the rows it learns from — or the input
-    /// stated — and the run's seed, exactly as <see cref="Lower"/> builds them from a stream of that seed.
+    /// stated — and the run's seed, exactly as <see cref="Lower"/> builds them from a stream of that seed; a last word whose
+    /// activation the loss applies itself is left out of them.
     /// </returns>
-    /// <exception cref="InvalidOperationException">The description holds no layer.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The description holds no layer, or none but the activation its loss applies itself.
+    /// </exception>
     /// <exception cref="ArgumentException">Its input is stated, and an example of it cannot reach a layer.</exception>
     /// <remarks>
     /// Nothing is drawn here: the seed that decides what the layers start at is the run's, given to the fit, so one recorded
     /// number reproduces the whole run — the start, the shuffles and the dropouts.
+    /// <para>
+    /// Keras's habit is to end a network in the activation its loss is trained with — <c>Dense(1, activation='sigmoid')</c>
+    /// before a binary cross-entropy, which there takes what the network gives. A loss here takes the logits and applies that
+    /// activation itself, so a last <see cref="Sigmoid()"/> before <see cref="BinaryCrossEntropy"/> is lifted into the loss:
+    /// the network ends before it, and every prediction goes through one sigmoid. Before any other loss it stays.
+    /// </para>
     /// </remarks>
     public CompiledNetwork Compile(Optimizer optimizer, Loss loss, LearningRateSchedule? schedule = null)
     {
@@ -176,7 +232,7 @@ public sealed class Sequential
             Check(stated);
         }
 
-        return new CompiledNetwork(new Sequential(this), optimizer, loss, schedule);
+        return new CompiledNetwork(Lifted(loss), optimizer, loss, schedule);
     }
 
     // Refuses a shape the description cannot be lowered at: one holding no value, another than its input says, or one an
@@ -218,6 +274,23 @@ public sealed class Sequential
         return this;
     }
 
+    // The description as it stands, for a network compiled with the loss: a last word whose activation the loss applies
+    // itself left out of it, so the network ends where the loss takes over.
+    private Sequential Lifted(Loss loss)
+    {
+        var lifted = new Sequential(this);
+
+        if (lifted._words[^1].IsAppliedBy(loss))
+        {
+            lifted._words.RemoveAt(lifted._words.Count - 1);
+        }
+
+        return lifted._words.Count > 0
+            ? lifted
+            : throw new InvalidOperationException(
+                "This network holds nothing but the sigmoid its loss applies itself: write in the layers before it, and the loss takes its outputs as the logits it applies the sigmoid to.");
+    }
+
     /// <summary>One word of a description: what it cannot take, what it hands on, and the layer it becomes for what it can take.</summary>
     private interface IWord
     {
@@ -229,6 +302,9 @@ public sealed class Sequential
 
         /// <summary>The layer the word becomes for examples of this shape, starting from the given draws when it learns.</summary>
         Layer Make(Shape each, Draws draws);
+
+        /// <summary>Whether the word is the activation the loss applies to a network's outputs itself; a word is not, unless it says so.</summary>
+        bool IsAppliedBy(Loss loss) => false;
     }
 
     /// <summary>A word whose layer takes any example and hands it on in the same shape, learning nothing.</summary>
@@ -239,6 +315,9 @@ public sealed class Sequential
         public Shape After(Shape each) => each;
 
         Layer IWord.Make(Shape each, Draws draws) => Make();
+
+        // The loss says which layer it applies itself, by the one rule it is compiled with a stack by.
+        public bool IsAppliedBy(Loss loss) => loss.Applies(Make());
     }
 
     private sealed record DenseWord : IWord

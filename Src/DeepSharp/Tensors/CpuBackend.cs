@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Numerics.Tensors;
+using System.Reflection;
 
 namespace DeepSharp.Tensors;
 
@@ -18,10 +19,23 @@ namespace DeepSharp.Tensors;
 /// values in once it is large, and ten million tenths came to a mean of 0.1087937 rather than a tenth.
 /// </para>
 /// </remarks>
-public sealed class CpuBackend : ITensorBackend
+public sealed class CpuBackend : INamesItsVersionAndDevice
 {
+    // The version the release is handed, as its package names it: what the assembly says of itself, less the commit Source
+    // Link adds after a '+', so every build of one release names the same one.
+    private static readonly string Release =
+        typeof(CpuBackend).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split('+')[0];
+
     /// <inheritdoc />
     public string Name => "cpu";
+
+    /// <inheritdoc />
+    /// <remarks>DeepSharp's own version: the arithmetic is DeepSharp's code, so another release of it may round otherwise.</remarks>
+    public string Version => Release;
+
+    /// <inheritdoc />
+    /// <remarks>This machine's processor.</remarks>
+    public string Device => "cpu";
 
     /// <inheritdoc />
     public Tensor Add(Tensor left, Tensor right) => Elementwise(left, right, TensorPrimitives.Add, nameof(Add));
@@ -37,20 +51,11 @@ public sealed class CpuBackend : ITensorBackend
     /// <inheritdoc />
     public Tensor MatMul(Tensor left, Tensor right)
     {
-        RequireMatrix(left, nameof(MatMul), nameof(left));
-        RequireMatrix(right, nameof(MatMul), nameof(right));
+        left.RequireMatrixProduct(right);
 
         var rows = left.Shape[0];
         var inner = left.Shape[1];
         var columns = right.Shape[1];
-
-        if (right.Shape[0] != inner)
-        {
-            throw new ArgumentException(
-                $"MatMul needs the left matrix as wide as the right one is tall, and was given {left.Shape} and {right.Shape}.",
-                nameof(right));
-        }
-
         var a = left.Values;
         var b = right.Values;
         var result = new float[rows * columns];
@@ -84,7 +89,7 @@ public sealed class CpuBackend : ITensorBackend
     /// <inheritdoc />
     public Tensor Transpose(Tensor matrix)
     {
-        RequireMatrix(matrix, nameof(Transpose), nameof(matrix));
+        matrix.RequireMatrix(nameof(Transpose));
 
         var rows = matrix.Shape[0];
         var columns = matrix.Shape[1];
@@ -105,23 +110,10 @@ public sealed class CpuBackend : ITensorBackend
     /// <inheritdoc />
     public Tensor AddRow(Tensor matrix, Tensor row)
     {
-        RequireMatrix(matrix, nameof(AddRow), nameof(matrix));
-        ArgumentNullException.ThrowIfNull(row);
-
-        if (row.Shape.Rank != 1)
-        {
-            throw new ArgumentException($"AddRow needs a row, a tensor of one axis, and was given a {row.Shape} one.", nameof(row));
-        }
+        matrix.RequireRow(row);
 
         var rows = matrix.Shape[0];
         var columns = matrix.Shape[1];
-
-        if (row.Shape[0] != columns)
-        {
-            throw new ArgumentException(
-                $"AddRow needs a row as long as the matrix is wide, and was given {matrix.Shape} and {row.Shape}.", nameof(row));
-        }
-
         var result = new float[matrix.Values.Length];
 
         for (var at = 0; at < rows; at++)
@@ -135,7 +127,7 @@ public sealed class CpuBackend : ITensorBackend
     /// <inheritdoc />
     public Tensor SumRows(Tensor matrix)
     {
-        RequireMatrix(matrix, nameof(SumRows), nameof(matrix));
+        matrix.RequireMatrix(nameof(SumRows));
 
         var rows = matrix.Shape[0];
         var columns = matrix.Shape[1];
@@ -156,12 +148,7 @@ public sealed class CpuBackend : ITensorBackend
     /// <inheritdoc />
     public Tensor Mean(Tensor values)
     {
-        ArgumentNullException.ThrowIfNull(values);
-
-        if (values.Shape.Count == 0)
-        {
-            throw new ArgumentException($"A mean needs at least one value, and a {values.Shape} tensor holds none.", nameof(values));
-        }
+        values.RequireValues();
 
         var total = 0d;
 
@@ -176,14 +163,7 @@ public sealed class CpuBackend : ITensorBackend
     /// <inheritdoc />
     public Tensor Scale(Tensor values, Tensor factor)
     {
-        ArgumentNullException.ThrowIfNull(values);
-        ArgumentNullException.ThrowIfNull(factor);
-
-        if (factor.Shape.Rank != 0)
-        {
-            throw new ArgumentException(
-                $"Scale multiplies by one value, a tensor with no axes, and was given a {factor.Shape} one.", nameof(factor));
-        }
+        values.RequireFactor(factor);
 
         var result = new float[values.Values.Length];
         TensorPrimitives.Multiply(values.Values, factor.Values[0], result);
@@ -250,7 +230,7 @@ public sealed class CpuBackend : ITensorBackend
     /// <remarks>Each row's sum of exponentials is kept in double precision while it is added up, like every total here.</remarks>
     public Tensor LogSoftmax(Tensor matrix)
     {
-        RequireMatrix(matrix, nameof(LogSoftmax), nameof(matrix));
+        matrix.RequireMatrix(nameof(LogSoftmax));
 
         var columns = matrix.Shape[1];
         var values = matrix.Values;
@@ -287,14 +267,7 @@ public sealed class CpuBackend : ITensorBackend
     /// <inheritdoc />
     public Tensor Reshape(Tensor values, Shape shape)
     {
-        ArgumentNullException.ThrowIfNull(values);
-
-        if (shape.Count != values.Shape.Count)
-        {
-            throw new ArgumentException(
-                $"Reshape keeps every value, and a {values.Shape} tensor holds {values.Shape.Count} where a {shape} one holds {shape.Count}.",
-                nameof(shape));
-        }
+        values.RequireSameCount(shape);
 
         return Tensor.Wrap(shape, values.Values.ToArray());
     }
@@ -302,8 +275,7 @@ public sealed class CpuBackend : ITensorBackend
     /// <inheritdoc />
     public Tensor Unfold(Tensor images, Window window)
     {
-        ArgumentNullException.ThrowIfNull(images);
-        RequireImages(images.Shape, window, nameof(Unfold), nameof(images));
+        images.RequireImagesFor(window);
 
         var walk = new ImageWalk(images.Shape, window);
         var source = images.Values;
@@ -321,18 +293,9 @@ public sealed class CpuBackend : ITensorBackend
     /// <remarks>What lands on one place is added up in double precision, like every total here.</remarks>
     public Tensor Fold(Tensor patches, Shape images, Window window)
     {
-        ArgumentNullException.ThrowIfNull(patches);
-        RequireImages(images, window, nameof(Fold), nameof(images));
+        patches.RequirePatchesOf(images, window);
 
         var walk = new ImageWalk(images, window);
-
-        if (patches.Shape != walk.Patches)
-        {
-            throw new ArgumentException(
-                $"Fold puts back the {walk.Patches} patches a {window} takes of {images} images, and was given {patches.Shape}.",
-                nameof(patches));
-        }
-
         var source = patches.Values;
         var totals = new double[images.Count];
 
@@ -363,58 +326,18 @@ public sealed class CpuBackend : ITensorBackend
         return Tensor.Wrap(values.Shape, result);
     }
 
-    /// <summary>Refuses a shape that is not a batch of images, or a window that cannot stand on them.</summary>
-    private static void RequireImages(Shape images, Window window, string operation, string parameter)
-    {
-        if (images.Rank != 4)
-        {
-            throw new ArgumentException(
-                $"{operation} works on a batch of images, image by row by column by channel, and was given a {images} one.", parameter);
-        }
-
-        if (window.Height < 1 || window.Width < 1 || window.Stride < 1 || window.Padding < 0)
-        {
-            throw new ArgumentException(
-                $"A {window} cannot stand anywhere: its sides and its stride are at least one, and its border at least nothing.", nameof(window));
-        }
-
-        if (window.RowsOver(images[1]) < 1 || window.ColumnsOver(images[2]) < 1)
-        {
-            throw new ArgumentException($"A {window} is larger than a {images} image with its border.", nameof(window));
-        }
-    }
-
-    /// <summary>The shape check the value-by-value operations share, and the buffer they write into.</summary>
+    /// <summary>The refusal the value-by-value operations share, and the buffer they write into.</summary>
     private static Tensor Elementwise(
         Tensor left,
         Tensor right,
         ElementwiseOperation operation,
         string name)
     {
-        ArgumentNullException.ThrowIfNull(left);
-        ArgumentNullException.ThrowIfNull(right);
-
-        if (left.Shape != right.Shape)
-        {
-            throw new ArgumentException(
-                $"{name} needs two tensors of the same shape, and was given {left.Shape} and {right.Shape}.",
-                nameof(right));
-        }
+        left.RequireSameShape(right, name);
 
         var result = new float[left.Shape.Count];
         operation(left.Values, right.Values, result);
         return Tensor.Wrap(left.Shape, result);
-    }
-
-    /// <summary>Refuses a tensor that is not a matrix, in the words of the operation that needs one.</summary>
-    private static void RequireMatrix(Tensor tensor, string operation, string parameter)
-    {
-        ArgumentNullException.ThrowIfNull(tensor, parameter);
-
-        if (tensor.Shape.Rank != 2)
-        {
-            throw new ArgumentException($"{operation} works on matrices, and was given a {tensor.Shape} tensor.", parameter);
-        }
     }
 
     /// <summary>One of the tensor primitives that reads two spans and writes a third.</summary>
@@ -428,7 +351,8 @@ public sealed class CpuBackend : ITensorBackend
 
     /// <summary>
     /// A window's walk over a batch of images, channels last: every place it stands, and every place of the image each of
-    /// its cells covers there — which is what unfolding copies out and folding adds back.
+    /// its cells covers there — which is what unfolding copies out and folding adds back. It starts where the window's
+    /// border, as <see cref="Window.BordersOver"/> works it out, puts its first patch.
     /// </summary>
     private sealed class ImageWalk(Shape images, Window window)
     {
@@ -437,12 +361,13 @@ public sealed class CpuBackend : ITensorBackend
         private readonly int _width = images[2];
         private readonly int _rows = window.RowsOver(images[1]);
         private readonly int _columns = window.ColumnsOver(images[2]);
+        private readonly Borders _borders = window.BordersOver(images[1], images[2]);
 
         /// <summary>How many values each place of an image holds.</summary>
         public int Channels { get; } = images[3];
 
         /// <summary>The patches' shape: a row for every image and every place the window stands, each as long as the window holds.</summary>
-        public Shape Patches => new(_count * _rows * _columns, window.Height * window.Width * Channels);
+        public Shape Patches { get; } = window.PatchesOver(images);
 
         /// <summary>
         /// Every cell of every patch that covers the image rather than its border: where its channels start in the patches,
@@ -462,8 +387,8 @@ public sealed class CpuBackend : ITensorBackend
                         {
                             for (var across = 0; across < window.Width; across++)
                             {
-                                var y = (row * window.Stride) - window.Padding + down;
-                                var x = (column * window.Stride) - window.Padding + across;
+                                var y = (row * window.Stride) - _borders.Top + down;
+                                var x = (column * window.Stride) - _borders.Left + across;
 
                                 if (y >= 0 && y < _height && x >= 0 && x < _width)
                                 {

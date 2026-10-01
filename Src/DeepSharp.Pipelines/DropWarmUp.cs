@@ -122,7 +122,10 @@ public sealed record DropGapsStep : IPipelineStep<DropGapsStep>, IDropsRows, IDe
 public sealed record DropWarmUpStep : IPipelineStep<DropWarmUpStep>, IDropsRows, IReadsRowOrder, IDescribesColumns
 {
     private static readonly WholeNumberParameter AtMostKey = new(
-        "atMost", "The most rows this may drop from the start; beyond it the run stops rather than shrink the data to nothing.", 1000, atLeast: 0);
+        "atMost", "The most rows this may drop from the start; beyond it the run stops rather than shrink the data to nothing.", 1000)
+    {
+        AtLeast = 0,
+    };
 
     /// <summary>Drops the rows at the start that any column is still silent about.</summary>
     /// <param name="atMost">The most rows this is allowed to drop; beyond it the run stops.</param>

@@ -55,7 +55,9 @@ internal readonly record struct NotebookTurn(int Stops, CancellationToken Mark);
 /// One view is kept: the last one worked out, under the key of the steps it is worked out from and the fingerprint of
 /// the bytes it was read from. A view is those two and nothing else, so while both stay it is the same view, and
 /// another page of it, or the same view shown again, runs no step. One, because a view holds every row at its block;
-/// the rows as read are kept apart, by the source's own cache.
+/// the rows as read are kept apart, by the source's own cache. So is the last report a report's block drew from the
+/// predictions a C# cell handed back, under the steps, the bytes and the predictions it was measured from: another page
+/// of that block's grid, or the block shown again, measures nothing again.
 /// </para>
 /// <para>
 /// The pipeline handed to C# cells goes through here and nowhere else, always into the variables the caller was
@@ -89,6 +91,15 @@ internal sealed class NotebookSession
 
     /// <summary>How many times a run of the whole pipeline was fitted and handed over.</summary>
     public int RunsFitted => Now.RunsFitted;
+
+    /// <summary>How many times a report's block measured the predictions handed back to it, on a run of its own.</summary>
+    public int ReportsMeasured => Now.ReportsMeasured;
+
+    /// <summary>
+    /// How many times the whole pipeline was run over the source's rows: for what it learned, handed to C# cells, or for a
+    /// report's measures — once at most for one block's show, whichever of them asks.
+    /// </summary>
+    public int WholeRuns => Now.WholeRuns;
 
     /// <summary>The blocks that show data, each with the key of the steps its rows were worked out from.</summary>
     public IReadOnlyDictionary<Guid, string> Shown => Now.Shown.ToDictionary(each => each.Key, each => each.Value.Key);
@@ -410,8 +421,7 @@ internal sealed class NotebookSession
     /// steps the blocks declare now, since blocks can change while a run is on its way.
     /// </summary>
     /// <param name="variables">The notebook's variables.</param>
-    /// <param name="prepared">The run.</param>
-    /// <param name="fingerprint">The fingerprint of the bytes it read.</param>
+    /// <param name="run">The run of the whole pipeline, and the fingerprint of the bytes it read: made here when it was not yet.</param>
     /// <param name="turn">The turn of the change that asked for the run: a stop since voids it.</param>
     /// <param name="also">The mark of the block's run, which the engine hands the block.</param>
     /// <returns><see langword="true"/> when it was handed over.</returns>
@@ -419,13 +429,14 @@ internal sealed class NotebookSession
     /// What it learned is written as text first; recording the run and handing it over are then one write, let through
     /// whole or not at all.
     /// </remarks>
-    public bool HandOverFit(IVariableStore variables, PreparedData prepared, string fingerprint, NotebookTurn turn, CancellationToken also)
+    public bool HandOverFit(IVariableStore variables, WholeRun run, NotebookTurn turn, CancellationToken also)
     {
         ArgumentNullException.ThrowIfNull(variables);
-        ArgumentNullException.ThrowIfNull(prepared);
+        ArgumentNullException.ThrowIfNull(run);
 
+        var prepared = run.Prepared;
         var envelope = prepared.ToJson();
-        var stamp = new RunStamp(KeyOf(prepared.Declaration), fingerprint, envelope);
+        var stamp = new RunStamp(KeyOf(prepared.Declaration), run.Fingerprint, envelope);
         var fitted = false;
 
         LetThrough(turn, also, () =>
@@ -451,20 +462,19 @@ internal sealed class NotebookSession
     /// for again then runs nothing.
     /// </summary>
     /// <param name="variables">The notebook's variables.</param>
-    /// <param name="declaration">The steps asked to run.</param>
-    /// <param name="fingerprint">The fingerprint of the bytes they would read.</param>
+    /// <param name="run">The steps asked to run, and the fingerprint of the bytes they would read; never run here.</param>
     /// <param name="turn">The turn of the change that asked for the run: a stop since voids it.</param>
     /// <param name="also">The mark of the block's run, which the engine hands the block.</param>
     /// <returns>
     /// <see langword="true"/> when the last run was that run — handed over again, unless a stop came since — so nothing is
     /// fitted again.
     /// </returns>
-    public bool HandOverFitAgain(IVariableStore variables, PipelineDeclaration declaration, string fingerprint, NotebookTurn turn, CancellationToken also)
+    public bool HandOverFitAgain(IVariableStore variables, WholeRun run, NotebookTurn turn, CancellationToken also)
     {
         ArgumentNullException.ThrowIfNull(variables);
-        ArgumentNullException.ThrowIfNull(declaration);
+        ArgumentNullException.ThrowIfNull(run);
 
-        if (Now.Run is not { } stamped || stamped.Fingerprint != fingerprint || stamped.Key != KeyOf(declaration))
+        if (Now.Run is not { } stamped || stamped.Fingerprint != run.Fingerprint || stamped.Key != KeyOf(run.Declaration))
         {
             return false;
         }
@@ -662,6 +672,34 @@ internal sealed class NotebookSession
         return view;
     }
 
+    /// <summary>Counts a run of the whole pipeline over the source's rows, made just now.</summary>
+    /// <param name="run">The run.</param>
+    /// <returns>The same run.</returns>
+    public PreparedData Ran(PreparedData run)
+    {
+        Change(state => state with { WholeRuns = state.WholeRuns + 1 });
+
+        return run;
+    }
+
+    /// <summary>What a report's block drew last, when it drew it from the same steps, bytes and predictions.</summary>
+    /// <param name="from">What it would be drawn from now.</param>
+    /// <returns>What it drew, or nothing when the report has to be measured.</returns>
+    public CellOutput? ReportFor(ReportFrom from) => Now.Report is { } kept && kept.From == from ? kept.Output : null;
+
+    /// <summary>Counts a report measured just now, and keeps what its block drew in place of the one kept before.</summary>
+    /// <param name="from">What it was measured from.</param>
+    /// <param name="output">What the block drew: the measures, or why the predictions were refused.</param>
+    /// <returns>The same output.</returns>
+    public CellOutput KeepReport(ReportFrom from, CellOutput output)
+    {
+        var kept = new KeptReport(from, output);
+
+        Change(state => state with { ReportsMeasured = state.ReportsMeasured + 1, Report = kept });
+
+        return output;
+    }
+
     /// <summary>Remembers that a block shows data: what its rows were worked out from, and what its grid offers.</summary>
     /// <param name="cell">The block's cell.</param>
     /// <param name="key">The key of the steps the rows at the block were worked out from.</param>
@@ -757,6 +795,9 @@ internal sealed class NotebookSession
         /// <summary>The one view kept.</summary>
         public KeptView? View { get; init; }
 
+        /// <summary>What a report's block drew last, and what it was measured from.</summary>
+        public KeptReport? Report { get; init; }
+
         /// <summary>What the notebook's own last run learned.</summary>
         public RunStamp? Run { get; init; }
 
@@ -765,6 +806,12 @@ internal sealed class NotebookSession
 
         /// <summary>How many runs of the whole pipeline were fitted and handed over.</summary>
         public int RunsFitted { get; init; }
+
+        /// <summary>How many times a report's block measured the predictions handed back to it.</summary>
+        public int ReportsMeasured { get; init; }
+
+        /// <summary>How many times the whole pipeline was run over the source's rows.</summary>
+        public int WholeRuns { get; init; }
 
         /// <summary>How many runs were stopped.</summary>
         public int Stops { get; init; }
@@ -794,6 +841,11 @@ internal sealed class NotebookSession
     /// <param name="Fingerprint">The fingerprint of the source's bytes.</param>
     /// <param name="View">The rows at the block, and where each stands.</param>
     private sealed record KeptView(string Key, string Fingerprint, PipelineView View);
+
+    /// <summary>What a report's block drew, and what it was measured from.</summary>
+    /// <param name="From">The steps, the bytes and the predictions handed back.</param>
+    /// <param name="Output">What the block drew.</param>
+    private sealed record KeptReport(ReportFrom From, CellOutput Output);
 
     /// <summary>What a block shows, under the key it was drawn for.</summary>
     /// <param name="Key">The key.</param>

@@ -1,0 +1,59 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A suite of its own for the engine on libtorch: the core's suite never carries a native library, and this one runs
+       every engine contract on libtorch, as an application that brings libtorch runs it. It brings the libtorch built for
+       this platform's processor, unless it is built with -p:Libtorch=cuda, which brings the one built for an NVIDIA card
+       instead, into a folder of its own; the tests that need a card run only where there is one. -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DeepSharp.Tests.Backends.Torch</RootNamespace>
+    <!-- As in the other suites: the documentation file switches the unused-using analyser on, and a test's name is its
+         documentation. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
+    <Libtorch Condition="'$(Libtorch)' == ''">cpu</Libtorch>
+    <!-- A card's libtorch is gigabytes, and a build of it never shares a folder with the processor's, which the coverage
+         check and the release run. -->
+    <BaseOutputPath Condition="'$(Libtorch)' == 'cuda'">bin\cuda\</BaseOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.*" />
+  </ItemGroup>
+
+  <!-- The libtorch an application brings, as one brings it: the processor's build for the platform it runs on. -->
+  <ItemGroup Condition="'$(Libtorch)' == 'cpu'">
+    <PackageReference Include="libtorch-cpu-win-x64" Version="2.10.0" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <PackageReference Include="libtorch-cpu-linux-x64" Version="2.10.0" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+    <PackageReference Include="libtorch-cpu-osx-arm64" Version="2.10.0" Condition="$([MSBuild]::IsOSPlatform('OSX'))" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Libtorch)' == 'cuda'">
+    <PackageReference Include="TorchSharp-cuda-windows" Version="0.107.0" Condition="$([MSBuild]::IsOSPlatform('Windows'))" />
+    <PackageReference Include="TorchSharp-cuda-linux" Version="0.107.0" Condition="$([MSBuild]::IsOSPlatform('Linux'))" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DeepSharp.Backends.TorchSharp\DeepSharp.Backends.TorchSharp.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Learners.Networks\DeepSharp.Learners.Networks.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+    <!-- What every engine is held to, run here on libtorch. -->
+    <ProjectReference Include="..\DeepSharp.Backends.Contract\DeepSharp.Backends.Contract.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One way to find the repository and the data the samples read, shared with the other suites. -->
+    <Compile Include="..\DeepSharp\Repository.cs" Link="Repository.cs" />
+    <!-- The parameter rule, read from the packages this suite references: each suite reads its own. -->
+    <Compile Include="..\DeepSharp\ParameterListTests.cs" Link="ParameterListTests.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

@@ -139,7 +139,21 @@ public sealed class SchemaBuilder
     /// <summary>The columns declared so far, in the order they were written.</summary>
     public IReadOnlyList<ColumnDeclaration> Columns => _columns;
 
-    /// <summary>One column, said in full.</summary>
+    /// <summary>One column, said in full: its declaration, with how its moments are written and which value stands for a gap.</summary>
+    /// <param name="column">
+    /// The column: its name, what it holds, whether the source may lack it, and — said on the declaration — how a timestamp
+    /// column's moments are written (<c>dd/MM/yyyy</c>, say) and a value that stands for a gap (<c>0</c>, say).
+    /// </param>
+    /// <returns>This schema, so the next column can be written after it.</returns>
+    /// <exception cref="ArgumentException">The column has no name, or is declared twice.</exception>
+    public SchemaBuilder Column(ColumnDeclaration column)
+    {
+        ArgumentNullException.ThrowIfNull(column);
+
+        return Add(column, nameof(column));
+    }
+
+    /// <summary>One column, said in full, one part at a time.</summary>
     /// <param name="name">The column's name in the source.</param>
     /// <param name="kind">What it holds.</param>
     /// <param name="optional">Whether the source is allowed not to have it at all.</param>
@@ -149,27 +163,36 @@ public sealed class SchemaBuilder
     /// </param>
     /// <param name="missing">A value that stands for a gap in the column, <c>0</c> say; nothing when none does.</param>
     /// <returns>This schema, so the next column can be written after it.</returns>
+    [Obsolete("Use Column(new ColumnDeclaration(name, kind, optional) { Format = format, Missing = missing }).")]
     public SchemaBuilder Column(string name, ColumnKind kind, bool optional = false, string? format = null, string? missing = null) =>
-        Add([name], kind, optional, format, missing);
+        Column(new ColumnDeclaration(name, kind, optional) { Format = format, Missing = missing });
 
-    private SchemaBuilder Add(string[] names, ColumnKind kind, bool optional = false, string? format = null, string? missing = null)
+    private SchemaBuilder Add(string[] names, ColumnKind kind, bool optional = false)
     {
         ArgumentNullException.ThrowIfNull(names);
 
         foreach (var name in names)
         {
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                throw new ArgumentException("A column needs a name.", nameof(names));
-            }
-
-            if (_columns.Any(column => column.Name == name))
-            {
-                throw new ArgumentException($"The column '{name}' is declared twice.", nameof(names));
-            }
-
-            _columns.Add(new ColumnDeclaration(name, kind, optional) { Format = format, Missing = missing });
+            Add(new ColumnDeclaration(name, kind, optional), nameof(names));
         }
+
+        return this;
+    }
+
+    // The refusal names the parameter the column came in by: the list of names, or the declaration.
+    private SchemaBuilder Add(ColumnDeclaration column, string handedAs)
+    {
+        if (string.IsNullOrWhiteSpace(column.Name))
+        {
+            throw new ArgumentException("A column needs a name.", handedAs);
+        }
+
+        if (_columns.Any(declared => declared.Name == column.Name))
+        {
+            throw new ArgumentException($"The column '{column.Name}' is declared twice.", handedAs);
+        }
+
+        _columns.Add(column);
 
         return this;
     }

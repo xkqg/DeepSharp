@@ -163,6 +163,20 @@ public class DistributionTests
     }
 
     [Fact]
+    public void ANewBlockOfADistribution_StartsWithoutWhatItsSharesAreSharesOf_AndAFileMayLeaveItOut()
+    {
+        // What the shares are shares of is a column the step can do without: a new block starts with none, which a file
+        // says by leaving the key out, and the shares then come back as shares.
+        var catalog = StepCatalog.BuiltIn();
+        var template = catalog.Describe("target.distribution").Template;
+        var read = (DistributionStep)catalog.ReadStep("""{"step": "target.distribution", "columns": ["w500", "w550"]}""");
+
+        Assert.DoesNotContain("scaleBy", template, StringComparison.Ordinal);
+        Assert.Null(read.ScaleBy);
+        Assert.Empty(catalog.Describe("target.distribution").Parameters.Single(parameter => parameter.Key == "scaleBy").RequiredKeys);
+    }
+
+    [Fact]
     public void WhatTheSharesAreSharesOf_IsNoneOfTheShares_InCodeAndInAFile()
     {
         var refused = Assert.Throws<ArgumentException>(() => new DistributionStep(["w500", "w550"], scaleBy: "w550"));

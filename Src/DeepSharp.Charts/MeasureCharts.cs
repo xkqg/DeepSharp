@@ -50,6 +50,24 @@ public static class MeasureCharts
     /// <exception cref="ArgumentException">The measures hold no number: the report names the confusion matrix alone.</exception>
     public static string Bars(this Measures measures) => BarFigure(measures).ToSvg();
 
+    /// <summary>
+    /// The report: the measures as their pipeline's report says they are shown — the numbers, these charts, or both — as one
+    /// value a notebook shows as HTML.
+    /// </summary>
+    /// <param name="measures">The measures.</param>
+    /// <returns>The report; <see cref="MeasuresReport.ToHtml"/> gives its HTML.</returns>
+    /// <exception cref="ArgumentNullException">There are no measures.</exception>
+    /// <remarks>
+    /// A C# cell of a notebook that ends with <c>trained.Measures!.Report()</c> shows the report there, and a notebook's report
+    /// block draws the same rendering: the report is rendered here, once, wherever it is shown.
+    /// </remarks>
+    public static MeasuresReport Report(this Measures measures)
+    {
+        ArgumentNullException.ThrowIfNull(measures);
+
+        return new MeasuresReport(measures);
+    }
+
     /// <summary>The figure <see cref="ConfusionMatrices"/> draws: the parts across, each part's matrices down.</summary>
     internal static Figure ConfusionFigure(Measures measures)
     {

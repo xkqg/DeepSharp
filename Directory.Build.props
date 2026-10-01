@@ -12,7 +12,7 @@
 
     <!-- One number for every packable project. It is handed out when the work starts, never invented here,
          and the changelog heading carries the same one. -->
-    <Version>0.4.0</Version>
+    <Version>0.5.0</Version>
 
     <!-- Which frameworks a project targets is the project's own business, said in the project itself. The
          packages and the two suites are built for .NET 8 and .NET 10, because Verso's hosts run on either;
@@ -34,6 +34,22 @@
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
     <DebugType>embedded</DebugType>
+
+    <!-- Every package, packed, is checked against itself: its .NET 8 and .NET 10 builds carry the same public surface,
+         and code compiled against one runs against the other. Built into the SDK's own pack, at no cost to a project
+         that is never packed. -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+  </PropertyGroup>
+
+  <!-- The packages nuget.org already carries a 0.4.0 build of: pack compares this build's public surface against that
+       one, so a change nobody meant to make breaks the build instead of somebody's upgrade. A package new in this
+       release has no earlier build to compare against yet, so it takes the two checks above alone. -->
+  <PropertyGroup>
+    <PublishedAt040>;DeepSharp;DeepSharp.Charts;DeepSharp.Learners.Networks;DeepSharp.Pipelines;DeepSharp.Pipelines.DataFrame;DeepSharp.Pipelines.Indicators;DeepSharp.Verso.Api;DeepSharp.Verso.Notebooks;DeepSharp.Verso.Serve;</PublishedAt040>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="$(PublishedAt040.Contains(';$(MSBuildProjectName);'))">
+    <PackageValidationBaselineVersion>0.4.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <ItemGroup>

@@ -13,17 +13,31 @@ namespace DeepSharp.Verso.Notebooks;
 /// </summary>
 /// <param name="field">The field that changed.</param>
 /// <param name="value">What it was set to.</param>
-/// <param name="step">The step's JSON, changed in place.</param>
 /// <param name="scope">The columns known around the block.</param>
 /// <param name="read">The step as it reads, before the change.</param>
 /// <remarks>
-/// Each kind says whether the field is one of its own and writes the value the way a pipeline file holds it; the
-/// step is then read back through the catalog, which holds it to every rule the text is held to. A value that
-/// cannot be one of the kind — a word where a number goes, a number with a decimal comma — is refused here, in the
-/// words the form shows, and nothing is written.
+/// Each kind says whether the field is one of its own and writes the value the way a pipeline file holds it, into the
+/// step's JSON as the step writes itself; the step is then read back through the catalog, which holds it to every rule the
+/// text is held to. A value that cannot be one of the kind — a word where a number goes, a number with a decimal comma —
+/// is refused here, in the words the form shows, and nothing is written.
 /// </remarks>
-internal sealed class FormEdit(string field, FieldValue value, JsonObject step, FormScope scope, IPipelineStep read) : IStepParameterVisitor<bool>
+internal sealed class FormEdit(string field, FieldValue value, FormScope scope, IPipelineStep read) : IStepParameterVisitor<bool>
 {
+    // The step's JSON, as the step writes itself, changed in place by the kind the field belongs to.
+    private readonly JsonObject _step = JsonNode.Parse(read.AsBlockText())!.AsObject();
+
+    /// <summary>The field that changed.</summary>
+    public string Field => @field;
+
+    /// <summary>What it was set to.</summary>
+    public FieldValue Value => value;
+
+    /// <summary>The step as it reads, before the change.</summary>
+    public IPipelineStep Read => read;
+
+    /// <summary>The step's JSON with the change written into it, once a kind has claimed the field.</summary>
+    public JsonObject Json => _step;
+
     public bool Visit(TextParameter parameter) => Set(parameter.Key, () => Words());
 
     public bool Visit(FilePathParameter parameter) => Set(parameter.Key, () => Words());
@@ -41,7 +55,7 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
             return Written(parameter.Key, parameter.Optional, List());
         }
 
-        List<string> names = [.. step[parameter.Key]?.AsArray().Select(item => item!.GetValue<string>()) ?? []];
+        List<string> names = [.. _step[parameter.Key]?.AsArray().Select(item => item!.GetValue<string>()) ?? []];
 
         if (parameter.Repeatable)
         {
@@ -90,7 +104,7 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
     {
         if (field == FormVocabulary.StrategyValue(parameter.Key))
         {
-            if (step[parameter.Key] is not JsonObject strategy)
+            if (_step[parameter.Key] is not JsonObject strategy)
             {
                 return false;
             }
@@ -103,7 +117,7 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
         return Set(parameter.Key, () =>
         {
             var name = Words();
-            var number = (step[parameter.Key] as JsonObject)?[FillStrategyParameter.ValueKey]?.DeepClone() ?? 0;
+            var number = (_step[parameter.Key] as JsonObject)?[FillStrategyParameter.ValueKey]?.DeepClone() ?? 0;
 
             return With.TakesAValue(name)
                 ? (JsonNode)new JsonObject { [FillStrategyParameter.KindKey] = name, [FillStrategyParameter.ValueKey] = number }
@@ -120,12 +134,12 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
             return false;
         }
 
-        step[field] = Share();
+        _step[field] = Share();
 
         // A split writes all four shares, predict too, so each is there to add up.
-        var others = parameter.Keys.Where(key => key != SplitSharesParameter.TestKey).Sum(key => step[key]!.GetValue<decimal>());
+        var others = parameter.Keys.Where(key => key != SplitSharesParameter.TestKey).Sum(key => _step[key]!.GetValue<decimal>());
 
-        step[SplitSharesParameter.TestKey] = 1m - others;
+        _step[SplitSharesParameter.TestKey] = 1m - others;
 
         return true;
     }
@@ -160,7 +174,7 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
                 throw new FormatException($"'{absent}' is not taken, so whether it may be absent says nothing.");
             }
 
-            var taken = step[parameter.Key]!.AsArray().OfType<JsonObject>().First(column => Named(parameter, column) == absent);
+            var taken = _step[parameter.Key]!.AsArray().OfType<JsonObject>().First(column => Named(parameter, column) == absent);
 
             taken[parameter.Optional.Key] = Switch();
 
@@ -209,7 +223,7 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
             throw new FormatException(refused.Message, refused);
         }
 
-        step[parameter.Key] = JsonNode.Parse(changed.AsBlockText())![parameter.Key]!.DeepClone();
+        _step[parameter.Key] = JsonNode.Parse(changed.AsBlockText())![parameter.Key]!.DeepClone();
     }
 
     // A kind picked for a column: given to it when the schema takes it; otherwise the column is taken in with that kind,
@@ -238,11 +252,11 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
 
         if (written() is { } node)
         {
-            step[key] = node;
+            _step[key] = node;
         }
         else
         {
-            step.Remove(key);
+            _step.Remove(key);
         }
 
         return true;
@@ -252,11 +266,11 @@ internal sealed class FormEdit(string field, FieldValue value, JsonObject step, 
     {
         if (optional && names.Count == 0)
         {
-            step.Remove(key);
+            _step.Remove(key);
         }
         else
         {
-            step[key] = new JsonArray([.. names.Select(name => (JsonNode?)name)]);
+            _step[key] = new JsonArray([.. names.Select(name => (JsonNode?)name)]);
         }
 
         return true;

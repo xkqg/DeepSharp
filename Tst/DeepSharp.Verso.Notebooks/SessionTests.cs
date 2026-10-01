@@ -212,7 +212,7 @@ public sealed class SessionTests : IDisposable
 
         var blocks = notebook.Host.GetCellTypes().OfType<StepCellType>().Single();
         var assembled = NotebookPipeline.Of(notebook.Scaffold.Cells);
-        var fit = new Pipeline(assembled.Readable, rows: null, SourceFolder.Of(_folder)).Run();
+        var fit = new WholeRun(blocks.Session, new Pipeline(assembled.Readable, rows: null, SourceFolder.Of(_folder)), "the bytes it read");
 
         blocks.Session.Publish(assembled);
 
@@ -220,7 +220,7 @@ public sealed class SessionTests : IDisposable
         var turn = await blocks.Session.OneAtATimeAsync(CancellationToken.None, turn => Task.FromResult(turn));
         await blocks.StoppedAsync();
 
-        Assert.False(blocks.Session.HandOverFit(notebook.Scaffold.Variables, fit, "the bytes it read", turn, CancellationToken.None));
+        Assert.False(blocks.Session.HandOverFit(notebook.Scaffold.Variables, fit, turn, CancellationToken.None));
         Assert.Equal(0, blocks.Session.RunsFitted);
         Assert.False(notebook.Scaffold.Variables.TryGet<string>(StepKernel.HandOver, out _));
     }
@@ -316,7 +316,7 @@ public sealed class SessionTests : IDisposable
 
             var gesture = new Gesture(session, notebook.Scaffold.Notebook, notebook.Scaffold.NotebookOps, notebook.Scaffold.Variables, last.Id, MayAddAndRemove: true, turn);
 
-            return StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Show, page: 0);
+            return StepCommit.ShowAsync(gesture, assembled, ViewTrigger.Show);
         });
 
         Assert.False(notebook.Scaffold.Variables.TryGet<string>(StepKernel.HandOver, out _));

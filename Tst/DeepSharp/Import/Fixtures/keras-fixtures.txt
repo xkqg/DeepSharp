@@ -1,0 +1,9 @@
+keras 3.15.1 on torch 2.10.0+cpu, numpy 2.5.3, Python 3.14.7
+titanic: 19 epochs; a third-class man of 22 0.1469188928604126, a first-class woman of 38 0.9597992300987244
+images: running mean 0.279867 0.222153 0.198863 0.237088 running var 0.329153 0.245032 0.225173 0.257660
+images: shares of the first 0.28114864 0.24086025 0.47799116
+keras-titanic.keras: 24153 bytes
+keras-titanic.h5: 25968 bytes
+keras-images.keras: 56440 bytes
+keras-images.h5: 60712 bytes
+keras-refused.keras: 32373 bytes

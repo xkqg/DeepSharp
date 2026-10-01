@@ -117,7 +117,7 @@ public sealed partial class ToolbarTests
 
         await host.RunAsync(cell);
 
-        var run = new Run(2, cell: null, takesTheCSharpTurn: true, told: () => { }, tell: () => Task.CompletedTask);
+        var run = new Run(2, cell: null, takesTheCSharpTurn: true, Unheard.Notebook);
 
         run.Stop();
 
@@ -156,7 +156,7 @@ public sealed partial class ToolbarTests
         var host = await OpenAsync(notebooks, "port.verso", CSharp("6 * 7"), CSharp("var second = 2;"));
         var first = host.Cells[0].Id;
         var second = host.Cells[1].Id;
-        var port = new RunPort(host.Scaffold, new Run(1, cell: null, takesTheCSharpTurn: true, told: () => { }, tell: () => Task.CompletedTask));
+        var port = new RunPort(host.Scaffold, new Run(1, cell: null, takesTheCSharpTurn: true, Unheard.Notebook));
 
         await port.ExecuteCellAsync(first);
         Assert.NotEmpty(host.Scaffold.Cells[0].Outputs);
@@ -201,7 +201,7 @@ public sealed partial class ToolbarTests
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "from.verso", CSharp(Held("first")), CSharp("var second = 2;"));
         var begun = Begun(host);
-        var run = new Run(1, cell: null, takesTheCSharpTurn: true, told: () => { }, tell: () => Task.CompletedTask);
+        var run = new Run(1, cell: null, takesTheCSharpTurn: true, Unheard.Notebook);
         var running = new RunPort(host.Scaffold, run).ExecuteFromAsync(host.Cells[0].Id);
 
         await UntilAsync("first-began", "the first cell never began");

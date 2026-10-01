@@ -27,13 +27,21 @@ public enum OutputActivation
 /// A loss is named by the person who trains, as Keras's <c>compile</c> has it; nothing picks one for them. It takes the
 /// network's raw outputs — the logits, for a loss of classes — and applies the activation it is written with itself,
 /// which is steadier than a network ending in one and is what PyTorch does; <see cref="Predictions"/> applies the same
-/// activation to what is served. Each loss also says which answers it could have meant, and a row handed over with any
-/// other is refused before anything is trained on it.
+/// activation to what is served. So a network compiled with a loss does not end in the activation the loss applies: a stack
+/// whose last layer is that activation is refused where it is compiled, and a description in Keras's words that ends in it,
+/// as Keras's habit is, leaves it out. Each loss also says which answers it could have meant, and a row handed over with
+/// any other is refused before anything is trained on it.
 /// </remarks>
 public abstract class Loss
 {
     /// <summary>What the outputs go through on their way out as predictions.</summary>
     public abstract OutputActivation Activation { get; }
+
+    /// <summary>
+    /// Whether a layer is the output activation this loss applies to a network's outputs itself — a sigmoid, for a loss whose
+    /// outputs are the logits of a one — so that a network compiled with it ends before one.
+    /// </summary>
+    internal bool Applies(Layer layer) => layer is Sigmoid && Activation == OutputActivation.Sigmoid;
 
     /// <summary>The loss of a batch.</summary>
     /// <param name="outputs">The network's raw outputs: a row for each example.</param>

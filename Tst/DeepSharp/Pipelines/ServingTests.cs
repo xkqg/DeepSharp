@@ -57,6 +57,37 @@ public class ServingTests
     }
 
     [Fact]
+    public void AServedRowCarryingItsAnswer_IsKeyedByThatCell_AndOneWithoutIt_ByAGapThere()
+    {
+        // The key is a digest of the record as it was handed in: an answer the rows do not carry counts as a gap in it,
+        // and one they carry counts as the cell they carry — nought, one or empty — while what is served is the same.
+        var trained = Passengers();
+
+        var without = trained.Served(new InMemoryRowSource(["pclass", "sex", "age"], [["3", "male", "22"]]));
+        var carried = trained.Served(new InMemoryRowSource(["pclass", "sex", "age", "survived"], [["3", "male", "22", "0"], ["3", "male", "22", "1"], ["3", "male", "22", ""]]));
+
+        Assert.Equal(4, new[] { without.Keys![0] }.Concat(carried.Keys!).Distinct().Count());
+        Assert.All(carried.Features, row => Assert.Equal(without.Features[0], row));
+    }
+
+    [Fact]
+    public void AServedRowWithoutAColumn_IsToldWhatItsRowsOffer_NotTheAnswersItAwaits()
+    {
+        // The answer a served row awaits is carried as a gap, so a missing column is refused among the columns the rows
+        // were handed in with: listing the awaited answer there would name a column nobody handed in.
+        var refused = Assert.Throws<InvalidOperationException>(
+            () => Passengers().Served(new InMemoryRowSource(["pclass", "age"], [["3", "22"]])));
+
+        // Rows a fit reads await nothing, and offer every column they hold.
+        var fitting = Assert.Throws<InvalidOperationException>(
+            () => Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Integer("survived", "pclass").Category("sex")).SplitAtRandom(0.5, 0).Target("survived").Build()
+                .Run(new InMemoryRowSource(["survived", "pclass"], [["1", "3"], ["0", "1"]])));
+
+        Assert.EndsWith("The source has no column called 'sex'. It offers: pclass, age.", refused.Message, StringComparison.Ordinal);
+        Assert.EndsWith("The source has no column called 'sex'. It offers: survived, pclass.", fitting.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AServedRow_SaysWhichHandedInRowItIs_AfterTheWarmUpIsDropped()
     {
         IReadOnlyList<IReadOnlyList<string?>> Days(int count) =>
@@ -72,7 +103,7 @@ public class ServingTests
             .Read(new InMemoryRowSource(["Date", "close"], Days(60)), "sixty days")
             .Declare(schema => schema.Timestamp("Date").Number("close"))
             .OrderBy("Date")
-            .AddIndicator("sma5", Indicator.Sma, ["close"], 5)
+            .Add(new AddIndicatorStep("sma5", Indicator.Sma, ["close"], 5))
             .DropWarmUp()
             .SplitByTime("Date", 0.70)
             .Normalise("close")
@@ -112,7 +143,7 @@ public class ServingTests
             .Read(Bars(60, Answer.Known), "sixty days")
             .Declare(schema => schema.Timestamp("Date").Number("close").Integer("up"))
             .OrderBy("Date")
-            .AddIndicator("sma5", Indicator.Sma, ["close"], 5)
+            .Add(new AddIndicatorStep("sma5", Indicator.Sma, ["close"], 5))
             .DropWarmUp()
             .SplitByTime("Date", 0.70)
             .Normalise("close")

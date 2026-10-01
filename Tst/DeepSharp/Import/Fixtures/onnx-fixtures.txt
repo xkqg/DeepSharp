@@ -1,0 +1,12 @@
+torch 2.10.0+cpu, onnx 1.23.1, onnxscript 0.7.2, numpy 2.5.3, Python 3.14.7
+titanic: 28 epochs; the README's passenger 0.1783664462766906, the woman of 38 0.9808011905393037
+onnx-titanic.onnx: 4959 bytes, beside it 896 bytes; opset 20; Gemm Relu Gemm
+onnx-titanic-torchscript.onnx: 1471 bytes; opset 20; Gemm Relu Gemm
+onnx-titanic-sigmoid.onnx: 6960 bytes, beside it 896 bytes; opset 20; Gemm Relu Gemm Sigmoid
+convolution outputs: 0.21460372 0.18256396 0.27754441 0.22927588 0.15485142 0.19173427
+onnx-convolution.onnx: 14187 bytes, beside it 720 bytes; opset 20; Conv Relu Conv Reshape BatchNormalization Gemm Tanh Gemm
+onnx-convolution-torchscript.onnx: 3078 bytes; opset 20; Conv Relu Conv Flatten BatchNormalization Gemm Tanh Gemm
+kinds: shares of the first 0.29608127 0.34364086 0.36027789
+onnx-kinds.onnx: 7751 bytes, beside it 448 bytes; opset 20; Gemm LayerNormalization Sigmoid Gemm Softmax
+onnx-refused.onnx: 13013 bytes, beside it 2016 bytes; opset 20; Conv Conv Conv Conv MaxPool LeakyRelu Reshape Gemm
+onnx-branch.onnx: 5092 bytes, beside it 784 bytes; opset 20; Gemm Relu Add Gemm

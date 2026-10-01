@@ -1,11 +1,18 @@
 <Solution>
   <Folder Name="/Src/">
     <Project Path="Src/DeepSharp/DeepSharp.csproj" />
+    <Project Path="Src/DeepSharp.Backends.TorchSharp/DeepSharp.Backends.TorchSharp.csproj" />
     <Project Path="Src/DeepSharp.Charts/DeepSharp.Charts.csproj" />
+    <Project Path="Src/DeepSharp.Import.Keras/DeepSharp.Import.Keras.csproj" />
+    <Project Path="Src/DeepSharp.Import.Onnx/DeepSharp.Import.Onnx.csproj" />
+    <Project Path="Src/DeepSharp.Import.PyTorch/DeepSharp.Import.PyTorch.csproj" />
     <Project Path="Src/DeepSharp.Learners.Networks/DeepSharp.Learners.Networks.csproj" />
     <Project Path="Src/DeepSharp.Pipelines/DeepSharp.Pipelines.csproj" />
     <Project Path="Src/DeepSharp.Pipelines.DataFrame/DeepSharp.Pipelines.DataFrame.csproj" />
+    <Project Path="Src/DeepSharp.Pipelines.Excel/DeepSharp.Pipelines.Excel.csproj" />
     <Project Path="Src/DeepSharp.Pipelines.Indicators/DeepSharp.Pipelines.Indicators.csproj" />
+    <Project Path="Src/DeepSharp.Pipelines.Json/DeepSharp.Pipelines.Json.csproj" />
+    <Project Path="Src/DeepSharp.Pipelines.Parquet/DeepSharp.Pipelines.Parquet.csproj" />
     <Project Path="Src/DeepSharp.Verso.Notebooks/DeepSharp.Verso.Notebooks.csproj" />
     <Project Path="Src/DeepSharp.Verso.Api/DeepSharp.Verso.Api.csproj" />
     <Project Path="Src/DeepSharp.Verso.Serve/DeepSharp.Verso.Serve.csproj" />
@@ -14,9 +21,18 @@
     <Project Path="Samples/DeepSharp.Sample.Networks/DeepSharp.Sample.Networks.csproj" />
     <Project Path="Samples/DeepSharp.Sample.Pipelines/DeepSharp.Sample.Pipelines.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/verso/VersoHost/VersoHost.csproj" />
+  </Folder>
   <Folder Name="/Tst/" />
   <Folder Name="/Tst/DeepSharp/">
     <Project Path="Tst/DeepSharp/DeepSharp.Tests.csproj" />
+    <Project Path="Tst/DeepSharp.Import.TestParts/DeepSharp.Import.TestParts.csproj" />
+    <Project Path="Tst/DeepSharp.Backends.TestParts/DeepSharp.Backends.TestParts.csproj" />
+    <Project Path="Tst/DeepSharp.Backends.Contract/DeepSharp.Backends.Contract.csproj" />
+  </Folder>
+  <Folder Name="/Tst/DeepSharp.Backends.TorchSharp/">
+    <Project Path="Tst/DeepSharp.Backends.TorchSharp/DeepSharp.Backends.TorchSharp.Tests.csproj" />
   </Folder>
   <Folder Name="/Tst/DeepSharp.Verso.Notebooks/">
     <Project Path="Tst/DeepSharp.Verso.Notebooks/DeepSharp.Verso.Notebooks.Tests.csproj" />

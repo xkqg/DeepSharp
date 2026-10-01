@@ -2,8 +2,10 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DeepSharp.Networks;
 using DeepSharp.Tensors;
+using DeepSharp.Tests.Backends.Parts;
 
 namespace DeepSharp.Tests.Networks;
 
@@ -57,6 +59,30 @@ public class NetworkFileRefusalTests
         }
         """.ReplaceLineEndings("\n");
 
+    // The early stopping of the run above, as the second version records it: a patience of five, restoring the best epoch.
+    private const string RecordedStopping = "\"earlyStopping\": {\"patience\": 5, \"minDelta\": 0, \"restoreBest\": true}";
+
+    // The same checkpoint as the second version writes it: the training part records the batch size and the early stopping
+    // the run went under, which a part of the first version — 0.4.0's — does not.
+    private static readonly string Recorded = Run.Replace(
+        "\"version\": 1,\n    \"seed\": 5,",
+        "\"version\": 2,\n    \"seed\": 5,\n    \"batchSize\": 32,\n    " + RecordedStopping + ",",
+        StringComparison.Ordinal);
+
+    // The same checkpoint naming the engine its run was on, the light one: its name, its version and its device.
+    private static readonly string Engined = Recorded.Replace(
+        RecordedStopping + ",",
+        RecordedStopping + ",\n    \"engine\": {\"name\": \"cpu\", \"version\": \"" + new CpuBackend().Version + "\", \"device\": \"cpu\"},",
+        StringComparison.Ordinal);
+
+    private const string EngineFault =
+        "The engine the run was on is written under 'engine' as its 'name' and, where the engine names them, its 'version' and its 'device', each as text.";
+
+    private const string BatchSizeFault = "The batch size is the whole number of rows a batch of the run held, from one, under 'batchSize'.";
+
+    private const string EarlyStoppingFault =
+        "The early stopping the run went under is written under 'earlyStopping' as its 'patience' — a whole number from nought — its 'minDelta' — a number from nought — and its 'restoreBest', true or false; or as null, for a run that had none.";
+
     private const string JudgementFault =
         "How far early stopping had got is written as its 'wait', 'best', 'bestEpoch' — an epoch of the history — and 'stops'.";
 
@@ -88,6 +114,81 @@ public class NetworkFileRefusalTests
     }
 
     [Fact]
+    public void ACheckpointReadOnce_IsTheNetworkAndTheRunItsTwoPartsAreEachReadAs_AndGoesOnAlike()
+    {
+        var catalog = NetworkCatalog.BuiltIn();
+        var trainedOn = Broken(Engined, "\"state\": {},\n", "\"state\": {},\n    \"trainedOn\": " + TrainedOnWritten + "\"seed\": 5, \"epoch\": 1},\n");
+        var once = NetworkDocument.ReadCheckpoint(trainedOn, "network", "training", catalog);
+        var network = NetworkDocument.ReadNetwork(trainedOn, "network", catalog);
+        var twice = NetworkDocument.ReadTraining(trainedOn, "training", catalog, network);
+
+        Assert.Equal(network.TrainedOn!.Features, once.Network.TrainedOn!.Features);
+        Assert.Same(once.Network.Network, once.Run.Compiled.Network);
+        Assert.Same(once.Network.Loss, once.Run.Compiled.Loss);
+        Assert.Equal(Numbers(network.Network), Numbers(once.Network.Network));
+        Assert.Equal(twice.Checkpoint.Seed, once.Run.Checkpoint.Seed);
+        Assert.Equal(twice.Checkpoint.History, once.Run.Checkpoint.History);
+        var paced = twice.Checkpoint.State.Pace!.Value;
+        var pacedOnce = once.Run.Checkpoint.State.Pace!.Value;
+
+        Assert.Equal(paced.BatchSize, pacedOnce.BatchSize);
+        Assert.Equal(paced.EarlyStopping!.Patience, pacedOnce.EarlyStopping!.Patience);
+        Assert.Equal(paced.EarlyStopping.MinDelta, pacedOnce.EarlyStopping.MinDelta);
+        Assert.Equal(paced.EarlyStopping.RestoreBest, pacedOnce.EarlyStopping.RestoreBest);
+        Assert.Equal(twice.Checkpoint.State.Engine, once.Run.Checkpoint.State.Engine);
+
+        // Gone on alike: to the best epoch's slots the file holds, as the checkpoint read by its two doors goes on.
+        var contradicting = new TrainingData(Tensor.From(new Shape(2, 1), [1f, 1f]), Tensor.From(new Shape(2, 1), [1f, -1f]));
+        var options = new FitOptions(seed: 5) { Epochs = 3, EarlyStopping = new EarlyStopping { Patience = 5, RestoreBest = true }, ResumeFrom = once.Run.Checkpoint };
+
+        Assert.Equal([0, 1, 2], once.Run.Compiled.Fit(Rows(4), contradicting, options).Epochs.Select(epoch => epoch.Number));
+        Assert.Equal([[0.375f], [0.0625f]], once.Run.Compiled.Network.Slots().Select(slot => slot.Slot.Value.Values.ToArray()));
+    }
+
+    [Theory]
+    [InlineData("\"values\": [0.5]", "\"values\": [\"x\"]")]
+    [InlineData("\"values\": [0.5]", "\"values\": [0.5, 1]")]
+    [InlineData("\"kind\": \"dense\"", "\"kind\": \"dens\"")]
+    [InlineData("\"seed\": 5", "\"seed\": \"5\"")]
+    [InlineData("\"values\": [0.25]", "\"values\": [[0.25]]")]
+    [InlineData("\"values\": [0.375]", "\"values\": [{\"a\": 1}]")]
+    [InlineData("\"learningRate\": 0.1}\n    ]", "\"learningRate\": \"fast\"}\n    ]")]
+    public void ACheckpointReadOnce_IsRefusedAsItsTwoPartsAreEachRefused_InTheSameWords_AtTheSamePlaces(string find, string replace)
+    {
+        // The network's part is refused first, as its own door refuses it, and a run is read only beside a network.
+        var broken = Broken(Recorded, find, replace);
+        var catalog = NetworkCatalog.BuiltIn();
+        var once = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(broken, "network", "training", catalog));
+        var apart = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadTraining(broken, "training", catalog, NetworkDocument.ReadNetwork(broken, "network", catalog)));
+
+        Assert.Equal(apart.Faults, once.Faults);
+    }
+
+    [Fact]
+    public void AValueOfASlotWrittenAsAListOrAnObject_IsRefusedAtTheValueItself()
+    {
+        var listed = Broken(Run, "\"values\": [0.5]", "\"values\": [[0.5]]");
+        var named = Broken(Run, "\"values\": [0.5]", "\"values\": [{\"value\": 0.5}]");
+
+        Assert.Equal([Place(listed, "[0.5]]", "'0.weight' holds finite numbers, and this is not one.")], NetworkRefused(listed).Faults);
+        Assert.Equal([Place(named, "{\"value\"", "'0.weight' holds finite numbers, and this is not one.")], NetworkRefused(named).Faults);
+    }
+
+    [Fact]
+    public void ACheckpointReadOnce_NamesEachPartItReads()
+    {
+        var catalog = NetworkCatalog.BuiltIn();
+
+        Assert.Throws<ArgumentNullException>(() => NetworkDocument.ReadCheckpoint(null!, "network", "training", catalog));
+        Assert.Throws<ArgumentNullException>(() => NetworkDocument.ReadCheckpoint(Run, null!, "training", catalog));
+        Assert.Throws<ArgumentNullException>(() => NetworkDocument.ReadCheckpoint(Run, "network", null!, catalog));
+        Assert.Throws<ArgumentNullException>(() => NetworkDocument.ReadCheckpoint(Run, "network", "training", null!));
+        Assert.Equal(
+            [new NetworkFileFault(1, 1, "This file holds no object under 'run'.")],
+            Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(Run, "network", "run", catalog)).Faults);
+    }
+
+    [Fact]
     public void ACheckpointOfARunThatWasToStop_GoesOnToNoFurtherEpoch()
     {
         var stopped = Broken(Run, "\"stops\": false", "\"stops\": true");
@@ -101,6 +202,225 @@ public class NetworkFileRefusalTests
 
         Assert.Equal(2, history.Epochs.Count);
         Assert.Equal(Stopping.NoLongerImproving, history.Stopped);
+    }
+
+    [Fact]
+    public void ACheckpointOfTheSecondVersion_GoesOnUnderTheBatchesAndTheEarlyStoppingItRecords_AndIsRefusedUnderOthers()
+    {
+        var catalog = NetworkCatalog.BuiltIn();
+        var resumed = NetworkDocument.ReadTraining(Recorded, "training", catalog, NetworkDocument.ReadNetwork(Recorded, "network", catalog));
+        var contradicting = new TrainingData(Tensor.From(new Shape(2, 1), [1f, 1f]), Tensor.From(new Shape(2, 1), [1f, -1f]));
+
+        var wrong = Assert.Throws<ArgumentException>(() => resumed.Compiled.Fit(Rows(4), contradicting, new FitOptions(seed: 5)
+        {
+            Epochs = 3, BatchSize = 16, EarlyStopping = new EarlyStopping { Patience = 5, RestoreBest = true }, ResumeFrom = resumed.Checkpoint,
+        }));
+        var history = resumed.Compiled.Fit(Rows(4), contradicting, new FitOptions(seed: 5)
+        {
+            Epochs = 3, EarlyStopping = new EarlyStopping { Patience = 5, RestoreBest = true }, ResumeFrom = resumed.Checkpoint,
+        });
+
+        Assert.Equal(
+            "The checkpoint was taken of a run in batches of 32, and going on in batches of 16 would take other rows into every step. (Parameter 'options')",
+            wrong.Message);
+        Assert.Equal([0, 1, 2], history.Epochs.Select(epoch => epoch.Number));
+        Assert.Equal([[0.375f], [0.0625f]], resumed.Compiled.Network.Slots().Select(slot => slot.Slot.Value.Values.ToArray()));
+    }
+
+    [Fact]
+    public void ACheckpointOfARunThatHadNoEarlyStopping_SaysSoWithNull_AndGoesOnOnlyWithoutIt()
+    {
+        var none = Broken(Recorded, RecordedStopping, "\"earlyStopping\": null");
+        var catalog = NetworkCatalog.BuiltIn();
+        var resumed = NetworkDocument.ReadTraining(none, "training", catalog, NetworkDocument.ReadNetwork(none, "network", catalog));
+
+        var wrong = Assert.Throws<ArgumentException>(
+            () => resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5) { Epochs = 3, EarlyStopping = new EarlyStopping(), ResumeFrom = resumed.Checkpoint }));
+        var history = resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5) { Epochs = 3, ResumeFrom = resumed.Checkpoint });
+
+        Assert.Contains("taken of a run with no early stopping", wrong.Message, StringComparison.Ordinal);
+        Assert.Equal(3, history.Epochs.Count);
+    }
+
+    [Fact]
+    public void ACheckpointOfTheFirstVersion_RecordsNeitherItsBatchesNorItsEarlyStopping_AndGoesOnUnderWhateverItIsHanded()
+    {
+        // As 0.4.0 went on from it: only its seed is held to.
+        var catalog = NetworkCatalog.BuiltIn();
+        var resumed = NetworkDocument.ReadTraining(Run, "training", catalog, NetworkDocument.ReadNetwork(Run, "network", catalog));
+
+        var history = resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5) { Epochs = 3, BatchSize = 1, ResumeFrom = resumed.Checkpoint });
+
+        Assert.Equal([0, 1, 2], history.Epochs.Select(epoch => epoch.Number));
+        Assert.Contains("seeded 5", Assert.Throws<ArgumentException>(
+            () => resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 6) { Epochs = 3, ResumeFrom = resumed.Checkpoint })).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACheckpointOfTheFirstVersion_NeverJudged_GoneOnAtItsLastEpochRestoringTheBest_TrainsNothing_AndRestoresNothingItNeverJudged()
+    {
+        var file = JsonNode.Parse(Run)!;
+        file["training"]!.AsObject().Remove("judgement");
+        var unjudged = file.ToJsonString();
+        var catalog = NetworkCatalog.BuiltIn();
+        var resumed = NetworkDocument.ReadTraining(unjudged, "training", catalog, NetworkDocument.ReadNetwork(unjudged, "network", catalog));
+
+        var history = resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5)
+        {
+            Epochs = 2, EarlyStopping = new EarlyStopping { RestoreBest = true }, ResumeFrom = resumed.Checkpoint,
+        });
+
+        Assert.Equal(2, history.Epochs.Count);
+        Assert.Null(history.BestEpoch);
+        Assert.Equal([[0.5f], [0f]], resumed.Compiled.Network.Slots().Select(slot => slot.Slot.Value.Values.ToArray()));
+    }
+
+    [Theory]
+    [InlineData("\"batchSize\": 32,\n    ", "", "\"training\"", BatchSizeFault)]
+    [InlineData("\"batchSize\": 32", "\"batchSize\": \"32\"", "\"batchSize\"", BatchSizeFault)]
+    [InlineData("\"batchSize\": 32", "\"batchSize\": 0", "\"batchSize\"", BatchSizeFault)]
+    [InlineData("\"batchSize\": 32", "\"batchSize\": 1.5", "\"batchSize\"", BatchSizeFault)]
+    [InlineData(RecordedStopping + ",\n    ", "", "\"training\"", EarlyStoppingFault)]
+    [InlineData(RecordedStopping, "\"earlyStopping\": 3", "\"earlyStopping\"", EarlyStoppingFault)]
+    [InlineData(RecordedStopping, "\"earlyStopping\": false", "\"earlyStopping\"", EarlyStoppingFault)]
+    [InlineData("\"patience\": 5, ", "", "\"earlyStopping\"", EarlyStoppingFault)]
+    [InlineData("\"patience\": 5", "\"patience\": -1", "\"earlyStopping\"", EarlyStoppingFault)]
+    [InlineData("\"patience\": 5", "\"patience\": 2.5", "\"earlyStopping\"", EarlyStoppingFault)]
+    [InlineData("\"minDelta\": 0, ", "", "\"earlyStopping\"", EarlyStoppingFault)]
+    [InlineData("\"minDelta\": 0", "\"minDelta\": \"x\"", "\"earlyStopping\"", EarlyStoppingFault)]
+    [InlineData("\"minDelta\": 0", "\"minDelta\": -0.5", "\"earlyStopping\"", EarlyStoppingFault)]
+    [InlineData(", \"restoreBest\": true", "", "\"earlyStopping\"", EarlyStoppingFault)]
+    [InlineData("\"restoreBest\": true", "\"restoreBest\": 1", "\"earlyStopping\"", EarlyStoppingFault)]
+    [InlineData("\"restoreBest\": true}", "\"restoreBest\": true, \"monitor\": \"val_loss\"}", "\"monitor\"",
+        "'monitor' is not written here: this holds 'patience', 'minDelta', 'restoreBest'.")]
+    public void WhatTheRunWentUnder_MissingOrWrittenAsAnythingElse_IsRefusedWhereItStands(string find, string replace, string at, string message)
+    {
+        var broken = Broken(Recorded, find, replace);
+
+        Assert.Equal([Place(broken, at, message)], TrainingRefused(broken).Faults);
+    }
+
+    [Fact]
+    public void APartOfTheSecondVersion_HoldsBothTheBatchSizeAndTheEarlyStopping_AndOneOfTheFirst_BothOrNeither()
+    {
+        var neither = Broken(Broken(Recorded, "\"batchSize\": 32,\n    ", string.Empty), RecordedStopping + ",\n    ", string.Empty);
+        var batchesOnly = Broken(Run, "\"seed\": 5,", "\"seed\": 5, \"batchSize\": 32,");
+        var stoppingOnly = Broken(Run, "\"seed\": 5,", "\"seed\": 5, " + RecordedStopping + ",");
+
+        Assert.Equal([Place(neither, "\"training\"", BatchSizeFault), Place(neither, "\"training\"", EarlyStoppingFault)], TrainingRefused(neither).Faults);
+        Assert.Equal([Place(batchesOnly, "\"training\"", EarlyStoppingFault)], TrainingRefused(batchesOnly).Faults);
+        Assert.Equal([Place(stoppingOnly, "\"training\"", BatchSizeFault)], TrainingRefused(stoppingOnly).Faults);
+
+        // One of the first version that holds both says what its run went under, and a run going on from it is held to it.
+        var both = Broken(Run, "\"seed\": 5,", "\"seed\": 5, \"batchSize\": 32, " + RecordedStopping + ",");
+        var catalog = NetworkCatalog.BuiltIn();
+        var resumed = NetworkDocument.ReadTraining(both, "training", catalog, NetworkDocument.ReadNetwork(both, "network", catalog));
+
+        Assert.Contains("in batches of 32, and going on in batches of 16", Assert.Throws<ArgumentException>(() => resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5)
+        {
+            Epochs = 3, BatchSize = 16, EarlyStopping = new EarlyStopping { Patience = 5, RestoreBest = true }, ResumeFrom = resumed.Checkpoint,
+        })).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACheckpointThatNamesItsEngine_GoesOnOnIt_AndIsRefusedOnAnother_NamingBoth()
+    {
+        var catalog = NetworkCatalog.BuiltIn();
+        var refused = NetworkDocument.ReadTraining(Engined, "training", catalog, NetworkDocument.ReadNetwork(Engined, "network", catalog));
+        var resumed = NetworkDocument.ReadTraining(Engined, "training", catalog, NetworkDocument.ReadNetwork(Engined, "network", catalog));
+        var native = new NativeMemoryBackend();
+
+        var wrong = Assert.Throws<ArgumentException>(() => refused.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5)
+        {
+            Epochs = 3, Backend = native, EarlyStopping = new EarlyStopping { Patience = 5, RestoreBest = true }, ResumeFrom = refused.Checkpoint,
+        }));
+        var history = resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5)
+        {
+            Epochs = 3, EarlyStopping = new EarlyStopping { Patience = 5, RestoreBest = true }, ResumeFrom = resumed.Checkpoint,
+        });
+
+        Assert.Equal(
+            $"The checkpoint was taken of a run on the engine 'cpu' {new CpuBackend().Version} on cpu, and going on under the engine 'nativememory' {native.Version} on cpu would round every step otherwise. (Parameter 'options')",
+            wrong.Message);
+        Assert.Equal([0, 1, 2], history.Epochs.Select(epoch => epoch.Number));
+    }
+
+    [Theory]
+    [InlineData("0.4.0", "cpu")]
+    [InlineData(null, "cuda:0")]
+    public void ACheckpointOfTheLightEngine_InAnotherVersionOrOnAnotherDevice_IsRefusedByTheLightEngineOfThisOne(string? version, string device)
+    {
+        // Another release of the light engine, or the same one somewhere else, is another engine to the checkpoint.
+        var light = new CpuBackend();
+        var taken = Broken(Engined, $"\"version\": \"{light.Version}\", \"device\": \"cpu\"", $"\"version\": \"{version ?? light.Version}\", \"device\": \"{device}\"");
+        var catalog = NetworkCatalog.BuiltIn();
+        var resumed = NetworkDocument.ReadTraining(taken, "training", catalog, NetworkDocument.ReadNetwork(taken, "network", catalog));
+
+        var wrong = Assert.Throws<ArgumentException>(() => resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5)
+        {
+            Epochs = 3, EarlyStopping = new EarlyStopping { Patience = 5, RestoreBest = true }, ResumeFrom = resumed.Checkpoint,
+        }));
+
+        Assert.Equal(
+            $"The checkpoint was taken of a run on the engine 'cpu' {version ?? light.Version} on {device}, and going on under the engine 'cpu' {light.Version} on cpu would round every step otherwise. (Parameter 'options')",
+            wrong.Message);
+    }
+
+    [Fact]
+    public void ACheckpointThatNamesNoEngine_OfTheFirstVersionOrOfTheSecond_GoesOnOnAnyEngine()
+    {
+        // 0.4.0 recorded no engine, and a part of the second version written before the engine was recorded names none
+        // either: neither says which engine its run was on, so a run goes on from it on whatever engine it is handed.
+        var catalog = NetworkCatalog.BuiltIn();
+
+        foreach (var file in (string[])[Run, Recorded])
+        {
+            var resumed = NetworkDocument.ReadTraining(file, "training", catalog, NetworkDocument.ReadNetwork(file, "network", catalog));
+            var history = resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5)
+            {
+                Epochs = 3, Backend = new NativeMemoryBackend(), EarlyStopping = new EarlyStopping { Patience = 5, RestoreBest = true }, ResumeFrom = resumed.Checkpoint,
+            });
+
+            Assert.Equal([0, 1, 2], history.Epochs.Select(epoch => epoch.Number));
+        }
+    }
+
+    [Fact]
+    public void AnEngineThatNamesOnlyItself_IsRecordedByItsName_AndHeldToIt()
+    {
+        var named = Broken(Engined, $", \"version\": \"{new CpuBackend().Version}\", \"device\": \"cpu\"", string.Empty);
+        var catalog = NetworkCatalog.BuiltIn();
+        var resumed = NetworkDocument.ReadTraining(named, "training", catalog, NetworkDocument.ReadNetwork(named, "network", catalog));
+
+        // Named 'cpu' alone, the light engine — which names its version and its device too — is another engine to it.
+        var wrong = Assert.Throws<ArgumentException>(() => resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5)
+        {
+            Epochs = 3, EarlyStopping = new EarlyStopping { Patience = 5, RestoreBest = true }, ResumeFrom = resumed.Checkpoint,
+        }));
+
+        Assert.StartsWith("The checkpoint was taken of a run on the engine 'cpu', and going on under the engine 'cpu' ", wrong.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("{\"name\": \"cpu\", ", "null, \"unused\": {", "\"engine\"", EngineFault)]
+    [InlineData("{\"name\": \"cpu\", ", "\"cpu\", \"unused\": {", "\"engine\"", EngineFault)]
+    [InlineData("\"name\": \"cpu\", ", "", "\"engine\"", EngineFault)]
+    [InlineData("\"name\": \"cpu\"", "\"name\": 3", "\"engine\"", EngineFault)]
+    [InlineData("\"device\": \"cpu\"", "\"device\": null", "\"engine\"", EngineFault)]
+    [InlineData("\"device\": \"cpu\"", "\"device\": \"cpu\", \"threads\": 16", "\"threads\"", "'threads' is not written here: this holds 'name', 'version', 'device'.")]
+    public void TheEngineARunWasOn_WrittenAsAnythingElse_IsRefusedWhereItStands(string find, string replace, string at, string message)
+    {
+        var broken = Broken(Engined, find, replace);
+
+        Assert.Contains(Place(broken, at, message), TrainingRefused(broken).Faults);
+    }
+
+    [Fact]
+    public void TheEnginesVersion_WrittenAsANumber_IsRefusedWhereTheEngineStands()
+    {
+        var broken = Broken(Engined, $"\"version\": \"{new CpuBackend().Version}\"", "\"version\": 2");
+
+        Assert.Equal([Place(broken, "\"engine\"", EngineFault)], TrainingRefused(broken).Faults);
     }
 
     [Fact]
@@ -128,6 +448,7 @@ public class NetworkFileRefusalTests
     [InlineData("""{"pipeline": {}}""")]
     [InlineData("""[]""")]
     [InlineData("""{"network": 3}""")]
+    [InlineData("""3""")]
     public void AFileWithNoObjectUnderTheKey_IsRefused(string text)
     {
         var fault = Assert.Single(NetworkRefused(text).Faults);
@@ -191,6 +512,7 @@ public class NetworkFileRefusalTests
 
     [Theory]
     [InlineData("3", "3]")]
+    [InlineData("{\"kind\": \"relu\"}, {\"kind\": \"relu\"}, 3", "3]")]
     [InlineData("{\"inputs\": 1, \"outputs\": 1}", "{\"inputs\"")]
     public void ALayerThatNamesNoKind_IsRefusedAtItsPlaceInTheList(string layer, string at)
     {
@@ -226,17 +548,60 @@ public class NetworkFileRefusalTests
     }
 
     [Theory]
+    [InlineData("\"padding\": \"valid\"", "\"padding\"", "'padding' is a whole number, or 'same', here.")]
+    [InlineData("\"padding\": 1, \"dilation\": 2", "\"dilation\"", "'dilation' is not a setting of 'conv2d'.")]
+    [InlineData("\"padding\": 1, \"groups\": 2", "\"groups\"", "'groups' is not a setting of 'conv2d'.")]
+    [InlineData("\"padding\": 1, \"strides\": [1, 2]", "\"strides\"", "'strides' is not a setting of 'conv2d'.")]
+    public void AConvolutionWrittenAsAWindowDoesNotWalk_IsRefusedAtTheSettingItCannotRead(string settings, string at, string message)
+    {
+        // A window pads by a border stated for every side or as 'same', and walks one stride down and across, undilated, over
+        // every channel at once: what else another framework's convolution can say has no setting here to be read into.
+        var text = Stack("""{"kind": "conv2d", "inChannels": 2, "outChannels": 2, "height": 3, "width": 3, "stride": 1, """ + settings + "}");
+
+        Assert.Contains(Place(text, at, message), NetworkRefused(text).Faults);
+    }
+
+    [Fact]
+    public void APoolingLayer_IsNoKindThisLibraryKnows_AndIsRefusedWhereItStands()
+    {
+        var text = Stack("""{"kind": "maxPooling2d", "height": 2, "width": 2}""");
+
+        var fault = Assert.Single(NetworkRefused(text).Faults);
+
+        Assert.Equal(Place(text, "{\"kind\": \"maxPooling2d\"", fault.Message), fault);
+        Assert.StartsWith("'maxPooling2d' is not a kind this catalog knows.", fault.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
     [InlineData("3", "\"trainedOn\"", TrainedOnFault)]
     [InlineData(TrainedOnWritten + "\"seed\": \"5\", \"epoch\": 0}", "\"trainedOn\"", TrainedOnFault)]
     [InlineData(TrainedOnWritten + "\"seed\": 5, \"epoch\": -1}", "\"trainedOn\"", TrainedOnFault)]
     [InlineData("{\"features\": [\"x\", 3], \"answers\": [\"y\"], \"output\": \"target\", \"trainedBehind\": \"ab\", \"seed\": 5, \"epoch\": 0}", "\"trainedOn\"", TrainedOnFault)]
     [InlineData("{\"features\": [\"x\"], \"answers\": [\"y\"], \"output\": 7, \"trainedBehind\": \"ab\", \"seed\": 5, \"epoch\": 0}", "\"trainedOn\"", TrainedOnFault)]
-    [InlineData(TrainedOnWritten + "\"seed\": 5, \"epoch\": 0, \"rows\": 3}", "\"rows\"", "'rows' is not written here: this holds 'features', 'answers', 'output', 'trainedBehind', 'seed', 'epoch'.")]
+    [InlineData(TrainedOnWritten + "\"seed\": 5, \"epoch\": 0, \"rows\": 3}", "\"rows\"",
+        "'rows' is not written here: this holds 'features', 'answers', 'output', 'trainedBehind', 'seed', 'epoch', 'unvaried'.")]
+    [InlineData(TrainedOnWritten + "\"seed\": 5, \"epoch\": 0, \"unvaried\": [\"x\"]}", "\"unvaried\"",
+        "Which features held one value on every training row is written as an object under 'unvaried': each feature by its name, with that value.")]
+    [InlineData(TrainedOnWritten + "\"seed\": 5, \"epoch\": 0, \"unvaried\": {\"z\": 0}}", "\"z\"", "'z' is no feature this network was trained on.")]
+    [InlineData(TrainedOnWritten + "\"seed\": 5, \"epoch\": 0, \"unvaried\": {\"x\": \"0\"}}", "\"x\": \"0\"",
+        "'x' is written with the one value it held on every training row, a finite number, and this is not one.")]
+    [InlineData(TrainedOnWritten + "\"seed\": 5, \"epoch\": 0, \"unvaried\": {\"x\": null}}", "\"x\": null",
+        "'x' is written with the one value it held on every training row, a finite number, and this is not one.")]
     public void WhatANetworkWasTrainedOn_WrittenAsAnythingElse_IsRefusedWhereItStands(string written, string at, string message)
     {
         var broken = Broken(Run, "\"state\": {},\n", $"\"state\": {{}},\n    \"trainedOn\": {written},\n");
 
         Assert.Equal([Place(broken, at, message)], NetworkRefused(broken).Faults);
+    }
+
+    [Fact]
+    public void WhichFeaturesHeldOneValue_WrittenAsTheFeaturesTheNetworkWasTrainedOn_IsRead()
+    {
+        var written = Broken(Run, "\"state\": {},\n", "\"state\": {},\n    \"trainedOn\": " + TrainedOnWritten + "\"seed\": 5, \"epoch\": 0, \"unvaried\": {\"x\": -0.25}},\n");
+
+        var read = NetworkDocument.ReadNetwork(written, "network", NetworkCatalog.BuiltIn());
+
+        Assert.Equal([new KeyValuePair<string, double>("x", -0.25)], read.TrainedOn!.Unvaried!);
     }
 
     private const string TrainedOnWritten = "{\"features\": [\"x\"], \"answers\": [\"y\"], \"output\": \"target\", \"trainedBehind\": \"ab\", ";
@@ -344,6 +709,29 @@ public class NetworkFileRefusalTests
         Assert.Equal([Place(broken, at, message)], TrainingRefused(broken).Faults);
     }
 
+    [Fact]
+    public void AParameterNameHoldingAForgedLineBreak_IsShownEscaped_NeverBreakingTheMessageIntoASecondLine()
+    {
+        var broken = Broken(Run, "\"0.bias\": {\"steps\"", "\"0.bias\\r\\nFAKE LINE\": {\"steps\"");
+
+        Assert.Equal(
+            [Place(broken, "\"0.bias\\r\\nFAKE LINE\"", "'0.bias\\r\\nFAKE LINE' is no parameter of this network.")],
+            TrainingRefused(broken).Faults);
+    }
+
+    [Fact]
+    public void AParameterNameOfExtremeLength_IsCutShortInTheRefusal_SayingHowLongItWas()
+    {
+        var huge = new string('m', 10_000);
+        var broken = Broken(Run, "\"0.bias\": {\"steps\"", "\"" + huge + "\": {\"steps\"");
+
+        var fault = Assert.Single(TrainingRefused(broken).Faults);
+
+        Assert.True(fault.Message.Length < 1000, $"The message is {fault.Message.Length} characters long.");
+        Assert.Contains("(10000 characters)", fault.Message, StringComparison.Ordinal);
+        Assert.EndsWith("is no parameter of this network.", fault.Message, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData("history", "histories", "The epochs so far are written as a list under 'history'.")]
     [InlineData("memory", "memories", "What the optimizer remembers is written by path, as an object under 'memory'.")]
@@ -356,7 +744,7 @@ public class NetworkFileRefusalTests
         Assert.Equal(
             [
                 Place(broken, "\"training\"", message),
-                Place(broken, $"\"{written}\"", $"The 'training' part has no '{written}'. It holds: version, seed, optimizer, schedule, memory, judgement, history."),
+                Place(broken, $"\"{written}\"", $"The 'training' part has no '{written}'. It holds: version, seed, batchSize, earlyStopping, engine, optimizer, schedule, memory, judgement, history."),
             ],
             TrainingRefused(broken).Faults);
     }
@@ -507,6 +895,8 @@ public class NetworkFileRefusalTests
         body(writer);
         writer.WriteEndObject();
     }
+
+    private static float[][] Numbers(Network network) => [.. network.Slots().Select(named => named.Slot.Value.Values.ToArray())];
 
     private static TrainingData Rows(int count, int width = 1)
     {

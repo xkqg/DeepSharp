@@ -75,6 +75,28 @@ public sealed class Rebuilding
         return layers.Any(layer => layer is null) ? throw new Unreadable() : [.. layers.Cast<Layer>()];
     }
 
+    /// <summary>
+    /// Whether a setting is written as a word a kind takes in place of the number it otherwise is — a window's padding as
+    /// <c>same</c>, say — and, when it is, the setting is read; any other word is refused where it stands, in the words that
+    /// say what the setting is. Written as anything but text, it is not read here, and is left to be read as its number.
+    /// </summary>
+    internal bool Says(JsonElement settings, string key, string word, string what)
+    {
+        if (settings.Member(key) is not { ValueKind: JsonValueKind.String } written)
+        {
+            return false;
+        }
+
+        _readings.Peek().Read.Add(key);
+
+        if (written.GetString() != word)
+        {
+            throw Refusal(key, what);
+        }
+
+        return true;
+    }
+
     /// <summary>Rebuilds the kind written at a place of the file, noting every fault at its place; nothing when it cannot be.</summary>
     internal object? Rebuild(JsonElement element, IReadOnlyList<string> path, NetworkCatalog.Role role)
     {
@@ -91,12 +113,12 @@ public sealed class Rebuilding
 
         try
         {
-            var rebuilt = _catalog.Rebuild(kind.GetString()!, package, role, element, this);
+            var rebuilt = _catalog.Rebuilder(kind.GetString()!, package, role)(element, this);
 
             foreach (var unread in element.EnumerateObject().Select(property => property.Name)
                          .Where(name => name is not (NetworkDocument.KindKey or NetworkDocument.PackageKey) && !reading.Read.Contains(name)))
             {
-                _text.Fault([.. path, unread], $"'{unread}' is not a setting of '{kind.GetString()}'.");
+                _text.Fault([.. path, unread], $"'{unread.Quoted()}' is not a setting of '{kind.GetString()!.Quoted()}'.");
             }
 
             return rebuilt;

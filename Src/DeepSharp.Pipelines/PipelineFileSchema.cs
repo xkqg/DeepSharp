@@ -65,12 +65,7 @@ internal static class PipelineFileSchema
                     ["properties"] = new JsonObject
                     {
                         ["step"] = AName(),
-                        ["prefix"] = new JsonObject
-                        {
-                            ["description"] = "The key of the steps up to the one that learned this: a SHA-256 digest, in hexadecimal.",
-                            ["type"] = "string",
-                            ["pattern"] = "^[0-9a-f]{64}$",
-                        },
+                        ["prefix"] = Prefix("The key of the steps up to the one that learned this: a SHA-256 digest, in hexadecimal."),
                         ["learned"] = new JsonObject
                         {
                             ["type"] = "object",
@@ -85,6 +80,23 @@ internal static class PipelineFileSchema
                         },
                     },
                     ["required"] = new JsonArray("step", "prefix", "learned"),
+                    ["additionalProperties"] = false,
+                },
+            },
+            ["skipped"] = new JsonObject
+            {
+                ["description"] = "The steps a run for a learner left out, written by the run rather than by a person: an entry for "
+                                  + "each, filed under the key of the steps up to it; written only when a run left one out.",
+                ["type"] = "array",
+                ["items"] = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject
+                    {
+                        ["step"] = AName(),
+                        ["prefix"] = Prefix("The key of the steps up to the one left out: a SHA-256 digest, in hexadecimal."),
+                    },
+                    ["required"] = new JsonArray("step", "prefix"),
                     ["additionalProperties"] = false,
                 },
             },
@@ -118,20 +130,27 @@ internal static class PipelineFileSchema
                     ["items"] = new JsonObject { ["$ref"] = "#/$defs/step" },
                 },
                 ["fitted"] = new JsonObject { ["$ref"] = "#/$defs/fitted" },
+                ["skipped"] = new JsonObject { ["$ref"] = "#/$defs/skipped" },
             },
             ["required"] = new JsonArray("declaration"),
             ["additionalProperties"] = false,
             ["$defs"] = definitions,
         };
 
-        // A verb that came to mean something else in a version of the file is not read from a file written
-        // against an earlier one. "version" is left out of a file from before it was written, which the
-        // properties below leave unchecked, so a file without one is held to the first version, as it is read.
+        // What a run left out is written from the fourth version, and a file written against an earlier one says nothing of
+        // it. A verb that came to mean something else in a version of the file is not read from a file written against an
+        // earlier one either. "version" is left out of a file from before it was written, which the properties below leave
+        // unchecked, so a file without one is held to the first version, as it is read.
         var since = verbs.Select(verb => verb.Since).Where(version => version > 1).Distinct().Order().ToArray();
 
-        if (since.Length > 0)
-        {
-            schema["allOf"] = new JsonArray([.. since.Select(version => (JsonNode)new JsonObject
+        schema["allOf"] = new JsonArray(
+        [
+            new JsonObject
+            {
+                ["if"] = new JsonObject { ["properties"] = new JsonObject { ["version"] = new JsonObject { ["exclusiveMaximum"] = PipelineDocument.SkippedSince } } },
+                ["then"] = new JsonObject { ["not"] = new JsonObject { ["required"] = new JsonArray("skipped") } },
+            },
+            .. since.Select(version => (JsonNode)new JsonObject
             {
                 ["if"] = new JsonObject
                 {
@@ -161,8 +180,8 @@ internal static class PipelineFileSchema
                         },
                     },
                 },
-            })]);
-        }
+            }),
+        ]);
 
         // A serializer ends its lines the way the machine does on some runtimes; the schema is the same text everywhere.
         return schema.ToJsonString(Indented).ReplaceLineEndings("\n") + "\n";
@@ -170,6 +189,14 @@ internal static class PipelineFileSchema
 
     // More than spaces: the rule every name and every word a step holds is kept to.
     private static JsonObject AName() => new() { ["type"] = "string", ["pattern"] = "\\S" };
+
+    // The key of the steps up to one: a SHA-256 digest, in lowercase hexadecimal.
+    private static JsonObject Prefix(string description) => new()
+    {
+        ["description"] = description,
+        ["type"] = "string",
+        ["pattern"] = "^[0-9a-f]{64}$",
+    };
 
     private static JsonObject Step(StepDescription verb)
     {

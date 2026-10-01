@@ -26,6 +26,8 @@
   <ItemGroup>
     <!-- One way to find the repository and the data the samples read, shared with the other suites. -->
     <Compile Include="..\DeepSharp\Repository.cs" Link="Repository.cs" />
+    <!-- The parameter rule, read from the packages this suite references: each suite reads its own. -->
+    <Compile Include="..\DeepSharp\ParameterListTests.cs" Link="ParameterListTests.cs" />
   </ItemGroup>
 
   <ItemGroup>

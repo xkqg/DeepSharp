@@ -32,20 +32,66 @@ public class PackageTests
     }
 
     [Fact]
-    public void ThePackageReferencesTheRuntimeAndAClosedListOfPackages()
+    public void WhatVersosInstallerLaysOutForThePackage_IsWhatItsBuildResolves_AndWhatTheRuntimeCarries()
     {
-        // Everything the package references is installed with it into Verso's folder for it. The list is closed
-        // so that a reference added for convenience is a decision somebody makes, not a surprise in every install.
-        string[] allowed = ["DeepSharp.Charts", "DeepSharp.Pipelines", "DeepSharp.Pipelines.Indicators", "MatPlotLibNet", "Verso.Abstractions"];
-        var runtime = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
+        // Everything the package depends on, however far down, is installed with it into Verso's folder for it, and nothing
+        // else reaches it there: an extension Verso installs is loaded apart. So what this build resolves for the package is
+        // held to the list of what Verso's own installer lays out for it — the list tools/verso/check.sh holds a real install
+        // to — and a dependency added for convenience is a decision somebody makes, not a surprise in every install. The
+        // engine and its tensors come in through the charts, and the readers are one: a first block reads any file a
+        // pipeline file names, at about 1.8 MB of managed code. Verso's installer also lays out what a dependency names that
+        // the runtime carries itself, which the build leaves to the runtime: on .NET 10 the immutable collections.
+        var listed = VersoInstall.Listed;
+        var resolved = VersoInstall.Resolved;
 
-        var outside = Package.GetReferencedAssemblies()
-            .Select(reference => reference.Name!)
-            .Where(name => !File.Exists(Path.Join(runtime, $"{name}.dll")))
-            .Except(allowed)
+        var unlisted = resolved.Except(listed).ToArray();
+        var unresolved = listed.Except(resolved).Where(file => !VersoInstall.CarriedByTheRuntime(file)).ToArray();
+
+        Assert.True(unlisted.Length == 0, $"The build resolves {string.Join(", ", unlisted)} for the notebook package, which {VersoInstall.List} does not name.");
+        Assert.True(unresolved.Length == 0, $"{VersoInstall.List} names {string.Join(", ", unresolved)}, which the build does not resolve for the notebook package and the runtime does not carry.");
+        Assert.Contains("DeepSharp.dll", listed);
+        Assert.Contains("System.Numerics.Tensors.dll", listed);
+        Assert.All(["DeepSharp.Pipelines.Parquet.dll", "DeepSharp.Pipelines.Excel.dll", "DeepSharp.Pipelines.Json.dll"], reader => Assert.Contains(reader, listed));
+    }
+
+    [Fact]
+    public void TheCommaSeparatedReaderIsNamedInTheNotebookOnlyAsANewBlocksTemplate()
+    {
+        // Every place that needs the source asks the rows the session kept, which the step that reads the file parsed,
+        // whichever it is: a place that asked for the comma-separated reader by name went silent over every other file.
+        // The one mention left is the block a new notebook starts with.
+        var naming = Directory.GetFiles(Path.Join(Repository.Root, "Src", "DeepSharp.Verso.Notebooks"), "*.cs")
+            .Where(file => File.ReadAllText(file).Contains(nameof(DeepSharp.Pipelines.ReadCsvStep), StringComparison.Ordinal))
+            .Select(Path.GetFileName);
+
+        Assert.Equal(["StepCellType.cs"], naming);
+    }
+
+    [Fact]
+    public void TheReadmesCSharpCell_BringsEveryPackageWhoseVerbsABlockCanHold()
+    {
+        // A C# cell reads the pipeline the blocks hand over through a catalog of its own, and a catalog that lacks one verb a
+        // block can hold refuses the whole pipeline. So the README's cell brings every package of DeepSharp's whose verbs the
+        // notebook carries, and teaches its catalog each of them.
+        var readme = File.ReadAllText(Path.Join(Repository.Root, "README.md")).ReplaceLineEndings("\n");
+        var cell = System.Text.RegularExpressions.Regex.Matches(readme, "```csharp\\n(?<code>.*?)```", System.Text.RegularExpressions.RegexOptions.Singleline)
+            .Select(match => match.Groups["code"].Value)
+            .Single(code => code.Contains(StepKernel.HandOver, StringComparison.Ordinal));
+        var packages = Package.GetReferencedAssemblies()
+            .Where(reference => reference.Name!.StartsWith("DeepSharp.", StringComparison.Ordinal))
+            .Select(Assembly.Load)
+            .Where(assembly => assembly.GetTypes().Any(type => type is { IsClass: true, IsAbstract: false }
+                && typeof(DeepSharp.Pipelines.IStepContribution).IsAssignableFrom(type)))
+            .Select(assembly => assembly.GetName().Name!)
+            .Order(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.True(outside.Length == 0, $"The notebook package references {string.Join(", ", outside)}.");
+        Assert.Equal(["DeepSharp.Pipelines.Excel", "DeepSharp.Pipelines.Indicators", "DeepSharp.Pipelines.Json", "DeepSharp.Pipelines.Parquet"], packages);
+        Assert.All(packages, package =>
+        {
+            Assert.Contains($"#r \"nuget: {package}\"", cell, StringComparison.Ordinal);
+            Assert.Contains($".With{package["DeepSharp.Pipelines.".Length..]}()", cell, StringComparison.Ordinal);
+        });
     }
 
     [Fact]

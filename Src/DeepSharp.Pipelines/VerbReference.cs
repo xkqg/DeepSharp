@@ -99,7 +99,8 @@ internal static class VerbReference
             [ColumnKind.Category] = "a category",
         };
 
-        public IReadOnlyList<Row> Visit(TextParameter parameter) => [new(parameter.Key, "words")];
+        public IReadOnlyList<Row> Visit(TextParameter parameter) =>
+            [new(parameter.Key, parameter.Optional ? "words; may be left out" : "words")];
 
         public IReadOnlyList<Row> Visit(FilePathParameter parameter) =>
             [new(parameter.Key, "the path of a file; a relative one is read from the pipeline's folder")];

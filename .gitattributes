@@ -5,3 +5,14 @@
 # What the server's page carries from other projects stays exactly as those projects publish it: Git never rewrites its
 # line endings, which in a script can change the text a string holds.
 Src/DeepSharp.Verso.Serve/Page/carried/** -text
+
+# The files an earlier DeepSharp wrote stay exactly as it wrote them — the network's part with the line endings of the
+# machine that wrote it, the pipeline's with line feeds — so a test reads what that release left, not what Git made of it.
+Tst/DeepSharp/Learners/Fixtures/** -text
+
+# The files the readers' tests read hold the passenger list's cells exactly as they were written, bytes included.
+Tst/DeepSharp/Pipelines/Fixtures/** -text
+
+# What PyTorch and Keras saved and the graphs exported to ONNX, and what each answered with them, stay exactly as
+# their scripts wrote them, the rows they trained on included.
+Tst/DeepSharp/Import/Fixtures/** -text

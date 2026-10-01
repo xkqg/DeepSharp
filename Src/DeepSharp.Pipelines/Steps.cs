@@ -13,7 +13,7 @@ namespace DeepSharp.Pipelines;
 /// Declaring where the data comes from is not the same act as going to get it: nothing is opened until the
 /// pipeline runs, so a declaration can be written, saved and checked on a machine that has no data on it.
 /// </remarks>
-public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows, IDescribesColumns
+public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows, IReadsAFile, IDescribesColumns
 {
     private static readonly FilePathParameter PathKey = new(
         "path", "Where the comma-separated file will be, when the pipeline runs.", "data.csv");
@@ -40,12 +40,37 @@ public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows, IDesc
     public string Verb => Name;
 
     /// <inheritdoc />
-    /// <remarks>A relative path is read from the pipeline's folder; the path stays as it was written.</remarks>
+    /// <remarks>
+    /// A relative path is read from the pipeline's folder; the path stays as it was written. The file's bytes are read once
+    /// and parsed as <see cref="Open(byte[], string)"/> parses them.
+    /// </remarks>
     public IRowSource Open(SourceFolder folder)
     {
         ArgumentNullException.ThrowIfNull(folder);
 
-        return new CsvRowSource(folder.Resolve(Path));
+        var file = folder.Resolve(Path);
+
+        return Open(File.ReadAllBytes(file), file);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Read as text as the file is, in the encoding its byte-order mark names, UTF-8 when it names none.</remarks>
+    /// <exception cref="FormatException">The text has no header, or a row has the wrong number of cells.</exception>
+    public IRowSource Open(byte[] bytes, string file)
+    {
+        ArgumentNullException.ThrowIfNull(bytes);
+        ArgumentException.ThrowIfNullOrWhiteSpace(file);
+
+        return CsvRowSource.FromText(bytes.AsText(), file);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The file's first line alone, read as the whole file is, so a large file costs that line.</remarks>
+    public IReadOnlyList<string> ColumnNamesIn(SourceFolder folder)
+    {
+        ArgumentNullException.ThrowIfNull(folder);
+
+        return CsvRowSource.HeaderOf(folder.Resolve(Path));
     }
 
     /// <inheritdoc />
@@ -134,7 +159,11 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
 
     private static readonly WholeNumberParameter GapKey = new(
         "gap", "How many of the last moments of every part are kept apart, fitted on by nothing and handed to nothing: at least as many as the rows an answer reads ahead. Left out, none.",
-        0, atLeast: 0, leftOut: 0);
+        0)
+    {
+        AtLeast = 0,
+        LeftOut = 0,
+    };
 
     /// <summary>Declares a split in time, by shares that together make a whole.</summary>
     /// <param name="column">The column that says when a row happened.</param>
@@ -292,8 +321,10 @@ public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingS
         "with",
         "What goes in the gaps, learned from the training rows: mean, median, zero, previous, constant, or refuse.",
         With.Median,
-        ["mean", "median", "zero", "previous", "constant", "refuse"],
-        "filling a gap");
+        ["mean", "median", "zero", "previous", "constant", "refuse"])
+    {
+        What = "filling a gap",
+    };
 
     private static readonly ShareParameter RefuseAboveKey = new(
         "refuseAbove",

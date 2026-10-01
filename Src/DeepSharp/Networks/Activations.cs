@@ -47,7 +47,9 @@ public sealed class Tanh : Layer, ISaved<Tanh>
 /// <summary>Bends every value between nothing and one along the logistic curve.</summary>
 /// <remarks>
 /// A network trained with <see cref="BinaryCrossEntropy"/> ends without one: the loss takes the logits and applies the
-/// curve itself, which is both steadier and what PyTorch does, and a prediction goes through it on its way out.
+/// curve itself, which is both steadier and what PyTorch does, and a prediction goes through it on its way out. A stack
+/// that ends in one is refused where it is compiled with such a loss, and a description in Keras's words that ends in one
+/// leaves it out as it is compiled.
 /// </remarks>
 public sealed class Sigmoid : Layer, ISaved<Sigmoid>
 {

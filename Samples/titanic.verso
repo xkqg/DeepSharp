@@ -1,0 +1,80 @@
+{
+  "verso": "1.1",
+  "metadata": {
+    "title": "The Titanic passenger list",
+    "defaultKernel": "csharp"
+  },
+  "cells": [
+    {
+      "id": "3437cebc-236d-4310-9d66-69bd316996fd",
+      "type": "markdown",
+      "source": "# The Titanic passenger list\n\nEach block below is one step of a pipeline that prepares the passenger list for a network: it reads the file beside\nthis notebook, declares the columns that take part, splits the passengers into training, validation and test rows,\nand learns everything it learns from the training rows alone. **Show the data here** on any block shows the rows as\nthey stand there, each marked with the part it lands in."
+    },
+    {
+      "id": "91c85803-90fd-4c8c-a48a-c4a96ea49d12",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022read.csv\u0022,\n  \u0022path\u0022: \u0022data/titanic.csv\u0022\n}"
+    },
+    {
+      "id": "b814958d-9efb-4918-a2a3-c6b12ebf522e",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022declare\u0022,\n  \u0022remainder\u0022: \u0022drop\u0022,\n  \u0022columns\u0022: [\n    {\n      \u0022name\u0022: \u0022survived\u0022,\n      \u0022kind\u0022: \u0022integer\u0022,\n      \u0022optional\u0022: false\n    },\n    {\n      \u0022name\u0022: \u0022sibsp\u0022,\n      \u0022kind\u0022: \u0022integer\u0022,\n      \u0022optional\u0022: false\n    },\n    {\n      \u0022name\u0022: \u0022parch\u0022,\n      \u0022kind\u0022: \u0022integer\u0022,\n      \u0022optional\u0022: false\n    },\n    {\n      \u0022name\u0022: \u0022pclass\u0022,\n      \u0022kind\u0022: \u0022category\u0022,\n      \u0022optional\u0022: false\n    },\n    {\n      \u0022name\u0022: \u0022sex\u0022,\n      \u0022kind\u0022: \u0022category\u0022,\n      \u0022optional\u0022: false\n    },\n    {\n      \u0022name\u0022: \u0022age\u0022,\n      \u0022kind\u0022: \u0022number\u0022,\n      \u0022optional\u0022: true\n    },\n    {\n      \u0022name\u0022: \u0022fare\u0022,\n      \u0022kind\u0022: \u0022number\u0022,\n      \u0022optional\u0022: false\n    }\n  ]\n}"
+    },
+    {
+      "id": "2f93bce4-ec04-499d-aaab-0841b5b0f2bd",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022split.stratified\u0022,\n  \u0022column\u0022: \u0022survived\u0022,\n  \u0022train\u0022: 0.7,\n  \u0022validation\u0022: 0.15,\n  \u0022test\u0022: 0.15,\n  \u0022predict\u0022: 0,\n  \u0022seed\u0022: 20260923\n}"
+    },
+    {
+      "id": "479a677b-101c-49c4-85c3-bc67bed7836d",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022fill.missing\u0022,\n  \u0022column\u0022: \u0022age\u0022,\n  \u0022with\u0022: \u0022median\u0022\n}"
+    },
+    {
+      "id": "84b04f81-48df-422c-bf97-84ce86c2bf80",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022encode.categories\u0022,\n  \u0022as\u0022: \u0022onehot\u0022,\n  \u0022unseen\u0022: \u0022reserve\u0022\n}"
+    },
+    {
+      "id": "00a0ce4d-4e16-4464-ada5-5f3204a5fab9",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022normalise\u0022,\n  \u0022column\u0022: \u0022age\u0022,\n  \u0022scale\u0022: \u0022midrange\u0022,\n  \u0022outOfRange\u0022: \u0022pass\u0022\n}"
+    },
+    {
+      "id": "67bef2ba-1304-41ce-915f-249425b736bb",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022normalise\u0022,\n  \u0022column\u0022: \u0022fare\u0022,\n  \u0022scale\u0022: \u0022midrange\u0022,\n  \u0022outOfRange\u0022: \u0022pass\u0022\n}"
+    },
+    {
+      "id": "380aeda8-8261-43b5-9638-717d4f1353ff",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022normalise\u0022,\n  \u0022column\u0022: \u0022sibsp\u0022,\n  \u0022scale\u0022: \u0022midrange\u0022,\n  \u0022outOfRange\u0022: \u0022pass\u0022\n}"
+    },
+    {
+      "id": "41c414db-0b06-4047-89dc-4f79a104a607",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022normalise\u0022,\n  \u0022column\u0022: \u0022parch\u0022,\n  \u0022scale\u0022: \u0022midrange\u0022,\n  \u0022outOfRange\u0022: \u0022pass\u0022\n}"
+    },
+    {
+      "id": "684279f6-b903-43b6-9a88-a3282a3dcba7",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022target\u0022,\n  \u0022column\u0022: \u0022survived\u0022\n}"
+    },
+    {
+      "id": "b3c23145-fafa-40ad-9d25-9f431d8b14f5",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022evidence.report\u0022,\n  \u0022metrics\u0022: [\n    \u0022accuracy\u0022,\n    \u0022precision\u0022,\n    \u0022recall\u0022,\n    \u0022confusionmatrix\u0022\n  ],\n  \u0022parts\u0022: [\n    \u0022validation\u0022,\n    \u0022test\u0022\n  ],\n  \u0022shown\u0022: [\n    \u0022numbers\u0022,\n    \u0022drawn\u0022\n  ]\n}"
+    },
+    {
+      "id": "bdd256b4-093f-4322-9fad-0478e63b1682",
+      "type": "markdown",
+      "source": "The last block names what a trained model is held to, and the notebook trains none. The C# cell below does: it\nreads the pipeline the blocks hand over \u2014 after **Show the data here** on any block, or the toolbar\u0027s run \u2014 trains\na network on it, and hands back what the network predicted. **Show the data here** on the report block then draws\nthe report under its grid."
+    },
+    {
+      "id": "19abdf82-ed61-49d8-bcd7-693783ebffc4",
+      "type": "code",
+      "language": "csharp",
+      "source": "#r \u0022nuget: DeepSharp.Learners.Networks\u0022\n#r \u0022nuget: DeepSharp.Charts\u0022\nusing DeepSharp.Charts;\nusing DeepSharp.Learners.Networks;\nusing DeepSharp.Networks;\nusing DeepSharp.Pipelines;\n\n// The pipeline the blocks declare, as text, run over the rows beside this notebook.\nvar text = Variables.Get\u003Cstring\u003E(\u0022deepsharp.pipeline\u0022);\nvar folder = Variables.TryGet\u003Cstring\u003E(\u0022deepsharp.folder\u0022, out var saved) ? SourceFolder.Of(saved) : SourceFolder.WorkingDirectory;\nvar prepared = new Pipeline(PipelineDeclaration.FromJson(text, StepCatalog.BuiltIn()), rows: null, folder).Run();\n\nvar trained = new Sequential().Dense(16).Relu().Dense(1)\n    .Compile(new Adam(0.01), new BinaryCrossEntropy())\n    .Fit(prepared, new FitOptions(seed: 20260929) { Epochs = 100, EarlyStopping = new EarlyStopping { Patience = 10, RestoreBest = true } });\n\n// What the report block measures and draws: the network\u0027s predictions, handed back as text.\nVariables.Set(\u0022deepsharp.predictions\u0022, trained.Measures!.PredictionsToJson());\n\ntrained.History!.LossCurve()"
+    }
+  ]
+}

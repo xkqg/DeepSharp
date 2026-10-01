@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- What every engine is held to, written once: the tests of the layers, the losses, the optimizers, the loop, the file
+       and the seam itself, each taking the engine it runs on, so the core's suite runs them on the light engine and on a
+       second one of its own, and an engine's package runs them on that engine. It is compiled against what DeepSharp
+       publishes and nothing else — the core opens its internals to DeepSharp.Tests alone — so what passes here passes for
+       an engine of somebody else's too. Not a suite, and not a package: its tests run in the suites that derive from it,
+       nothing measures it and nothing ships it. -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DeepSharp.Tests.Backends.Contract</RootNamespace>
+    <!-- Tests: a test's name is its documentation, as in the suites, so the file is generated and CS1591 is off here. -->
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The attributes and the assertions a test is written with, and not the runner: the suites that derive from it run it. -->
+    <PackageReference Include="xunit.v3.extensibility.core" Version="4.*" />
+    <PackageReference Include="xunit.v3.assert" Version="4.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DeepSharp\DeepSharp.csproj" />
+    <!-- The published passenger list, prepared as the samples prepare it, for the steps the contract trains. -->
+    <ProjectReference Include="..\..\Src\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The repository these tests run inside, found as every suite finds it: one file, linked where it is needed. -->
+    <Compile Include="..\DeepSharp\Repository.cs" Link="Repository.cs" />
+  </ItemGroup>
+
+</Project>

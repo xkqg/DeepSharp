@@ -216,7 +216,7 @@ public sealed partial class ToolbarTests : IDisposable
     {
         await using var notebooks = new OpenNotebooks();
         var host = await OpenAsync(notebooks, "titanic.verso", [.. Titanic.Select(Block)]);
-        var run = new Run(1, cell: null, takesTheCSharpTurn: true, told: () => { }, tell: () => Task.CompletedTask);
+        var run = new Run(1, cell: null, takesTheCSharpTurn: true, Unheard.Notebook);
         var port = new RunPort(host.Scaffold, run);
         var context = new ToolbarContext(host.Scaffold, [], port);
 
