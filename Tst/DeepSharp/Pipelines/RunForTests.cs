@@ -25,10 +25,8 @@ public class RunForTests
 
         Assert.Empty(every.Skipped);
 
-        foreach (var needs in new[] { Needs.Numbers, Needs.OneScale })
+        foreach (var run in new[] { Needs.Numbers, Needs.OneScale }.Select(needs => Titanic.RunFor(needs)))
         {
-            var run = Titanic.RunFor(needs);
-
             Assert.Empty(run.Skipped);
             Assert.Equal(every.ToJson(), run.ToJson());
         }

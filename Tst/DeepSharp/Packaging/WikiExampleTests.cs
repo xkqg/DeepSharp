@@ -79,7 +79,8 @@ public sealed class WikiExampleTests
 
         try
         {
-            var written = context.LoadFromStream(new MemoryStream(compiled.Image)).GetTypes().Single(type => type.IsSubclassOf(typeof(Network)));
+            using var image = new MemoryStream(compiled.Image);
+            var written = context.LoadFromStream(image).GetTypes().Single(type => type.IsSubclassOf(typeof(Network)));
             var network = (Network)Activator.CreateInstance(written, new RandomStream(42).Draw("initialise:wiki", 0, 0))!;
             var prepared = WikiTitanic.In(WikiTitanic.DataFolder).Run();
             var trained = network.Compile(new Adam(0.01), new BinaryCrossEntropy()).Fit(prepared, new FitOptions(seed: 7) { Epochs = 2 });

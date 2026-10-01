@@ -38,15 +38,15 @@ public class CategoryTests
     {
         // The place kept for a category the training rows never held is written as g_other, and so would be the trained
         // category 'other': one would take the other's column, and its rows would lose their category without a word.
-        foreach (var fitting in new Func<PreparedData>[]
-                 {
-                     () => Grouped("other", "zzz").EncodeCategories().Build().Run(),
-                     () => Grouped("other", "zzz").Encode("g").Build().Run(),
-                     () => Grouped("other", "zzz").EncodeCategories().Build().RunFor(Needs.Categories),
-                 })
-        {
-            var refused = Assert.Throws<InvalidOperationException>(fitting);
+        Func<PreparedData>[] fittings =
+        [
+            () => Grouped("other", "zzz").EncodeCategories().Build().Run(),
+            () => Grouped("other", "zzz").Encode("g").Build().Run(),
+            () => Grouped("other", "zzz").EncodeCategories().Build().RunFor(Needs.Categories),
+        ];
 
+        foreach (var refused in fittings.Select(fitting => Assert.Throws<InvalidOperationException>(fitting)))
+        {
             Assert.Contains("'g' holds the category 'other' on its training rows", refused.Message, StringComparison.Ordinal);
             Assert.Contains("'g_other'", refused.Message, StringComparison.Ordinal);
             Assert.Contains("unseen: refuse", refused.Message, StringComparison.Ordinal);

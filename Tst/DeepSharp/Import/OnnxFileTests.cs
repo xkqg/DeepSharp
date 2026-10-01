@@ -362,7 +362,7 @@ public class OnnxFileTests
     {
         using var folder = new GraphFolder();
         var model = OnnxFixtures.Model("onnx-titanic-torchscript.onnx");
-        var beside = new MemoryStream();
+        using var beside = new MemoryStream();
         beside.Write(new byte[7]);
 
         // Every number moved into one file beside the graph: the first ones at an offset with a length, the last one

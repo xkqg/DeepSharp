@@ -486,9 +486,7 @@ internal sealed class ReshapeKind : OnnxKind
 
         var copies = node.Whole("allowzero", 0) == 0;
 
-        if (lengths is not [var batch, var row]
-            || !(batch == -1 || batch == reaching.Batch || (batch == 0 && copies))
-            || !(row > 0 || (row == -1 && batch != -1)))
+        if (lengths is not [var batch, var row] || !KeepsTheBatch(batch) || !MakesARow(row, batch))
         {
             node.Refuse($"it lays each batch out as [{string.Join(", ", lengths)}], and a reshape is read here when it flattens each example into one row, as Flatten does.");
 
@@ -496,6 +494,12 @@ internal sealed class ReshapeKind : OnnxKind
         }
 
         return Flattened(reaching.Flow) with { RowLength = row > 0 ? row : null };
+
+        // The batch's length left to be worked out, stated as the graph's input states it, or copied from the input.
+        bool KeepsTheBatch(long length) => length == -1 || length == reaching.Batch || (length == 0 && copies);
+
+        // The row's length stated, or left to be worked out once the batch's length is not.
+        static bool MakesARow(long length, long batchLength) => length > 0 || (length == -1 && batchLength != -1);
     }
 }
 

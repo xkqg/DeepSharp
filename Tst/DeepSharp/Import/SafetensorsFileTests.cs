@@ -156,7 +156,7 @@ public class SafetensorsFileTests
             var network = new LayerStack(new Dense(Tensor.Zeros(new Shape(2, 1)), Tensor.Zeros(new Shape(1))));
             var before = network.Slots().Select(named => named.Slot.Value).ToArray();
             var read = new SafetensorsFile(network, new MeanSquaredError());
-            var file = new MemoryStream(Convert.FromBase64String(each.GetProperty("file").GetString()!));
+            using var file = new MemoryStream(Convert.FromBase64String(each.GetProperty("file").GetString()!));
 
             if (reference.StartsWith("reads", StringComparison.Ordinal))
             {

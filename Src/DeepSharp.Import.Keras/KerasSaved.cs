@@ -111,7 +111,7 @@ internal static class KerasArchive
             ? named
             : null;
 
-        var held = new MemoryStream();
+        using var held = new MemoryStream();
 
         using (var entry = weights.Open())
         {

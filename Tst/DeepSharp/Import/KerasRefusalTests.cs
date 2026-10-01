@@ -270,8 +270,9 @@ public class KerasRefusalTests
     public void AnHdf5FileOfNumbersAlone_IsRefusedAsNoModelKerasSavedWhole()
     {
         var file = new H5File { ["model_weights"] = new H5Group() };
+        using var written = new MemoryStream(KerasFixtures.Written(file));
 
-        var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(new MemoryStream(KerasFixtures.Written(file))));
+        var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(written));
 
         Assert.Equal(
             "This HDF5 file holds no model_config: a model Keras saved whole describes itself there, and a file of numbers alone names no layers to hold them.",
@@ -281,12 +282,15 @@ public class KerasRefusalTests
     [Fact]
     public void AFileThatIsNeitherAKerasArchiveNorAnHdf5File_IsRefusedAsSuch()
     {
-        var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(new MemoryStream(Encoding.UTF8.GetBytes("{\"network\": {}}"))));
+        using var text = new MemoryStream(Encoding.UTF8.GetBytes("{\"network\": {}}"));
+        using var empty = new MemoryStream();
+
+        var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(text));
 
         Assert.Equal(
             "A Keras file is the archive Keras 3 saves a model to, .keras, or the HDF5 file it saved one to before, .h5, and this is neither.",
             refused.Message);
-        Assert.Throws<FormatException>(() => new KerasFile().Read(new MemoryStream()));
+        Assert.Throws<FormatException>(() => new KerasFile().Read(empty));
         Assert.Throws<ArgumentNullException>(() => new KerasFile().Read(null!));
     }
 

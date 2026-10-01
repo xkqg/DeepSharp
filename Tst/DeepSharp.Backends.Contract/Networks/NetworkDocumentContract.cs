@@ -354,8 +354,8 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         var training = JsonNode.Parse(Checkpointed(compiled, kept[^1]))!["training"]!.AsObject();
 
         Assert.Equal(32, (int)training["batchSize"]!);
-        Assert.True(training.ContainsKey("earlyStopping"));
-        Assert.Null(training["earlyStopping"]);
+        Assert.True(training.TryGetPropertyValue("earlyStopping", out var earlyStopping));
+        Assert.Null(earlyStopping);
     }
 
     [Fact]

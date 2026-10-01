@@ -266,7 +266,7 @@ internal sealed class TorchArchive : IDisposable
         }
 
         // An inflater stops at the length the headers say, so a record inflating to more is caught by its check instead.
-        if (((ReadOnlySpan<byte>)bytes).Crc32() is var check && check != entry.Crc32)
+        if (bytes.Crc32() is var check && check != entry.Crc32)
         {
             throw new FormatException(
                 string.Create(CultureInfo.InvariantCulture, $"The file's '{name}' holds other bytes than its check says: their CRC-32 is {check:x8}, and the archive's {entry.Crc32:x8}."));

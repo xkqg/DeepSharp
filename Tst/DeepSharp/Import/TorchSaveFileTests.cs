@@ -137,7 +137,7 @@ public class TorchSaveFileTests
             var torch = each.GetProperty("torch").GetString()!;
             var network = TitanicInKerasWords();
             var before = network.Slots().Select(named => named.Slot.Value).ToArray();
-            var file = new MemoryStream(Convert.FromBase64String(each.GetProperty("file").GetString()!));
+            using var file = new MemoryStream(Convert.FromBase64String(each.GetProperty("file").GetString()!));
 
             var refused = Record.Exception(() => new TorchSaveFile(network, new BinaryCrossEntropy()).Read(file));
 
@@ -765,8 +765,9 @@ public class TorchSaveFileTests
                 ])
             .ToArray();
         Said(file, "archive/data/0", 8);
+        using var archive = new MemoryStream(file);
 
-        var (refused, allocated) = Refused(new MemoryStream(file));
+        var (refused, allocated) = Refused(archive);
 
         Assert.Equal("The file's 'archive/data/0' holds more bytes than the 8 it says.", refused.Message);
         Assert.InRange(allocated, 0, 4 << 20);
@@ -786,8 +787,9 @@ public class TorchSaveFileTests
                 CompressionLevel.SmallestSize)
             .ToArray();
         Said(file, "archive/data/0", 8);
+        using var archive = new MemoryStream(file);
 
-        var (refused, allocated) = Refused(new MemoryStream(file));
+        var (refused, allocated) = Refused(archive);
 
         Assert.StartsWith("The file's 'archive/data/0' holds other bytes than its check says: ", refused.Message, StringComparison.Ordinal);
         Assert.InRange(allocated, 0, 4 << 20);
@@ -806,8 +808,9 @@ public class TorchSaveFileTests
                 CompressionLevel.SmallestSize)
             .ToArray();
         Said(file, "archive/data/1", 4);
+        using var archive = new MemoryStream(file);
 
-        var (refused, _) = Refused(new MemoryStream(file));
+        var (refused, _) = Refused(archive);
 
         Assert.StartsWith("The file's 'archive/data/1' holds fewer bytes than the 4 it says", refused.Message, StringComparison.Ordinal);
     }

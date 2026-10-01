@@ -121,14 +121,10 @@ public abstract partial class TensorBackendContract
     public void TheElementwiseOperations_LeaveTheirInputAsItWas()
     {
         var values = Mixed();
+        Func<Tensor, Tensor>[] operations = [_backend.Relu, _backend.Positive, _backend.Tanh, _backend.Sigmoid, _backend.Exp, _backend.Softplus, _backend.LogSoftmax];
 
-        foreach (var operation in new Func<Tensor, Tensor>[]
-                 {
-                     _backend.Relu, _backend.Positive, _backend.Tanh, _backend.Sigmoid, _backend.Exp, _backend.Softplus, _backend.LogSoftmax,
-                 })
+        foreach (var result in operations.Select(operation => operation(values)))
         {
-            var result = operation(values);
-
             Assert.Equal(values.Shape, result.Shape);
         }
 

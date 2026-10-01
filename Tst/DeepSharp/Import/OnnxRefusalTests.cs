@@ -514,6 +514,7 @@ public class OnnxRefusalTests
 
     [Theory]
     [InlineData("location=../elsewhere.data", "'0.weight' is said to be kept in '../elsewhere.data', outside the folder the graph stands in, and numbers are read from beside the graph alone.")]
+    [InlineData("location=/elsewhere.data", "'0.weight' is said to be kept in '/elsewhere.data', outside the folder the graph stands in, and numbers are read from beside the graph alone.")]
     [InlineData("location=missing.data", "'0.weight' is kept in 'missing.data', and no such file stands beside the graph.")]
     [InlineData("location=short.data|offset=0|length=896", "'0.weight' is kept in 'short.data' from byte 0 for 896 bytes, and the file holds 100.")]
     [InlineData("location=short.data|length=100", "'0.weight' is written as a 16x14 tensor of FLOAT, and the graph holds 100 bytes for it, where it takes 896.")]
@@ -545,9 +546,12 @@ public class OnnxRefusalTests
     [Fact]
     public void AFileThatIsNoOnnxModel_IsRefusedAsSuch()
     {
+        using var words = new MemoryStream(Encoding.UTF8.GetBytes("not a model"));
+        using var nothing = new MemoryStream();
+
         var keras = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(KerasFixtures.Open("keras-titanic.keras")));
-        var text = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(new MemoryStream(Encoding.UTF8.GetBytes("not a model"))));
-        var empty = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(new MemoryStream()));
+        var text = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(words));
+        var empty = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(nothing));
 
         Assert.StartsWith("This is no ONNX model: ", keras.Message, StringComparison.Ordinal);
         Assert.StartsWith("This is no ONNX model: ", text.Message, StringComparison.Ordinal);

@@ -107,7 +107,7 @@ internal sealed class GraphNumbers(string? folder)
 
             return bytes.Fault is { } fault
                 ? new HeldWholes(null, fault)
-                : new HeldWholes([.. Enumerable.Range(0, (int)count).Select(at => BinaryPrimitives.ReadInt64LittleEndian(bytes.Bytes.Span[(at * 8)..]))], null);
+                : new HeldWholes([.. Enumerable.Range(0, count).Select(at => BinaryPrimitives.ReadInt64LittleEndian(bytes.Bytes.Span[(at * 8)..]))], null);
         }
 
         return kept.Tensor.Int64Data.Count == count
