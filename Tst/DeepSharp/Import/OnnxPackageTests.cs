@@ -62,6 +62,6 @@ public class OnnxPackageTests
         Assert.Contains("OnnxSharp 0.3.2, MIT", text, StringComparison.Ordinal);
         Assert.Contains("Google.Protobuf 3.29.3, BSD-3-Clause", text, StringComparison.Ordinal);
         Assert.Equal("true", project.Descendants("EnableTrimAnalyzer").Single().Value);
-        Assert.Equal(["DeepSharp.csproj"], project.Descendants("ProjectReference").Select(reference => Path.GetFileName(reference.Attribute("Include")!.Value)));
+        Assert.Equal(["DeepSharp.csproj"], project.Descendants("ProjectReference").Select(reference => Path.GetFileName(reference.Attribute("Include")!.Value.Replace('\\', '/'))));
     }
 }

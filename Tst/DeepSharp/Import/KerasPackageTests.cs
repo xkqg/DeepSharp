@@ -59,6 +59,6 @@ public class KerasPackageTests
         Assert.Equal("PureHDF", borrowed.Attribute("Include")!.Value);
         Assert.Equal("2.2.0", borrowed.Attribute("Version")!.Value);
         Assert.Contains("PureHDF 2.2.0, MIT", File.ReadAllText(path), StringComparison.Ordinal);
-        Assert.Equal(["DeepSharp.csproj"], project.Descendants("ProjectReference").Select(reference => Path.GetFileName(reference.Attribute("Include")!.Value)));
+        Assert.Equal(["DeepSharp.csproj"], project.Descendants("ProjectReference").Select(reference => Path.GetFileName(reference.Attribute("Include")!.Value.Replace('\\', '/'))));
     }
 }
