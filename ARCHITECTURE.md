@@ -1194,7 +1194,7 @@ again and withdraws a fit learned from it, the safe way round. Keeping
 the parsed rows took close to half off every show on files of five and eleven megabytes, measured inside
 Verso's own engine. The session is held by the block type Verso loaded, the one object every part of the
 notebook reaches — the block type's own kernel directly, every other part through the host that loaded it —
-and one change on it runs at a time: a gesture, a change in a block's form, the toolbar's run, export and take-over
+and one change on it runs at a time: a gesture, a change in a block's form, a press of any of the toolbar's buttons
 each wait for the one before them, in the order they came, since one host hands them over one at a time and another
 side by side. A stop gives the notebook back at once: the change it stopped goes on by itself, and what that change
 asks for from then on writes nothing — no grid, and nothing handed to C# cells — because a change's turn begins with
@@ -1267,6 +1267,20 @@ over the notebook it came from, whose blocks were measured gone. And a package i
 is loaded only after a file of another format has been opened, so the refusal on the way in holds only for an install
 at the top of Verso's extensions folder. Tests pin the order Verso opens things in and read the browser editor's own
 code for what it asks when it opens and saves, so a Verso that changes either is noticed.
+
+Where the guard is not asked, the way back is DeepSharp's own and asks nothing of Verso. A toolbar button, **Make
+blocks of the steps**, is drawn wherever the notebook runs, since every editor of Verso's draws an extension's buttons
+and hands each the notebook's cells as they stand; it is on wherever a cell holds a step a format kept the text of, and
+it puts a block in each such step's place — a raw cell or a code cell whose whole text reads as a step becomes that
+block, and a cell of text is cut at each fence that holds a step, the text between them staying text. It writes the
+change as any change to the blocks is written, in the notebook's turn, and takes back what the blocks no longer make;
+it runs nothing. Measured in the browser editor: a Jupyter copy `verso convert` made, opened there, made blocks again
+and saved, left a `.verso` file holding every block of the notebook it came from, where the same save without the
+button left none. The guard and the button read a cell by one rule, kept in one place, so what one takes for a step a
+format forgot the other does too. Verso has been asked, in its own tracker, to let its browser editor run the guards
+its other host runs ([#113](https://github.com/DataficationSDK/Verso/issues/113)) and to say so before a save writes
+over a file of the same name ([#114](https://github.com/DataficationSDK/Verso/issues/114)); the button stays either way,
+since a file can reach the notebook as text from anywhere.
 
 The same package runs wherever Verso does, and it is the same code in each: Verso's VS Code extension, the
 browser editor `verso serve` starts, and an application that takes Verso's engine as an ordinary dependency,
@@ -1404,7 +1418,7 @@ editor does: it draws a block's output, which is HTML; it hands a control's `dat
 part the control names, with its `data-payload` — or, for a control that carries none, its state, as Verso's own router
 sends it: `true` or `false` for a box, the value it is at for a select — and with the notebook's variables and
 operations; it draws again when a block's output is updated or a gesture says it changed the blocks; it gives the
-toolbar's buttons — Run, Export and the take-over — a context of its own; and it saves through a serializer that knows
+toolbar's buttons, every one of DeepSharp's, a context of its own; and it saves through a serializer that knows
 the cell types, so what the blocks show stays out of the file. An application that only wants the pipeline reads each
 block with `StepCatalog.ReadStep` and builds the declaration through its constructor, or has the command line write the
 file with `verso export --format "Export the pipeline" --extensions <the published package>`. That file holds the steps

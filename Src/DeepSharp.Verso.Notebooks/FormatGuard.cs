@@ -1,7 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using System.Text.RegularExpressions;
 using Verso.Abstractions;
 
 namespace DeepSharp.Verso.Notebooks;
@@ -18,11 +17,12 @@ namespace DeepSharp.Verso.Notebooks;
 /// every format but Verso's own, so a format it does not know is refused a block rather than trusted with one; the save
 /// is recognised by its format, since Verso names no file when it saves. The guard runs where the host asks it — Verso's
 /// VS Code host and DeepSharp's own server do, before they write a file and after they read one. Verso's command-line
-/// converter asks nothing on the way out, and the browser editor <c>verso serve</c> starts asks nothing either way; both
-/// are written down in the architecture and on the notebook's page rather than trusted.
+/// converter asks nothing on the way out, and the browser editor <c>verso serve</c> starts asks nothing either way, so
+/// there such a file opens with its steps as text; <see cref="RestoreBlocksAction"/> makes blocks of them again, reading
+/// a cell by the same rule as the guard.
 /// </remarks>
 [VersoExtension]
-public sealed partial class FormatGuard : NotebookExtension, INotebookPostProcessor
+public sealed class FormatGuard : NotebookExtension, INotebookPostProcessor
 {
     /// <summary>The guard's id.</summary>
     public const string Id = "io.github.xkqg.deepsharp.notebooks.format-guard";
@@ -62,7 +62,7 @@ public sealed partial class FormatGuard : NotebookExtension, INotebookPostProces
         ArgumentNullException.ThrowIfNull(notebook);
 
         var catalog = NotebookVerbs.Catalog();
-        var step = notebook.Cells.SelectMany(BlockTexts).Select(catalog.TryReadStep).FirstOrDefault(each => each is not null);
+        var step = notebook.Cells.SelectMany(cell => cell.Parts(catalog)).Select(part => part.Step).FirstOrDefault(each => each is not null);
 
         return step is null
             ? Task.FromResult(notebook)
@@ -70,19 +70,4 @@ public sealed partial class FormatGuard : NotebookExtension, INotebookPostProces
                 $"This file holds pipeline steps saved as cells of another kind — '{step.Verb}' among them. Its format kept "
                 + "their text and lost that each was a block, so it is not opened as though they were something else: open the .verso notebook they came from.");
     }
-
-    // The texts a cell holds where a format kept a block's text and forgot the block: all of a raw or a code cell's, and
-    // each fence Markdown wrote a block in, under the block's language or its kind — Markdown reads the fences of several
-    // blocks back as one cell of text with whatever text stood between them. A cell of any other kind holds no block's text.
-    private static IEnumerable<string> BlockTexts(CellModel cell) => cell.Type switch
-    {
-        "raw" or "code" => [cell.Source],
-        "markdown" => Fenced().Matches(cell.Source.ReplaceLineEndings("\n")).Select(fence => fence.Groups["text"].Value),
-        _ => [],
-    };
-
-    // A fence opened on a line of its own with the block's language or its kind, and closed on a line of its own, as
-    // Markdown writes a block.
-    [GeneratedRegex(@"^```(?:pdd|deepsharp\.step)[ \t]*\n(?<text>[\s\S]*?)\n?^```[ \t]*$", RegexOptions.Multiline)]
-    private static partial Regex Fenced();
 }

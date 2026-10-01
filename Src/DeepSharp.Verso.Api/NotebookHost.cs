@@ -747,6 +747,7 @@ public sealed class NotebookHost : IRunListener
         new ExportPipelineAction(),
         new TakeOverAction(),
         new FormatGuard(),
+        new RestoreBlocksAction(),
     ];
 
     /// <summary>Opens the notebook a file holds on an engine, and closes the engine when it cannot be opened.</summary>

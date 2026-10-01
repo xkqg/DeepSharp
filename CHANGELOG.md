@@ -410,6 +410,15 @@ model hands back, and a sample notebook ships.
   the report block to draw. `deepsharp-serve Samples/titanic.verso`, from the repository's folder, opens it, and a test
   runs it as a person does.
 
+- **Make blocks of the steps: a button that makes blocks again of the steps another format kept as text.** A notebook
+  saved as Jupyter comes back with its blocks as raw cells, one saved as Markdown with them fenced into a cell of text,
+  and a Jupyter file another program wrote may hold them as code. Verso's browser editor opens such a file without
+  asking the guard that refuses it, and saving it there writes those cells into a `.verso` file as they are. The
+  notebook's toolbar now has a button, on wherever a cell holds such a step, that puts a block in each step's place —
+  the text around them staying text, every other cell as it was — so the notebook runs again, before it is saved or
+  after. It is the same button in every editor the notebook runs in, it runs nothing, and the guard and the button
+  read a cell by the one rule.
+
 - **A window pads as TensorFlow's 'same' does.** `new Window(3, 3) { Stride = 2, PaddingMode = PaddingMode.Same }`
   works its border out from each image as TensorFlow's and Keras's `padding='same'` does: along each axis as many places
   as the stride fits into the image, the rows or columns those need beyond it split in two, the odd one after. No border
@@ -550,9 +559,10 @@ model hands back, and a sample notebook ships.
   so the file the converter wrote opened with its blocks as inert text. The guard now reads a raw cell, a code cell and a
   fenced Markdown cell alike, and a test holds it to refusing whatever each of Verso's formats makes of a block. It is
   asked in VS Code, in `deepsharp-serve` and in an application on `DeepSharp.Verso.Api`; the browser editor `verso serve`
-  starts asks no extension when it opens or saves a file, so there the converted file opens, and saving it writes a
-  `.verso` file over the notebook it came from — keep a converted copy away from its notebook, or open it where the
-  guard is asked. A test reads that editor's code, so a Verso whose editor starts asking is noticed.
+  starts asks no extension when it opens or saves a file, so there the converted file opens with its blocks as text,
+  and saving it writes a `.verso` file over the notebook it came from. There, **Make blocks of the steps** on the
+  toolbar makes them blocks again, before the save or after it. A test reads that editor's code, so a Verso whose
+  editor starts asking is noticed.
 
 - **`deepsharp-serve` names every library it carries in its third-party notices.** Its package carries the libraries
   the server runs on — Verso and its engine, the C# compiler, NuGet's client, Markdig, and from this release the readers'

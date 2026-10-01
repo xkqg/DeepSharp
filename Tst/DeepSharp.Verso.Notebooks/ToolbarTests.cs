@@ -66,22 +66,27 @@ public sealed class ToolbarTests : IDisposable
         var run = Action<RunPipelineAction>(notebook);
         var export = Action<ExportPipelineAction>(notebook);
         var takeOver = Action<TakeOverAction>(notebook);
+        var restore = Action<RestoreBlocksAction>(notebook);
 
         Assert.Equal(ToolbarPlacement.MainToolbar, run.Placement);
         Assert.Equal(ToolbarPlacement.ExportMenu, export.Placement);
         Assert.Equal(ToolbarPlacement.MainToolbar, takeOver.Placement);
+        Assert.Equal(ToolbarPlacement.MainToolbar, restore.Placement);
         Assert.Equal(RunPipelineAction.Id, run.ActionId);
         Assert.Equal(ExportPipelineAction.Id, export.ActionId);
         Assert.Equal(TakeOverAction.Id, takeOver.ActionId);
+        Assert.Equal(RestoreBlocksAction.Id, restore.ActionId);
         Assert.Equal(run.ActionId, run.ExtensionId);
         Assert.Equal(export.ActionId, export.ExtensionId);
         Assert.Equal(takeOver.ActionId, takeOver.ExtensionId);
+        Assert.Equal(restore.ActionId, restore.ExtensionId);
         Assert.Equal("Take over the saved columns", takeOver.DisplayName);
+        Assert.Equal("Make blocks of the steps", restore.DisplayName);
 
-        // Run first, then the take-over beside it.
-        Assert.Equal([0, 0, 1], new IToolbarAction[] { run, export, takeOver }.Select(action => action.Order));
+        // Run first, then the take-over beside it, then the way back for steps a format forgot.
+        Assert.Equal([0, 0, 1, 2], new IToolbarAction[] { run, export, takeOver, restore }.Select(action => action.Order));
 
-        foreach (NotebookExtension action in new NotebookExtension[] { run, export, takeOver })
+        foreach (NotebookExtension action in new NotebookExtension[] { run, export, takeOver, restore })
         {
             var button = (IToolbarAction)action;
 
