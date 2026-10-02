@@ -1,6 +1,7 @@
 Apache.Arrow.dll
 CommunityToolkit.HighPerformance.dll
 DeepSharp.Charts.dll
+DeepSharp.Learners.Networks.dll
 DeepSharp.Pipelines.Excel.dll
 DeepSharp.Pipelines.Indicators.dll
 DeepSharp.Pipelines.Json.dll

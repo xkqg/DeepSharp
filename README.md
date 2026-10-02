@@ -18,18 +18,18 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
-**0.5.0 learns on the engine you choose, and reads what others trained.** A network trains, is measured by its
-pipeline's report and serves on the light engine `DeepSharp` ships or on libtorch, on the processor or a graphics card,
-without a line of it changing; and a model PyTorch, Keras or an ONNX exporter saved is read into the same network, to
-serve, to measure or to train further. The pipeline reads Parquet files, Excel workbooks and JSON files as it reads a
-comma-separated one, and runs for the learner that learns from it, saying which steps that learner does without. Beneath
-them stands what came before: layers, losses and optimizers; a training loop that stops once the validation rows no
-longer improve; networks described in Keras's words or written as code, saved with their pipeline as one file; the
-pipeline's report and the charts; tensors whose gradients are worked out automatically, the data half — which proposes
-what each column holds and names what should not be there — and a notebook to see the data in, whose report block draws
-what the cell that trains a model hands back. The [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what
-comes next, and the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release
-added.
+**0.6.0 puts the model in the pipeline.** A pipeline says which network its rows are prepared for — the layers, what
+moves them, what judges them, when the run stops and the engine it runs on — in the words TensorFlow and Keras use or
+the words PyTorch uses, and running it trains exactly that network. The whole course from a file to a validated model
+is one declaration, saved as one file and replayed from it. Beneath it stands what came before: a network trains, is
+measured by its pipeline's report and serves on the light engine `DeepSharp` ships or on libtorch, on the processor or
+a graphics card, without a line of it changing; a model PyTorch, Keras or an ONNX exporter saved is read into the same
+network; the pipeline reads Parquet files, Excel workbooks and JSON files as it reads a comma-separated one, and runs
+for the learner that learns from it; layers, losses and optimizers; a training loop that stops once the validation
+rows no longer improve; the report and the charts; tensors whose gradients are worked out automatically, the data half
+— which proposes what each column holds and names what should not be there — and a notebook to see the data in, whose
+blocks now hold the network too. The [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what comes next,
+and the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release added.
 
 ```
 dotnet add package DeepSharp
@@ -42,7 +42,7 @@ using DeepSharp.Learners.Networks;
 using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 
-var prepared = Pdd.Create()
+var pipeline = Pdd.Create()
     .ReadCsv("btceur-1d.csv")                                // declared, not opened
     .Declare(schema => schema
         .Timestamp("timestamp")
@@ -56,12 +56,14 @@ var prepared = Pdd.Create()
     .Normalise("trades", Scale.MidRange)
     .Drop("timestamp")
     .Report(report => report.Measure(Metric.Rmse).On(Part.Validation, Part.Test).As(Shown.Numbers))
-    .Build()
-    .Run();
+    .WithTensorflow(network => network                       // and the network these rows train
+        .Dense(8).Relu().Dense(1)                            // Keras's words: the widths come from the rows
+        .Adam()
+        .MeanSquaredError()
+        .Run(seed: 42, epochs: 20))
+    .Build();
 
-var trained = new Sequential().Dense(8).Relu().Dense(1)     // Keras's words: the widths come from the rows
-    .Compile(new Adam(), new MeanSquaredError())
-    .Fit(prepared, new FitOptions(seed: 42) { Epochs = 20 });
+var trained = pipeline.Train();                              // the course, from the file to the trained model
 
 var file = trained.ToJson();                                 // the network and its pipeline, one file
 ```
@@ -80,12 +82,13 @@ report measures it, each measure beside what predicting the training rows' avera
 answers rows that arrive later in the answer's own units — here, a return comes back as a price — and its `Unfamiliar`
 names, for each row, the features it moves away from the one value every training row held there, which the network
 learned nothing about; the report counts such rows in each part it measures. `TrainedNetwork.FromJson(file,
-NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn())` reads the network and its pipeline back in a program that has never
-seen the data, refusing the network beside any other fit of its pipeline, however alike their columns are.
+NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks())` reads the network and its pipeline back in a program
+that has never seen the data, refusing the network beside any other fit of its pipeline, however alike their columns
+are.
 `DeepSharp.Charts` draws the loss curve, the measures and a confusion matrix, as SVG, and `trained.Measures!.Report()`
 renders the whole report as HTML.
 
-The steps and what they learned are one file: `prepared.ToJson()` writes it, and
+The steps and what they learned are one file: `pipeline.Run().ToJson()` writes it, and
 `PreparedData.FromJson(text, StepCatalog.BuiltIn())` reads it back in a program that has never seen the data.
 The catalog is the list of verbs the reader knows — add `.WithIndicators()` for a file that holds indicators,
 which read the rows in their order and so need that order said first, with `.OrderBy("timestamp")`; and `.WithParquet()`,
@@ -249,12 +252,14 @@ knows every verb a block can hold, so it brings the packages the notebook brings
 #r "nuget: DeepSharp.Pipelines.Parquet"
 #r "nuget: DeepSharp.Pipelines.Excel"
 #r "nuget: DeepSharp.Pipelines.Json"
+#r "nuget: DeepSharp.Learners.Networks"
+using DeepSharp.Learners.Networks;
 using DeepSharp.Pipelines;
 
 if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 {
     var folder = Variables.TryGet<string>("deepsharp.folder", out var saved) ? SourceFolder.Of(saved) : SourceFolder.WorkingDirectory;
-    var catalog = StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson();
+    var catalog = StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson().WithNetworks();
     var declaration = PipelineDeclaration.FromJson(text, catalog);
     var prepared = new Pipeline(declaration, rows: null, folder).Run();
 }
@@ -290,13 +295,13 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | | |
 |---|---|
 | `DeepSharp` | The tensors, their shape and the storage their values live on, the seam the arithmetic runs behind, what every engine refuses, the light engine on .NET's own vector maths, and the gradients worked out through it; the layers — dense, activations, dropout, normalisations, convolution, its window padded as TensorFlow's 'same' if you say so — networks written as code or described in Keras's words, losses, optimizers and learning-rate schedules, the training loop with early stopping and checkpoints, a network written down as the kinds it is made of and the numbers it learned, and the load that puts numbers trained elsewhere into its slots. Brings System.Numerics.Tensors alone. |
-| `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales, a profile that names what should not be there, the answer in four kinds, the report of what a trained model is measured by, the handover — a run for each learner, and every feature declared to land between minus one and one for a learner that needs it — and the column decisions saved on their own and taken over — saved as a file and replayed. Knows no tensor, and brings nothing but Microsoft's dependency-injection abstractions. |
+| `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales, a profile that names what should not be there, the answer in four kinds, the report of what a trained model is measured by, the learner a declaration is written for, the handover — a run for each learner, and every feature declared to land between minus one and one for a learner that needs it — and the column decisions saved on their own and taken over — saved as a file and replayed. Knows no tensor, and brings nothing but Microsoft's dependency-injection abstractions. |
 | `DeepSharp.Pipelines.Parquet` | `.ReadParquet(path)`: an Apache Parquet file, which says what each of its columns holds. Brings Parquet.Net 6.1.0 and the compression libraries it reads with. |
 | `DeepSharp.Pipelines.Excel` | `.ReadExcel(path)` and `.ReadExcel(path, sheet)`: a sheet of an `.xlsx`, `.xls` or `.xlsb` workbook, each cell as the sheet types it. Brings ExcelDataReader 3.9.0. |
 | `DeepSharp.Pipelines.Json` | `.ReadJson(path)`: a JSON file holding an array of records, each value as the file writes it. Brings nothing: .NET reads JSON itself. |
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). A CSV comes through as the text the file writes, and a query with the kinds the database gives its columns. |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
-| `DeepSharp.Learners.Networks` | Where a network meets a pipeline: trained on its training rows, judged by its validation rows, measured by its report, and saved with it as one file that refuses any other fit of it; what it predicts for rows served later comes back in the answer's own units, on whichever engine it is handed, naming what each row holds that the network learned nothing about; and a checkpoint is the same file with what the run needs to go on, refused to a run under another seed, batch size, early stopping or engine. Brings the two packages it joins. |
+| `DeepSharp.Learners.Networks` | Where a network meets a pipeline: declared in the chain that prepares its rows — `.WithTorch(…)` or `.WithTensorflow(…)`, and `pipeline.Train()` runs it — or written as code and fitted by hand; trained on its training rows, judged by its validation rows, measured by its report, and saved with it as one file that refuses any other fit of it; what it predicts for rows served later comes back in the answer's own units, on whichever engine it is handed, naming what each row holds that the network learned nothing about; and a checkpoint is the same file with what the run needs to go on, refused to a run under another seed, batch size, early stopping or engine. Brings the two packages it joins. |
 | `DeepSharp.Backends.TorchSharp` | The arithmetic on libtorch, on the processor or a graphics card: `TorchBackend.OnCpu()` or `TorchBackend.OnGpu(0)`, held to the same contract as the light engine, operation by operation. Brings TorchSharp 0.107.0; the application brings the libtorch it runs on. |
 | `DeepSharp.Import.PyTorch` | A network PyTorch trained, read into the same network written here: a safetensors file, or the `.pt` file `torch.save(model.state_dict(), file)` writes, its pickle read as PyTorch's weights-only reader reads it. Brings Onnxify.Safetensors 0.3.11, a port of safetensors' own reader. |
 | `DeepSharp.Import.Keras` | A model Keras 3 saved, as a `.keras` archive or an `.h5` file, read into a network built in Keras's words. Brings PureHDF 2.2.0, a managed HDF5 reader. |

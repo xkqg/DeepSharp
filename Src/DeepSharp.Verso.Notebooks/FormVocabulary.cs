@@ -61,6 +61,42 @@ internal static class FormVocabulary
         return After(field, $"{key}/", out var rest) && int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out place);
     }
 
+    /// <summary>One setting of the part at a place of a list of parts.</summary>
+    /// <param name="key">The parts' key.</param>
+    /// <param name="place">The part's place, counting from nought.</param>
+    /// <param name="setting">The setting's key.</param>
+    /// <returns>The field's name.</returns>
+    public static string Setting(string key, int place, string setting) =>
+        string.Create(CultureInfo.InvariantCulture, $"{key}/{place}/{setting}");
+
+    /// <summary>Whether a field is one setting of a part at a place, which place and which setting.</summary>
+    /// <param name="field">The field's name.</param>
+    /// <param name="key">The parts' key.</param>
+    /// <param name="place">The place, when it is one.</param>
+    /// <param name="setting">The setting's key, when it is one.</param>
+    /// <returns><see langword="true"/> when it is.</returns>
+    public static bool IsSetting(string field, string key, out int place, out string setting)
+    {
+        place = -1;
+        setting = string.Empty;
+
+        if (!After(field, $"{key}/", out var rest))
+        {
+            return false;
+        }
+
+        var at = rest.IndexOf('/', StringComparison.Ordinal);
+
+        if (at <= 0)
+        {
+            return false;
+        }
+
+        setting = rest[(at + 1)..];
+
+        return int.TryParse(rest[..at], NumberStyles.None, CultureInfo.InvariantCulture, out place) && setting.Length > 0;
+    }
+
     /// <summary>The pick of the kind a schema gives one column, or not taken.</summary>
     /// <param name="key">The declarations' key.</param>
     /// <param name="column">The column.</param>

@@ -344,9 +344,9 @@ public class BlockTests
     [Fact]
     public async Task EveryKeyOfEveryVerb_IsOfferedWhatItsKindTakes_AndNothingWhereItTakesAnythingAtAll()
     {
-        // Words where the kind has words — one of a set, true or false, a way to fill — and nothing where a value is
-        // a person's own: a name, a number, a path. A column is known only once a gesture has shown the notebook's
-        // pipeline, which a kernel on its own has never seen.
+        // Words where the kind has words — one of a set, true or false, a way to fill, the names a part may give — and
+        // nothing where a value is a person's own: a name, a number, a path. A column is known only once a gesture has
+        // shown the notebook's pipeline, which a kernel on its own has never seen.
         var kernel = new StepKernel();
 
         foreach (var description in Verbs().Descriptions)
@@ -357,7 +357,7 @@ public class BlockTests
                 {
                     var code = $$"""{"step": "{{description.Verb}}", "{{key}}": """;
                     var offered = await kernel.GetCompletionsAsync(code, code.Length);
-                    var hasWords = parameter.GetType().Name is "OneOfParameter`1" or "TrueOrFalseParameter" or "FillStrategyParameter";
+                    var hasWords = parameter.GetType().Name is "OneOfParameter`1" or "TrueOrFalseParameter" or "FillStrategyParameter" or "PartsParameter";
 
                     Assert.True(hasWords == offered.Count > 0, $"{description.Verb}.{key}: {offered.Count}");
                 }

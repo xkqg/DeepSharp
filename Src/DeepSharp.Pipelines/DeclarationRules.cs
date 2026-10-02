@@ -91,14 +91,15 @@ internal sealed class AtMostOne<TStep>(string what) : IDeclarationRule
 }
 
 /// <summary>
-/// Every step does something the run acts on, except an output that only names the answer and a report that only names
-/// what a model's answers are measured by.
+/// Every step does something the run acts on, except an output that only names the answer, a report that only names
+/// what a model's answers are measured by, and a step that only names the learner the pipeline is declared for.
 /// </summary>
 /// <remarks>
 /// A step with no acting capability used to be carried along and ignored: it was in the file and in the
 /// chain, and in nothing the pipeline did. Two capabilities on one step cannot compile outside this library,
-/// so what this rule has left to find is a step that does nothing. Naming the answer and naming its measures change
-/// no row, and each is read by what comes after the pipeline: the handover, and the measures of a trained model.
+/// so what this rule has left to find is a step that does nothing. Naming the answer, naming its measures and naming the
+/// learner change no row, and each is read by what comes after the pipeline: the handover, the measures of a trained
+/// model, and the package that trains it.
 /// </remarks>
 internal sealed class EveryStepActs : IDeclarationRule
 {
@@ -106,7 +107,7 @@ internal sealed class EveryStepActs : IDeclarationRule
     {
         for (var at = 0; at < steps.Count; at++)
         {
-            if (steps[at] is not (IActsInAWalk or INamesTheAnswer or INamesTheMeasures))
+            if (steps[at] is not (IActsInAWalk or INamesTheAnswer or INamesTheMeasures or INamesTheLearner))
             {
                 yield return new DeclarationFault(
                     at, steps[at].Verb,
@@ -431,6 +432,43 @@ internal sealed class AReportStandsBelowItsOutput : IDeclarationRule
                 output < 0
                     ? "names the measures of a model's answers, and this pipeline names no answer: a report stands below the output whose answers it measures."
                     : $"measures the answers the output at step {output + 1} names, and stands above it: a report stands below the output whose answers it measures.");
+        }
+    }
+}
+
+/// <summary>
+/// A learner stands below the output it learns to answer.
+/// </summary>
+/// <remarks>
+/// What it learns is that output's answers, so without an output it learns nothing, and above one it would name a learner
+/// for an answer not named yet where it stands.
+/// </remarks>
+internal sealed class ALearnerStandsBelowItsOutput : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        var output = -1;
+
+        for (var at = 0; at < steps.Count && output < 0; at++)
+        {
+            if (steps[at] is INamesTheAnswer)
+            {
+                output = at;
+            }
+        }
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is not INamesTheLearner || (output >= 0 && output < at))
+            {
+                continue;
+            }
+
+            yield return new DeclarationFault(
+                at, steps[at].Verb,
+                output < 0
+                    ? "names the learner this pipeline is declared for, and this pipeline names no answer: a learner stands below the output it learns to answer."
+                    : $"learns the answers the output at step {output + 1} names, and stands above it: a learner stands below the output it learns to answer.");
         }
     }
 }

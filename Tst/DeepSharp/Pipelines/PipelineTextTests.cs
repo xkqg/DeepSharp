@@ -19,6 +19,45 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class PipelineTextTests
 {
+    // The version of the pipeline file every verb this library ships first appears in. A row is added when a verb is; a
+    // row never changes, because a verb that came to mean something else would have to.
+    private static readonly (string Verb, int Since)[] Versions =
+    [
+        ("declare", 1),
+        ("drop.columns", 2),
+        ("drop.gaps", 2),
+        ("drop.warmup", 2),
+        ("encode", 1),
+        ("encode.categories", 2),
+        ("evidence.correlation", 2),
+        ("evidence.profile", 2),
+        ("evidence.report", 3),
+        ("feature.add", 1),
+        ("feature.cyclical", 1),
+        ("feature.indicator", 1),
+        ("feature.timeParts", 1),
+        ("fill.missing", 1),
+        ("fill.nan", 1),
+        ("learn.network", 5),
+        ("maths", 1),
+        ("normalise", 1),
+        ("normalise.row", 1),
+        ("order.by", 2),
+        ("outliers.clip", 1),
+        ("read.csv", 1),
+        ("read.excel", 1),
+        ("read.json", 1),
+        ("read.parquet", 1),
+        ("read.rows", 1),
+        ("split.atRandom", 2),
+        ("split.byTime", 2),
+        ("split.stratified", 2),
+        ("target", 1),
+        ("target.ahead", 2),
+        ("target.distribution", 2),
+        ("target.labels", 2),
+    ];
+
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
 
     [Fact]
@@ -150,9 +189,13 @@ public class PipelineTextTests
 
         Assert.Equal(PipelineText.FirstComparable, first);
         Assert.All(StepCatalog.VerbsOtherPackagesBring.Keys, verb => Assert.True(catalog.Knows(verb), $"The catalog here does not know '{verb}'."));
-        Assert.All(catalog.Descriptions, description => Assert.True(
-            description.Since <= PipelineText.FirstComparable,
-            string.Create(CultureInfo.InvariantCulture, $"'{description.Verb}' means something else from version {description.Since} of the pipeline file.")));
+
+        // The version a verb first appears in, written down once for every verb this library ships. A verb may be added —
+        // a file written before it cannot name it, so no text's meaning moves — but a verb already here may never be given
+        // another first version: that is what a changed meaning would need, and it would make two texts of one fit differ.
+        Assert.Equal(
+            Versions,
+            catalog.Descriptions.Select(description => (description.Verb, description.Since)).OrderBy(each => each.Verb, StringComparer.Ordinal));
     }
 
     // Rows t = 1…count of x = sin t, whose answer is whether x is above nought: the same declaration, whatever the count.

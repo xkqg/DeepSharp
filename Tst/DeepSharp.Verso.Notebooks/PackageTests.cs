@@ -86,11 +86,13 @@ public class PackageTests
             .Order(StringComparer.Ordinal)
             .ToArray();
 
-        Assert.Equal(["DeepSharp.Pipelines.Excel", "DeepSharp.Pipelines.Indicators", "DeepSharp.Pipelines.Json", "DeepSharp.Pipelines.Parquet"], packages);
+        Assert.Equal(
+            ["DeepSharp.Learners.Networks", "DeepSharp.Pipelines.Excel", "DeepSharp.Pipelines.Indicators", "DeepSharp.Pipelines.Json", "DeepSharp.Pipelines.Parquet"],
+            packages);
         Assert.All(packages, package =>
         {
             Assert.Contains($"#r \"nuget: {package}\"", cell, StringComparison.Ordinal);
-            Assert.Contains($".With{package["DeepSharp.Pipelines.".Length..]}()", cell, StringComparison.Ordinal);
+            Assert.Contains($".With{package[(package.LastIndexOf('.') + 1)..]}()", cell, StringComparison.Ordinal);
         });
     }
 

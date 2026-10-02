@@ -33,10 +33,12 @@ public static class NetworkSample
         Bikes(data, output, charts);
     }
 
-    // Whether a passenger survived: Keras's words, every width worked out from the rows, the start drawn from the run's seed.
+    // Whether a passenger survived: declared from the file to the trained model in one chain, in the words TensorFlow and
+    // Keras use. Nothing here trains by hand — the declaration says which network these rows are prepared for, and the run
+    // of it trains that network.
     private static void Passengers(string data, TextWriter output, string charts)
     {
-        var prepared = Pdd.Create()
+        var pipeline = Pdd.Create()
             .ReadCsv(Path.Join(data, "titanic.csv"))
             .Declare(schema => schema.Integer("survived", "sibsp", "parch").Category("pclass", "sex").Optional("age", ColumnKind.Number).Number("fare"))
             .SplitStratified("survived", train: 0.70, validation: 0.15)
@@ -53,12 +55,17 @@ public static class NetworkSample
                 .Measure(Metric.Accuracy, Metric.Precision, Metric.Recall, Metric.ConfusionMatrix)
                 .On(Part.Train, Part.Validation, Part.Test)
                 .As(Shown.Numbers, Shown.Drawn))
-            .Build()
-            .Run();
+            // And the network those rows train: stack the layers, say what moves them and what judges them, say how the run
+            // goes. It is one more step of the declaration, so the file says what was trained behind these steps.
+            .WithTensorflow(network => network
+                .Dense(16).Relu().Dense(1)
+                .Adam(0.01)
+                .BinaryCrossEntropy()
+                .Run(seed: 20260929, epochs: 100)
+                .StoppingAfter(patience: 10))
+            .Build();
 
-        var trained = new Sequential().Dense(16).Relu().Dense(1)
-            .Compile(new Adam(0.01), new BinaryCrossEntropy())
-            .Fit(prepared, new FitOptions(seed: 20260929) { Epochs = 100, EarlyStopping = new EarlyStopping { Patience = 10, RestoreBest = true } });
+        var trained = pipeline.Train();
 
         var served = new InMemoryRowSource(["pclass", "sex", "age", "sibsp", "parch", "fare"], [["3", "male", "22", "1", "0", "7.25"], ["1", "female", "38", "1", "0", "71.2833"]]);
         var predictions = Told(output, "Titanic", trained, served);
@@ -159,7 +166,7 @@ public static class NetworkSample
         }
 
         var file = trained.ToJson();
-        var loaded = TrainedNetwork.FromJson(file, NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn());
+        var loaded = TrainedNetwork.FromJson(file, NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks());
         var predictions = trained.Predict(served);
         var same = predictions.Answers.Zip(loaded.Predict(served).Answers).All(pair => pair.First.SequenceEqual(pair.Second));
 

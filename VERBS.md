@@ -23,6 +23,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`feature.timeParts`](#featuretimeparts) | Takes a moment in time apart into the pieces people reason with: an hour, a weekday, a month. |
 | [`fill.missing`](#fillmissing) | Fills the gaps in a column the named way, with a value learned from the training rows, and marks where they were. |
 | [`fill.nan`](#fillnan) | Deals with a value that is not a number a model can use; refusing it is the default. |
+| [`learn.network`](#learnnetwork) | Names the network this pipeline is declared for: its layers, what moves them, what judges them, when the run stops and the engine it runs on. |
 | [`maths`](#maths) | Pulls a column into another shape by arithmetic that learns nothing: a logarithm, a root, a reciprocal. |
 | [`normalise`](#normalise) | Brings a column onto a comparable scale, by numbers learned from the training rows. |
 | [`normalise.row`](#normaliserow) | Brings each row onto a comparable scale across the columns that make it up, learning nothing. |
@@ -320,6 +321,36 @@ Deals with a value that is not a number a model can use; refusing it is the defa
 - **`with`**: What happens to a value that is not a number: refuse, which is the default and usually the right answer, or mean, median, zero or constant.
 
 Means what it says from version 1 of the file.
+
+## `learn.network`
+
+Names the network this pipeline is declared for: its layers, what moves them, what judges them, when the run stops and the engine it runs on.
+
+```json
+{"step":"learn.network","layers":[{"kind":"dense","units":16},{"kind":"relu"}],"optimizer":{"kind":"adam","rate":0.001,"firstMoment":0.9,"secondMoment":0.999,"epsilon":1E-08},"loss":{"kind":"meanSquaredError"},"stopping":{"kind":"never"},"engine":"light","seed":20260929,"epochs":100,"batch":32}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `layers` | a list of parts, each a name and its settings: `dense`, which takes `units`, `relu`, which takes nothing, `tanh`, which takes nothing, `sigmoid`, which takes nothing, `dropout`, which takes `rate`, `batchNorm`, which takes `momentum` or `epsilon` or `layerNorm`, which takes `epsilon` | `[{"kind":"dense","units":16},{"kind":"relu"}]` |
+| `optimizer` | a part, written as a name and its settings: `sgd`, which takes `rate` or `momentum` or `adam`, which takes `rate`, `firstMoment`, `secondMoment` or `epsilon` | `{"kind":"adam","rate":0.001,"firstMoment":0.9,"secondMoment":0.999,"epsilon":1E-08}` |
+| `loss` | a part, written as a name and its settings: `meanSquaredError`, which takes nothing, `crossEntropy`, which takes nothing or `binaryCrossEntropy`, which takes nothing | `{"kind":"meanSquaredError"}` |
+| `stopping` | a part, written as a name and its settings: `never`, which takes nothing or `patience`, which takes `patience`, `least` or `best` | `{"kind":"never"}` |
+| `engine` | words | `"light"` |
+| `seed` | a whole number | `20260929` |
+| `epochs` | a whole number, at least 1 | `100` |
+| `batch` | a whole number, at least 1 | `32` |
+
+- **`layers`**: The layers, from the one the prepared rows reach first.
+- **`optimizer`**: What moves the network's numbers at every step.
+- **`loss`**: What the network's answers are judged by while it trains.
+- **`stopping`**: When the run stops: at its last pass, or once the validation loss stops falling.
+- **`engine`**: The name of the engine the run's arithmetic happens on; which engine it stands for — and which device it works on — is the application's to say.
+- **`seed`**: The number every random draw of the run is worked out from, so the same declaration gives the same run.
+- **`epochs`**: How many times the run goes over the training rows, at most.
+- **`batch`**: How many rows one step of the run is worked out from.
+
+Means what it says from version 5 of the file.
 
 ## `maths`
 

@@ -245,3 +245,48 @@ public sealed record SquashStep : IPipelineStep<SquashStep>, IMeetsANeed, IDescr
     public void ApplyTo(Table table, FittedStepValues fitted) =>
         table.Put(new Column<double>(Column, ColumnKind.Number, table.NumbersOf(Column).Select(value => value is { } number ? Math.Tanh(number) : (double?)null)));
 }
+
+/// <summary>
+/// A step from elsewhere that names the learner the pipeline is declared for: the stump of these tests, which takes
+/// numbers of any size. It changes no column and runs nothing — the package that brings it trains once the pipeline has
+/// run — so it says which columns it leaves behind, as every no-act step does.
+/// </summary>
+public sealed record LearnStumpStep : IPipelineStep<LearnStumpStep>, INamesTheLearner, IDescribesColumns
+{
+    private static readonly WholeNumberParameter DepthKey = new("depth", "How many questions deep the stump asks.", 1) { AtLeast = 1 };
+
+    public LearnStumpStep(int depth) => Depth = DepthKey.Require(depth);
+
+    public int Depth { get; }
+
+    public static string Name => "learn.stump";
+
+    public static string Purpose => "Names a stump as the learner this pipeline is declared for.";
+
+    public static StepParameters<LearnStumpStep> Parameters { get; } =
+        new StepParameters<LearnStumpStep>().With(DepthKey, step => step.Depth);
+
+    public string Verb => Name;
+
+    public Needs Needs => Needs.NoScale;
+
+    public static LearnStumpStep ReadFrom(JsonElement element) => new(DepthKey.Read(element));
+
+    public ColumnState After(ColumnState before) => before;
+}
+
+/// <summary>A step that names a learner and says nothing of the columns it leaves behind: what the rule above it refuses.</summary>
+public sealed record LearnQuietlyStep : IPipelineStep<LearnQuietlyStep>, INamesTheLearner
+{
+    public static string Name => "learn.quietly";
+
+    public static string Purpose => "Names a learner without saying which columns it leaves behind.";
+
+    public static StepParameters<LearnQuietlyStep> Parameters { get; } = new();
+
+    public string Verb => Name;
+
+    public Needs Needs => Needs.NoScale;
+
+    public static LearnQuietlyStep ReadFrom(JsonElement element) => new();
+}

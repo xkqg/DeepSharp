@@ -42,6 +42,8 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         new OnlyAnOutputReadsAhead(),
         new RowsAheadAreKeptApart(),
         new AReturnIsMadeFromItsColumnAsRead(),
+        new AtMostOne<INamesTheLearner>("learner"),
+        new ALearnerStandsBelowItsOutput(),
         new AtMostOne<INamesTheMeasures>("report"),
         new AReportStandsBelowItsOutput(),
         new AReportMeasuresDividedRows(),
@@ -75,6 +77,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         ColumnsAt = Array.FindIndex(_steps, step => step is IBindsColumns);
         SplitAt = Array.FindIndex(_steps, step => step is ISplitStep);
         OutputAt = Array.FindIndex(_steps, step => step is INamesTheAnswer);
+        Learner = _steps.OfType<INamesTheLearner>().FirstOrDefault();
         Report = _steps.OfType<INamesTheMeasures>().FirstOrDefault();
     }
 
@@ -115,11 +118,12 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// rows by what they hold rather than by where they stand — and a step is refused from a file older than the
     /// meaning it has now, rather than read as something it never meant. It goes up too when a file can say
     /// something an older library would not understand — as the schema did when a timestamp column began to say how
-    /// its moments are written, and as a run for a learner did when it began to write down the steps it left out — so
-    /// that library names the newer version instead of the word it does not know. A property rather than a constant,
-    /// so a package compiled against this version reads the number the running library has.
+    /// its moments are written, as a run for a learner did when it began to write down the steps it left out, and as a
+    /// declaration did when it began to name the learner it is written for — so that library names the newer version
+    /// instead of the word it does not know. A property rather than a constant, so a package compiled against this
+    /// version reads the number the running library has.
     /// </remarks>
-    public static int Version => 4;
+    public static int Version => 5;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;
@@ -207,6 +211,13 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// a replay, the way back — whichever kind of output it is.
     /// </remarks>
     public INamesTheAnswer? Output => OutputAt < 0 ? null : (INamesTheAnswer)_steps[OutputAt];
+
+    /// <summary>The step that names the learner this pipeline is declared for, or nothing when it names none.</summary>
+    /// <remarks>
+    /// A declaration has at most one, below its output. It is what the package that trains asks for the learner's words,
+    /// and what <see cref="INamesTheLearner.Needs"/> is read from when a run is made for the learner the pipeline names.
+    /// </remarks>
+    public INamesTheLearner? Learner { get; }
 
     /// <summary>The step that names the measures a trained model is held to, or nothing when the pipeline names none.</summary>
     /// <remarks>

@@ -1,13 +1,14 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Learners.Networks;
 using DeepSharp.Pipelines;
 
 namespace DeepSharp.Verso.Notebooks;
 
 /// <summary>
 /// The verbs a notebook understands: the library's own, and those of the packages this one brings along — the indicators,
-/// and the readers of a Parquet file, an Excel workbook and a JSON file.
+/// the readers of a Parquet file, an Excel workbook and a JSON file, and the network a pipeline is declared for.
 /// </summary>
 /// <remarks>
 /// A fresh catalog every time, never a shared one: the parts of a notebook are separate instances that Verso makes
@@ -20,5 +21,5 @@ internal static class NotebookVerbs
 {
     /// <summary>A new catalog of every verb a notebook can hold.</summary>
     /// <returns>The catalog.</returns>
-    public static StepCatalog Catalog() => StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson();
+    public static StepCatalog Catalog() => StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson().WithNetworks();
 }

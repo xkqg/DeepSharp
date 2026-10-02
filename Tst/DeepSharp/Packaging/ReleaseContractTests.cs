@@ -343,25 +343,28 @@ public class ReleaseContractTests
         // A package nuget.org already carries is checked against that build's own public surface, so a change nobody
         // meant to make breaks the build instead of somebody's upgrade; a package new this release has nothing yet to
         // compare against, and asking for a baseline that was never published would refuse the build for a package
-        // that never shipped one.
-        string[] existedAtTheLastRelease =
+        // that never shipped one. Every package shipped before the release this build is for is named here, and a
+        // package that was not fails this test until somebody says which of the two it is.
+        string[] publishedBefore =
         [
-            "DeepSharp", "DeepSharp.Charts", "DeepSharp.Learners.Networks", "DeepSharp.Pipelines",
-            "DeepSharp.Pipelines.DataFrame", "DeepSharp.Pipelines.Indicators", "DeepSharp.Verso.Api",
+            "DeepSharp", "DeepSharp.Backends.TorchSharp", "DeepSharp.Charts", "DeepSharp.Import.Keras",
+            "DeepSharp.Import.Onnx", "DeepSharp.Import.PyTorch", "DeepSharp.Learners.Networks", "DeepSharp.Pipelines",
+            "DeepSharp.Pipelines.DataFrame", "DeepSharp.Pipelines.Excel", "DeepSharp.Pipelines.Indicators",
+            "DeepSharp.Pipelines.Json", "DeepSharp.Pipelines.Parquet", "DeepSharp.Verso.Api",
             "DeepSharp.Verso.Notebooks", "DeepSharp.Verso.Serve",
         ];
         var props = Read("Directory.Build.props");
-        var listed = Regex.Match(props, @"<PublishedAt040>(?<list>[^<]*)</PublishedAt040>").Groups["list"].Value
+        var listed = Regex.Match(props, @"<PublishedBefore>(?<list>[^<]*)</PublishedBefore>").Groups["list"].Value
             .Split(';', StringSplitOptions.RemoveEmptyEntries);
+        var packable = PackableProjects().Select(project => Path.GetFileNameWithoutExtension(project)).ToArray();
 
         Assert.Contains("<EnablePackageValidation>true</EnablePackageValidation>", props, StringComparison.Ordinal);
         Assert.Contains("PackageValidationBaselineVersion", props, StringComparison.Ordinal);
-        Assert.Equal(existedAtTheLastRelease.Order(StringComparer.Ordinal), listed.Order(StringComparer.Ordinal));
+        Assert.Equal(publishedBefore.Order(StringComparer.Ordinal), listed.Order(StringComparer.Ordinal));
 
-        var newThisRelease = PackableProjects().Select(project => Path.GetFileNameWithoutExtension(project)).Except(existedAtTheLastRelease).ToArray();
-
-        Assert.NotEmpty(newThisRelease);
-        Assert.All(newThisRelease, package => Assert.DoesNotContain($";{package};", props, StringComparison.Ordinal));
+        // A package new this release is in neither: it is packed, and nothing is asked of a baseline it never had.
+        Assert.All(packable.Except(publishedBefore), package => Assert.DoesNotContain($";{package};", props, StringComparison.Ordinal));
+        Assert.Equal(packable.Order(StringComparer.Ordinal), publishedBefore.Order(StringComparer.Ordinal));
     }
 
     [Fact]

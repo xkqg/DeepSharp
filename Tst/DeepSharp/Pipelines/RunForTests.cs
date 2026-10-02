@@ -216,6 +216,27 @@ public class RunForTests
     }
 
     // What a run for a learner leaves out of the Titanic passengers, their age filled, with these steps below.
+    [Fact]
+    public void ALearnerNamedInTheDeclaration_SaysWhatTheRunIsMadeFor_AndLeavesTheSameStepsOut()
+    {
+        // The learner the pipeline names says what it needs, so the run leaves out exactly what a run asked for that need
+        // leaves out. A step that names a learner says which columns it leaves behind, as every step that changes none
+        // does; one that said nothing of them would make every scale look read from below and nothing could be left out.
+        var declared = LeftOut(fitting => fitting.Normalise("fare", Scale.MidRange).Target("survived").Add(new LearnStumpStep(1)), Needs.NoScale);
+
+        Assert.Equal([4], declared);
+        Assert.Equal([4], LeftOut(fitting => fitting.Normalise("fare", Scale.MidRange).Target("survived"), Needs.NoScale));
+    }
+
+    [Fact]
+    public void AStepThatNamesALearner_AndSaysNothingOfItsColumns_LeavesNothingToLeaveOut()
+    {
+        // The reason the learner step describes its columns: a step below that says nothing of them may read any of them,
+        // so every scale above it is taken for every learner. Pinned here because the cost is silent — the run is correct
+        // and simply does more than it had to.
+        Assert.Empty(LeftOut(fitting => fitting.Normalise("fare", Scale.MidRange).Target("survived").Add(new LearnQuietlyStep()), Needs.NoScale));
+    }
+
     private static IReadOnlyList<int> LeftOut(Func<FittingBuilder, FittingBuilder> below, Needs needs) =>
         below(Pdd.Create()
                 .ReadCsv(Repository.Data("titanic.csv"))

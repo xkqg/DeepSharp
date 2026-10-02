@@ -243,6 +243,85 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
         column[parameter.Name.Key]!.GetValue<string>();
 
     // Sets a key when the field is the key's own; a value of nothing leaves the key out.
+    // A part's name, or one of its settings, written back into the step's own JSON. Changing the name writes the part
+    // that name starts with, settings and all, because another name takes other settings. Nothing here knows which step
+    // the parts belong to: the place in the list and the setting's key are the whole of what a field says.
+    public bool Visit(PartsParameter parameter)
+    {
+        if (FormVocabulary.IsPlace(field, parameter.Key, out var at) && Part(parameter, at) is { } part)
+        {
+            var named = parameter.Kinds.FirstOrDefault(kind => kind.Name == Words());
+
+            if (named is null)
+            {
+                return false;
+            }
+
+            Write(parameter, at, Started(named));
+
+            return true;
+        }
+
+        if (!FormVocabulary.IsSetting(field, parameter.Key, out var place, out var setting) || Part(parameter, place) is not { } holding)
+        {
+            return false;
+        }
+
+        var kind = parameter.Kinds.FirstOrDefault(each => each.Name == holding["kind"]?.GetValue<string>());
+
+        if (kind?.Setting(setting) is null || holding[setting] is not JsonValue held)
+        {
+            return false;
+        }
+
+        // A setting holds one value, and the kind it holds is what the part says it is: the new value is written as
+        // that kind, so a part comes back out of the form as the step's own reader takes it.
+        holding[setting] = held.GetValueKind() switch
+        {
+            JsonValueKind.Number => Number(),
+            JsonValueKind.True or JsonValueKind.False => Switch(),
+            _ => Words(),
+        };
+
+        return true;
+    }
+
+    // The part at a place, as the step's JSON holds it; nothing when the step holds no such part.
+    private JsonObject? Part(PartsParameter parameter, int place) =>
+        parameter.Single
+            ? place == 0 ? _step[parameter.Key] as JsonObject : null
+            : _step[parameter.Key] is JsonArray parts && place >= 0 && place < parts.Count ? parts[place] as JsonObject : null;
+
+    private void Write(PartsParameter parameter, int place, JsonObject part)
+    {
+        if (parameter.Single)
+        {
+            _step[parameter.Key] = part;
+        }
+        else
+        {
+            _step[parameter.Key]!.AsArray()[place] = part;
+        }
+    }
+
+    // A part of this name as a new one starts: every setting at the value its own parameter offers.
+    private static JsonObject Started(PartKind kind)
+    {
+        var part = new JsonObject { ["kind"] = kind.Name };
+
+        foreach (var setting in kind.Declared().Settings)
+        {
+            part[setting.Key] = setting.Value.Holds switch
+            {
+                PartValues.Number => JsonValue.Create(setting.Value.Number),
+                PartValues.YesOrNo => JsonValue.Create(setting.Value.YesOrNo),
+                _ => JsonValue.Create(setting.Value.Text),
+            };
+        }
+
+        return part;
+    }
+
     private bool Set(string key, Func<JsonNode?> written)
     {
         if (field != key)

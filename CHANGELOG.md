@@ -3,6 +3,79 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0]
+
+Where the model moves into the pipeline. Pipeline-driven design is the whole course from raw data to a validated
+model, declared in advance and replayed — and until now the last step of that course was written by hand after the
+declaration ended. A pipeline now names the network it is prepared for, in the words TensorFlow and Keras use or the
+words PyTorch uses, and running it trains exactly that network: the layers, what moves them, what judges them, when
+the run stops and the engine it runs on are all in the file, so the file says what was trained behind these steps and
+training it again from the file gives the same network, number for number.
+
+### Upgrading from 0.5
+
+- **The pipeline file is at its fifth version.** A file DeepSharp writes now names version 5, and an older DeepSharp
+  refuses it whole rather than reading a word it does not know. Every file 0.5.0 wrote is read as it always was, and a
+  network's file is still held to the pipeline it carries by the digest of its text, which leaves the version out — so
+  a model trained behind a 0.4.0 or 0.5.0 pipeline loads and serves unchanged.
+
+- **A catalog that reads a file naming a learner needs the package that brings the verb.** `learn.network` is brought
+  by `DeepSharp.Learners.Networks`, as `read.parquet` is brought by `DeepSharp.Pipelines.Parquet`: call
+  `StepCatalog.BuiltIn().WithNetworks()`, or let a host find it through `IStepContribution`. A catalog that was never
+  taught it says which package brings it, rather than that the verb is misspelled. The notebook's own catalog knows
+  it.
+
+- **`IStepParameterVisitor<T>` has a fifteenth member.** A form, a schema or a reference page of your own that
+  implements the interface gains `Visit(PartsParameter)`, the kind that holds the parts of a model. Nothing else about
+  the interface changed, and no other kind moved.
+
+### Added
+
+- **A pipeline names the network it prepares its rows for: `.WithTorch(…)` and `.WithTensorflow(…)`.** Below the
+  output, the chain says which network these rows train — `.Dense(16).Relu().Dense(1).Adam(0.01).BinaryCrossEntropy()
+  .Run(seed, epochs).StoppingAfter(patience: 10)` — and the whole thing is one declaration. Both doors write the same
+  step and lower onto the same model; where a caller leaves a number unsaid, each door writes the number its own
+  library leaves there, so the file says which run was asked for rather than which library asked for it. The words
+  TensorFlow and Keras use run on libtorch and on the light engine alike: a vocabulary is a way of speaking, never an
+  engine.
+
+- **`pipeline.Train()` trains what the declaration names.** It runs the pipeline for the learner it names — leaving
+  out the steps that learner does without, as `RunFor` always has — trains the network, measures it as the pipeline's
+  report declares, and hands back the same `TrainedNetwork` a network written as code gives. `prepared.Train()` does
+  it for a run already in hand. A pipeline that names no learner says so rather than guessing one.
+
+- **The engine is named in the declaration, and the application says what that name stands for.** A step names an
+  engine — `light` unless said — and `new Engines().Use("torch", TorchBackend.OnCpu())` hands that name an engine
+  before the run. So one declared model runs on the light engine on a machine with nothing installed and on libtorch
+  where libtorch is there, without a word of the file changing; a name nothing was given is refused by name, with what
+  to do.
+
+- **`learn.network`, the verb a pipeline file writes it as.** Its layers are written as a list of named parts, each
+  with the settings that name takes, in the same words a saved network uses — `dense` with its `units`, `adam` with
+  its `rate`, `binaryCrossEntropy` — so a declaration and the network it trains speak one language. Every setting a
+  name takes is written down: a file that leaves one out is refused where it is read, rather than filled in behind the
+  writer's back.
+
+- **A declaration may name the learner it is written for: `INamesTheLearner`.** A step that implements it changes no
+  column and runs nothing — the package that brings the verb trains once the pipeline has run — and says one thing the
+  pipeline itself uses: what that learner needs of the features it is handed. A declaration has at most one, below the
+  output it learns to answer, and `PipelineDeclaration.Learner` is where every part that needs it asks.
+
+- **`PartsParameter`, the kind of parameter that holds the parts of a model.** A step says which names a part may give
+  and what each takes, and the file, the JSON schema, the reference page and a notebook's form all describe those
+  parts through the kinds every other parameter is described through. It is the first parameter whose value is not one
+  value, and it is written as a list, or as itself where a step takes one.
+
+- **The notebook holds a learner block.** Its catalog knows `learn.network`, its form draws a part's name and the
+  settings that name takes, and typing a part offers the names there are. The sample notebook now declares the network
+  the passenger list trains, and its C# cell trains that one with `Train()` rather than writing a network of its own.
+
+### Changed
+
+- **The networks sample declares the passenger list's network in the chain.** Its other two walked networks — a price
+  five days on, a day's bikes hour by hour — are still written as code, so both doors stand side by side in one
+  sample.
+
 ## [0.5.0]
 
 Where it runs on libtorch and reads what others trained, and where every gap 0.4.0 left between a trained network and a

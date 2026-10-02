@@ -68,6 +68,9 @@ internal sealed class StepWords(IReadOnlyList<KnownColumn> scope, IReadOnlyList<
 
     public Words Visit(ColumnDeclarationsParameter parameter) => Words.None;
 
+    // The names a part may give, offered as the words they are written as, so typing a layer offers the layers there are.
+    public Words Visit(PartsParameter parameter) => new(parameter.Names, [.. parameter.Names.Select(Quote)]);
+
     private IReadOnlyList<string> Named(IReadOnlyList<ColumnKind> accepts) => scope.NamesOf(accepts);
 
     private static string Quote(string word) => $"\"{word}\"";

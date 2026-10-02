@@ -660,7 +660,8 @@ to an established .NET trainer should never drag a tensor engine along, and a ne
 somebody else prepared should not drag a CSV reader.
 
 The contract between them lives on the pipeline side: prepared splits, the declared evidence, what a learner
-says it needs, and which steps a run left out for it, and what a model says of the rows it predicted — which of them it learned nothing about, for the
+says it needs, the step a declaration names its learner in — which carries that need and nothing else the pipeline
+reads — and which steps a run left out for it, and what a model says of the rows it predicted — which of them it learned nothing about, for the
 report to count — together with the text those predictions cross in, to be measured again wherever the same pipeline
 runs. Everything else about a learner is its own package's business.
 
@@ -2391,6 +2392,55 @@ the digest two pipelines are compared by, and the window of versions they may be
 wherever two pipelines meet — a network's file and the pipeline it carries, a checkpoint and the one it goes on behind,
 and predictions handed back as text and the run that measures them — and a learner's package reaches it as a public type,
 since packages are taken at versions of their own and nothing internal to one can be counted on by another.
+
+### The learner is declared with the pipeline, and the pipeline still knows no learner
+
+Pipeline-driven design is the course from raw data to a validated model, declared in advance as one replayable
+artefact. For four releases the last stretch of that course was not in the artefact: the pipeline was declared, and
+then somebody wrote a network beside it and fitted it by hand. Two runs of one declaration could train different
+models, and the file said nothing about which. A declaration now names the learner it is written for, and the file
+says what was trained behind those steps.
+
+What makes that possible without breaking the first package boundary is that the pipeline names a learner without
+knowing one. `INamesTheLearner` is a step that acts on nothing — like an output that only names the answer and a
+report that only names its measures — and it says exactly one thing the pipeline itself uses: `Needs`, which the
+pipeline already had. Everything else about the learner is written in the step's own parameters, and only the package
+that brings the verb reads them. So `DeepSharp.Pipelines` still references no learner, no engine and no network, and
+the rule runs one way as it always has.
+
+The step is the last of the declaration's four no-act shapes, and it is held like the others: at most one, below the
+output it learns to answer, and it says which columns it leaves behind. That last part is not decoration. A run for a
+learner leaves out the steps that learner does without, and it may only leave a step out when nothing below reads what
+that step touched; a step that says nothing of its columns may read any of them, so a learner step that kept quiet
+would silently make every scale look read from below and nothing could be left out. The run would still be correct and
+would simply do more than it had to — which is the kind of cost that never shows up as a failure.
+
+**The model is text in the same words the saved network uses.** A declared network's layers are a list of named parts,
+each with the settings that name takes: `dense` with its `units`, `adam` with its `rate`, `binaryCrossEntropy` with
+nothing. Those are the names a network's own file already writes, so a declaration and the network it trains speak one
+language and nothing is translated between them. The parts are carried by one kind of parameter, `PartsParameter`,
+which takes the names it accepts as data from the step that uses it — the pipeline validates a model it cannot
+understand, and the vocabulary stays in the package that owns it.
+
+Every setting a name takes is written down, and a file that leaves one out is refused where it is read. A declaration
+is replayed from what it says; a number filled in behind the writer's back would make two runs of one file differ as
+soon as a default moved. That is also why the file names no vocabulary: TensorFlow's words and PyTorch's lower onto
+one model, and where a caller leaves a number unsaid each door writes the number its own library leaves there. Keras's
+Adam and PyTorch's differ in their epsilon, so the two doors write different files — which is the honest outcome,
+because they are different runs. A `vocabulary` key would say which library was used to type the model, and nothing
+would read it.
+
+**The engine is a name, and the application says what it stands for.** A declaration that carried an engine object
+could not be a file; one that carried a package name would tie a model to a machine. So the step names an engine —
+`light` unless said — and an application hands that name an engine before the run, through `Engines.Use`. The same
+declared model trains on the light engine where nothing is installed and on libtorch where libtorch is there, and a
+name nothing was given is refused by name rather than falling back to something that would quietly give other numbers.
+
+**Training is the learner package's, not the pipeline's.** `Run()` answers what it always answered: the prepared rows.
+`pipeline.Train()` lives in `DeepSharp.Learners.Networks`, runs the pipeline for the learner the declaration names,
+and trains it — the same `TrainedNetwork` the hand-written door gives, number for number, which a test holds both
+doors to. The pipeline file gains a step and nothing else: a model saved by an earlier release still loads, because a
+network is held to its pipeline by the digest of the text that pipeline carries, and that text is kept verbatim.
 
 ### Charts come from the training loop, not from the caller
 

@@ -174,6 +174,7 @@ public class StepParameterContractTests
             ["target.distribution"] = 2,
             ["target.labels"] = 2,
             ["target.ahead"] = 2,
+            ["learn.network"] = 5,
         };
 
         Assert.All(since, each => Assert.Equal(newer.GetValueOrDefault(each.Key, 1), each.Value));
@@ -329,6 +330,29 @@ public class StepParameterContractTests
                 new JsonObject { ["name"] = "gone", ["kind"] = "number", ["optional"] = false, ["excluded"] = true })),
             .. One(parameter.Key, new JsonArray(new JsonObject { ["name"] = "other", ["kind"] = "category", ["optional"] = false, ["was"] = "integer" })),
         ];
+
+        // Every name a part may give, each with the settings that name takes at a value other than the one it starts at.
+        public IEnumerable<Dictionary<string, JsonNode?>> Visit(PartsParameter parameter) =>
+        [
+            .. parameter.Kinds.Select(kind => Other(parameter, kind)),
+        ];
+
+        private static Dictionary<string, JsonNode?> Other(PartsParameter parameter, PartKind kind)
+        {
+            var part = new JsonObject { ["kind"] = kind.Name };
+
+            foreach (var setting in kind.Declared().Settings)
+            {
+                part[setting.Key] = setting.Value.Holds switch
+                {
+                    PartValues.Number => JsonValue.Create(setting.Value.Number + 1),
+                    PartValues.YesOrNo => JsonValue.Create(!setting.Value.YesOrNo),
+                    _ => JsonValue.Create(setting.Value.Text + " again"),
+                };
+            }
+
+            return new() { [parameter.Key] = parameter.Single ? part : new JsonArray(part) };
+        }
     }
 
     [Fact]

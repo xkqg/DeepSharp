@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 4
+      "maximum": 5
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -51,6 +51,7 @@
             "feature.timeParts",
             "fill.missing",
             "fill.nan",
+            "learn.network",
             "maths",
             "normalise",
             "normalise.row",
@@ -298,6 +299,21 @@
           },
           "then": {
             "$ref": "#/$defs/fill.nan"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "learn.network"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/learn.network"
           }
         },
         {
@@ -1437,6 +1453,482 @@
       ],
       "additionalProperties": false
     },
+    "learn.network": {
+      "description": "Names the network this pipeline is declared for: its layers, what moves them, what judges them, when the run stops and the engine it runs on.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "learn.network"
+        },
+        "layers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "oneOf": [
+              {
+                "description": "A layer that answers with as many numbers as it is given, each a weighted sum of the ones below it.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "dense"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Dd][Ee][Nn][Ss][Ee])$"
+                      }
+                    ]
+                  },
+                  "units": {
+                    "description": "How many numbers the layer answers with.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "kind",
+                  "units"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Leaves what is below nought at nought.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "relu"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Rr][Ee][Ll][Uu])$"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Squashes every number between minus one and one.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "tanh"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Tt][Aa][Nn][Hh])$"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Squashes every number between nought and one.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "sigmoid"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ss][Ii][Gg][Mm][Oo][Ii][Dd])$"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Leaves a share of the numbers out at every pass while training, and none while serving.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "dropout"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Dd][Rr][Oo][Pp][Oo][Uu][Tt])$"
+                      }
+                    ]
+                  },
+                  "rate": {
+                    "description": "The share of numbers left out at every pass while training, between nothing and one.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rate"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Brings every number to the mean and spread of the rows it was trained on.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "batchNorm"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Bb][Aa][Tt][Cc][Hh][Nn][Oo][Rr][Mm])$"
+                      }
+                    ]
+                  },
+                  "momentum": {
+                    "description": "How much of what was measured before carries on.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  },
+                  "epsilon": {
+                    "description": "The small number added so nothing is divided by nought.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  }
+                },
+                "required": [
+                  "kind",
+                  "momentum",
+                  "epsilon"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Brings every number of one row to that row's own mean and spread.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "layerNorm"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ll][Aa][Yy][Ee][Rr][Nn][Oo][Rr][Mm])$"
+                      }
+                    ]
+                  },
+                  "epsilon": {
+                    "description": "The small number added so nothing is divided by nought.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  }
+                },
+                "required": [
+                  "kind",
+                  "epsilon"
+                ],
+                "additionalProperties": false
+              }
+            ]
+          },
+          "description": "The layers, from the one the prepared rows reach first."
+        },
+        "optimizer": {
+          "type": "object",
+          "oneOf": [
+            {
+              "description": "Moves every number against its gradient, carrying some of the last step's velocity.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "sgd"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Ss][Gg][Dd])$"
+                    }
+                  ]
+                },
+                "rate": {
+                  "description": "How far one step moves the numbers.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "momentum": {
+                  "description": "How much of the last step's velocity carries into the next.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "rate",
+                "momentum"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "Moves every number by a running mean of its gradients over the root of a running mean of their squares.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "adam"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Aa][Dd][Aa][Mm])$"
+                    }
+                  ]
+                },
+                "rate": {
+                  "description": "How far one step moves the numbers.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "firstMoment": {
+                  "description": "How much of the running mean of the gradients carries on.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "secondMoment": {
+                  "description": "How much of the running mean of their squares carries on.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "epsilon": {
+                  "description": "The small number added so nothing is divided by nought.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "rate",
+                "firstMoment",
+                "secondMoment",
+                "epsilon"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "What moves the network's numbers at every step."
+        },
+        "loss": {
+          "type": "object",
+          "oneOf": [
+            {
+              "description": "The mean of the squared differences: an answer that is an amount.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "meanSquaredError"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Mm][Ee][Aa][Nn][Ss][Qq][Uu][Aa][Rr][Ee][Dd][Ee][Rr][Rr][Oo][Rr])$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The loss of one answer among several classes, read through a softmax.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "crossEntropy"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Cc][Rr][Oo][Ss][Ss][Ee][Nn][Tt][Rr][Oo][Pp][Yy])$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The loss of an answer that is a chance, read through a sigmoid.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "binaryCrossEntropy"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Bb][Ii][Nn][Aa][Rr][Yy][Cc][Rr][Oo][Ss][Ss][Ee][Nn][Tt][Rr][Oo][Pp][Yy])$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "What the network's answers are judged by while it trains."
+        },
+        "stopping": {
+          "type": "object",
+          "oneOf": [
+            {
+              "description": "The run goes on to its last pass.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "never"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Nn][Ee][Vv][Ee][Rr])$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The run stops once the validation loss has not fallen for as many passes as it waits.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "patience"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Pp][Aa][Tt][Ii][Ee][Nn][Cc][Ee])$"
+                    }
+                  ]
+                },
+                "patience": {
+                  "description": "How many passes without a better one the run waits before it stops.",
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "least": {
+                  "description": "How far the validation loss has to fall below the best for a pass to count as better.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "best": {
+                  "description": "Whether the run ends holding the numbers of its best pass rather than its last.",
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "kind",
+                "patience",
+                "least",
+                "best"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "When the run stops: at its last pass, or once the validation loss stops falling."
+        },
+        "engine": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The name of the engine the run's arithmetic happens on; which engine it stands for — and which device it works on — is the application's to say."
+        },
+        "seed": {
+          "description": "The number every random draw of the run is worked out from, so the same declaration gives the same run.",
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "epochs": {
+          "description": "How many times the run goes over the training rows, at most.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "batch": {
+          "description": "How many rows one step of the run is worked out from.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "layers",
+        "optimizer",
+        "loss",
+        "stopping",
+        "engine",
+        "seed",
+        "epochs",
+        "batch"
+      ],
+      "additionalProperties": false
+    },
     "maths": {
       "description": "Pulls a column into another shape by arithmetic that learns nothing: a logarithm, a root, a reciprocal.",
       "type": "object",
@@ -2078,6 +2570,7 @@
                       "evidence.correlation",
                       "evidence.profile",
                       "evidence.report",
+                      "learn.network",
                       "order.by",
                       "split.atRandom",
                       "split.byTime",
@@ -2110,7 +2603,34 @@
                 "step": {
                   "not": {
                     "enum": [
-                      "evidence.report"
+                      "evidence.report",
+                      "learn.network"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 5
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "declaration": {
+            "items": {
+              "properties": {
+                "step": {
+                  "not": {
+                    "enum": [
+                      "learn.network"
                     ]
                   }
                 }

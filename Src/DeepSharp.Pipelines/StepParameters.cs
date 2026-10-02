@@ -219,6 +219,11 @@ public interface IStepParameterVisitor<out TResult>
     /// <param name="parameter">The parameter.</param>
     /// <returns>What the visitor builds for it.</returns>
     TResult Visit(ColumnDeclarationsParameter parameter);
+
+    /// <summary>The parts of a model a step declares by name: the layers, the optimizer, the loss.</summary>
+    /// <param name="parameter">The parameter.</param>
+    /// <returns>What the visitor builds for it.</returns>
+    TResult Visit(PartsParameter parameter);
 }
 
 /// <summary>

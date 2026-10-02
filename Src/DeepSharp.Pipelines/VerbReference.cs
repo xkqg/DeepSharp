@@ -167,6 +167,18 @@ internal static class VerbReference
                                + "as a gap"),
         ];
 
+        public IReadOnlyList<Row> Visit(PartsParameter parameter) =>
+        [
+            new(parameter.Key, (parameter.Single ? "a part, written as a name and its settings: " : "a list of parts, each a name and its settings: ")
+                               + Joined([.. parameter.Kinds.Select(Named)])),
+        ];
+
+        // One name a part may give, with the settings it takes, as a reader of the page needs them.
+        private static string Named(PartKind kind) =>
+            kind.Settings.Count == 0
+                ? $"`{kind.Name}`, which takes nothing"
+                : $"`{kind.Name}`, which takes {Joined([.. kind.Settings.Select(setting => $"`{setting.Key}`")])}";
+
         private static string Choices(IReadOnlyList<string> words) => Joined([.. words.Select(word => $"`{word}`")]);
 
         private static string Kinds(IReadOnlyList<ColumnKind> kinds) =>

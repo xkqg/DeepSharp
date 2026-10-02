@@ -203,7 +203,8 @@ public class DeclarationRulesTests
         {
             var acts = step.GetInterfaces().Count(face => Acts(face) && !face.GetInterfaces().Any(Acts));
 
-            var onlyNames = (typeof(INamesTheAnswer).IsAssignableFrom(step) || typeof(INamesTheMeasures).IsAssignableFrom(step))
+            var onlyNames = (typeof(INamesTheAnswer).IsAssignableFrom(step) || typeof(INamesTheMeasures).IsAssignableFrom(step)
+                             || typeof(INamesTheLearner).IsAssignableFrom(step))
                             && !typeof(IActsInAWalk).IsAssignableFrom(step);
 
             Assert.True(onlyNames ? acts == 0 : acts == 1, $"{step.Name} does {acts} things.");
@@ -444,4 +445,54 @@ public class DeclarationRulesTests
 
         public static ClaimStep ReadFrom(JsonElement element) => new();
     }
+    [Fact]
+    public void ADeclarationWhoseStepNamesItsLearner_IsRun_AndSaysWhichLearnerItNames()
+    {
+        // A learner named in the declaration changes no row: it says what the pipeline is declared for, as an output says
+        // what it answers and a report what those answers are measured by. The package that brings the verb trains once the
+        // run is done, so the step does nothing the walk acts on.
+        var declaration = new PipelineDeclaration(
+            [new ReadCsvStep("a.csv"), Schema("fare", "survived"), new SplitAtRandomStep(Shares, 1), new TargetStep("survived"), new LearnStumpStep(2)]);
+
+        Assert.Equal(new LearnStumpStep(2), declaration.Learner);
+        Assert.Equal(Needs.NoScale, declaration.Learner!.Needs);
+    }
+
+    [Fact]
+    public void ADeclarationThatNamesNoLearner_SaysSo()
+    {
+        var declaration = new PipelineDeclaration([new ReadCsvStep("a.csv"), Schema("fare", "survived"), new SplitAtRandomStep(Shares, 1), new TargetStep("survived")]);
+
+        Assert.Null(declaration.Learner);
+    }
+
+    [Fact]
+    public void ADeclarationWithTwoLearners_IsRefused()
+    {
+        var refused = Refused(
+            new ReadCsvStep("a.csv"), Schema("fare", "survived"), new SplitAtRandomStep(Shares, 1), new TargetStep("survived"),
+            new LearnStumpStep(1), new LearnStumpStep(2));
+
+        Assert.Contains(refused.Faults, fault => fault.At == 5 && fault.Verb == "learn.stump");
+        Assert.Contains("one learner", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ALearnerAboveTheOutputItLearns_IsRefused()
+    {
+        var refused = Refused(
+            new ReadCsvStep("a.csv"), Schema("fare", "survived"), new SplitAtRandomStep(Shares, 1), new LearnStumpStep(1), new TargetStep("survived"));
+
+        Assert.Contains(refused.Faults, fault => fault.At == 3 && fault.Verb == "learn.stump");
+    }
+
+    [Fact]
+    public void ALearnerInAPipelineThatNamesNoAnswer_IsRefused()
+    {
+        var refused = Refused(new ReadCsvStep("a.csv"), Schema("fare"), new SplitAtRandomStep(Shares, 1), new LearnStumpStep(1));
+
+        Assert.Contains(refused.Faults, fault => fault.At == 3 && fault.Verb == "learn.stump");
+        Assert.Contains("names no answer", refused.Message, StringComparison.Ordinal);
+    }
+
 }

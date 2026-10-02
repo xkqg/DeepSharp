@@ -400,6 +400,50 @@ internal static class PipelineFileSchema
             ];
         }
 
+        public IReadOnlyList<PropertySchema> Visit(PartsParameter parameter)
+        {
+            var part = new JsonObject
+            {
+                ["type"] = "object",
+                ["oneOf"] = new JsonArray([.. parameter.Kinds.Select(OfTheName)]),
+            };
+
+            return
+            [
+                new(parameter.Key, parameter.Single
+                    ? Described(part, parameter.Description)
+                    : Described(
+                        new JsonObject { ["type"] = "array", ["minItems"] = 1, ["items"] = part },
+                        parameter.Description)),
+            ];
+        }
+
+        // One name a part may give: its own word under 'kind', every setting it takes, and nothing else.
+        private JsonObject OfTheName(PartKind kind)
+        {
+            var settings = new JsonObject { ["kind"] = AWord([kind.Name]) };
+
+            foreach (var property in kind.Settings.SelectMany(setting => setting.Accept(this)))
+            {
+                settings[property.Key] = property.Schema;
+            }
+
+            return new JsonObject
+            {
+                ["description"] = kind.Purpose,
+                ["properties"] = settings,
+                ["required"] = new JsonArray([.. settings.Select(property => (JsonNode)property.Key)]),
+                ["additionalProperties"] = false,
+            };
+        }
+
+        private static JsonObject Described(JsonObject schema, string description)
+        {
+            schema["description"] = description;
+
+            return schema;
+        }
+
         // A part only one kind of column is written with, refused on a column of any other kind, as the reader refuses it.
         private static JsonNode OnlyOn(OneOfParameter<ColumnKind> kind, ColumnPart part) => new JsonObject
         {

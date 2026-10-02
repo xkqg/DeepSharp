@@ -4,6 +4,7 @@
 using System.Globalization;
 using System.Text.Json;
 using DeepSharp.Verso.Notebooks;
+using DeepSharp.Learners.Networks;
 using DeepSharp.Pipelines;
 using Verso.Abstractions;
 
@@ -998,4 +999,58 @@ public sealed class FormTests : IDisposable
         Assert.DoesNotContain("keep", standing.Source, StringComparison.Ordinal);
         Assert.DoesNotContain("keep", declare.Source, StringComparison.Ordinal);
     }
+    [Fact]
+    public async Task ABlockOfParts_DrawsEachPartsNameAndItsSettings_AndTakesBackWhatIsChangedThere()
+    {
+        // A step that declares parts — a network's layers, what moves them — is drawn part by part: the name of each as
+        // a pick among the names that step knows, and a field for every setting that name takes. Nothing here knows
+        // which step it is: the place in the list and the setting's key are the whole of what a field says.
+        await using var notebook = await NotebookAsync();
+        var cell = notebook.AddBlock(NotebookVerbs.Catalog().ReadStep(NotebookVerbs.Catalog().Describe("learn.network").Template).AsBlockText());
+        var section = await SectionAsync(notebook, cell);
+
+        Assert.Equal(PropertyFieldType.Select, Field(section, "layers/0").FieldType);
+        Assert.Contains(Field(section, "layers/0").Options!, option => option.Value == "dropout");
+        Assert.Equal("16", Field(section, "layers/0/units").CurrentValue);
+
+        // A setting written back as a number, a word and whether it is so, each as the part holds it.
+        await ChangeAsync(notebook, cell, "layers/0/units", "8");
+        await ChangeAsync(notebook, cell, "engine", "ours");
+        await ChangeAsync(notebook, cell, "stopping/0", "patience");
+        await ChangeAsync(notebook, cell, "stopping/0/best", "false");
+
+        var step = Assert.IsType<LearnNetworkStep>(Step(cell));
+
+        Assert.Equal(8, step.Layers[0].Whole("units"));
+        Assert.Equal("ours", step.Engine);
+        Assert.Equal("patience", step.Stopping.Kind);
+        Assert.False(step.Stopping.YesOrNo("best"));
+
+        // The name of a part changes what it takes: the settings that name takes come with it.
+        await ChangeAsync(notebook, cell, "layers/0", "dropout");
+
+        Assert.Equal("dropout", Assert.IsType<LearnNetworkStep>(Step(cell)).Layers[0].Kind);
+        Assert.Equal(0.2, Assert.IsType<LearnNetworkStep>(Step(cell)).Layers[0].Number("rate"));
+    }
+
+    [Fact]
+    public async Task AFieldOfPartsThatNamesNoPart_IsClaimedByNothing()
+    {
+        await using var notebook = await NotebookAsync();
+        var cell = notebook.AddBlock(NotebookVerbs.Catalog().ReadStep(NotebookVerbs.Catalog().Describe("learn.network").Template).AsBlockText());
+        var step = Step(cell);
+
+        Assert.False(Claims(step, "layers/9"));
+        Assert.False(Claims(step, "layers/9/units"));
+        Assert.False(Claims(step, "layers/0/elsewhere"));
+        Assert.False(Claims(step, "layers/nowhere"));
+        Assert.False(Claims(step, "stopping/1"));
+        Assert.False(Claims(step, "layers", "transformer"));
+    }
+
+    // Whether some kind of the step claims a field, as the form asks before it writes a change.
+    private static bool Claims(IPipelineStep step, string field, string value = "1") =>
+        NotebookVerbs.Catalog().Describe(step.Verb).Parameters.Any(parameter =>
+            parameter.Accept(new FormEdit(field, FieldValue.Of(value), FormScope.Unknown, step)));
+
 }

@@ -161,6 +161,45 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
         return fields;
     }
 
+    // The parts of a model, one group of fields each: which name the part gives, and a field for every setting that
+    // name takes, drawn by the setting's own kind. The fields are named by the part's place, so a block of any step
+    // that declares parts is drawn the same way and nothing here knows which step it is.
+    public IEnumerable<PropertyField> Visit(PartsParameter parameter)
+    {
+        var declared = parameter.Read(step);
+        var written = step.GetProperty(parameter.Key);
+        var fields = new List<PropertyField>();
+
+        for (var place = 0; place < declared.Count; place++)
+        {
+            var part = declared[place];
+            var kind = parameter.Kinds.First(each => each.Name == part.Kind);
+            var inside = parameter.Single ? written : written[place];
+
+            fields.Add(new Field(
+                FormVocabulary.Place(parameter.Key, place),
+                parameter.Single ? parameter.Key : $"{parameter.Key} {place + 1}",
+                kind.Purpose).Choose(part.Kind, parameter.Names));
+
+            foreach (var setting in kind.Settings)
+            {
+                foreach (var field in setting.Accept(new FormFields(inside, scope)))
+                {
+                    fields.Add(new PropertyField(
+                        FormVocabulary.Setting(parameter.Key, place, field.Name),
+                        parameter.Single ? field.DisplayName : $"{field.DisplayName} {place + 1}",
+                        field.FieldType,
+                        field.CurrentValue,
+                        field.Description,
+                        field.Options,
+                        field.IsReadOnly));
+                }
+            }
+        }
+
+        return fields;
+    }
+
     private string Written(string key) => step.GetProperty(key).GetRawText();
 
     private string Written(string key, string inner) => step.GetProperty(key).GetProperty(inner).GetRawText();

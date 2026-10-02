@@ -12,7 +12,7 @@
 
     <!-- One number for every packable project. It is handed out when the work starts, never invented here,
          and the changelog heading carries the same one. -->
-    <Version>0.5.0</Version>
+    <Version>0.6.0</Version>
 
     <!-- Which frameworks a project targets is the project's own business, said in the project itself. The
          packages and the two suites are built for .NET 8 and .NET 10, because Verso's hosts run on either;
@@ -41,15 +41,17 @@
     <EnablePackageValidation>true</EnablePackageValidation>
   </PropertyGroup>
 
-  <!-- The packages nuget.org already carries a 0.4.0 build of: pack compares this build's public surface against that
-       one, so a change nobody meant to make breaks the build instead of somebody's upgrade. A package new in this
-       release has no earlier build to compare against yet, so it takes the two checks above alone. -->
+  <!-- The packages nuget.org already carries a build of: pack compares this build's public surface against the last
+       release, so a change nobody meant to make breaks the build instead of somebody's upgrade. A package new in this
+       release has no earlier build to compare against yet, so it takes the two checks above alone. A break that is
+       meant is written into a suppression file beside the project, and said out loud in the changelog's upgrading
+       notes. -->
   <PropertyGroup>
-    <PublishedAt040>;DeepSharp;DeepSharp.Charts;DeepSharp.Learners.Networks;DeepSharp.Pipelines;DeepSharp.Pipelines.DataFrame;DeepSharp.Pipelines.Indicators;DeepSharp.Verso.Api;DeepSharp.Verso.Notebooks;DeepSharp.Verso.Serve;</PublishedAt040>
+    <PublishedBefore>;DeepSharp;DeepSharp.Backends.TorchSharp;DeepSharp.Charts;DeepSharp.Import.Keras;DeepSharp.Import.Onnx;DeepSharp.Import.PyTorch;DeepSharp.Learners.Networks;DeepSharp.Pipelines;DeepSharp.Pipelines.DataFrame;DeepSharp.Pipelines.Excel;DeepSharp.Pipelines.Indicators;DeepSharp.Pipelines.Json;DeepSharp.Pipelines.Parquet;DeepSharp.Verso.Api;DeepSharp.Verso.Notebooks;DeepSharp.Verso.Serve;</PublishedBefore>
   </PropertyGroup>
 
-  <PropertyGroup Condition="$(PublishedAt040.Contains(';$(MSBuildProjectName);'))">
-    <PackageValidationBaselineVersion>0.4.0</PackageValidationBaselineVersion>
+  <PropertyGroup Condition="$(PublishedBefore.Contains(';$(MSBuildProjectName);'))">
+    <PackageValidationBaselineVersion>0.5.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <ItemGroup>

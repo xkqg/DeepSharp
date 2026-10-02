@@ -466,12 +466,13 @@ public class ParameterKindTests
             new SeveralOfParameter<TimePart>("parts", "Parts.", [TimePart.Month]),
             new FillStrategyParameter("with", "A strategy.", With.Mean, ["mean"]) { What = "filling a gap" },
             new SplitSharesParameter(),
-            new ColumnDeclarationsParameter("columns", "Declared columns.", [new ColumnDeclaration("x", ColumnKind.Text, false)]),
+            new ColumnDeclarationsParameter("columns", "Declared columns.", [new ColumnDeclaration("x", ColumnKind.Text, false)]),
+            new PartsParameter("layers", "The layers.", [new PartDeclaration("relu", [])], [new PartKind("relu", "A layer.", [])]),
         ];
 
         Assert.Equal(
             ["Text", "FilePath", "Column", "NewColumn", "Columns", "Number", "WholeNumber", "TrueOrFalse", "Share", "OneOf",
-             "SeveralOf", "FillStrategy", "SplitShares", "ColumnDeclarations"],
+             "SeveralOf", "FillStrategy", "SplitShares", "ColumnDeclarations", "Parts"],
             kinds.Select(kind => kind.Accept(new KindName())));
     }
 
@@ -506,7 +507,9 @@ public class ParameterKindTests
 
         public string Visit(SplitSharesParameter parameter) => "SplitShares";
 
-        public string Visit(ColumnDeclarationsParameter parameter) => "ColumnDeclarations";
+        public string Visit(ColumnDeclarationsParameter parameter) => "ColumnDeclarations";
+
+        public string Visit(PartsParameter parameter) => "Parts";
     }
 
     [Fact]

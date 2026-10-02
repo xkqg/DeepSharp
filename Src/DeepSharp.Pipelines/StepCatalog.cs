@@ -111,6 +111,7 @@ public sealed class StepCatalog
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["feature.indicator"] = "DeepSharp.Pipelines.Indicators",
+            ["learn.network"] = "DeepSharp.Learners.Networks",
             ["read.excel"] = "DeepSharp.Pipelines.Excel",
             ["read.json"] = "DeepSharp.Pipelines.Json",
             ["read.parquet"] = "DeepSharp.Pipelines.Parquet",
