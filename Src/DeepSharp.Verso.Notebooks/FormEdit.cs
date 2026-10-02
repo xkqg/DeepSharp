@@ -248,7 +248,7 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
     // the parts belong to: the place in the list and the setting's key are the whole of what a field says.
     public bool Visit(PartsParameter parameter)
     {
-        if (FormVocabulary.IsPlace(field, parameter.Key, out var at) && Part(parameter, at) is { } part)
+        if (FormVocabulary.IsPlace(field, parameter.Key, out var at) && Part(parameter, at) is not null)
         {
             var named = parameter.Kinds.FirstOrDefault(kind => kind.Name == Words());
 

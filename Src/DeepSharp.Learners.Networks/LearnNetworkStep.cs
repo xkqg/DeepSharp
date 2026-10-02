@@ -127,9 +127,9 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
     /// <inheritdoc />
     public static StepParameters<LearnNetworkStep> Parameters { get; } = new StepParameters<LearnNetworkStep>()
         .With(LayersKey, step => step.Layers)
-        .With(OptimizerKey, step => (IReadOnlyList<PartDeclaration>)[step.Optimizer])
-        .With(LossKey, step => (IReadOnlyList<PartDeclaration>)[step.Loss])
-        .With(StoppingKey, step => (IReadOnlyList<PartDeclaration>)[step.Stopping])
+        .With(OptimizerKey, step => One(step.Optimizer))
+        .With(LossKey, step => One(step.Loss))
+        .With(StoppingKey, step => One(step.Stopping))
         .With(EngineKey, step => step.Engine)
         .With(SeedKey, step => step.Seed)
         .With(EpochsKey, step => step.Epochs)
@@ -137,6 +137,10 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
 
     /// <inheritdoc />
     public string Verb => Name;
+
+    // The one part a key holds, as the parameter that writes it takes them: a list of one.
+    private static IReadOnlyList<PartDeclaration> One(PartDeclaration part) => [part];
+
 
     /// <inheritdoc />
     /// <remarks>Every feature between minus one and one, as a network takes them.</remarks>

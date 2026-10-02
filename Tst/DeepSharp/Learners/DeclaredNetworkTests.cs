@@ -204,7 +204,9 @@ public class DeclaredNetworkTests
     [Fact]
     public void AWordTheseVocabulariesDoNotKnow_IsRefusedNamingTheOnesTheyDo()
     {
-        Assert.Throws<ArgumentNullException>(() => ((IReadOnlyList<PartDeclaration>)null!).Described());
+        IReadOnlyList<PartDeclaration> none = null!;
+
+        Assert.Throws<ArgumentNullException>(() => none.Described());
         Assert.Contains("'dense'", Assert.Throws<NotSupportedException>(() => new[] { new PartDeclaration("transformer", []) }.Described()).Message, StringComparison.Ordinal);
         Assert.Contains("'adam'", Assert.Throws<NotSupportedException>(() => new PartDeclaration("rmsprop", []).Moved()).Message, StringComparison.Ordinal);
         Assert.Contains("'crossEntropy'", Assert.Throws<NotSupportedException>(() => new PartDeclaration("hinge", []).Judged()).Message, StringComparison.Ordinal);
@@ -294,12 +296,16 @@ public class DeclaredNetworkTests
     [Fact]
     public void NothingIsTrained_AndNothingDeclares()
     {
-        Assert.Throws<ArgumentNullException>(() => ((Pipeline)null!).Train());
-        Assert.Throws<ArgumentNullException>(() => ((PreparedData)null!).Train());
+        Pipeline pipeline = null!;
+        PreparedData prepared = null!;
+        FittingBuilder chain = null!;
+
+        Assert.Throws<ArgumentNullException>(() => pipeline.Train());
+        Assert.Throws<ArgumentNullException>(() => prepared.Train());
         Assert.Throws<ArgumentNullException>(() => Passengers().WithTorch(null!));
-        Assert.Throws<ArgumentNullException>(() => ((FittingBuilder)null!).WithTorch(network => network));
+        Assert.Throws<ArgumentNullException>(() => chain.WithTorch(network => network));
         Assert.Throws<ArgumentNullException>(() => Passengers().WithTensorflow(null!));
-        Assert.Throws<ArgumentNullException>(() => ((FittingBuilder)null!).WithTensorflow(network => network));
+        Assert.Throws<ArgumentNullException>(() => chain.WithTensorflow(network => network));
     }
 
     [Fact]
