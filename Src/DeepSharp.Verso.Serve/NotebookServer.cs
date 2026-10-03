@@ -65,7 +65,7 @@ public static class NotebookServer
             _ => next(context),
         });
         app.MapGet("/", page.Answer);
-        NotebookEndpoints.Map(app);
+        app.MapNotebooks();
         app.Lifetime.ApplicationStarted.Register(() => Started(app, options, token, said));
 
         // The notebooks close as soon as the server is told to stop, each run under way stopped as a close stops it, so a

@@ -13,18 +13,20 @@ namespace DeepSharp.Verso.Serve;
 /// </summary>
 internal static class NotebookEndpoints
 {
-    /// <summary>Maps the notebooks' endpoints under <c>/api/notebooks</c>.</summary>
-    /// <param name="app">The server.</param>
-    public static void Map(WebApplication app)
+    extension(WebApplication app)
     {
-        var notebooks = app.MapGroup("/api/notebooks");
+        /// <summary>Maps the notebooks' endpoints under <c>/api/notebooks</c>.</summary>
+        public void MapNotebooks()
+        {
+            var notebooks = app.MapGroup("/api/notebooks");
 
-        notebooks.MapGet("/", async (ServedNotebooks served) => Results.Ok(await served.NamesAsync()));
-        notebooks.MapPost("/", NewAsync);
+            notebooks.MapGet("/", async (ServedNotebooks served) => Results.Ok(await served.NamesAsync()));
+            notebooks.MapPost("/", NewAsync);
 
-        // What the server serves: a folder, where a notebook can be made, or one notebook.
-        app.MapGet("/api/served", (ServedNotebooks served) => Results.Ok(new { folder = served.IsFolder }));
-        notebooks.MapGet("/{name}/socket", SocketAsync);
+            // What the server serves: a folder, where a notebook can be made, or one notebook.
+            app.MapGet("/api/served", (ServedNotebooks served) => Results.Ok(new { folder = served.IsFolder }));
+            notebooks.MapGet("/{name}/socket", SocketAsync);
+        }
     }
 
     // A page's socket on a notebook: opened first, so a refusal reaches the page in words it can show — a browser shows a
