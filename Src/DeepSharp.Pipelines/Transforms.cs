@@ -662,17 +662,20 @@ public sealed record NormaliseRowStep : IPipelineStep<NormaliseRowStep>, IAddsCo
             // its length out by a relative 5.6e-6.
             var largest = present.Max(value => Math.Abs(value!.Value));
 
-            var size = largest == 0 ? 0 : Norm switch
+            // A row of noughts has no size to divide by, and nothing to change.
+            if (largest <= 0)
+            {
+                continue;
+            }
+
+            // Every size is at least the largest value, since that value divided by itself is one, so there is no
+            // second guard against dividing by nothing.
+            var size = Norm switch
             {
                 Norm.L1 => largest * present.Sum(value => Math.Abs(value!.Value) / largest),
                 Norm.Max => largest,
                 _ => largest * Math.Sqrt(present.Sum(value => (value!.Value / largest) * (value!.Value / largest))),
             };
-
-            if (size == 0)
-            {
-                continue;
-            }
 
             foreach (var column in values)
             {

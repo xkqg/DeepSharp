@@ -29,12 +29,9 @@ public class RowSizeTests
     {
         var prepared = Rows(norm, value, value * 2, -value);
 
-        foreach (var column in new[] { "a", "b", "c" })
-        {
-            var written = prepared.Table.NumbersOf(column);
-
-            Assert.All(written, each => Assert.InRange(each!.Value, -1, 1));
-        }
+        Assert.All(
+            new[] { "a", "b", "c" }.SelectMany(column => prepared.Table.NumbersOf(column)),
+            written => Assert.InRange(written!.Value, -1, 1));
     }
 
     [Fact]
