@@ -309,33 +309,36 @@ internal readonly record struct IndicatorOutput(string Column, double[] Values);
 /// </summary>
 public static class IndicatorExtensions
 {
-    /// <summary>Adds an indicator worked out from the rows that came before.</summary>
-    /// <param name="pipeline">The pipeline being written.</param>
-    /// <param name="name">What the new column is called.</param>
-    /// <param name="indicator">Which indicator.</param>
-    /// <param name="columns">The columns it reads, in the order the indicator expects them.</param>
-    /// <param name="period">The look-back, for an indicator that takes one.</param>
-    /// <returns>The pipeline, so the next verb can be written after it.</returns>
-    /// <remarks>The step itself says all of it: <c>.Add(new AddIndicatorStep(name, indicator, columns, period))</c>.</remarks>
-    [Obsolete("Use .Add(new AddIndicatorStep(name, indicator, columns, period)).")]
-    public static PipelineBuilder AddIndicator(
-        this PipelineBuilder pipeline, string name, Indicator indicator, string[] columns, int period = 14)
+    extension(PipelineBuilder pipeline)
     {
-        ArgumentNullException.ThrowIfNull(pipeline);
+        /// <summary>Adds an indicator worked out from the rows that came before.</summary>
+        /// <param name="name">What the new column is called.</param>
+        /// <param name="indicator">Which indicator.</param>
+        /// <param name="columns">The columns it reads, in the order the indicator expects them.</param>
+        /// <param name="period">The look-back, for an indicator that takes one.</param>
+        /// <returns>The pipeline, so the next verb can be written after it.</returns>
+        /// <remarks>The step itself says all of it: <c>.Add(new AddIndicatorStep(name, indicator, columns, period))</c>.</remarks>
+        [Obsolete("Use .Add(new AddIndicatorStep(name, indicator, columns, period)).")]
+        public PipelineBuilder AddIndicator(string name, Indicator indicator, string[] columns, int period = 14)
+        {
+            ArgumentNullException.ThrowIfNull(pipeline);
 
-        return pipeline.Add(new AddIndicatorStep(name, indicator, columns, period));
+            return pipeline.Add(new AddIndicatorStep(name, indicator, columns, period));
+        }
     }
 
-    /// <summary>Teaches a catalog to read the indicator verb back out of a file.</summary>
-    /// <param name="catalog">The catalog being assembled.</param>
-    /// <returns>The same catalog, so registration reads as one sentence.</returns>
-    public static StepCatalog WithIndicators(this StepCatalog catalog)
+    extension(StepCatalog catalog)
     {
-        ArgumentNullException.ThrowIfNull(catalog);
+        /// <summary>Teaches a catalog to read the indicator verb back out of a file.</summary>
+        /// <returns>The same catalog, so registration reads as one sentence.</returns>
+        public StepCatalog WithIndicators()
+        {
+            ArgumentNullException.ThrowIfNull(catalog);
 
-        catalog.Register<AddIndicatorStep>();
+            catalog.Register<AddIndicatorStep>();
 
-        return catalog;
+            return catalog;
+        }
     }
 }
 

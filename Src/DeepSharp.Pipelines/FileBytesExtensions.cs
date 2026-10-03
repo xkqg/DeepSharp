@@ -14,20 +14,22 @@ namespace DeepSharp.Pipelines;
 /// </remarks>
 public static class FileBytesExtensions
 {
-    /// <summary>
-    /// The text a file's bytes hold, read as a file is read as text: in the encoding its byte-order mark names, UTF-8 when
-    /// it names none.
-    /// </summary>
-    /// <param name="bytes">Every byte of the file.</param>
-    /// <returns>The text, without its byte-order mark.</returns>
-    /// <exception cref="ArgumentNullException">No bytes are handed in.</exception>
-    /// <remarks>The text <c>File.ReadAllText</c> reads from a file holding the same bytes.</remarks>
-    public static string AsText(this byte[] bytes)
+    extension(byte[] bytes)
     {
-        ArgumentNullException.ThrowIfNull(bytes);
+        /// <summary>
+        /// The text a file's bytes hold, read as a file is read as text: in the encoding its byte-order mark names, UTF-8 when
+        /// it names none.
+        /// </summary>
+        /// <returns>The text, without its byte-order mark.</returns>
+        /// <exception cref="ArgumentNullException">No bytes are handed in.</exception>
+        /// <remarks>The text <c>File.ReadAllText</c> reads from a file holding the same bytes.</remarks>
+        public string AsText()
+        {
+            ArgumentNullException.ThrowIfNull(bytes);
 
-        using var reader = new StreamReader(new MemoryStream(bytes, writable: false), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            using var reader = new StreamReader(new MemoryStream(bytes, writable: false), Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
 
-        return reader.ReadToEnd();
+            return reader.ReadToEnd();
+        }
     }
 }

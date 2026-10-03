@@ -13,15 +13,17 @@ namespace DeepSharp.Pipelines;
 /// </remarks>
 public static class CsvSourceExtensions
 {
-    /// <summary>Declares that the rows come from a comma-separated file.</summary>
-    /// <param name="pipeline">The pipeline being written.</param>
-    /// <param name="path">Where the file will be, when the pipeline runs.</param>
-    /// <returns>The pipeline, so the next verb can be written after it.</returns>
-    /// <exception cref="ArgumentException">The path is empty or nothing but spaces.</exception>
-    public static PipelineBuilder ReadCsv(this PipelineBuilder pipeline, string path)
+    extension(PipelineBuilder pipeline)
     {
-        ArgumentNullException.ThrowIfNull(pipeline);
+        /// <summary>Declares that the rows come from a comma-separated file.</summary>
+        /// <param name="path">Where the file will be, when the pipeline runs.</param>
+        /// <returns>The pipeline, so the next verb can be written after it.</returns>
+        /// <exception cref="ArgumentException">The path is empty or nothing but spaces.</exception>
+        public PipelineBuilder ReadCsv(string path)
+        {
+            ArgumentNullException.ThrowIfNull(pipeline);
 
-        return pipeline.Add(new ReadCsvStep(path));
+            return pipeline.Add(new ReadCsvStep(path));
+        }
     }
 }

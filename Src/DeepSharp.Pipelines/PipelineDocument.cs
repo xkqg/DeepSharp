@@ -66,30 +66,16 @@ internal sealed class PipelineDocument
     };
     private static readonly IReadOnlyDictionary<int, FittedStepValues> NothingFitted = new Dictionary<int, FittedStepValues>();
 
-    // How many bytes of a larger file are made at a time while it is walked for the pipeline it holds: the walk holds no
-    // more of the file than this and the token it has reached.
-    private const int Piece = 1 << 16;
+    // The file's text, surveyed: where each of its parts stands, and every fault at its line and column.
+    private readonly SurveyedText _text;
 
-    private readonly string _json;
-    private readonly List<Fault> _faults = [];
-
-    // Where the parts of the text stand, as the survey that opens every read found them.
-    private Places _places = new();
-
-    // The UTF-8 of the part of the text the document is, and where that part starts in the whole text: all of the text,
-    // unless the pipeline stands inside a larger file as the value of one of its keys, when it is that value alone. Every
-    // place is a place in the whole text, so a fault is at the line and column of the file a person opens.
-    private byte[] _text;
-    private long _start;
-
-    private PipelineDocument(string json, byte[] text)
-    {
-        _json = json;
-        _text = text;
-    }
+    private PipelineDocument(SurveyedText text) => _text = text;
 
     // A pipeline's own file: all of its text is the document.
-    private static PipelineDocument Whole(string json) => new(json, Encoding.UTF8.GetBytes(json));
+    private static PipelineDocument Whole(string json) => new(SurveyedText.Whole(json));
+
+    // A pipeline standing inside a larger file: the value of a key at the top of that file.
+    private static PipelineDocument Within(string json, string property) => new(SurveyedText.Within(json, property));
 
     /// <summary>
     /// Writes a pipeline: the version, the steps, what the fit learned when there is a fit, and the steps its run left out
@@ -212,18 +198,14 @@ internal sealed class PipelineDocument
 
     private PipelinePreset Preset(StepCatalog catalog)
     {
-        Survey();
-
-        ThrowIfFaulty();
-
-        using var document = JsonDocument.Parse(_text);
+        using var document = JsonDocument.Parse(_text.Bytes);
         var root = document.RootElement;
 
         if (root.ValueKind != JsonValueKind.Object)
         {
-            Add(_places.Root, "A file of saved columns is one JSON object, holding its schema under 'declare' and whatever else was decided.");
+            _text.Fault(_text.Root, "A file of saved columns is one JSON object, holding its schema under 'declare' and whatever else was decided.");
 
-            throw Refused();
+            throw _text.Refused();
         }
 
         // No preset was written before the second version, and its output may be a word only the second has: one that
@@ -232,7 +214,7 @@ internal sealed class PipelineDocument
 
         foreach (var property in root.EnumerateObject().Where(property => !PresetKeys.Contains(property.Name)))
         {
-            Add(_places.Keys[property.Name], $"A file of saved columns has no '{property.Name.Quoted()}'. It holds: {string.Join(", ", PresetKeys)}.");
+            _text.Fault(_text.Of(property.Name), $"A file of saved columns has no '{property.Name.Quoted()}'. It holds: {string.Join(", ", PresetKeys)}.");
         }
 
         var source = NamesUnder(root, SourceKey);
@@ -242,17 +224,17 @@ internal sealed class PipelineDocument
 
         if (!root.TryGetProperty(DeclareKey, out _))
         {
-            Add(_places.Root, $"A file of saved columns holds its schema under '{DeclareKey}'.");
+            _text.Fault(_text.Root, $"A file of saved columns holds its schema under '{DeclareKey}'.");
         }
 
         if (declare is not (null or DeclareStep))
         {
-            Add(_places.Keys[DeclareKey], $"'{DeclareKey}' holds a '{declare.Verb}', and a schema is a 'declare'.");
+            _text.Fault(_text.Of(DeclareKey), $"'{DeclareKey}' holds a '{declare.Verb}', and a schema is a 'declare'.");
         }
 
         if (output is not (null or INamesTheAnswer))
         {
-            Add(_places.Keys[OutputKey], $"'{OutputKey}' holds a '{output.Verb}', which names no answer.");
+            _text.Fault(_text.Of(OutputKey), $"'{OutputKey}' holds a '{output.Verb}', which names no answer.");
         }
 
         if (drop is not null)
@@ -263,18 +245,18 @@ internal sealed class PipelineDocument
             }
             catch (ArgumentException twice)
             {
-                Add(_places.Keys[DropKey], $"'{DropKey}': {StepCatalog.InTheFilesWords(twice)}");
+                _text.Fault(_text.Of(DropKey), $"'{DropKey}': {StepCatalog.InTheFilesWords(twice)}");
             }
         }
 
-        ThrowIfFaulty();
+        _text.ThrowIfFaulty();
 
         return new PipelinePreset((DeclareStep)declare!, drop, output as INamesTheAnswer, source);
     }
 
     private int NoVersion()
     {
-        Add(_places.Root, $"A file of saved columns names the version of the pipeline file it was written against, under '{VersionKey}'.");
+        _text.Fault(_text.Root, $"A file of saved columns names the version of the pipeline file it was written against, under '{VersionKey}'.");
 
         return PipelineDeclaration.Version;
     }
@@ -290,7 +272,7 @@ internal sealed class PipelineDocument
         if (list.ValueKind != JsonValueKind.Array
             || list.EnumerateArray().Any(each => each.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(each.GetString())))
         {
-            Add(_places.Keys[key], $"'{key}' is a list of column names.");
+            _text.Fault(_text.Of(key), $"'{key}' is a list of column names.");
 
             return null;
         }
@@ -308,7 +290,7 @@ internal sealed class PipelineDocument
 
         if (written.ValueKind != JsonValueKind.Object)
         {
-            Add(_places.Keys[key], $"A file of saved columns holds {PresetSteps[key]} under '{key}', as the step's own JSON object.");
+            _text.Fault(_text.Of(key), $"A file of saved columns holds {PresetSteps[key]} under '{key}', as the step's own JSON object.");
 
             return null;
         }
@@ -319,7 +301,7 @@ internal sealed class PipelineDocument
         }
         catch (Exception fault) when (fault is FormatException or NotSupportedException)
         {
-            Add(_places.Keys[key], $"'{key}': {fault.Message}");
+            _text.Fault(_text.Of(key), $"'{key}': {fault.Message}");
 
             return null;
         }
@@ -353,107 +335,6 @@ internal sealed class PipelineDocument
     public static SavedPipeline ReadPipelineIn(string json, StepCatalog catalog, string property) =>
         Within(json, property).Read(catalog, withFit: true);
 
-    /// <summary>The document a pipeline standing inside a larger file is: the value of a key at the top of that file.</summary>
-    /// <remarks>
-    /// The whole file is read first, so text that stops being JSON anywhere in it is said where it stops; the value is then
-    /// read as a pipeline's own file is, its places kept as places in the whole file. The file is read a piece of its UTF-8
-    /// at a time, and of all of it only the pipeline's own bytes are kept: the file around a pipeline may be a network of
-    /// millions of numbers, and a copy of every byte of it would cost more than the pipeline to read past them.
-    /// </remarks>
-    private static PipelineDocument Within(string json, string property)
-    {
-        var document = new PipelineDocument(json, []);
-        var pieces = new Pieces(json);
-        var pipeline = new ArrayBufferWriter<byte>();
-        var root = -1L;
-        var key = -1L;
-        var start = -1L;
-        var taking = false;
-
-        try
-        {
-            do
-            {
-                var reader = pieces.Next();
-                var from = 0;
-
-                while (reader.Read())
-                {
-                    var at = pieces.Passed + reader.TokenStartIndex;
-
-                    if (root < 0)
-                    {
-                        root = at;
-
-                        if (reader.TokenType != JsonTokenType.StartObject)
-                        {
-                            document.Add(root, $"A file that holds a pipeline in place is one JSON object, with the pipeline under '{property}'.");
-
-                            throw document.Refused();
-                        }
-                    }
-                    else if (key >= 0)
-                    {
-                        // The value of the key the pipeline stands under: the first is the pipeline, taken as it passes.
-                        if (start >= 0)
-                        {
-                            document.Add(key, $"'{property}' is written twice here, and only one of the two would be read.");
-                        }
-                        else
-                        {
-                            start = at;
-                            from = (int)reader.TokenStartIndex;
-                            taking = reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray;
-
-                            if (!taking)
-                            {
-                                pipeline.Write(pieces.Bytes(from, (int)reader.BytesConsumed));
-                            }
-                        }
-
-                        key = -1;
-                    }
-                    else if (taking && reader.CurrentDepth == 1 && reader.TokenType is JsonTokenType.EndObject or JsonTokenType.EndArray)
-                    {
-                        pipeline.Write(pieces.Bytes(from, (int)reader.BytesConsumed));
-                        taking = false;
-                    }
-                    else if (reader.TokenType == JsonTokenType.PropertyName && reader.CurrentDepth == 1 && reader.ValueTextEquals(property))
-                    {
-                        key = at;
-                    }
-                }
-
-                // A pipeline that goes on into the next piece: what of it this piece held.
-                if (taking)
-                {
-                    pipeline.Write(pieces.Bytes(from, (int)reader.BytesConsumed));
-                }
-
-                pieces.Taken(ref reader);
-            }
-            while (!pieces.Last);
-        }
-        catch (JsonException fault)
-        {
-            // Nothing after this point can be read, so it is the last fault there is.
-            document.Add(document.OffsetOf(fault), $"The text stops being JSON here: {WithoutItsPlace(fault.Message).Quoted()}");
-
-            throw document.Refused();
-        }
-
-        if (start < 0)
-        {
-            document.Add(root, $"This file holds no '{property}', which is where the pipeline in it stands.");
-        }
-
-        document.ThrowIfFaulty();
-        document._text = pipeline.WrittenSpan.ToArray();
-        document._start = start;
-
-        return document;
-    }
-
     /// <summary>Reads one step written on its own: a notebook block, say.</summary>
     /// <param name="json">The step, as the JSON object it was written as.</param>
     /// <param name="catalog">The verbs it may use.</param>
@@ -465,11 +346,7 @@ internal sealed class PipelineDocument
 
     private IPipelineStep Step(StepCatalog catalog, int writtenAgainst)
     {
-        Survey();
-
-        ThrowIfFaulty();
-
-        using var document = JsonDocument.Parse(_text);
+        using var document = JsonDocument.Parse(_text.Bytes);
 
         try
         {
@@ -477,33 +354,29 @@ internal sealed class PipelineDocument
         }
         catch (Exception fault) when (fault is FormatException or NotSupportedException)
         {
-            Add(_places.Root, fault.Message);
+            _text.Fault(_text.Root, fault.Message);
 
-            throw Refused();
+            throw _text.Refused();
         }
     }
 
     private SavedPipeline Read(StepCatalog catalog, bool withFit)
     {
-        Survey();
-
-        ThrowIfFaulty();
-
-        using var document = JsonDocument.Parse(_text);
+        using var document = JsonDocument.Parse(_text.Bytes);
         var root = document.RootElement;
 
         if (root.ValueKind != JsonValueKind.Object)
         {
-            Add(_places.Root, "A pipeline file is one JSON object, holding its 'declaration' and, once it is fitted, what the fit learned.");
+            _text.Fault(_text.Root, "A pipeline file is one JSON object, holding its 'declaration' and, once it is fitted, what the fit learned.");
 
-            throw Refused();
+            throw _text.Refused();
         }
 
         var version = VersionOf(root);
 
         foreach (var property in root.EnumerateObject().Where(property => !RootKeys.Contains(property.Name)))
         {
-            Add(_places.Keys[property.Name], $"A pipeline file has no '{property.Name.Quoted()}'. It holds: {string.Join(", ", RootKeys)}.");
+            _text.Fault(_text.Of(property.Name), $"A pipeline file has no '{property.Name.Quoted()}'. It holds: {string.Join(", ", RootKeys)}.");
         }
 
         // What a run left out is written from the version in which a run for a learner first left steps out; an older file
@@ -512,7 +385,7 @@ internal sealed class PipelineDocument
 
         if (said && version < SkippedSince)
         {
-            Add(_places.Keys[SkippedKey], string.Create(
+            _text.Fault(_text.Of(SkippedKey), string.Create(
                 CultureInfo.InvariantCulture,
                 $"What a run left out for its learner is written from version {SkippedSince} of the pipeline file, and this file was written against version {version}, which has no '{SkippedKey}'."));
         }
@@ -521,7 +394,7 @@ internal sealed class PipelineDocument
 
         if (fit.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Array))
         {
-            Add(_places.Keys[FittedKey], fit.ValueKind == JsonValueKind.Object
+            _text.Fault(_text.Of(FittedKey), fit.ValueKind == JsonValueKind.Object
                 ? "The fitted half is filed by the position of each step, as DeepSharp 0.2 wrote it, and a position says "
                   + "nothing about which steps a fit was learned behind. Fit the pipeline again."
                 : "The fitted half is a list, with an entry for each step that learned something.");
@@ -531,35 +404,42 @@ internal sealed class PipelineDocument
 
         if (!withFit || declaration is null || fit.ValueKind is not (JsonValueKind.Undefined or JsonValueKind.Array))
         {
-            ThrowIfFaulty();
+            _text.ThrowIfFaulty();
 
             return new SavedPipeline(declaration!, NothingFitted, []);
         }
 
+        // Where every step stands, by the key of the steps up to it: both halves of the file are filed under it, and it
+        // is the same for both, so it is worked out once for the read rather than once for each half.
+        var positions = Positions(declaration);
+
         // What the run left out is read before what it learned, since a step it left out learned nothing. A record of it
         // that cannot be read leaves the steps the run took unknown, and a missing entry is then not asked about.
-        var course = !said ? Course.Whole(declaration) : version < SkippedSince ? null : CourseOf(skips, declaration);
+        var course = !said ? Course.Whole(declaration) : version < SkippedSince ? null : CourseOf(skips, declaration, positions);
 
         // A file without a fitted half is read as one that fitted nothing, so a step that learned is missed
         // there too: a declaration alone, loaded as a fitted pipeline, used to serve every value unfitted.
-        var fitted = FittedOf(fit.ValueKind == JsonValueKind.Array ? [.. fit.EnumerateArray()] : [], declaration, course);
+        var fitted = FittedOf(fit.ValueKind == JsonValueKind.Array ? [.. fit.EnumerateArray()] : [], declaration, course, positions);
 
-        ThrowIfFaulty();
+        _text.ThrowIfFaulty();
 
         return new SavedPipeline(declaration, fitted, course!.Skipped);
     }
 
     /// <summary>The steps a file's run left out, each bound to its step; nothing when anything in that record is wrong.</summary>
-    private Course? CourseOf(JsonElement skips, PipelineDeclaration declaration)
+    /// <param name="skips">What the file says its run left out.</param>
+    /// <param name="declaration">The steps the file declares.</param>
+    /// <param name="positions">Where every step stands, by the key of the steps up to it.</param>
+    private Course? CourseOf(JsonElement skips, PipelineDeclaration declaration, Dictionary<string, int> positions)
     {
         if (skips.ValueKind != JsonValueKind.Array)
         {
-            Add(_places.Keys[SkippedKey], "What a run left out is a list, with an entry for each step it left out.");
+            _text.Fault(_text.Of(SkippedKey), "What a run left out is a list, with an entry for each step it left out.");
 
             return null;
         }
 
-        var positions = Positions(declaration);
+        var places = _text.ElementsUnder(SkippedKey);
         var entryOf = new Dictionary<int, int>();
         var every = true;
         var index = 0;
@@ -577,7 +457,7 @@ internal sealed class PipelineDocument
             }
             catch (FormatException fault)
             {
-                Add(_places.Skips[index], fault.Message);
+                _text.Fault(places[index], fault.Message);
                 every = false;
             }
 
@@ -593,7 +473,7 @@ internal sealed class PipelineDocument
 
         foreach (var fault in faults)
         {
-            Add(_places.Skips[entryOf[fault.At]], fault.ToString());
+            _text.Fault(places[entryOf[fault.At]], fault.ToString());
         }
 
         return faults.Count == 0 ? Course.Of(declaration, [.. entryOf.Keys]) : null;
@@ -615,7 +495,8 @@ internal sealed class PipelineDocument
                 $"This entry says '{skip.Verb.Quoted()}' was left out, and the step at that place is step {at + 1}, '{declaration.Steps[at].Verb}'.");
     }
 
-    // Every step's place, by the key of the steps up to it: what an entry of the file is filed under.
+    /// <summary>Every step's place, by the key of the steps up to it: what an entry of the file is filed under.</summary>
+    /// <param name="declaration">The steps the file declares.</param>
     private static Dictionary<string, int> Positions(PipelineDeclaration declaration) =>
         Enumerable.Range(0, declaration.Steps.Count).ToDictionary(declaration.KeyAt, StringComparer.Ordinal);
 
@@ -629,7 +510,7 @@ internal sealed class PipelineDocument
 
         if (!written.TryGetWholeNumber(out var version) || version < 1)
         {
-            Add(_places.Keys[VersionKey], $"The version is the whole number of the file format a pipeline was written against, counting from 1, and {written.GetRawText().Quoted()} is not one.");
+            _text.Fault(_text.Of(VersionKey), $"The version is the whole number of the file format a pipeline was written against, counting from 1, and {written.GetRawText().Quoted()} is not one.");
 
             return PipelineDeclaration.Version;
         }
@@ -638,11 +519,11 @@ internal sealed class PipelineDocument
         {
             // A newer file may use words this version never had, so none of it is read: the one thing to say
             // is that it is newer, rather than a list of faults that are faults only to an older reader.
-            Add(_places.Keys[VersionKey], string.Create(
+            _text.Fault(_text.Of(VersionKey), string.Create(
                 CultureInfo.InvariantCulture,
                 $"This file was written against version {version} of the pipeline file, by a newer DeepSharp than this one, which reads up to version {PipelineDeclaration.Version}. Nothing in it is read: read it with that DeepSharp."));
 
-            throw Refused();
+            throw _text.Refused();
         }
 
         return version;
@@ -653,13 +534,14 @@ internal sealed class PipelineDocument
     {
         if (!root.TryGetProperty(DeclarationKey, out var written) || written.ValueKind != JsonValueKind.Array)
         {
-            Add(
-                written.ValueKind == JsonValueKind.Undefined ? _places.Root : _places.Keys[DeclarationKey],
+            _text.Fault(
+                written.ValueKind == JsonValueKind.Undefined ? _text.Root : _text.Of(DeclarationKey),
                 "A pipeline file holds its steps as a list, under 'declaration'.");
 
             return null;
         }
 
+        var places = _text.ElementsUnder(DeclarationKey);
         var steps = new List<IPipelineStep>();
         var at = 0;
 
@@ -671,7 +553,7 @@ internal sealed class PipelineDocument
             }
             catch (Exception fault) when (fault is FormatException or NotSupportedException)
             {
-                Add(_places.Steps[at], $"Step {at + 1}: {fault.Message}");
+                _text.Fault(places[at], $"Step {at + 1}: {fault.Message}");
             }
 
             at++;
@@ -688,7 +570,7 @@ internal sealed class PipelineDocument
 
         foreach (var fault in broken)
         {
-            Add(_places.Steps[fault.At], fault.ToString());
+            _text.Fault(places[fault.At], fault.ToString());
         }
 
         return broken.Count == 0 ? new PipelineDeclaration(steps) : null;
@@ -696,11 +578,17 @@ internal sealed class PipelineDocument
 
     /// <summary>What each step learned, filed by the key of the steps it was learned behind.</summary>
     /// <remarks>Held to the steps as the run took them; when those are unknown, to the steps as declared, and nothing is missed.</remarks>
-    private Dictionary<int, FittedStepValues> FittedOf(IReadOnlyList<JsonElement> entries, PipelineDeclaration declaration, Course? course)
+    /// <param name="entries">The entries of the fitted half.</param>
+    /// <param name="declaration">The steps the file declares.</param>
+    /// <param name="course">The steps as the run took them; nothing when those are unknown.</param>
+    /// <param name="positions">Where every step stands, by the key of the steps up to it.</param>
+    private Dictionary<int, FittedStepValues> FittedOf(
+        IReadOnlyList<JsonElement> entries, PipelineDeclaration declaration, Course? course, Dictionary<string, int> positions)
     {
         var fitted = new Dictionary<int, FittedStepValues>();
         var taken = course ?? Course.Whole(declaration);
-        var positions = Positions(declaration);
+        var places = _text.ElementsUnder(FittedKey);
+        var steps = _text.ElementsUnder(DeclarationKey);
         var every = true;
         var at = 0;
 
@@ -712,7 +600,7 @@ internal sealed class PipelineDocument
             }
             catch (FormatException fault)
             {
-                Add(_places.Entries[at], fault.Message);
+                _text.Fault(places[at], fault.Message);
                 every = false;
             }
 
@@ -725,7 +613,7 @@ internal sealed class PipelineDocument
         {
             foreach (var missing in PreparedData.FitsMissing(course, fitted))
             {
-                Add(_places.Steps[missing.At], missing.ToString());
+                _text.Fault(steps[missing.At], missing.ToString());
             }
         }
 
@@ -767,216 +655,6 @@ internal sealed class PipelineDocument
                 $"This is a second entry for step {at + 1}, '{step.Verb}', which is fitted once: the file cannot say which "
                 + "of the two it learned.");
         }
-    }
-
-    /// <summary>Walks the text token by token: where everything stands, kept as this document's places, and every key written twice.</summary>
-    /// <remarks>
-    /// Of the part of the text the document is, each place counted from the start of the whole text. A part inside a larger
-    /// file is only ever set once the whole file has been read as JSON, so text that stops being JSON is met here in a
-    /// document that is the whole text.
-    /// </remarks>
-    private void Survey()
-    {
-        var places = new Places();
-        var reader = new Utf8JsonReader(_text);
-        var names = new Stack<HashSet<string>>();
-        string? under = null;
-
-        try
-        {
-            while (reader.Read())
-            {
-                var at = _start + reader.TokenStartIndex;
-
-                if (reader.CurrentDepth == 0 && reader.TokenType is not (JsonTokenType.EndObject or JsonTokenType.EndArray))
-                {
-                    places.Root = at;
-                }
-
-                // An element of one of the lists at the top: a step, a fitted entry, or a step a run left out.
-                if (reader.CurrentDepth == 2
-                    && reader.TokenType is not (JsonTokenType.PropertyName or JsonTokenType.EndObject or JsonTokenType.EndArray))
-                {
-                    (under switch { DeclarationKey => places.Steps, FittedKey => places.Entries, SkippedKey => places.Skips, _ => null })?.Add(at);
-                }
-
-                switch (reader.TokenType)
-                {
-                    case JsonTokenType.StartObject:
-                        names.Push(new HashSet<string>(StringComparer.Ordinal));
-                        break;
-
-                    case JsonTokenType.EndObject:
-                        names.Pop();
-                        break;
-
-                    case JsonTokenType.PropertyName:
-                        var name = reader.GetString()!;
-
-                        if (!names.Peek().Add(name))
-                        {
-                            Add(at, $"'{name.Quoted()}' is written twice here, and only one of the two would be read.");
-                        }
-
-                        if (reader.CurrentDepth == 1)
-                        {
-                            under = name;
-                            places.Keys.TryAdd(name, at);
-                        }
-
-                        break;
-                }
-            }
-        }
-        catch (JsonException fault)
-        {
-            // Nothing after this point can be read, so it is the last fault there is.
-            Add(OffsetOf(fault), $"The text stops being JSON here: {WithoutItsPlace(fault.Message).Quoted()}");
-
-            throw Refused();
-        }
-
-        _places = places;
-    }
-
-    /// <summary>Where a reader's fault is, from the line and the byte in that line it names, both from nought.</summary>
-    /// <remarks>
-    /// Counted in the whole text's UTF-8 by walking the text itself, up to its end: the reader was handed that UTF-8, so the
-    /// line it names is one the text has.
-    /// </remarks>
-    private long OffsetOf(JsonException fault)
-    {
-        var at = 0;
-        var bytes = 0L;
-
-        for (var lines = fault.LineNumber.GetValueOrDefault(); lines > 0; lines--)
-        {
-            var end = _json.IndexOf('\n', at);
-
-            bytes += Encoding.UTF8.GetByteCount(_json.AsSpan(at, end + 1 - at));
-            at = end + 1;
-        }
-
-        return Math.Min(bytes + fault.BytePositionInLine.GetValueOrDefault(), bytes + Encoding.UTF8.GetByteCount(_json.AsSpan(at)));
-    }
-
-    // The reader ends its message with where it stopped, counted from nought; the fault carries the place
-    // counted from one, as an editor shows it, and saying it twice in two ways would only confuse.
-    private static string WithoutItsPlace(string message) => message.Split(" LineNumber:")[0];
-
-    private void Add(long offset, string message) => _faults.Add(new Fault(offset, message));
-
-    private void ThrowIfFaulty()
-    {
-        if (_faults.Count > 0)
-        {
-            throw Refused();
-        }
-    }
-
-    private PipelineFileException Refused() => new([.. Placed([.. _faults.OrderBy(fault => fault.Offset)])]);
-
-    /// <summary>
-    /// Each fault at its line and column, both from one, the column in characters rather than bytes: the text walked once, a
-    /// character at a time, each counted as the bytes of UTF-8 it is written in, up to each fault's offset in turn.
-    /// </summary>
-    /// <param name="faults">The faults, in the order they stand; each offset one within the text or at its end.</param>
-    private IEnumerable<PipelineFileFault> Placed(Fault[] faults)
-    {
-        var bytes = 0L;
-        var line = 1;
-        var lineStart = 0;
-        var at = 0;
-
-        foreach (var fault in faults)
-        {
-            while (bytes < fault.Offset)
-            {
-                Rune.DecodeFromUtf16(_json.AsSpan(at), out var letter, out var read);
-                bytes += letter.Utf8SequenceLength;
-                at += read;
-
-                if (_json[at - 1] == '\n')
-                {
-                    line++;
-                    lineStart = at;
-                }
-            }
-
-            yield return new PipelineFileFault(line, at - lineStart + 1, fault.Message);
-        }
-    }
-
-    // A text read as JSON a piece of its UTF-8 at a time: each piece handed to a reader behind what the reader left unread of
-    // the one before, so no more of the text is ever held as bytes than a piece and the token it ends in.
-    private sealed class Pieces(string text)
-    {
-        // The most bytes of UTF-8 one character of the text is written in.
-        private const int WidestLetter = 4;
-
-        private readonly Encoder _encoder = Encoding.UTF8.GetEncoder();
-        private byte[] _buffer = new byte[Piece];
-        private JsonReaderState _state;
-        private int _made;
-        private int _held;
-
-        // How many bytes of the text come before the piece a reader was last handed.
-        public long Passed { get; private set; }
-
-        // Whether the piece a reader was last handed ends the text.
-        public bool Last { get; private set; }
-
-        // The next piece, behind what the reader left unread of the one before: the buffer grows for a token longer than it.
-        public Utf8JsonReader Next()
-        {
-            if (_buffer.Length - _held < WidestLetter)
-            {
-                Array.Resize(ref _buffer, _buffer.Length * 2);
-            }
-
-            _encoder.Convert(text.AsSpan(_made), _buffer.AsSpan(_held), flush: true, out var letters, out var bytes, out _);
-            _made += letters;
-            _held += bytes;
-            Last = _made == text.Length;
-
-            return new Utf8JsonReader(_buffer.AsSpan(0, _held), Last, _state);
-        }
-
-        // The bytes of the piece a reader was last handed, from one place in it to another.
-        public ReadOnlySpan<byte> Bytes(int from, int to) => _buffer.AsSpan(from, to - from);
-
-        // What a reader took of its piece: what it left is kept, in front of the next.
-        public void Taken(ref Utf8JsonReader reader)
-        {
-            var taken = (int)reader.BytesConsumed;
-
-            _state = reader.CurrentState;
-            _buffer.AsSpan(taken, _held - taken).CopyTo(_buffer);
-            _held -= taken;
-            Passed += taken;
-        }
-    }
-
-    /// <summary>A fault, and the offset in the text of the thing it is about.</summary>
-    private readonly record struct Fault(long Offset, string Message);
-
-    /// <summary>Where the parts of a file stand in its text, as offsets of their first byte.</summary>
-    private sealed class Places
-    {
-        /// <summary>The value the file is.</summary>
-        public long Root { get; set; }
-
-        /// <summary>Each key at the top of the file.</summary>
-        public Dictionary<string, long> Keys { get; } = new(StringComparer.Ordinal);
-
-        /// <summary>Each step of the declaration.</summary>
-        public List<long> Steps { get; } = [];
-
-        /// <summary>Each entry of the fitted half.</summary>
-        public List<long> Entries { get; } = [];
-
-        /// <summary>Each entry of what a run left out.</summary>
-        public List<long> Skips { get; } = [];
     }
 
     /// <summary>One entry of what a run left out: the step, and the key of the steps up to it.</summary>

@@ -132,14 +132,16 @@ public sealed class NetworkCatalog
 /// <summary>What each role a kind plays in a network file is called.</summary>
 internal static class RoleExtensions
 {
-    /// <summary>The role as a refusal says it, with its article: a layer, a loss, an optimizer, a learning-rate schedule.</summary>
-    /// <param name="role">The role.</param>
-    /// <returns>Its name.</returns>
-    public static string Named(this NetworkCatalog.Role role) => role switch
+    extension(NetworkCatalog.Role role)
     {
-        NetworkCatalog.Role.Layer => "a layer",
-        NetworkCatalog.Role.Loss => "a loss",
-        NetworkCatalog.Role.Optimizer => "an optimizer",
-        _ => "a learning-rate schedule",
-    };
+        /// <summary>The role as a refusal says it, with its article: a layer, a loss, an optimizer, a learning-rate schedule.</summary>
+        /// <returns>Its name.</returns>
+        public string Named() => role switch
+        {
+            NetworkCatalog.Role.Layer => "a layer",
+            NetworkCatalog.Role.Loss => "a loss",
+            NetworkCatalog.Role.Optimizer => "an optimizer",
+            _ => "a learning-rate schedule",
+        };
+    }
 }

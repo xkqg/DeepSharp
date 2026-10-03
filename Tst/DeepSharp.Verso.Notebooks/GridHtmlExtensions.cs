@@ -17,31 +17,31 @@ internal readonly record struct DrawnBox(string Action, bool Ticked, bool Enable
 /// <summary>What a test reads off a grid's page.</summary>
 internal static partial class GridHtmlExtensions
 {
-    /// <summary>Whether the grid has a column of that name: its header, followed by the column's boxes.</summary>
-    /// <param name="grid">The grid's page.</param>
-    /// <param name="column">The column's name, as the page writes it.</param>
-    /// <returns><see langword="true"/> when the column is a header of the grid.</returns>
-    public static bool Heads(this string grid, string column) =>
-        grid.Contains($"<th>{column} <label>", StringComparison.Ordinal);
+    extension(string grid)
+    {
+        /// <summary>Whether the grid has a column of that name: its header, followed by the column's boxes.</summary>
+        /// <param name="column">The column's name, as the page writes it.</param>
+        /// <returns><see langword="true"/> when the column is a header of the grid.</returns>
+        public bool Heads(string column) =>
+            grid.Contains($"<th>{column} <label>", StringComparison.Ordinal);
 
-    /// <summary>The box a grid's header draws for a column and a gesture, found the way the router reads it.</summary>
-    /// <param name="grid">The grid's page.</param>
-    /// <param name="gesture">The gesture the box makes.</param>
-    /// <param name="column">The column the box is about.</param>
-    /// <returns>The box, or nothing when the grid draws none.</returns>
-    public static DrawnBox? Box(this string grid, string gesture, string column) =>
-        grid.Boxes().Cast<DrawnBox?>().FirstOrDefault(box => box!.Value.Action.StartsWith($"{gesture} ", StringComparison.Ordinal)
-                                                              && ColumnOf(box.Value.Action) == column);
+        /// <summary>The box a grid's header draws for a column and a gesture, found the way the router reads it.</summary>
+        /// <param name="gesture">The gesture the box makes.</param>
+        /// <param name="column">The column the box is about.</param>
+        /// <returns>The box, or nothing when the grid draws none.</returns>
+        public DrawnBox? Box(string gesture, string column) =>
+            grid.Boxes().Cast<DrawnBox?>().FirstOrDefault(box => box!.Value.Action.StartsWith($"{gesture} ", StringComparison.Ordinal)
+                                                                  && ColumnOf(box.Value.Action) == column);
 
-    /// <summary>Every box a grid's page draws, in the order it draws them.</summary>
-    /// <param name="grid">The grid's page.</param>
-    /// <returns>The boxes.</returns>
-    public static IReadOnlyList<DrawnBox> Boxes(this string grid) =>
-        [.. Inputs().Matches(grid).Select(input => input.Value).Select(input => new DrawnBox(
-            WebUtility.HtmlDecode(Action().Match(input).Groups[1].Value),
-            input.Contains(" checked", StringComparison.Ordinal),
-            !input.Contains(" disabled", StringComparison.Ordinal),
-            input.Contains("data-payload=", StringComparison.Ordinal)))];
+        /// <summary>Every box a grid's page draws, in the order it draws them.</summary>
+        /// <returns>The boxes.</returns>
+        public IReadOnlyList<DrawnBox> Boxes() =>
+            [.. Inputs().Matches(grid).Select(input => input.Value).Select(input => new DrawnBox(
+                WebUtility.HtmlDecode(Action().Match(input).Groups[1].Value),
+                input.Contains(" checked", StringComparison.Ordinal),
+                !input.Contains(" disabled", StringComparison.Ordinal),
+                input.Contains("data-payload=", StringComparison.Ordinal)))];
+    }
 
     // The column a box's action names: the JSON after the gesture's name.
     private static string? ColumnOf(string action) =>

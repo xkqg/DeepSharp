@@ -59,14 +59,14 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
 
         if (parameter.Repeatable)
         {
-            if (!FormVocabulary.IsPlace(field, parameter.Key, out var place) || place >= names.Count)
+            if (!parameter.IsPlace(field, out var place) || place >= names.Count)
             {
                 return false;
             }
 
             names[place] = Words();
         }
-        else if (!FormVocabulary.IsMember(field, parameter.Key, out var column))
+        else if (!parameter.IsMember(field, out var column))
         {
             return false;
         }
@@ -102,7 +102,7 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
     // A way of filling that takes a number is written with one, starting at nought; its number is set on its own.
     public bool Visit(FillStrategyParameter parameter)
     {
-        if (field == FormVocabulary.StrategyValue(parameter.Key))
+        if (field == parameter.Number())
         {
             if (_step[parameter.Key] is not JsonObject strategy)
             {
@@ -156,7 +156,7 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
             return false;
         }
 
-        if (FormVocabulary.IsKind(field, parameter.Key, out var name))
+        if (parameter.IsKind(field, out var name))
         {
             var kind = Words();
 
@@ -167,7 +167,7 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
             return true;
         }
 
-        if (FormVocabulary.IsAbsent(field, parameter.Key, out var absent))
+        if (parameter.IsAbsent(field, out var absent))
         {
             if (declare.Taking.All(column => column.Name != absent))
             {
@@ -181,7 +181,7 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
             return true;
         }
 
-        if (FormVocabulary.IsFormat(field, parameter.Key, out var written))
+        if (parameter.IsFormat(field, out var written))
         {
             if (declare.Taking.All(column => column.Name != written))
             {
@@ -193,7 +193,7 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
             return true;
         }
 
-        if (FormVocabulary.IsMissing(field, parameter.Key, out var gap))
+        if (parameter.IsMissing(field, out var gap))
         {
             if (declare.Taking.All(column => column.Name != gap))
             {
@@ -248,7 +248,7 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
     // the parts belong to: the place in the list and the setting's key are the whole of what a field says.
     public bool Visit(PartsParameter parameter)
     {
-        if (FormVocabulary.IsPlace(field, parameter.Key, out var at) && Part(parameter, at) is not null)
+        if (parameter.IsPlace(field, out var at) && Part(parameter, at) is not null)
         {
             var named = parameter.Kinds.FirstOrDefault(kind => kind.Name == Words());
 
@@ -262,7 +262,7 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
             return true;
         }
 
-        if (!FormVocabulary.IsSetting(field, parameter.Key, out var place, out var setting) || Part(parameter, place) is not { } holding)
+        if (!parameter.IsSetting(field, out var place, out var setting) || Part(parameter, place) is not { } holding)
         {
             return false;
         }

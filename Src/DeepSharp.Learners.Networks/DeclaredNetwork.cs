@@ -68,47 +68,51 @@ public sealed class Engines
 /// </summary>
 public static class TrainExtensions
 {
-    /// <summary>Runs the pipeline for the network it declares, and trains that network on what it hands over.</summary>
-    /// <param name="pipeline">The pipeline, which names a learner.</param>
-    /// <param name="engines">The engines the names in the declaration stand for; the light engine alone, unless given.</param>
-    /// <returns>The network behind its pipeline: what it predicts, its file, what the run did and how the report measured it.</returns>
-    /// <exception cref="ArgumentNullException">There is no pipeline.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The pipeline names no learner, or names an engine nothing was given; or anything the run itself refuses.
-    /// </exception>
-    public static TrainedNetwork Train(this Pipeline pipeline, Engines? engines = null)
+    extension(Pipeline pipeline)
     {
-        ArgumentNullException.ThrowIfNull(pipeline);
+        /// <summary>Runs the pipeline for the network it declares, and trains that network on what it hands over.</summary>
+        /// <param name="engines">The engines the names in the declaration stand for; the light engine alone, unless given.</param>
+        /// <returns>The network behind its pipeline: what it predicts, its file, what the run did and how the report measured it.</returns>
+        /// <exception cref="ArgumentNullException">There is no pipeline.</exception>
+        /// <exception cref="InvalidOperationException">
+        /// The pipeline names no learner, or names an engine nothing was given; or anything the run itself refuses.
+        /// </exception>
+        public TrainedNetwork Train(Engines? engines = null)
+        {
+            ArgumentNullException.ThrowIfNull(pipeline);
 
-        var step = Declared(pipeline.Declaration);
+            var step = Declared(pipeline.Declaration);
 
-        return pipeline.RunFor(step.Needs).Train(engines);
+            return pipeline.RunFor(step.Needs).Train(engines);
+        }
     }
 
-    /// <summary>Trains the network a pipeline declares on the rows a run of it prepared.</summary>
-    /// <param name="prepared">The pipeline, run for the learner it names.</param>
-    /// <param name="engines">The engines the names in the declaration stand for; the light engine alone, unless given.</param>
-    /// <returns>The network behind its pipeline.</returns>
-    /// <exception cref="ArgumentNullException">There is nothing prepared.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The pipeline names no learner, or names an engine nothing was given; or anything <see cref="CompiledNetworkExtensions.Fit"/> refuses.
-    /// </exception>
-    public static TrainedNetwork Train(this PreparedData prepared, Engines? engines = null)
+    extension(PreparedData prepared)
     {
-        ArgumentNullException.ThrowIfNull(prepared);
+        /// <summary>Trains the network a pipeline declares on the rows a run of it prepared.</summary>
+        /// <param name="engines">The engines the names in the declaration stand for; the light engine alone, unless given.</param>
+        /// <returns>The network behind its pipeline.</returns>
+        /// <exception cref="ArgumentNullException">There is nothing prepared.</exception>
+        /// <exception cref="InvalidOperationException">
+        /// The pipeline names no learner, or names an engine nothing was given; or anything <see cref="CompiledNetworkExtensions.Fit"/> refuses.
+        /// </exception>
+        public TrainedNetwork Train(Engines? engines = null)
+        {
+            ArgumentNullException.ThrowIfNull(prepared);
 
-        var step = Declared(prepared.Declaration);
+            var step = Declared(prepared.Declaration);
 
-        return step.Layers
-            .Described()
-            .Compile(step.Optimizer.Moved(), step.Loss.Judged())
-            .Fit(prepared, new FitOptions(step.Seed)
-            {
-                Epochs = step.Epochs,
-                BatchSize = step.Batch,
-                EarlyStopping = step.Stopping.Stops(),
-                Backend = (engines ?? new Engines()).Named(step.Engine),
-            });
+            return step.Layers
+                .Described()
+                .Compile(step.Optimizer.Moved(), step.Loss.Judged())
+                .Fit(prepared, new FitOptions(step.Seed)
+                {
+                    Epochs = step.Epochs,
+                    BatchSize = step.Batch,
+                    EarlyStopping = step.Stopping.Stops(),
+                    Backend = (engines ?? new Engines()).Named(step.Engine),
+                });
+        }
     }
 
     private static LearnNetworkStep Declared(PipelineDeclaration declaration) =>

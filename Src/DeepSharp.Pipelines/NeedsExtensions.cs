@@ -13,33 +13,32 @@ namespace DeepSharp.Pipelines;
 /// </remarks>
 public static class NeedsExtensions
 {
-    /// <summary>Whether a learner with this need takes numbers of any size, so a step that only scales a feature can be left out for it.</summary>
-    /// <param name="needs">The need.</param>
-    /// <returns><see langword="true"/> for <see cref="Needs.NoScale"/> and <see cref="Needs.Categories"/>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">No need is named by this value.</exception>
-    public static bool DoesWithoutScaling(this Needs needs) => needs.Named() is Needs.NoScale or Needs.Categories;
+    extension(Needs needs)
+    {
+        /// <summary>Whether a learner with this need takes numbers of any size, so a step that only scales a feature can be left out for it.</summary>
+        /// <returns><see langword="true"/> for <see cref="Needs.NoScale"/> and <see cref="Needs.Categories"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">No need is named by this value.</exception>
+        public bool DoesWithoutScaling() => needs.Named() is Needs.NoScale or Needs.Categories;
 
-    /// <summary>Whether a learner with this need takes each category as its place in the list the training rows held.</summary>
-    /// <param name="needs">The need.</param>
-    /// <returns><see langword="true"/> for <see cref="Needs.Categories"/>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">No need is named by this value.</exception>
-    public static bool TakesCategories(this Needs needs) => needs.Named() == Needs.Categories;
+        /// <summary>Whether a learner with this need takes each category as its place in the list the training rows held.</summary>
+        /// <returns><see langword="true"/> for <see cref="Needs.Categories"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">No need is named by this value.</exception>
+        public bool TakesCategories() => needs.Named() == Needs.Categories;
 
-    /// <summary>Whether a learner with this need takes every feature on one scale, between minus one and one.</summary>
-    /// <param name="needs">The need.</param>
-    /// <returns><see langword="true"/> for <see cref="Needs.OneScale"/>.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">No need is named by this value.</exception>
-    public static bool NeedsOneScale(this Needs needs) => needs.Named() == Needs.OneScale;
+        /// <summary>Whether a learner with this need takes every feature on one scale, between minus one and one.</summary>
+        /// <returns><see langword="true"/> for <see cref="Needs.OneScale"/>.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">No need is named by this value.</exception>
+        public bool NeedsOneScale() => needs.Named() == Needs.OneScale;
 
-    /// <summary>The need, when a need is named by it.</summary>
-    /// <param name="needs">The value stated.</param>
-    /// <returns>The same value.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">No need is named by this value: a learner that stated it would be handed something nobody decided.</exception>
-    internal static Needs Named(this Needs needs) =>
-        Enum.IsDefined(needs)
-            ? needs
-            : throw new ArgumentOutOfRangeException(
-                nameof(needs),
-                needs,
-                string.Create(CultureInfo.InvariantCulture, $"No need is numbered {(int)needs}: a learner needs {string.Join(", ", Enum.GetNames<Needs>())}."));
+        /// <summary>The need, when a need is named by it.</summary>
+        /// <returns>The same value.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">No need is named by this value: a learner that stated it would be handed something nobody decided.</exception>
+        internal Needs Named() =>
+            Enum.IsDefined(needs)
+                ? needs
+                : throw new ArgumentOutOfRangeException(
+                    nameof(needs),
+                    needs,
+                    string.Create(CultureInfo.InvariantCulture, $"No need is numbered {(int)needs}: a learner needs {string.Join(", ", Enum.GetNames<Needs>())}."));
+    }
 }

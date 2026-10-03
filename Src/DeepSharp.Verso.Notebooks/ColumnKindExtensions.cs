@@ -8,17 +8,21 @@ namespace DeepSharp.Verso.Notebooks;
 /// <summary>A column's kind as a notebook writes it, and back: the one word a control carries and a card shows.</summary>
 internal static class ColumnKindExtensions
 {
-    /// <summary>The word a kind is written as.</summary>
-    /// <param name="kind">The kind.</param>
-    /// <returns>Its name, in lower case, as a pipeline file writes it.</returns>
-    public static string Word(this ColumnKind kind) => kind.ToString().ToLowerInvariant();
+    extension(ColumnKind kind)
+    {
+        /// <summary>The word a kind is written as.</summary>
+        /// <returns>Its name, in lower case, as a pipeline file writes it.</returns>
+        public string Word() => kind.ToString().ToLowerInvariant();
+    }
 
-    /// <summary>The kind a word names.</summary>
-    /// <param name="word">The word, as a control carries it.</param>
-    /// <returns>
-    /// The kind whose word it is, in whatever case; nothing for any other word — a number, or several words joined by a
-    /// comma, which the runtime's own parser reads as a kind of its own.
-    /// </returns>
-    public static ColumnKind? AsKind(this string? word) =>
-        Enum.GetValues<ColumnKind>().Where(kind => string.Equals(kind.Word(), word, StringComparison.OrdinalIgnoreCase)).Cast<ColumnKind?>().FirstOrDefault();
+    extension(string? word)
+    {
+        /// <summary>The kind a word names.</summary>
+        /// <returns>
+        /// The kind whose word it is, in whatever case; nothing for any other word — a number, or several words joined by a
+        /// comma, which the runtime's own parser reads as a kind of its own.
+        /// </returns>
+        public ColumnKind? AsKind() =>
+            Enum.GetValues<ColumnKind>().Where(kind => string.Equals(kind.Word(), word, StringComparison.OrdinalIgnoreCase)).Cast<ColumnKind?>().FirstOrDefault();
+    }
 }

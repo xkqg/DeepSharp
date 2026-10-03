@@ -123,7 +123,19 @@ internal readonly record struct WrittenFit(string Fit, int Version, IReadOnlyLis
 /// <param name="Behind">The fit the predictions were made behind.</param>
 /// <param name="Answers">What each number of a row's predictions stands for, in the order the output names them.</param>
 /// <param name="Parts">Each part, in the order the report names them.</param>
-internal readonly record struct WrittenPredictions(WrittenFit Behind, IReadOnlyList<string> Answers, IReadOnlyList<WrittenPart> Parts);
+internal readonly record struct WrittenPredictions(WrittenFit Behind, IReadOnlyList<string> Answers, IReadOnlyList<WrittenPart> Parts)
+{
+    /// <summary>What a model predicted, as its text.</summary>
+    /// <returns>The text, as one JSON object.</returns>
+    public string ToJson() => PredictionsDocument.Write(this);
+
+    /// <summary>What a model predicted, read back from its text.</summary>
+    /// <param name="json">The text.</param>
+    /// <returns>What it says.</returns>
+    /// <exception cref="ArgumentNullException">There is no text.</exception>
+    /// <exception cref="FormatException">The text is not what <see cref="ToJson"/> writes, said with where it is not; or a newer DeepSharp wrote it.</exception>
+    public static WrittenPredictions FromJson(string json) => PredictionsDocument.Read(json);
+}
 
 /// <summary>
 /// The text of what a model predicted for the parts a pipeline's report measures, which crosses to wherever the same pipeline

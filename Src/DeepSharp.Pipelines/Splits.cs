@@ -372,91 +372,96 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
 /// </summary>
 internal static class SplitPlacement
 {
-    /// <summary>Rows in the order of a digest of the seed and what each row says.</summary>
-    /// <param name="table">The rows' table, which knows each row's key.</param>
-    /// <param name="rows">The rows to rank.</param>
-    /// <param name="seed">The number that makes the ranking one of many possible ones, and the same one each time.</param>
-    /// <returns>The rows, ranked; rows that say the same thing stand side by side.</returns>
-    /// <remarks>
-    /// SHA-256 rather than a generator of random numbers: a generator shuffles places, so the same rows in
-    /// another order were dealt differently, while a digest of what a row says ranks it the same wherever it
-    /// stands, on every machine.
-    /// </remarks>
-    internal static int[] Ranked(this Table table, IEnumerable<int> rows, int seed)
+    extension(Table table)
     {
-        var ranked = rows.ToArray();
-        var ranks = ranked.Select(row => table.Identities[row].Key.Ranked(seed)).ToArray();
-
-        Array.Sort(ranks, ranked);
-
-        return ranked;
-    }
-
-    /// <summary>Gives every row the part of the row before it, when the two belong together.</summary>
-    /// <param name="parts">The part of each row, by row; changed in place.</param>
-    /// <param name="ordered">The rows in the order the parts were handed out.</param>
-    /// <param name="together">Whether a row belongs with the one before it: the same row twice, the same moment.</param>
-    internal static void KeptTogether(this Part[] parts, int[] ordered, Func<int, int, bool> together)
-    {
-        for (var at = 1; at < ordered.Length; at++)
+        /// <summary>Rows in the order of a digest of the seed and what each row says.</summary>
+        /// <param name="rows">The rows to rank.</param>
+        /// <param name="seed">The number that makes the ranking one of many possible ones, and the same one each time.</param>
+        /// <returns>The rows, ranked; rows that say the same thing stand side by side.</returns>
+        /// <remarks>
+        /// SHA-256 rather than a generator of random numbers: a generator shuffles places, so the same rows in
+        /// another order were dealt differently, while a digest of what a row says ranks it the same wherever it
+        /// stands, on every machine.
+        /// </remarks>
+        internal int[] Ranked(IEnumerable<int> rows, int seed)
         {
-            if (together(ordered[at - 1], ordered[at]))
-            {
-                parts[ordered[at]] = parts[ordered[at - 1]];
-            }
+            var ranked = rows.ToArray();
+            var ranks = ranked.Select(row => table.Identities[row].Key.Ranked(seed)).ToArray();
+
+            Array.Sort(ranks, ranked);
+
+            return ranked;
         }
     }
 
-    /// <summary>Keeps the last moments of every part apart: before each line, and at the end.</summary>
-    /// <param name="parts">The part of each row, by row; changed in place.</param>
-    /// <param name="ordered">The rows in the order the parts were handed out.</param>
-    /// <param name="gap">How many moments of each part are kept apart.</param>
-    /// <param name="together">Whether a row belongs with the one before it: the same moment.</param>
-    /// <remarks>Moments rather than rows, so a moment is kept apart whole, as a split keeps it whole.</remarks>
-    internal static void Gapped(this Part[] parts, int[] ordered, int gap, Func<int, int, bool> together)
+    extension(Part[] parts)
     {
-        var end = ordered.Length;
-
-        while (end > 0)
+        /// <summary>Gives every row the part of the row before it, when the two belong together.</summary>
+        /// <param name="ordered">The rows in the order the parts were handed out.</param>
+        /// <param name="together">Whether a row belongs with the one before it: the same row twice, the same moment.</param>
+        internal void KeptTogether(int[] ordered, Func<int, int, bool> together)
         {
-            var part = parts[ordered[end - 1]];
-            var start = end - 1;
-
-            while (start > 0 && parts[ordered[start - 1]] == part)
+            for (var at = 1; at < ordered.Length; at++)
             {
-                start--;
-            }
-
-            var moments = 0;
-
-            for (var at = end - 1; at >= start && moments < gap; at--)
-            {
-                parts[ordered[at]] = Part.Gap;
-
-                // The row that begins its moment completes one moment kept apart.
-                if (at == start || !together(ordered[at - 1], ordered[at]))
+                if (together(ordered[at - 1], ordered[at]))
                 {
-                    moments++;
+                    parts[ordered[at]] = parts[ordered[at - 1]];
                 }
             }
+        }
 
-            end = start;
+        /// <summary>Keeps the last moments of every part apart: before each line, and at the end.</summary>
+        /// <param name="ordered">The rows in the order the parts were handed out.</param>
+        /// <param name="gap">How many moments of each part are kept apart.</param>
+        /// <param name="together">Whether a row belongs with the one before it: the same moment.</param>
+        /// <remarks>Moments rather than rows, so a moment is kept apart whole, as a split keeps it whole.</remarks>
+        internal void Gapped(int[] ordered, int gap, Func<int, int, bool> together)
+        {
+            var end = ordered.Length;
+
+            while (end > 0)
+            {
+                var part = parts[ordered[end - 1]];
+                var start = end - 1;
+
+                while (start > 0 && parts[ordered[start - 1]] == part)
+                {
+                    start--;
+                }
+
+                var moments = 0;
+
+                for (var at = end - 1; at >= start && moments < gap; at--)
+                {
+                    parts[ordered[at]] = Part.Gap;
+
+                    // The row that begins its moment completes one moment kept apart.
+                    if (at == start || !together(ordered[at - 1], ordered[at]))
+                    {
+                        moments++;
+                    }
+                }
+
+                end = start;
+            }
         }
     }
 
-    /// <summary>Lays a run of parts out over the rows in a given order.</summary>
-    /// <param name="inOrder">The parts, training first.</param>
-    /// <param name="rows">The rows, in the order the parts should be handed out.</param>
-    /// <returns>One part per row, in row order.</returns>
-    internal static Part[] Placed(this Part[] inOrder, int[] rows)
+    extension(Part[] inOrder)
     {
-        var parts = new Part[inOrder.Length];
-
-        for (var at = 0; at < rows.Length; at++)
+        /// <summary>Lays a run of parts out over the rows in a given order.</summary>
+        /// <param name="rows">The rows, in the order the parts should be handed out.</param>
+        /// <returns>One part per row, in row order.</returns>
+        internal Part[] Placed(int[] rows)
         {
-            parts[rows[at]] = inOrder[at];
-        }
+            var parts = new Part[inOrder.Length];
 
-        return parts;
+            for (var at = 0; at < rows.Length; at++)
+            {
+                parts[rows[at]] = inOrder[at];
+            }
+
+            return parts;
+        }
     }
 }

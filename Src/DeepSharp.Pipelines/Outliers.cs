@@ -251,7 +251,7 @@ public sealed record ClipOutliersStep : IFittedStep, IPipelineStep<ClipOutliersS
         }
 
         // How many of the training rows lie outside: what the fit saw, like everything else in its half.
-        learned.Learned(
+        learned.Saw(
             "outside",
             training.Finite.Count(value => value < learned.Number("lower") || value > learned.Number("upper")));
 

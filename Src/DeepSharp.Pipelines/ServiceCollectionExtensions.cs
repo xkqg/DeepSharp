@@ -17,37 +17,39 @@ namespace DeepSharp.Pipelines;
 /// </remarks>
 public static class ServiceCollectionExtensions
 {
-    /// <summary>Adds the pipeline factory and the catalog of verbs to an application's services.</summary>
-    /// <param name="services">The services being assembled.</param>
-    /// <returns>The same collection, so registration reads as one sentence.</returns>
-    /// <remarks>
-    /// Registering twice adds nothing twice. Two factories would be harmless and two catalogs would not:
-    /// a host that taught one of them a verb would be left with a file that reads differently depending on
-    /// which of the two answered.
-    /// </remarks>
-    public static IServiceCollection AddDeepSharpPipelines(this IServiceCollection services)
+    extension(IServiceCollection services)
     {
-        ArgumentNullException.ThrowIfNull(services);
-
-        // Every contribution is applied, whoever registered first. The obvious shape -- each package
-        // registering a catalog of its own and the container keeping one -- makes the order of two lines in
-        // a startup file decide which verbs exist, silently, and the error message then blames a package
-        // that is present.
-        services.TryAddSingleton(provider =>
+        /// <summary>Adds the pipeline factory and the catalog of verbs to an application's services.</summary>
+        /// <returns>The same collection, so registration reads as one sentence.</returns>
+        /// <remarks>
+        /// Registering twice adds nothing twice. Two factories would be harmless and two catalogs would not:
+        /// a host that taught one of them a verb would be left with a file that reads differently depending on
+        /// which of the two answered.
+        /// </remarks>
+        public IServiceCollection AddDeepSharpPipelines()
         {
-            var catalog = StepCatalog.BuiltIn();
+            ArgumentNullException.ThrowIfNull(services);
 
-            foreach (var contribution in provider.GetServices<IStepContribution>())
+            // Every contribution is applied, whoever registered first. The obvious shape -- each package
+            // registering a catalog of its own and the container keeping one -- makes the order of two lines in
+            // a startup file decide which verbs exist, silently, and the error message then blames a package
+            // that is present.
+            services.TryAddSingleton(provider =>
             {
-                contribution.AddTo(catalog);
-            }
+                var catalog = StepCatalog.BuiltIn();
 
-            return catalog;
-        });
+                foreach (var contribution in provider.GetServices<IStepContribution>())
+                {
+                    contribution.AddTo(catalog);
+                }
 
-        services.TryAddSingleton<IPipelineFactory, PipelineFactory>();
+                return catalog;
+            });
 
-        return services;
+            services.TryAddSingleton<IPipelineFactory, PipelineFactory>();
+
+            return services;
+        }
     }
 }
 

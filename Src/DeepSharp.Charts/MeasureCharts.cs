@@ -25,47 +25,45 @@ public static class MeasureCharts
 {
     private const int Side = 360;
 
-    /// <summary>
-    /// Every confusion matrix as a heatmap of counts: a row to each class the rows held, a column to each class predicted.
-    /// </summary>
-    /// <param name="measures">The measures.</param>
-    /// <returns>The chart, as the text of an SVG.</returns>
-    /// <exception cref="ArgumentException">The measures hold no confusion matrix: the report names none.</exception>
-    public static string ConfusionMatrices(this Measures measures) => ConfusionFigure(measures).ToSvg();
-
-    /// <summary>What was predicted for each row against what the row held, part by part, beside the line where the two agree.</summary>
-    /// <param name="measures">The measures.</param>
-    /// <returns>The chart, as the text of an SVG.</returns>
-    public static string PredictedAgainstActual(this Measures measures) => PredictedFigure(measures).ToSvg();
-
-    /// <summary>What was left over — each row's answer less what was predicted for it — against what was predicted, part by part.</summary>
-    /// <param name="measures">The measures.</param>
-    /// <returns>The chart, as the text of an SVG.</returns>
-    /// <remarks>Residuals scattered evenly about nought are what a model that learned what there was to learn leaves behind.</remarks>
-    public static string Residuals(this Measures measures) => ResidualFigure(measures).ToSvg();
-
-    /// <summary>Every measure that is a number as bars: each part's, beside predicting the training rows' average.</summary>
-    /// <param name="measures">The measures.</param>
-    /// <returns>The chart, as the text of an SVG.</returns>
-    /// <exception cref="ArgumentException">The measures hold no number: the report names the confusion matrix alone.</exception>
-    public static string Bars(this Measures measures) => BarFigure(measures).ToSvg();
-
-    /// <summary>
-    /// The report: the measures as their pipeline's report says they are shown — the numbers, these charts, or both — as one
-    /// value a notebook shows as HTML.
-    /// </summary>
-    /// <param name="measures">The measures.</param>
-    /// <returns>The report; <see cref="MeasuresReport.ToHtml"/> gives its HTML.</returns>
-    /// <exception cref="ArgumentNullException">There are no measures.</exception>
-    /// <remarks>
-    /// A C# cell of a notebook that ends with <c>trained.Measures!.Report()</c> shows the report there, and a notebook's report
-    /// block draws the same rendering: the report is rendered here, once, wherever it is shown.
-    /// </remarks>
-    public static MeasuresReport Report(this Measures measures)
+    extension(Measures measures)
     {
-        ArgumentNullException.ThrowIfNull(measures);
+        /// <summary>
+        /// Every confusion matrix as a heatmap of counts: a row to each class the rows held, a column to each class predicted.
+        /// </summary>
+        /// <returns>The chart, as the text of an SVG.</returns>
+        /// <exception cref="ArgumentException">The measures hold no confusion matrix: the report names none.</exception>
+        public string ConfusionMatrices() => ConfusionFigure(measures).ToSvg();
 
-        return new MeasuresReport(measures);
+        /// <summary>What was predicted for each row against what the row held, part by part, beside the line where the two agree.</summary>
+        /// <returns>The chart, as the text of an SVG.</returns>
+        public string PredictedAgainstActual() => PredictedFigure(measures).ToSvg();
+
+        /// <summary>What was left over — each row's answer less what was predicted for it — against what was predicted, part by part.</summary>
+        /// <returns>The chart, as the text of an SVG.</returns>
+        /// <remarks>Residuals scattered evenly about nought are what a model that learned what there was to learn leaves behind.</remarks>
+        public string Residuals() => ResidualFigure(measures).ToSvg();
+
+        /// <summary>Every measure that is a number as bars: each part's, beside predicting the training rows' average.</summary>
+        /// <returns>The chart, as the text of an SVG.</returns>
+        /// <exception cref="ArgumentException">The measures hold no number: the report names the confusion matrix alone.</exception>
+        public string Bars() => BarFigure(measures).ToSvg();
+
+        /// <summary>
+        /// The report: the measures as their pipeline's report says they are shown — the numbers, these charts, or both — as one
+        /// value a notebook shows as HTML.
+        /// </summary>
+        /// <returns>The report; <see cref="MeasuresReport.ToHtml"/> gives its HTML.</returns>
+        /// <exception cref="ArgumentNullException">There are no measures.</exception>
+        /// <remarks>
+        /// A C# cell of a notebook that ends with <c>trained.Measures!.Report()</c> shows the report there, and a notebook's report
+        /// block draws the same rendering: the report is rendered here, once, wherever it is shown.
+        /// </remarks>
+        public MeasuresReport Report()
+        {
+            ArgumentNullException.ThrowIfNull(measures);
+
+            return new MeasuresReport(measures);
+        }
     }
 
     /// <summary>The figure <see cref="ConfusionMatrices"/> draws: the parts across, each part's matrices down.</summary>

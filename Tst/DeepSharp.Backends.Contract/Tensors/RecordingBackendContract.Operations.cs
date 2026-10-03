@@ -121,12 +121,15 @@ public abstract partial class RecordingBackendContract
 /// <summary>Draws a tensor's values again, so two inputs of one shape are not the same numbers.</summary>
 internal static class DrawnTensorExtensions
 {
-    public static Tensor Drawn(this Tensor tensor, int anew)
+    extension(Tensor tensor)
     {
-        var generator = new Random(anew);
-        var low = tensor.Values.ToArray().Min();
-        var high = tensor.Values.ToArray().Max();
+        public Tensor Drawn(int anew)
+        {
+            var generator = new Random(anew);
+            var low = tensor.Values.ToArray().Min();
+            var high = tensor.Values.ToArray().Max();
 
-        return Tensor.From(tensor.Shape, [.. Enumerable.Range(0, tensor.Shape.Count).Select(_ => low + ((high - low) * generator.NextSingle()))]);
+            return Tensor.From(tensor.Shape, [.. Enumerable.Range(0, tensor.Shape.Count).Select(_ => low + ((high - low) * generator.NextSingle()))]);
+        }
     }
 }

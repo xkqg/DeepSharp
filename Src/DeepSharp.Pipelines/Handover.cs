@@ -148,109 +148,108 @@ public enum Needs
 /// </remarks>
 public static class Handover
 {
-    /// <summary>The numbers of one part, ready for something that learns.</summary>
-    /// <param name="prepared">The data as the pipeline left it.</param>
-    /// <param name="part">Which part of it to hand over.</param>
-    /// <returns>The rows of that split, and their answers when the pipeline names an output.</returns>
-    /// <exception cref="ArgumentException">The part asked for is the gap a split keeps apart.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The pipeline holds no rows, as one read from its file holds none; the run left out a step a learner of numbers needs,
-    /// a column still holds words, an answer column is not there, a value
-    /// is a gap or not a finite number, or the output refuses a row's answers.
-    /// </exception>
-    /// <remarks>Handed over for a learner of numbers, <see cref="Needs.Numbers"/>, which takes every step as declared.</remarks>
-    public static Batch Batch(this PreparedData prepared, Part part) => prepared.Batch(part, Needs.Numbers);
-
-    /// <summary>The numbers of one part, ready for a learner that needs them as it says.</summary>
-    /// <param name="prepared">The data as the pipeline left it.</param>
-    /// <param name="part">Which part of it to hand over.</param>
-    /// <param name="needs">What the learner needs of its features.</param>
-    /// <returns>
-    /// The rows of that split, their answers when the pipeline names an output, and each feature handed over as the places of
-    /// its categories.
-    /// </returns>
-    /// <exception cref="ArgumentOutOfRangeException">No need is named by the value.</exception>
-    /// <exception cref="ArgumentException">The part asked for is the gap a split keeps apart.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The pipeline holds no rows, as one read from its file holds none; the run left out a step this learner needs, every
-    /// such step named; a column still holds words, an answer column is
-    /// not there, a value is a gap or not a finite number, the output refuses a row's answers, or — for a learner that takes
-    /// every feature on one scale — a feature is not declared to land between minus one and one.
-    /// </exception>
-    /// <remarks>
-    /// A run of every step goes to every learner; a run for a learner goes to one that does without every step it left out
-    /// (<see cref="PreparedData.Skipped"/>). Where a feature lands is read from the steps the run took, as they say, not from
-    /// the rows: a feature that happens to lie between minus one and one on these rows and is declared to land nowhere would
-    /// not on the next ones.
-    /// </remarks>
-    public static Batch Batch(this PreparedData prepared, Part part, Needs needs)
+    extension(PreparedData prepared)
     {
-        ArgumentNullException.ThrowIfNull(prepared);
-        _ = needs.Named();
+        /// <summary>The numbers of one part, ready for something that learns.</summary>
+        /// <param name="part">Which part of it to hand over.</param>
+        /// <returns>The rows of that split, and their answers when the pipeline names an output.</returns>
+        /// <exception cref="ArgumentException">The part asked for is the gap a split keeps apart.</exception>
+        /// <exception cref="InvalidOperationException">
+        /// The pipeline holds no rows, as one read from its file holds none; the run left out a step a learner of numbers needs,
+        /// a column still holds words, an answer column is not there, a value
+        /// is a gap or not a finite number, or the output refuses a row's answers.
+        /// </exception>
+        /// <remarks>Handed over for a learner of numbers, <see cref="Needs.Numbers"/>, which takes every step as declared.</remarks>
+        public Batch Batch(Part part) => prepared.Batch(part, Needs.Numbers);
 
-        if (part == Part.Gap)
+        /// <summary>The numbers of one part, ready for a learner that needs them as it says.</summary>
+        /// <param name="part">Which part of it to hand over.</param>
+        /// <param name="needs">What the learner needs of its features.</param>
+        /// <returns>
+        /// The rows of that split, their answers when the pipeline names an output, and each feature handed over as the places of
+        /// its categories.
+        /// </returns>
+        /// <exception cref="ArgumentOutOfRangeException">No need is named by the value.</exception>
+        /// <exception cref="ArgumentException">The part asked for is the gap a split keeps apart.</exception>
+        /// <exception cref="InvalidOperationException">
+        /// The pipeline holds no rows, as one read from its file holds none; the run left out a step this learner needs, every
+        /// such step named; a column still holds words, an answer column is
+        /// not there, a value is a gap or not a finite number, the output refuses a row's answers, or — for a learner that takes
+        /// every feature on one scale — a feature is not declared to land between minus one and one.
+        /// </exception>
+        /// <remarks>
+        /// A run of every step goes to every learner; a run for a learner goes to one that does without every step it left out
+        /// (<see cref="PreparedData.Skipped"/>). Where a feature lands is read from the steps the run took, as they say, not from
+        /// the rows: a feature that happens to lie between minus one and one on these rows and is declared to land nowhere would
+        /// not on the next ones.
+        /// </remarks>
+        public Batch Batch(Part part, Needs needs)
         {
-            throw new ArgumentException(
-                "The rows a split keeps apart are fitted on by nothing and handed to nothing: that is what keeps them apart.",
-                nameof(part));
+            ArgumentNullException.ThrowIfNull(prepared);
+            _ = needs.Named();
+
+            if (part == Part.Gap)
+            {
+                throw new ArgumentException(
+                    "The rows a split keeps apart are fitted on by nothing and handed to nothing: that is what keeps them apart.",
+                    nameof(part));
+            }
+
+            var rows = RowsOf(prepared, part);
+            var features = FeaturesOf(prepared, prepared.Table, rows, needs);
+            var answered = AnswersOf(prepared, prepared.Table, rows);
+
+            // The labels are one number a row, so they carry an output of one answer.
+            return new Batch(features.Names, features.Rows, answered.Names is [_] ? [.. answered.Answers!.Select(each => each[0])] : null)
+            {
+                AnswerNames = answered.Names,
+                Answers = answered.Answers,
+                Part = part,
+                Keys = features.Keys,
+                Categories = features.Categories,
+            };
         }
 
-        var rows = RowsOf(prepared, part);
-        var features = FeaturesOf(prepared, prepared.Table, rows, needs);
-        var answered = AnswersOf(prepared, prepared.Table, rows);
+        /// <summary>Rows that arrived after training, replayed and handed over in the shape the training rows were.</summary>
+        /// <param name="rows">The rows to serve, without the answer — it is what is being asked.</param>
+        /// <returns>Their numbers in the training order, and which handed-in row each is.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// The run left out a step a learner of numbers needs, or a served row is refused for what a training row would be: a
+        /// column still holding words, a gap, a value that is not a finite number.
+        /// </exception>
+        /// <remarks>
+        /// Nothing is fitted: the rows are replayed with the numbers the training rows produced, which is the
+        /// only way a model sees tomorrow's rows the way it saw the ones it learned from.
+        /// </remarks>
+        public ServedBatch Served(IRowSource rows) => prepared.Served(rows, Needs.Numbers);
 
-        // The labels are one number a row, so they carry an output of one answer.
-        return new Batch(features.Names, features.Rows, answered.Names is [_] ? [.. answered.Answers!.Select(each => each[0])] : null)
+        /// <summary>Rows that arrived after training, replayed and handed over to a learner that needs them as it says.</summary>
+        /// <param name="rows">The rows to serve, without the answer — it is what is being asked.</param>
+        /// <param name="needs">What the learner needs of its features.</param>
+        /// <returns>Their numbers in the training order, which handed-in row each is, and each feature handed over as places.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">No need is named by the value.</exception>
+        /// <exception cref="InvalidOperationException">
+        /// The run left out a step this learner needs; a served row is refused for what a training row would be; or — for a
+        /// learner that takes every feature on one scale — a feature is not declared to land between minus one and one, which a
+        /// pipeline loaded from its file says as the one that was fitted does.
+        /// </exception>
+        /// <remarks>The steps are replayed as the run took them, so a served row is handed over as the training rows were.</remarks>
+        public ServedBatch Served(IRowSource rows, Needs needs)
         {
-            AnswerNames = answered.Names,
-            Answers = answered.Answers,
-            Part = part,
-            Keys = features.Keys,
-            Categories = features.Categories,
-        };
-    }
+            ArgumentNullException.ThrowIfNull(prepared);
+            ArgumentNullException.ThrowIfNull(rows);
+            _ = needs.Named();
 
-    /// <summary>Rows that arrived after training, replayed and handed over in the shape the training rows were.</summary>
-    /// <param name="prepared">The trained pipeline.</param>
-    /// <param name="rows">The rows to serve, without the answer — it is what is being asked.</param>
-    /// <returns>Their numbers in the training order, and which handed-in row each is.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// The run left out a step a learner of numbers needs, or a served row is refused for what a training row would be: a
-    /// column still holding words, a gap, a value that is not a finite number.
-    /// </exception>
-    /// <remarks>
-    /// Nothing is fitted: the rows are replayed with the numbers the training rows produced, which is the
-    /// only way a model sees tomorrow's rows the way it saw the ones it learned from.
-    /// </remarks>
-    public static ServedBatch Served(this PreparedData prepared, IRowSource rows) => prepared.Served(rows, Needs.Numbers);
+            var table = prepared.Replay(rows);
+            var all = Enumerable.Range(0, table.RowCount).ToArray();
+            var features = FeaturesOf(prepared, table, all, needs);
 
-    /// <summary>Rows that arrived after training, replayed and handed over to a learner that needs them as it says.</summary>
-    /// <param name="prepared">The trained pipeline.</param>
-    /// <param name="rows">The rows to serve, without the answer — it is what is being asked.</param>
-    /// <param name="needs">What the learner needs of its features.</param>
-    /// <returns>Their numbers in the training order, which handed-in row each is, and each feature handed over as places.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">No need is named by the value.</exception>
-    /// <exception cref="InvalidOperationException">
-    /// The run left out a step this learner needs; a served row is refused for what a training row would be; or — for a
-    /// learner that takes every feature on one scale — a feature is not declared to land between minus one and one, which a
-    /// pipeline loaded from its file says as the one that was fitted does.
-    /// </exception>
-    /// <remarks>The steps are replayed as the run took them, so a served row is handed over as the training rows were.</remarks>
-    public static ServedBatch Served(this PreparedData prepared, IRowSource rows, Needs needs)
-    {
-        ArgumentNullException.ThrowIfNull(prepared);
-        ArgumentNullException.ThrowIfNull(rows);
-        _ = needs.Named();
-
-        var table = prepared.Replay(rows);
-        var all = Enumerable.Range(0, table.RowCount).ToArray();
-        var features = FeaturesOf(prepared, table, all, needs);
-
-        return new ServedBatch(features.Names, features.Rows, [.. all.Select(row => table.Identities[row].ReadAt)])
-        {
-            Keys = features.Keys,
-            Categories = features.Categories,
-        };
+            return new ServedBatch(features.Names, features.Rows, [.. all.Select(row => table.Identities[row].ReadAt)])
+            {
+                Keys = features.Keys,
+                Categories = features.Categories,
+            };
+        }
     }
 
     /// <summary>The answers of one part and the key of each of its rows, and nothing of its features.</summary>

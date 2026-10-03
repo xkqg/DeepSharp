@@ -171,7 +171,7 @@ public sealed class Measures : Evidence
     /// network's file is held to its pipeline by, or on a run of every step of the same declaration; what it is measured
     /// against, and the way back to the answers' own units, are the run's that measures it.
     /// </remarks>
-    public string PredictionsToJson() => PredictionsDocument.Write(new WrittenPredictions(WrittenFit.Of(MeasuredOn), Answers, Predicted));
+    public string PredictionsToJson() => new WrittenPredictions(WrittenFit.Of(MeasuredOn), Answers, Predicted).ToJson();
 
     /// <inheritdoc />
     public override TResult Accept<TResult>(IEvidenceVisitor<TResult> visitor)

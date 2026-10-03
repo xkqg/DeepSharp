@@ -417,14 +417,14 @@ public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingS
         var training = table.TrainingValues(Column, parts);
 
         // The gaps among the training rows: what the fit saw, like every number in its half of the file.
-        learned.Learned("gaps", training.Gaps);
+        learned.Saw("gaps", training.Gaps);
 
         if (RefuseAbove is { } ceiling)
         {
             var share = training.Rows == 0 ? 0 : training.Gaps / (double)training.Rows;
 
-            learned.Learned("share", share);
-            learned.Learned("filled", share <= ceiling ? 1 : 0);
+            learned.Saw("share", share);
+            learned.Decided("filled", share <= ceiling ? 1 : 0);
 
             if (share > ceiling)
             {

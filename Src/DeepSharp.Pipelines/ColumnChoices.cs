@@ -96,258 +96,251 @@ public sealed record ColumnChoices(IReadOnlyList<ColumnChoice> Rows, INamesTheAn
 /// </remarks>
 public static class ColumnChoiceExtensions
 {
-    /// <summary>The steps with a column taken in.</summary>
-    /// <param name="declaration">The pipeline.</param>
-    /// <param name="column">The column.</param>
-    /// <param name="kind">The kind it takes when the schema does not name it yet; a declared column keeps its own.</param>
-    /// <param name="header">The source's columns, in order: a new column stands where the source has it.</param>
-    /// <returns>
-    /// The steps with the column taking part: an excluded one brought back as it was, a dropped one's name taken out
-    /// of its drop — a drop left empty goes — and one the schema does not name taken in with the kind given. The steps
-    /// as they are when the column takes part already, or when nothing here can bring it back.
-    /// </returns>
-    public static IReadOnlyList<IPipelineStep> Including(
-        this PipelineDeclaration declaration, string column, ColumnKind kind, IReadOnlyList<string> header)
+    extension(PipelineDeclaration declaration)
     {
-        ArgumentNullException.ThrowIfNull(declaration);
-        ArgumentNullException.ThrowIfNull(header);
-
-        var steps = declaration.Steps;
-
-        if (Schema(declaration) is not { } declare || Reaches(declaration, column))
+        /// <summary>The steps with a column taken in.</summary>
+        /// <param name="column">The column.</param>
+        /// <param name="kind">The kind it takes when the schema does not name it yet; a declared column keeps its own.</param>
+        /// <param name="header">The source's columns, in order: a new column stands where the source has it.</param>
+        /// <returns>
+        /// The steps with the column taking part: an excluded one brought back as it was, a dropped one's name taken out
+        /// of its drop — a drop left empty goes — and one the schema does not name taken in with the kind given. The steps
+        /// as they are when the column takes part already, or when nothing here can bring it back.
+        /// </returns>
+        public IReadOnlyList<IPipelineStep> Including(
+            string column, ColumnKind kind, IReadOnlyList<string> header)
         {
-            return steps;
-        }
+            ArgumentNullException.ThrowIfNull(declaration);
+            ArgumentNullException.ThrowIfNull(header);
 
-        var declared = declare.Columns.FirstOrDefault(each => each.Name == column);
+            var steps = declaration.Steps;
 
-        if (declared is { Excluded: true })
-        {
-            return Replaced(steps, declaration.ColumnsAt, declare.WithColumn(column, kind, header));
-        }
-
-        if (DropOf(steps, column) is { } at)
-        {
-            string[] left = [.. ((DropColumnsStep)steps[at]).Columns.Where(each => each != column)];
-
-            return left.Length == 0 ? [.. steps.Take(at), .. steps.Skip(at + 1)] : Replaced(steps, at, new DropColumnsStep(left));
-        }
-
-        return declared is null && !Made(declaration, column)
-            ? Replaced(steps, declaration.ColumnsAt, declare.WithColumn(column, kind, header))
-            : steps;
-    }
-
-    /// <summary>The steps with several columns taken in, one after another, each as one column is taken in.</summary>
-    /// <param name="declaration">The pipeline.</param>
-    /// <param name="columns">The columns, in the order they are taken in.</param>
-    /// <param name="kind">The one kind each takes when the schema does not name it yet; a declared column keeps its own.</param>
-    /// <param name="header">The source's columns, in order: a new column stands where the source has it.</param>
-    /// <returns>
-    /// The steps with every column taking part; the steps as they are when every one takes part already. A column taken
-    /// in that breaks a rule stops the rest, and the steps it made are handed back, for the rules to judge.
-    /// </returns>
-    public static IReadOnlyList<IPipelineStep> Including(
-        this PipelineDeclaration declaration, IReadOnlyList<string> columns, ColumnKind kind, IReadOnlyList<string> header)
-    {
-        ArgumentNullException.ThrowIfNull(declaration);
-        ArgumentNullException.ThrowIfNull(columns);
-
-        var steps = declaration.Steps;
-
-        foreach (var column in columns)
-        {
-            steps = new PipelineDeclaration(steps).Including(column, kind, header);
-
-            if (PipelineDeclaration.FaultsIn(steps).Count > 0)
+            if (Schema(declaration) is not { } declare || Reaches(declaration, column))
             {
-                break;
+                return steps;
             }
+
+            var declared = declare.Columns.FirstOrDefault(each => each.Name == column);
+
+            if (declared is { Excluded: true })
+            {
+                return Replaced(steps, declaration.ColumnsAt, declare.WithColumn(column, kind, header));
+            }
+
+            if (DropOf(steps, column) is { } at)
+            {
+                string[] left = [.. ((DropColumnsStep)steps[at]).Columns.Where(each => each != column)];
+
+                return left.Length == 0 ? [.. steps.Take(at), .. steps.Skip(at + 1)] : Replaced(steps, at, new DropColumnsStep(left));
+            }
+
+            return declared is null && !Made(declaration, column)
+                ? Replaced(steps, declaration.ColumnsAt, declare.WithColumn(column, kind, header))
+                : steps;
         }
 
-        return steps;
-    }
-
-    /// <summary>The steps with a column left out.</summary>
-    /// <param name="declaration">The pipeline.</param>
-    /// <param name="column">The column.</param>
-    /// <returns>
-    /// The steps without it: a declared column no step names is excluded in the schema, keeping its kind — a category
-    /// the step that encodes every category turns into columns of its own among them, though it never reaches the end
-    /// itself; any other is dropped after the last step that reads it, or after the step that makes it, as another name
-    /// in a drop standing there. The steps as they are when a column a step names does not reach the end.
-    /// </returns>
-    /// <exception cref="DeclarationException">
-    /// The column is the last one the schema takes, and the schema does not keep the rest: it would take no column.
-    /// </exception>
-    public static IReadOnlyList<IPipelineStep> Excluding(this PipelineDeclaration declaration, string column)
-    {
-        ArgumentNullException.ThrowIfNull(declaration);
-
-        var steps = declaration.Steps;
-
-        if (Schema(declaration) is not { } declare)
+        /// <summary>The steps with several columns taken in, one after another, each as one column is taken in.</summary>
+        /// <param name="columns">The columns, in the order they are taken in.</param>
+        /// <param name="kind">The one kind each takes when the schema does not name it yet; a declared column keeps its own.</param>
+        /// <param name="header">The source's columns, in order: a new column stands where the source has it.</param>
+        /// <returns>
+        /// The steps with every column taking part; the steps as they are when every one takes part already. A column taken
+        /// in that breaks a rule stops the rest, and the steps it made are handed back, for the rules to judge.
+        /// </returns>
+        public IReadOnlyList<IPipelineStep> Including(
+            IReadOnlyList<string> columns, ColumnKind kind, IReadOnlyList<string> header)
         {
+            ArgumentNullException.ThrowIfNull(declaration);
+            ArgumentNullException.ThrowIfNull(columns);
+
+            var steps = declaration.Steps;
+
+            foreach (var column in columns)
+            {
+                steps = new PipelineDeclaration(steps).Including(column, kind, header);
+
+                if (PipelineDeclaration.FaultsIn(steps).Count > 0)
+                {
+                    break;
+                }
+            }
+
             return steps;
         }
 
-        var readers = Enumerable.Range(0, steps.Count).Where(at => steps[at].ColumnsRead.Any(read => read.Column == column)).ToArray();
-
-        if (readers.Length == 0 && declare.Columns.Any(each => each is { Excluded: false } && each.Name == column))
+        /// <summary>The steps with a column left out.</summary>
+        /// <param name="column">The column.</param>
+        /// <returns>
+        /// The steps without it: a declared column no step names is excluded in the schema, keeping its kind — a category
+        /// the step that encodes every category turns into columns of its own among them, though it never reaches the end
+        /// itself; any other is dropped after the last step that reads it, or after the step that makes it, as another name
+        /// in a drop standing there. The steps as they are when a column a step names does not reach the end.
+        /// </returns>
+        /// <exception cref="DeclarationException">
+        /// The column is the last one the schema takes, and the schema does not keep the rest: it would take no column.
+        /// </exception>
+        public IReadOnlyList<IPipelineStep> Excluding(string column)
         {
-            return Replaced(steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnExcluded(column)));
+            ArgumentNullException.ThrowIfNull(declaration);
+
+            var steps = declaration.Steps;
+
+            if (Schema(declaration) is not { } declare)
+            {
+                return steps;
+            }
+
+            var readers = Enumerable.Range(0, steps.Count).Where(at => steps[at].ColumnsRead.Any(read => read.Column == column)).ToArray();
+
+            if (readers.Length == 0 && declare.Columns.Any(each => each is { Excluded: false } && each.Name == column))
+            {
+                return Replaced(steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnExcluded(column)));
+            }
+
+            if (!Reaches(declaration, column))
+            {
+                return steps;
+            }
+
+            var after = Math.Max(readers.DefaultIfEmpty(-1).Max(), MadeAt(declaration, column)) + 1;
+
+            return after < steps.Count && steps[after] is DropColumnsStep drop
+                ? Replaced(steps, after, new DropColumnsStep([.. drop.Columns, column]))
+                : [.. steps.Take(after), new DropColumnsStep([column]), .. steps.Skip(after)];
         }
 
-        if (!Reaches(declaration, column))
+        /// <summary>The steps with a column the schema names given another kind.</summary>
+        /// <param name="column">The column.</param>
+        /// <param name="kind">The kind.</param>
+        /// <returns>The steps with the schema changed, as <see cref="DeclareStep.WithColumnKind"/> changes it.</returns>
+        /// <exception cref="ArgumentException">The schema does not name the column; taking one in is <see cref="Including(PipelineDeclaration, string, ColumnKind, IReadOnlyList{string})"/>.</exception>
+        public IReadOnlyList<IPipelineStep> WithKind(string column, ColumnKind kind)
         {
-            return steps;
+            ArgumentNullException.ThrowIfNull(declaration);
+
+            return Schema(declaration) is { } declare
+                ? Replaced(declaration.Steps, declaration.ColumnsAt, declare.WithColumnKind(column, kind))
+                : declaration.Steps;
         }
 
-        var after = Math.Max(readers.DefaultIfEmpty(-1).Max(), MadeAt(declaration, column)) + 1;
-
-        return after < steps.Count && steps[after] is DropColumnsStep drop
-            ? Replaced(steps, after, new DropColumnsStep([.. drop.Columns, column]))
-            : [.. steps.Take(after), new DropColumnsStep([column]), .. steps.Skip(after)];
-    }
-
-    /// <summary>The steps with a column the schema names given another kind.</summary>
-    /// <param name="declaration">The pipeline.</param>
-    /// <param name="column">The column.</param>
-    /// <param name="kind">The kind.</param>
-    /// <returns>The steps with the schema changed, as <see cref="DeclareStep.WithColumnKind"/> changes it.</returns>
-    /// <exception cref="ArgumentException">The schema does not name the column; taking one in is <see cref="Including(PipelineDeclaration, string, ColumnKind, IReadOnlyList{string})"/>.</exception>
-    public static IReadOnlyList<IPipelineStep> WithKind(this PipelineDeclaration declaration, string column, ColumnKind kind)
-    {
-        ArgumentNullException.ThrowIfNull(declaration);
-
-        return Schema(declaration) is { } declare
-            ? Replaced(declaration.Steps, declaration.ColumnsAt, declare.WithColumnKind(column, kind))
-            : declaration.Steps;
-    }
-
-    /// <summary>The steps with a timestamp column the schema names read by a format, or as ISO 8601 writes moments.</summary>
-    /// <param name="declaration">The pipeline.</param>
-    /// <param name="column">The column.</param>
-    /// <param name="format">How its moments are written; nothing for ISO 8601.</param>
-    /// <returns>The steps with the schema changed, as <see cref="DeclareStep.WithColumnFormat"/> changes it.</returns>
-    /// <exception cref="DeclarationException">
-    /// The schema does not name the column, or it holds no moments: a fault at the schema's place, in the words a file shows.
-    /// </exception>
-    public static IReadOnlyList<IPipelineStep> WithFormat(this PipelineDeclaration declaration, string column, string? format)
-    {
-        ArgumentNullException.ThrowIfNull(declaration);
-
-        return Schema(declaration) is { } declare
-            ? Replaced(declaration.Steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnFormat(column, format)))
-            : declaration.Steps;
-    }
-
-    /// <summary>The steps with a value said to stand for a gap in a column the schema names, or with none.</summary>
-    /// <param name="declaration">The pipeline.</param>
-    /// <param name="column">The column.</param>
-    /// <param name="missing">The value that stands for a gap; nothing for none.</param>
-    /// <returns>The steps with the schema changed, as <see cref="DeclareStep.WithColumnMissing"/> changes it.</returns>
-    /// <exception cref="DeclarationException">
-    /// The schema does not name the column, or the value is nothing but spaces: a fault at the schema's place, in the words
-    /// a file shows.
-    /// </exception>
-    public static IReadOnlyList<IPipelineStep> WithMissing(this PipelineDeclaration declaration, string column, string? missing)
-    {
-        ArgumentNullException.ThrowIfNull(declaration);
-
-        return Schema(declaration) is { } declare
-            ? Replaced(declaration.Steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnMissing(column, missing)))
-            : declaration.Steps;
-    }
-
-    /// <summary>The steps with an output placed.</summary>
-    /// <param name="declaration">The pipeline.</param>
-    /// <param name="output">The output, made under its verb by <see cref="StepCatalog.Make"/>.</param>
-    /// <returns>
-    /// The steps with the output in the place of the one standing, or at the end when none stands; an answer made from
-    /// its column as it was read — a return — directly after the split, above every step that changes that column. The
-    /// steps as they are when the output standing writes what this one writes.
-    /// </returns>
-    /// <remarks>An output is the same output when it writes the same, whatever its own equality says.</remarks>
-    public static IReadOnlyList<IPipelineStep> WithOutput(this PipelineDeclaration declaration, INamesTheAnswer output)
-    {
-        ArgumentNullException.ThrowIfNull(declaration);
-        ArgumentNullException.ThrowIfNull(output);
-
-        var steps = declaration.Steps;
-        var at = declaration.OutputAt;
-
-        if (at >= 0 && steps[at].Canonical().AsSpan().SequenceEqual(output.Canonical()))
+        /// <summary>The steps with a timestamp column the schema names read by a format, or as ISO 8601 writes moments.</summary>
+        /// <param name="column">The column.</param>
+        /// <param name="format">How its moments are written; nothing for ISO 8601.</param>
+        /// <returns>The steps with the schema changed, as <see cref="DeclareStep.WithColumnFormat"/> changes it.</returns>
+        /// <exception cref="DeclarationException">
+        /// The schema does not name the column, or it holds no moments: a fault at the schema's place, in the words a file shows.
+        /// </exception>
+        public IReadOnlyList<IPipelineStep> WithFormat(string column, string? format)
         {
-            return steps;
+            ArgumentNullException.ThrowIfNull(declaration);
+
+            return Schema(declaration) is { } declare
+                ? Replaced(declaration.Steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnFormat(column, format)))
+                : declaration.Steps;
         }
 
-        if (output is AheadStep { IsMadeFromItsColumnAsRead: true } && declaration.SplitAt >= 0)
+        /// <summary>The steps with a value said to stand for a gap in a column the schema names, or with none.</summary>
+        /// <param name="column">The column.</param>
+        /// <param name="missing">The value that stands for a gap; nothing for none.</param>
+        /// <returns>The steps with the schema changed, as <see cref="DeclareStep.WithColumnMissing"/> changes it.</returns>
+        /// <exception cref="DeclarationException">
+        /// The schema does not name the column, or the value is nothing but spaces: a fault at the schema's place, in the words
+        /// a file shows.
+        /// </exception>
+        public IReadOnlyList<IPipelineStep> WithMissing(string column, string? missing)
         {
-            var split = steps[declaration.SplitAt];
-            List<IPipelineStep> placed = [.. steps.Where((_, place) => place != at)];
+            ArgumentNullException.ThrowIfNull(declaration);
 
-            placed.Insert(placed.IndexOf(split) + 1, output);
-
-            return placed;
+            return Schema(declaration) is { } declare
+                ? Replaced(declaration.Steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnMissing(column, missing)))
+                : declaration.Steps;
         }
 
-        return at >= 0 ? [.. steps.Take(at), output, .. steps.Skip(at + 1)] : [.. steps, output];
-    }
+        /// <summary>The steps with an output placed.</summary>
+        /// <param name="output">The output, made under its verb by <see cref="StepCatalog.Make"/>.</param>
+        /// <returns>
+        /// The steps with the output in the place of the one standing, or at the end when none stands; an answer made from
+        /// its column as it was read — a return — directly after the split, above every step that changes that column. The
+        /// steps as they are when the output standing writes what this one writes.
+        /// </returns>
+        /// <remarks>An output is the same output when it writes the same, whatever its own equality says.</remarks>
+        public IReadOnlyList<IPipelineStep> WithOutput(INamesTheAnswer output)
+        {
+            ArgumentNullException.ThrowIfNull(declaration);
+            ArgumentNullException.ThrowIfNull(output);
 
-    /// <summary>The steps without their output.</summary>
-    /// <param name="declaration">The pipeline.</param>
-    /// <returns>The steps with the output taken away; the steps as they are when there is none.</returns>
-    public static IReadOnlyList<IPipelineStep> WithoutOutput(this PipelineDeclaration declaration)
-    {
-        ArgumentNullException.ThrowIfNull(declaration);
+            var steps = declaration.Steps;
+            var at = declaration.OutputAt;
 
-        var at = declaration.OutputAt;
+            if (at >= 0 && steps[at].Canonical().AsSpan().SequenceEqual(output.Canonical()))
+            {
+                return steps;
+            }
 
-        return at < 0 ? declaration.Steps : [.. declaration.Steps.Take(at), .. declaration.Steps.Skip(at + 1)];
-    }
+            if (output is AheadStep { IsMadeFromItsColumnAsRead: true } && declaration.SplitAt >= 0)
+            {
+                var split = steps[declaration.SplitAt];
+                List<IPipelineStep> placed = [.. steps.Where((_, place) => place != at)];
 
-    /// <summary>The kinds a column can be given without breaking a rule.</summary>
-    /// <param name="declaration">The pipeline.</param>
-    /// <param name="column">The column.</param>
-    /// <param name="header">The source's columns, in order: where a column taken in stands.</param>
-    /// <returns>
-    /// In the order the kinds are named: for a column the schema names, its own kind and every other <see cref="WithKind"/>
-    /// gives it that the rules keep; for one it does not, every kind <see cref="Including(PipelineDeclaration, string, ColumnKind, IReadOnlyList{string})"/> takes it in with that the rules
-    /// keep; none for a column neither changes — one kept with the rest of the file, or one a step makes.
-    /// </returns>
-    /// <remarks>What a list offers a column's kind from: nothing it offers is refused.</remarks>
-    public static IReadOnlyList<ColumnKind> KindsFor(this PipelineDeclaration declaration, string column, IReadOnlyList<string> header)
-    {
-        ArgumentNullException.ThrowIfNull(declaration);
-        ArgumentNullException.ThrowIfNull(header);
+                placed.Insert(placed.IndexOf(split) + 1, output);
 
-        var declared = Schema(declaration)?.Columns.FirstOrDefault(each => each.Name == column);
+                return placed;
+            }
 
-        return
-        [
-            .. Enum.GetValues<ColumnKind>().Where(kind => declared is not null
-                ? kind == declared.Kind || Changes(declaration, () => declaration.WithKind(column, kind))
-                : Changes(declaration, () => declaration.Including(column, kind, header))),
-        ];
-    }
+            return at >= 0 ? [.. steps.Take(at), output, .. steps.Skip(at + 1)] : [.. steps, output];
+        }
 
-    /// <summary>How each column asked about stands, and what can be done to it without breaking a rule.</summary>
-    /// <param name="declaration">The pipeline.</param>
-    /// <param name="columns">The columns, in the order the rows are wanted: the source's, or those a block shows.</param>
-    /// <returns>One row per column asked.</returns>
-    /// <remarks>
-    /// An operation is offered when it changes the steps and the rules keep what it makes: so leaving out the answer
-    /// is not offered, nor making a category of a column a step below scales as a number.
-    /// </remarks>
-    public static ColumnChoices ChoicesFor(this PipelineDeclaration declaration, IReadOnlyList<string> columns)
-    {
-        ArgumentNullException.ThrowIfNull(declaration);
-        ArgumentNullException.ThrowIfNull(columns);
+        /// <summary>The steps without their output.</summary>
+        /// <returns>The steps with the output taken away; the steps as they are when there is none.</returns>
+        public IReadOnlyList<IPipelineStep> WithoutOutput()
+        {
+            ArgumentNullException.ThrowIfNull(declaration);
 
-        var roles = RolesOf(declaration);
+            var at = declaration.OutputAt;
 
-        return new([.. columns.Select(column => Choice(declaration, column, columns, roles.GetValueOrDefault(column)))], declaration.Output);
+            return at < 0 ? declaration.Steps : [.. declaration.Steps.Take(at), .. declaration.Steps.Skip(at + 1)];
+        }
+
+        /// <summary>The kinds a column can be given without breaking a rule.</summary>
+        /// <param name="column">The column.</param>
+        /// <param name="header">The source's columns, in order: where a column taken in stands.</param>
+        /// <returns>
+        /// In the order the kinds are named: for a column the schema names, its own kind and every other <see cref="WithKind"/>
+        /// gives it that the rules keep; for one it does not, every kind <see cref="Including(PipelineDeclaration, string, ColumnKind, IReadOnlyList{string})"/> takes it in with that the rules
+        /// keep; none for a column neither changes — one kept with the rest of the file, or one a step makes.
+        /// </returns>
+        /// <remarks>What a list offers a column's kind from: nothing it offers is refused.</remarks>
+        public IReadOnlyList<ColumnKind> KindsFor(string column, IReadOnlyList<string> header)
+        {
+            ArgumentNullException.ThrowIfNull(declaration);
+            ArgumentNullException.ThrowIfNull(header);
+
+            var declared = Schema(declaration)?.Columns.FirstOrDefault(each => each.Name == column);
+
+            return
+            [
+                .. Enum.GetValues<ColumnKind>().Where(kind => declared is not null
+                    ? kind == declared.Kind || Changes(declaration, () => declaration.WithKind(column, kind))
+                    : Changes(declaration, () => declaration.Including(column, kind, header))),
+            ];
+        }
+
+        /// <summary>How each column asked about stands, and what can be done to it without breaking a rule.</summary>
+        /// <param name="columns">The columns, in the order the rows are wanted: the source's, or those a block shows.</param>
+        /// <returns>One row per column asked.</returns>
+        /// <remarks>
+        /// An operation is offered when it changes the steps and the rules keep what it makes: so leaving out the answer
+        /// is not offered, nor making a category of a column a step below scales as a number.
+        /// </remarks>
+        public ColumnChoices ChoicesFor(IReadOnlyList<string> columns)
+        {
+            ArgumentNullException.ThrowIfNull(declaration);
+            ArgumentNullException.ThrowIfNull(columns);
+
+            var roles = RolesOf(declaration);
+
+            return new([.. columns.Select(column => Choice(declaration, column, columns, roles.GetValueOrDefault(column)))], declaration.Output);
+        }
     }
 
     // What each column is to the output, by the way back of each answer: the column an answer comes back to is an

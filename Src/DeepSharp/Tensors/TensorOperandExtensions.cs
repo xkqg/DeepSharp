@@ -18,196 +18,205 @@ namespace DeepSharp.Tensors;
 /// </remarks>
 public static class TensorOperandExtensions
 {
-    /// <summary>
-    /// What <see cref="ITensorBackend.Add"/>, <see cref="ITensorBackend.Subtract"/>, <see cref="ITensorBackend.Multiply"/>
-    /// and <see cref="ITensorBackend.Divide"/> ask of their tensors: both handed, of one shape.
-    /// </summary>
-    /// <param name="left">The first tensor.</param>
-    /// <param name="right">The second.</param>
-    /// <param name="operation">The operation's name, for the refusal's words.</param>
-    /// <exception cref="ArgumentNullException">Either is not handed.</exception>
-    /// <exception cref="ArgumentException">The two shapes differ.</exception>
-    public static void RequireSameShape(this Tensor left, Tensor right, string operation)
+    extension(Tensor left)
     {
-        ArgumentNullException.ThrowIfNull(left);
-        ArgumentNullException.ThrowIfNull(right);
-
-        if (left.Shape != right.Shape)
+        /// <summary>
+        /// What <see cref="ITensorBackend.Add"/>, <see cref="ITensorBackend.Subtract"/>, <see cref="ITensorBackend.Multiply"/>
+        /// and <see cref="ITensorBackend.Divide"/> ask of their tensors: both handed, of one shape.
+        /// </summary>
+        /// <param name="right">The second.</param>
+        /// <param name="operation">The operation's name, for the refusal's words.</param>
+        /// <exception cref="ArgumentNullException">Either is not handed.</exception>
+        /// <exception cref="ArgumentException">The two shapes differ.</exception>
+        public void RequireSameShape(Tensor right, string operation)
         {
-            throw new ArgumentException(
-                $"{operation} needs two tensors of the same shape, and was given {left.Shape} and {right.Shape}.", nameof(right));
+            ArgumentNullException.ThrowIfNull(left);
+            ArgumentNullException.ThrowIfNull(right);
+
+            if (left.Shape != right.Shape)
+            {
+                throw new ArgumentException(
+                    $"{operation} needs two tensors of the same shape, and was given {left.Shape} and {right.Shape}.", nameof(right));
+            }
+        }
+
+        /// <summary>What <see cref="ITensorBackend.MatMul"/> asks of its tensors: two matrices, the left as wide as the right is tall.</summary>
+        /// <param name="right">The right matrix.</param>
+        /// <exception cref="ArgumentNullException">Either is not handed.</exception>
+        /// <exception cref="ArgumentException">Either is not a matrix, or the left is not as wide as the right is tall.</exception>
+        public void RequireMatrixProduct(Tensor right)
+        {
+            Matrix(left, nameof(ITensorBackend.MatMul), nameof(left));
+            Matrix(right, nameof(ITensorBackend.MatMul), nameof(right));
+
+            if (right.Shape[0] != left.Shape[1])
+            {
+                throw new ArgumentException(
+                    $"MatMul needs the left matrix as wide as the right one is tall, and was given {left.Shape} and {right.Shape}.",
+                    nameof(right));
+            }
         }
     }
 
-    /// <summary>What <see cref="ITensorBackend.MatMul"/> asks of its tensors: two matrices, the left as wide as the right is tall.</summary>
-    /// <param name="left">The left matrix.</param>
-    /// <param name="right">The right matrix.</param>
-    /// <exception cref="ArgumentNullException">Either is not handed.</exception>
-    /// <exception cref="ArgumentException">Either is not a matrix, or the left is not as wide as the right is tall.</exception>
-    public static void RequireMatrixProduct(this Tensor left, Tensor right)
+    extension(Tensor matrix)
     {
-        Matrix(left, nameof(ITensorBackend.MatMul), nameof(left));
-        Matrix(right, nameof(ITensorBackend.MatMul), nameof(right));
+        /// <summary>
+        /// What <see cref="ITensorBackend.Transpose"/>, <see cref="ITensorBackend.SumRows"/> and
+        /// <see cref="ITensorBackend.LogSoftmax"/> ask of their tensor: a matrix.
+        /// </summary>
+        /// <param name="operation">The operation's name, for the refusal's words.</param>
+        /// <exception cref="ArgumentNullException">It is not handed.</exception>
+        /// <exception cref="ArgumentException">It is not a matrix.</exception>
+        public void RequireMatrix(string operation) => Matrix(matrix, operation, nameof(matrix));
 
-        if (right.Shape[0] != left.Shape[1])
+        /// <summary>What <see cref="ITensorBackend.AddRow"/> asks of its tensors: a matrix, and a row as long as it is wide.</summary>
+        /// <param name="row">The row.</param>
+        /// <exception cref="ArgumentNullException">Either is not handed.</exception>
+        /// <exception cref="ArgumentException">
+        /// The first is not a matrix, the second is not a row, or the row is not as long as the matrix is wide.
+        /// </exception>
+        public void RequireRow(Tensor row)
         {
-            throw new ArgumentException(
-                $"MatMul needs the left matrix as wide as the right one is tall, and was given {left.Shape} and {right.Shape}.",
-                nameof(right));
+            Matrix(matrix, nameof(ITensorBackend.AddRow), nameof(matrix));
+            ArgumentNullException.ThrowIfNull(row);
+
+            if (row.Shape.Rank != 1)
+            {
+                throw new ArgumentException($"AddRow needs a row, a tensor of one axis, and was given a {row.Shape} one.", nameof(row));
+            }
+
+            if (row.Shape[0] != matrix.Shape[1])
+            {
+                throw new ArgumentException(
+                    $"AddRow needs a row as long as the matrix is wide, and was given {matrix.Shape} and {row.Shape}.", nameof(row));
+            }
         }
     }
 
-    /// <summary>
-    /// What <see cref="ITensorBackend.Transpose"/>, <see cref="ITensorBackend.SumRows"/> and
-    /// <see cref="ITensorBackend.LogSoftmax"/> ask of their tensor: a matrix.
-    /// </summary>
-    /// <param name="matrix">The tensor.</param>
-    /// <param name="operation">The operation's name, for the refusal's words.</param>
-    /// <exception cref="ArgumentNullException">It is not handed.</exception>
-    /// <exception cref="ArgumentException">It is not a matrix.</exception>
-    public static void RequireMatrix(this Tensor matrix, string operation) => Matrix(matrix, operation, nameof(matrix));
-
-    /// <summary>What <see cref="ITensorBackend.AddRow"/> asks of its tensors: a matrix, and a row as long as it is wide.</summary>
-    /// <param name="matrix">The matrix.</param>
-    /// <param name="row">The row.</param>
-    /// <exception cref="ArgumentNullException">Either is not handed.</exception>
-    /// <exception cref="ArgumentException">
-    /// The first is not a matrix, the second is not a row, or the row is not as long as the matrix is wide.
-    /// </exception>
-    public static void RequireRow(this Tensor matrix, Tensor row)
+    extension(Tensor values)
     {
-        Matrix(matrix, nameof(ITensorBackend.AddRow), nameof(matrix));
-        ArgumentNullException.ThrowIfNull(row);
-
-        if (row.Shape.Rank != 1)
+        /// <summary>What <see cref="ITensorBackend.Mean"/> asks of its tensor: at least one value.</summary>
+        /// <exception cref="ArgumentNullException">It is not handed.</exception>
+        /// <exception cref="ArgumentException">It holds no values.</exception>
+        public void RequireValues()
         {
-            throw new ArgumentException($"AddRow needs a row, a tensor of one axis, and was given a {row.Shape} one.", nameof(row));
+            ArgumentNullException.ThrowIfNull(values);
+
+            if (values.Shape.Count == 0)
+            {
+                throw new ArgumentException($"A mean needs at least one value, and a {values.Shape} tensor holds none.", nameof(values));
+            }
         }
 
-        if (row.Shape[0] != matrix.Shape[1])
+        /// <summary>What <see cref="ITensorBackend.Scale"/> asks of its tensors: values, and a factor of one value with no axes.</summary>
+        /// <param name="factor">The factor.</param>
+        /// <exception cref="ArgumentNullException">Either is not handed.</exception>
+        /// <exception cref="ArgumentException">The factor has axes.</exception>
+        public void RequireFactor(Tensor factor)
         {
-            throw new ArgumentException(
-                $"AddRow needs a row as long as the matrix is wide, and was given {matrix.Shape} and {row.Shape}.", nameof(row));
+            ArgumentNullException.ThrowIfNull(values);
+            ArgumentNullException.ThrowIfNull(factor);
+
+            if (factor.Shape.Rank != 0)
+            {
+                throw new ArgumentException(
+                    $"Scale multiplies by one value, a tensor with no axes, and was given a {factor.Shape} one.", nameof(factor));
+            }
+        }
+
+        /// <summary>What <see cref="ITensorBackend.Reshape"/> asks of its tensor and shape: as many values in the one as the other holds.</summary>
+        /// <param name="shape">The shape they are to be laid out along.</param>
+        /// <exception cref="ArgumentNullException">The values are not handed.</exception>
+        /// <exception cref="ArgumentException">The shape holds another number of values.</exception>
+        public void RequireSameCount(Shape shape)
+        {
+            ArgumentNullException.ThrowIfNull(values);
+
+            if (shape.Count != values.Shape.Count)
+            {
+                throw new ArgumentException(
+                    $"Reshape keeps every value, and a {values.Shape} tensor holds {values.Shape.Count} where a {shape} one holds {shape.Count}.",
+                    nameof(shape));
+            }
         }
     }
 
-    /// <summary>What <see cref="ITensorBackend.Mean"/> asks of its tensor: at least one value.</summary>
-    /// <param name="values">The tensor.</param>
-    /// <exception cref="ArgumentNullException">It is not handed.</exception>
-    /// <exception cref="ArgumentException">It holds no values.</exception>
-    public static void RequireValues(this Tensor values)
+    extension(Tensor images)
     {
-        ArgumentNullException.ThrowIfNull(values);
-
-        if (values.Shape.Count == 0)
+        /// <summary>What <see cref="ITensorBackend.Unfold"/> asks of its images and window: a batch of images the window stands on.</summary>
+        /// <param name="window">The window.</param>
+        /// <exception cref="ArgumentNullException">The images are not handed.</exception>
+        /// <exception cref="ArgumentException">
+        /// The images are not a batch of rows, columns and channels, or the window cannot stand on them: a side or a stride
+        /// below one, a border below nothing, a border given to a window padded as 'same', or a window larger than the image
+        /// with its border.
+        /// </exception>
+        public void RequireImagesFor(Window window)
         {
-            throw new ArgumentException($"A mean needs at least one value, and a {values.Shape} tensor holds none.", nameof(values));
+            ArgumentNullException.ThrowIfNull(images);
+            Images(images.Shape, window, nameof(ITensorBackend.Unfold), nameof(images));
         }
     }
 
-    /// <summary>What <see cref="ITensorBackend.Scale"/> asks of its tensors: values, and a factor of one value with no axes.</summary>
-    /// <param name="values">The values.</param>
-    /// <param name="factor">The factor.</param>
-    /// <exception cref="ArgumentNullException">Either is not handed.</exception>
-    /// <exception cref="ArgumentException">The factor has axes.</exception>
-    public static void RequireFactor(this Tensor values, Tensor factor)
+    extension(Tensor patches)
     {
-        ArgumentNullException.ThrowIfNull(values);
-        ArgumentNullException.ThrowIfNull(factor);
-
-        if (factor.Shape.Rank != 0)
+        /// <summary>
+        /// What <see cref="ITensorBackend.Fold"/> asks of its patches, images and window: the patches such a window takes of
+        /// such images.
+        /// </summary>
+        /// <param name="images">The shape of the images they were taken from, channels last.</param>
+        /// <param name="window">The window that took them.</param>
+        /// <exception cref="ArgumentNullException">The patches are not handed.</exception>
+        /// <exception cref="ArgumentException">
+        /// The shape is not one of images, the window cannot stand on them, or the patches are not the ones such a window takes
+        /// of such images.
+        /// </exception>
+        public void RequirePatchesOf(Shape images, Window window)
         {
-            throw new ArgumentException(
-                $"Scale multiplies by one value, a tensor with no axes, and was given a {factor.Shape} one.", nameof(factor));
+            ArgumentNullException.ThrowIfNull(patches);
+            Images(images, window, nameof(ITensorBackend.Fold), nameof(images));
+
+            var taken = window.PatchesOver(images);
+
+            if (patches.Shape != taken)
+            {
+                throw new ArgumentException(
+                    $"Fold puts back the {taken} patches a {window} takes of {images} images, and was given {patches.Shape}.",
+                    nameof(patches));
+            }
         }
     }
 
-    /// <summary>What <see cref="ITensorBackend.Reshape"/> asks of its tensor and shape: as many values in the one as the other holds.</summary>
-    /// <param name="values">The values.</param>
-    /// <param name="shape">The shape they are to be laid out along.</param>
-    /// <exception cref="ArgumentNullException">The values are not handed.</exception>
-    /// <exception cref="ArgumentException">The shape holds another number of values.</exception>
-    public static void RequireSameCount(this Tensor values, Shape shape)
+    extension(Window window)
     {
-        ArgumentNullException.ThrowIfNull(values);
-
-        if (shape.Count != values.Shape.Count)
+        /// <summary>
+        /// Refuses a window that cannot stand anywhere: a side or the stride below one, or the border below nothing — or, padded
+        /// as 'same', given a border of its own besides the one it works out.
+        /// </summary>
+        /// <remarks>The one rule for the window, whether a convolution is being built or its window is being walked.</remarks>
+        internal void RequireStanding()
         {
-            throw new ArgumentException(
-                $"Reshape keeps every value, and a {values.Shape} tensor holds {values.Shape.Count} where a {shape} one holds {shape.Count}.",
-                nameof(shape));
-        }
-    }
+            if (window.Height < 1 || window.Width < 1 || window.Stride < 1 || window.Padding < 0)
+            {
+                throw new ArgumentException(
+                    $"A {window} cannot stand anywhere: its sides and its stride are at least one, and its border at least nothing.", nameof(window));
+            }
 
-    /// <summary>What <see cref="ITensorBackend.Unfold"/> asks of its images and window: a batch of images the window stands on.</summary>
-    /// <param name="images">The images, channels last.</param>
-    /// <param name="window">The window.</param>
-    /// <exception cref="ArgumentNullException">The images are not handed.</exception>
-    /// <exception cref="ArgumentException">
-    /// The images are not a batch of rows, columns and channels, or the window cannot stand on them: a side or a stride
-    /// below one, a border below nothing, a border given to a window padded as 'same', or a window larger than the image
-    /// with its border.
-    /// </exception>
-    public static void RequireImagesFor(this Tensor images, Window window)
-    {
-        ArgumentNullException.ThrowIfNull(images);
-        Images(images.Shape, window, nameof(ITensorBackend.Unfold), nameof(images));
-    }
-
-    /// <summary>
-    /// What <see cref="ITensorBackend.Fold"/> asks of its patches, images and window: the patches such a window takes of
-    /// such images.
-    /// </summary>
-    /// <param name="patches">The patches.</param>
-    /// <param name="images">The shape of the images they were taken from, channels last.</param>
-    /// <param name="window">The window that took them.</param>
-    /// <exception cref="ArgumentNullException">The patches are not handed.</exception>
-    /// <exception cref="ArgumentException">
-    /// The shape is not one of images, the window cannot stand on them, or the patches are not the ones such a window takes
-    /// of such images.
-    /// </exception>
-    public static void RequirePatchesOf(this Tensor patches, Shape images, Window window)
-    {
-        ArgumentNullException.ThrowIfNull(patches);
-        Images(images, window, nameof(ITensorBackend.Fold), nameof(images));
-
-        var taken = window.PatchesOver(images);
-
-        if (patches.Shape != taken)
-        {
-            throw new ArgumentException(
-                $"Fold puts back the {taken} patches a {window} takes of {images} images, and was given {patches.Shape}.",
-                nameof(patches));
-        }
-    }
-
-    /// <summary>
-    /// Refuses a window that cannot stand anywhere: a side or the stride below one, or the border below nothing — or, padded
-    /// as 'same', given a border of its own besides the one it works out.
-    /// </summary>
-    /// <remarks>The one rule for the window, whether a convolution is being built or its window is being walked.</remarks>
-    internal static void RequireStanding(this Window window)
-    {
-        if (window.Height < 1 || window.Width < 1 || window.Stride < 1 || window.Padding < 0)
-        {
-            throw new ArgumentException(
-                $"A {window} cannot stand anywhere: its sides and its stride are at least one, and its border at least nothing.", nameof(window));
+            if (window.PaddingMode == PaddingMode.Same && window.Padding != 0)
+            {
+                throw new ArgumentException(
+                    string.Create(CultureInfo.InvariantCulture, $"A {window} works its border out from each image it stands on, and cannot be given one of {window.Padding} besides."),
+                    nameof(window));
+            }
         }
 
-        if (window.PaddingMode == PaddingMode.Same && window.Padding != 0)
-        {
-            throw new ArgumentException(
-                string.Create(CultureInfo.InvariantCulture, $"A {window} works its border out from each image it stands on, and cannot be given one of {window.Padding} besides."),
-                nameof(window));
-        }
+        /// <summary>
+        /// The patches a window takes of a batch of images: a row for every image and every place it stands, each as long as the
+        /// window holds values.
+        /// </summary>
+        internal Shape PatchesOver(Shape images) =>
+            new(images[0] * window.RowsOver(images[1]) * window.ColumnsOver(images[2]), window.Height * window.Width * images[3]);
     }
-
-    /// <summary>
-    /// The patches a window takes of a batch of images: a row for every image and every place it stands, each as long as the
-    /// window holds values.
-    /// </summary>
-    internal static Shape PatchesOver(this Window window, Shape images) =>
-        new(images[0] * window.RowsOver(images[1]) * window.ColumnsOver(images[2]), window.Height * window.Width * images[3]);
 
     // A tensor that is not a matrix, refused in the words of the operation that needs one.
     private static void Matrix(Tensor tensor, string operation, string parameter)

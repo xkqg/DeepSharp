@@ -17,32 +17,33 @@ namespace DeepSharp.Learners.Networks;
 /// </remarks>
 public static class NetworkChainExtensions
 {
-    /// <summary>Declares the network this pipeline trains, in the words PyTorch uses.</summary>
-    /// <param name="fitting">The chain, below its output.</param>
-    /// <param name="network">The network: its layers, what moves them, what judges them, and how the run goes.</param>
-    /// <returns>The chain, with the network declared.</returns>
-    /// <exception cref="ArgumentNullException">There is no chain, or nothing describes the network.</exception>
-    /// <exception cref="DeclarationException">The declaration names no answer yet, or already names a learner.</exception>
-    public static FittingBuilder WithTorch(this FittingBuilder fitting, Func<NetworkDeclaration, NetworkDeclaration> network)
+    extension(FittingBuilder fitting)
     {
-        ArgumentNullException.ThrowIfNull(fitting);
-        ArgumentNullException.ThrowIfNull(network);
+        /// <summary>Declares the network this pipeline trains, in the words PyTorch uses.</summary>
+        /// <param name="network">The network: its layers, what moves them, what judges them, and how the run goes.</param>
+        /// <returns>The chain, with the network declared.</returns>
+        /// <exception cref="ArgumentNullException">There is no chain, or nothing describes the network.</exception>
+        /// <exception cref="DeclarationException">The declaration names no answer yet, or already names a learner.</exception>
+        public FittingBuilder WithTorch(Func<NetworkDeclaration, NetworkDeclaration> network)
+        {
+            ArgumentNullException.ThrowIfNull(fitting);
+            ArgumentNullException.ThrowIfNull(network);
 
-        return fitting.Add(network(new NetworkDeclaration(Vocabularies.Torch)).Step());
-    }
+            return fitting.Add(network(new NetworkDeclaration(Vocabularies.Torch)).Step());
+        }
 
-    /// <summary>Declares the network this pipeline trains, in the words TensorFlow and Keras use.</summary>
-    /// <param name="fitting">The chain, below its output.</param>
-    /// <param name="network">The network: its layers, what moves them, what judges them, and how the run goes.</param>
-    /// <returns>The chain, with the network declared.</returns>
-    /// <exception cref="ArgumentNullException">There is no chain, or nothing describes the network.</exception>
-    /// <exception cref="DeclarationException">The declaration names no answer yet, or already names a learner.</exception>
-    public static FittingBuilder WithTensorflow(this FittingBuilder fitting, Func<NetworkDeclaration, NetworkDeclaration> network)
-    {
-        ArgumentNullException.ThrowIfNull(fitting);
-        ArgumentNullException.ThrowIfNull(network);
+        /// <summary>Declares the network this pipeline trains, in the words TensorFlow and Keras use.</summary>
+        /// <param name="network">The network: its layers, what moves them, what judges them, and how the run goes.</param>
+        /// <returns>The chain, with the network declared.</returns>
+        /// <exception cref="ArgumentNullException">There is no chain, or nothing describes the network.</exception>
+        /// <exception cref="DeclarationException">The declaration names no answer yet, or already names a learner.</exception>
+        public FittingBuilder WithTensorflow(Func<NetworkDeclaration, NetworkDeclaration> network)
+        {
+            ArgumentNullException.ThrowIfNull(fitting);
+            ArgumentNullException.ThrowIfNull(network);
 
-        return fitting.Add(network(new NetworkDeclaration(Vocabularies.Keras)).Step());
+            return fitting.Add(network(new NetworkDeclaration(Vocabularies.Keras)).Step());
+        }
     }
 }
 

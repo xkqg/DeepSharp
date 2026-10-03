@@ -125,106 +125,105 @@ public readonly record struct TrainingValues
 /// </remarks>
 public static class TableExtensions
 {
-    /// <summary>The column's values as numbers, with a gap where a cell is a gap.</summary>
-    /// <param name="table">The table to look in.</param>
-    /// <param name="column">The column's name.</param>
-    /// <returns>One value per row.</returns>
-    /// <exception cref="InvalidOperationException">The column holds something that is not a number.</exception>
-    public static double?[] NumbersOf(this Table table, string column)
+    extension(Table table)
     {
-        ArgumentNullException.ThrowIfNull(table);
-
-        return table[column] switch
+        /// <summary>The column's values as numbers, with a gap where a cell is a gap.</summary>
+        /// <param name="column">The column's name.</param>
+        /// <returns>One value per row.</returns>
+        /// <exception cref="InvalidOperationException">The column holds something that is not a number.</exception>
+        public double?[] NumbersOf(string column)
         {
-            Column<double> numbers => [.. Enumerable.Range(0, numbers.Count).Select(row => numbers[row])],
-            Column<long> whole => [.. Enumerable.Range(0, whole.Count).Select(row => (double?)whole[row])],
-            Column<bool> flags =>
-                [.. Enumerable.Range(0, flags.Count).Select(row => flags[row] is { } flag ? flag ? 1 : 0 : (double?)null)],
-            var other => throw new InvalidOperationException(
-                $"'{column}' holds {other.Kind.ToString().ToLowerInvariant()}, and this step works on numbers."),
-        };
-    }
+            ArgumentNullException.ThrowIfNull(table);
 
-    /// <summary>What the training rows of a column hold: its finite values, its gaps and its values that are not numbers.</summary>
-    /// <param name="table">The table.</param>
-    /// <param name="column">The column's name.</param>
-    /// <param name="parts">Which part each row belongs to.</param>
-    /// <returns>The training values, the one set every fit reads.</returns>
-    /// <exception cref="ArgumentException">The parts are not one per row.</exception>
-    /// <exception cref="InvalidOperationException">The column holds something that is not a number.</exception>
-    public static TrainingValues TrainingValues(this Table table, string column, IReadOnlyList<Part> parts)
-    {
-        ArgumentNullException.ThrowIfNull(table);
-        ArgumentNullException.ThrowIfNull(parts);
-
-        if (parts.Count != table.RowCount)
-        {
-            throw new ArgumentException(
-                $"There are {parts.Count} parts for {table.RowCount} rows, and a row belongs to exactly one part.", nameof(parts));
+            return table[column] switch
+            {
+                Column<double> numbers => [.. Enumerable.Range(0, numbers.Count).Select(row => numbers[row])],
+                Column<long> whole => [.. Enumerable.Range(0, whole.Count).Select(row => (double?)whole[row])],
+                Column<bool> flags =>
+                    [.. Enumerable.Range(0, flags.Count).Select(row => flags[row] is { } flag ? flag ? 1 : 0 : (double?)null)],
+                var other => throw new InvalidOperationException(
+                    $"'{column}' holds {other.Kind.ToString().ToLowerInvariant()}, and this step works on numbers."),
+            };
         }
 
-        return table.ValuesOf(column, row => parts[row] == Part.Train);
-    }
-
-    /// <summary>What some rows of a column hold: the training rows of a fit, the measured rows of a view.</summary>
-    /// <param name="table">The table.</param>
-    /// <param name="column">The column's name.</param>
-    /// <param name="measured">Which rows count.</param>
-    /// <returns>Their finite values, their gaps and their values that are not numbers.</returns>
-    internal static TrainingValues ValuesOf(this Table table, string column, Func<int, bool> measured)
-    {
-        var values = table.NumbersOf(column);
-        var finite = new List<double>();
-        var gaps = 0;
-        var notFinite = 0;
-
-        for (var row = 0; row < values.Length; row++)
+        /// <summary>What the training rows of a column hold: its finite values, its gaps and its values that are not numbers.</summary>
+        /// <param name="column">The column's name.</param>
+        /// <param name="parts">Which part each row belongs to.</param>
+        /// <returns>The training values, the one set every fit reads.</returns>
+        /// <exception cref="ArgumentException">The parts are not one per row.</exception>
+        /// <exception cref="InvalidOperationException">The column holds something that is not a number.</exception>
+        public TrainingValues TrainingValues(string column, IReadOnlyList<Part> parts)
         {
-            if (!measured(row))
+            ArgumentNullException.ThrowIfNull(table);
+            ArgumentNullException.ThrowIfNull(parts);
+
+            if (parts.Count != table.RowCount)
             {
-                continue;
+                throw new ArgumentException(
+                    $"There are {parts.Count} parts for {table.RowCount} rows, and a row belongs to exactly one part.", nameof(parts));
             }
 
-            switch (values[row])
-            {
-                case null:
-                    gaps++;
-                    break;
-
-                case { } value when !double.IsFinite(value):
-                    notFinite++;
-                    break;
-
-                case { } value:
-                    finite.Add(value);
-                    break;
-            }
+            return table.ValuesOf(column, row => parts[row] == Part.Train);
         }
 
-        finite.Sort();
+        /// <summary>What some rows of a column hold: the training rows of a fit, the measured rows of a view.</summary>
+        /// <param name="column">The column's name.</param>
+        /// <param name="measured">Which rows count.</param>
+        /// <returns>Their finite values, their gaps and their values that are not numbers.</returns>
+        internal TrainingValues ValuesOf(string column, Func<int, bool> measured)
+        {
+            var values = table.NumbersOf(column);
+            var finite = new List<double>();
+            var gaps = 0;
+            var notFinite = 0;
 
-        return new TrainingValues(column, [.. finite], gaps, notFinite);
-    }
+            for (var row = 0; row < values.Length; row++)
+            {
+                if (!measured(row))
+                {
+                    continue;
+                }
 
-    /// <summary>
-    /// What some rows of a column hold as words: the categories an encoder learns from the training rows, the categories
-    /// the measured rows of a view hold.
-    /// </summary>
-    /// <param name="table">The table.</param>
-    /// <param name="column">The column's name.</param>
-    /// <param name="measured">Which rows count.</param>
-    /// <returns>Every value those rows hold, once, in ordinal order; a gap is none.</returns>
-    internal static IReadOnlyList<string> CategoriesOf(this Table table, string column, Func<int, bool> measured)
-    {
-        var values = table[column];
+                switch (values[row])
+                {
+                    case null:
+                        gaps++;
+                        break;
 
-        return
-        [
-            .. Enumerable.Range(0, table.RowCount)
-                .Where(row => measured(row) && !values.IsMissing(row))
-                .Select(row => values.TextAt(row)!)
-                .Distinct(StringComparer.Ordinal)
-                .Order(StringComparer.Ordinal),
-        ];
+                    case { } value when !double.IsFinite(value):
+                        notFinite++;
+                        break;
+
+                    case { } value:
+                        finite.Add(value);
+                        break;
+                }
+            }
+
+            finite.Sort();
+
+            return new TrainingValues(column, [.. finite], gaps, notFinite);
+        }
+
+        /// <summary>
+        /// What some rows of a column hold as words: the categories an encoder learns from the training rows, the categories
+        /// the measured rows of a view hold.
+        /// </summary>
+        /// <param name="column">The column's name.</param>
+        /// <param name="measured">Which rows count.</param>
+        /// <returns>Every value those rows hold, once, in ordinal order; a gap is none.</returns>
+        internal IReadOnlyList<string> CategoriesOf(string column, Func<int, bool> measured)
+        {
+            var values = table[column];
+
+            return
+            [
+                .. Enumerable.Range(0, table.RowCount)
+                    .Where(row => measured(row) && !values.IsMissing(row))
+                    .Select(row => values.TextAt(row)!)
+                    .Distinct(StringComparer.Ordinal)
+                    .Order(StringComparer.Ordinal),
+            ];
+        }
     }
 }

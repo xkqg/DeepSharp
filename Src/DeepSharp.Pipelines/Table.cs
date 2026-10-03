@@ -470,38 +470,40 @@ public sealed class Table
 /// </summary>
 internal static class RowOrdering
 {
-    /// <summary>How a column orders two rows, each value compared as what it is.</summary>
-    /// <param name="table">The rows.</param>
-    /// <param name="name">The column that orders them: a moment, a whole number or a number.</param>
-    /// <returns>A comparison of two rows by their places in the table.</returns>
-    /// <exception cref="InvalidOperationException">
-    /// A row has no value in the column, a number that is not a number, or the column holds something with no order.
-    /// </exception>
-    /// <remarks>
-    /// A moment as a moment and a whole number as a whole number: turning them all into one kind of number
-    /// would call two different moments the same once they were close enough together.
-    /// </remarks>
-    internal static Comparison<int> RowOrderBy(this Table table, string name)
+    extension(Table table)
     {
-        var column = table[name];
-
-        for (var row = 0; row < table.RowCount; row++)
+        /// <summary>How a column orders two rows, each value compared as what it is.</summary>
+        /// <param name="name">The column that orders them: a moment, a whole number or a number.</param>
+        /// <returns>A comparison of two rows by their places in the table.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// A row has no value in the column, a number that is not a number, or the column holds something with no order.
+        /// </exception>
+        /// <remarks>
+        /// A moment as a moment and a whole number as a whole number: turning them all into one kind of number
+        /// would call two different moments the same once they were close enough together.
+        /// </remarks>
+        internal Comparison<int> RowOrderBy(string name)
         {
-            if (column.IsMissing(row))
+            var column = table[name];
+
+            for (var row = 0; row < table.RowCount; row++)
             {
-                throw new InvalidOperationException(
-                    $"Row {table.Identities[row].ReadAt + 1} has no '{name}', so it has no place in the order.");
+                if (column.IsMissing(row))
+                {
+                    throw new InvalidOperationException(
+                        $"Row {table.Identities[row].ReadAt + 1} has no '{name}', so it has no place in the order.");
+                }
             }
-        }
 
-        return column switch
-        {
-            Column<DateTime> moments => (one, other) => moments[one]!.Value.CompareTo(moments[other]!.Value),
-            Column<long> whole => (one, other) => whole[one]!.Value.CompareTo(whole[other]!.Value),
-            Column<double> numbers => Numbers(table, name, numbers),
-            _ => throw new InvalidOperationException(
-                $"'{name}' holds {column.Kind.ToString().ToLowerInvariant()}, which has no order to put rows in."),
-        };
+            return column switch
+            {
+                Column<DateTime> moments => (one, other) => moments[one]!.Value.CompareTo(moments[other]!.Value),
+                Column<long> whole => (one, other) => whole[one]!.Value.CompareTo(whole[other]!.Value),
+                Column<double> numbers => Numbers(table, name, numbers),
+                _ => throw new InvalidOperationException(
+                    $"'{name}' holds {column.Kind.ToString().ToLowerInvariant()}, which has no order to put rows in."),
+            };
+        }
     }
 
     private static Comparison<int> Numbers(Table table, string name, Column<double> numbers)

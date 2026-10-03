@@ -134,6 +134,47 @@ public class PipelineInPlaceTests
     }
 
     [Fact]
+    public void TheKeyAPipelineStandsUnderWrittenTwice_IsShownAsWordsAndNothingElse()
+    {
+        // The key is whoever wrote the file's, so a refusal that echoes it shows it the way every other refusal does: a
+        // name holding a line break cannot start a line of its own in a log.
+        const string key = "pipe\nline";
+
+        var twice = Assert.Single(
+            Assert.Throws<PipelineFileException>(() => PreparedData.FromJson(
+                "{\"pipe\\nline\": {\"declaration\": []},\n \"pipe\\nline\": {\"declaration\": []}}", StepCatalog.BuiltIn(), key)).Faults);
+
+        Assert.Contains("written twice", twice.Message, StringComparison.Ordinal);
+        Assert.Contains(@"'pipe\nline'", twice.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain(key, twice.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void APipelineBehindATokenWiderThanAPieceOfTheFile_IsReadAsItAlwaysWas()
+    {
+        // The file around a pipeline is read a piece of its UTF-8 at a time, and a piece is 65 536 bytes. One word longer
+        // than that is a token the piece cannot hold, so the walk makes room for it rather than stopping short of it.
+        var wide = "{\n  \"note\": \"" + new string('m', 70_000) + "\",\n  \"pipeline\": "
+            + """{"version": 3, "declaration": [{"step": "read.csv", "path": "a.csv"}]}""" + "\n}\n";
+
+        var read = PreparedData.FromJson(wide, StepCatalog.BuiltIn(), "pipeline");
+
+        Assert.Equal("read.csv", Assert.Single(read.Declaration.Steps).Verb);
+    }
+
+    [Fact]
+    public void AFaultBehindLettersOfMoreThanOneByte_IsAtItsColumnInCharacters()
+    {
+        // A place is counted in the bytes of UTF-8, and a column is shown in characters: a line of letters each written in
+        // three or four bytes would otherwise put the fault several columns past where a person sees it.
+        var fault = Assert.Single(Refused(
+            "{\n  \"note\": \"漢字漢字\U0001F600\",\n  \"pipeline\": {\"version\": 3,\n   \"colour\": \"red\",\n   \"declaration\": []}\n}\n").Faults);
+
+        Assert.Equal((4, 4), (fault.Line, fault.Column));
+        Assert.Contains("'colour'", fault.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void TheKeyAPipelineStandsUnder_IsNamed()
     {
         Assert.Throws<ArgumentException>(() => PreparedData.FromJson("{}", StepCatalog.BuiltIn(), " "));

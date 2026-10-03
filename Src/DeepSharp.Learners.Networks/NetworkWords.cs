@@ -81,42 +81,50 @@ public static class NetworkWords
         new("patience", "The run stops once the validation loss has not fallen for as many passes as it waits.", [PatienceKey, LeastKey, BestKey]),
     ];
 
-    /// <summary>The network a declaration's layers describe, in the words TensorFlow and Keras use.</summary>
-    /// <param name="layers">The layers, from the one the rows reach first.</param>
-    /// <returns>The description, ready to be compiled.</returns>
-    /// <exception cref="ArgumentNullException">There are no layers.</exception>
-    /// <exception cref="NotSupportedException">A layer gives a name these words do not know.</exception>
-    public static Sequential Described(this IReadOnlyList<PartDeclaration> layers)
+    extension(IReadOnlyList<PartDeclaration> layers)
     {
-        ArgumentNullException.ThrowIfNull(layers);
-
-        var described = new Sequential();
-
-        foreach (var layer in layers)
+        /// <summary>The network a declaration's layers describe, in the words TensorFlow and Keras use.</summary>
+        /// <returns>The description, ready to be compiled.</returns>
+        /// <exception cref="ArgumentNullException">There are no layers.</exception>
+        /// <exception cref="NotSupportedException">A layer gives a name these words do not know.</exception>
+        public Sequential Described()
         {
-            described = Word(LayerWords, layer, Layers)(described, layer);
-        }
+            ArgumentNullException.ThrowIfNull(layers);
 
-        return described;
+            var described = new Sequential();
+
+            foreach (var layer in layers)
+            {
+                described = Word(LayerWords, layer, Layers)(described, layer);
+            }
+
+            return described;
+        }
     }
 
-    /// <summary>The optimizer a declared part names.</summary>
-    /// <param name="optimizer">The part.</param>
-    /// <returns>The optimizer.</returns>
-    /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
-    public static Optimizer Moved(this PartDeclaration optimizer) => Word(OptimizerWords, optimizer, Optimizers)(optimizer);
+    extension(PartDeclaration optimizer)
+    {
+        /// <summary>The optimizer a declared part names.</summary>
+        /// <returns>The optimizer.</returns>
+        /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
+        public Optimizer Moved() => Word(OptimizerWords, optimizer, Optimizers)(optimizer);
+    }
 
-    /// <summary>The loss a declared part names.</summary>
-    /// <param name="loss">The part.</param>
-    /// <returns>The loss.</returns>
-    /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
-    public static Loss Judged(this PartDeclaration loss) => Word(LossWords, loss, Losses)(loss);
+    extension(PartDeclaration loss)
+    {
+        /// <summary>The loss a declared part names.</summary>
+        /// <returns>The loss.</returns>
+        /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
+        public Loss Judged() => Word(LossWords, loss, Losses)(loss);
+    }
 
-    /// <summary>When the run a declared part names stops, or nothing when it goes on to its last pass.</summary>
-    /// <param name="stopping">The part.</param>
-    /// <returns>The stopping, or nothing.</returns>
-    /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
-    public static EarlyStopping? Stops(this PartDeclaration stopping) => Word(StoppingWords, stopping, Stopping)(stopping);
+    extension(PartDeclaration stopping)
+    {
+        /// <summary>When the run a declared part names stops, or nothing when it goes on to its last pass.</summary>
+        /// <returns>The stopping, or nothing.</returns>
+        /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
+        public EarlyStopping? Stops() => Word(StoppingWords, stopping, Stopping)(stopping);
+    }
 
     // What one word makes, looked up by the name the part gives: one table per family, so a word is added by writing it
     // beside the name it is written under rather than by widening a decision somewhere else.

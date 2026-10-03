@@ -161,27 +161,6 @@ public sealed class FormTests : IDisposable
     }
 
     [Fact]
-    public void EveryFieldNameTheFormBuilds_ReadsBackAsTheKeyAndThePartItNames()
-    {
-        Assert.True(FormVocabulary.IsKind(FormVocabulary.Kind("columns", "a/b"), "columns", out var kind) && kind == "a/b");
-        Assert.True(FormVocabulary.IsAbsent(FormVocabulary.Absent("columns", "x"), "columns", out var absent) && absent == "x");
-        Assert.True(FormVocabulary.IsFormat(FormVocabulary.Format("columns", "when"), "columns", out var written) && written == "when");
-        Assert.True(FormVocabulary.IsMissing(FormVocabulary.Missing("columns", "fare"), "columns", out var gap) && gap == "fare");
-        Assert.True(FormVocabulary.IsMember(FormVocabulary.Member("columns", "age"), "columns", out var member) && member == "age");
-        Assert.True(FormVocabulary.IsPlace(FormVocabulary.Place("columns", 2), "columns", out var place) && place == 2);
-        Assert.Equal("with/value", FormVocabulary.StrategyValue("with"));
-
-        Assert.False(FormVocabulary.IsKind("columns/optional/x", "columns", out _));
-        Assert.False(FormVocabulary.IsAbsent("columns/kind/x", "columns", out _));
-        Assert.False(FormVocabulary.IsFormat("columns/kind/x", "columns", out _));
-        Assert.False(FormVocabulary.IsMissing("columns/format/x", "columns", out _));
-        Assert.False(FormVocabulary.IsMember("parts/x", "columns", out _));
-        Assert.False(FormVocabulary.IsPlace("columns/first", "columns", out _));
-        Assert.False(FormVocabulary.IsPlace("columns/-1", "columns", out _));
-        Assert.False(FormVocabulary.IsPlace("period", "columns", out _));
-    }
-
-    [Fact]
     public async Task AFormChange_RewritesTheBlocksTextAsTheStepWritesItself_AndNeverItsMetadata()
     {
         await using var notebook = await NotebookAsync(Titanic[4]);

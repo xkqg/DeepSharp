@@ -59,6 +59,56 @@ and every fit are what they were: the line is a door a person writes through, ne
   was worked out from and says to settle those rows above the step that works it out, rather than saying only that a
   gap is a gap.
 
+- **A fit says what it learned, what it decided and what it saw.** `FittedStepValues` gains `Saw` and `Decided` beside
+  `Learned`: a value a replay reads is learned, a choice made from the training rows that a replay reads is decided —
+  whether a column with that many gaps is filled at all — and a count nothing replays is seen. The file is unchanged
+  to the byte, because it holds one object of names and values and marks none of them, so every pipeline published
+  before keeps loading; what the words buy is a rule that can be tested rather than hoped for, and the tests now hold
+  every fit to it: nothing a replay reads was only counted.
+
+- **An extension method is a member of an `extension(T value)` block.** Every one in the library — 115 of them, across
+  every package — is written that way now rather than with a `this` parameter, so the call site reads as a sentence
+  and the thing a method is about is its receiver. Nothing about the surface changes: the methods keep their names,
+  their arguments and their order, and package validation against 0.5.0 sees no difference.
+
+- **The notebook's file, the engine's questions and the host's duties stand apart.** `NotebookHost` keeps what makes
+  it a host — one notebook, one turn at a time, one publisher — and is read a duty at a time across
+  `NotebookHost.Editing`, `.Running`, `.Panels`, `.Publishing` and `.Opening`. What its file last held and the writing
+  of it are `NotebookFile`; the twenty questions that are about the engine rather than about an open notebook are
+  asked of the engine, the notebook's scaffold, a cell or a serializer. One type, one published surface, nothing moved
+  that an application can see.
+
+- **One predicate where there were three.** Two of the host's names for "whether two of the engine's names name the
+  same thing" and the comparison that asked whether a kernel is the C# one were three copies of one line; there is one
+  now, asked of the name.
+
+- **The text a pipeline file is read from is its own thing.** `SurveyedText` holds the text, where each of its parts
+  stands and every fault at its line and column, and `TextPieces` reads a larger file a piece of its UTF-8 at a time;
+  `PipelineDocument` keeps the pipeline's own vocabulary and holds one of them. The sibling shape in the
+  deep-learning core, `NetworkText`, was already this, so the second implementation named what the first had found.
+  The refusal that says a key is written twice now shows that key the way every other refusal shows a file's text.
+
+- **`Transforms.cs` is `Scaling.cs` and `Encoding.cs`.** It held two families that share no type, under a name that
+  named neither, so a reader after a scaling opens the file named for scaling. No type, name or signature changed.
+
+- **A form's field name is asked of the parameter it belongs to.** The sixteen ways a notebook's properties panel names
+  and reads its fields took a parameter's key and what the field was about as two strings side by side, which a caller
+  can hand over the wrong way round; the parameter is the receiver now, so it cannot. Every way of writing a field is
+  held to having a way of reading it back, found by reflection, so one added without its reader says so at once.
+
+- **The verbs write their own schema and reference, and a model's predictions write themselves.**
+  `StepCatalog.JsonSchema()` and `.VerbReference()` now ask the descriptions rather than handing them to a writer, and
+  what a model predicted says `ToJson()` and reads `FromJson(…)` as every other saved thing in the library does.
+
+### Removed
+
+- **A guard that could not fire.** Reading what is unsaved compared the notebook with its file inside a `try` that
+  answered a fallback when the comparison was caught by a run writing what a cell shows. Measured at 8.2 million
+  comparisons against three kinds of writer — the same output written again, the list cleared and refilled, one added
+  and taken away — it never once threw: Verso reads those outputs whole rather than as they come. The guard is gone,
+  and a test now holds that measurement, so a version of Verso that read them as they came would say so here rather
+  than silently telling a person there was nothing to save.
+
 ## [0.6.0]
 
 Where the model moves into the pipeline. Pipeline-driven design is the whole course from raw data to a validated

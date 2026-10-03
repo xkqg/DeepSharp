@@ -13,18 +13,19 @@ namespace DeepSharp.Charts;
 /// </summary>
 public static class HistoryCharts
 {
-    /// <summary>The loss curve: the training loss of every epoch, and beside it the validation loss when the run had validation rows.</summary>
-    /// <param name="history">What the run did.</param>
-    /// <returns>The chart, as the text of an SVG.</returns>
-    /// <exception cref="ArgumentException">The history holds no epoch.</exception>
-    /// <remarks>A training loss that goes on falling while the validation loss turns back up is a model learning its training rows by heart.</remarks>
-    public static string LossCurve(this History history) => LossFigure(history).ToSvg();
+    extension(History history)
+    {
+        /// <summary>The loss curve: the training loss of every epoch, and beside it the validation loss when the run had validation rows.</summary>
+        /// <returns>The chart, as the text of an SVG.</returns>
+        /// <exception cref="ArgumentException">The history holds no epoch.</exception>
+        /// <remarks>A training loss that goes on falling while the validation loss turns back up is a model learning its training rows by heart.</remarks>
+        public string LossCurve() => LossFigure(history).ToSvg();
 
-    /// <summary>The learning rate every epoch trained at: the schedule, as the run took it.</summary>
-    /// <param name="history">What the run did.</param>
-    /// <returns>The chart, as the text of an SVG.</returns>
-    /// <exception cref="ArgumentException">The history holds no epoch.</exception>
-    public static string LearningRates(this History history) => RatesFigure(history).ToSvg();
+        /// <summary>The learning rate every epoch trained at: the schedule, as the run took it.</summary>
+        /// <returns>The chart, as the text of an SVG.</returns>
+        /// <exception cref="ArgumentException">The history holds no epoch.</exception>
+        public string LearningRates() => RatesFigure(history).ToSvg();
+    }
 
     /// <summary>The figure <see cref="LossCurve"/> draws.</summary>
     internal static Figure LossFigure(History history)

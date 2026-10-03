@@ -55,37 +55,37 @@ public enum Period
 /// </summary>
 internal static class FormExtensions
 {
-    /// <summary>The least value a column that lands in this form holds: minus one when signed, nothing otherwise.</summary>
-    /// <param name="form">Where the column lands: signed or unit.</param>
-    /// <returns>The lower end; the upper end is always one.</returns>
-    internal static double Floor(this Form form) => form == Form.Signed ? -1 : 0;
-
-    /// <summary>The names of the columns one signed value becomes, in this form.</summary>
-    /// <param name="form">How it is written down.</param>
-    /// <param name="name">What the value is called.</param>
-    /// <returns>One name, or two.</returns>
-    internal static IEnumerable<string> Names(this Form form, string name) =>
-        form == Form.SplitSign ? [$"{name}_pos", $"{name}_neg"] : [name];
-
-    /// <summary>The columns one signed value becomes, in this form.</summary>
-    /// <param name="form">How to write it down.</param>
-    /// <param name="name">What the value is called.</param>
-    /// <param name="values">The value for each row, between minus one and one.</param>
-    /// <returns>One column, or two, named as <see cref="Names"/> says.</returns>
-    internal static IEnumerable<IColumn> Written(this Form form, string name, double?[] values)
+    extension(Form form)
     {
-        var names = form.Names(name).ToArray();
+        /// <summary>The least value a column that lands in this form holds: minus one when signed, nothing otherwise.</summary>
+        /// <returns>The lower end; the upper end is always one.</returns>
+        internal double Floor() => form == Form.Signed ? -1 : 0;
 
-        return form switch
+        /// <summary>The names of the columns one signed value becomes, in this form.</summary>
+        /// <param name="name">What the value is called.</param>
+        /// <returns>One name, or two.</returns>
+        internal IEnumerable<string> Names(string name) =>
+            form == Form.SplitSign ? [$"{name}_pos", $"{name}_neg"] : [name];
+
+        /// <summary>The columns one signed value becomes, in this form.</summary>
+        /// <param name="name">What the value is called.</param>
+        /// <param name="values">The value for each row, between minus one and one.</param>
+        /// <returns>One column, or two, named as <see cref="Names"/> says.</returns>
+        internal IEnumerable<IColumn> Written(string name, double?[] values)
         {
-            Form.Signed => [new Column<double>(names[0], ColumnKind.Number, values)],
-            Form.Unit => [new Column<double>(names[0], ColumnKind.Number, values.Select(Shifted))],
-            _ =>
-            [
-                new Column<double>(names[0], ColumnKind.Number, values.Select(value => Half(value, up: true))),
-                new Column<double>(names[1], ColumnKind.Number, values.Select(value => Half(value, up: false))),
-            ],
-        };
+            var names = form.Names(name).ToArray();
+
+            return form switch
+            {
+                Form.Signed => [new Column<double>(names[0], ColumnKind.Number, values)],
+                Form.Unit => [new Column<double>(names[0], ColumnKind.Number, values.Select(Shifted))],
+                _ =>
+                [
+                    new Column<double>(names[0], ColumnKind.Number, values.Select(value => Half(value, up: true))),
+                    new Column<double>(names[1], ColumnKind.Number, values.Select(value => Half(value, up: false))),
+                ],
+            };
+        }
     }
 
     private static double? Shifted(double? value) => value is { } number ? (number + 1) / 2 : null;

@@ -8,19 +8,21 @@ namespace DeepSharp.Backends.TorchSharp;
 /// <summary>A shape as libtorch is handed one.</summary>
 internal static class ShapeLengthsExtensions
 {
-    /// <summary>The length of each axis, outermost first, as libtorch takes them: no axes at all for a single value.</summary>
-    /// <param name="shape">The shape.</param>
-    /// <returns>The lengths.</returns>
-    public static long[] Lengths(this Shape shape)
+    extension(Shape shape)
     {
-        var axes = shape.Axes;
-        var lengths = new long[axes.Length];
-
-        for (var axis = 0; axis < axes.Length; axis++)
+        /// <summary>The length of each axis, outermost first, as libtorch takes them: no axes at all for a single value.</summary>
+        /// <returns>The lengths.</returns>
+        public long[] Lengths()
         {
-            lengths[axis] = axes[axis];
-        }
+            var axes = shape.Axes;
+            var lengths = new long[axes.Length];
 
-        return lengths;
+            for (var axis = 0; axis < axes.Length; axis++)
+            {
+                lengths[axis] = axes[axis];
+            }
+
+            return lengths;
+        }
     }
 }

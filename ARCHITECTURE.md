@@ -37,7 +37,9 @@ Src/DeepSharp.Pipelines/          the data side
     PipelineDeclaration.cs DeclarationRules.cs
                                     the steps in order, the rules every declaration keeps, the keys of its prefixes
     PipelineDocument.cs PipelineFileException.cs PipelineFileSchema.cs VerbReference.cs
-                                    the file: its envelope, every fault at its line and column, the schema, the reference
+                                    the file: its envelope, the schema, the reference
+    SurveyedText.cs TextPieces.cs   the text a file is read from: where each of its parts stands, every fault at its line
+                                    and column, and a larger file read a piece of its UTF-8 at a time
     PipelineText.cs                 a pipeline's text as one writer writes it, and whether two pipelines are one fit
     PipelinePreset.cs               what a pipeline decided about its columns, saved on its own
     ColumnState.cs                  which columns there are at each step, followed from the schema down
@@ -46,7 +48,7 @@ Src/DeepSharp.Pipelines/          the data side
                                     reading, declaring, putting in order, dividing
     Features.cs TimeParts.cs Maths.cs
                                     what is worked out from a single row
-    FillStrategy.cs FillNaN.cs Transforms.cs Outliers.cs DropColumns.cs DropWarmUp.cs
+    FillStrategy.cs FillNaN.cs Scaling.cs Encoding.cs Outliers.cs DropColumns.cs DropWarmUp.cs
                                     what learns, and what takes rows or columns away
     Evidence.cs Report.cs Measures.cs PredictionsDocument.cs
                                     the profile and the correlation a run is declared to produce, the report of what a
@@ -76,6 +78,12 @@ Src/DeepSharp.Backends.TorchSharp/   an engine on libtorch, through TorchSharp, 
 Src/DeepSharp.Charts/                every chart, as the text of an SVG, drawn with MatPlotLibNet; the report, as HTML
 Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
 Src/DeepSharp.Verso.Api/             an application of your own that hosts the notebook
+    NotebookHost.cs                 one open notebook: its state, its turn, and the read every look takes
+    NotebookHost.Editing.cs NotebookHost.Running.cs NotebookHost.Panels.cs NotebookHost.Publishing.cs
+    NotebookHost.Opening.cs         the same host, read a duty at a time: the cells, what runs, the parts and the layout,
+                                    the versions every view is told, and opening, saving and closing
+    NotebookFile.cs                 the notebook's file: what it last held, whether the notebook differs from it, writing it
+    EngineExtensions.cs             what the engine is asked about itself, each question asked of the thing it is about
 Src/DeepSharp.Verso.Serve/           DeepSharp's own server, the notebook in a browser
 Samples/                          runnable programs, a sample notebook, and the published data they read
 tools/                            the coverage check, the script that draws the icon, and the checks that start what a
@@ -355,6 +363,19 @@ Break it and nothing goes red. A mean computed over the whole set gives a model 
 validation and disappoints the day it meets real data, because the validation rows had already been allowed
 to influence what the model saw. The same failure wears a second costume at serving time: a feature computed
 one way while training and another way live, which is the same leak running backwards.
+
+### Three words for what a fit writes down
+
+A fit does not only learn. It **learns** a value — a mean, a bound, the categories it found — and a replay reads it. It
+**decides** something from what it saw, such as whether a column with that many gaps is filled at all, and a replay reads
+that too, so rows served long afterwards keep meeting the pipeline the model was trained with. And it **sees**: how many
+gaps there were, how many values were no number, how many lay outside its bounds. The third is evidence, written down so a
+person can see what the fit was looking at, and no replay may depend on it.
+
+The three are said apart in one bag, because that is what the file holds: one object of names and values, in one order,
+marking none of them. So a pipeline published before the three words existed still loads, and a bag read back from a file
+counts nothing — the words are the fit's own, where they can be held to. What the distinction buys is a rule that can be
+tested rather than hoped for: nothing a replay reads was only counted.
 
 ### What that makes the carrier
 

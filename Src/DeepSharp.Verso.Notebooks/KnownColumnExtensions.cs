@@ -8,10 +8,12 @@ namespace DeepSharp.Verso.Notebooks;
 /// <summary>The columns a key can name, read the same way by the form and by the editor.</summary>
 internal static class KnownColumnExtensions
 {
-    /// <summary>The names of the columns of a kind a parameter works on, each once, in the order they come.</summary>
-    /// <param name="columns">The columns known.</param>
-    /// <param name="accepts">The kinds the parameter works on.</param>
-    /// <returns>Their names.</returns>
-    public static IReadOnlyList<string> NamesOf(this IEnumerable<KnownColumn> columns, IReadOnlyList<ColumnKind> accepts) =>
-        [.. columns.Where(column => accepts.Contains(column.Kind)).Select(column => column.Name).Distinct(StringComparer.Ordinal)];
+    extension(IEnumerable<KnownColumn> columns)
+    {
+        /// <summary>The names of the columns of a kind a parameter works on, each once, in the order they come.</summary>
+        /// <param name="accepts">The kinds the parameter works on.</param>
+        /// <returns>Their names.</returns>
+        public IReadOnlyList<string> NamesOf(IReadOnlyList<ColumnKind> accepts) =>
+            [.. columns.Where(column => accepts.Contains(column.Kind)).Select(column => column.Name).Distinct(StringComparer.Ordinal)];
+    }
 }

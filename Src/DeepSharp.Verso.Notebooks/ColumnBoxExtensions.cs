@@ -11,18 +11,19 @@ namespace DeepSharp.Verso.Notebooks;
 /// </summary>
 internal static class ColumnBoxExtensions
 {
-    /// <summary>The box for whether a column is in.</summary>
-    /// <param name="column">How the column stands, and what the rules offer it.</param>
-    /// <returns>Ticked when it takes part, is kept or is made; clickable when the rules allow what the click asks for.</returns>
-    public static HeaderBox IncludedBox(this ColumnChoice column) =>
-        Box(column.Standing is ColumnStanding.Taking or ColumnStanding.Kept or ColumnStanding.Made, column.Offers, ColumnOffers.Exclude, ColumnOffers.Include);
+    extension(ColumnChoice column)
+    {
+        /// <summary>The box for whether a column is in.</summary>
+        /// <returns>Ticked when it takes part, is kept or is made; clickable when the rules allow what the click asks for.</returns>
+        public HeaderBox IncludedBox() =>
+            Box(column.Standing is ColumnStanding.Taking or ColumnStanding.Kept or ColumnStanding.Made, column.Offers, ColumnOffers.Exclude, ColumnOffers.Include);
 
-    /// <summary>The box for whether a column is a category.</summary>
-    /// <param name="column">How the column stands, and what the rules offer it.</param>
-    /// <returns>Ticked when it is one; clickable when the rules allow what the click asks for.</returns>
-    /// <remarks>A category can be unticked only when it says which kind it was.</remarks>
-    public static HeaderBox CategoryBox(this ColumnChoice column) =>
-        Box(column.Kind == ColumnKind.Category, column.Offers, ColumnOffers.BackToWas, ColumnOffers.MakeCategory);
+        /// <summary>The box for whether a column is a category.</summary>
+        /// <returns>Ticked when it is one; clickable when the rules allow what the click asks for.</returns>
+        /// <remarks>A category can be unticked only when it says which kind it was.</remarks>
+        public HeaderBox CategoryBox() =>
+            Box(column.Kind == ColumnKind.Category, column.Offers, ColumnOffers.BackToWas, ColumnOffers.MakeCategory);
+    }
 
     // A box, ticked or not, that can be clicked when the rules offer what the click asks for: unticking it when it is
     // ticked, ticking it when it is not.

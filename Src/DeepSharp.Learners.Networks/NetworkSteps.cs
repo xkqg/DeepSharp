@@ -10,18 +10,20 @@ namespace DeepSharp.Learners.Networks;
 /// </summary>
 public static class NetworkStepExtensions
 {
-    /// <summary>Teaches a catalog the network a pipeline can be declared for.</summary>
-    /// <param name="catalog">The catalog.</param>
-    /// <returns>The catalog, so verbs are taught one after another.</returns>
-    /// <exception cref="ArgumentNullException">There is no catalog.</exception>
-    /// <exception cref="InvalidOperationException">It already knows the verb.</exception>
-    public static StepCatalog WithNetworks(this StepCatalog catalog)
+    extension(StepCatalog catalog)
     {
-        ArgumentNullException.ThrowIfNull(catalog);
+        /// <summary>Teaches a catalog the network a pipeline can be declared for.</summary>
+        /// <returns>The catalog, so verbs are taught one after another.</returns>
+        /// <exception cref="ArgumentNullException">There is no catalog.</exception>
+        /// <exception cref="InvalidOperationException">It already knows the verb.</exception>
+        public StepCatalog WithNetworks()
+        {
+            ArgumentNullException.ThrowIfNull(catalog);
 
-        catalog.Register<LearnNetworkStep>();
+            catalog.Register<LearnNetworkStep>();
 
-        return catalog;
+            return catalog;
+        }
     }
 }
 

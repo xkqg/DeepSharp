@@ -42,31 +42,35 @@ public static class TypedValueExtensions
     // written in.
     private const string RoundTrip = "O";
 
-    /// <summary>The value as the cell the pipeline reads.</summary>
-    /// <param name="value">The value, as the source holds it; nothing for a gap.</param>
-    /// <returns>
-    /// Nothing for nothing; a moment or a day in the form ISO 8601 writes it, <c>2015-02-18T09:30:00.0000000</c> or
-    /// <c>2015-02-18</c>; anything else as the invariant culture writes it — a number in its shortest exact form, true
-    /// and false as <c>True</c> and <c>False</c>.
-    /// </returns>
-    public static string? AsCell(this object? value) => value switch
+    extension(object? value)
     {
-        null => null,
-        DateTime moment => moment.ToString(RoundTrip, CultureInfo.InvariantCulture),
-        DateOnly day => day.ToString(RoundTrip, CultureInfo.InvariantCulture),
-        _ => Convert.ToString(value, CultureInfo.InvariantCulture),
-    };
+        /// <summary>The value as the cell the pipeline reads.</summary>
+        /// <returns>
+        /// Nothing for nothing; a moment or a day in the form ISO 8601 writes it, <c>2015-02-18T09:30:00.0000000</c> or
+        /// <c>2015-02-18</c>; anything else as the invariant culture writes it — a number in its shortest exact form, true
+        /// and false as <c>True</c> and <c>False</c>.
+        /// </returns>
+        public string? AsCell() => value switch
+        {
+            null => null,
+            DateTime moment => moment.ToString(RoundTrip, CultureInfo.InvariantCulture),
+            DateOnly day => day.ToString(RoundTrip, CultureInfo.InvariantCulture),
+            _ => Convert.ToString(value, CultureInfo.InvariantCulture),
+        };
+    }
 
-    /// <summary>The kind a column of values of this type says it holds.</summary>
-    /// <param name="type">The type of the column's values.</param>
-    /// <returns>
-    /// Words, true or false, a moment, a whole number or a number; nothing for a type that says none of those, whose
-    /// values are then proposed from what their cells look like.
-    /// </returns>
-    public static ColumnKind? AsColumnKind(this Type type)
+    extension(Type type)
     {
-        ArgumentNullException.ThrowIfNull(type);
+        /// <summary>The kind a column of values of this type says it holds.</summary>
+        /// <returns>
+        /// Words, true or false, a moment, a whole number or a number; nothing for a type that says none of those, whose
+        /// values are then proposed from what their cells look like.
+        /// </returns>
+        public ColumnKind? AsColumnKind()
+        {
+            ArgumentNullException.ThrowIfNull(type);
 
-        return Kinds.TryGetValue(type, out var kind) ? kind : null;
+            return Kinds.TryGetValue(type, out var kind) ? kind : null;
+        }
     }
 }

@@ -28,10 +28,14 @@ internal static class PipelineFileSchema
         Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
-    /// <summary>Writes the schema of a file that may hold these verbs.</summary>
-    /// <param name="verbs">What each verb is.</param>
-    /// <returns>The schema, as an indented JSON document ending in a line break.</returns>
-    public static string Write(IReadOnlyList<StepDescription> verbs)
+    extension(IReadOnlyList<StepDescription> verbs)
+    {
+        /// <summary>The schema of a file that may hold these verbs.</summary>
+        /// <returns>The schema, as an indented JSON document ending in a line break.</returns>
+        public string AsJsonSchema() => Schema(verbs);
+    }
+
+    private static string Schema(IReadOnlyList<StepDescription> verbs)
     {
         var definitions = new JsonObject
         {

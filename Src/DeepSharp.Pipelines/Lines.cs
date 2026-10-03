@@ -33,30 +33,32 @@ internal interface IDeclaresSteps
 /// </summary>
 internal static class LineExtensions
 {
-    /// <summary>Writes a line and hands back the steps it declared.</summary>
     /// <typeparam name="TLine">The kind of line.</typeparam>
-    /// <param name="line">How the line is written.</param>
-    /// <param name="features">Where the pipeline says its features land.</param>
-    /// <param name="parameter">The name of the parameter the line came in as, for a refusal that names it.</param>
-    /// <returns>The steps, in the order the columns were named.</returns>
-    /// <exception cref="ArgumentNullException">There is no line.</exception>
-    /// <exception cref="ArgumentException">The line names no column, so it declares nothing.</exception>
-    internal static IReadOnlyList<IPipelineStep> Declared<TLine>(this Action<TLine> line, Form features, string parameter)
+    extension<TLine>(Action<TLine> line)
         where TLine : IDeclaresSteps, new()
     {
-        ArgumentNullException.ThrowIfNull(line);
+        /// <summary>Writes a line and hands back the steps it declared.</summary>
+        /// <param name="features">Where the pipeline says its features land.</param>
+        /// <param name="parameter">The name of the parameter the line came in as, for a refusal that names it.</param>
+        /// <returns>The steps, in the order the columns were named.</returns>
+        /// <exception cref="ArgumentNullException">There is no line.</exception>
+        /// <exception cref="ArgumentException">The line names no column, so it declares nothing.</exception>
+        internal IReadOnlyList<IPipelineStep> Declared(Form features, string parameter)
+        {
+            ArgumentNullException.ThrowIfNull(line);
 
-        var declared = new TLine { Features = features };
-        line(declared);
+            var declared = new TLine { Features = features };
+            line(declared);
 
-        // A line that declares nothing is a line somebody meant to finish, and it is refused where it is written
-        // rather than read as a verb that does nothing — which the declaration's own rules would refuse later, at a
-        // place that no longer says which line it was.
-        return declared.Steps.Count > 0
-            ? declared.Steps
-            : throw new ArgumentException(
-                $"This line names no column, so it does nothing. Name the columns each kind holds for, as "
-                + $"{typeof(TLine).Name} says.",
-                parameter);
+            // A line that declares nothing is a line somebody meant to finish, and it is refused where it is written
+            // rather than read as a verb that does nothing — which the declaration's own rules would refuse later, at a
+            // place that no longer says which line it was.
+            return declared.Steps.Count > 0
+                ? declared.Steps
+                : throw new ArgumentException(
+                    $"This line names no column, so it does nothing. Name the columns each kind holds for, as "
+                    + $"{typeof(TLine).Name} says.",
+                    parameter);
+        }
     }
 }

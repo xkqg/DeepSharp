@@ -14,15 +14,17 @@ namespace DeepSharp.Charts;
 /// <summary>A correlation between columns, drawn.</summary>
 public static class CorrelationChart
 {
-    /// <summary>
-    /// The correlation of the columns as a heatmap: every coefficient on the whole of its scale, from minus one to one, blue to
-    /// red, each cell labelled with its value.
-    /// </summary>
-    /// <param name="correlation">The rows a correlation is drawn from, and the columns they hold.</param>
-    /// <returns>The chart, as the text of an SVG.</returns>
-    /// <exception cref="ArgumentException">Fewer than two rows were kept, which correlate nothing.</exception>
-    /// <remarks>The coefficients are MatPlotLibNet's, as is the drawing.</remarks>
-    public static string Heatmap(this CorrelationInput correlation) => HeatmapFigure(correlation).ToSvg();
+    extension(CorrelationInput correlation)
+    {
+        /// <summary>
+        /// The correlation of the columns as a heatmap: every coefficient on the whole of its scale, from minus one to one, blue to
+        /// red, each cell labelled with its value.
+        /// </summary>
+        /// <returns>The chart, as the text of an SVG.</returns>
+        /// <exception cref="ArgumentException">Fewer than two rows were kept, which correlate nothing.</exception>
+        /// <remarks>The coefficients are MatPlotLibNet's, as is the drawing.</remarks>
+        public string Heatmap() => HeatmapFigure(correlation).ToSvg();
+    }
 
     /// <summary>The figure <see cref="Heatmap"/> draws.</summary>
     internal static Figure HeatmapFigure(CorrelationInput correlation)

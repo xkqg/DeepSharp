@@ -240,19 +240,23 @@ public sealed class ReportBuilder
 /// <summary>What each measure counts.</summary>
 internal static class MetricExtensions
 {
-    /// <summary>Whether a measure counts classes, which only answers that can be classes have.</summary>
-    /// <param name="metric">The measure.</param>
-    /// <returns><see langword="true"/> for accuracy, precision, recall and the confusion matrix.</returns>
-    public static bool CountsClasses(this Metric metric) =>
-        metric is Metric.Accuracy or Metric.Precision or Metric.Recall or Metric.ConfusionMatrix;
-
-    /// <summary>Measures as a file writes them, each once, in a phrase: "accuracy", "accuracy and recall", "accuracy, precision and recall".</summary>
-    /// <param name="metrics">The measures, one at least.</param>
-    /// <returns>The phrase.</returns>
-    public static string Listed(this IEnumerable<Metric> metrics)
+    extension(Metric metric)
     {
-        var words = metrics.Distinct().Select(metric => Vocabulary<Metric>.WordFor(metric, "metrics")).ToArray();
+        /// <summary>Whether a measure counts classes, which only answers that can be classes have.</summary>
+        /// <returns><see langword="true"/> for accuracy, precision, recall and the confusion matrix.</returns>
+        public bool CountsClasses() =>
+            metric is Metric.Accuracy or Metric.Precision or Metric.Recall or Metric.ConfusionMatrix;
+    }
 
-        return words.Length == 1 ? words[0] : $"{string.Join(", ", words[..^1])} and {words[^1]}";
+    extension(IEnumerable<Metric> metrics)
+    {
+        /// <summary>Measures as a file writes them, each once, in a phrase: "accuracy", "accuracy and recall", "accuracy, precision and recall".</summary>
+        /// <returns>The phrase.</returns>
+        public string Listed()
+        {
+            var words = metrics.Distinct().Select(metric => Vocabulary<Metric>.WordFor(metric, "metrics")).ToArray();
+
+            return words.Length == 1 ? words[0] : $"{string.Join(", ", words[..^1])} and {words[^1]}";
+        }
     }
 }

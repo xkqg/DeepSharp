@@ -25,22 +25,23 @@ internal readonly record struct CellPart(string Text, IPipelineStep? Step);
 /// </remarks>
 internal static partial class ForgottenBlockExtensions
 {
-    /// <summary>The parts a cell's text falls into, in their order: the steps it holds, and the text around them.</summary>
-    /// <param name="cell">The cell.</param>
-    /// <param name="catalog">The steps a text may read as.</param>
-    /// <returns>The parts; one part, no step, for a cell that holds none.</returns>
-    public static IReadOnlyList<CellPart> Parts(this CellModel cell, StepCatalog catalog) => cell.Type switch
+    extension(CellModel cell)
     {
-        "raw" or "code" => [new CellPart(cell.Source, catalog.TryReadStep(cell.Source))],
-        "markdown" => Fences(cell.Source.ReplaceLineEndings("\n"), catalog),
-        _ => [new CellPart(cell.Source, null)],
-    };
+        /// <summary>The parts a cell's text falls into, in their order: the steps it holds, and the text around them.</summary>
+        /// <param name="catalog">The steps a text may read as.</param>
+        /// <returns>The parts; one part, no step, for a cell that holds none.</returns>
+        public IReadOnlyList<CellPart> Parts(StepCatalog catalog) => cell.Type switch
+        {
+            "raw" or "code" => [new CellPart(cell.Source, catalog.TryReadStep(cell.Source))],
+            "markdown" => Fences(cell.Source.ReplaceLineEndings("\n"), catalog),
+            _ => [new CellPart(cell.Source, null)],
+        };
 
-    /// <summary>Whether a cell holds a step a format forgot was a block.</summary>
-    /// <param name="cell">The cell.</param>
-    /// <param name="catalog">The steps a text may read as.</param>
-    /// <returns>Whether any of its parts is a step.</returns>
-    public static bool HoldsForgottenSteps(this CellModel cell, StepCatalog catalog) => cell.Parts(catalog).Any(part => part.Step is not null);
+        /// <summary>Whether a cell holds a step a format forgot was a block.</summary>
+        /// <param name="catalog">The steps a text may read as.</param>
+        /// <returns>Whether any of its parts is a step.</returns>
+        public bool HoldsForgottenSteps(StepCatalog catalog) => cell.Parts(catalog).Any(part => part.Step is not null);
+    }
 
     // A cell of text cut at each fence that holds a step: the text before it, the step, and so on, the text after the last
     // one. A fence of the block's language whose text is no step stays in the text around it.

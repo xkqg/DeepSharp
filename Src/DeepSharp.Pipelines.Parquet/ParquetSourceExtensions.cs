@@ -12,32 +12,36 @@ namespace DeepSharp.Pipelines;
 /// </remarks>
 public static class ParquetSourceExtensions
 {
-    /// <summary>Declares that the rows come from an Apache Parquet file.</summary>
-    /// <param name="pipeline">The pipeline being written.</param>
-    /// <param name="path">Where the file will be, when the pipeline runs; a relative path is read from the pipeline's folder.</param>
-    /// <returns>The pipeline, so the next verb can be written after it.</returns>
-    /// <exception cref="ArgumentException">The path is empty or nothing but spaces.</exception>
-    /// <remarks>
-    /// Nothing is opened until the pipeline runs. The file says what each of its columns holds, and
-    /// <see cref="PipelineBuilder.ProposedKinds"/> proposes what it says.
-    /// </remarks>
-    public static PipelineBuilder ReadParquet(this PipelineBuilder pipeline, string path)
+    extension(PipelineBuilder pipeline)
     {
-        ArgumentNullException.ThrowIfNull(pipeline);
+        /// <summary>Declares that the rows come from an Apache Parquet file.</summary>
+        /// <param name="path">Where the file will be, when the pipeline runs; a relative path is read from the pipeline's folder.</param>
+        /// <returns>The pipeline, so the next verb can be written after it.</returns>
+        /// <exception cref="ArgumentException">The path is empty or nothing but spaces.</exception>
+        /// <remarks>
+        /// Nothing is opened until the pipeline runs. The file says what each of its columns holds, and
+        /// <see cref="PipelineBuilder.ProposedKinds"/> proposes what it says.
+        /// </remarks>
+        public PipelineBuilder ReadParquet(string path)
+        {
+            ArgumentNullException.ThrowIfNull(pipeline);
 
-        return pipeline.Add(new ReadParquetStep(path));
+            return pipeline.Add(new ReadParquetStep(path));
+        }
     }
 
-    /// <summary>Teaches a catalog to read <c>read.parquet</c> back out of a pipeline file.</summary>
-    /// <param name="catalog">The catalog being assembled.</param>
-    /// <returns>The same catalog, so registration reads as one sentence.</returns>
-    public static StepCatalog WithParquet(this StepCatalog catalog)
+    extension(StepCatalog catalog)
     {
-        ArgumentNullException.ThrowIfNull(catalog);
+        /// <summary>Teaches a catalog to read <c>read.parquet</c> back out of a pipeline file.</summary>
+        /// <returns>The same catalog, so registration reads as one sentence.</returns>
+        public StepCatalog WithParquet()
+        {
+            ArgumentNullException.ThrowIfNull(catalog);
 
-        catalog.Register<ReadParquetStep>();
+            catalog.Register<ReadParquetStep>();
 
-        return catalog;
+            return catalog;
+        }
     }
 }
 

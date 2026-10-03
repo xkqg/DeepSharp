@@ -1194,14 +1194,15 @@ internal static class Vocabulary<TEnum>
 /// <summary>The words a pipeline file writes its choices in.</summary>
 public static class WordExtensions
 {
-    /// <summary>
-    /// The word a pipeline file writes a choice as — <c>train</c>, <c>rmse</c>, <c>drawn</c> — by the one rule its reader and
-    /// its writer use, so a chart or a notebook that names the choice names it as the file does.
-    /// </summary>
-    /// <typeparam name="TEnum">The set of choices.</typeparam>
-    /// <param name="value">The choice.</param>
-    /// <returns>Its word.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The value is none of the set's: a number cast to it.</exception>
-    public static string Word<TEnum>(this TEnum value)
-        where TEnum : struct, Enum => Vocabulary<TEnum>.WordFor(value, typeof(TEnum).Name);
+    extension<TEnum>(TEnum value)
+        where TEnum : struct, Enum
+    {
+        /// <summary>
+        /// The word a pipeline file writes a choice as — <c>train</c>, <c>rmse</c>, <c>drawn</c> — by the one rule its reader and
+        /// its writer use, so a chart or a notebook that names the choice names it as the file does.
+        /// </summary>
+        /// <returns>Its word.</returns>
+        /// <exception cref="ArgumentOutOfRangeException">The value is none of the set's: a number cast to it.</exception>
+        public string Word() => Vocabulary<TEnum>.WordFor(value, typeof(TEnum).Name);
+    }
 }

@@ -17,10 +17,14 @@ namespace DeepSharp.Pipelines;
 /// </remarks>
 internal static class VerbReference
 {
-    /// <summary>Writes the page for these verbs.</summary>
-    /// <param name="verbs">What each verb is.</param>
-    /// <returns>The page, in Markdown, ending in a line break.</returns>
-    public static string Write(IReadOnlyList<StepDescription> verbs)
+    extension(IReadOnlyList<StepDescription> verbs)
+    {
+        /// <summary>The reference page for these verbs.</summary>
+        /// <returns>The page, in Markdown, ending in a line break.</returns>
+        public string AsVerbReference() => Page(verbs);
+    }
+
+    private static string Page(IReadOnlyList<StepDescription> verbs)
     {
         var page = new StringBuilder();
 

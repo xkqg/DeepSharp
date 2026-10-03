@@ -39,6 +39,12 @@ reach for a test that pretends to cover it.
 - No `Helper`, `Util`, `Utility` or `Manager` classes. A shared function on a type is an extension method on
   that type; a shared abstraction across types is a generic base or interface. A class whose name ends in
   `Helper` is a drawer nobody owns.
+- An extension method is written as a member of an `extension(T value) { … }` block, never with a `this`
+  parameter. The members inside a block carry no `static` and no `this`, so the call site reads as a sentence and the
+  thing the method is about is the receiver rather than the first of its arguments. The enclosing class is still
+  `static`, which the language requires. A `public static` method whose first parameter is the thing the method is
+  about belongs in such a block; one whose whole body is `new`, handing back a fresh instance of the type it names, is
+  a factory and stays where it is.
 - Several values out of a method is a `readonly record struct` with named members, never a tuple. A tuple
   loses its names in IntelliSense, in stack traces and in the documentation.
 - A method or a constructor takes four parameters at most, public or not, and the receiver of an extension method is

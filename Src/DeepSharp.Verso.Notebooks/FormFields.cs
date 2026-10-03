@@ -58,17 +58,17 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
 
         if (names.Count == 0)
         {
-            return [Text(parameter, FormVocabulary.ListText(current))];
+            return [Text(parameter, current.AsListText())];
         }
 
         if (parameter.Repeatable)
         {
             return current.Select((name, place) =>
-                new Field(FormVocabulary.Place(parameter.Key, place), $"{parameter.Key} {place + 1}", parameter.Description).Pick(name, names));
+                new Field(parameter.Place(place), $"{parameter.Key} {place + 1}", parameter.Description).Pick(name, names));
         }
 
         return names.Concat(current.Except(names, StringComparer.Ordinal)).Select(name => new PropertyField(
-            FormVocabulary.Member(parameter.Key, name), name, PropertyFieldType.Toggle, current.Contains(name, StringComparer.Ordinal), parameter.Description));
+            parameter.Member(name), name, PropertyFieldType.Toggle, current.Contains(name, StringComparer.Ordinal), parameter.Description));
     }
 
     public IEnumerable<PropertyField> Visit(NumberParameter parameter) => [Text(parameter, Written(parameter.Key))];
@@ -103,7 +103,7 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
         return strategy.Value is null
             ? [name]
             : [name, new(
-                FormVocabulary.StrategyValue(parameter.Key), FillStrategyParameter.ValueKey, PropertyFieldType.Text,
+                parameter.Number(), FillStrategyParameter.ValueKey, PropertyFieldType.Text,
                 Written(parameter.Key, FillStrategyParameter.ValueKey), parameter.Description)];
     }
 
@@ -133,27 +133,27 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
         {
             var taken = taking.GetValueOrDefault(name);
 
-            fields.Add(new Field(FormVocabulary.Kind(parameter.Key, name), name, parameter.Kind.Description).Choose(
+            fields.Add(new Field(parameter.Kind(name), name, parameter.Kind.Description).Choose(
                 taken?.Kind ?? FormVocabulary.NotTaken, [FormVocabulary.NotTaken, .. parameter.Kind.Choices]));
 
             if (taken is not null)
             {
                 fields.Add(new(
-                    FormVocabulary.Absent(parameter.Key, name), $"{name} may be absent", PropertyFieldType.Toggle, taken.Declared.Optional,
+                    parameter.Absent(name), $"{name} may be absent", PropertyFieldType.Toggle, taken.Declared.Optional,
                     parameter.Optional.Description));
             }
 
             if (taken?.Declared.Kind == ColumnKind.Timestamp)
             {
                 fields.Add(new(
-                    FormVocabulary.Format(parameter.Key, name), $"{name} is written as", PropertyFieldType.Text, taken.Declared.Format,
+                    parameter.Format(name), $"{name} is written as", PropertyFieldType.Text, taken.Declared.Format,
                     parameter.Format.Description));
             }
 
             if (taken is not null)
             {
                 fields.Add(new(
-                    FormVocabulary.Missing(parameter.Key, name), $"{name} is a gap when it holds", PropertyFieldType.Text, taken.Declared.Missing,
+                    parameter.Missing(name), $"{name} is a gap when it holds", PropertyFieldType.Text, taken.Declared.Missing,
                     parameter.Missing.Description));
             }
         }
@@ -177,7 +177,7 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
             var inside = parameter.Single ? written : written[place];
 
             fields.Add(new Field(
-                FormVocabulary.Place(parameter.Key, place),
+                parameter.Place(place),
                 parameter.Single ? parameter.Key : $"{parameter.Key} {place + 1}",
                 kind.Purpose).Choose(part.Kind, parameter.Names));
 
@@ -186,7 +186,7 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
                 foreach (var field in setting.Accept(new FormFields(inside, scope)))
                 {
                     fields.Add(new PropertyField(
-                        FormVocabulary.Setting(parameter.Key, place, field.Name),
+                        parameter.Setting(place, field.Name),
                         parameter.Single ? field.DisplayName : $"{field.DisplayName} {place + 1}",
                         field.FieldType,
                         field.CurrentValue,

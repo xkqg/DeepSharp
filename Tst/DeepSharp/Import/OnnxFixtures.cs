@@ -44,37 +44,58 @@ internal static class OnnxFixtures
         return new MemoryStream(model.ToByteArray());
     }
 
-    /// <summary>A graph's node, by its name.</summary>
-    public static NodeProto Node(this ModelProto model, string name) => model.Graph.Node.Single(node => node.Name == name);
-
-    /// <summary>A graph's initializer, by its name.</summary>
-    public static TensorProto Initializer(this ModelProto model, string name) => model.Graph.Initializer.Single(tensor => tensor.Name == name);
-
-    /// <summary>A node's attribute, by its name.</summary>
-    public static AttributeProto Attribute(this NodeProto node, string name) => node.Attribute.Single(attribute => attribute.Name == name);
-
-    /// <summary>Sets a node's whole-number attribute, adding it when the node writes none.</summary>
-    public static void SetWhole(this NodeProto node, string name, long value) =>
-        node.Set(new AttributeProto { Name = name, Type = AttributeProto.Types.AttributeType.Int, I = value });
-
-    /// <summary>Sets a node's list of whole numbers, adding it when the node writes none.</summary>
-    public static void SetWholes(this NodeProto node, string name, params long[] values)
+    extension(ModelProto model)
     {
-        var attribute = new AttributeProto { Name = name, Type = AttributeProto.Types.AttributeType.Ints };
-        attribute.Ints.Add(values);
-        node.Set(attribute);
+        /// <summary>A graph's node, by its name.</summary>
+        public NodeProto Node(string name) => model.Graph.Node.Single(node => node.Name == name);
+
+        /// <summary>A graph's initializer, by its name.</summary>
+        public TensorProto Initializer(string name) => model.Graph.Initializer.Single(tensor => tensor.Name == name);
     }
 
-    /// <summary>Sets a node's number attribute, adding it when the node writes none.</summary>
-    public static void SetNumber(this NodeProto node, string name, float value) =>
-        node.Set(new AttributeProto { Name = name, Type = AttributeProto.Types.AttributeType.Float, F = value });
+    extension(NodeProto node)
+    {
+        /// <summary>A node's attribute, by its name.</summary>
+        public AttributeProto Attribute(string name) => node.Attribute.Single(attribute => attribute.Name == name);
 
-    /// <summary>Sets a node's text attribute, adding it when the node writes none.</summary>
-    public static void SetText(this NodeProto node, string name, string value) =>
-        node.Set(new AttributeProto { Name = name, Type = AttributeProto.Types.AttributeType.String, S = ByteString.CopyFromUtf8(value) });
+        /// <summary>Sets a node's whole-number attribute, adding it when the node writes none.</summary>
+        public void SetWhole(string name, long value) =>
+            node.Set(new AttributeProto { Name = name, Type = AttributeProto.Types.AttributeType.Int, I = value });
 
-    /// <summary>Takes a node's attribute out.</summary>
-    public static void Unset(this NodeProto node, string name) => node.Attribute.Remove(node.Attribute(name));
+        /// <summary>Sets a node's list of whole numbers, adding it when the node writes none.</summary>
+        public void SetWholes(string name, params long[] values)
+        {
+            var attribute = new AttributeProto { Name = name, Type = AttributeProto.Types.AttributeType.Ints };
+            attribute.Ints.Add(values);
+            node.Set(attribute);
+        }
+
+        /// <summary>Sets a node's number attribute, adding it when the node writes none.</summary>
+        public void SetNumber(string name, float value) =>
+            node.Set(new AttributeProto { Name = name, Type = AttributeProto.Types.AttributeType.Float, F = value });
+
+        /// <summary>Sets a node's text attribute, adding it when the node writes none.</summary>
+        public void SetText(string name, string value) =>
+            node.Set(new AttributeProto { Name = name, Type = AttributeProto.Types.AttributeType.String, S = ByteString.CopyFromUtf8(value) });
+
+        /// <summary>Takes a node's attribute out.</summary>
+        public void Unset(string name) => node.Attribute.Remove(node.Attribute(name));
+
+        // One attribute set on a node: written in its place when the node writes it already, added when it does not.
+        private void Set(AttributeProto attribute)
+        {
+            var at = node.Attribute.ToList().FindIndex(each => each.Name == attribute.Name);
+
+            if (at < 0)
+            {
+                node.Attribute.Add(attribute);
+            }
+            else
+            {
+                node.Attribute[at] = attribute;
+            }
+        }
+    }
 
     /// <summary>An initializer of single-precision numbers, written as ONNX writes one: little-endian bytes.</summary>
     public static TensorProto Floats(string name, long[] dims, params float[] values)
@@ -119,20 +140,6 @@ internal static class OnnxFixtures
         var values = Values(features);
 
         return Tensor.From(new Shape(values.Length / 14, 14), values);
-    }
-
-    private static void Set(this NodeProto node, AttributeProto attribute)
-    {
-        var at = node.Attribute.ToList().FindIndex(each => each.Name == attribute.Name);
-
-        if (at < 0)
-        {
-            node.Attribute.Add(attribute);
-        }
-        else
-        {
-            node.Attribute[at] = attribute;
-        }
     }
 }
 

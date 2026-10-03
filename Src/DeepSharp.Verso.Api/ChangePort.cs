@@ -64,6 +64,37 @@ internal sealed class ChangePort(NotebookHost host) : NotebookPort(host.Scaffold
     /// <returns>A task that ends then.</returns>
     public Task SettledAsync() => _runs.TakeTurnAsync(() => Task.FromResult(true));
 
+    /// <summary>What a part does as one change, whole.</summary>
+    /// <typeparam name="T">What the part answers.</typeparam>
+    /// <param name="act">What the part does.</param>
+    /// <returns>What it answered; nothing when a stop took the change's run.</returns>
+    /// <remarks>
+    /// A change whose run was stopped ends as that run ends, with nothing to answer, and a change is over only once every run
+    /// it asked for has ended or was stopped, whether or not it waited for them.
+    /// </remarks>
+    public async Task<T?> WholeAsync<T>(Func<Task<T>> act)
+    {
+        ArgumentNullException.ThrowIfNull(act);
+
+        var answer = default(T);
+
+        try
+        {
+            answer = await act();
+        }
+        catch (OperationCanceledException) when (Stopped)
+        {
+            // A change whose run was stopped ends as that run ends.
+        }
+        finally
+        {
+            await SettledAsync();
+        }
+
+        // A stopped change writes nothing, what it answers included.
+        return Stopped ? default : answer;
+    }
+
     // Let through on the change's last run until a stop takes it, and held until it has landed; a change that ran nothing
     // yet holds nothing.
     protected override Admission Admit() => Volatile.Read(ref _run)?.Admit() ?? default;

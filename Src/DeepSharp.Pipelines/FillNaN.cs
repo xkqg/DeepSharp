@@ -80,7 +80,7 @@ public sealed record FillNaNStep : IFittedStep, IPipelineStep<FillNaNStep>, IDes
         // "Not a number" in the sense a model cares about: a not-a-number and an infinity alike. Both are
         // arithmetic that produced no usable value, and a mean with an infinity in it is an infinity. Counted
         // among the training rows, like every number in the fitted half.
-        learned.Learned("notNumbers", training.NotFinite);
+        learned.Saw("notNumbers", training.NotFinite);
 
         // This is the step that deals with those values, so it learns from the finite ones rather than refusing.
         switch (Strategy.Name)

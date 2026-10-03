@@ -32,9 +32,12 @@ internal static class PyTorchFixture
     /// <summary>A file of the fixture, opened to be read.</summary>
     public static Stream Open(string file) => File.OpenRead(Path(file));
 
-    /// <summary>The numbers of a list in pytorch.json, each as the 32-bit float it was written from.</summary>
-    public static float[] Floats(this JsonElement list) => [.. list.EnumerateArray().Select(value => (float)value.GetDouble())];
+    extension(JsonElement list)
+    {
+        /// <summary>The numbers of a list in pytorch.json, each as the 32-bit float it was written from.</summary>
+        public float[] Floats() => [.. list.EnumerateArray().Select(value => (float)value.GetDouble())];
 
-    /// <summary>The numbers of a list in pytorch.json, as written.</summary>
-    public static double[] Doubles(this JsonElement list) => [.. list.EnumerateArray().Select(value => value.GetDouble())];
+        /// <summary>The numbers of a list in pytorch.json, as written.</summary>
+        public double[] Doubles() => [.. list.EnumerateArray().Select(value => value.GetDouble())];
+    }
 }

@@ -32,20 +32,21 @@ internal static class StageExtensions
         [typeof(INamesTheMeasures)] = "evidence",
     };
 
-    /// <summary>The capability this step acts through: the one thing it does in a run.</summary>
-    /// <param name="step">The step.</param>
-    /// <returns>
-    /// The capability; for an output, the family of outputs, whichever of them acts, since an output is swapped for
-    /// another output; the step's own type for a step that does nothing the run knows.
-    /// </returns>
-    public static Type ActingCapability(this IPipelineStep step) =>
-        step is INamesTheAnswer
-            ? typeof(INamesTheAnswer)
-            : Stages.Keys.FirstOrDefault(capability => capability.IsInstanceOfType(step)) ?? step.GetType();
+    extension(IPipelineStep step)
+    {
+        /// <summary>The capability this step acts through: the one thing it does in a run.</summary>
+        /// <returns>
+        /// The capability; for an output, the family of outputs, whichever of them acts, since an output is swapped for
+        /// another output; the step's own type for a step that does nothing the run knows.
+        /// </returns>
+        public Type ActingCapability() =>
+            step is INamesTheAnswer
+                ? typeof(INamesTheAnswer)
+                : Stages.Keys.FirstOrDefault(capability => capability.IsInstanceOfType(step)) ?? step.GetType();
 
-    /// <summary>The stage this step belongs to.</summary>
-    /// <param name="step">The step.</param>
-    /// <returns>Its stage, in a word or a few.</returns>
-    public static string Stage(this IPipelineStep step) =>
-        step is INamesTheAnswer ? "output" : Stages.GetValueOrDefault(step.ActingCapability(), "step");
+        /// <summary>The stage this step belongs to.</summary>
+        /// <returns>Its stage, in a word or a few.</returns>
+        public string Stage() =>
+            step is INamesTheAnswer ? "output" : Stages.GetValueOrDefault(step.ActingCapability(), "step");
+    }
 }

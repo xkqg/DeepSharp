@@ -148,7 +148,7 @@ public sealed class StepCatalog
     /// cannot disagree about a key, a kind or a word. What no schema can say — shares that make a whole, a
     /// quantile bound further out than half, where a step may stand — is the reader's alone.
     /// </remarks>
-    public string JsonSchema() => PipelineFileSchema.Write(Descriptions);
+    public string JsonSchema() => Descriptions.AsJsonSchema();
 
     /// <summary>Every verb in this catalog, written out as a page a person reads.</summary>
     /// <returns>The reference, in Markdown.</returns>
@@ -156,7 +156,7 @@ public sealed class StepCatalog
     /// Generated rather than typed, so the page says exactly what the reader reads: a step that changes
     /// changes its page with it, and a test holds the committed copy to what the steps say.
     /// </remarks>
-    public string VerbReference() => Pipelines.VerbReference.Write(Descriptions);
+    public string VerbReference() => Descriptions.AsVerbReference();
 
     private void Add(string verb, Verb entry)
     {

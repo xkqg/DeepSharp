@@ -8,19 +8,21 @@ namespace DeepSharp.Verso.Notebooks;
 /// <summary>Reading a cell's text as a step, where text that is none is an answer rather than a fault.</summary>
 internal static class StepCatalogExtensions
 {
-    /// <summary>The step a text reads as, through the catalog a pipeline file is read with.</summary>
-    /// <param name="catalog">The verbs the text may use.</param>
-    /// <param name="text">The text.</param>
-    /// <returns>The step, or nothing when the text does not read as one.</returns>
-    public static IPipelineStep? TryReadStep(this StepCatalog catalog, string text)
+    extension(StepCatalog catalog)
     {
-        try
+        /// <summary>The step a text reads as, through the catalog a pipeline file is read with.</summary>
+        /// <param name="text">The text.</param>
+        /// <returns>The step, or nothing when the text does not read as one.</returns>
+        public IPipelineStep? TryReadStep(string text)
         {
-            return catalog.ReadStep(text);
-        }
-        catch (PipelineFileException)
-        {
-            return null;
+            try
+            {
+                return catalog.ReadStep(text);
+            }
+            catch (PipelineFileException)
+            {
+                return null;
+            }
         }
     }
 }

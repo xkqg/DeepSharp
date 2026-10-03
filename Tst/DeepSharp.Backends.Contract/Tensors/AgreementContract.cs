@@ -171,7 +171,10 @@ public abstract class AgreementContract(ITensorBackend engine)
 /// <summary>The patches a window takes of a batch of images, as the seam lays them out.</summary>
 internal static class WindowPatchesExtensions
 {
-    /// <summary>A row for every image and every place the window stands, each as long as the window holds values.</summary>
-    public static Shape PatchesOf(this Window window, Shape images) =>
-        new(images[0] * window.RowsOver(images[1]) * window.ColumnsOver(images[2]), window.Height * window.Width * images[3]);
+    extension(Window window)
+    {
+        /// <summary>A row for every image and every place the window stands, each as long as the window holds values.</summary>
+        public Shape PatchesOf(Shape images) =>
+            new(images[0] * window.RowsOver(images[1]) * window.ColumnsOver(images[2]), window.Height * window.Width * images[3]);
+    }
 }

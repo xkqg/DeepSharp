@@ -3,17 +3,20 @@
 
 using System.Globalization;
 using System.Text.Json;
+using DeepSharp.Pipelines;
 
 namespace DeepSharp.Verso.Notebooks;
 
 /// <summary>
-/// How the form names its fields and spells its values: each name built and read back in one place.
+/// How a parameter's form names its fields and spells its values: each name built and read back in one place.
 /// </summary>
 /// <remarks>
-/// A parameter with one value is one field under its own key. The others are named from their key and what the field
-/// is about — one column of a set, one place of a list of roles, the kind a schema gives one column, whether that
-/// column may be absent, how its moments are written, which of its values stands for a gap, the number a way of filling
-/// carries — so a field the form draws is always one it reads back.
+/// A parameter with one value is one field under its own key. The others are named from the parameter and what the field
+/// is about — one column of a set, one place of a list of roles, the kind a schema gives one column, whether that column
+/// may be absent, how its moments are written, which of its values stands for a gap, the number a way of filling carries —
+/// so a field the form draws is always one it reads back. The parameter is what each name is asked of, rather than its key
+/// handed over beside what the field is about: two names of the same kind, side by side, are a pair a caller can hand over
+/// the wrong way round, and a receiver cannot be.
 /// </remarks>
 internal static class FormVocabulary
 {
@@ -28,137 +31,120 @@ internal static class FormVocabulary
 
     private const string Gap = "missing";
 
-    private const string Number = "value";
+    private const string TheNumber = "value";
 
-    /// <summary>The switch for one column of a set of columns.</summary>
-    /// <param name="key">The set's key.</param>
-    /// <param name="column">The column.</param>
-    /// <returns>The field's name.</returns>
-    public static string Member(string key, string column) => $"{key}/{column}";
-
-    /// <summary>Whether a field is the switch for one column of a set, and which.</summary>
-    /// <param name="field">The field's name.</param>
-    /// <param name="key">The set's key.</param>
-    /// <param name="column">The column, when it is.</param>
-    /// <returns><see langword="true"/> when it is.</returns>
-    public static bool IsMember(string field, string key, out string column) => After(field, $"{key}/", out column);
-
-    /// <summary>The pick of one place of a list whose places are roles.</summary>
-    /// <param name="key">The list's key.</param>
-    /// <param name="place">The place, counting from nought.</param>
-    /// <returns>The field's name.</returns>
-    public static string Place(string key, int place) => string.Create(CultureInfo.InvariantCulture, $"{key}/{place}");
-
-    /// <summary>Whether a field is the pick of one place of a list, and which.</summary>
-    /// <param name="field">The field's name.</param>
-    /// <param name="key">The list's key.</param>
-    /// <param name="place">The place, when it is one.</param>
-    /// <returns><see langword="true"/> when it is.</returns>
-    public static bool IsPlace(string field, string key, out int place)
+    extension(StepParameter parameter)
     {
-        place = -1;
+        /// <summary>The switch for one column of a set of columns.</summary>
+        /// <param name="column">The column.</param>
+        /// <returns>The field's name.</returns>
+        public string Member(string column) => $"{parameter.Key}/{column}";
 
-        return After(field, $"{key}/", out var rest) && int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out place);
-    }
+        /// <summary>Whether a field is the switch for one column of a set, and which.</summary>
+        /// <param name="field">The field's name.</param>
+        /// <param name="column">The column, when it is.</param>
+        /// <returns><see langword="true"/> when it is.</returns>
+        public bool IsMember(string field, out string column) => After(field, $"{parameter.Key}/", out column);
 
-    /// <summary>One setting of the part at a place of a list of parts.</summary>
-    /// <param name="key">The parts' key.</param>
-    /// <param name="place">The part's place, counting from nought.</param>
-    /// <param name="setting">The setting's key.</param>
-    /// <returns>The field's name.</returns>
-    public static string Setting(string key, int place, string setting) =>
-        string.Create(CultureInfo.InvariantCulture, $"{key}/{place}/{setting}");
+        /// <summary>The pick of one place of a list whose places are roles.</summary>
+        /// <param name="place">The place, counting from nought.</param>
+        /// <returns>The field's name.</returns>
+        public string Place(int place) => string.Create(CultureInfo.InvariantCulture, $"{parameter.Key}/{place}");
 
-    /// <summary>Whether a field is one setting of a part at a place, which place and which setting.</summary>
-    /// <param name="field">The field's name.</param>
-    /// <param name="key">The parts' key.</param>
-    /// <param name="place">The place, when it is one.</param>
-    /// <param name="setting">The setting's key, when it is one.</param>
-    /// <returns><see langword="true"/> when it is.</returns>
-    public static bool IsSetting(string field, string key, out int place, out string setting)
-    {
-        place = -1;
-        setting = string.Empty;
-
-        if (!After(field, $"{key}/", out var rest))
+        /// <summary>Whether a field is the pick of one place of a list, and which.</summary>
+        /// <param name="field">The field's name.</param>
+        /// <param name="place">The place, when it is one.</param>
+        /// <returns><see langword="true"/> when it is.</returns>
+        public bool IsPlace(string field, out int place)
         {
-            return false;
+            place = -1;
+
+            return After(field, $"{parameter.Key}/", out var rest)
+                && int.TryParse(rest, NumberStyles.None, CultureInfo.InvariantCulture, out place);
         }
 
-        var at = rest.IndexOf('/', StringComparison.Ordinal);
+        /// <summary>One setting of the thing at one place of a list.</summary>
+        /// <param name="place">The place, counting from nought.</param>
+        /// <param name="setting">The setting's own key.</param>
+        /// <returns>The field's name.</returns>
+        public string Setting(int place, string setting) =>
+            string.Create(CultureInfo.InvariantCulture, $"{parameter.Key}/{place}/{setting}");
 
-        if (at <= 0)
+        /// <summary>Whether a field is one setting of the thing at one place of a list, and which setting of which place.</summary>
+        /// <param name="field">The field's name.</param>
+        /// <param name="place">The place, when it is one.</param>
+        /// <param name="setting">The setting's own key, when it is one.</param>
+        /// <returns><see langword="true"/> when it is.</returns>
+        public bool IsSetting(string field, out int place, out string setting)
         {
-            return false;
+            place = -1;
+            setting = string.Empty;
+
+            if (!After(field, $"{parameter.Key}/", out var rest) || rest.IndexOf('/', StringComparison.Ordinal) is var at && at <= 0)
+            {
+                return false;
+            }
+
+            setting = rest[(at + 1)..];
+
+            return setting.Length > 0 && int.TryParse(rest[..at], NumberStyles.None, CultureInfo.InvariantCulture, out place);
         }
 
-        setting = rest[(at + 1)..];
+        /// <summary>The kind a schema gives one column.</summary>
+        /// <param name="column">The column.</param>
+        /// <returns>The field's name.</returns>
+        public string Kind(string column) => $"{parameter.Key}/{Kinds}/{column}";
 
-        return int.TryParse(rest[..at], NumberStyles.None, CultureInfo.InvariantCulture, out place) && setting.Length > 0;
+        /// <summary>Whether a field is the kind a schema gives one column, and which column.</summary>
+        /// <param name="field">The field's name.</param>
+        /// <param name="column">The column, when it is.</param>
+        /// <returns><see langword="true"/> when it is.</returns>
+        public bool IsKind(string field, out string column) => After(field, $"{parameter.Key}/{Kinds}/", out column);
+
+        /// <summary>Whether one column may be absent from a source.</summary>
+        /// <param name="column">The column.</param>
+        /// <returns>The field's name.</returns>
+        public string Absent(string column) => $"{parameter.Key}/{Absence}/{column}";
+
+        /// <summary>Whether a field says one column may be absent, and which column.</summary>
+        /// <param name="field">The field's name.</param>
+        /// <param name="column">The column, when it is.</param>
+        /// <returns><see langword="true"/> when it is.</returns>
+        public bool IsAbsent(string field, out string column) => After(field, $"{parameter.Key}/{Absence}/", out column);
+
+        /// <summary>How one column's moments are written.</summary>
+        /// <param name="column">The column.</param>
+        /// <returns>The field's name.</returns>
+        public string Format(string column) => $"{parameter.Key}/{Written}/{column}";
+
+        /// <summary>Whether a field says how one column's moments are written, and which column.</summary>
+        /// <param name="field">The field's name.</param>
+        /// <param name="column">The column, when it is.</param>
+        /// <returns><see langword="true"/> when it is.</returns>
+        public bool IsFormat(string field, out string column) => After(field, $"{parameter.Key}/{Written}/", out column);
+
+        /// <summary>Which of one column's values stands for a gap.</summary>
+        /// <param name="column">The column.</param>
+        /// <returns>The field's name.</returns>
+        public string Missing(string column) => $"{parameter.Key}/{Gap}/{column}";
+
+        /// <summary>Whether a field says which of one column's values stands for a gap, and which column.</summary>
+        /// <param name="field">The field's name.</param>
+        /// <param name="column">The column, when it is.</param>
+        /// <returns><see langword="true"/> when it is.</returns>
+        public bool IsMissing(string field, out string column) => After(field, $"{parameter.Key}/{Gap}/", out column);
+
+        /// <summary>The number a way of filling carries.</summary>
+        /// <returns>The field's name.</returns>
+        public string Number() => $"{parameter.Key}/{TheNumber}";
     }
 
-    /// <summary>The pick of the kind a schema gives one column, or not taken.</summary>
-    /// <param name="key">The declarations' key.</param>
-    /// <param name="column">The column.</param>
-    /// <returns>The field's name.</returns>
-    public static string Kind(string key, string column) => $"{key}/{Kinds}/{column}";
-
-    /// <summary>Whether a field is the pick of a column's kind, and which column.</summary>
-    /// <param name="field">The field's name.</param>
-    /// <param name="key">The declarations' key.</param>
-    /// <param name="column">The column, when it is.</param>
-    /// <returns><see langword="true"/> when it is.</returns>
-    public static bool IsKind(string field, string key, out string column) => After(field, $"{key}/{Kinds}/", out column);
-
-    /// <summary>The switch for whether one declared column may be absent.</summary>
-    /// <param name="key">The declarations' key.</param>
-    /// <param name="column">The column.</param>
-    /// <returns>The field's name.</returns>
-    public static string Absent(string key, string column) => $"{key}/{Absence}/{column}";
-
-    /// <summary>Whether a field is the switch for a column's absence, and which column.</summary>
-    /// <param name="field">The field's name.</param>
-    /// <param name="key">The declarations' key.</param>
-    /// <param name="column">The column, when it is.</param>
-    /// <returns><see langword="true"/> when it is.</returns>
-    public static bool IsAbsent(string field, string key, out string column) => After(field, $"{key}/{Absence}/", out column);
-
-    /// <summary>The field of how one declared timestamp column's moments are written.</summary>
-    /// <param name="key">The declarations' key.</param>
-    /// <param name="column">The column.</param>
-    /// <returns>The field's name.</returns>
-    public static string Format(string key, string column) => $"{key}/{Written}/{column}";
-
-    /// <summary>Whether a field is how a column's moments are written, and which column.</summary>
-    /// <param name="field">The field's name.</param>
-    /// <param name="key">The declarations' key.</param>
-    /// <param name="column">The column, when it is.</param>
-    /// <returns><see langword="true"/> when it is.</returns>
-    public static bool IsFormat(string field, string key, out string column) => After(field, $"{key}/{Written}/", out column);
-
-    /// <summary>The field of the value that stands for a gap in one declared column.</summary>
-    /// <param name="key">The declarations' key.</param>
-    /// <param name="column">The column.</param>
-    /// <returns>The field's name.</returns>
-    public static string Missing(string key, string column) => $"{key}/{Gap}/{column}";
-
-    /// <summary>Whether a field is the value that stands for a gap in a column, and which column.</summary>
-    /// <param name="field">The field's name.</param>
-    /// <param name="key">The declarations' key.</param>
-    /// <param name="column">The column, when it is.</param>
-    /// <returns><see langword="true"/> when it is.</returns>
-    public static bool IsMissing(string field, string key, out string column) => After(field, $"{key}/{Gap}/", out column);
-
-    /// <summary>The field of the number a way of filling carries.</summary>
-    /// <param name="key">The strategy's key.</param>
-    /// <returns>The field's name.</returns>
-    public static string StrategyValue(string key) => $"{key}/{Number}";
-
-    /// <summary>A list of names as the form writes it in a text field: as JSON, so a name may hold anything.</summary>
-    /// <param name="names">The names.</param>
-    /// <returns>The list, written as JSON.</returns>
-    public static string ListText(IEnumerable<string> names) =>
-        $"[{string.Join(", ", names.Select(name => JsonSerializer.Serialize(name)))}]";
+    extension(IEnumerable<string> names)
+    {
+        /// <summary>A list of names as the form writes it in a text field: as JSON, so a name may hold anything.</summary>
+        /// <returns>The list, written as JSON.</returns>
+        public string AsListText() => $"[{string.Join(", ", names.Select(name => JsonSerializer.Serialize(name)))}]";
+    }
 
     private static bool After(string field, string prefix, out string rest)
     {

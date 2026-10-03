@@ -13,8 +13,10 @@ namespace DeepSharp.Verso.Notebooks;
 /// </remarks>
 internal static class FormatIdExtensions
 {
-    /// <summary>Whether the format is Verso's own, under either of its names.</summary>
-    /// <param name="formatId">The format's name, as the host hands it.</param>
-    /// <returns>Whether it names Verso's own format.</returns>
-    public static bool IsVersosOwn(this string formatId) => formatId is "verso" or "verso-native";
+    extension(string formatId)
+    {
+        /// <summary>Whether the format is Verso's own, under either of its names.</summary>
+        /// <returns>Whether it names Verso's own format.</returns>
+        public bool IsVersosOwn() => formatId is "verso" or "verso-native";
+    }
 }

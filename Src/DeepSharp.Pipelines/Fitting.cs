@@ -7,12 +7,21 @@ using System.Text.Json;
 namespace DeepSharp.Pipelines;
 
 /// <summary>
-/// What one step learned while it was fitted.
+/// What one step wrote down while it was fitted.
 /// </summary>
 /// <remarks>
 /// A number for a mean or a bound, a list for the categories an encoder found. This is the half of a saved
 /// pipeline the fit writes, and it is kept apart from the declaration so the same declaration can be fitted
 /// again on fresh data without anybody editing anything.
+/// <para>
+/// Three kinds of thing go in, and they are said apart because they are not alike. A step <em>learns</em> a value, and a
+/// replay reads it. A step <em>decides</em> something from what it saw — whether a column with that many gaps is filled at
+/// all — and a replay reads that too, so the rows a model is served keep meeting the pipeline it was trained with. And a
+/// step <em>sees</em> how many gaps there were, how many values were no number, how many lay outside its bounds: that is
+/// evidence, written down so a person can see what the fit was looking at, and no replay may depend on it. The file holds
+/// one object of names and values and marks none of them, so the three words are the fit's own and a bag read back from a
+/// file counts nothing.
+/// </para>
 /// </remarks>
 public sealed class FittedStepValues
 {
@@ -20,9 +29,17 @@ public sealed class FittedStepValues
     private readonly Dictionary<string, IReadOnlyList<string>> _lists = [];
     private readonly Dictionary<string, IReadOnlyList<double>> _curves = [];
     private readonly Dictionary<string, string> _texts = [];
+    private readonly HashSet<string> _counts = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _decisions = new(StringComparer.Ordinal);
 
     /// <summary>What this step learned, as numbers.</summary>
     public IReadOnlyDictionary<string, double> Numbers => _numbers;
+
+    /// <summary>The names of the numbers this step only counted: what it saw, which no replay reads.</summary>
+    public IReadOnlyCollection<string> Counts => _counts;
+
+    /// <summary>The names of what this step decided from what it saw, which a replay reads.</summary>
+    public IReadOnlyCollection<string> Decisions => _decisions;
 
     /// <summary>What this step learned, as lists of words.</summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>> Lists => _lists;
@@ -41,12 +58,48 @@ public sealed class FittedStepValues
     /// The number is not finite: no file can hold it, and no replay could use it, so it is refused by the fit
     /// that learned it rather than by whatever writes it down later.
     /// </exception>
-    public void Learned(string name, double value)
+    public void Learned(string name, double value) => Number(name, value, Said.Learned);
+
+    /// <summary>Records a count of what this step saw while it was fitted: evidence, which no replay reads.</summary>
+    /// <param name="name">What was counted.</param>
+    /// <param name="count">How many there were.</param>
+    /// <exception cref="ArgumentException">The name already holds another kind of thing.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The count is not a finite number.</exception>
+    public void Saw(string name, double count) => Number(name, count, Said.Seen);
+
+    /// <summary>Records what this step decided from what it saw, which a replay reads.</summary>
+    /// <param name="name">What was decided.</param>
+    /// <param name="choice">The decision, as a number.</param>
+    /// <exception cref="ArgumentException">The name already holds another kind of thing.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The decision is not a finite number.</exception>
+    public void Decided(string name, double choice) => Number(name, choice, Said.Decided);
+
+    // One number under one name, and the word it was written down under: the last writing of a name is the one that stands,
+    // so a name is never in two of the three at once.
+    private void Number(string name, double value, Said said)
     {
         ThrowIfHeldAsAnotherKind(name, Kind.Number);
         ThrowIfNotFinite(name, value);
 
         _numbers[name] = value;
+
+        if (said == Said.Seen)
+        {
+            _counts.Add(name);
+        }
+        else
+        {
+            _counts.Remove(name);
+        }
+
+        if (said == Said.Decided)
+        {
+            _decisions.Add(name);
+        }
+        else
+        {
+            _decisions.Remove(name);
+        }
     }
 
     /// <summary>Records a list this step learned.</summary>
@@ -225,6 +278,19 @@ public sealed class FittedStepValues
         List,
         Run,
         Words,
+    }
+
+    /// <summary>How a number came to be written down.</summary>
+    private enum Said
+    {
+        /// <summary>A value the step learned, which a replay reads.</summary>
+        Learned,
+
+        /// <summary>Something the step decided from what it saw, which a replay reads.</summary>
+        Decided,
+
+        /// <summary>A count of what the step saw, which no replay reads.</summary>
+        Seen,
     }
 }
 
@@ -766,7 +832,7 @@ public sealed class PreparedData
     {
         ArgumentNullException.ThrowIfNull(predictions);
 
-        var written = PredictionsDocument.Read(predictions);
+        var written = WrittenPredictions.FromJson(predictions);
 
         if (Declaration.Output is { } output && !output.Answers.SequenceEqual(written.Answers))
         {

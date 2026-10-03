@@ -200,22 +200,24 @@ public interface ISplitStep : IActsInAWalk
 /// </summary>
 internal static class PipelineStepExtensions
 {
-    /// <summary>The step as it writes itself, on one line with nothing between the tokens.</summary>
-    /// <param name="step">The step.</param>
-    /// <returns>The step's JSON, as UTF-8.</returns>
-    /// <remarks>
-    /// The form a step is compared and keyed by. The step writes it from what it holds, so it is the same
-    /// however a file happened to space, order or spell what the step was read from.
-    /// </remarks>
-    public static byte[] Canonical(this IPipelineStep step)
+    extension(IPipelineStep step)
     {
-        var buffer = new ArrayBufferWriter<byte>();
-
-        using (var writer = new Utf8JsonWriter(buffer))
+        /// <summary>The step as it writes itself, on one line with nothing between the tokens.</summary>
+        /// <returns>The step's JSON, as UTF-8.</returns>
+        /// <remarks>
+        /// The form a step is compared and keyed by. The step writes it from what it holds, so it is the same
+        /// however a file happened to space, order or spell what the step was read from.
+        /// </remarks>
+        public byte[] Canonical()
         {
-            step.WriteTo(writer);
-        }
+            var buffer = new ArrayBufferWriter<byte>();
 
-        return buffer.WrittenSpan.ToArray();
+            using (var writer = new Utf8JsonWriter(buffer))
+            {
+                step.WriteTo(writer);
+            }
+
+            return buffer.WrittenSpan.ToArray();
+        }
     }
 }
