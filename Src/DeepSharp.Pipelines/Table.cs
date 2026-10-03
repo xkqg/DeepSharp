@@ -183,6 +183,7 @@ public sealed class Table
 {
     private readonly List<IColumn> _columns;
     private readonly RowIdentity[] _identities;
+    private RowKey[]? _keys;
 
     /// <summary>A table of exactly these columns, each row known by its own cells and its place.</summary>
     /// <param name="columns">The columns, in the order they should be seen.</param>
@@ -211,6 +212,7 @@ public sealed class Table
     private Table(List<IColumn> columns, RowIdentity[]? identities)
     {
         _columns = columns;
+        _keys = null;
 
         var lengths = _columns.Select(column => column.Count).Distinct().ToArray();
 
@@ -268,16 +270,33 @@ public sealed class Table
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
 
-    private IEnumerable<RowIdentity> OwnIdentities() => WhatEachRowHolds().Select((key, row) => new RowIdentity(row, key));
+    private IEnumerable<RowIdentity> OwnIdentities() => KeysAsTheyStand().Select((key, row) => new RowIdentity(row, key));
 
-    // What each row holds here, digested as every row key is: its cells with the names of their columns.
+    /// <summary>What each row holds here, digested once and kept until a column arrives or leaves.</summary>
+    /// <returns>One key a row, in row order.</returns>
+    /// <remarks>
+    /// Several things ask the same question at one place — which rows are there more than once, what the table's own
+    /// digest is made of, who each row is where no identity was handed in — and each used to walk every cell of every
+    /// column again. The keys are what the columns say, so they hold until the columns change, which is what
+    /// <see cref="Put"/> and <see cref="Remove"/> say by throwing them away.
+    /// </remarks>
+    private RowKey[] KeysAsTheyStand() => _keys ??= [.. WhatEachRowHolds()];
+
+    // What each row holds here, digested as every row key is: its cells with the names of their columns. One row of
+    // cells is filled again for each row rather than made again: the digest reads them and keeps none.
     private IEnumerable<RowKey> WhatEachRowHolds()
     {
         var digest = new RecordDigest([.. _columns.Select(column => column.Name)]);
+        var cells = new string?[_columns.Count];
 
         for (var row = 0; row < RowCount; row++)
         {
-            yield return digest.Of([.. _columns.Select(column => column.TextAt(row))]);
+            for (var column = 0; column < cells.Length; column++)
+            {
+                cells[column] = _columns[column].TextAt(row);
+            }
+
+            yield return digest.Of(cells);
         }
     }
 
@@ -325,6 +344,9 @@ public sealed class Table
         {
             _columns[at] = column;
         }
+
+        // What a row holds is what its columns say, so a column arriving or changing makes the keys again.
+        _keys = null;
     }
 
     /// <summary>Keeps the rows a mask says to keep, each with its identity.</summary>
@@ -390,7 +412,18 @@ public sealed class Table
     /// <summary>Removes the column with this name, if it is there.</summary>
     /// <param name="name">The column's name.</param>
     /// <returns><see langword="true"/> when a column was removed.</returns>
-    public bool Remove(string name) => _columns.RemoveAll(column => column.Name == name) > 0;
+    public bool Remove(string name)
+    {
+        if (_columns.RemoveAll(column => column.Name == name) == 0)
+        {
+            return false;
+        }
+
+        // What a row holds is what its columns say, so one leaving makes the keys again.
+        _keys = null;
+
+        return true;
+    }
 
     /// <summary>How many rows are the same row more than once, and how many of those a split has pulled apart.</summary>
     /// <param name="parts">Which part each row belongs to, when the rows have been divided.</param>
@@ -412,7 +445,7 @@ public sealed class Table
         var groups = new Dictionary<RowKey, List<int>>();
         var row = 0;
 
-        foreach (var key in WhatEachRowHolds())
+        foreach (var key in KeysAsTheyStand())
         {
             if (!groups.TryGetValue(key, out var rows))
             {

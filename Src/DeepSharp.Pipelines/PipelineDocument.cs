@@ -19,10 +19,10 @@ internal readonly record struct SavedPipeline(
 
 /// <summary>
 /// The file a pipeline is saved as, written and read in this one place — and the file of saved columns beside a
-/// notebook, <c>{"version": 4, "source": [...], "declare": {...}, "drop": [...], "output": {...}}</c>, with the same care.
+/// notebook, <c>{"version": 5, "source": [...], "declare": {...}, "drop": [...], "output": {...}}</c>, with the same care.
 /// </summary>
 /// <remarks>
-/// <code>{"version": 4, "declaration": [ ... ], "fitted": [ {"step": ..., "prefix": ..., "learned": { ... }} ], "skipped": [ {"step": ..., "prefix": ...} ]}</code>
+/// <code>{"version": 5, "declaration": [ ... ], "fitted": [ {"step": ..., "prefix": ..., "learned": { ... }} ], "skipped": [ {"step": ..., "prefix": ...} ]}</code>
 /// The version is the one the file was written against, so a step whose meaning changed since is refused by
 /// name rather than read as something it never meant. The declaration is what a person wrote. Each fitted
 /// entry names the step that learned it and the key of the steps it was learned behind

@@ -323,6 +323,7 @@ public static class Handover
 
         var values = features.Select(column => table.NumbersOf(column.Name)).ToArray();
         var handed = new List<double[]>(rows.Length);
+        var madeFrom = MadeFrom(prepared);
 
         foreach (var row in rows)
         {
@@ -332,7 +333,7 @@ public static class Handover
 
             for (var at = 0; at < features.Length; at++)
             {
-                line[at] = Handed(values[at][row], features[at].Name, readAt);
+                line[at] = Handed(values[at][row], features[at].Name, readAt, madeFrom);
             }
 
             handed.Add(line);
@@ -360,6 +361,7 @@ public static class Handover
 
         var known = answers.Select(answer => table.NumbersOf(answer)).ToArray();
         var answered = new List<double[]>(rows.Length);
+        var madeFrom = MadeFrom(prepared);
 
         foreach (var row in rows)
         {
@@ -368,7 +370,7 @@ public static class Handover
 
             for (var at = 0; at < answers.Count; at++)
             {
-                rowAnswers[at] = Handed(known[at][row], answers[at], readAt);
+                rowAnswers[at] = Handed(known[at][row], answers[at], readAt, madeFrom);
             }
 
             if (output.Refusal(rowAnswers) is { } refusal)
@@ -392,11 +394,50 @@ public static class Handover
             : answers;
     }
 
-    /// <summary>A value as it may be handed to something that learns, or the reason it may not.</summary>
-    private static double Handed(double? value, string column, int readAt) => value switch
+    /// <summary>For each column a step worked out from others, the columns it was worked out from.</summary>
+    /// <param name="prepared">The run.</param>
+    /// <returns>The columns a step added, each with the columns that step reads; empty for a pipeline that adds none.</returns>
+    /// <remarks>
+    /// Worked out from the declaration rather than kept anywhere: a step that adds columns says which it reads through
+    /// its own parameters, and what it leaves behind is the difference its <see cref="IDescribesColumns.After"/> makes.
+    /// </remarks>
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> MadeFrom(PreparedData prepared)
     {
+        var made = new Dictionary<string, IReadOnlyList<string>>(StringComparer.Ordinal);
+        var standing = ColumnState.None;
+
+        foreach (var step in prepared.Course.Steps)
+        {
+            var after = step is IDescribesColumns describes ? describes.After(standing) : standing;
+
+            if (step is IAddsColumns && step.ColumnsRead is { Count: > 0 } read)
+            {
+                foreach (var column in after.Columns.Select(known => known.Name).Except(
+                    standing.Columns.Select(known => known.Name), StringComparer.Ordinal))
+                {
+                    made[column] = [.. read.Select(each => each.Column)];
+                }
+            }
+
+            standing = after;
+        }
+
+        return made;
+    }
+
+    /// <summary>A value as it may be handed to something that learns, or the reason it may not.</summary>
+    private static double Handed(
+        double? value, string column, int readAt, IReadOnlyDictionary<string, IReadOnlyList<string>> madeFrom) => value switch
+    {
+        // A column worked out from another carries that column's gaps, and filling what it was made from below the
+        // split does not reach back into it: the feature was worked out above the split, from the columns as they
+        // stood there. So the refusal names where the gap came from rather than only that it is one.
         null => throw new InvalidOperationException(
-            $"Row {readAt + 1} of '{column}' is still a gap. Fill it, drop it, or leave the column out."),
+            madeFrom.TryGetValue(column, out var sources) && sources.Count > 0
+                ? $"Row {readAt + 1} of '{column}' is still a gap. It is worked out from "
+                  + $"{string.Join(" and ", sources.Select(source => $"'{source}'"))}, so a gap there is a gap here: "
+                  + "settle those rows above the step that works it out, or leave the column out."
+                : $"Row {readAt + 1} of '{column}' is still a gap. Fill it, drop it, or leave the column out."),
 
         // A model handed an infinity or a not-a-number learns nothing from that row and says nothing about
         // it. Either is a fault upstream, and the verb for it is fill.nan.

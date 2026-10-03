@@ -84,3 +84,102 @@ public static class With
     /// <returns><see langword="true"/> when the strategy is written with a number beside it.</returns>
     public static bool TakesAValue(string name) => name is "constant";
 }
+
+/// <summary>
+/// The gaps of one line: which value goes in them, and the columns it goes into.
+/// </summary>
+/// <typeparam name="TLine">The line itself, so each kind hands back the line it was written on.</typeparam>
+/// <remarks>
+/// A value that was never there and a value arithmetic could not make are two different things with two different
+/// verbs, and both choose from one vocabulary — so the kinds are written once here and each verb's line says only which
+/// step it makes. A column with a limit above which filling is refused keeps the verb that takes one column: that limit
+/// is a fact about that column, not about the group, and it has no default on purpose.
+/// </remarks>
+public abstract class FillLine<TLine> : IDeclaresSteps
+    where TLine : FillLine<TLine>
+{
+    private readonly List<IPipelineStep> _steps = [];
+
+    /// <summary>The steps this line declares, in the order the columns were named.</summary>
+    IReadOnlyList<IPipelineStep> IDeclaresSteps.Steps => _steps;
+
+    /// <summary>Columns filled with the average of the column, over the training rows.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    public TLine Mean(params string[] columns) => Add(columns, With.Mean);
+
+    /// <summary>Columns filled with the middle value of the column, which a single extreme cannot drag around.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    public TLine Median(params string[] columns) => Add(columns, With.Median);
+
+    /// <summary>Columns filled with nought, which is a measurement and not an absence.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    /// <remarks>The marking column beside each says which it was.</remarks>
+    public TLine Zero(params string[] columns) => Add(columns, With.Zero);
+
+    /// <summary>Columns where a gap stops the run.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    /// <remarks>For a column that is not supposed to have anything wrong with it.</remarks>
+    public TLine Refuse(params string[] columns) => Add(columns, With.Refuse);
+
+    /// <summary>Columns filled with a number you choose.</summary>
+    /// <param name="value">The number to put in every gap.</param>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    /// <remarks>For a column where absence has a meaning you already know.</remarks>
+    public TLine Constant(double value, params string[] columns) => Add(columns, With.Constant(value));
+
+    /// <summary>The step this line's verb makes for one column.</summary>
+    /// <param name="column">The column.</param>
+    /// <param name="strategy">What goes in its gaps.</param>
+    /// <returns>The step.</returns>
+    protected abstract IPipelineStep Step(string column, FillStrategy strategy);
+
+    /// <summary>Takes the columns of one kind into this line.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <param name="strategy">What goes in their gaps.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    /// <exception cref="ArgumentNullException">There are no columns.</exception>
+    protected TLine Add(string[] columns, FillStrategy strategy)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        foreach (var column in columns)
+        {
+            _steps.Add(Step(column, strategy));
+        }
+
+        return (TLine)this;
+    }
+}
+
+/// <summary>
+/// The gaps of one line: values that were never there.
+/// </summary>
+public sealed class GapLine : FillLine<GapLine>
+{
+    /// <summary>Columns filled with the last value before the gap, for data that arrives in order.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    /// <remarks>
+    /// This kind belongs to the gaps alone: the row above a value that is not a number says nothing about what it
+    /// should have been, so the verb that watches for those refuses it where it is read — and a line may not offer a
+    /// kind its verb would throw on. It reads the rows in their order, so the order is declared above it.
+    /// </remarks>
+    public GapLine Previous(params string[] columns) => Add(columns, With.Previous);
+
+    /// <inheritdoc />
+    protected override IPipelineStep Step(string column, FillStrategy strategy) => FillMissingStep.Of(column, strategy);
+}
+
+/// <summary>
+/// The values of one line that arithmetic could not make: a division by nought, almost always.
+/// </summary>
+public sealed class NotANumberLine : FillLine<NotANumberLine>
+{
+    /// <inheritdoc />
+    protected override IPipelineStep Step(string column, FillStrategy strategy) => new FillNaNStep(column, strategy);
+}

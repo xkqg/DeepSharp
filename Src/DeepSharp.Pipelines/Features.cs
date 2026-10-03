@@ -206,6 +206,65 @@ public sealed record AddFeatureStep : IPipelineStep<AddFeatureStep>, IAddsColumn
 }
 
 /// <summary>
+/// The cycles of one line: which one, and the columns it places a moment on.
+/// </summary>
+/// <remarks>
+/// The cycles are the methods, as the kinds of a scaling are, so a line reads as the sentence it is and the set stays
+/// open-closed: a cycle added to <see cref="Period"/> adds a method here and changes no call site. Each hands back one
+/// step a column, which is what the declaration, the file and a notebook's blocks have always held — the line is a door,
+/// not a new shape. A column that stands on more than one cycle is named under each. Every place is written as the verb
+/// for one column writes it when it names no form; naming a form is said on
+/// <see cref="PipelineBuilder.Cyclical(string, Period, Form)"/>.
+/// </remarks>
+public sealed class PeriodLine : IDeclaresSteps
+{
+    private readonly List<IPipelineStep> _steps = [];
+
+    private Form _features = NormaliseStep.DefaultFeatures;
+
+    /// <summary>The steps this line declares, in the order the columns were named.</summary>
+    IReadOnlyList<IPipelineStep> IDeclaresSteps.Steps => _steps;
+
+    /// <summary>Where the pipeline declared its features land, which is where a place on a circle is written.</summary>
+    Form IDeclaresSteps.Features
+    {
+        set => _features = value;
+    }
+
+    /// <summary>Columns placed on the cycle of the day, by the hour, where midnight follows eleven at night.</summary>
+    /// <param name="columns">The columns holding a moment.</param>
+    /// <returns>This line, so the next cycle can be written after it.</returns>
+    public PeriodLine HourOfDay(params string[] columns) => Add(columns, Period.HourOfDay);
+
+    /// <summary>Columns placed on the cycle of the week, by the day, where Monday follows Sunday.</summary>
+    /// <param name="columns">The columns holding a moment.</param>
+    /// <returns>This line, so the next cycle can be written after it.</returns>
+    public PeriodLine DayOfWeek(params string[] columns) => Add(columns, Period.DayOfWeek);
+
+    /// <summary>Columns placed on the cycle of the month, by the day.</summary>
+    /// <param name="columns">The columns holding a moment.</param>
+    /// <returns>This line, so the next cycle can be written after it.</returns>
+    public PeriodLine DayOfMonth(params string[] columns) => Add(columns, Period.DayOfMonth);
+
+    /// <summary>Columns placed on the cycle of the year, by the month, where January follows December.</summary>
+    /// <param name="columns">The columns holding a moment.</param>
+    /// <returns>This line, so the next cycle can be written after it.</returns>
+    public PeriodLine MonthOfYear(params string[] columns) => Add(columns, Period.MonthOfYear);
+
+    private PeriodLine Add(string[] columns, Period period)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        foreach (var column in columns)
+        {
+            _steps.Add(new CyclicalStep(column, period, _features));
+        }
+
+        return this;
+    }
+}
+
+/// <summary>
 /// Writes a moment in time as a place on a circle.
 /// </summary>
 /// <remarks>

@@ -107,6 +107,9 @@ public static class PipelineSample
                 // the data rather than a decision about the model. EncodeCategories then takes them by name.
                 .Category("sex", "embarked"))
             .AddFeature("family", "sibsp", Arithmetic.Plus, "parch")
+            // Where this pipeline's features land, said once: between minus one and one, which is what a scaling that
+            // names no kind then writes. Form.Unit would put them between nothing and one instead.
+            .DefaultFeatures(Form.Signed)
             // The profile said what should not come along: 'alive' hands a model the answer, and 'class' and
             // 'embark_town' say again what 'pclass' and 'embarked' say. None of them is declared, so none comes along.
             // Whether a fare of 0 means that nobody knew it is for whoever knows the data to say; here it stays a fare.
@@ -114,7 +117,7 @@ public static class PipelineSample
             // what is left. So this says fifteen too — and nothing can ask for more rows than there are.
             .SplitStratified("survived", train: 0.70, validation: 0.15)
             // ---- nothing above this line is allowed to learn from the data ----
-            .FillMissing("age", With.Median)
+            .FillMissing(fill => fill.Median("age"))
             .EncodeCategories()
             .Normalise("age", "fare", "family")
             .Target("survived")
@@ -152,10 +155,9 @@ public static class PipelineSample
             // the ninety that remain — here 65, 15 and the 10 that are left.
             .Predict(10)
             .SplitByTime("Date", train: 65, validation: 15)
-            .Normalise("AAPL.Close", Scale.Robust)
-            .Normalise("AAPL.Volume", Scale.Robust)
-            .Normalise("range", Scale.Robust)
-            .Normalise("rsi", Scale.MinMax)
+            .Normalise(scale => scale
+                .Robust("AAPL.Close", "AAPL.Volume", "range")   // prices and volumes: the spike is not the data
+                .MinMax("rsi"))                                 // already between nought and a hundred
             .EncodeCategories()
             .Build()
             .Run();

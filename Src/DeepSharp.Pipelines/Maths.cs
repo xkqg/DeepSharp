@@ -35,6 +35,87 @@ public enum Maths
 }
 
 /// <summary>
+/// The reshapings of one line: which shape, and the columns it holds for.
+/// </summary>
+/// <remarks>
+/// The shapes are the methods, as the kinds of a scaling are, so a line reads as the sentence it is and the set stays
+/// open-closed: a shape added to <see cref="Maths"/> adds a method here and changes no call site. Each hands back one
+/// step a column, which is what the declaration, the file and a notebook's blocks have always held — the line is a door,
+/// not a new shape. What to call the result stays on <see cref="PipelineBuilder.Reshape(string, Maths, string)"/>: a
+/// result is written into one name, so that belongs to a column and not to a group, and every column of a line is
+/// reshaped in place.
+/// </remarks>
+public sealed class MathsLine : IDeclaresSteps
+{
+    private readonly List<IPipelineStep> _steps = [];
+
+    /// <summary>The steps this line declares, in the order the columns were named.</summary>
+    IReadOnlyList<IPipelineStep> IDeclaresSteps.Steps => _steps;
+
+    /// <summary>Columns pulled into their natural logarithm.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next shape can be written after it.</returns>
+    /// <remarks>
+    /// For a column where the ratio matters and the difference does not. A value of nought or less has no logarithm, and
+    /// the run refuses it.
+    /// </remarks>
+    public MathsLine Log(params string[] columns) => Add(columns, Maths.Log);
+
+    /// <summary>Columns pulled into the logarithm of one plus the value, so that a nought stays a nought.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next shape can be written after it.</returns>
+    /// <remarks>A value of minus one or less has no such logarithm, and the run refuses it.</remarks>
+    public MathsLine Log1P(params string[] columns) => Add(columns, Maths.Log1P);
+
+    /// <summary>Columns pulled into one divided by the value.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next shape can be written after it.</returns>
+    /// <remarks>A nought has no reciprocal, and the run refuses it.</remarks>
+    public MathsLine Reciprocal(params string[] columns) => Add(columns, Maths.Reciprocal);
+
+    /// <summary>Columns pulled into their square root, a gentler version of a logarithm.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next shape can be written after it.</returns>
+    /// <remarks>A negative number has no square root, and the run refuses it.</remarks>
+    public MathsLine Sqrt(params string[] columns) => Add(columns, Maths.Sqrt);
+
+    /// <summary>Columns pulled into the value times itself, for a relation that bends the other way.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next shape can be written after it.</returns>
+    public MathsLine Square(params string[] columns) => Add(columns, Maths.Square);
+
+    /// <summary>Columns of proportions pulled into the arcsine of their square root.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next shape can be written after it.</returns>
+    /// <remarks>A value outside nought and one is not a proportion, and the run refuses it.</remarks>
+    public MathsLine ArcSin(params string[] columns) => Add(columns, Maths.ArcSin);
+
+    /// <summary>Columns pulled into their magnitude, dropping the sign.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next shape can be written after it.</returns>
+    /// <remarks>The sign is thrown away, so there is no way back from this shape.</remarks>
+    public MathsLine Abs(params string[] columns) => Add(columns, Maths.Abs);
+
+    /// <summary>Columns pulled into minus one, nought or one: only the direction survives.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next shape can be written after it.</returns>
+    /// <remarks>The size is thrown away, so there is no way back from this shape.</remarks>
+    public MathsLine Sign(params string[] columns) => Add(columns, Maths.Sign);
+
+    private MathsLine Add(string[] columns, Maths maths)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        foreach (var column in columns)
+        {
+            _steps.Add(new MathsStep(column, maths));
+        }
+
+        return this;
+    }
+}
+
+/// <summary>
 /// Pulls a column into another shape, by arithmetic that learns nothing from the data.
 /// </summary>
 /// <remarks>

@@ -49,6 +49,101 @@ public interface IDeclaresCategories : IPipelineStep
 }
 
 /// <summary>
+/// The pieces of a moment in time of one line: which pieces, and the columns they are taken from.
+/// </summary>
+/// <typeparam name="TLine">The line itself, so each group of pieces hands back the line it was written on.</typeparam>
+/// <remarks>
+/// What a column is asked for here is a set of pieces, and a step holds the whole set — so the kinds cannot be methods, as
+/// they are for a scaling: a method per piece would make a step per piece, which is another declaration than the verb for
+/// one column writes. The line names the pieces once, with <see cref="Taking"/>, and then the columns they are taken from,
+/// with <see cref="TimePartsTaken{TLine}.Of"/>:
+/// <c>parts =&gt; parts.Taking(TimePart.Month, TimePart.Hour).Of("start", "end")</c>. Another group can follow it, for
+/// columns that want other pieces. Whether the pieces stand for a group or for numbers is the choice between the two
+/// verbs, not a flag on the line, and both verbs choose from this one vocabulary — so it is written once here, and each
+/// verb's line says only which step it makes.
+/// </remarks>
+public abstract class TimePartLine<TLine> : IDeclaresSteps
+    where TLine : TimePartLine<TLine>
+{
+    private readonly List<IPipelineStep> _steps = [];
+
+    /// <summary>The steps this line declares, in the order the columns were named.</summary>
+    IReadOnlyList<IPipelineStep> IDeclaresSteps.Steps => _steps;
+
+    /// <summary>Names the pieces of a moment to take, before the columns to take them from.</summary>
+    /// <param name="parts">Which pieces to take out of each column that follows.</param>
+    /// <returns>The pieces, waiting for the columns they come from.</returns>
+    /// <exception cref="ArgumentNullException">The pieces are missing.</exception>
+    public TimePartsTaken<TLine> Taking(params TimePart[] parts)
+    {
+        ArgumentNullException.ThrowIfNull(parts);
+
+        return new TimePartsTaken<TLine>(columns => Add(columns, parts));
+    }
+
+    /// <summary>The step this line's verb makes for one column.</summary>
+    /// <param name="column">The column holding the moment.</param>
+    /// <param name="parts">Which pieces to take out of it.</param>
+    /// <returns>The step.</returns>
+    protected abstract IPipelineStep Step(string column, IReadOnlyList<TimePart> parts);
+
+    private TLine Add(string[] columns, TimePart[] parts)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        foreach (var column in columns)
+        {
+            _steps.Add(Step(column, parts));
+        }
+
+        return (TLine)this;
+    }
+}
+
+/// <summary>
+/// The pieces of a moment a line has named, waiting for the columns they are taken from.
+/// </summary>
+/// <typeparam name="TLine">The line the pieces were named on, which the columns are added to.</typeparam>
+public sealed class TimePartsTaken<TLine>
+{
+    private readonly Func<string[], TLine> _of;
+
+    // What adding columns to the line means is the line's own business, so it is handed over rather than reached into.
+    internal TimePartsTaken(Func<string[], TLine> of) => _of = of;
+
+    /// <summary>Takes the pieces out of these columns.</summary>
+    /// <param name="columns">The columns holding a moment.</param>
+    /// <returns>The line, so another group of pieces can be named after it.</returns>
+    /// <exception cref="ArgumentNullException">The columns are missing.</exception>
+    /// <exception cref="ArgumentException">A column has no name, or the group takes no piece.</exception>
+    public TLine Of(params string[] columns) => _of(columns);
+}
+
+/// <summary>
+/// The pieces of a moment in time of one line, each standing for a group.
+/// </summary>
+/// <remarks>
+/// A month is not a quantity, so the pieces arrive as categories unless the order is the point; <see cref="NumberPartLine"/>
+/// is the line for that.
+/// </remarks>
+public sealed class CategoryPartLine : TimePartLine<CategoryPartLine>
+{
+    /// <inheritdoc />
+    protected override IPipelineStep Step(string column, IReadOnlyList<TimePart> parts) => new TimePartsStep(column, parts);
+}
+
+/// <summary>
+/// The pieces of a moment in time of one line, each a number.
+/// </summary>
+/// <remarks>For a piece where the order is the point, such as a year across a long span.</remarks>
+public sealed class NumberPartLine : TimePartLine<NumberPartLine>
+{
+    /// <inheritdoc />
+    protected override IPipelineStep Step(string column, IReadOnlyList<TimePart> parts) =>
+        new TimePartsStep(column, parts, asCategories: false);
+}
+
+/// <summary>
 /// Takes a moment in time apart into the pieces people actually reason with.
 /// </summary>
 /// <remarks>
@@ -58,8 +153,9 @@ public interface IDeclaresCategories : IPipelineStep
 /// <para>
 /// Ask for them as numbers when the order is the point rather than the grouping — a year over a long span,
 /// say, where each one being its own category would be a column per year and a certain refusal the first
-/// time next year arrives. And where a piece of time wraps round, <see cref="PipelineBuilder.Cyclical"/>
-/// says that better than either: eleven at night and midnight are neighbours, which no category knows.
+/// time next year arrives. And where a piece of time wraps round,
+/// <see cref="PipelineBuilder.Cyclical(string, Period, Form)"/> says that better than either: eleven at night and
+/// midnight are neighbours, which no category knows.
 /// </para>
 /// </remarks>
 public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns, IDeclaresCategories, IDescribesColumns

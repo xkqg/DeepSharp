@@ -45,10 +45,7 @@ public static class NetworkSample
             // ---- nothing above this line learns from the rows ----
             .FillMissing("age", With.Median)
             .EncodeCategories()
-            .Normalise("age", Scale.MidRange)
-            .Normalise("fare", Scale.MidRange)
-            .Normalise("sibsp", Scale.MidRange)
-            .Normalise("parch", Scale.MidRange)
+            .Normalise("age", "fare", "sibsp", "parch")   // a network takes them between -1 and 1, which is the default
             .Target("survived")
             // Declared with the pipeline, before a number exists: every run is measured the same way.
             .Report(report => report
@@ -90,8 +87,7 @@ public static class NetworkSample
             .SplitByTime("Date", train: 0.70, validation: 0.15, gap: 5)
             .Ahead("AAPL.Close", 5, AheadAs.Return)
             // ---- nothing above this line learns from the rows ----
-            .Normalise("AAPL.Close", Scale.MidRange)
-            .Normalise("AAPL.Volume", Scale.MidRange)
+            .Normalise("AAPL.Close", "AAPL.Volume")
             .Drop("Date")
             .Report(report => report.Measure(Metric.Rmse, Metric.Mae, Metric.R2).On(Part.Train, Part.Validation, Part.Test).As(Shown.Numbers, Shown.Drawn))
             .Build()
@@ -127,10 +123,7 @@ public static class NetworkSample
             .NormaliseRow(Norm.L1, Hours)
             // ---- nothing above this line learns from the rows ----
             .EncodeCategories()
-            .Normalise("temp", Scale.MidRange)
-            .Normalise("atemp", Scale.MidRange)
-            .Normalise("hum", Scale.MidRange)
-            .Normalise("windspeed", Scale.MidRange)
+            .Normalise("temp", "atemp", "hum", "windspeed")
             .Drop("dteday")
             .Distribution(Hours, scaleBy: "cnt")
             .Drop("cnt")

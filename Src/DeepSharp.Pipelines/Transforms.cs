@@ -50,6 +50,28 @@ public static class ScaleExtensions
         Scale.MaxAbs or Scale.MidRange => Form.Signed,
         _ => null,
     };
+
+    /// <summary>The scale that lands the training rows in a range, for a scaling that names no kind.</summary>
+    /// <param name="range">The range the features are declared to land in.</param>
+    /// <returns>Midrange for minus one to one, min-max for nothing to one.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The form writes a value as two columns rather than landing one in a range, so it is no answer to where the
+    /// features land.
+    /// </exception>
+    /// <remarks>
+    /// The other direction of <see cref="Lands"/>, kept beside it so the two cannot drift: a range named here is a
+    /// range some scale lands its rows in, and that scale is the one a column which names no kind is scaled by.
+    /// </remarks>
+    internal static Scale Landing(this Form range) => range switch
+    {
+        Form.Signed => Scale.MidRange,
+        Form.Unit => Scale.MinMax,
+        _ => throw new ArgumentOutOfRangeException(
+            nameof(range),
+            range,
+            $"{range} writes a value as two columns, each between nothing and one, rather than landing one in a range, "
+            + "so it does not say where the features land. Say Signed for minus one to one, or Unit for nothing to one."),
+    };
 }
 
 /// <summary>What happens to a value outside the range the fit learned.</summary>
@@ -63,6 +85,110 @@ public enum OutOfRange
 
     /// <summary>Stop, and say the data is outside what this model has seen.</summary>
     Refuse,
+}
+
+/// <summary>
+/// The scalings of one line: which kind, and the columns it holds for.
+/// </summary>
+/// <remarks>
+/// The kinds are the methods, as they are in the schema's own builder, so a line reads as the sentence it is and the
+/// set stays open-closed: a kind added here adds a method and changes no call site. Each hands back one step a column,
+/// which is what the declaration, the file and a notebook's blocks have always held — the line is a door, not a new
+/// shape. What happens to a value outside the learned range is said on the kind that can hold one: a scale that lands
+/// its rows in no range has nothing to hold a value in, and a rank has no place beyond the training rows to let one
+/// through, so neither has a method that offers the choice.
+/// </remarks>
+public sealed class ScaleBuilder : IDeclaresSteps
+{
+    private readonly List<IPipelineStep> _steps = [];
+    private Form _features = NormaliseStep.DefaultFeatures;
+
+    /// <summary>The steps this line declares, in the order the columns were named.</summary>
+    IReadOnlyList<IPipelineStep> IDeclaresSteps.Steps => _steps;
+
+    /// <summary>Where the pipeline declared its features land, for the columns this line names no kind for.</summary>
+    Form IDeclaresSteps.Features
+    {
+        set => _features = value;
+    }
+
+    /// <summary>Columns scaled to land where the pipeline says its features land: between minus one and one, unless it says otherwise.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    public ScaleBuilder Columns(params string[] columns) => Add(columns, _features.Landing(), OutOfRange.Pass);
+
+    /// <summary>Columns centred on the middle of their training range, landing between minus one and one.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    public ScaleBuilder MidRange(params string[] columns) => Add(columns, Scale.MidRange, OutOfRange.Pass);
+
+    /// <summary>Columns centred on the middle of their training range, saying what happens outside it.</summary>
+    /// <param name="outOfRange">What happens to a value outside the range the fit learned.</param>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    public ScaleBuilder MidRange(OutOfRange outOfRange, params string[] columns) => Add(columns, Scale.MidRange, outOfRange);
+
+    /// <summary>Columns squeezed between nothing and one by their training extremes.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    public ScaleBuilder MinMax(params string[] columns) => Add(columns, Scale.MinMax, OutOfRange.Pass);
+
+    /// <summary>Columns squeezed between nothing and one, saying what happens outside that range.</summary>
+    /// <param name="outOfRange">What happens to a value outside the range the fit learned.</param>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    public ScaleBuilder MinMax(OutOfRange outOfRange, params string[] columns) => Add(columns, Scale.MinMax, outOfRange);
+
+    /// <summary>Columns divided by their largest magnitude, so a nought stays a nought.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    public ScaleBuilder MaxAbs(params string[] columns) => Add(columns, Scale.MaxAbs, OutOfRange.Pass);
+
+    /// <summary>Columns divided by their largest magnitude, saying what happens outside that range.</summary>
+    /// <param name="outOfRange">What happens to a value outside the range the fit learned.</param>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    public ScaleBuilder MaxAbs(OutOfRange outOfRange, params string[] columns) => Add(columns, Scale.MaxAbs, outOfRange);
+
+    /// <summary>Columns centred on their median and divided by the spread of their middle half.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    /// <remarks>Unmoved by a few extremes, and it lands its rows in no range, so nothing is held or refused outside one.</remarks>
+    public ScaleBuilder Robust(params string[] columns) => Add(columns, Scale.Robust, OutOfRange.Pass);
+
+    /// <summary>Columns centred on their mean and divided by their spread.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    /// <remarks>Moved by a single extreme value, and it lands its rows in no range.</remarks>
+    public ScaleBuilder Standard(params string[] columns) => Add(columns, Scale.Standard, OutOfRange.Pass);
+
+    /// <summary>Columns reshaped towards a bell curve and then centred.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    /// <remarks>For a column that leans heavily one way; it lands its rows in no range.</remarks>
+    public ScaleBuilder Power(params string[] columns) => Add(columns, Scale.Power, OutOfRange.Pass);
+
+    /// <summary>Columns written as where each value sat among the training values, saying what happens beyond them.</summary>
+    /// <param name="outOfRange">What happens to a value beyond the training rows: held at the edge, or refused.</param>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next kind can be written after it.</returns>
+    /// <remarks>
+    /// A rank has no place beyond the training rows for a value to pass to, which is why this is the one kind with no
+    /// line that leaves the choice unsaid.
+    /// </remarks>
+    public ScaleBuilder Quantile(OutOfRange outOfRange, params string[] columns) => Add(columns, Scale.Quantile, outOfRange);
+
+    private ScaleBuilder Add(string[] columns, Scale scale, OutOfRange outOfRange)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        foreach (var column in columns)
+        {
+            _steps.Add(new NormaliseStep(column, scale, outOfRange));
+        }
+
+        return this;
+    }
 }
 
 /// <summary>How a category is written down as numbers.</summary>
@@ -120,11 +246,30 @@ public enum Norm
 /// </remarks>
 public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<NormaliseStep>, IDescribesColumns, IMeetsANeed
 {
+    /// <summary>
+    /// The scaling a caller who names none means: the training rows land between minus one and one, which is where a
+    /// network takes its features.
+    /// </summary>
+    /// <remarks>
+    /// Said once, here, and read by every door that lets the scale be left out — this step's own constructor, the
+    /// chain's verb, and the value a new block starts with. A default is a compile-time constant in C#, so it cannot
+    /// be read from the parameter at the signature; the parameter reads it from here instead, and a test holds every
+    /// door to this one value.
+    /// </remarks>
+    public const Scale DefaultScale = Scale.MidRange;
+
+    /// <summary>Where a pipeline that does not say lands its features: between minus one and one.</summary>
+    /// <remarks>
+    /// The range <see cref="DefaultScale"/> lands its rows in, said as the range rather than as the scale, because that
+    /// is what <see cref="PipelineBuilder.DefaultFeatures"/> takes and what a reader of a chain asks about.
+    /// </remarks>
+    public const Form DefaultFeatures = Form.Signed;
+
     private static readonly ColumnParameter ColumnKey = new(
         "column", "The column to bring onto a comparable scale.", "column", ColumnKinds.Numbers);
 
     private static readonly OneOfParameter<Scale> ScaleKey = new(
-        "scale", "Which kind of scaling: what the fit learns from the training rows.", Scale.MidRange);
+        "scale", "Which kind of scaling: what the fit learns from the training rows.", DefaultScale);
 
     private static readonly OneOfParameter<OutOfRange> OutOfRangeKey = new(
         "outOfRange", "What happens to a value outside the range the fit learned: let it through, hold it at the edge, or refuse.", OutOfRange.Pass);
@@ -137,7 +282,7 @@ public sealed record NormaliseStep : IFittedStep, IUndoesItself, IPipelineStep<N
     /// The column has no name, or the scale cannot do what is said of a value outside its range: hold it or refuse it
     /// with no range to hold it in, or let it through a rank.
     /// </exception>
-    public NormaliseStep(string column, Scale scale = Scale.Standard, OutOfRange outOfRange = OutOfRange.Pass)
+    public NormaliseStep(string column, Scale scale = DefaultScale, OutOfRange outOfRange = OutOfRange.Pass)
     {
         Column = ColumnKey.Require(column);
         Scale = ScaleKey.Require(scale);
@@ -511,11 +656,17 @@ public sealed record NormaliseRowStep : IPipelineStep<NormaliseRowStep>, IAddsCo
                 continue;
             }
 
-            var size = Norm switch
+            // Worked out around the largest value in the row, as every library that measures a length does: squaring
+            // the values themselves loses a row of small ones to nothing and sends a row of large ones to infinity.
+            // Measured on this code before the scaling: a row of 1e200 came back as noughts, and a row of 1e-160 had
+            // its length out by a relative 5.6e-6.
+            var largest = present.Max(value => Math.Abs(value!.Value));
+
+            var size = largest == 0 ? 0 : Norm switch
             {
-                Norm.L1 => present.Sum(value => Math.Abs(value!.Value)),
-                Norm.Max => present.Max(value => Math.Abs(value!.Value)),
-                _ => Math.Sqrt(present.Sum(value => value!.Value * value!.Value)),
+                Norm.L1 => largest * present.Sum(value => Math.Abs(value!.Value) / largest),
+                Norm.Max => largest,
+                _ => largest * Math.Sqrt(present.Sum(value => (value!.Value / largest) * (value!.Value / largest))),
             };
 
             if (size == 0)

@@ -124,9 +124,9 @@ in `.Tests`, since the engine passes over an assembly named so.
 
 A design is named after whatever drives it, and here that is **the pipeline**.
 
-Every piece of work follows one sequence: collect the data, add the features, normalise, deal with the
-missing values, split into train, validation and test, build the model, and check it against data it has
-never seen. The sequence is not the interesting part — everyone does those steps. What matters is that the
+Every piece of work follows one sequence: collect the data, settle its rows and their gaps, add the features,
+split into train, validation and test, fill what is still missing and normalise — those two below the split, since
+they learn — build the model, and check it against data it has never seen. The sequence is not the interesting part — everyone does those steps. What matters is that the
 whole of it is **declared in advance as one artefact and then replayed**, instead of being assembled again
 at each stage by whoever happens to be writing that stage.
 
@@ -397,6 +397,14 @@ A value that is not a finite number is refused by every fit, not only by `FillNa
 training values became the centre a scale was built around. The fit names `fill.nan` as the step that deals
 with it, and the handover refuses one as well.
 
+A column worked out from another carries that column's gaps, and filling what it was made from does not reach back
+into it. The features are added above the split and the fills stand below it, because what fills a gap is learned from
+the training rows alone — even a nought is, since a fill writes down how many gaps the training rows held and refuses
+the column when that share is above the limit it was given. So a sum of two columns, one of which has a gap, is itself
+a gap, and the way to have it otherwise is to settle those rows above the step that works the feature out: `DropGaps`
+and `DropWarmUp` stand there and learn nothing. The handover says so when it meets one, naming the columns the feature
+was worked out from rather than only that a gap is a gap.
+
 ### The declaration is a file, and the chain can write it
 
 The pipeline is saved as one file with two blocks, because they have different authors. The
@@ -408,7 +416,7 @@ builder existed.
 
 ```
 {
-  "version": 4,
+  "version": 5,
   "declaration": [ { "step": "read.csv", "path": "titanic.csv" }, … ],
   "fitted": [
     { "step": "split.stratified", "prefix": "9e27e6…",
@@ -606,7 +614,39 @@ feature is constant. Two hundred of 0.1 average to 0.10000000000000007, and the 
 as 6.9e-17: taken for a spread, it made every training row −1 and a later 0.2 more than a quadrillion.
 
 Row-wise normalisation is a different verb, not a member of this family: it works across a row, learns
-nothing, and is fitted nowhere.
+nothing, and is fitted nowhere. Where it lands its columns is a fact of its arithmetic rather than a choice — a value
+divided by its row's size is between minus one and one for every norm there is — so it is the one landing nothing
+declares. Its sizes are worked out around the largest value in the row, as every library that measures a length does:
+squaring the values themselves lost a row of 1e-160 to a length out by a relative 5.6e-6 and sent a row of 1e200 to
+infinity, which made every value of it nought.
+
+**One line scales many columns, and the kind is the method.** `.Normalise("age", "fare")` scales both the way a caller
+who names no kind means it, and `.Normalise(scale => scale.MidRange("age", "fare").Robust("volume"))` names a kind per
+group. What reaches the declaration is one step a column either way, so the file, a notebook's blocks and every fit
+keyed by the steps above it are what they always were: the line is a door, not a shape. The same door is on
+`FillMissing`, `FillNaN`, `Reshape`, `Cyclical`, `ClipOutliers` and `TimeParts`, written out by one fan-out
+(`IDeclaresSteps`, `LineExtensions.Declared`) rather than by a copy of it per verb, and a line that names no column is
+refused where it stands. What a column needs beyond the kind stays on the verb that takes one column — the share above
+which a fill is refused, the column a reshaping writes into, what happens to a value outside a clip's bounds — because
+it belongs to that column and not to the group. Three verbs keep the one-column door and no line, each for a reason
+written down in the test that checks it: `Encode`, because `EncodeCategories()` already writes every category at once;
+`Target` and `Ahead`, because a pipeline names one answer.
+
+**Where the features land is said once, for the whole pipeline.** `.DefaultFeatures(Form.Signed)` is between minus one
+and one, which is what a pipeline that says nothing means; `.DefaultFeatures(Form.Unit)` is between nothing and one. It
+is written above the split, where it holds for every column alike, and it decides two things: what a scaling that names
+no kind is written as — midrange for signed, min-max for unit, by the one rule that also says where each scale lands —
+and how a moment on a circle is written. A column that names its own kind keeps it. Nothing of it reaches the file:
+each column is written as the kind that lands it there, so a pipeline that says the range and one that names the kinds
+are the same text. Said twice, or said below a step it would have governed, it is refused where the second is written;
+`Form.SplitSign` is refused outright, since writing a value as two columns is no answer to where one lands.
+
+The scale a caller who names none means is written down once, as `NormaliseStep.DefaultScale`, and the range it lands
+in as `NormaliseStep.DefaultFeatures`. A default is a compile-time constant in C#, so a signature cannot read it from
+the parameter that governs the file; the parameter reads it from there instead, and a test holds every door that lets
+the scale be left out to that one value. It used to be written twice and read a third way — the chain and the step's
+own constructor each said standard, while the value a new block starts with said midrange — so the same omission meant
+two different things depending on which door it came through.
 
 Two decisions are made here rather than discovered later. What happens outside the learned range while the
 model is running — clip, pass through, or refuse — because a price meets a new high and min-max has no

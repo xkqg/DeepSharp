@@ -33,6 +33,86 @@ public enum Outlier
 }
 
 /// <summary>
+/// The bounds of one line: how they are worked out, and the columns they hold for.
+/// </summary>
+/// <remarks>
+/// The ways of finding the bounds are the methods, as the kinds of a scaling are, so a line reads as the sentence it is
+/// and the set stays open-closed: a way added to <see cref="Bounds"/> adds a method here and changes no call site. Each
+/// hands back one step a column, which is what the declaration, the file and a notebook's blocks have always held — the
+/// line is a door, not a new shape. Every column is held at its bound. What happens to a value outside the bounds is a
+/// fact about one column — a refusal belongs on the column that must never see one — and stays on
+/// <see cref="FittingBuilder.ClipOutliers(string, Bounds, double, Outlier)"/>.
+/// <para>
+/// A distance left out is the one the step starts from, so it is said in one place. A quantile is the exception: its
+/// distance is a share of the column, the step refuses that starting multiple there, and a line that offered a quantile
+/// without a share could only fail.
+/// </para>
+/// </remarks>
+public sealed class BoundsLine : IDeclaresSteps
+{
+    private readonly List<IPipelineStep> _steps = [];
+
+    /// <summary>The steps this line declares, in the order the columns were named.</summary>
+    IReadOnlyList<IPipelineStep> IDeclaresSteps.Steps => _steps;
+
+    /// <summary>Columns held to the middle half, widened by the usual distance beyond the quartiles.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next way can be written after it.</returns>
+    /// <remarks>The robust middle: the middle half is what an extreme value cannot move.</remarks>
+    public BoundsLine Iqr(params string[] columns) => Add(columns, Bounds.Iqr);
+
+    /// <summary>Columns held to the middle half, widened by a distance you choose beyond the quartiles.</summary>
+    /// <param name="at">How far beyond the quartiles the bounds sit, as a multiple of the width of the middle half.</param>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next way can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The distance is not a finite number above nothing.</exception>
+    public BoundsLine Iqr(double at, params string[] columns) => Add(columns, Bounds.Iqr, at);
+
+    /// <summary>Columns held to so many standard deviations either side of their mean, at the usual distance.</summary>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next way can be written after it.</returns>
+    /// <remarks>
+    /// Assumes the column is roughly symmetric, and is dragged around by exactly the values it is meant to catch.
+    /// </remarks>
+    public BoundsLine Sigma(params string[] columns) => Add(columns, Bounds.Sigma);
+
+    /// <summary>Columns held to a number of standard deviations you choose either side of their mean.</summary>
+    /// <param name="at">How many standard deviations either side of the middle the bounds sit.</param>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next way can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The distance is not a finite number above nothing.</exception>
+    public BoundsLine Sigma(double at, params string[] columns) => Add(columns, Bounds.Sigma, at);
+
+    /// <summary>Columns whose lowest and highest few per cent are held at the edge of the rest.</summary>
+    /// <param name="at">
+    /// The share set aside at each end, less than half of the column; nothing for the smallest and largest value the
+    /// training rows hold.
+    /// </param>
+    /// <param name="columns">The columns.</param>
+    /// <returns>This line, so the next way can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The share is not a finite number, at least nothing and less than half of the column.
+    /// </exception>
+    /// <remarks>Honest about tails of any shape. It is the one way with no line that leaves the share unsaid.</remarks>
+    public BoundsLine Quantile(double at, params string[] columns) => Add(columns, Bounds.Quantile, at);
+
+    private BoundsLine Add(string[] columns, Bounds bounds, double? at = null)
+    {
+        ArgumentNullException.ThrowIfNull(columns);
+
+        foreach (var column in columns)
+        {
+            // Left out, the distance is the one the step starts from, which keeps it said in one place.
+            _steps.Add(at is { } distance
+                ? new ClipOutliersStep(column, bounds, distance)
+                : new ClipOutliersStep(column, bounds));
+        }
+
+        return this;
+    }
+}
+
+/// <summary>
 /// Holds the extreme values of a column to bounds learned from the training rows.
 /// </summary>
 /// <remarks>

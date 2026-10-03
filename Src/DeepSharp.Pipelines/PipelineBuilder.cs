@@ -19,6 +19,7 @@ public sealed class PipelineBuilder
     private readonly List<IPipelineStep> _steps = [];
     private bool _split;
     private double _predict;
+    private Form? _features;
     private IRowSource? _rows;
 
     internal PipelineBuilder()
@@ -151,8 +152,34 @@ public sealed class PipelineBuilder
     /// <param name="period">Which cycle to place it on.</param>
     /// <param name="form">How to write the two values down.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
-    public PipelineBuilder Cyclical(string column, Period period, Form form = Form.Signed) =>
+    public PipelineBuilder Cyclical(string column, Period period, Form form) =>
         Add(new CyclicalStep(column, period, form));
+
+    /// <summary>Writes a moment in time as a place on a circle, so its ends meet.</summary>
+    /// <param name="column">The column holding the moment.</param>
+    /// <param name="period">Which cycle to place it on.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// Written where this pipeline says its features land — between minus one and one, unless
+    /// <see cref="DefaultFeatures"/> says otherwise. A place on a circle is a feature like any other.
+    /// </remarks>
+    public PipelineBuilder Cyclical(string column, Period period) =>
+        Add(new CyclicalStep(column, period, FeaturesLandIn));
+
+    /// <summary>Writes moments in time as places on circles in one line, the cycle named per group of columns.</summary>
+    /// <param name="period">
+    /// Names the cycles and the columns each holds for:
+    /// <c>period =&gt; period.HourOfDay("start", "end").DayOfWeek("start")</c>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The line names no column.</exception>
+    /// <exception cref="InvalidOperationException">This builder has already been split and is finished.</exception>
+    /// <remarks>
+    /// One step a column and cycle, exactly as writing the verb once for each does, so the file, the notebook's blocks and
+    /// every fit are what they were. How the two values of a place are written down is a choice about one column and stays
+    /// on <see cref="Cyclical(string, Period, Form)"/>. <see cref="PeriodLine"/> has the cycles.
+    /// </remarks>
+    public PipelineBuilder Cyclical(Action<PeriodLine> period) => Many(period, nameof(period));
 
     /// <summary>Pulls a column into another shape, by arithmetic that learns nothing.</summary>
     /// <param name="column">The column to reshape.</param>
@@ -167,6 +194,21 @@ public sealed class PipelineBuilder
     public PipelineBuilder Reshape(string column, Maths maths, string? into = null) =>
         Add(new MathsStep(column, maths, into));
 
+    /// <summary>Pulls several columns into other shapes in one line, the shape named per group of columns.</summary>
+    /// <param name="shape">
+    /// Names the shapes and the columns each holds for:
+    /// <c>shape =&gt; shape.Log1P("fare", "volume").Sqrt("age")</c>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The line names no column.</exception>
+    /// <exception cref="InvalidOperationException">This builder has already been split and is finished.</exception>
+    /// <remarks>
+    /// One step a column reaches the declaration, exactly as writing the verb once a column does, so the file, the
+    /// notebook's blocks and every fit are what they were. A result written under another name is a fact about one
+    /// column and stays on <see cref="Reshape(string, Maths, string)"/>. <see cref="MathsLine"/> has the shapes.
+    /// </remarks>
+    public PipelineBuilder Reshape(Action<MathsLine> shape) => Many(shape, nameof(shape));
+
     /// <summary>Takes a moment in time apart into the pieces people reason with.</summary>
     /// <param name="column">The column holding the moment.</param>
     /// <param name="parts">Which pieces to take out of it.</param>
@@ -174,10 +216,25 @@ public sealed class PipelineBuilder
     /// <remarks>
     /// The pieces arrive as categories, because a month is not a quantity: March is not three of anything,
     /// and December is not twelve times January. <see cref="FittingBuilder.EncodeCategories"/> then turns them into the
-    /// numbers a model can take. Use <see cref="TimePartsAsNumbers"/> where the order is the point.
+    /// numbers a model can take. Use <see cref="TimePartsAsNumbers(string, TimePart[])"/> where the order is the point.
     /// </remarks>
     public PipelineBuilder TimeParts(string column, params TimePart[] parts) =>
         Add(new TimePartsStep(column, parts));
+
+    /// <summary>Takes moments in time apart in one line, naming the pieces once and the columns they are taken from.</summary>
+    /// <param name="parts">
+    /// Names the pieces and the columns they come from:
+    /// <c>parts =&gt; parts.Taking(TimePart.Month, TimePart.Hour).Of("start", "end")</c>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The line names no column, or a group takes no piece.</exception>
+    /// <exception cref="InvalidOperationException">This builder has already been split and is finished.</exception>
+    /// <remarks>
+    /// One step a column, as the verb for one column writes it — the pieces arrive as categories here too — so the file,
+    /// the notebook's blocks and every fit are what they were. The pieces are a set rather than one kind, so the line
+    /// names them once instead of once a kind; <see cref="TimePartLine{TLine}"/> says why.
+    /// </remarks>
+    public PipelineBuilder TimeParts(Action<CategoryPartLine> parts) => Many(parts, nameof(parts));
 
     /// <summary>Takes a moment in time apart, as numbers rather than as groups.</summary>
     /// <param name="column">The column holding the moment.</param>
@@ -189,6 +246,20 @@ public sealed class PipelineBuilder
     /// </remarks>
     public PipelineBuilder TimePartsAsNumbers(string column, params TimePart[] parts) =>
         Add(new TimePartsStep(column, parts, asCategories: false));
+
+    /// <summary>Takes moments in time apart as numbers in one line, naming the pieces once and then their columns.</summary>
+    /// <param name="parts">
+    /// Names the pieces and the columns they come from:
+    /// <c>parts =&gt; parts.Taking(TimePart.Year).Of("start", "end")</c>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The line names no column, or a group takes no piece.</exception>
+    /// <exception cref="InvalidOperationException">This builder has already been split and is finished.</exception>
+    /// <remarks>
+    /// One step a column, as the verb for one column writes it, so the file, the notebook's blocks and every fit are what
+    /// they were. <see cref="TimePartLine{TLine}"/> says why the pieces are named once rather than once a kind.
+    /// </remarks>
+    public PipelineBuilder TimePartsAsNumbers(Action<NumberPartLine> parts) => Many(parts, nameof(parts));
 
     /// <summary>Drops the rows at the start that no column can speak for yet.</summary>
     /// <param name="atMost">The most rows this is allowed to drop; beyond it the run stops.</param>
@@ -230,6 +301,48 @@ public sealed class PipelineBuilder
     /// knowing, which is why the split is only offered after this.
     /// </remarks>
     public PipelineBuilder DropGaps(params string[] columns) => Add(new DropGapsStep(columns));
+
+    /// <summary>Says where the features of this pipeline land, for every scaling that names no kind.</summary>
+    /// <param name="range">
+    /// Between minus one and one, <see cref="Form.Signed"/>, which is where a network takes its features; or between
+    /// nothing and one, <see cref="Form.Unit"/>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The form writes a value as two columns rather than landing one in a range.</exception>
+    /// <exception cref="InvalidOperationException">This pipeline already says where its features land, or has been split.</exception>
+    /// <remarks>
+    /// It holds for every column alike, so it is said once, here, above the split — and a column that names its own
+    /// kind keeps it. Nothing of it reaches the file: each scaling is written as the kind that lands its rows there,
+    /// so a pipeline that says the range and one that names the kind are the same text.
+    /// </remarks>
+    public PipelineBuilder DefaultFeatures(Form range)
+    {
+        ThrowIfSplit();
+
+        // Refused here rather than at the first scaling, because this is where it is written.
+        _ = range.Landing();
+
+        if (_features is { } said)
+        {
+            throw new InvalidOperationException(
+                $"This pipeline already lands its features in {said}, and a second range would leave two answers to "
+                + "one question. Say it once.");
+        }
+
+        // It governs what is written after it, so a step already standing that it would have governed would be left
+        // written one way while everything after it is written another.
+        if (_steps.OfType<CyclicalStep>().FirstOrDefault() is { } governed)
+        {
+            throw new InvalidOperationException(
+                $"Step {_steps.IndexOf(governed) + 1}, '{governed.Verb}', is already written and would have been "
+                + $"written in {range} had the range been said first. Say where the features land above the steps it "
+                + "governs.");
+        }
+
+        _features = range;
+
+        return this;
+    }
 
     /// <summary>Holds a share of the rows back, to predict on once a model has been trained.</summary>
     /// <param name="share">How much to hold back, as a fraction or as a percentage.</param>
@@ -379,7 +492,7 @@ public sealed class PipelineBuilder
         _steps.Add(step);
         _split = true;
 
-        return new FittingBuilder(_steps, _rows);
+        return new FittingBuilder(_steps, _rows, FeaturesLandIn);
     }
 
     private void ThrowIfSplit()
@@ -394,6 +507,14 @@ public sealed class PipelineBuilder
                 + "or start another pipeline for a second arrangement.");
         }
     }
+
+    // Where the features land when the pipeline never said: said once, for the split that hands it on and for every line.
+    private Form FeaturesLandIn => _features ?? NormaliseStep.DefaultFeatures;
+
+    // Every line of this half goes through the one fan-out, and the steps it declared are added as any step is.
+    private PipelineBuilder Many<TLine>(Action<TLine> line, string parameter)
+        where TLine : IDeclaresSteps, new() =>
+        line.Declared<TLine>(FeaturesLandIn, parameter).Aggregate(this, (chain, step) => chain.Add(step));
 }
 
 /// <summary>
@@ -408,11 +529,13 @@ public sealed class FittingBuilder
 {
     private readonly List<IPipelineStep> _steps;
     private readonly IRowSource? _rows;
+    private readonly Form _features;
 
-    internal FittingBuilder(List<IPipelineStep> steps, IRowSource? rows)
+    internal FittingBuilder(List<IPipelineStep> steps, IRowSource? rows, Form features)
     {
         _steps = steps;
         _rows = rows;
+        _features = features;
     }
 
     /// <summary>What has been declared so far.</summary>
@@ -444,29 +567,64 @@ public sealed class FittingBuilder
     public FittingBuilder FillMissing(string column, FillStrategy strategy, double? refuseAbove = null) =>
         Add(FillMissingStep.Of(column, strategy, refuseAbove));
 
+    /// <summary>Fills the gaps of several columns in one line, the value named per group of columns.</summary>
+    /// <param name="fill">
+    /// Names what goes in the gaps and the columns it goes into:
+    /// <c>fill =&gt; fill.Median("age").Mean("trades")</c>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The line names no column.</exception>
+    /// <remarks>
+    /// One step a column, as writing the verb once a column does. A column with a share of gaps above which filling is
+    /// refused keeps <see cref="FillMissing(string, FillStrategy, double?)"/>: that limit has no default, by decision.
+    /// </remarks>
+    public FittingBuilder FillMissing(Action<GapLine> fill) => Many(fill, nameof(fill));
+
+    /// <summary>Says what happens to values that are not numbers in several columns, in one line.</summary>
+    /// <param name="fill">
+    /// Names what happens and the columns it happens in: <c>fill =&gt; fill.Refuse("range").Zero("ratio")</c>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The line names no column.</exception>
+    public FittingBuilder FillNaN(Action<NotANumberLine> fill) => Many(fill, nameof(fill));
+
     /// <summary>Brings a column onto a comparable scale, by numbers learned from the training rows.</summary>
     /// <param name="column">The column to scale.</param>
     /// <param name="scale">Which kind of scaling.</param>
     /// <param name="outOfRange">What happens to a value outside the range the fit learned.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
     public FittingBuilder Normalise(
-        string column, Scale scale = Scale.Standard, OutOfRange outOfRange = OutOfRange.Pass) =>
+        string column, Scale scale, OutOfRange outOfRange = OutOfRange.Pass) =>
         Add(new NormaliseStep(column, scale, outOfRange));
 
     /// <summary>Brings several columns onto a comparable scale, by numbers learned from the training rows.</summary>
     /// <param name="columns">The columns to scale, each on its own.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>Each the way a caller who names no kind means it: landing between minus one and one.</remarks>
     public FittingBuilder Normalise(params string[] columns)
     {
         ArgumentNullException.ThrowIfNull(columns);
 
         foreach (var column in columns)
         {
-            Add(new NormaliseStep(column));
+            Add(new NormaliseStep(column, _features.Landing()));
         }
 
         return this;
     }
+
+    /// <summary>Brings columns onto a comparable scale in one line, the kind named per group of columns.</summary>
+    /// <param name="scale">
+    /// Names the kinds and the columns each holds for:
+    /// <c>scale =&gt; scale.MidRange("age", "fare").Robust("volume")</c>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The line scales nothing.</exception>
+    /// <remarks>
+    /// One step a column reaches the declaration, exactly as writing the verb once a column does, so the file, the
+    /// notebook's blocks and every fit are what they were. <see cref="ScaleBuilder"/> has the kinds.
+    /// </remarks>
+    public FittingBuilder Normalise(Action<ScaleBuilder> scale) => Many(scale, nameof(scale));
 
     /// <summary>Writes a column of words down as numbers, using the categories the training rows held.</summary>
     /// <param name="column">The column of words.</param>
@@ -492,6 +650,21 @@ public sealed class FittingBuilder
     public FittingBuilder ClipOutliers(
         string column, Bounds bounds = Bounds.Iqr, double at = 1.5, Outlier outlier = Outlier.Clip) =>
         Add(new ClipOutliersStep(column, bounds, at, outlier));
+
+    /// <summary>Holds the extreme values of several columns to bounds learned from the training rows, in one line.</summary>
+    /// <param name="clip">
+    /// Names how the bounds are worked out and the columns each holds for:
+    /// <c>clip =&gt; clip.Iqr("fare", "age").Sigma(2.5, "volume")</c>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The line names no column.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A distance is not one its bounds can use.</exception>
+    /// <remarks>
+    /// One step a column, as writing the verb once a column does, each holding a value outside its bounds at the bound.
+    /// What happens to a value outside them is a fact about one column and stays on
+    /// <see cref="ClipOutliers(string, Bounds, double, Outlier)"/>. <see cref="BoundsLine"/> has the ways of finding them.
+    /// </remarks>
+    public FittingBuilder ClipOutliers(Action<BoundsLine> clip) => Many(clip, nameof(clip));
 
     /// <summary>Writes every column that stands for a group down as numbers.</summary>
     /// <param name="how">One column per category, or one column of places.</param>
@@ -633,4 +806,16 @@ public sealed class FittingBuilder
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
     public Pipeline Build() => new(Declaration, _rows);
+
+    // Every line of this half goes through the one fan-out, and the steps it declared are added as any step is.
+    private FittingBuilder Many<TLine>(Action<TLine> line, string parameter)
+        where TLine : IDeclaresSteps, new()
+    {
+        foreach (var step in line.Declared<TLine>(_features, parameter))
+        {
+            Add(step);
+        }
+
+        return this;
+    }
 }
