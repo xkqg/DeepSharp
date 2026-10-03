@@ -123,15 +123,12 @@ public class FormFieldNameTests
         var members = typeof(NotebookVerbs).Assembly.GetType("DeepSharp.Verso.Notebooks.FormVocabulary")!
             .GetMethods(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
 
-        foreach (var writer in members.Where(each =>
-            each.ReturnType == typeof(string)
-            && each.GetParameters() is [{ ParameterType: var first }, { ParameterType: var second }]
-            && first == typeof(StepParameter) && second == typeof(string)))
-        {
-            if (members.FirstOrDefault(each => each.Name == "Is" + writer.Name) is { } reader)
-            {
-                yield return (writer, reader);
-            }
-        }
+        return from writer in members
+               where writer.ReturnType == typeof(string)
+                   && writer.GetParameters() is [{ ParameterType: var first }, { ParameterType: var second }]
+                   && first == typeof(StepParameter) && second == typeof(string)
+               let reader = members.FirstOrDefault(each => each.Name == "Is" + writer.Name)
+               where reader is not null
+               select (writer, reader);
     }
 }

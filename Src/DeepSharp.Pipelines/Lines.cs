@@ -33,6 +33,7 @@ internal interface IDeclaresSteps
 /// </summary>
 internal static class LineExtensions
 {
+    /// <summary>A line of a chain, written by whoever called the verb it belongs to.</summary>
     /// <typeparam name="TLine">The kind of line.</typeparam>
     extension<TLine>(Action<TLine> line)
         where TLine : IDeclaresSteps, new()
