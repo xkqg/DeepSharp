@@ -18,6 +18,12 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.6.1 gives every per-column verb one line.** `.Normalise(scale => scale.MidRange("age", "fare").Robust("volume"))`
+names a kind and the columns it holds for, and the gaps, the reshapings, the moments on a circle, the clipped extremes
+and the pieces of a moment take the same shape; `.DefaultFeatures(Form)` says once, above the split, where the features
+land, and a scaling that names no kind lands them between minus one and one. One step a column reaches the declaration
+either way, so the file is what it was.
+
 **0.6.0 puts the model in the pipeline.** A pipeline says which network its rows are prepared for — the layers, what
 moves them, what judges them, when the run stops and the engine it runs on — in the words TensorFlow and Keras use or
 the words PyTorch uses, and running it trains exactly that network. The whole course from a file to a validated model

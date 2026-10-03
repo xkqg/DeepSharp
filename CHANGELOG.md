@@ -3,6 +3,62 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.1]
+
+Where one line does one thing to many columns. Every verb whose first word is a column — the scalings, the gaps, the
+reshapings, the moments on a circle, the clipped extremes and the pieces of a moment — gains a line that names a kind
+and lists the columns it holds for, and a pipeline says once, above the split, where its features land. What reaches
+the declaration is one step a column, exactly as writing the verb once a column does, so the file, a notebook's blocks
+and every fit are what they were: the line is a door a person writes through, never a new shape in the artefact.
+
+### Upgrading from 0.6
+
+- **A scaling that names no kind now lands its rows between minus one and one.** The chain and the step's own
+  constructor said standard where the value a new block starts with said midrange, so the same omission meant two
+  different things depending on which door it came through; it is written down once now, as
+  `NormaliseStep.DefaultScale`, and every door reads it. No pipeline file changes meaning: a file always writes the
+  scale it was given, and one that leaves the key out is refused rather than defaulted. What changes is what new code
+  means — `.Normalise("age", "fare")` and `scale => scale.Columns("age")` now land their rows between minus one and
+  one, which is what a network takes. A caller who wants the old behaviour names it: `.Normalise("age",
+  Scale.Standard)`. The one case no source diff shows is a caller who recompiles nothing and swaps the assembly: a
+  default is settled where the caller was compiled, so their omitted scale stays standard until they build again.
+
+- **`.Normalise(string, Scale, OutOfRange)` no longer defaults its scale.** `.Normalise("age")` now reaches the
+  overload that takes the columns and lands them where the pipeline says its features land; naming a scale is
+  unchanged. Nothing else about the signature moved.
+
+### Added
+
+- **One line does one thing to many columns, and the kind is the method.**
+  `.Normalise(scale => scale.MidRange("age", "fare").Robust("volume"))` names a kind per group of columns, and
+  `.FillMissing(fill => fill.Median("age").Mean("trades"))`, `.FillNaN`, `.Reshape`, `.Cyclical`, `.ClipOutliers`,
+  `.TimeParts` and `.TimePartsAsNumbers` take the same shape. What reaches the declaration is one step a column, as
+  writing the verb once a column does, so the file, a notebook's blocks and every fit are unchanged — the line is a
+  door. What happens outside a learned range is said on the kind that can hold a value in one, and the kinds that land
+  their rows in no range have no method that offers the choice. A line that names no column is refused where it
+  stands. `Encode`, `Target` and `Ahead` keep the one-column door, each for a reason a test holds them to.
+
+- **Where the features land is said once: `.DefaultFeatures(Form)`.** Written above the split, where it holds for
+  every column alike: `Form.Signed` is between minus one and one, `Form.Unit` between nothing and one, and a column
+  that names its own kind keeps it. It decides what a scaling that names no kind is written as and how a moment on a
+  circle is written, and nothing of it reaches the file — each column is written as the kind that lands it there, so a
+  pipeline that says the range and one that names the kinds are the same text.
+
+### Changed
+
+- **A row divided by its own size is worked out around the largest value in it.** The length of a row squares its
+  values, and a small enough value squares to nothing while a large one squares to infinity: a row of 1e-160 came back
+  with its length out by a relative 5.6e-6, and a row of 1e200 came back as noughts. The sizes are scaled by the
+  largest value in the row first, as every library that measures a length does, so what the step declares of the
+  columns it writes — between minus one and one — holds for every row there is. A row of ordinary numbers comes back
+  exactly as it did.
+
+- **A gap in a column a feature was worked out from is refused with the column it came from.** The features are added
+  above the split and the fills stand below it, so a sum of two columns one of which has a gap is itself a gap, and
+  filling what it was made from afterwards does not reach back into it. The handover now names the columns the feature
+  was worked out from and says to settle those rows above the step that works it out, rather than saying only that a
+  gap is a gap.
+
 ## [0.6.0]
 
 Where the model moves into the pipeline. Pipeline-driven design is the whole course from raw data to a validated
@@ -25,40 +81,11 @@ training it again from the file gives the same network, number for number.
   taught it says which package brings it, rather than that the verb is misspelled. The notebook's own catalog knows
   it.
 
-- **A scaling that names no kind now lands its rows between minus one and one.** The chain and the step's own
-  constructor said standard where the value a new block starts with said midrange, so the same omission meant two
-  different things depending on which door it came through; it is written down once now, as
-  `NormaliseStep.DefaultScale`, and every door reads it. No pipeline file changes meaning: a file always writes the
-  scale it was given, and one that leaves the key out is refused rather than defaulted. What changes is what new code
-  means — `.Normalise("age", "fare")` and `scale => scale.Columns("age")` now land their rows between minus one and
-  one, which is what a network takes. A caller who wants the old behaviour names it: `.Normalise("age",
-  Scale.Standard)`. The one case no source diff shows is a caller who recompiles nothing and swaps the assembly: a
-  default is settled where the caller was compiled, so their omitted scale stays standard until they build again.
-
-- **`.Normalise(string, Scale, OutOfRange)` no longer defaults its scale.** `.Normalise("age")` now reaches the
-  overload that takes the columns and lands them where the pipeline says its features land; naming a scale is
-  unchanged. Nothing else about the signature moved.
-
 - **`IStepParameterVisitor<T>` has a fifteenth member.** A form, a schema or a reference page of your own that
   implements the interface gains `Visit(PartsParameter)`, the kind that holds the parts of a model. Nothing else about
   the interface changed, and no other kind moved.
 
 ### Added
-
-- **One line does one thing to many columns, and the kind is the method.**
-  `.Normalise(scale => scale.MidRange("age", "fare").Robust("volume"))` names a kind per group of columns, and
-  `.FillMissing(fill => fill.Median("age").Mean("trades"))`, `.FillNaN`, `.Reshape`, `.Cyclical`, `.ClipOutliers`,
-  `.TimeParts` and `.TimePartsAsNumbers` take the same shape. What reaches the declaration is one step a column, as
-  writing the verb once a column does, so the file, a notebook's blocks and every fit are unchanged — the line is a
-  door. What happens outside a learned range is said on the kind that can hold a value in one, and the kinds that land
-  their rows in no range have no method that offers the choice. A line that names no column is refused where it
-  stands. `Encode`, `Target` and `Ahead` keep the one-column door, each for a reason a test holds them to.
-
-- **Where the features land is said once: `.DefaultFeatures(Form)`.** Written above the split, where it holds for
-  every column alike: `Form.Signed` is between minus one and one, `Form.Unit` between nothing and one, and a column
-  that names its own kind keeps it. It decides what a scaling that names no kind is written as and how a moment on a
-  circle is written, and nothing of it reaches the file — each column is written as the kind that lands it there, so a
-  pipeline that says the range and one that names the kinds are the same text.
 
 - **A pipeline names the network it prepares its rows for: `.WithTorch(…)` and `.WithTensorflow(…)`.** Below the
   output, the chain says which network these rows train — `.Dense(16).Relu().Dense(1).Adam(0.01).BinaryCrossEntropy()
@@ -100,19 +127,6 @@ training it again from the file gives the same network, number for number.
   the passenger list trains, and its C# cell trains that one with `Train()` rather than writing a network of its own.
 
 ### Changed
-
-- **A row divided by its own size is worked out around the largest value in it.** The length of a row squares its
-  values, and a small enough value squares to nothing while a large one squares to infinity: a row of 1e-160 came back
-  with its length out by a relative 5.6e-6, and a row of 1e200 came back as noughts. The sizes are scaled by the
-  largest value in the row first, as every library that measures a length does, so what the step declares of the
-  columns it writes — between minus one and one — holds for every row there is. A row of ordinary numbers comes back
-  exactly as it did.
-
-- **A gap in a column a feature was worked out from is refused with the column it came from.** The features are added
-  above the split and the fills stand below it, so a sum of two columns one of which has a gap is itself a gap, and
-  filling what it was made from afterwards does not reach back into it. The handover now names the columns the feature
-  was worked out from and says to settle those rows above the step that works it out, rather than saying only that a
-  gap is a gap.
 
 - **The networks sample declares the passenger list's network in the chain.** Its other two walked networks — a price
   five days on, a day's bikes hour by hour — are still written as code, so both doors stand side by side in one
