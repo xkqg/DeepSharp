@@ -1,7 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using DeepSharp.Pipelines;
 using DeepSharp.Verso.Notebooks;
 
 namespace DeepSharp.Tests.Notebooks;
@@ -19,8 +18,8 @@ public class LearnerBlockTests
     [Fact]
     public void ABlockNamingALearner_OffersTheOtherLearnersAsItsStage()
     {
-        var network = (IPipelineStep)NotebookVerbs.Catalog().ReadStep(NotebookVerbs.Catalog().Describe("learn.network").Template);
-        var tree = (IPipelineStep)NotebookVerbs.Catalog().ReadStep(NotebookVerbs.Catalog().Describe("learn.ml").Template);
+        var network = NotebookVerbs.Catalog().ReadStep(NotebookVerbs.Catalog().Describe("learn.network").Template);
+        var tree = NotebookVerbs.Catalog().ReadStep(NotebookVerbs.Catalog().Describe("learn.ml").Template);
 
         Assert.Equal(network.ActingCapability(), tree.ActingCapability());
         Assert.Equal(network.Stage(), tree.Stage());

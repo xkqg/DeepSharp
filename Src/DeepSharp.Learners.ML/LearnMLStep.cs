@@ -75,11 +75,14 @@ public sealed record LearnMLStep : IPipelineStep<LearnMLStep>, INamesTheLearner,
 
     /// <inheritdoc />
     public static StepParameters<LearnMLStep> Parameters { get; } = new StepParameters<LearnMLStep>()
-        .With(TrainerKey, step => (IReadOnlyList<PartDeclaration>)[step.Trainer])
+        .With(TrainerKey, step => One(step.Trainer))
         .With(SeedKey, step => step.Seed);
 
     /// <inheritdoc />
     public string Verb => Name;
+
+    // The one part a key holds, as the parameter that writes it takes them: a list of one.
+    private static IReadOnlyList<PartDeclaration> One(PartDeclaration part) => [part];
 
     /// <inheritdoc />
     /// <remarks>Numbers of any size, as a tree takes them: a step that only scales a feature is left out of the run.</remarks>
