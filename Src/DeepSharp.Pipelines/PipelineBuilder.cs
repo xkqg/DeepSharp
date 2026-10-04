@@ -302,6 +302,26 @@ public sealed class PipelineBuilder
     /// </remarks>
     public PipelineBuilder DropGaps(params string[] columns) => Add(new DropGapsStep(columns));
 
+    /// <summary>Settles the gaps in a column, with a value no row decided.</summary>
+    /// <param name="column">The column with gaps in it.</param>
+    /// <param name="strategy">What goes in them: <see cref="With.Zero"/>, <see cref="With.Constant"/> or <see cref="With.Refuse"/>.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// Here, where the features are worked out, because nothing about the value came from the rows: a feature worked out
+    /// after it is worked out from settled columns rather than inheriting their gaps. What a fill learns from the
+    /// training rows is the other half, and it stands below the split.
+    /// </remarks>
+    public PipelineBuilder SettleGaps(string column, FillStrategy strategy = default) =>
+        Add(new SettleGapsStep(column, strategy));
+
+    /// <summary>Settles the gaps of many columns, each the way it is named.</summary>
+    /// <param name="gaps">The line: a kind, and the columns it holds for.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentNullException">There is no line.</exception>
+    /// <exception cref="ArgumentException">The line names no column, so it declares nothing.</exception>
+    /// <remarks>What reaches the declaration is one step a column, exactly as writing the verb once a column does.</remarks>
+    public PipelineBuilder SettleGaps(Action<SettleLine> gaps) => Many(gaps, nameof(gaps));
+
     /// <summary>Says where the features of this pipeline land, for every scaling that names no kind.</summary>
     /// <param name="range">
     /// Between minus one and one, <see cref="Form.Signed"/>, which is where a network takes its features; or between

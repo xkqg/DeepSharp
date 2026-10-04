@@ -49,6 +49,7 @@ public class PipelineTextTests
         ("read.json", 1),
         ("read.parquet", 1),
         ("read.rows", 1),
+        ("settle.gaps", 6),
         ("split.atRandom", 2),
         ("split.byTime", 2),
         ("split.stratified", 2),

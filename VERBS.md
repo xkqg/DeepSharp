@@ -21,7 +21,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`feature.cyclical`](#featurecyclical) | Writes a moment in time as a place on a circle, so that the ends of a cycle meet. |
 | [`feature.indicator`](#featureindicator) | Adds a market indicator worked out from the rows that came before: an average, a strength index, a band. |
 | [`feature.timeParts`](#featuretimeparts) | Takes a moment in time apart into the pieces people reason with: an hour, a weekday, a month. |
-| [`fill.missing`](#fillmissing) | Fills the gaps in a column the named way, with a value learned from the training rows, and marks where they were. |
+| [`fill.missing`](#fillmissing) | Fills the gaps in a column the named way, below the split, and marks where they were. A value no row decided is settle.gaps, above it. |
 | [`fill.nan`](#fillnan) | Deals with a value that is not a number a model can use; refusing it is the default. |
 | [`learn.network`](#learnnetwork) | Names the network this pipeline is declared for: its layers, what moves them, what judges them, when the run stops and the engine it runs on. |
 | [`maths`](#maths) | Pulls a column into another shape by arithmetic that learns nothing: a logarithm, a root, a reciprocal. |
@@ -34,6 +34,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`read.json`](#readjson) | Reads the rows from a JSON file holding an array of records, one object a row, every value as the file writes it. |
 | [`read.parquet`](#readparquet) | Reads the rows from an Apache Parquet file, which says what each of its columns holds. |
 | [`read.rows`](#readrows) | Takes rows that are handed in rather than opened: a table already in memory, a reader over a query. |
+| [`settle.gaps`](#settlegaps) | Settles the gaps in a column with a value no row decided, so a feature worked out from it is not a gap. |
 | [`split.atRandom`](#splitatrandom) | Divides the rows at random, the same way every time for the same seed. |
 | [`split.byTime`](#splitbytime) | Divides the rows by when they happened: the earliest to learn from, the latest to be measured on. |
 | [`split.stratified`](#splitstratified) | Divides the rows at random while keeping the mixture of one column the same in every part. |
@@ -286,7 +287,7 @@ Means what it says from version 1 of the file.
 
 ## `fill.missing`
 
-Fills the gaps in a column the named way, with a value learned from the training rows, and marks where they were.
+Fills the gaps in a column the named way, below the split, and marks where they were. A value no row decided is settle.gaps, above it.
 
 ```json
 {"step":"fill.missing","column":"column","with":"median"}
@@ -299,7 +300,7 @@ Fills the gaps in a column the named way, with a value learned from the training
 | `refuseAbove` | a share, from nought to one; left out, there is none | left out |
 
 - **`column`**: The column with gaps in it.
-- **`with`**: What goes in the gaps, learned from the training rows: mean, median, zero, previous, constant, or refuse.
+- **`with`**: What goes in the gaps: the mean or the median of the training rows, the value before the gap, nought, a constant, or refuse.
 - **`refuseAbove`**: The share of the training rows that may be gaps and still be filled. Above it the column is not filled, and the column that says where the gaps were speaks for it. Left out, every share is filled.
 
 Means what it says from version 1 of the file.
@@ -529,6 +530,24 @@ Takes rows that are handed in rather than opened: a table already in memory, a r
 - **`description`**: What the rows are, for whoever reads the file later.
 
 Means what it says from version 1 of the file.
+
+## `settle.gaps`
+
+Settles the gaps in a column with a value no row decided, so a feature worked out from it is not a gap.
+
+```json
+{"step":"settle.gaps","column":"column","with":"zero"}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `column` | the name of a column holding a number or a whole number | `"column"` |
+| `with` | one of `"zero"`, `"refuse"` or `{"kind": "constant", "value": a number}` | `"zero"` |
+
+- **`column`**: The column with gaps in it.
+- **`with`**: What goes in the gaps, decided by nobody but you: zero, a constant, or refuse for a column that is not supposed to have gaps at all.
+
+Means what it says from version 6 of the file.
 
 ## `split.atRandom`
 

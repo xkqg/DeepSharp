@@ -119,11 +119,12 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// meaning it has now, rather than read as something it never meant. It goes up too when a file can say
     /// something an older library would not understand — as the schema did when a timestamp column began to say how
     /// its moments are written, as a run for a learner did when it began to write down the steps it left out, and as a
-    /// declaration did when it began to name the learner it is written for — so that library names the newer version
-    /// instead of the word it does not know. A property rather than a constant, so a package compiled against this
-    /// version reads the number the running library has.
+    /// declaration did when it began to name the learner it is written for, and as settling a gap above the split did
+    /// when it became a verb of its own — so that library names the newer version instead of the word it does not know.
+    /// A property rather than a constant, so a package compiled against this version reads the number the running
+    /// library has.
     /// </remarks>
-    public static int Version => 5;
+    public static int Version => 6;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;

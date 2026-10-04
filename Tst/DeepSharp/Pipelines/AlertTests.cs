@@ -13,6 +13,20 @@ namespace DeepSharp.Tests.Pipelines;
 /// </summary>
 public class AlertTests
 {
+    [Fact]
+    public void TheGapsOfANumberColumn_AreAnsweredByBothVerbs_EachWhereItStands()
+    {
+        // Two verbs answer a gap and they stand in different halves of the pipeline, so the one sentence says which is
+        // which: settling puts in a value no row decided and may stand where the features are worked out, filling learns
+        // its value from the training rows and stands below the split.
+        var alert = Assert.Single(Passengers().Alerts, each => each.Column == "age" && each.Says.Contains("rows are gaps", StringComparison.Ordinal));
+
+        Assert.Contains("settle.gaps", alert.Says, StringComparison.Ordinal);
+        Assert.Contains("fill.missing", alert.Says, StringComparison.Ordinal);
+        Assert.Contains("above", alert.Says, StringComparison.Ordinal);
+        Assert.Contains("below", alert.Says, StringComparison.Ordinal);
+    }
+
     private static string Titanic => Repository.Data("titanic.csv");
 
     // Every column of the published file, as the proposal of its kinds proposes it, profiled above a split that trains on
@@ -128,7 +142,7 @@ public class AlertTests
         }
 
         // A gap among words is answered by the encoder, which makes it no category and marks it; among numbers by a fill.
-        Assert.Contains(profile.Alerts, alert => alert.Answer == AlertAnswer.Step("encode.categories", "deck") && alert.Says.EndsWith("are gaps.", StringComparison.Ordinal));
+        Assert.Contains(profile.Alerts, alert => alert.Answer == AlertAnswer.Step("encode.categories", "deck") && alert.Says.Contains("are gaps.", StringComparison.Ordinal));
         Assert.Contains(profile.Alerts, alert => alert.Answer == AlertAnswer.Step("fill.missing", "age"));
     }
 

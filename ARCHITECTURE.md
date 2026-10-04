@@ -50,6 +50,8 @@ Src/DeepSharp.Pipelines/          the data side
                                     what is worked out from a single row
     FillStrategy.cs FillNaN.cs Scaling.cs Encoding.cs Outliers.cs DropColumns.cs DropWarmUp.cs
                                     what learns, and what takes rows or columns away
+    Settling.cs Marking.cs          settling a gap with a value no row decided, above the split; and the one column
+                                    that says where the gaps were, named and written in one place
     Evidence.cs Report.cs Measures.cs PredictionsDocument.cs
                                     the profile and the correlation a run is declared to produce, the report of what a
                                     trained model is held to, how it measured, and the predictions it measured as text
@@ -132,9 +134,9 @@ in `.Tests`, since the engine passes over an assembly named so.
 
 A design is named after whatever drives it, and here that is **the pipeline**.
 
-Every piece of work follows one sequence: collect the data, settle its rows and their gaps, add the features,
-split into train, validation and test, fill what is still missing and normalise — those two below the split, since
-they learn — build the model, and check it against data it has never seen. The sequence is not the interesting part — everyone does those steps. What matters is that the
+Every piece of work follows one sequence: collect the data, choose its rows and settle the gaps that would travel into a
+feature, add the features, split into train, validation and test, fill what is still missing and normalise — those two
+below the split, since they learn — build the model, and check it against data it has never seen. The sequence is not the interesting part — everyone does those steps. What matters is that the
 whole of it is **declared in advance as one artefact and then replayed**, instead of being assembled again
 at each stage by whoever happens to be writing that stage.
 
@@ -355,9 +357,10 @@ and it does not work: Verso picks a formatter by the types it names, and a cell'
 ### The rule that gives it meaning
 
 **Anything that learns from the data is fitted on the training split alone, and then replayed unchanged.**
-A mean and a standard deviation, the value that fills a gap, the categories an encoder knows, the bounds of
-a clip — each is a parameter, each is learned once, and each is applied identically to validation, to test,
-and to data arriving in production long afterwards.
+A mean and a standard deviation, the value a fill learns for a gap, the categories an encoder knows, the bounds
+of a clip — each is a parameter, each is learned once, and each is applied identically to validation, to test, and to
+data arriving in production long afterwards. A value no row decided — a nought, a number you chose — is not one of
+them, and that is what lets `settle.gaps` stand above the split.
 
 Break it and nothing goes red. A mean computed over the whole set gives a model that scores beautifully in
 validation and disappoints the day it meets real data, because the validation rows had already been allowed
@@ -403,8 +406,9 @@ further upstream. They deserve different verbs and different defaults:
 
 Dropping the row is not among the strategies, though it was once meant to be. A strategy stands below the split,
 and dropping rows there would quietly change how many each part holds — the shares the split promised. So it is
-a verb of its own, `DropGaps`, that stands above the split beside `DropWarmUp`: the rows are settled first and
-divided afterwards. Leaving a column out is a verb too, `Drop`, anywhere below the schema.
+a verb of its own, `DropGaps`, that stands above the split beside `DropWarmUp`: the rows are chosen first and divided
+afterwards. `SettleGaps` stands up there as well and keeps the row instead, putting in a value no row decided. Leaving a
+column out is a verb too, `Drop`, anywhere below the schema.
 
 The strategy is a named value rather than a flag. A boolean parameter says nothing at the place it is
 written — `Fill("trades", true, false)` has to be read with the signature open beside it — whereas the
@@ -420,12 +424,13 @@ training values became the centre a scale was built around. The fit names `fill.
 with it, and the handover refuses one as well.
 
 A column worked out from another carries that column's gaps, and filling what it was made from does not reach back
-into it. The features are added above the split and the fills stand below it, because what fills a gap is learned from
-the training rows alone — even a nought is, since a fill writes down how many gaps the training rows held and refuses
-the column when that share is above the limit it was given. So a sum of two columns, one of which has a gap, is itself
-a gap, and the way to have it otherwise is to settle those rows above the step that works the feature out: `DropGaps`
-and `DropWarmUp` stand there and learn nothing. The handover says so when it meets one, naming the columns the feature
-was worked out from rather than only that a gap is a gap.
+into it: the features are added above the split and the fills stand below it, because what a fill puts in a gap is
+learned from the training rows. So a sum of two columns, one of which has a gap, is itself a gap — unless the gap is
+settled where the features are worked out, which is what `settle.gaps` is for. It puts in a value no row decided, so
+nothing of validation or test taught it anything; it writes nothing into the fitted half, because it learned nothing;
+and a feature worked out after it is worked out from settled columns. `DropGaps` and `DropWarmUp` stand there too and
+take the rows out instead. The handover says all of this when it meets a gap it cannot hand over, naming the columns
+the feature was worked out from rather than only that a gap is a gap.
 
 ### The declaration is a file, and the chain can write it
 
@@ -438,7 +443,7 @@ builder existed.
 
 ```
 {
-  "version": 5,
+  "version": 6,
   "declaration": [ { "step": "read.csv", "path": "titanic.csv" }, … ],
   "fitted": [
     { "step": "split.stratified", "prefix": "9e27e6…",

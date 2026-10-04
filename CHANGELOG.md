@@ -3,6 +3,44 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.2]
+
+Where a gap is settled before the features are worked out. A column derived from one with a gap is itself a gap, and
+what fills a gap is learned from the training rows, so the fill stands below the split and cannot reach back into a
+feature worked out above it. Settling is the other half of the same work: a nought, a number you choose, or a refusal —
+none of them a value any row decided — so it stands where the features are, and a feature worked out after it is worked
+out from settled columns. It learns nothing, so it writes nothing into the fitted half of the file.
+
+### Upgrading from 0.6.1
+
+- **A file this version writes names version 6, and every DeepSharp before it refuses that file whole** — whether or not
+  it uses the new verb, because the version is stamped by whoever writes. A model trained on 0.6.2 cannot be served by
+  0.6.1. Every file written by 0.2 through 0.6.1 keeps reading exactly as it did, and a trained model keeps matching its
+  pipeline, because the digest a model is bound by leaves the version out.
+
+- **The published schema is served from this repository's main branch**, so between this commit and the release an
+  editor on 0.6.1 is told that version 6 and `settle.gaps` are valid while the installed reader still refuses them.
+
+### Added
+
+- **`settle.gaps`, and `.SettleGaps` beside `.DropGaps`.** One column at a time, or one line for many:
+  `.SettleGaps(gaps => gaps.Zero("age").Constant(-1, "fare"))`. The kinds are the ones no row decides — `Zero`,
+  `Constant`, `Refuse` — and the ways a fill learns from the training rows are not among them: a mean or a median comes
+  from the rows, and carrying the value before a gap forward reads them in their order, so both stay below the split
+  where `.FillMissing` offers them. The step writes no entry into the fitted half, because it learned nothing; a replay
+  does what the run did by doing it again.
+
+- **The column that says where the gaps were is named and written in one place.** Three verbs write it — filling a gap,
+  settling one, and encoding a column whose cell was empty — and each said the name for itself until the third made it a
+  sentence written three times. The name a reader sees does not change.
+
+- **A gap the profile finds names both verbs and where each stands**, in the one sentence it already said.
+
+### Changed
+
+- **The pipeline file is at version 6.** Only the new verb is new in it: no verb that shipped before means anything else
+  than it did, and the committed schema and verb reference are projected from the steps as they always were.
+
 ## [0.6.1]
 
 Where one line does one thing to many columns. Every verb whose first word is a column — the scalings, the gaps, the

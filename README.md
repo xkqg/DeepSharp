@@ -18,6 +18,12 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.6.2 settles a gap where the features are worked out.** A column derived from one with a gap is itself a gap, and
+filling that column afterwards does not reach back into it — because what fills a gap is learned from the training rows,
+and so stands below the split. `.SettleGaps(gaps => gaps.Zero("trades"))` is the other half: a nought, a number you
+choose, or a refusal, none of them a value any row decided, so it stands where the features are and a feature worked out
+after it is worked out from settled columns. It writes nothing down, because there is nothing it learned.
+
 **0.6.1 gives every per-column verb one line.** `.Normalise(scale => scale.MidRange("age", "fare").Robust("volume"))`
 names a kind and the columns it holds for, and the gaps, the reshapings, the moments on a circle, the clipped extremes
 and the pieces of a moment take the same shape; `.DefaultFeatures(Form)` says once, above the split, where the features
@@ -57,11 +63,12 @@ var pipeline = Pdd.Create()
         .Number("close")
         .Optional("trades", ColumnKind.Number))              // a column that may have gaps
     .OrderBy("timestamp")
-    .SplitByTime("timestamp", train: 0.70, validation: 0.15, gap: 1) // test is the rest
+    .SettleGaps(gaps => gaps.Zero("trades"))                 // the gaps first: a quiet day traded nothing
+    .AddFeature("turnover", "close", Arithmetic.Times, "trades") // then the features, worked out from settled columns
+    .SplitByTime("timestamp", train: 0.70, validation: 0.15, gap: 1) // then the split: test is the rest
     .Ahead("close", 1, AheadAs.Return)                       // the answer: tomorrow's return
-    .FillMissing(fill => fill.Mean("trades"))                // only offered after the split
-    .Normalise(scale => scale                                // one line, a kind a column
-        .Columns("close")                                    // where this pipeline's features land: -1 to 1 by default
+    .Normalise(scale => scale                                // and below it what learns from the training rows alone
+        .Columns("close", "turnover")                        // where this pipeline's features land: -1 to 1 by default
         .MaxAbs("trades"))                                   // a count, divided by its largest, so a quiet day stays nought
     .Drop("timestamp")
     .Report(report => report.Measure(Metric.Rmse).On(Part.Validation, Part.Test).As(Shown.Numbers))

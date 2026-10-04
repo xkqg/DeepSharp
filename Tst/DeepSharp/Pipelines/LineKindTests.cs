@@ -64,7 +64,7 @@ public class LineKindTests
         // The theories are only worth anything if they find every line, so the set is pinned: a line added or taken
         // away says so here first.
         Assert.Equal(
-            ["BoundsLine", "CategoryPartLine", "GapLine", "MathsLine", "NotANumberLine", "NumberPartLine", "PeriodLine", "ScaleBuilder"],
+            ["BoundsLine", "CategoryPartLine", "GapLine", "MathsLine", "NotANumberLine", "NumberPartLine", "PeriodLine", "ScaleBuilder", "SettleLine"],
             Lines().Select(line => line.Name).Order(StringComparer.Ordinal));
     }
 

@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 5
+      "maximum": 6
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -62,6 +62,7 @@
             "read.json",
             "read.parquet",
             "read.rows",
+            "settle.gaps",
             "split.atRandom",
             "split.byTime",
             "split.stratified",
@@ -464,6 +465,21 @@
           },
           "then": {
             "$ref": "#/$defs/read.rows"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "settle.gaps"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/settle.gaps"
           }
         },
         {
@@ -1341,7 +1357,7 @@
       "additionalProperties": false
     },
     "fill.missing": {
-      "description": "Fills the gaps in a column the named way, with a value learned from the training rows, and marks where they were.",
+      "description": "Fills the gaps in a column the named way, below the split, and marks where they were. A value no row decided is settle.gaps, above it.",
       "type": "object",
       "properties": {
         "step": {
@@ -1353,7 +1369,7 @@
           "description": "The column with gaps in it."
         },
         "with": {
-          "description": "What goes in the gaps, learned from the training rows: mean, median, zero, previous, constant, or refuse.",
+          "description": "What goes in the gaps: the mean or the median of the training rows, the value before the gap, nought, a constant, or refuse.",
           "anyOf": [
             {
               "enum": [
@@ -2257,6 +2273,57 @@
       ],
       "additionalProperties": false
     },
+    "settle.gaps": {
+      "description": "Settles the gaps in a column with a value no row decided, so a feature worked out from it is not a gap.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "settle.gaps"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column with gaps in it."
+        },
+        "with": {
+          "description": "What goes in the gaps, decided by nobody but you: zero, a constant, or refuse for a column that is not supposed to have gaps at all.",
+          "anyOf": [
+            {
+              "enum": [
+                "zero",
+                "refuse"
+              ]
+            },
+            {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "constant"
+                  ]
+                },
+                "value": {
+                  "type": "number",
+                  "minimum": -1.7976931348623157E+308,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "with"
+      ],
+      "additionalProperties": false
+    },
     "split.atRandom": {
       "description": "Divides the rows at random, the same way every time for the same seed.",
       "type": "object",
@@ -2572,6 +2639,7 @@
                       "evidence.report",
                       "learn.network",
                       "order.by",
+                      "settle.gaps",
                       "split.atRandom",
                       "split.byTime",
                       "split.stratified",
@@ -2604,7 +2672,8 @@
                   "not": {
                     "enum": [
                       "evidence.report",
-                      "learn.network"
+                      "learn.network",
+                      "settle.gaps"
                     ]
                   }
                 }
@@ -2630,7 +2699,34 @@
                 "step": {
                   "not": {
                     "enum": [
-                      "learn.network"
+                      "learn.network",
+                      "settle.gaps"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 6
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "declaration": {
+            "items": {
+              "properties": {
+                "step": {
+                  "not": {
+                    "enum": [
+                      "settle.gaps"
                     ]
                   }
                 }

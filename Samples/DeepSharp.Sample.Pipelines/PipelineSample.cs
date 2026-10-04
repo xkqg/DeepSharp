@@ -117,6 +117,10 @@ public static class PipelineSample
             // what is left. So this says fifteen too — and nothing can ask for more rows than there are.
             .SplitStratified("survived", train: 0.70, validation: 0.15)
             // ---- nothing above this line is allowed to learn from the data ----
+            // The median of the ages is learned from the training rows, so the fill stands here. Nothing is worked out
+            // from 'age' above the line; if something were, its gaps would travel into it, and the answer would be to
+            // settle them where the features are worked out, with a value no row decided — which is what SettleGaps is
+            // for, and which writes nothing into the fitted half because it learned nothing.
             .FillMissing(fill => fill.Median("age"))
             .EncodeCategories()
             .Normalise("age", "fare", "family")

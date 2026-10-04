@@ -27,6 +27,7 @@ public class FittedVocabularyTests
         { "normalise", [], [], ["centre", "spread"] },
         { "normalise.power", [], [], ["centre", "lambda", "spread"] },
         { "encode", [], [], ["categories"] },
+        { "encode.categories", [], [], ["c"] },
         { "fill.missing", ["gaps"], [], ["value"] },
         { "fill.missing.refused", ["gaps", "share"], ["filled"], [] },
         { "fill.nan", ["notNumbers"], [], [] },
@@ -79,6 +80,40 @@ public class FittedVocabularyTests
                 Shown(step, table, Apart(values, [name])) != Shown(step, table, values),
                 $"'{name}' was taken out of what '{fit}' wrote down, and the replay came out the same, so nothing reads it.");
         }
+    }
+
+    [Fact]
+    public void EveryStepThatLearns_HasItsWordsPinnedHere()
+    {
+        // The theories above are only worth anything if they cover every step that writes into the fitted half, so the
+        // set is taken from the catalog rather than typed: a verb that learns and is not exercised here says so the day
+        // it is registered, and a step that lied about what it learned would be measured by nothing.
+        var learns = Shipped.Catalog().Descriptions
+            .Select(description => Shipped.Catalog().ReadStep(description.Template))
+            .OfType<IFittedStep>()
+            .Select(step => ((IPipelineStep)step).Verb)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var exercised = new[]
+            {
+                "normalise", "normalise.power", "encode", "encode.categories", "fill.missing", "fill.missing.refused",
+                "fill.nan", "fill.nan.mean", "clip",
+            }
+            .Select(fit => ((IPipelineStep)Of(fit).Step).Verb)
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.Equal(learns.Order(StringComparer.Ordinal), exercised.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void NoStepBothLearnsAndOnlyAddsColumns()
+    {
+        // The two capabilities answer the same question differently: one is fitted on the training rows and replayed, the
+        // other does the same thing wherever it stands. A step that declared both would be placed by the rule as a
+        // learner and acted on as neither.
+        Assert.All(
+            Shipped.Catalog().Descriptions.Select(description => Shipped.Catalog().ReadStep(description.Template)),
+            step => Assert.False(step is IFittedStep and IAddsColumns, $"'{step.Verb}' says it both learns and only adds columns."));
     }
 
     [Fact]
@@ -153,6 +188,7 @@ public class FittedVocabularyTests
         "normalise" => (new NormaliseStep("a"), Numbers(1, 2, 3, 4, 10)),
         "normalise.power" => (new NormaliseStep("a", Scale.Power), Numbers(1, 2, 3, 4, 10)),
         "encode" => (new EncodeStep("c"), Words("x", "y", "x")),
+        "encode.categories" => (new EncodeCategoriesStep(), Words("x", "y", "x")),
         "fill.missing" => (FillMissingStep.Of("a", With.Median), Numbers(1, 2, null, 4, 10)),
         "fill.missing.refused" => (FillMissingStep.Of("a", With.Median, 0.10), Numbers(1, 2, null, 4, 10)),
         "fill.nan" => (new FillNaNStep("a"), Numbers(1, 2, 3, 4, 10)),

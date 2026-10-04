@@ -31,7 +31,7 @@ public class PipelineSampleTests
         Assert.Matches(@"  alive: .* so it hands a model the answer\. Answered by leaving it out\.", said);
         Assert.Matches(@"  class: .* so it says again what pclass says\. Answered by leaving it out\.", said);
         Assert.Matches(@"  fare: 12 of 623 rows hold 0, .* Answered by saying in the schema that 0 stands for a gap\.", said);
-        Assert.Contains("  age: 133 of 623 rows are gaps. Answered by fill.missing.", said, StringComparison.Ordinal);
+        Assert.Matches(@"  age: 133 of 623 rows are gaps\. settle\.gaps .* fill\.missing .* Answered by fill\.missing\.", said);
         Assert.Contains("=== Titanic ===", said, StringComparison.Ordinal);
         Assert.Contains("=== Apple ===", said, StringComparison.Ordinal);
         // A scaling that names no kind lands the training rows between minus one and one, so age's centre is the middle

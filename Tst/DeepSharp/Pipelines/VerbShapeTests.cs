@@ -92,7 +92,7 @@ public class VerbShapeTests
         Assert.Equal(
             [
                 "Ahead", "ClipOutliers", "Cyclical", "Encode", "FillMissing", "FillNaN", "Normalise", "Reshape",
-                "SplitByTime", "SplitStratified", "Target", "TimeParts", "TimePartsAsNumbers",
+                "SettleGaps", "SplitByTime", "SplitStratified", "Target", "TimeParts", "TimePartsAsNumbers",
             ],
             OfTheShape().Select(each => each.Verb).Order(StringComparer.Ordinal));
     }

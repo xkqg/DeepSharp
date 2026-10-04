@@ -44,9 +44,6 @@ public sealed record EncodeStep : IFittedStep, IPipelineStep<EncodeStep>, IDescr
     // What the column kept for a category the training rows never held is named after, beside the column's own name.
     private const string Reserved = "other";
 
-    // What the column marking where the cell was empty is named after, beside the column's own name.
-    private const string Marked = "was_missing";
-
     private static readonly ColumnParameter ColumnKey = new(
         "column", "The column of words to write down as numbers.", "column", ColumnKinds.Any);
 
@@ -84,7 +81,7 @@ public sealed record EncodeStep : IFittedStep, IPipelineStep<EncodeStep>, IDescr
     public Unseen Unseen { get; }
 
     /// <summary>The column written beside an encoded one, saying where the cell was empty.</summary>
-    public string MarkerColumn => $"{Column}_{Marked}";
+    public string MarkerColumn => Column.Marked;
 
     /// <inheritdoc />
     /// <remarks>
@@ -178,10 +175,10 @@ public sealed record EncodeStep : IFittedStep, IPipelineStep<EncodeStep>, IDescr
                 + "unseen: refuse, which keeps no such column, or with as: ordinal, which writes each category as its place.");
         }
 
-        if (categories.Contains(Marked, StringComparer.Ordinal))
+        if (categories.Contains(Marking.WasMissing, StringComparer.Ordinal))
         {
             throw new InvalidOperationException(
-                $"'{Column}' holds the category '{Marked}' on its training rows, and written one column per category it would take "
+                $"'{Column}' holds the category '{Marking.WasMissing}' on its training rows, and written one column per category it would take "
                 + $"'{MarkerColumn}', the column that marks where the cell was empty. Declare the encoder with as: ordinal, which "
                 + "writes each category as its place.");
         }

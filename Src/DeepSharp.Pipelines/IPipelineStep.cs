@@ -106,10 +106,12 @@ public interface IActsInAWalk : IPipelineStep
 /// A step that learns something from the training rows and then replays what it learned.
 /// </summary>
 /// <remarks>
-/// A mean, the value that fills a gap, the categories an encoder knows, the bounds of a clip — each is a
+/// A mean, the value a fill learns for a gap, the categories an encoder knows, the bounds of a clip — each is a
 /// parameter learned from the training rows alone. Saying so in the type is what lets one rule, in one
 /// place, refuse such a step wherever it arrives from: the chain, the extension point, a hand-written file or
-/// a notebook. A step that is arithmetic on a single row does not implement this and needs no split before it.
+/// a notebook. A step that is arithmetic on a single row does not implement this and needs no split before it, and
+/// neither does one that puts in a value no row decided — <see cref="SettleGapsStep"/> settles a gap that way and
+/// implements <see cref="IAddsColumns"/> instead.
 /// <para>
 /// Fitting and applying are two separate acts on purpose. The fit sees the training rows and nothing else;
 /// applying sees every row and learns nothing, so validation, test and a row arriving in production a year

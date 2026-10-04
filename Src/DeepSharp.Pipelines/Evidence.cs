@@ -380,7 +380,7 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
     {
         if (column.Gaps > 0)
         {
-            yield return One(column, $"{column.Gaps} of {column.Rows} rows are gaps.", AlertAnswer.Step(GapStep(column.Kind), column.Name));
+            yield return One(column, $"{column.Gaps} of {column.Rows} rows are gaps. {GapAnswer(column.Kind)}", AlertAnswer.Step(GapStep(column.Kind), column.Name));
         }
 
         if (column.NotFinite > 0)
@@ -420,6 +420,17 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
     }
 
     private static ProfileAlert One(ColumnProfile column, string says, AlertAnswer answer) => new([column.Name], says, answer);
+
+    // Where the verbs that answer a gap stand, for the kinds that have two of them: settling puts in a value no row
+    // decided, so it may stand where the features are worked out; filling learns its value from the training rows, so it
+    // stands below the split. A column worked out from one with a gap is a gap, and only the first reaches back.
+    private static string GapAnswer(ColumnKind kind) =>
+        ColumnKinds.Fillable.Contains(kind)
+            ? "settle.gaps puts in a value no row decided, above the split where the features are worked out; "
+              + "fill.missing learns one from the training rows, below it."
+            : kind is ColumnKind.Category or ColumnKind.Text
+                ? "The encoder makes a gap no category and marks it."
+                : "drop.gaps takes those rows out, above the split, where every part loses them alike.";
 
     // The step that answers a gap, by the rule each step keeps for the kinds it takes: a fill where it can fill, the
     // encoder among words, which makes a gap no category and marks it, and dropping the rows otherwise.

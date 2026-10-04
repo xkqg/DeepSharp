@@ -57,6 +57,7 @@ public sealed class StepCatalog
         catalog.Register<EncodeCategoriesStep>();
         catalog.Register<OrderByStep>();
         catalog.Register<DropGapsStep>();
+        catalog.Register<SettleGapsStep>();
         catalog.Register<ProfileStep>();
         catalog.Register<CorrelationStep>();
         catalog.Register<ReportStep>();

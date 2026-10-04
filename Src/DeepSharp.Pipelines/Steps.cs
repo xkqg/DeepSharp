@@ -319,7 +319,7 @@ public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingS
 
     private static readonly FillStrategyParameter WithKey = new(
         "with",
-        "What goes in the gaps, learned from the training rows: mean, median, zero, previous, constant, or refuse.",
+        "What goes in the gaps: the mean or the median of the training rows, the value before the gap, nought, a constant, or refuse.",
         With.Median,
         ["mean", "median", "zero", "previous", "constant", "refuse"])
     {
@@ -376,7 +376,7 @@ public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingS
     /// Always, and not behind a flag. Filling destroys the difference between "absent" and "the value
     /// happened to be that" permanently, so the difference is written down before it goes.
     /// </remarks>
-    public string MarkerColumn => $"{Column}_was_missing";
+    public string MarkerColumn => Column.Marked;
 
     /// <inheritdoc />
     /// <remarks>
@@ -402,7 +402,7 @@ public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingS
     public static string Name => "fill.missing";
 
     /// <inheritdoc />
-    public static string Purpose => "Fills the gaps in a column the named way, with a value learned from the training rows, and marks where they were.";
+    public static string Purpose => "Fills the gaps in a column the named way, below the split, and marks where they were. A value no row decided is settle.gaps, above it.";
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -444,16 +444,14 @@ public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingS
         ArgumentNullException.ThrowIfNull(fitted);
 
         var column = table[Column];
-        var marker = new Column<double>(
-            MarkerColumn, ColumnKind.Number,
-            Enumerable.Range(0, table.RowCount).Select(row => (double?)(column.IsMissing(row) ? 1 : 0)));
+
+        table.Marks(Column);
 
         // Decided when the pipeline was fitted: too many of the training rows were gaps, so the column is not
         // filled at all, and the marker speaks for it.
         if (fitted.Numbers.TryGetValue("filled", out var filled) && filled == 0)
         {
             table.Remove(Column);
-            table.Put(marker);
 
             return;
         }
@@ -472,8 +470,6 @@ public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingS
                 throw new InvalidOperationException(
                     $"'{Column}' holds {column.Kind.ToString().ToLowerInvariant()}, and a gap in it is not filled with a number.");
         }
-
-        table.Put(marker);
     }
 
     /// <summary>Reads this step back out of a file, in the form its strategy takes.</summary>

@@ -157,7 +157,7 @@ public class StepParameterContractTests
         // New in the second version: dropping columns, encoding every category, putting rows in order. Changed
         // in it: the three splits, which place a row by what it says rather than where it stands, and the
         // warm-up drop, which reads the declared order rather than the file's. New in the third: the report of
-        // what a trained model is measured by.
+        // what a trained model is measured by. New in the sixth: settling a gap where the features are worked out.
         Dictionary<string, int> newer = new(StringComparer.Ordinal)
         {
             ["drop.columns"] = 2,
@@ -167,6 +167,7 @@ public class StepParameterContractTests
             ["evidence.profile"] = 2,
             ["evidence.report"] = 3,
             ["order.by"] = 2,
+            ["settle.gaps"] = 6,
             ["split.atRandom"] = 2,
             ["split.byTime"] = 2,
             ["split.stratified"] = 2,

@@ -60,6 +60,31 @@ public class DerivedGapTests
     }
 
     [Fact]
+    public void AColumnSettledAboveTheFeature_LeavesNoGapInIt_AndItsMarkerIsNeverOne()
+    {
+        // The answer the refusal points at: settle the gaps where the features are worked out, and the feature is worked
+        // out from settled columns. The column that says where the gaps were is added there too, and it is a measurement
+        // of every row — never a gap itself — so nothing it is made from can refuse a row.
+        var prepared = Pdd.Create()
+            .ReadCsv(Titanic)
+            .Declare(schema => schema
+                .Integer("survived", "sibsp", "parch")
+                .Optional("age", ColumnKind.Number))
+            .SettleGaps(gaps => gaps.Zero("age"))
+            .AddFeature("older", "age", Arithmetic.Plus, "sibsp")
+            .SplitStratified("survived", train: 0.70, validation: 0.15)
+            .Normalise("age", "older", "sibsp", "parch", "age_was_missing")
+            .Target("survived")
+            .Build()
+            .Run();
+
+        Assert.Equal(891, prepared.Table.RowCount);
+        Assert.NotEmpty(prepared.Batch(Part.Train).Features);
+        Assert.DoesNotContain(Enumerable.Range(0, prepared.Table.RowCount), prepared.Table["older"].IsMissing);
+        Assert.DoesNotContain(Enumerable.Range(0, prepared.Table.RowCount), prepared.Table["age_was_missing"].IsMissing);
+    }
+
+    [Fact]
     public void AFeatureWhoseColumnsAreFilledAboveIt_HandsOverWithoutAWord()
     {
         // The way to have it: the rows whose gaps nothing can answer are dropped above the split, where dropping does
