@@ -147,7 +147,7 @@ public class SettleGapsTests
 
         Assert.Equal(once.CountIn(Part.Train), again.CountIn(Part.Train));
         Assert.Equal(once.Table.Digest(), again.Table.Digest());
-        Assert.Equal(177, once.Table.NumbersOf("age_was_missing").Count(value => value!.Value == 1));
+        Assert.Equal(177, once.Table.NumbersOf("age_was_missing").Count(value => value is 1));
     }
 
     [Fact]
