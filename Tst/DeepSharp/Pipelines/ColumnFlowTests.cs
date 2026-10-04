@@ -394,6 +394,7 @@ public class ColumnFlowTests
             "feature.timeParts" => new TimePartsStep("when", [TimePart.Hour, TimePart.Season]),
             "feature.indicator" => new AddIndicatorStep("bands", Indicator.BollingerBands, ["b"], 3),
             "fill.missing" => FillMissingStep.Of("a", With.Median),
+            "scale.given" => new ScaleGivenStep("a", new KnownRange(0, 100)),
             "settle.gaps" => new SettleGapsStep("a", With.Zero),
             "fill.nan" => new FillNaNStep("a", With.Zero),
             "maths" => new MathsStep("b", Maths.Square, "b2"),

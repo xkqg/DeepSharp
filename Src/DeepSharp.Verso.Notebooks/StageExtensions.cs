@@ -28,6 +28,7 @@ internal static class StageExtensions
         [typeof(IDropsColumns)] = "clean",
         [typeof(ISplitStep)] = "split",
         [typeof(IFittedStep)] = "learned from the training rows",
+        [typeof(INamesTheLearner)] = "the learner",
         [typeof(IProducesEvidence)] = "evidence",
         [typeof(INamesTheMeasures)] = "evidence",
     };

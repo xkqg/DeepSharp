@@ -17,6 +17,9 @@
     <!-- A file's own text is escaped for a refusal by one internal rule, reached directly by its tests as the core
          library's own is. -->
     <InternalsVisibleTo Include="DeepSharp.Tests" />
+    <!-- The learner that writes its model beside the pipeline it was trained behind reads a file the same way this
+         package does: the same survey, so a fault stands at its line and column wherever a model file is read. -->
+    <InternalsVisibleTo Include="DeepSharp.Learners.ML" />
   </ItemGroup>
 
   <ItemGroup>

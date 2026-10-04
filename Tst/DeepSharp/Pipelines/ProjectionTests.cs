@@ -143,7 +143,7 @@ public class ProjectionTests
     [InlineData("""{"version":2,"declaration":[{"step":"drop.columns","columns":["a","b","a"]}]}""")]
     [InlineData("""{"declaration":[],"colour":"red"}""")]
     [InlineData("""{"fitted":{}}""")]
-    [InlineData("""{"version":7,"declaration":[]}""")]
+    [InlineData("""{"version":8,"declaration":[]}""")]
     [InlineData("""{"version":3,"declaration":[],"skipped":[]}""")]
     [InlineData("""{"declaration":[],"skipped":[]}""")]
     [InlineData("""{"version":4,"declaration":[],"skipped":"normalise"}""")]

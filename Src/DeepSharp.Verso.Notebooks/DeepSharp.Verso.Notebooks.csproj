@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DeepSharp.Charts\DeepSharp.Charts.csproj" />
     <ProjectReference Include="..\DeepSharp.Learners.Networks\DeepSharp.Learners.Networks.csproj" />
+    <ProjectReference Include="..\DeepSharp.Learners.ML\DeepSharp.Learners.ML.csproj" />
     <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
     <ProjectReference Include="..\DeepSharp.Pipelines.Indicators\DeepSharp.Pipelines.Indicators.csproj" />
     <!-- The readers a first block can name, carried as the indicators are: an extension Verso installs is loaded apart, so the notebook's verbs are only what this package brings. -->

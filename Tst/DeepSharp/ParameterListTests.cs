@@ -41,6 +41,8 @@ public class ParameterListTests
         ["DeepSharp.Import.Keras"] = "DeepSharp.Tests",
         ["DeepSharp.Import.Onnx"] = "DeepSharp.Tests",
         ["DeepSharp.Import.PyTorch"] = "DeepSharp.Tests",
+        ["DeepSharp.Learners.ML"] = "DeepSharp.Tests",
+        ["DeepSharp.Learners.MLNet"] = "DeepSharp.Learners.MLNet.Tests",
         ["DeepSharp.Learners.Networks"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines.DataFrame"] = "DeepSharp.Tests",

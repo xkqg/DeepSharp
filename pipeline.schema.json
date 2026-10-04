@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 6
+      "maximum": 7
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -51,6 +51,7 @@
             "feature.timeParts",
             "fill.missing",
             "fill.nan",
+            "learn.ml",
             "learn.network",
             "maths",
             "normalise",
@@ -62,7 +63,9 @@
             "read.json",
             "read.parquet",
             "read.rows",
+            "scale.given",
             "settle.gaps",
+            "shuffle",
             "split.atRandom",
             "split.byTime",
             "split.stratified",
@@ -306,6 +309,21 @@
           "if": {
             "properties": {
               "step": {
+                "const": "learn.ml"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/learn.ml"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
                 "const": "learn.network"
               }
             },
@@ -471,6 +489,21 @@
           "if": {
             "properties": {
               "step": {
+                "const": "scale.given"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/scale.given"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
                 "const": "settle.gaps"
               }
             },
@@ -480,6 +513,21 @@
           },
           "then": {
             "$ref": "#/$defs/settle.gaps"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "shuffle"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/shuffle"
           }
         },
         {
@@ -1469,6 +1517,126 @@
       ],
       "additionalProperties": false
     },
+    "learn.ml": {
+      "description": "Names the trainer from ML.NET this pipeline is declared for: which trainer, the settings it takes and the seed it repeats from.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "learn.ml"
+        },
+        "trainer": {
+          "type": "object",
+          "oneOf": [
+            {
+              "description": "Gradient-boosted trees: each tree corrects what the ones before it got wrong. The usual first answer for a table.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "fastTree"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Ff][Aa][Ss][Tt][Tt][Rr][Ee][Ee])$"
+                    }
+                  ]
+                },
+                "leaves": {
+                  "description": "How many leaves one tree may grow to: the larger it is, the finer the splits and the easier it is to learn the training rows by heart.",
+                  "type": "integer",
+                  "minimum": 2,
+                  "maximum": 2147483647
+                },
+                "trees": {
+                  "description": "How many trees are grown.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "leastRows": {
+                  "description": "The fewest training rows a leaf may stand for, which is what keeps a split from being one passenger's story.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "rate": {
+                  "description": "How much of each tree's correction is taken: smaller is slower and steadier.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "leaves",
+                "trees",
+                "leastRows",
+                "rate"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "A forest of trees grown apart and averaged, which holds up better on few rows than boosting does.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "fastForest"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Ff][Aa][Ss][Tt][Ff][Oo][Rr][Ee][Ss][Tt])$"
+                    }
+                  ]
+                },
+                "leaves": {
+                  "description": "How many leaves one tree may grow to: the larger it is, the finer the splits and the easier it is to learn the training rows by heart.",
+                  "type": "integer",
+                  "minimum": 2,
+                  "maximum": 2147483647
+                },
+                "trees": {
+                  "description": "How many trees are grown.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "leastRows": {
+                  "description": "The fewest training rows a leaf may stand for, which is what keeps a split from being one passenger's story.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                }
+              },
+              "required": [
+                "kind",
+                "leaves",
+                "trees",
+                "leastRows"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "The trainer these rows are prepared for, and the settings it takes."
+        },
+        "seed": {
+          "description": "The number the trainer's own random draws are worked out from, so the same declaration gives the same model.",
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "trainer",
+        "seed"
+      ],
+      "additionalProperties": false
+    },
     "learn.network": {
       "description": "Names the network this pipeline is declared for: its layers, what moves them, what judges them, when the run stops and the engine it runs on.",
       "type": "object",
@@ -2273,6 +2441,56 @@
       ],
       "additionalProperties": false
     },
+    "scale.given": {
+      "description": "Scales a column into a range from bounds you give, above the split, so a feature worked out after it is worked out from scaled columns.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "scale.given"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column to scale."
+        },
+        "lowest": {
+          "description": "The lowest value the column can hold.",
+          "type": "number",
+          "minimum": -1.7976931348623157E+308,
+          "maximum": 1.7976931348623157E+308
+        },
+        "highest": {
+          "description": "The highest value it can hold.",
+          "type": "number",
+          "minimum": -1.7976931348623157E+308,
+          "maximum": 1.7976931348623157E+308
+        },
+        "lands": {
+          "anyOf": [
+            {
+              "enum": [
+                "signed",
+                "unit",
+                "splitsign"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Ss][Ii][Gg][Nn][Ee][Dd]|[Uu][Nn][Ii][Tt]|[Ss][Pp][Ll][Ii][Tt][Ss][Ii][Gg][Nn])$"
+            }
+          ],
+          "description": "Where the scaled values land: between minus one and one, or between nothing and one."
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "lowest",
+        "highest",
+        "lands"
+      ],
+      "additionalProperties": false
+    },
     "settle.gaps": {
       "description": "Settles the gaps in a column with a value no row decided, so a feature worked out from it is not a gap.",
       "type": "object",
@@ -2321,6 +2539,26 @@
         "step",
         "column",
         "with"
+      ],
+      "additionalProperties": false
+    },
+    "shuffle": {
+      "description": "Puts the rows in an order drawn from a seed, before they are divided, so every part holds the same mixture.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "shuffle"
+        },
+        "seed": {
+          "description": "The number that makes the shuffle repeatable: the same seed puts the same rows in the same order.",
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "seed"
       ],
       "additionalProperties": false
     },
@@ -2637,9 +2875,12 @@
                       "evidence.correlation",
                       "evidence.profile",
                       "evidence.report",
+                      "learn.ml",
                       "learn.network",
                       "order.by",
+                      "scale.given",
                       "settle.gaps",
+                      "shuffle",
                       "split.atRandom",
                       "split.byTime",
                       "split.stratified",
@@ -2672,8 +2913,11 @@
                   "not": {
                     "enum": [
                       "evidence.report",
+                      "learn.ml",
                       "learn.network",
-                      "settle.gaps"
+                      "scale.given",
+                      "settle.gaps",
+                      "shuffle"
                     ]
                   }
                 }
@@ -2699,8 +2943,11 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "learn.ml",
                       "learn.network",
-                      "settle.gaps"
+                      "scale.given",
+                      "settle.gaps",
+                      "shuffle"
                     ]
                   }
                 }
@@ -2726,7 +2973,38 @@
                 "step": {
                   "not": {
                     "enum": [
-                      "settle.gaps"
+                      "learn.ml",
+                      "scale.given",
+                      "settle.gaps",
+                      "shuffle"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 7
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "declaration": {
+            "items": {
+              "properties": {
+                "step": {
+                  "not": {
+                    "enum": [
+                      "learn.ml",
+                      "scale.given",
+                      "shuffle"
                     ]
                   }
                 }

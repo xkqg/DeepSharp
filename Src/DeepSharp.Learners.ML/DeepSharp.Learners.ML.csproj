@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Learners.ML</PackageId>
+    <Description>Where a trainer from ML.NET meets a DeepSharp pipeline: the pipeline says which trainer its rows are prepared for — a tree, the seed it is pinned by, the settings it takes — and a tree and a network are measured by one report on the same rows, which is the only reason the two can honestly be compared. This package declares that trainer and reads and writes the model it produces; it carries no ML.NET at all, so a notebook, a server or an application that only reads a model never brings the library. Training it needs DeepSharp.Learners.MLNet, which this package names when it is not there.</Description>
+    <PackageTags>deepsharp;pipeline;pdd;mlnet;machine-learning;decision-tree;fasttree;tabular;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The verb's own words and the model file's survey are read by the suite that holds this package to them. -->
+    <InternalsVisibleTo Include="DeepSharp.Tests" />
+    <InternalsVisibleTo Include="DeepSharp.Learners.MLNet" />
+    <InternalsVisibleTo Include="DeepSharp.Learners.MLNet.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

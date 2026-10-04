@@ -58,6 +58,8 @@ public sealed class StepCatalog
         catalog.Register<OrderByStep>();
         catalog.Register<DropGapsStep>();
         catalog.Register<SettleGapsStep>();
+        catalog.Register<ScaleGivenStep>();
+        catalog.Register<ShuffleStep>();
         catalog.Register<ProfileStep>();
         catalog.Register<CorrelationStep>();
         catalog.Register<ReportStep>();
@@ -112,6 +114,7 @@ public sealed class StepCatalog
         new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["feature.indicator"] = "DeepSharp.Pipelines.Indicators",
+            ["learn.ml"] = "DeepSharp.Learners.ML",
             ["learn.network"] = "DeepSharp.Learners.Networks",
             ["read.excel"] = "DeepSharp.Pipelines.Excel",
             ["read.json"] = "DeepSharp.Pipelines.Json",

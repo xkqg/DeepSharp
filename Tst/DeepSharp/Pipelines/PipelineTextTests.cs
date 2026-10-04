@@ -38,6 +38,7 @@ public class PipelineTextTests
         ("feature.timeParts", 1),
         ("fill.missing", 1),
         ("fill.nan", 1),
+        ("learn.ml", 7),
         ("learn.network", 5),
         ("maths", 1),
         ("normalise", 1),
@@ -49,7 +50,9 @@ public class PipelineTextTests
         ("read.json", 1),
         ("read.parquet", 1),
         ("read.rows", 1),
+        ("scale.given", 7),
         ("settle.gaps", 6),
+        ("shuffle", 7),
         ("split.atRandom", 2),
         ("split.byTime", 2),
         ("split.stratified", 2),
@@ -113,6 +116,20 @@ public class PipelineTextTests
         Assert.Equal(PipelineDeclaration.Version + 1, newer.Version);
         Assert.False(grown.IsTheFitOf(handed));
         Assert.False(PipelineText.Of(Encoding.UTF8.GetBytes(Restamped(Rows(24).ToJson(), PipelineDeclaration.Version + 1))).IsTheFitOf(handed));
+    }
+
+    [Fact]
+    public void TheDigestAModelIsBoundBy_NamesTheVersion_AndTheFitsDigestIsTheOneThatDoesNot()
+    {
+        // Why a model trained behind an older pipeline keeps loading: its file carries that pipeline's text exactly as it
+        // was written, so the version the text names never changes and neither does the digest taken over it. The digest
+        // that leaves the version out is the other one, which is how two pipelines are compared fit for fit.
+        var handed = PipelineText.Of(Rows(20));
+        var newer = PipelineText.Of(Encoding.UTF8.GetBytes(Restamped(Rows(20).ToJson(), PipelineDeclaration.Version + 1)));
+
+        Assert.Contains($"\"version\": {PipelineDeclaration.Version}", handed.Text, StringComparison.Ordinal);
+        Assert.NotEqual(handed.Digest, newer.Digest);
+        Assert.Equal(handed.FitDigest, newer.FitDigest);
     }
 
     [Fact]

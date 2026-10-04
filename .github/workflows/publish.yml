@@ -106,6 +106,13 @@ jobs:
         timeout-minutes: 10
         run: bash tools/torch/check.sh nupkgs
 
+      # The two halves of the ML.NET learner from the packages about to be pushed: the one that trains fits a tree of the
+      # Titanic pipeline and writes it beside its pipeline as one file, and the one that only declares and reads takes
+      # that file back while carrying nothing of ML.NET at all.
+      - name: Check the ML.NET learner from its packages
+        timeout-minutes: 10
+        run: bash tools/ml/check.sh nupkgs
+
       # The key this returns is valid for one hour, so it is asked for here rather than at the top of the job.
       # `user` is the nuget.org profile name that owns the trusted-publishing policy — not an email address,
       # and not a secret.

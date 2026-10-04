@@ -87,7 +87,10 @@ public class PackageTests
             .ToArray();
 
         Assert.Equal(
-            ["DeepSharp.Learners.Networks", "DeepSharp.Pipelines.Excel", "DeepSharp.Pipelines.Indicators", "DeepSharp.Pipelines.Json", "DeepSharp.Pipelines.Parquet"],
+            [
+                "DeepSharp.Learners.ML", "DeepSharp.Learners.Networks", "DeepSharp.Pipelines.Excel",
+                "DeepSharp.Pipelines.Indicators", "DeepSharp.Pipelines.Json", "DeepSharp.Pipelines.Parquet",
+            ],
             packages);
         Assert.All(packages, package =>
         {

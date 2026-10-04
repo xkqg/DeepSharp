@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- An application that references the ML.NET learner's packages the way a person does: from nuget, never from this
+       repository's source. It is built twice - once bringing the package that trains, and once bringing only the one
+       that declares and reads - because the whole point of the split is that the second never carries ML.NET. -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <!-- ML.NET's own build refuses an AnyCPU executable. -->
+    <PlatformTarget>x64</PlatformTarget>
+    <Trainer Condition="'$(Trainer)' == ''">none</Trainer>
+    <DefineConstants Condition="'$(Trainer)' == 'mlnet'">$(DefineConstants);TRAINS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DeepSharp.Learners.ML" Version="*" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Trainer)' == 'mlnet'">
+    <PackageReference Include="DeepSharp.Learners.MLNet" Version="*" />
+  </ItemGroup>
+
+</Project>

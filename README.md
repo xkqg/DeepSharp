@@ -18,6 +18,14 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.7.0 trains a tree from ML.NET behind the same seam a network stands behind.** A table that a tree learns better
+than a network does not have to become a network: `.WithML(trainer => trainer.FastTree())` says which trainer the rows
+are prepared for, `pipeline.TrainWithML()` runs the pipeline for what that trainer needs — leaving out the scalings a
+tree does without, and writing down which — and the pipeline's own report then measures the tree and a network on the
+same rows. It names boosted trees and a forest and no other trainer, because a declaration promises that running it
+again gives the same model and only a tree keeps that promise from the seed the declaration carries. The library it
+brings travels in a package of its own, so a notebook or a server that only reads a model never carries ML.NET.
+
 **0.6.2 settles a gap where the features are worked out.** A column derived from one with a gap is itself a gap, and
 filling that column afterwards does not reach back into it — because what fills a gap is learned from the training rows,
 and so stands below the split. `.SettleGaps(gaps => gaps.Zero("trades"))` is the other half: a nought, a number you
@@ -65,10 +73,12 @@ var pipeline = Pdd.Create()
     .OrderBy("timestamp")
     .SettleGaps(gaps => gaps.Zero("trades"))                 // the gaps first: a quiet day traded nothing
     .AddFeature("turnover", "close", Arithmetic.Times, "trades") // then the features, worked out from settled columns
-    .SplitByTime("timestamp", train: 0.70, validation: 0.15, gap: 1) // then the split: test is the rest
-    .Ahead("close", 1, AheadAs.Return)                       // the answer: tomorrow's return
-    .Normalise(scale => scale                                // and below it what learns from the training rows alone
-        .Columns("close", "turnover")                        // where this pipeline's features land: -1 to 1 by default
+    .ScaleGiven(scale => scale                               // then the scaling, from bounds you know: no row decides
+        .Between("turnover", 0, 2_000_000_000))              // them, so it stands here rather than below the split
+    .SplitByTime("timestamp", train: 0.70, validation: 0.15, gap: 1) // then the split, just before what learns
+    .Ahead("close", 1, AheadAs.Return)                       // the answer: tomorrow's return, from close as it was read
+    .Normalise(scale => scale                                // and below it only what the training rows decide
+        .Columns("close")                                    // the price's own scale, which no bound was given for
         .MaxAbs("trades"))                                   // a count, divided by its largest, so a quiet day stays nought
     .Drop("timestamp")
     .Report(report => report.Measure(Metric.Rmse).On(Part.Validation, Part.Test).As(Shown.Numbers))
@@ -268,14 +278,16 @@ knows every verb a block can hold, so it brings the packages the notebook brings
 #r "nuget: DeepSharp.Pipelines.Parquet"
 #r "nuget: DeepSharp.Pipelines.Excel"
 #r "nuget: DeepSharp.Pipelines.Json"
+#r "nuget: DeepSharp.Learners.ML"
 #r "nuget: DeepSharp.Learners.Networks"
+using DeepSharp.Learners.ML;
 using DeepSharp.Learners.Networks;
 using DeepSharp.Pipelines;
 
 if (Variables.TryGet<string>("deepsharp.pipeline", out var text))
 {
     var folder = Variables.TryGet<string>("deepsharp.folder", out var saved) ? SourceFolder.Of(saved) : SourceFolder.WorkingDirectory;
-    var catalog = StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson().WithNetworks();
+    var catalog = StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson().WithNetworks().WithML();
     var declaration = PipelineDeclaration.FromJson(text, catalog);
     var prepared = new Pipeline(declaration, rows: null, folder).Run();
 }
@@ -318,6 +330,8 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). A CSV comes through as the text the file writes, and a query with the kinds the database gives its columns. |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
 | `DeepSharp.Learners.Networks` | Where a network meets a pipeline: declared in the chain that prepares its rows — `.WithTorch(…)` or `.WithTensorflow(…)`, and `pipeline.Train()` runs it — or written as code and fitted by hand; trained on its training rows, judged by its validation rows, measured by its report, and saved with it as one file that refuses any other fit of it; what it predicts for rows served later comes back in the answer's own units, on whichever engine it is handed, naming what each row holds that the network learned nothing about; and a checkpoint is the same file with what the run needs to go on, refused to a run under another seed, batch size, early stopping or engine. Brings the two packages it joins. |
+| `DeepSharp.Learners.ML` | Where a trainer from ML.NET meets a pipeline: the chain says which trainer its rows are prepared for — `.WithML(trainer => trainer.FastTree())` — and the run made for it leaves out the steps a tree does without and writes down which, so a tree and a network are measured by one report on the same rows. This package declares that trainer and reads and writes the model it produces, and it carries no ML.NET at all, so a notebook, a server or an application that only reads a model never brings the library. |
+| `DeepSharp.Learners.MLNet` | The half that carries ML.NET: it hands the prepared rows to Microsoft.ML, fits the tree the declaration names with `pipeline.TrainWithML()`, and writes the model beside the pipeline it was trained behind as one file. It names one trainer family on purpose — boosted trees and a forest — because a tree repeats from the seed the declaration carries, which is what a declaration meant to be replayed has to promise. Brings Microsoft.ML 5.0.0 and Microsoft.ML.FastTree 5.0.0. |
 | `DeepSharp.Backends.TorchSharp` | The arithmetic on libtorch, on the processor or a graphics card: `TorchBackend.OnCpu()` or `TorchBackend.OnGpu(0)`, held to the same contract as the light engine, operation by operation. Brings TorchSharp 0.107.0; the application brings the libtorch it runs on. |
 | `DeepSharp.Import.PyTorch` | A network PyTorch trained, read into the same network written here: a safetensors file, or the `.pt` file `torch.save(model.state_dict(), file)` writes, its pickle read as PyTorch's weights-only reader reads it. Brings Onnxify.Safetensors 0.3.11, a port of safetensors' own reader. |
 | `DeepSharp.Import.Keras` | A model Keras 3 saved, as a `.keras` archive or an `.h5` file, read into a network built in Keras's words. Brings PureHDF 2.2.0, a managed HDF5 reader. |
@@ -327,7 +341,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | `DeepSharp.Verso.Api` | An application of your own hosting the notebook: one open notebook for each file, however many views show it, with the notebook's parts registered by the package itself — so a program published as a single file has them too. Typing, running, a click on a block's controls and the toolbar's buttons take their turn one at a time; a cell is added after another or at the end, of any kind the engine has, taken away, moved past its neighbour or turned into another kind, each only where the notebook's layout allows it; as a cell's text is typed, its kernel offers what may come next and says what a word means, even while a run is under way; a new notebook is made as one block that reads a CSV file, never over a file that is there already; a run can be stopped, one that never ends or one that still waits for another notebook's C# run, a file a button hands over goes to whoever pressed it, the properties panel comes back field by field, the layout, the theme and the title are changed as Verso's editors change them, and what a person does to the dashboard's tiles goes to the layout's own part. The notebook opens and saves as Verso's browser editor does, writing nothing into it that the engine only falls back on; every view is told what changed, version by version — the cells, the run under way and what runs that no run owns, the toolbar, whether anything is unsaved, what became of the kernels, what the dashboard or the presentation draws, and what the notebook says of itself; a notebook no view shows can close by itself when nothing in it is unsaved, a close stops the run under way instead of waiting for it, and the cells, and what they show, come back as plain values. Brings Verso's engine, 1.2.2. |
 | `DeepSharp.Verso.Serve` | DeepSharp's own server: `deepsharp-serve`, a .NET tool, shows a notebook or a folder of them in your browser, on Verso's engine and built on `DeepSharp.Verso.Api`, with nothing else to install. It listens on this computer alone, answers only the address it prints, makes a change only for its own page, and writes into its folder only the notebooks it serves, what they save beside themselves, and a new notebook a page asks for, never over a file that is there; Ctrl+C ends it at once, whatever a notebook runs. Its page does what Verso's editor does, over one connection a tab, and carries everything it draws with, so it fetches nothing: the blocks, failures, JSON, CSV, progress, Mermaid diagrams and KaTeX formulas drawn as Verso draws them, a widget in a sandboxed frame, the dashboard and the presentation as the engine arranges them; the Metadata, Properties and View panels; Verso's keys, and what a cell's kernel offers and what a word means as its text is typed; the kernels' status, a dot while anything is unsaved, and the Stop where Run All stood. A cell is added, taken away once you say yes, moved or turned into another kind there, where the notebook's layout allows it; a file a button hands over arrives as a download; a dropped connection comes back by itself, keeping what was typed; and a folder's page makes a new notebook. |
 
-`dotnet pack DeepSharp.slnx` makes all sixteen. They run on .NET 8 and .NET 10. MIT — see
+`dotnet pack DeepSharp.slnx` makes all eighteen. They run on .NET 8 and .NET 10. MIT — see
 [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE); each library a package brings comes under the licence its
 own package states. The page `deepsharp-serve` serves carries Mermaid and KaTeX, each under its own MIT licence, and
 DOMPurify under the Apache License 2.0, and the tool's

@@ -76,6 +76,8 @@ Src/DeepSharp.Import.PyTorch/        a reader of what PyTorch saved — a safete
 Src/DeepSharp.Import.Keras/          a reader of the models Keras saved, .keras and .h5, through PureHDF
 Src/DeepSharp.Import.Onnx/           a reader of ONNX graphs — PyTorch's, Keras's and tf2onnx's — through OnnxSharp
 Src/DeepSharp.Learners.Networks/     where a network meets a pipeline: trained behind it, serving, the one file
+Src/DeepSharp.Learners.ML/           where a trainer from ML.NET is declared, and its model read and written; no ML.NET
+Src/DeepSharp.Learners.MLNet/        the half that carries ML.NET: the rows handed over, the tree fitted, the file written
 Src/DeepSharp.Backends.TorchSharp/   an engine on libtorch, through TorchSharp, on the processor or a graphics card
 Src/DeepSharp.Charts/                every chart, as the text of an SVG, drawn with MatPlotLibNet; the report, as HTML
 Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
@@ -109,12 +111,21 @@ references to keep it that way. They meet in `DeepSharp.Learners.Networks`, whic
 references, and the charts reference both and MatPlotLibNet; what each of those packages references is a closed list a
 test reads.
 
+A learner that brings an outside library is split in two, and the split is the dependency rather than the design. The
+notebook, the host, the server and the core's own suite are all forced to carry whichever package brings a verb — three
+hand-written lists say so, and tests hold them to each other — so the package that declares a trainer from ML.NET,
+`DeepSharp.Learners.ML`, carries nothing of ML.NET at all, and the package that trains, `DeepSharp.Learners.MLNet`,
+carries the library and is referenced by nothing of ours. An application that only reads a model therefore never brings
+it, which a check of the packages measures rather than assumes. The segment after `Learners.` says what the package is
+for; where a second package exists only to carry the library, it is named after the library.
+
 The notebook's tests, the host's and the server's are suites of their own because Verso's engine and the
 validator the core's tests hold the pipeline schema to each need a different version of the C# compiler, and one
 test program can load only one. The libtorch engine's tests are a suite of their own because they carry libtorch,
 which the core's suite never does: the processor's build for the platform they run on, as an application brings it,
 or — built with `-p:Libtorch=cuda`, into a folder of its own — the one for an NVIDIA card, whose tests run only where
-libtorch finds a card and are skipped everywhere else. The coverage check and the release both run every suite they
+libtorch finds a card and are skipped everywhere else. The ML.NET learner's tests are a suite of their own for the same
+reason and no other: that library brings a native side, and the rule is that the core's suite carries none. The coverage check and the release both run every suite they
 find, by the name every suite has, on every runtime the suite is built for. The check measures on the newest and runs the others:
 the two builds of one assembly, measured together, merge as one module and most of its branches lose their counts,
 so every class read as fully covered. The code is one code on both runtimes, so one measurement covers it. The
@@ -458,7 +469,7 @@ builder existed.
 
 ```
 {
-  "version": 6,
+  "version": 7,
   "declaration": [ { "step": "read.csv", "path": "titanic.csv" }, … ],
   "fitted": [
     { "step": "split.stratified", "prefix": "9e27e6…",

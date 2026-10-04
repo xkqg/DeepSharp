@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Learners.MLNet</PackageId>
+    <Description>The half of DeepSharp's ML.NET learner that carries ML.NET: it hands a pipeline's prepared rows to a trainer from Microsoft.ML, fits the tree the declaration names, and writes the model beside the pipeline it was trained behind as one file. The declaration, the trainer's words and that file's reader live in DeepSharp.Learners.ML, which carries nothing of ML.NET — so a notebook or a server that only reads a model never brings this package. It names one trainer family on purpose: a tree repeats from its own seed, which is what a declaration meant to be replayed has to promise.</Description>
+    <PackageTags>deepsharp;pipeline;pdd;mlnet;machine-learning;decision-tree;fasttree;training;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+    <ProjectReference Include="..\DeepSharp.Learners.ML\DeepSharp.Learners.ML.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ML.NET and the one trainer family whose model repeats from a seed, each pinned exactly: a restore that moved the
+         version would change the model a declaration promises to replay. LightGBM is deliberately absent — its native
+         side is x64 only and wants an OpenMP runtime the package does not bring. -->
+    <PackageReference Include="Microsoft.ML" Version="5.0.0" />
+    <PackageReference Include="Microsoft.ML.FastTree" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Its own suite reads the adapter's schema and the words a missing trainer is named in. -->
+    <InternalsVisibleTo Include="DeepSharp.Learners.MLNet.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

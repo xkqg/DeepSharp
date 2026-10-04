@@ -93,6 +93,36 @@ jobs:
         timeout-minutes: 10
         run: bash tools/torch/check.sh nupkgs
 
+      # The two halves of the ML.NET learner from the packages just made: the one that trains fits a tree of the Titanic
+      # pipeline and writes it beside its pipeline as one file, and the one that only declares and reads takes that file
+      # back while carrying nothing of ML.NET at all.
+      - name: Check the ML.NET learner from its packages
+        timeout-minutes: 10
+        run: bash tools/ml/check.sh nupkgs
+
+  # The ML.NET learner's own suite, which carries that library's native side, on Windows as well as the ubuntu run the
+  # coverage gate already gives it: a trainer's native code is reached on both the platforms a person trains on.
+  ml-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+          dotnet-quality: 'preview'
+
+      - name: Run the ML.NET learner suite
+        shell: bash
+        run: |
+          for framework in net8.0 net10.0; do
+            dotnet run --project Tst/DeepSharp.Learners.MLNet/DeepSharp.Learners.MLNet.Tests.csproj --configuration Release --framework "$framework" || exit 1
+          done
+
   # The engine's own suite, on libtorch, proven on both the platforms a person runs it on: the packages it references
   # for the processor's libtorch differ by platform, and native interop the suite's own run above never leaves
   # untried on Windows.

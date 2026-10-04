@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A suite of its own for the learner that carries ML.NET: the core's suite never carries a native library, and this
+       one trains a real tree on the rows a real pipeline hands over, as an application that brings ML.NET runs it. -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DeepSharp.Tests.Learners.MLNet</RootNamespace>
+    <!-- As in the other suites: the documentation file switches the unused-using analyser on, and a test's name is its
+         documentation. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
+    <!-- ML.NET's own build refuses an AnyCPU executable, so this suite says which processor it runs on. -->
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DeepSharp.Learners.ML\DeepSharp.Learners.ML.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Learners.MLNet\DeepSharp.Learners.MLNet.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Learners.Networks\DeepSharp.Learners.Networks.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One way to find the repository and the data the samples read, shared with the other suites. -->
+    <Compile Include="..\DeepSharp\Repository.cs" Link="Repository.cs" />
+    <!-- The parameter rule, read from the packages this suite references: each suite reads its own. -->
+    <Compile Include="..\DeepSharp\ParameterListTests.cs" Link="ParameterListTests.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

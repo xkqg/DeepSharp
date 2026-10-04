@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Learners.ML;
 using DeepSharp.Learners.Networks;
 using DeepSharp.Pipelines;
 
@@ -21,5 +22,5 @@ internal static class NotebookVerbs
 {
     /// <summary>A new catalog of every verb a notebook can hold.</summary>
     /// <returns>The catalog.</returns>
-    public static StepCatalog Catalog() => StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson().WithNetworks();
+    public static StepCatalog Catalog() => StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson().WithNetworks().WithML();
 }

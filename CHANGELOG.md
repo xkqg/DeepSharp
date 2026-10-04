@@ -3,6 +3,74 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0]
+
+A trainer from ML.NET, behind the same seam a network stands behind, so a tree and a network are measured by one report
+on the same rows — which is the only reason the two can honestly be compared.
+
+### Upgrading from 0.6.1 (v0.6.2, no package)
+
+- **A file this version writes names version 7, and every DeepSharp before it refuses that file whole**, whether or not
+  it names the new verb. A file written by 0.2 through 0.6.2 keeps reading exactly as it did, and a model trained behind
+  an older pipeline keeps loading and serving: its file carries that pipeline's text as it was written and is bound to
+  that text, so the version the text names never changes.
+
+- **0.6.2 was built but never released**, so this release follows 0.6.1 on nuget.org. Its own notes stand below: a gap
+  settled above the split is in this version too.
+
+- **The published schema is served from this repository's main branch**, so between this commit and the release an
+  editor is told that version 7 and `learn.ml` are valid while every installed reader still refuses them.
+
+### Added
+
+- **`learn.ml`, and `.WithML(…)` beside `.WithTorch(…)` and `.WithTensorflow(…)`.** The chain says which trainer its
+  rows are prepared for — `.WithML(trainer => trainer.FastTree())` — and `pipeline.TrainWithML()` runs the pipeline for
+  what that trainer needs and trains it. A tree takes numbers of any size, so the run leaves the scalings out and writes
+  down which it left out, and the report then measures a tree and a network on the same rows.
+
+- **Two packages, because the library they bring may not travel.** `DeepSharp.Learners.ML` declares the trainer and
+  reads and writes the model it produces, and carries no ML.NET at all — a notebook, a server or an application that
+  only reads a model never brings it. `DeepSharp.Learners.MLNet` carries Microsoft.ML and does the training. A check of
+  the packages measures exactly that: one application trains and writes a model file, another reads it back carrying
+  nothing of ML.NET.
+
+- **Boosted trees and a forest, and no other trainer.** A declaration promises that running it again gives the same
+  model, and a tree keeps that promise from the seed the declaration carries. Measured on this library's own rows, the
+  stochastic trainers do not: one of them gave five different models in five runs, and pinning it to one thread makes it
+  repeat on one machine while the last bits still move when the processor takes another instruction path. A trainer that
+  cannot be replayed is refused by name rather than offered with a warning.
+
+- **A model and its pipeline as one file**, as a network's is: the pipeline's text exactly as it was written, the model
+  bound to it, and a model read beside another fit of those steps refused. It also names the version of ML.NET that
+  wrote the model and the processor it was written on, because the model inside it is that library's own archive — so a
+  reader that cannot open it can say which package and which version would.
+
+- **A learner is a stage of its own in a notebook**, so a block that names one offers the others: swapping a network for
+  a tree is the gesture the comparison is made of.
+
+- **`scale.given`, scaling from bounds you give, above the split.** Every other scaling reads its numbers from the
+  training rows — a mean, a spread, a smallest and a largest — so it stands below the split. This one is told them: a
+  fare runs from nothing to the most anybody paid, an hour from nought to twenty-three. That is knowledge about the
+  column rather than about the rows, so it stands where the features are worked out and a feature after it is already on
+  the scale a model takes. It writes nothing into the fitted half, and the way back is exact without anything written
+  down: `.ScaleGiven("fare", 0, 512)`, or one line for many columns.
+
+- **`shuffle`, before the rows are divided.** A file written in an order that means something — every survivor first,
+  every month in turn — gives parts that are not alike, and shuffling first is what gives each the same mixture. The
+  order is drawn from a seed the way the splits draw theirs, by a digest of what each row says, so the same rows give
+  the same order on every machine. Without it the rows keep the order they were read in, exactly as before; and it is
+  never written beside `.OrderBy`, since a series in time must stay in its order. The training loop's own shuffle,
+  afresh every epoch, is a different question and was already there.
+
+### Changed
+
+- **The pipeline file is at version 7.** Only the new verb is new in it: no verb that shipped before means anything else
+  than it did, and the committed schema and verb reference are projected from the steps as they always were.
+
+- **Two sentences about what binds a model to its pipeline were wrong and are corrected.** A model's file carries its
+  pipeline's text as written and is bound to that text; the digest that leaves the version out is the one two pipelines
+  are compared by, fit for fit.
+
 ## [0.6.2]
 
 Where a gap is settled before the features are worked out. A column derived from one with a gap is itself a gap, and
@@ -16,7 +84,9 @@ out from settled columns. It learns nothing, so it writes nothing into the fitte
 - **A file this version writes names version 6, and every DeepSharp before it refuses that file whole** — whether or not
   it uses the new verb, because the version is stamped by whoever writes. A model trained on 0.6.2 cannot be served by
   0.6.1. Every file written by 0.2 through 0.6.1 keeps reading exactly as it did, and a trained model keeps matching its
-  pipeline, because the digest a model is bound by leaves the version out.
+  pipeline, because a model's file carries that pipeline's text exactly as it was written and is bound to that text: the
+  version the text names never changes, so neither does the digest taken over it. Two pipelines are compared fit for fit
+  by a different digest, and that is the one that leaves the version out.
 
 - **The published schema is served from this repository's main branch**, so between this commit and the release an
   editor on 0.6.1 is told that version 6 and `settle.gaps` are valid while the installed reader still refuses them.

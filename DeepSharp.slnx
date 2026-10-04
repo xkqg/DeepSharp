@@ -7,6 +7,8 @@
     <Project Path="Src/DeepSharp.Import.Onnx/DeepSharp.Import.Onnx.csproj" />
     <Project Path="Src/DeepSharp.Import.PyTorch/DeepSharp.Import.PyTorch.csproj" />
     <Project Path="Src/DeepSharp.Learners.Networks/DeepSharp.Learners.Networks.csproj" />
+    <Project Path="Src/DeepSharp.Learners.ML/DeepSharp.Learners.ML.csproj" />
+    <Project Path="Src/DeepSharp.Learners.MLNet/DeepSharp.Learners.MLNet.csproj" />
     <Project Path="Src/DeepSharp.Pipelines/DeepSharp.Pipelines.csproj" />
     <Project Path="Src/DeepSharp.Pipelines.DataFrame/DeepSharp.Pipelines.DataFrame.csproj" />
     <Project Path="Src/DeepSharp.Pipelines.Excel/DeepSharp.Pipelines.Excel.csproj" />
@@ -30,6 +32,9 @@
     <Project Path="Tst/DeepSharp.Import.TestParts/DeepSharp.Import.TestParts.csproj" />
     <Project Path="Tst/DeepSharp.Backends.TestParts/DeepSharp.Backends.TestParts.csproj" />
     <Project Path="Tst/DeepSharp.Backends.Contract/DeepSharp.Backends.Contract.csproj" />
+  </Folder>
+  <Folder Name="/Tst/DeepSharp.Learners.MLNet/">
+    <Project Path="Tst/DeepSharp.Learners.MLNet/DeepSharp.Learners.MLNet.Tests.csproj" />
   </Folder>
   <Folder Name="/Tst/DeepSharp.Backends.TorchSharp/">
     <Project Path="Tst/DeepSharp.Backends.TorchSharp/DeepSharp.Backends.TorchSharp.Tests.csproj" />

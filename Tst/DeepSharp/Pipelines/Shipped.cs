@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Reflection;
+using DeepSharp.Learners.ML;
 using DeepSharp.Learners.Networks;
 using DeepSharp.Pipelines;
 
@@ -19,7 +20,7 @@ internal static class Shipped
 {
     /// <summary>What each package that brings verbs offers a catalog.</summary>
     public static IReadOnlyList<IStepContribution> Contributions { get; } =
-        [new IndicatorSteps(), new ParquetSteps(), new ExcelSteps(), new JsonSteps(), new NetworkSteps()];
+        [new IndicatorSteps(), new ParquetSteps(), new ExcelSteps(), new JsonSteps(), new NetworkSteps(), new MLSteps()];
 
     /// <summary>The assemblies the steps are defined in: the pipeline's and each package's.</summary>
     public static IReadOnlyList<Assembly> StepAssemblies { get; } =

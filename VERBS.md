@@ -23,6 +23,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`feature.timeParts`](#featuretimeparts) | Takes a moment in time apart into the pieces people reason with: an hour, a weekday, a month. |
 | [`fill.missing`](#fillmissing) | Fills the gaps in a column the named way, below the split, and marks where they were. A value no row decided is settle.gaps, above it. |
 | [`fill.nan`](#fillnan) | Deals with a value that is not a number a model can use; refusing it is the default. |
+| [`learn.ml`](#learnml) | Names the trainer from ML.NET this pipeline is declared for: which trainer, the settings it takes and the seed it repeats from. |
 | [`learn.network`](#learnnetwork) | Names the network this pipeline is declared for: its layers, what moves them, what judges them, when the run stops and the engine it runs on. |
 | [`maths`](#maths) | Pulls a column into another shape by arithmetic that learns nothing: a logarithm, a root, a reciprocal. |
 | [`normalise`](#normalise) | Brings a column onto a comparable scale, by numbers learned from the training rows. |
@@ -34,7 +35,9 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`read.json`](#readjson) | Reads the rows from a JSON file holding an array of records, one object a row, every value as the file writes it. |
 | [`read.parquet`](#readparquet) | Reads the rows from an Apache Parquet file, which says what each of its columns holds. |
 | [`read.rows`](#readrows) | Takes rows that are handed in rather than opened: a table already in memory, a reader over a query. |
+| [`scale.given`](#scalegiven) | Scales a column into a range from bounds you give, above the split, so a feature worked out after it is worked out from scaled columns. |
 | [`settle.gaps`](#settlegaps) | Settles the gaps in a column with a value no row decided, so a feature worked out from it is not a gap. |
+| [`shuffle`](#shuffle) | Puts the rows in an order drawn from a seed, before they are divided, so every part holds the same mixture. |
 | [`split.atRandom`](#splitatrandom) | Divides the rows at random, the same way every time for the same seed. |
 | [`split.byTime`](#splitbytime) | Divides the rows by when they happened: the earliest to learn from, the latest to be measured on. |
 | [`split.stratified`](#splitstratified) | Divides the rows at random while keeping the mixture of one column the same in every part. |
@@ -323,6 +326,24 @@ Deals with a value that is not a number a model can use; refusing it is the defa
 
 Means what it says from version 1 of the file.
 
+## `learn.ml`
+
+Names the trainer from ML.NET this pipeline is declared for: which trainer, the settings it takes and the seed it repeats from.
+
+```json
+{"step":"learn.ml","trainer":{"kind":"fastTree","leaves":20,"trees":100,"leastRows":10,"rate":0.2},"seed":20260929}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `trainer` | a part, written as a name and its settings: `fastTree`, which takes `leaves`, `trees`, `leastRows` or `rate` or `fastForest`, which takes `leaves`, `trees` or `leastRows` | `{"kind":"fastTree","leaves":20,"trees":100,"leastRows":10,"rate":0.2}` |
+| `seed` | a whole number | `20260929` |
+
+- **`trainer`**: The trainer these rows are prepared for, and the settings it takes.
+- **`seed`**: The number the trainer's own random draws are worked out from, so the same declaration gives the same model.
+
+Means what it says from version 7 of the file.
+
 ## `learn.network`
 
 Names the network this pipeline is declared for: its layers, what moves them, what judges them, when the run stops and the engine it runs on.
@@ -531,6 +552,28 @@ Takes rows that are handed in rather than opened: a table already in memory, a r
 
 Means what it says from version 1 of the file.
 
+## `scale.given`
+
+Scales a column into a range from bounds you give, above the split, so a feature worked out after it is worked out from scaled columns.
+
+```json
+{"step":"scale.given","column":"column","lowest":0,"highest":1,"lands":"signed"}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `column` | the name of a column holding a number or a whole number | `"column"` |
+| `lowest` | a number | `0` |
+| `highest` | a number | `1` |
+| `lands` | one of `signed`, `unit` or `splitsign` | `"signed"` |
+
+- **`column`**: The column to scale.
+- **`lowest`**: The lowest value the column can hold.
+- **`highest`**: The highest value it can hold.
+- **`lands`**: Where the scaled values land: between minus one and one, or between nothing and one.
+
+Means what it says from version 7 of the file.
+
 ## `settle.gaps`
 
 Settles the gaps in a column with a value no row decided, so a feature worked out from it is not a gap.
@@ -548,6 +591,22 @@ Settles the gaps in a column with a value no row decided, so a feature worked ou
 - **`with`**: What goes in the gaps, decided by nobody but you: zero, a constant, or refuse for a column that is not supposed to have gaps at all.
 
 Means what it says from version 6 of the file.
+
+## `shuffle`
+
+Puts the rows in an order drawn from a seed, before they are divided, so every part holds the same mixture.
+
+```json
+{"step":"shuffle","seed":20260929}
+```
+
+| key | holds | a new block starts with |
+|---|---|---|
+| `seed` | a whole number | `20260929` |
+
+- **`seed`**: The number that makes the shuffle repeatable: the same seed puts the same rows in the same order.
+
+Means what it says from version 7 of the file.
 
 ## `split.atRandom`
 

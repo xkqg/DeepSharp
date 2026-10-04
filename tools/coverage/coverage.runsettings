@@ -13,6 +13,8 @@
                 <ModulePath>.*DeepSharp[.]Import[.]Keras[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Import[.]Onnx[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Import[.]PyTorch[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Learners[.]ML[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Learners[.]MLNet[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Learners[.]Networks[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]DataFrame[.]dll$</ModulePath>

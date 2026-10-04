@@ -322,6 +322,39 @@ public sealed class PipelineBuilder
     /// <remarks>What reaches the declaration is one step a column, exactly as writing the verb once a column does.</remarks>
     public PipelineBuilder SettleGaps(Action<SettleLine> gaps) => Many(gaps, nameof(gaps));
 
+    /// <summary>Scales a column into a range from bounds you give, above the split.</summary>
+    /// <param name="column">The column to scale.</param>
+    /// <param name="lowest">The lowest value it can hold.</param>
+    /// <param name="highest">The highest value it can hold.</param>
+    /// <param name="lands">Where the scaled values land; between minus one and one, unless said.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The column has no name, or the range is not one.</exception>
+    /// <remarks>
+    /// The bounds are knowledge about the column rather than about the rows, so this stands where the features are
+    /// worked out and a feature after it is worked out from a column already on the scale a model takes. A scaling that
+    /// reads its numbers from the rows is <see cref="FittingBuilder.Normalise(string[])"/>, below the split.
+    /// </remarks>
+    public PipelineBuilder ScaleGiven(string column, double lowest, double highest, Form lands = Form.Signed) =>
+        Add(new ScaleGivenStep(column, new KnownRange(lowest, highest)) { Lands = lands });
+
+    /// <summary>Scales many columns, each between the bounds it is given.</summary>
+    /// <param name="scale">The line: a column, and the range it is known to hold.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentNullException">There is no line.</exception>
+    /// <exception cref="ArgumentException">The line names no column.</exception>
+    public PipelineBuilder ScaleGiven(Action<ScaleGivenLine> scale) => Many(scale, nameof(scale));
+
+    /// <summary>Shuffles the rows before they are divided, in an order drawn from a seed.</summary>
+    /// <param name="seed">The number the order is drawn from.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="DeclarationException">The declaration already says the order the rows stand in.</exception>
+    /// <remarks>
+    /// Without this the rows keep the order they were read in. It is the one thing that decides that order, so it is
+    /// never written beside <see cref="OrderBy(string[])"/>; the training loop shuffles again within each epoch, from
+    /// its own seed, which is a different question from which rows end up beside which.
+    /// </remarks>
+    public PipelineBuilder Shuffle(int seed = 20260929) => Add(new ShuffleStep(seed));
+
     /// <summary>Says where the features of this pipeline land, for every scaling that names no kind.</summary>
     /// <param name="range">
     /// Between minus one and one, <see cref="Form.Signed"/>, which is where a network takes its features; or between

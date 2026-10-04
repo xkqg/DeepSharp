@@ -295,6 +295,7 @@ public class ReleaseContractTests
     [InlineData("serve")]
     [InlineData("verso")]
     [InlineData("torch")]
+    [InlineData("ml")]
     public void ACheckOfThePackagesJustMade_ExtractsThemIntoAFolderOfItsOwn_NeverIntoTheMachinesPackageCache(string check)
     {
         // A version is extracted into the machine's package cache once, and never again: a check run on packages packed
@@ -362,9 +363,13 @@ public class ReleaseContractTests
         Assert.Contains("PackageValidationBaselineVersion", props, StringComparison.Ordinal);
         Assert.Equal(publishedBefore.Order(StringComparer.Ordinal), listed.Order(StringComparer.Ordinal));
 
-        // A package new this release is in neither: it is packed, and nothing is asked of a baseline it never had.
-        Assert.All(packable.Except(publishedBefore), package => Assert.DoesNotContain($";{package};", props, StringComparison.Ordinal));
-        Assert.Equal(packable.Order(StringComparer.Ordinal), publishedBefore.Order(StringComparer.Ordinal));
+        // A package new this release is in neither list above: it is packed, and nothing is asked of a baseline it never
+        // had. Naming them here is what keeps "new" from becoming a word anybody can use for a package that simply
+        // dropped out of the published list by accident.
+        string[] newThisRelease = ["DeepSharp.Learners.ML", "DeepSharp.Learners.MLNet"];
+
+        Assert.All(newThisRelease, package => Assert.DoesNotContain($";{package};", props, StringComparison.Ordinal));
+        Assert.Equal(packable.Order(StringComparer.Ordinal), publishedBefore.Concat(newThisRelease).Order(StringComparer.Ordinal));
     }
 
     [Fact]

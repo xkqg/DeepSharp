@@ -32,6 +32,7 @@
     <ProjectReference Include="..\..\Src\DeepSharp\DeepSharp.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Charts\DeepSharp.Charts.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Import.PyTorch\DeepSharp.Import.PyTorch.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Learners.ML\DeepSharp.Learners.ML.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Learners.Networks\DeepSharp.Learners.Networks.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.DataFrame\DeepSharp.Pipelines.DataFrame.csproj" />
