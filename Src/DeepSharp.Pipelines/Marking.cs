@@ -27,14 +27,23 @@ internal static class Marking
     {
         /// <summary>Puts the column that says where a column's gaps were onto the table, one value a row.</summary>
         /// <param name="column">The column whose gaps are marked; it is read, never changed.</param>
-        /// <remarks>Written before the gaps are settled or filled, since afterwards there is nothing left to see.</remarks>
+        /// <remarks>
+        /// Written before the gaps are settled or filled, since afterwards there is nothing left to see — and a row
+        /// already marked stays marked. Two verbs can reach one column: a gap settled above the split and then filled
+        /// below it leaves the fill nothing to find, and a marker written again from what the column holds now would say
+        /// no row was ever empty. Whoever marked it first is the one who saw the gap, so a later marking adds to that
+        /// answer rather than replacing it.
+        /// </remarks>
         internal void Marks(string column)
         {
             var values = table[column];
+            var marked = values.Name.Marked;
+            var before = table.Has(marked) ? table.NumbersOf(marked) : null;
 
             table.Put(new Column<double>(
-                values.Name.Marked, ColumnKind.Number,
-                Enumerable.Range(0, table.RowCount).Select(row => (double?)(values.IsMissing(row) ? 1 : 0))));
+                marked, ColumnKind.Number,
+                Enumerable.Range(0, table.RowCount).Select(row =>
+                    (double?)(values.IsMissing(row) || before?[row] is 1 ? 1 : 0))));
         }
     }
 }

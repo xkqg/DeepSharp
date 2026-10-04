@@ -43,6 +43,33 @@ public class MarkerTests
     }
 
     [Fact]
+    public void AColumnMarkedTwice_KeepsWhereTheGapsWere()
+    {
+        // Settling a gap destroys the difference between absent and measured, so a verb marking the same column
+        // afterwards finds nothing missing. The marker must still say what it said: whoever marked it first was the one
+        // who saw the gap, and a later marking adds to that answer rather than replacing it.
+        var table = new Table([new Column<double>("a", ColumnKind.Number, [1, null, 3])]);
+
+        table.Marks("a");
+        new SettleGapsStep("a", With.Zero).AddTo(table);
+        table.Marks("a");
+
+        Assert.Equal([0, 1, 0], table.NumbersOf("a_was_missing").Select(value => value!.Value));
+    }
+
+    [Fact]
+    public void ARowMissingOnlyTheSecondTime_IsAddedToWhatWasAlreadyMarked()
+    {
+        var table = new Table([new Column<double>("a", ColumnKind.Number, [1, null, 3])]);
+
+        table.Marks("a");
+        table.Put(new Column<double>("a", ColumnKind.Number, [null, 2, 3]));
+        table.Marks("a");
+
+        Assert.Equal([1, 1, 0], table.NumbersOf("a_was_missing").Select(value => value!.Value));
+    }
+
+    [Fact]
     public void AMarkerOnAColumnWithNoGaps_SaysSoForEveryRow()
     {
         var table = new Table([new Column<double>("a", ColumnKind.Number, [1, 2, 3])]);

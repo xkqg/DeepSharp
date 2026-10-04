@@ -36,6 +36,15 @@ out from settled columns. It learns nothing, so it writes nothing into the fitte
 
 - **A gap the profile finds names both verbs and where each stands**, in the one sentence it already said.
 
+- **A column already settled is not filled again, and says so at the line.** Settling leaves no gap for a fill to find,
+  so a `.FillMissing` of the same column can do nothing: the declaration refuses it, naming the settling's step number,
+  the column, and the two ways out. The same holds for settling one column twice.
+
+- **A second marking adds to the first instead of replacing it.** The column that says where the gaps were is the only
+  record that a value was ever absent — filling destroys the difference on purpose — so a verb marking a column another
+  verb already marked keeps what was there. Without it, a column settled above the split and filled below it ended up
+  saying no row had ever been empty.
+
 - **What a fit decided is read back as the choice it was.** `FittedStepValues.Choice(name)` answers the whole number the
   fit wrote under a name, or nothing when it wrote none, so a replay asking what was decided never compares fractions to
   learn something that was never a fraction. A value a hair wide of nought or one, which a hand-edited file can hold,

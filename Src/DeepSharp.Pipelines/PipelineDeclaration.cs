@@ -35,6 +35,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         new AtMostOne<ISplitStep>("split"),
         new NothingLearnsBeforeTheSplit(),
         new RowsAreSettledBeforeTheSplit(),
+        new ASettledColumnIsNotFilledAgain(),
         new AtMostOne<IOrdersRows>("order"),
         new RowOrderIsDeclaredBeforeItIsRead(),
         new AtMostOne<INamesTheAnswer>("output"),

@@ -120,7 +120,8 @@ public static class PipelineSample
             // The median of the ages is learned from the training rows, so the fill stands here. Nothing is worked out
             // from 'age' above the line; if something were, its gaps would travel into it, and the answer would be to
             // settle them where the features are worked out, with a value no row decided — which is what SettleGaps is
-            // for, and which writes nothing into the fitted half because it learned nothing.
+            // for, and which writes nothing into the fitted half because it learned nothing. This line would then go:
+            // a settled column has no gap left, so the pipeline refuses a fill of it rather than run a line that cannot act.
             .FillMissing(fill => fill.Median("age"))
             .EncodeCategories()
             .Normalise("age", "fare", "family")

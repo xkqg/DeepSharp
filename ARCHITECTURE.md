@@ -424,6 +424,15 @@ always. Filling destroys the distinction between "absent" and "the value happene
 destroys it irreversibly; a caller who does not want the column drops it like any other column, which is a
 verb they already have.
 
+Because the distinction is destroyed, the marking column is the only record left that it ever existed — so a
+second verb reaching the same column **adds** to the marking rather than writing it again. Three verbs mark:
+filling a gap, settling one, and encoding a column whose cell was empty. Two of them can meet on one column,
+a gap settled above the split and then filled below it, and by the time the second looks there is nothing
+missing to see: a marking written afresh from what the column holds then would say no row was ever empty. The
+first verb to mark is the one that saw the gap. Whether the second verb should have been written at all is a
+separate question, and the declaration answers it: a fill of a column already settled can do nothing, so it
+is refused at its own line, naming the settling's step and the column.
+
 A value that is not a finite number is refused by every fit, not only by `FillNaN`: one not-a-number among the
 training values became the centre a scale was built around. The fit names `fill.nan` as the step that deals
 with it, and the handover refuses one as well.
@@ -433,8 +442,9 @@ into it: the features are added above the split and the fills stand below it, be
 learned from the training rows. So a sum of two columns, one of which has a gap, is itself a gap — unless the gap is
 settled where the features are worked out, which is what `settle.gaps` is for. It puts in a value no row decided, so
 nothing of validation or test taught it anything; it writes nothing into the fitted half, because it learned nothing;
-and a feature worked out after it is worked out from settled columns. `DropGaps` and `DropWarmUp` stand there too and
-take the rows out instead. The handover says all of this when it meets a gap it cannot hand over, naming the columns
+and a feature worked out after it is worked out from settled columns. It is one answer or the other, never both: a
+settled column has no gap left, so a fill of it below the split is refused at its own line rather than run as a step that
+cannot act. `DropGaps` and `DropWarmUp` stand up there too and take the rows out instead. The handover says all of this when it meets a gap it cannot hand over, naming the columns
 the feature was worked out from rather than only that a gap is a gap.
 
 ### The declaration is a file, and the chain can write it

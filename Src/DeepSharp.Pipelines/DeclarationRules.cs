@@ -187,6 +187,54 @@ internal sealed class ColumnsAreDeclaredFirst : IDeclarationRule
 }
 
 /// <summary>
+/// A column whose gaps were settled is not settled or filled again.
+/// </summary>
+/// <remarks>
+/// Settling destroys the difference between absent and measured, permanently: afterwards the column holds no gap, so a
+/// second verb reaching for the same column has nothing to do. The marking column keeps saying where the gaps were,
+/// because a later marking adds to the first rather than replacing it, but the line itself never acts — and a line that
+/// never acts is a person who meant one of the two and wrote both. Said at the declaration, where the line is, rather
+/// than left to a run that quietly does nothing.
+/// </remarks>
+internal sealed class ASettledColumnIsNotFilledAgain : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+
+        var settled = new Dictionary<string, int>(StringComparer.Ordinal);
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (Column(steps[at]) is not { } column)
+            {
+                continue;
+            }
+
+            if (settled.TryGetValue(column, out var first))
+            {
+                yield return new DeclarationFault(
+                    at, steps[at].Verb,
+                    $"would fill the gaps in '{column}', and settle.gaps at step {first + 1} already settled them: "
+                    + "there is no gap left for it to find. Keep the settling, or keep the fill and settle another column.");
+            }
+            else if (steps[at] is SettleGapsStep)
+            {
+                settled[column] = at;
+            }
+        }
+    }
+
+    // The column a verb would put a value into, for the two verbs that fill a gap; nothing for every other step.
+    private static string? Column(IPipelineStep step) => step switch
+    {
+        SettleGapsStep settle => settle.Column,
+        FillMissingStep fill => fill.Column,
+        _ => null,
+    };
+}
+
+/// <summary>
 /// Nothing that learns from the data stands before the rows are split.
 /// </summary>
 /// <remarks>
