@@ -51,7 +51,7 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="$(PublishedBefore.Contains(';$(MSBuildProjectName);'))">
-    <PackageValidationBaselineVersion>0.5.0</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>0.6.1</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <ItemGroup>
