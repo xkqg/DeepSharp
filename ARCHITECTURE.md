@@ -395,9 +395,10 @@ arithmetic produced no number, almost always a division by zero in a derived col
 further upstream. They deserve different verbs and different defaults:
 
 ```csharp
-.FillMissing("trades", With.Mean)      // fitted on train; With.Median, With.Zero,
-.FillMissing("volume", With.Previous)  // With.Constant(0), With.Previous, With.Refuse
-.FillNaN("range", With.Refuse)         // the default: a NaN stops the run, because it should not be there
+.FillMissing(fill => fill             // fitted on train, a kind a group of columns:
+    .Mean("trades")                   // Mean, Median, Zero, Constant(0), Previous, Refuse
+    .Previous("volume"))
+.FillNaN("range", With.Refuse)        // the default: a NaN stops the run, because it should not be there
 ```
 
 Dropping the row is not among the strategies, though it was once meant to be. A strategy stands below the split,

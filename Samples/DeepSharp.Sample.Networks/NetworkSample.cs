@@ -117,13 +117,16 @@ public static class NetworkSample
                 .Boolean("holiday", "workingday")
                 .Number("temp", "atemp", "hum", "windspeed", "cnt")
                 .Number(Hours))
-            .Cyclical("dteday", Period.DayOfWeek)
-            .Cyclical("dteday", Period.MonthOfYear)
+            .Cyclical(cyclical => cyclical                   // one line, a period a column
+                .DayOfWeek("dteday")
+                .MonthOfYear("dteday"))
             .SplitByTime("dteday", train: 0.70, validation: 0.15)
             .NormaliseRow(Norm.L1, Hours)
             // ---- nothing above this line learns from the rows ----
             .EncodeCategories()
-            .Normalise("temp", "atemp", "hum", "windspeed")
+            .Normalise(scale => scale                        // a kind a group: the weather lands where the features do,
+                .Columns("temp", "atemp", "hum")             // and the wind, which gusts, is divided by its largest
+                .MaxAbs("windspeed"))
             .Drop("dteday")
             .Distribution(Hours, scaleBy: "cnt")
             .Drop("cnt")

@@ -59,8 +59,10 @@ var pipeline = Pdd.Create()
     .OrderBy("timestamp")
     .SplitByTime("timestamp", train: 0.70, validation: 0.15, gap: 1) // test is the rest
     .Ahead("close", 1, AheadAs.Return)                       // the answer: tomorrow's return
-    .FillMissing("trades", With.Mean)                        // only offered after the split
-    .Normalise("close", "trades")                            // where this pipeline's features land: -1 to 1 by default
+    .FillMissing(fill => fill.Mean("trades"))                // only offered after the split
+    .Normalise(scale => scale                                // one line, a kind a column
+        .Columns("close")                                    // where this pipeline's features land: -1 to 1 by default
+        .MaxAbs("trades"))                                   // a count, divided by its largest, so a quiet day stays nought
     .Drop("timestamp")
     .Report(report => report.Measure(Metric.Rmse).On(Part.Validation, Part.Test).As(Shown.Numbers))
     .WithTensorflow(network => network                       // and the network these rows train
