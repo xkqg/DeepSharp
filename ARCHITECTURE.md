@@ -380,6 +380,11 @@ marking none of them. So a pipeline published before the three words existed sti
 counts nothing — the words are the fit's own, where they can be held to. What the distinction buys is a rule that can be
 tested rather than hoped for: nothing a replay reads was only counted.
 
+A decision is read back as the choice it was, never as a number to compare. The bag holds numbers because the file does,
+but a decision is a nought or a one and never a measurement, so asking for it gives the whole number the fit wrote — a
+value a hair wide of one, which a hand-edited file can hold, reads as the nearest. A replay that asked whether a number
+equalled nought would be comparing fractions to learn something that was never a fraction.
+
 ### What that makes the carrier
 
 The pipeline is the artefact: the ordered steps plus what they learned while being fitted. It is saved

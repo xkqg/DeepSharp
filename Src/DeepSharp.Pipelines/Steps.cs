@@ -449,7 +449,7 @@ public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingS
 
         // Decided when the pipeline was fitted: too many of the training rows were gaps, so the column is not
         // filled at all, and the marker speaks for it.
-        if (fitted.Numbers.TryGetValue("filled", out var filled) && filled == 0)
+        if (fitted.Choice("filled") is 0)
         {
             table.Remove(Column);
 

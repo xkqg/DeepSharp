@@ -36,6 +36,11 @@ out from settled columns. It learns nothing, so it writes nothing into the fitte
 
 - **A gap the profile finds names both verbs and where each stands**, in the one sentence it already said.
 
+- **What a fit decided is read back as the choice it was.** `FittedStepValues.Choice(name)` answers the whole number the
+  fit wrote under a name, or nothing when it wrote none, so a replay asking what was decided never compares fractions to
+  learn something that was never a fraction. A value a hair wide of nought or one, which a hand-edited file can hold,
+  reads as the nearest.
+
 ### Changed
 
 - **The pipeline file is at version 6.** Only the new verb is new in it: no verb that shipped before means anything else

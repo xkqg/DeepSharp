@@ -213,6 +213,21 @@ public sealed class FittedStepValues
             : throw new InvalidOperationException(
                 $"This pipeline was never fitted for '{name}', so there is nothing to replay.");
 
+    /// <summary>What this step chose under that name, as the whole number it is.</summary>
+    /// <param name="name">What was chosen.</param>
+    /// <returns>The choice, or nothing when the fit wrote none under that name.</returns>
+    /// <remarks>
+    /// A decision is written as a number, because the file holds one object of numbers — but a decision is a nought or a
+    /// one and never a measurement, so it is read back as the whole number it is rather than compared as a fraction. A
+    /// file is text and text can be edited, so a value a hair wide of a whole number is read as the nearest one. A bag
+    /// read back from a file marks none of its names, so this answers for any number written under the name, and it is a
+    /// replay's question: a step asks it where it would otherwise ask whether a number equals nought.
+    /// </remarks>
+    public long? Choice(string name) =>
+        _numbers.TryGetValue(name, out var value)
+            ? (long)Math.Round(value, MidpointRounding.AwayFromZero)
+            : null;
+
     /// <summary>The list this step learned under that name.</summary>
     /// <param name="name">What the list is.</param>
     /// <returns>The list.</returns>

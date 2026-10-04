@@ -179,6 +179,36 @@ public class FittedVocabularyTests
         Assert.Throws<ArgumentException>(() => values.Saw("categories", 1));
     }
 
+    [Fact]
+    public void ADecisionIsReadBackAsTheChoiceItWas_NotAsANumberToCompare()
+    {
+        // The file holds one object of numbers, so a decision is written as one — but a nought or a one is the whole of
+        // it, and a replay asks which it was. Read back as a choice, nothing anywhere compares a floating-point value
+        // to tell what the fit decided.
+        var values = new FittedStepValues();
+        values.Decided("filled", 0);
+        values.Saw("gaps", 133);
+
+        Assert.Equal(0, values.Choice("filled"));
+        Assert.Equal(133, values.Choice("gaps"));
+        Assert.Null(values.Choice("never written"));
+    }
+
+    [Fact]
+    public void AChoiceWrittenWideOfAWholeNumber_IsReadAsTheNearestOne()
+    {
+        // A file is text, and text can be edited: a decision that arrives a hair off nought is still nought, because the
+        // fit only ever wrote a whole number under that name.
+        var values = new FittedStepValues();
+        values.Decided("filled", 0.0000000001);
+
+        Assert.Equal(0, values.Choice("filled"));
+
+        values.Decided("filled", 0.9999999999);
+
+        Assert.Equal(1, values.Choice("filled"));
+    }
+
     // Every row of the table is a training row: a part for each, which is how a fit is told which rows it may learn from.
     private static Part[] Training(Table table) => [.. Enumerable.Repeat(Part.Train, table.RowCount)];
 
