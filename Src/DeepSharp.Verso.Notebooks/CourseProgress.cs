@@ -195,9 +195,8 @@ internal sealed class CourseProgress
     {
         var kinds = new Kinds(catalog);
 
-        foreach (var cell in cells.Where(cell => cell.Type == StepCellType.StepType))
+        foreach (var verb in cells.Where(cell => cell.Type == StepCellType.StepType).Select(cell => StepText.Of(cell.Source).Verb))
         {
-            var verb = StepText.Of(cell.Source).Verb;
             var row = verb is not null && catalog.Knows(verb) ? RowOf(course, verb, kinds) : -1;
 
             if (row >= 0 && !kinds.Of(verb!).Drops)

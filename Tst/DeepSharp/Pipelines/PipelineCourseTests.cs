@@ -54,8 +54,10 @@ public class PipelineCourseTests
         Assert.NotEqual(one, PipelineCourse.Of([Declare, Read]));
         Assert.NotEqual(one, PipelineCourse.Of([Read, CourseStep.Of("settle.gaps")]));
         Assert.NotEqual(one, PipelineCourse.Of([Read]));
+        object another = "a course";
+
         Assert.False(one.Equals(null));
-        Assert.False(one.Equals("a course"));
+        Assert.False(one.Equals(another));
     }
 
     [Fact]

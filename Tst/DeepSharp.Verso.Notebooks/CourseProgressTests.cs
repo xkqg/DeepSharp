@@ -295,9 +295,8 @@ public class CourseProgressTests
     {
         // The notebook says which verbs fill the same place of a course by what a declaration keeps one of; the declaration
         // says it too, in its rules. Held to each other, so a step a rule starts to limit is limited here as well.
-        foreach (var description in Catalog.Descriptions)
+        foreach (var step in Catalog.Descriptions.Select(description => Catalog.ReadStep(description.Template)))
         {
-            var step = Catalog.ReadStep(description.Template);
             var refusedTwice = PipelineDeclaration.FaultsIn([step, step]).Any(fault => fault.Message.StartsWith("a pipeline has one ", StringComparison.Ordinal));
 
             Assert.Equal(CourseProgress.OnceOnly.Any(kind => kind.IsInstanceOfType(step)), refusedTwice);
