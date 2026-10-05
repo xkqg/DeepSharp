@@ -1,6 +1,7 @@
 ﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Verso.Notebooks;
 using Verso;
 using Verso.Abstractions;
 
@@ -37,7 +38,10 @@ public sealed partial class NotebookHost
         });
     }
 
-    /// <summary>Adds a cell of a kind right after another, as the add button between two cells does; it starts empty.</summary>
+    /// <summary>
+    /// Adds a cell of a kind right after another, as the add button between two cells does; it starts empty, but for a pipeline
+    /// block, which starts as the next step of the course the notebook's blocks follow.
+    /// </summary>
     /// <param name="after">The cell it follows.</param>
     /// <param name="kind">
     /// One of <see cref="Kinds"/>; one named with no language is given the language Verso's editors give it — code in the
@@ -52,7 +56,10 @@ public sealed partial class NotebookHost
     public Task<HostedCell> InsertAsync(Guid after, HostedKind kind) => TurnAsync(() =>
         AddedAsync(Scaffold.Notebook.Cells.IndexOf(Standing(after)) + 1, kind));
 
-    /// <summary>Adds a cell of a kind at the end, as the add button under the last cell does; it starts empty.</summary>
+    /// <summary>
+    /// Adds a cell of a kind at the end, as the add button under the last cell does; it starts empty, but for a pipeline block,
+    /// which starts as the next step of the course the notebook's blocks follow.
+    /// </summary>
     /// <param name="kind">
     /// One of <see cref="Kinds"/>; one named with no language is given the language Verso's editors give it — code in the
     /// notebook's default kernel, else C#.
@@ -217,11 +224,19 @@ public sealed partial class NotebookHost
     // cell type's kernel's; none for a type a renderer draws; else the notebook's default kernel, else C#.
     private HostedKind Listed(HostedKind kind) => Kinds.Listed(kind, kind.Language ?? Extensions.LanguageOf(Scaffold, kind.Type));
 
-    // A cell of a listed kind added at a place, empty, through the port the notebook's layout guards; the notebook is told.
+    // A cell of a listed kind added at a place, through the port the notebook's layout guards; the notebook is told. Empty,
+    // but for a pipeline block, which starts as the next step of the course the blocks follow: Verso's editors never ask a
+    // cell type what its cell starts with, and the host is where a cell is added.
     private async Task<HostedCell> AddedAsync(int at, HostedKind kind)
     {
         var listed = Listed(kind);
+        var starting = listed.Type == StepCellType.StepType ? _blocks.StartingText(Scaffold.Notebook.Cells, at) : string.Empty;
         var added = Guid.Parse(await Scaffold.NotebookOps.InsertCellAsync(at, listed.Type, listed.Language));
+
+        if (starting.Length > 0)
+        {
+            Scaffold.UpdateCellSource(added, starting);
+        }
 
         await TellAsync();
 

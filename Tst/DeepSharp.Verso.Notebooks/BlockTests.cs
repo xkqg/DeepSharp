@@ -38,7 +38,10 @@ public class BlockTests
         Assert.Equal(cell.CellTypeId, cell.Renderer.CellTypeId);
         Assert.False(string.IsNullOrWhiteSpace(cell.DisplayName));
         Assert.False(string.IsNullOrWhiteSpace(cell.Icon));
-        Assert.Equal("read.csv", Verbs().ReadStep(cell.GetDefaultContent()).Verb);
+
+        // The first step of a course, the file it reads still to say: what a new notebook starts with, and so what a block
+        // added to an empty notebook starts with.
+        Assert.Equal("{\n  \"step\": \"read.csv\",\n  \"path\": null\n}", cell.GetDefaultContent());
     }
 
     [Theory]

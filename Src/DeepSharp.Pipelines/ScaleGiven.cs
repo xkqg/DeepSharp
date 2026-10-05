@@ -60,9 +60,9 @@ public sealed record ScaleGivenStep : IPipelineStep<ScaleGivenStep>, IAddsColumn
     private static readonly ColumnParameter ColumnKey = new(
         "column", "The column to scale.", "column", ColumnKinds.Fillable);
 
-    private static readonly NumberParameter LowestKey = new("lowest", "The lowest value the column can hold.", 0);
+    private static readonly NumberParameter LowestKey = new("lowest", "The lowest value the column can hold.", 0) { IsABound = true };
 
-    private static readonly NumberParameter HighestKey = new("highest", "The highest value it can hold.", 1);
+    private static readonly NumberParameter HighestKey = new("highest", "The highest value it can hold.", 1) { IsABound = true };
 
     private static readonly OneOfParameter<Form> LandsKey = new(
         "lands", "Where the scaled values land: between minus one and one, or between nothing and one.", Form.Signed);

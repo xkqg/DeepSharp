@@ -175,6 +175,24 @@ public sealed class CatchUpTests : IDisposable
         Assert.True(ShowsAGrid(notebook.Scaffold.Cells[^1]));
     }
 
+    [Fact]
+    public async Task TheCoursePressedAfterABlockNoGestureSawWasAdded_ClearsTheGridTheBlocksNoLongerMake()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var fill = notebook.Scaffold.Cells[3];
+
+        await notebook.GestureAsync(fill, StepRenderer.Show);
+        Assert.True(ShowsAGrid(fill));
+
+        // A block that takes columns away, added above it in Verso's own editor, which tells no part of it; then the button
+        // that writes the steps still to come catches the notebook up as any press does.
+        notebook.Scaffold.InsertCell(2, StepCellType.StepType, StepKernel.Language, """{"step": "drop.columns", "columns": ["pclass"]}""");
+        await notebook.PressAsync(TableCourseAction.Id);
+
+        Assert.False(ShowsAGrid(fill));
+        Assert.Equal(["evidence.report", "learn.network"], notebook.Scaffold.Cells.TakeLast(2).Select(cell => StepText.Of(cell.Source).Verb));
+    }
+
     // Asks a block to show something in a turn of its own, as the toolbar's run or a gesture does, and stops the run the
     // moment the engine begins the block — as a person who pressed stop while it worked. The block works it all out, as
     // a run left behind does, and must write none of it.

@@ -54,7 +54,7 @@ Names the columns that take part, says what each holds, and decides what becomes
 {"step":"declare","remainder":"drop","columns":[{"name":"column","kind":"number","optional":false}]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `remainder` | one of `drop`, `keep` or `refuse` | `"drop"` |
 | `columns` | a list of columns, each with a `name`, a `kind` that is one of `text`, `number`, `integer`, `boolean`, `timestamp` or `category`, and whether it is `optional`; a column may say it is `excluded` — named, its kind kept, and read by nothing — a category may say which kind it `was` before it became one, a timestamp the `format` its moments are written in, as .NET writes a date format, without which they are read as ISO 8601 writes them, and any column the value that is `missing` there, which is read as a gap | `[{"name":"column","kind":"number","optional":false}]` |
@@ -72,7 +72,7 @@ Leaves columns out from here on.
 {"step":"drop.columns","columns":["column"]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `columns` | a list of the names of columns holding anything, each named once | `["column"]` |
 
@@ -88,7 +88,7 @@ Drops every row that has a gap in any of the named columns, before the rows are 
 {"step":"drop.gaps","columns":["column"]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `columns` | a list of the names of columns holding anything, each named once | `["column"]` |
 
@@ -104,7 +104,7 @@ Drops the rows at the start that an indicator cannot yet speak for.
 {"step":"drop.warmup","atMost":1000}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `atMost` | a whole number, at least 0 | `1000` |
 
@@ -120,7 +120,7 @@ Writes a column of words down as numbers, using the categories the training rows
 {"step":"encode","column":"column","as":"onehot","unseen":"reserve"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding anything | `"column"` |
 | `as` | one of `onehot` or `ordinal` | `"onehot"` |
@@ -140,7 +140,7 @@ Writes every column that stands for a group down as numbers, each by the categor
 {"step":"encode.categories","as":"onehot","unseen":"reserve"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `as` | one of `onehot` or `ordinal` | `"onehot"` |
 | `unseen` | one of `reserve` or `refuse` | `"reserve"` |
@@ -158,7 +158,7 @@ Sets out the rows a correlation between columns is drawn from, on the rows the s
 {"step":"evidence.correlation","columns":["left","right"],"shown":"drawn"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `columns` | a list of the names of columns holding a number, a whole number or true or false, each named once | `["left","right"]` |
 | `shown` | one of `drawn` or `numbers` | `"drawn"` |
@@ -176,7 +176,7 @@ Profiles the columns where it stands, on the rows the split trains on, and names
 {"step":"evidence.profile","columns":["column"]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `columns` | a list of the names of columns holding anything, each named once; may be left out | `["column"]` |
 
@@ -192,7 +192,7 @@ Names the measures a trained model is held to, the parts they are taken on and h
 {"step":"evidence.report","metrics":["rmse"],"parts":["validation","test"],"shown":["numbers"]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `metrics` | a list of one or more of `rmse`, `mae`, `r2`, `accuracy`, `precision`, `recall` or `confusionmatrix` | `["rmse"]` |
 | `parts` | a list of one or more of `train`, `validation` or `test` | `["validation","test"]` |
@@ -212,7 +212,7 @@ Adds a column worked out from two others by plain arithmetic.
 {"step":"feature.add","column":"feature","left":"left","arithmetic":"minus","right":"right"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of the column it makes | `"feature"` |
 | `left` | the name of a column holding a number, a whole number or true or false | `"left"` |
@@ -234,7 +234,7 @@ Writes a moment in time as a place on a circle, so that the ends of a cycle meet
 {"step":"feature.cyclical","column":"when","period":"monthofyear","form":"signed"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a moment in time | `"when"` |
 | `period` | one of `hourofday`, `dayofweek`, `dayofmonth` or `monthofyear` | `"monthofyear"` |
@@ -254,7 +254,7 @@ Adds a market indicator worked out from the rows that came before: an average, a
 {"step":"feature.indicator","column":"indicator","indicator":"sma","period":14,"columns":["close"]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of the column it makes | `"indicator"` |
 | `indicator` | one of `sma`, `ema`, `rsi`, `atr`, `adx`, `cci`, `williamsr`, `obv`, `macd`, `bollingerbands`, `stochastic` or `vwap` | `"sma"` |
@@ -276,7 +276,7 @@ Takes a moment in time apart into the pieces people reason with: an hour, a week
 {"step":"feature.timeParts","column":"when","asCategories":true,"parts":["month"]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a moment in time | `"when"` |
 | `asCategories` | `true` or `false` | `true` |
@@ -296,7 +296,7 @@ Fills the gaps in a column the named way, below the split, and marks where they 
 {"step":"fill.missing","column":"column","with":"median"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a number or a whole number | `"column"` |
 | `with` | one of `"mean"`, `"median"`, `"zero"`, `"previous"`, `"refuse"` or `{"kind": "constant", "value": a number}` | `"median"` |
@@ -316,7 +316,7 @@ Deals with a value that is not a number a model can use; refusing it is the defa
 {"step":"fill.nan","column":"column","with":"refuse"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a number | `"column"` |
 | `with` | one of `"refuse"`, `"mean"`, `"median"`, `"zero"` or `{"kind": "constant", "value": a number}` | `"refuse"` |
@@ -334,7 +334,7 @@ Names the trainer from ML.NET this pipeline is declared for: which trainer, the 
 {"step":"learn.ml","trainer":{"kind":"fastTree","leaves":20,"trees":100,"leastRows":10,"rate":0.2},"seed":20260929}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `trainer` | a part, written as a name and its settings: `fastTree`, which takes `leaves`, `trees`, `leastRows` or `rate` or `fastForest`, which takes `leaves`, `trees` or `leastRows` | `{"kind":"fastTree","leaves":20,"trees":100,"leastRows":10,"rate":0.2}` |
 | `seed` | a whole number | `20260929` |
@@ -352,7 +352,7 @@ Names the network this pipeline is declared for: its layers, what moves them, wh
 {"step":"learn.network","layers":[{"kind":"dense","units":16},{"kind":"relu"}],"optimizer":{"kind":"adam","rate":0.001,"firstMoment":0.9,"secondMoment":0.999,"epsilon":1E-08},"loss":{"kind":"meanSquaredError"},"stopping":{"kind":"never"},"engine":"light","seed":20260929,"epochs":100,"batch":32}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `layers` | a list of parts, each a name and its settings: `dense`, which takes `units`, `relu`, which takes nothing, `tanh`, which takes nothing, `sigmoid`, which takes nothing, `dropout`, which takes `rate`, `batchNorm`, which takes `momentum` or `epsilon` or `layerNorm`, which takes `epsilon` | `[{"kind":"dense","units":16},{"kind":"relu"}]` |
 | `optimizer` | a part, written as a name and its settings: `sgd`, which takes `rate` or `momentum` or `adam`, which takes `rate`, `firstMoment`, `secondMoment` or `epsilon` | `{"kind":"adam","rate":0.001,"firstMoment":0.9,"secondMoment":0.999,"epsilon":1E-08}` |
@@ -382,7 +382,7 @@ Pulls a column into another shape by arithmetic that learns nothing: a logarithm
 {"step":"maths","column":"column","maths":"log1p","into":"column"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a number, a whole number or true or false | `"column"` |
 | `maths` | one of `log`, `log1p`, `reciprocal`, `sqrt`, `square`, `arcsin`, `abs` or `sign` | `"log1p"` |
@@ -402,7 +402,7 @@ Brings a column onto a comparable scale, by numbers learned from the training ro
 {"step":"normalise","column":"column","scale":"midrange","outOfRange":"pass"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a number, a whole number or true or false | `"column"` |
 | `scale` | one of `standard`, `minmax`, `maxabs`, `robust`, `quantile`, `power` or `midrange` | `"midrange"` |
@@ -422,7 +422,7 @@ Brings each row onto a comparable scale across the columns that make it up, lear
 {"step":"normalise.row","norm":"l2","columns":["left","right"]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `norm` | one of `l1`, `l2` or `max` | `"l2"` |
 | `columns` | a list of the names of columns holding a number, a whole number or true or false, each named once | `["left","right"]` |
@@ -440,7 +440,7 @@ Puts the rows in order by one or more columns, smallest first, for the steps tha
 {"step":"order.by","columns":["when"]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `columns` | a list of the names of columns holding a moment in time, a whole number or a number, each named once | `["when"]` |
 
@@ -456,7 +456,7 @@ Holds the extreme values of a column to bounds learned from the training rows.
 {"step":"outliers.clip","column":"column","bounds":"iqr","at":1.5,"outlier":"clip"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a number, a whole number or true or false | `"column"` |
 | `bounds` | one of `quantile`, `sigma` or `iqr` | `"iqr"` |
@@ -478,7 +478,7 @@ Reads the rows from a comma-separated file.
 {"step":"read.csv","path":"data.csv"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `path` | the path of a file; a relative one is read from the pipeline's folder | `"data.csv"` |
 
@@ -494,7 +494,7 @@ Reads the rows from a sheet of an Excel workbook, the first unless one is named,
 {"step":"read.excel","path":"data.xlsx"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `path` | the path of a file; a relative one is read from the pipeline's folder | `"data.xlsx"` |
 | `sheet` | words; may be left out | left out |
@@ -512,7 +512,7 @@ Reads the rows from a JSON file holding an array of records, one object a row, e
 {"step":"read.json","path":"data.json"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `path` | the path of a file; a relative one is read from the pipeline's folder | `"data.json"` |
 
@@ -528,7 +528,7 @@ Reads the rows from an Apache Parquet file, which says what each of its columns 
 {"step":"read.parquet","path":"data.parquet"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `path` | the path of a file; a relative one is read from the pipeline's folder | `"data.parquet"` |
 
@@ -544,7 +544,7 @@ Takes rows that are handed in rather than opened: a table already in memory, a r
 {"step":"read.rows","description":"rows handed in"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `description` | words | `"rows handed in"` |
 
@@ -560,7 +560,7 @@ Scales a column into a range from bounds you give, above the split, so a feature
 {"step":"scale.given","column":"column","lowest":0,"highest":1,"lands":"signed"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a number or a whole number | `"column"` |
 | `lowest` | a number | `0` |
@@ -582,7 +582,7 @@ Settles the gaps in a column with a value no row decided, so a feature worked ou
 {"step":"settle.gaps","column":"column","with":"zero"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a number or a whole number | `"column"` |
 | `with` | one of `"zero"`, `"refuse"` or `{"kind": "constant", "value": a number}` | `"zero"` |
@@ -600,7 +600,7 @@ Puts the rows in an order drawn from a seed, before they are divided, so every p
 {"step":"shuffle","seed":20260929}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `seed` | a whole number | `20260929` |
 
@@ -616,7 +616,7 @@ Divides the rows at random, the same way every time for the same seed.
 {"step":"split.atRandom","train":0.7,"validation":0.15,"test":0.15,"predict":0,"seed":20260923}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `train` | the share the model learns from: above nought, at most one | `0.7` |
 | `validation` | the share used while choosing between models: nought to one | `0.15` |
@@ -637,7 +637,7 @@ Divides the rows by when they happened: the earliest to learn from, the latest t
 {"step":"split.byTime","column":"when","train":0.7,"validation":0.15,"test":0.15,"predict":0}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a moment in time, a whole number or a number | `"when"` |
 | `train` | the share the model learns from: above nought, at most one | `0.7` |
@@ -660,7 +660,7 @@ Divides the rows at random while keeping the mixture of one column the same in e
 {"step":"split.stratified","column":"class","train":0.7,"validation":0.15,"test":0.15,"predict":0,"seed":20260923}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding anything | `"class"` |
 | `train` | the share the model learns from: above nought, at most one | `0.7` |
@@ -683,7 +683,7 @@ Names the column a model is asked to predict, which is handed over apart from th
 {"step":"target","column":"answer"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding anything | `"answer"` |
 
@@ -699,7 +699,7 @@ Names an answer read from a column rows later in the declared order: the value t
 {"step":"target.ahead","column":"close","ahead":1,"as":"value"}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `column` | the name of a column holding a number, a whole number or true or false | `"close"` |
 | `ahead` | a whole number, at least 1 | `1` |
@@ -719,7 +719,7 @@ Names the columns a model is asked to predict as one answer: how a whole is divi
 {"step":"target.distribution","columns":["share1","share2"]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `columns` | a list of the names of columns holding a number, a whole number or true or false, each named once | `["share1","share2"]` |
 | `scaleBy` | the name of a column holding a number, a whole number or true or false; may be left out | left out |
@@ -737,7 +737,7 @@ Names the columns a model is asked to predict as one answer of labels, each noug
 {"step":"target.labels","columns":["label1","label2"]}
 ```
 
-| key | holds | a new block starts with |
+| key | holds | an example |
 |---|---|---|
 | `columns` | a list of the names of columns holding a number, a whole number or true or false, each named once | `["label1","label2"]` |
 | `ones` | a whole number, at least 0; left out, 0 | left out |

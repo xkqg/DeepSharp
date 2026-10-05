@@ -19,7 +19,8 @@ internal readonly record struct SavedPipeline(
 
 /// <summary>
 /// The file a pipeline is saved as, written and read in this one place — and the file of saved columns beside a
-/// notebook, <c>{"version": 5, "source": [...], "declare": {...}, "drop": [...], "output": {...}}</c>, with the same care.
+/// notebook, <c>{"version": 5, "source": [...], "declare": {...}, "drop": [...], "output": {...}}</c>, and a course,
+/// <c>{"version": 7, "course": [...]}</c>, with the same care. The course's part is in a file of its own.
 /// </summary>
 /// <remarks>
 /// <code>{"version": 5, "declaration": [ ... ], "fitted": [ {"step": ..., "prefix": ..., "learned": { ... }} ], "skipped": [ {"step": ..., "prefix": ...} ]}</code>
@@ -41,7 +42,7 @@ internal readonly record struct SavedPipeline(
 /// pipeline it was trained behind. It is read the same way, and its faults are placed in the larger file.
 /// </para>
 /// </remarks>
-internal sealed class PipelineDocument
+internal sealed partial class PipelineDocument
 {
     private const string VersionKey = "version";
     private const string DeclarationKey = "declaration";
@@ -210,12 +211,9 @@ internal sealed class PipelineDocument
 
         // No preset was written before the second version, and its output may be a word only the second has: one that
         // names no version is not read as the first, as a pipeline file is.
-        var version = root.TryGetProperty(VersionKey, out _) ? VersionOf(root) : NoVersion();
+        var version = root.TryGetProperty(VersionKey, out _) ? VersionOf(root) : NoVersion("A file of saved columns");
 
-        foreach (var property in root.EnumerateObject().Where(property => !PresetKeys.Contains(property.Name)))
-        {
-            _text.Fault(_text.Of(property.Name), $"A file of saved columns has no '{property.Name.Quoted()}'. It holds: {string.Join(", ", PresetKeys)}.");
-        }
+        FaultKeysNotHeld(root, PresetKeys, "A file of saved columns");
 
         var source = NamesUnder(root, SourceKey);
         var drop = NamesUnder(root, DropKey);
@@ -254,11 +252,20 @@ internal sealed class PipelineDocument
         return new PipelinePreset((DeclareStep)declare!, drop, output as INamesTheAnswer, source);
     }
 
-    private int NoVersion()
+    private int NoVersion(string file)
     {
-        _text.Fault(_text.Root, $"A file of saved columns names the version of the pipeline file it was written against, under '{VersionKey}'.");
+        _text.Fault(_text.Root, $"{file} names the version of the pipeline file it was written against, under '{VersionKey}'.");
 
         return PipelineDeclaration.Version;
+    }
+
+    // Every key at the top of a file that this kind of file does not hold, each said where it stands.
+    private void FaultKeysNotHeld(JsonElement root, string[] held, string file)
+    {
+        foreach (var property in root.EnumerateObject().Where(property => !held.Contains(property.Name)))
+        {
+            _text.Fault(_text.Of(property.Name), $"{file} has no '{property.Name.Quoted()}'. It holds: {string.Join(", ", held)}.");
+        }
     }
 
     /// <summary>A list of column names under a key, or nothing when the key is not there or holds something else.</summary>
@@ -374,10 +381,7 @@ internal sealed class PipelineDocument
 
         var version = VersionOf(root);
 
-        foreach (var property in root.EnumerateObject().Where(property => !RootKeys.Contains(property.Name)))
-        {
-            _text.Fault(_text.Of(property.Name), $"A pipeline file has no '{property.Name.Quoted()}'. It holds: {string.Join(", ", RootKeys)}.");
-        }
+        FaultKeysNotHeld(root, RootKeys, "A pipeline file");
 
         // What a run left out is written from the version in which a run for a learner first left steps out; an older file
         // that says it is refused where it says it, rather than read as something no reader of its version would read.

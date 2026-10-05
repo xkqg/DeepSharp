@@ -112,41 +112,18 @@ public sealed class RestoreBlocksAction : NotebookExtension, IToolbarAction
     // A cell's parts in its place — a block for each step, a cell of its own kind for the text around them — and the cell gone.
     private static async Task RestoreAsync(IToolbarActionContext context, Forgotten forgotten)
     {
-        var at = IndexOf(context, forgotten.Cell.Id);
+        var at = context.IndexOf(forgotten.Cell.Id);
 
         foreach (var part in forgotten.Parts)
         {
             var made = part.Step is { } step
-                ? await InsertAsync(context, at, new CellModel { Type = StepCellType.StepType, Language = StepKernel.Language, Source = step.AsBlockText() })
-                : await InsertAsync(context, at, new CellModel { Type = forgotten.Cell.Type, Language = forgotten.Cell.Language, Source = part.Text });
+                ? await context.InsertedAsync(at, new CellModel { Type = StepCellType.StepType, Language = StepKernel.Language, Source = step.AsBlockText() })
+                : await context.InsertedAsync(at, new CellModel { Type = forgotten.Cell.Type, Language = forgotten.Cell.Language, Source = part.Text });
 
-            at = IndexOf(context, made) + 1;
+            at = context.IndexOf(made) + 1;
         }
 
         await context.Notebook.RemoveCellAsync(forgotten.Cell.Id);
-    }
-
-    // A cell made where it is asked for, holding what it is asked to hold.
-    private static async Task<Guid> InsertAsync(IToolbarActionContext context, int at, CellModel wanted)
-    {
-        var id = Guid.Parse(await context.Notebook.InsertCellAsync(at, wanted.Type, wanted.Language));
-
-        context.NotebookCells[IndexOf(context, id)].Source = wanted.Source;
-
-        return id;
-    }
-
-    private static int IndexOf(IToolbarActionContext context, Guid id)
-    {
-        for (var at = 0; at < context.NotebookCells.Count; at++)
-        {
-            if (context.NotebookCells[at].Id == id)
-            {
-                return at;
-            }
-        }
-
-        throw new InvalidOperationException("A cell the notebook was asked to change is no longer in it.");
     }
 
     /// <summary>A cell holding steps a format forgot were blocks, and the parts its text falls into.</summary>

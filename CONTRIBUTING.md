@@ -66,6 +66,26 @@ The owner names the number when the work starts. It is written once, as the sing
 stands in the README at once — a test holds the three together, and another refuses a second `<Version>`
 anywhere. Nothing is packed or published before it is named.
 
+A published version is also what the next one is held to. When a package is packed, its public surface is compared with
+the last release's — `PackageValidationBaselineVersion` in `Directory.Build.props`, moved to the version just published
+in the commit that begins the next one — so a change nobody meant to make breaks the build instead of somebody's upgrade.
+A package that is new in a release is added to `PublishedBefore` when the one after it begins, and a test holds that list
+to the packable projects. A break that is meant is written into a suppression file beside the project, and said out loud
+in the changelog's upgrading notes.
+
+## What the steps write, and is committed
+
+`pipeline.schema.json`, which editors validate a pipeline file against, and `VERBS.md`, the reference of every verb, are
+written by the steps themselves and committed, and `ProjectionTests` fails when either no longer says what the steps do.
+A change to what a verb takes or writes writes them again: run the core's suite for that class with
+`DEEPSHARP_REGEN_GOLDEN=1`, read what changed, and commit it with the change.
+
+```
+DEEPSHARP_REGEN_GOLDEN=1 dotnet run --project Tst/DeepSharp/DeepSharp.Tests.csproj -c Release -f net10.0 -- -class DeepSharp.Tests.Pipelines.ProjectionTests
+```
+
+They are never edited by hand, since a hand-edited reference is the drift they exist to prevent.
+
 ## Every change ends with the documents
 
 The same commit that changes behaviour updates what describes it: the README when the shape of the library

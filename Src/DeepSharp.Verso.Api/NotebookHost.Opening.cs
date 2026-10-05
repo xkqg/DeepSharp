@@ -66,6 +66,8 @@ public sealed partial class NotebookHost
         new TakeOverAction(),
         new FormatGuard(),
         new RestoreBlocksAction(),
+        new TableCourseAction(),
+        new SeriesCourseAction(),
     ];
 
     /// <summary>Opens the notebook a file holds on an engine, and closes the engine when it cannot be opened.</summary>

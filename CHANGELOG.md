@@ -3,6 +3,92 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.1]
+
+A course to fill in: every step of a prepared pipeline in the order the steps belong, each present and waiting for what
+only a person knows, so a pipeline written from nothing starts from the steps rather than from a reader who has to
+remember which verb comes where.
+
+### Upgrading from 0.7.0
+
+- **The pipeline file stays at version 7.** A course is a third kind of file under the number a pipeline's file and the
+  saved columns already share, so no file written by 0.7.0 reads differently and no pipeline file or saved-columns file
+  this version writes differs from what 0.7.0 writes. Only a course file is new, and this version alone reads it. Raising
+  the number would have made every earlier reader refuse every file the new version writes — the columns a notebook keeps
+  beside itself included — to make room for a file no course touches.
+
+- **A pipeline block added in a notebook that DeepSharp's own host opens no longer starts empty.** In an application that
+  hosts the notebook through `DeepSharp.Verso.Api`, and in `deepsharp-serve`, the add button now writes the step of the
+  course that belongs where the block is added — the next step after the blocks above, so long as the blocks below do not
+  already stand past it — and starts empty where none belongs. Verso's own editors still add an empty block, because
+  Verso never asks a cell type what a cell starts with. A cell of any other kind starts empty everywhere, as it did.
+
+- **A new notebook's first block waits for its file.** `DeepSharp.Verso.Api` and `deepsharp-serve` used to start a new
+  notebook with the step that reads a CSV file at an example path, `data.csv`, which read as a file somebody chose. It is
+  now the course's first step with its path waiting, as every other block of a course is; a notebook made before keeps
+  its block as it was.
+
+- **No package published before this version changes what it offers**; this version only adds to the public surface of
+  `DeepSharp.Pipelines`, `DeepSharp.Verso.Notebooks` and `DeepSharp.Verso.Api`. The packages are now compared with 0.7.0
+  rather than 0.6.1 when they are packed, and the two that were new in 0.7.0, `DeepSharp.Learners.ML` and
+  `DeepSharp.Learners.MLNet`, are held to it as well.
+
+### Added
+
+- **`PipelineCourse`, the steps of a prepared pipeline as a value.** `PipelineCourse.Table` is the course for rows that do
+  not depend on one another — read, declare, settle the gaps, add the features, scale from bounds you know, split, name
+  the answer, drop what is not needed, fill and scale what is learned, report, and name the network — and
+  `PipelineCourse.SeriesInTime` the one for rows that follow each other in time; `PipelineCourse.Named` lists both. `Say`
+  returns the course with more said of a step, `Waiting` names every step that still waits and what it waits for, and
+  `Pdd.From(course, catalog)` starts a pipeline from a course filled in all the way, refusing one that is not with every
+  fault at its step. `Without` leaves the steps of some verbs out and `Also` adds one more step of a verb, since a scale is
+  written once a column.
+
+- **A course holds a verb and what has been said of it, never a half-made step.** A step cannot be half made: the reader
+  refuses one that lacks a key, and a key left as nothing is refused in the same words, so what a course carries is what
+  `StepCatalog.Make` already takes. A step that still waits is judged by its keys — whether its verb takes them — and once
+  nothing it waits for is missing it is judged by the verb, in the verb's own words, so a course written half way reads
+  back as the course it was and the rules every declaration keeps hold for its steps together.
+
+- **What waits is what only you know.** A column, the columns, a new column, a file, the columns a schema declares and a
+  bound start as nothing, since an example of one is not a default — a column called `column` reads as well as any other
+  name, so a step that kept it would pass for one somebody chose. A name a step may leave out stays out, which is how the
+  step decides it itself, and everything that only settles how — a seed, a share, a word from a set, a number that is not a
+  bound of your column — starts as its verb starts it. The step a block starts as, and the keys it leaves to the person,
+  are written from the same parameters as the template and the validator rather than beside them, and a course says both
+  of itself: `CourseStep.Skeleton` and `CourseStep.Waiting`.
+
+- **Two courses, because the rules say one cannot teach both.** A series is read in its order, so it is put in order
+  first and never shuffled, and it is divided along the clock rather than at random; and the answer that reads ahead
+  refuses a split without a gap at least as wide as how far it reads, so the course says `gap` where the table's leaves it
+  out. The order within each is written once, by the course, and held by tests: filled in for the passenger list and for
+  the price series, each breaks no rule, and the few neighbours the rules do fix are said by a test beside their reason.
+
+- **A course as a file of its own.** `course.ToJson()` and `PipelineCourse.FromJson(text, catalog)`, through the door the
+  pipeline's file and the saved columns are read through: a catalog, every fault at its line and column, a file written by
+  a newer DeepSharp refused whole, and a file of another kind refused by name.
+
+- **Two buttons in the notebook, one for each course.** **Course for a table** and **Course for a series** write every
+  step the notebook does not hold yet, each as a block that is its verb's skeleton with `null` where only you can say, in
+  one turn. A block that waits does not read, so it names the key it waits for and takes no part in the pipeline above it;
+  the blocks below it are not judged, so no rule is shown broken on a block nobody has touched. A course goes on from where
+  the blocks stand: it never writes over or moves a block, puts its steps after the last block that is a step, takes a
+  Parquet file for the step that reads a comma-separated one and a split along the clock for the one at random, lets a
+  block that drops columns stand wherever it stands, and is offered to no notebook whose steps stand in another order or
+  that holds the course whole. A shuffle is not the order of a series, so it does not steer a notebook to the series'
+  course.
+
+- **A pipeline block added in DeepSharp's own host starts as the step that belongs there.** See the upgrading notes.
+
+- **The pipelines sample starts one pipeline from the table's course** and runs it over the passenger list, and a page of
+  the wiki, Starting from a course, has both courses step by step, why each step stands where it does, and the code.
+
+### Changed
+
+- **The verb reference heads its column "an example".** `VERBS.md` showed each key's template value under "a new block
+  starts with"; a block of a course starts as the verb's skeleton, with what only you know waiting, so the column now says
+  what it is: an example of the value.
+
 ## [0.7.0]
 
 A trainer from ML.NET, behind the same seam a network stands behind, so a tree and a network are measured by one report

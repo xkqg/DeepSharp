@@ -10,8 +10,8 @@ using Verso.Serializers;
 namespace DeepSharp.Tests.Api;
 
 /// <summary>
-/// A notebook can be made where there is none: a .verso file holding one block, the step that reads a CSV file, written
-/// whole under a name of its own before it takes its place, so nothing ever meets half a notebook — and never over a file
+/// A notebook can be made where there is none: a .verso file holding one block, the step that reads a CSV file with its path
+/// still to say, written whole under a name of its own before it takes its place, so nothing ever meets half a notebook — and never over a file
 /// that is there already, which is left as it was.
 /// </summary>
 public sealed class CreateTests : IDisposable
@@ -22,9 +22,8 @@ public sealed class CreateTests : IDisposable
 
     private string At(string name) => Path.Join(_folder, name);
 
-    // The step a new block holds: the catalog's own template of the step that reads a CSV file.
-    private static IPipelineStep ReadStep() =>
-        StepCatalog.BuiltIn().ReadStep(StepCatalog.BuiltIn().Describe(ReadCsvStep.Name).Template);
+    // The step a new notebook starts with: the first step of a course, the file it reads still to say.
+    private const string FirstStepOfACourse = "{\n  \"step\": \"read.csv\",\n  \"path\": null\n}";
 
     [Fact]
     public async Task ANewNotebook_HoldsOneBlockThatReadsACsvFile_AndIsOpen()
@@ -35,7 +34,7 @@ public sealed class CreateTests : IDisposable
 
         var block = Assert.Single(host.Cells);
         Assert.Equal((StepCellType.StepType, StepKernel.Language), (block.Type, block.Language));
-        Assert.Equal(ReadStep(), StepCatalog.BuiltIn().ReadStep(block.Source));
+        Assert.Equal(FirstStepOfACourse, block.Source);
         Assert.Same(host, await notebooks.OpenAsync(At("new.verso"), TestContext.Current.CancellationToken));
 
         var saved = await new VersoSerializer().DeserializeAsync(await File.ReadAllTextAsync(At("new.verso"), TestContext.Current.CancellationToken));

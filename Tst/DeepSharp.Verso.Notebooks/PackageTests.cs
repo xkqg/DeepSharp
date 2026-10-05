@@ -55,16 +55,17 @@ public class PackageTests
     }
 
     [Fact]
-    public void TheCommaSeparatedReaderIsNamedInTheNotebookOnlyAsANewBlocksTemplate()
+    public void TheCommaSeparatedReaderIsNamedNowhereInTheNotebook()
     {
         // Every place that needs the source asks the rows the session kept, which the step that reads the file parsed,
         // whichever it is: a place that asked for the comma-separated reader by name went silent over every other file.
-        // The one mention left is the block a new notebook starts with.
+        // The block a new notebook starts with was the one mention left; it is now the first step of a course, which the
+        // course names.
         var naming = Directory.GetFiles(Path.Join(Repository.Root, "Src", "DeepSharp.Verso.Notebooks"), "*.cs")
             .Where(file => File.ReadAllText(file).Contains(nameof(DeepSharp.Pipelines.ReadCsvStep), StringComparison.Ordinal))
             .Select(Path.GetFileName);
 
-        Assert.Equal(["StepCellType.cs"], naming);
+        Assert.Empty(naming);
     }
 
     [Fact]

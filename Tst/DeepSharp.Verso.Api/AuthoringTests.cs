@@ -12,7 +12,8 @@ namespace DeepSharp.Tests.Api;
 
 /// <summary>
 /// A notebook is written in its host as in Verso's own editor: a cell is added after another or at the end, of a kind the
-/// engine has — code in a language it runs, Markdown, a pipeline block and the rest — and starts empty; a cell is taken
+/// engine has — code in a language it runs, Markdown, a pipeline block and the rest — and starts empty, but for a pipeline
+/// block, which starts as the next step of the course its blocks follow; a cell is taken
 /// away, moved past the neighbour it passes, or turned into another kind in one step. Every such change goes through the
 /// port the notebook's layout guards, so a layout that does not let cells be added, taken away, moved or typed into
 /// refuses it, and every version says what the layout allows. Each change tells the notebook, so what was worked out
@@ -31,6 +32,9 @@ public sealed class AuthoringTests : IDisposable
         """{"step": "fill.missing", "column": "age", "with": "median"}""",
         """{"step": "normalise", "column": "fare", "scale": "standard", "outOfRange": "pass"}""",
     ];
+
+    // What a block holds when it is the first step of a course: the file it reads, waiting to be said.
+    private const string FirstStepOfACourse = "{\n  \"step\": \"read.csv\",\n  \"path\": null\n}";
 
     public AuthoringTests() => File.Copy(Repository.Data("titanic.csv"), Path.Join(_folder, "titanic.csv"));
 
@@ -129,7 +133,87 @@ public sealed class AuthoringTests : IDisposable
         var second = await host.AddAsync(Kind(host, StepCellType.StepType));
 
         Assert.Equal([first.Id, second.Id], Order(host));
-        Assert.Equal((StepCellType.StepType, StepKernel.Language, ""), (second.Type, second.Language, second.Source));
+        Assert.Equal((StepCellType.StepType, StepKernel.Language, FirstStepOfACourse), (second.Type, second.Language, second.Source));
+    }
+
+    [Fact]
+    public async Task ABlockInsertedBetweenTwoOthers_ArrivesAsTheStepThatBelongsThere()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "titanic.verso", Block(Titanic[0]), Block(Titanic[1]), Block(Titanic[2]));
+
+        var added = await host.InsertAsync(host.Cells[1].Id, Kind(host, StepCellType.StepType));
+
+        Assert.Contains("\"step\": \"settle.gaps\"", added.Source, StringComparison.Ordinal);
+        Assert.Equal(host.Cells[2], added);
+        Assert.Contains("split.stratified", host.Cells[3].Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABlockInsertedWhereNoStepOfTheCourseBelongs_StartsEmpty_AndTheNotebookStaysOnItsCourse()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "titanic.verso", Block(Titanic[0]), Block(Titanic[1]), Block(Titanic[2]));
+
+        var added = await host.InsertAsync(host.Cells[0].Id, Kind(host, StepCellType.StepType));
+
+        Assert.Equal(string.Empty, added.Source);
+
+        // The block added at the end is still the step that follows the blocks: the notebook never left the course.
+        Assert.Contains("\"step\": \"target\"", (await host.AddAsync(Kind(host, StepCellType.StepType))).Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABlockAddedAfterTheFirstStepsOfACourse_ArrivesAsTheNextStep_WaitingForWhatOnlyItsPersonKnows()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "titanic.verso", Block(Titanic[0]), Block(Titanic[1]));
+
+        var added = await host.AddAsync(Kind(host, StepCellType.StepType));
+
+        Assert.Equal("{\n  \"step\": \"settle.gaps\",\n  \"column\": null,\n  \"with\": \"zero\"\n}", added.Source);
+        Assert.Equal(host.Cells[2], added);
+    }
+
+    [Fact]
+    public async Task ABlockAddedToASeriesNotebook_ArrivesAsTheNextStepOfTheSeriesCourse_WithItsGap()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(
+            notebooks,
+            "prices.verso",
+            Block("""{"step": "read.csv", "path": "apple.csv"}"""),
+            Block("""{"step": "declare", "remainder": "drop", "columns": [{"name": "Date", "kind": "timestamp", "optional": false}]}"""),
+            Block("""{"step": "order.by", "columns": ["Date"]}"""),
+            Block("""{"step": "settle.gaps", "column": "AAPL.Volume", "with": "zero"}"""),
+            Block("""{"step": "feature.add", "column": "range", "left": "AAPL.High", "arithmetic": "minus", "right": "AAPL.Low"}"""),
+            Block("""{"step": "scale.given", "column": "AAPL.Volume", "lowest": 0, "highest": 1000000000, "lands": "signed"}"""));
+
+        var added = await host.AddAsync(Kind(host, StepCellType.StepType));
+
+        Assert.Contains("\"step\": \"split.byTime\"", added.Source, StringComparison.Ordinal);
+        Assert.Contains("\"gap\": 1", added.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ABlockAddedToANotebookThatHoldsTheWholeCourse_OrThatWentItsOwnWay_StartsEmpty()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var whole = await OpenAsync(notebooks, "whole.verso", [.. PipelineCourse.Table.Steps.Select(step => Block($"{{\"step\": \"{step.Verb}\"}}"))]);
+        var own = await OpenAsync(notebooks, "own.verso", Block("""{"step": "split.stratified"}"""), Block("""{"step": "read.csv"}"""));
+
+        Assert.Equal(string.Empty, (await whole.AddAsync(Kind(whole, StepCellType.StepType))).Source);
+        Assert.Equal(string.Empty, (await own.AddAsync(Kind(own, StepCellType.StepType))).Source);
+    }
+
+    [Fact]
+    public async Task AnyOtherKindOfCell_StillStartsEmpty()
+    {
+        await using var notebooks = new OpenNotebooks();
+        var host = await OpenAsync(notebooks, "titanic.verso", Block(Titanic[0]));
+
+        Assert.Equal(string.Empty, (await host.AddAsync(Kind(host, "code"))).Source);
+        Assert.Equal(string.Empty, (await host.InsertAsync(host.Cells[0].Id, Kind(host, "markdown"))).Source);
     }
 
     [Fact]

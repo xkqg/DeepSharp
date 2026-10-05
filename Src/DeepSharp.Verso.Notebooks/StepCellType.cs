@@ -1,7 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using DeepSharp.Pipelines;
 using Verso.Abstractions;
 
 namespace DeepSharp.Verso.Notebooks;
@@ -75,15 +74,38 @@ public sealed class StepCellType : NotebookExtension, ICellType
 
     /// <inheritdoc />
     /// <remarks>
-    /// The step that reads a CSV file, written the way the step writes itself: the block a new notebook starts with when
-    /// <c>DeepSharp.Verso.Api</c> makes one. A block added to a notebook that is there already starts empty, since neither
-    /// Verso's engine nor its editors ask a cell type for its default text.
+    /// The first step of a course, waiting for what only its person knows: the step that reads a file, its path still to say —
+    /// the block a new notebook starts with when <c>DeepSharp.Verso.Api</c> makes one. Neither Verso's engine nor its editors
+    /// ask a cell type for its default text, so a block added to a notebook that is there already starts empty in them;
+    /// <c>DeepSharp.Verso.Api</c> asks <see cref="StartingText"/> instead, for the step that belongs where the block goes.
     /// </remarks>
-    public string GetDefaultContent()
+    public string GetDefaultContent() => StartingText([], 0);
+
+    /// <summary>The text a block added to a notebook starts with: the step of the course that belongs where the block goes.</summary>
+    /// <param name="cells">The notebook's cells, as they stand before the block is added.</param>
+    /// <param name="at">The place the block goes: how many cells stand above it.</param>
+    /// <returns>
+    /// The step of the course the blocks follow that belongs at that place, as the skeleton a block holds, waiting for what
+    /// only its person knows; nothing at all when the blocks have gone their own way, already say the whole course, or no step
+    /// belongs there.
+    /// </returns>
+    /// <remarks>
+    /// Neither Verso's engine nor its editors ask a cell type what a block starts with, so a host that adds blocks itself —
+    /// as <c>DeepSharp.Verso.Api</c> does — asks here. Which of the two courses the blocks follow is the one they say most of,
+    /// and the table's when they say as much of both. A block put between two others is the step that belongs between them, so
+    /// it never lands out of the order the course teaches.
+    /// </remarks>
+    public string StartingText(IReadOnlyList<CellModel> cells, int at)
     {
+        ArgumentNullException.ThrowIfNull(cells);
+        ArgumentOutOfRangeException.ThrowIfNegative(at);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(at, cells.Count);
+
         var catalog = NotebookVerbs.Catalog();
 
-        return catalog.ReadStep(catalog.Describe(ReadCsvStep.Name).Template).AsBlockText();
+        return CourseProgress.FollowedBy(cells, catalog) is { } course && CourseProgress.NextAt(course, cells, at, catalog) is { } next
+            ? next.AsBlockText(catalog)
+            : string.Empty;
     }
 
     /// <summary>

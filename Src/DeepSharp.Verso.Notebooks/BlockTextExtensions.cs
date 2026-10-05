@@ -20,6 +20,25 @@ internal static class BlockTextExtensions
 {
     private static readonly JsonWriterOptions Indented = new() { Indented = true };
 
+    extension(CourseStep step)
+    {
+        /// <summary>The text a block holding this step of a course starts with.</summary>
+        /// <param name="catalog">The verbs a notebook knows.</param>
+        /// <returns>The step's skeleton, with what has been said put in it, laid out as every block is: indented.</returns>
+        public string AsBlockText(StepCatalog catalog)
+        {
+            var buffer = new ArrayBufferWriter<byte>();
+
+            using (var writer = new Utf8JsonWriter(buffer, Indented))
+            using (var skeleton = JsonDocument.Parse(step.Skeleton(catalog)))
+            {
+                skeleton.RootElement.WriteTo(writer);
+            }
+
+            return Encoding.UTF8.GetString(buffer.WrittenSpan).ReplaceLineEndings("\n");
+        }
+    }
+
     extension(IPipelineStep step)
     {
         /// <summary>The text a block holding this step shows.</summary>

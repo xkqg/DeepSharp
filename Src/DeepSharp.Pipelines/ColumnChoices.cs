@@ -257,7 +257,7 @@ public static class ColumnChoiceExtensions
         }
 
         /// <summary>The steps with an output placed.</summary>
-        /// <param name="output">The output, made under its verb by <see cref="StepCatalog.Make"/>.</param>
+        /// <param name="output">The output, made under its verb by <see cref="StepCatalog.Make(string, System.Text.Json.Nodes.JsonObject, IPipelineStep?)"/>.</param>
         /// <returns>
         /// The steps with the output in the place of the one standing, or at the end when none stands; an answer made from
         /// its column as it was read — a return — directly after the split, above every step that changes that column. The

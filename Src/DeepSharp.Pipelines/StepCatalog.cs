@@ -130,7 +130,7 @@ public sealed class StepCatalog
     public IReadOnlyList<StepDescription> Descriptions =>
         [.. _verbs.Values.Select(verb => verb.Description).OrderBy(each => each.Verb, StringComparer.Ordinal)];
 
-    /// <summary>What one verb is: what it does, its parameters, and the step a new block starts with.</summary>
+    /// <summary>What one verb is: what it does, its parameters, and an example of the step.</summary>
     /// <param name="verb">The verb.</param>
     /// <returns>Its description.</returns>
     /// <exception cref="ArgumentException">The verb is empty.</exception>
@@ -291,7 +291,17 @@ public sealed class StepCatalog
     /// The one way a step is made under a verb from what a person picked: a form that swaps a step for another that does
     /// what it does, and a list that picks an output's kind and its columns, make it here, so both keep the same values.
     /// </remarks>
-    public IPipelineStep Make(string verb, JsonObject stated, IPipelineStep? carrying)
+    public IPipelineStep Make(string verb, JsonObject stated, IPipelineStep? carrying) =>
+        Make(verb, stated, carrying, PipelineDeclaration.Version);
+
+    /// <summary>A step made under a verb, read as a file written against a given version is read.</summary>
+    /// <param name="verb">The verb.</param>
+    /// <param name="stated">The values said, under the verb's keys.</param>
+    /// <param name="carrying">The step the one made replaces, whose values under the verb's keys are kept; nothing for none.</param>
+    /// <param name="writtenAgainst">The version of the pipeline file the step is said to be written against.</param>
+    /// <returns>The step.</returns>
+    /// <exception cref="PipelineFileException">The verb is not known here, a key is not the verb's, a value breaks its rules, or the verb meant something else in that version.</exception>
+    internal IPipelineStep Make(string verb, JsonObject stated, IPipelineStep? carrying, int writtenAgainst)
     {
         ArgumentNullException.ThrowIfNull(verb);
         ArgumentNullException.ThrowIfNull(stated);
@@ -299,7 +309,7 @@ public sealed class StepCatalog
         if (!Knows(verb))
         {
             // Refused in the reader's own words, as a file naming the verb is.
-            return ReadStep(new JsonObject { [StepKey] = verb }.ToJsonString());
+            return ReadStep(new JsonObject { [StepKey] = verb }.ToJsonString(), writtenAgainst);
         }
 
         var description = Describe(verb);
@@ -313,12 +323,53 @@ public sealed class StepCatalog
             }
         }
 
+        return ReadStep(Overlaid(made, stated).ToJsonString(), writtenAgainst);
+    }
+
+    /// <summary>A step made of what a course has said: the verb's skeleton for the rest, so a name nobody said stays unsaid.</summary>
+    /// <param name="verb">The verb.</param>
+    /// <param name="said">What has been said, under the verb's keys.</param>
+    /// <param name="writtenAgainst">The version of the pipeline file the step is said to be written against.</param>
+    /// <returns>The step, read as a file's step is read, so the verb's own rules hold.</returns>
+    /// <exception cref="PipelineFileException">
+    /// The verb is not known here, a key is not the verb's, a key it needs was not said, a value breaks its rules, or the verb
+    /// meant something else in that version.
+    /// </exception>
+    /// <remarks>
+    /// The other way a step is made under a verb. <see cref="Make(string, JsonObject, IPipelineStep?)"/> starts from the
+    /// template, whose every key holds an example; a course starts from the skeleton without what waits, so a column nobody
+    /// named and a name the verb may leave out are never there to be taken for a decision.
+    /// </remarks>
+    internal IPipelineStep MakeFromSaid(string verb, JsonObject said, int writtenAgainst)
+    {
+        ArgumentNullException.ThrowIfNull(verb);
+        ArgumentNullException.ThrowIfNull(said);
+
+        if (!Knows(verb))
+        {
+            // Refused in the reader's own words, as a file naming the verb is.
+            return ReadStep(new JsonObject { [StepKey] = verb }.ToJsonString(), writtenAgainst);
+        }
+
+        var made = JsonNode.Parse(Describe(verb).Skeleton)!.AsObject();
+
+        foreach (var waiting in made.Where(pair => pair.Value is null).Select(pair => pair.Key).ToArray())
+        {
+            made.Remove(waiting);
+        }
+
+        return ReadStep(Overlaid(made, said).ToJsonString(), writtenAgainst);
+    }
+
+    // What was said, put over what a step starts with: what is said wins, and the verb is no key to say.
+    private static JsonObject Overlaid(JsonObject made, JsonObject stated)
+    {
         foreach (var (key, value) in stated.Where(pair => pair.Key != StepKey))
         {
             made[key] = value?.DeepClone();
         }
 
-        return ReadStep(made.ToJsonString());
+        return made;
     }
 
     /// <summary>Reads one step written on its own, as text, against a given version of the pipeline file.</summary>
@@ -366,7 +417,7 @@ public sealed class StepCatalog
     }
 
     /// <summary>Why a verb cannot be read here: it is another package's, or nothing anywhere knows it.</summary>
-    private string Unknown(string verb)
+    internal string Unknown(string verb)
     {
         if (PackageThatBrings(verb) is { } package)
         {

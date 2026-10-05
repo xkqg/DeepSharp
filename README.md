@@ -18,6 +18,15 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.7.1 gives a pipeline a course to fill in.** The steps of a prepared pipeline in the order they belong, each waiting
+for what only you know: the file, the columns, the bounds. `PipelineCourse.Table` is the course for rows that do not
+depend on one another and `PipelineCourse.SeriesInTime` the one for rows that follow each other in time, because the
+rules that keep a declaration honest say no one order teaches both. A course is a value — `Say` fills in a step,
+`Waiting` names what still waits and `Pdd.From` starts a pipeline from one filled in all the way — and a file of its own,
+read through the same door as the pipeline's. In a notebook, two buttons write the steps the blocks do not hold yet, each
+block as its verb's skeleton with a `null` where only you can say, and a block added in DeepSharp's own host arrives as
+the step that belongs there instead of empty.
+
 **0.7.0 trains a tree from ML.NET behind the same seam a network stands behind.** A table that a tree learns better
 than a network does not have to become a network: `.WithML(trainer => trainer.FastTree())` says which trainer the rows
 are prepared for, `pipeline.TrainWithML()` runs the pipeline for what that trainer needs — leaving out the scalings a
@@ -77,10 +86,10 @@ var pipeline = Pdd.Create()
         .Between("turnover", 0, 2_000_000_000))              // them, so it stands here rather than below the split
     .SplitByTime("timestamp", train: 0.70, validation: 0.15, gap: 1) // then the split, just before what learns
     .Ahead("close", 1, AheadAs.Return)                       // the answer: tomorrow's return, from close as it was read
+    .Drop("timestamp")                                       // what no model reads, before what learns
     .Normalise(scale => scale                                // and below it only what the training rows decide
         .Columns("close")                                    // the price's own scale, which no bound was given for
         .MaxAbs("trades"))                                   // a count, divided by its largest, so a quiet day stays nought
-    .Drop("timestamp")
     .Report(report => report.Measure(Metric.Rmse).On(Part.Validation, Part.Test).As(Shown.Numbers))
     .WithTensorflow(network => network                       // and the network these rows train
         .Dense(8).Relu().Dense(1)                            // Keras's words: the widths come from the rows
@@ -119,6 +128,30 @@ The steps and what they learned are one file: `pipeline.Run().ToJson()` writes i
 The catalog is the list of verbs the reader knows — add `.WithIndicators()` for a file that holds indicators,
 which read the rows in their order and so need that order said first, with `.OrderBy("timestamp")`; and `.WithParquet()`,
 `.WithExcel()` or `.WithJson()` for one that reads its rows with those packages' readers.
+
+## Starting from a course
+
+A pipeline written from nothing starts with an empty chain and a reader who has to know which verb comes where. A course
+says it: every step of a prepared pipeline in the order the steps belong, each present and waiting for what only you
+know — the file to read, the columns to declare, the bounds a scale is given — and starting everything else as its verb
+starts it. `PipelineCourse.Table` is the course for rows that do not depend on one another, a passenger list or a
+customer file: read, declare, settle the gaps, add the features, scale from bounds you know, split, name the answer,
+drop what is not needed, fill and scale what is learned, report, and name the network. `PipelineCourse.SeriesInTime` is
+the same course for rows that follow each other in time, with three differences the rules make: the rows are put in order
+first, they are divided along the clock, and the answer is the one that reads ahead, so the split keeps a gap as wide as
+the answer reads.
+
+A course is a value you say more of, and a file of its own. `course.Say("read.csv", …)` fills in a step,
+`course.Waiting(catalog)` names every step that still waits and what it waits for, and `Pdd.From(course, catalog)` starts
+a pipeline from a course that waits for nothing, refusing one that still does with every fault at its step. `Without`
+leaves out the steps a pipeline does not need, and `Also` adds one more step of a verb, as a scale is written once a
+column. `course.ToJson()` writes it and `PipelineCourse.FromJson(text, catalog)` reads it back through the door the pipeline's
+file is read through; the file names the pipeline file's version, which does not move for it. In a
+notebook, the toolbar's **Course for a table** and **Course for a series** write every step the blocks do not hold yet, in
+one turn, each block as its verb's skeleton with `null` where only you can say — a block that waits does not read, so it
+names the key it waits for and no rule is shown broken on a block nobody has touched. The wiki's
+[Starting from a course](https://github.com/xkqg/DeepSharp/wiki/Starting-from-a-course) page has both courses step by
+step, why each step stands where it does, and the code.
 
 ## Reading the data, and running it for the learner
 
@@ -228,7 +261,8 @@ dotnet run --project Samples/DeepSharp.Sample.Networks -c Release -f net10.0
 ```
 
 The first asks the Titanic passenger list what each of its columns holds before anything is declared, has a profile say
-what should not be there and how each is answered, and prepares the passengers and a price series. The second trains a
+what should not be there and how each is answered, prepares the passengers and a price series, and starts the
+passengers' pipeline from the table's course, saying what waits before it fills it in. The second trains a
 network on each of three datasets — whether a passenger survived, a price five days on, a day's bikes hour by hour —
 has each pipeline's report measure it, saves it as its one file, reads it back and serves a row, and writes its charts.
 The notebook, `Samples/titanic.verso`, writes the Titanic pipeline block by block; its C# cell trains a network on what
@@ -305,6 +339,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | | |
 |---|---|
 | [Getting started](https://github.com/xkqg/DeepSharp/wiki/Getting-Started) | Install it, add two tensors, prepare a real file, train a network on it. |
+| [Starting from a course](https://github.com/xkqg/DeepSharp/wiki/Starting-from-a-course) | Every step of a prepared pipeline in the order the steps belong, each waiting for what only you know: a table's and a series', as a value, a file and two buttons in the notebook. |
 | [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) | The idea this library is built around, and the mistake it removes. |
 | [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) | Every verb in the order you write it: readers, features, the split, gaps, scales, what a model is asked to predict, the handover, and a run for each learner. |
 | [Networks](https://github.com/xkqg/DeepSharp/wiki/Networks) | Layers, losses, optimizers and the loop; a network in Keras's words or as code; trained behind a pipeline, measured, drawn and saved as one file. |
@@ -323,7 +358,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | | |
 |---|---|
 | `DeepSharp` | The tensors, their shape and the storage their values live on, the seam the arithmetic runs behind, what every engine refuses, the light engine on .NET's own vector maths, and the gradients worked out through it; the layers — dense, activations, dropout, normalisations, convolution, its window padded as TensorFlow's 'same' if you say so — networks written as code or described in Keras's words, losses, optimizers and learning-rate schedules, the training loop with early stopping and checkpoints, a network written down as the kinds it is made of and the numbers it learned, and the load that puts numbers trained elsewhere into its slots. Brings System.Numerics.Tensors alone. |
-| `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales — one line naming the kind and the columns it holds for, landing the features between minus one and one unless the pipeline says otherwise — a profile that names what should not be there, the answer in four kinds, the report of what a trained model is measured by, the learner a declaration is written for, the handover — a run for each learner, and every feature declared to land between minus one and one for a learner that needs it — and the column decisions saved on their own and taken over — saved as a file and replayed. Knows no tensor, and brings nothing but Microsoft's dependency-injection abstractions. |
+| `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales — one line naming the kind and the columns it holds for, landing the features between minus one and one unless the pipeline says otherwise — a profile that names what should not be there, the answer in four kinds, the report of what a trained model is measured by, the learner a declaration is written for, the handover — a run for each learner, and every feature declared to land between minus one and one for a learner that needs it — and the column decisions saved on their own and taken over, and a course to fill in — the steps of a prepared pipeline in the order they belong, each waiting for what only you know — saved as a file and replayed. Knows no tensor, and brings nothing but Microsoft's dependency-injection abstractions. |
 | `DeepSharp.Pipelines.Parquet` | `.ReadParquet(path)`: an Apache Parquet file, which says what each of its columns holds. Brings Parquet.Net 6.1.0 and the compression libraries it reads with. |
 | `DeepSharp.Pipelines.Excel` | `.ReadExcel(path)` and `.ReadExcel(path, sheet)`: a sheet of an `.xlsx`, `.xls` or `.xlsb` workbook, each cell as the sheet types it. Brings ExcelDataReader 3.9.0. |
 | `DeepSharp.Pipelines.Json` | `.ReadJson(path)`: a JSON file holding an array of records, each value as the file writes it. Brings nothing: .NET reads JSON itself. |
@@ -337,8 +372,8 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | `DeepSharp.Import.Keras` | A model Keras 3 saved, as a `.keras` archive or an `.h5` file, read into a network built in Keras's words. Brings PureHDF 2.2.0, a managed HDF5 reader. |
 | `DeepSharp.Import.Onnx` | An ONNX graph — PyTorch's, Keras's or tf2onnx's — lowered onto the layers it is. Brings OnnxSharp 0.3.2 and the Google.Protobuf 3.29.3 it reads with. |
 | `DeepSharp.Charts` | The charts, as SVG, drawn with [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) from what the training loop and the measures already keep: the loss curve, the learning rate, a confusion matrix, what was predicted against what was there, what was left over, every measure as bars beside the training rows' average, and a correlation as a heatmap; and the report, rendered once as HTML. |
-| `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, the first reading a comma-separated, Parquet, Excel or JSON file, with the data, a profile and a heatmap at any block, and its columns chosen from the grid or a list — which shows what each column's cells propose — and saved beside it; a box beside a profile's alert gives its answer, and a report block draws the measures a C# cell hands back. It brings the charts, the indicators and the three readers, keeps a notebook of blocks in `.verso`, and makes blocks again of the steps another format kept as text. It runs in Verso's VS Code extension, in `verso serve`, in DeepSharp's own server and in an application of your own. |
-| `DeepSharp.Verso.Api` | An application of your own hosting the notebook: one open notebook for each file, however many views show it, with the notebook's parts registered by the package itself — so a program published as a single file has them too. Typing, running, a click on a block's controls and the toolbar's buttons take their turn one at a time; a cell is added after another or at the end, of any kind the engine has, taken away, moved past its neighbour or turned into another kind, each only where the notebook's layout allows it; as a cell's text is typed, its kernel offers what may come next and says what a word means, even while a run is under way; a new notebook is made as one block that reads a CSV file, never over a file that is there already; a run can be stopped, one that never ends or one that still waits for another notebook's C# run, a file a button hands over goes to whoever pressed it, the properties panel comes back field by field, the layout, the theme and the title are changed as Verso's editors change them, and what a person does to the dashboard's tiles goes to the layout's own part. The notebook opens and saves as Verso's browser editor does, writing nothing into it that the engine only falls back on; every view is told what changed, version by version — the cells, the run under way and what runs that no run owns, the toolbar, whether anything is unsaved, what became of the kernels, what the dashboard or the presentation draws, and what the notebook says of itself; a notebook no view shows can close by itself when nothing in it is unsaved, a close stops the run under way instead of waiting for it, and the cells, and what they show, come back as plain values. Brings Verso's engine, 1.2.2. |
+| `DeepSharp.Verso.Notebooks` | A pipeline written as a [Verso](https://www.versonotebooks.com/) notebook, one block per step, the first reading a comma-separated, Parquet, Excel or JSON file, with the data, a profile and a heatmap at any block, and its columns chosen from the grid or a list — which shows what each column's cells propose — and saved beside it; a box beside a profile's alert gives its answer, and a report block draws the measures a C# cell hands back, and two buttons write the steps of a course into the blocks, each waiting for what only you know. It brings the charts, the indicators and the three readers, keeps a notebook of blocks in `.verso`, and makes blocks again of the steps another format kept as text. It runs in Verso's VS Code extension, in `verso serve`, in DeepSharp's own server and in an application of your own. |
+| `DeepSharp.Verso.Api` | An application of your own hosting the notebook: one open notebook for each file, however many views show it, with the notebook's parts registered by the package itself — so a program published as a single file has them too. Typing, running, a click on a block's controls and the toolbar's buttons take their turn one at a time; a cell is added after another or at the end, of any kind the engine has, taken away, moved past its neighbour or turned into another kind, each only where the notebook's layout allows it; as a cell's text is typed, its kernel offers what may come next and says what a word means, even while a run is under way; a new notebook is made as one block that reads a CSV file, never over a file that is there already, and a pipeline block added to one arrives as the step of the course that belongs there instead of empty; a run can be stopped, one that never ends or one that still waits for another notebook's C# run, a file a button hands over goes to whoever pressed it, the properties panel comes back field by field, the layout, the theme and the title are changed as Verso's editors change them, and what a person does to the dashboard's tiles goes to the layout's own part. The notebook opens and saves as Verso's browser editor does, writing nothing into it that the engine only falls back on; every view is told what changed, version by version — the cells, the run under way and what runs that no run owns, the toolbar, whether anything is unsaved, what became of the kernels, what the dashboard or the presentation draws, and what the notebook says of itself; a notebook no view shows can close by itself when nothing in it is unsaved, a close stops the run under way instead of waiting for it, and the cells, and what they show, come back as plain values. Brings Verso's engine, 1.2.2. |
 | `DeepSharp.Verso.Serve` | DeepSharp's own server: `deepsharp-serve`, a .NET tool, shows a notebook or a folder of them in your browser, on Verso's engine and built on `DeepSharp.Verso.Api`, with nothing else to install. It listens on this computer alone, answers only the address it prints, makes a change only for its own page, and writes into its folder only the notebooks it serves, what they save beside themselves, and a new notebook a page asks for, never over a file that is there; Ctrl+C ends it at once, whatever a notebook runs. Its page does what Verso's editor does, over one connection a tab, and carries everything it draws with, so it fetches nothing: the blocks, failures, JSON, CSV, progress, Mermaid diagrams and KaTeX formulas drawn as Verso draws them, a widget in a sandboxed frame, the dashboard and the presentation as the engine arranges them; the Metadata, Properties and View panels; Verso's keys, and what a cell's kernel offers and what a word means as its text is typed; the kernels' status, a dot while anything is unsaved, and the Stop where Run All stood. A cell is added, taken away once you say yes, moved or turned into another kind there, where the notebook's layout allows it; a file a button hands over arrives as a download; a dropped connection comes back by itself, keeping what was typed; and a folder's page makes a new notebook. |
 
 `dotnet pack DeepSharp.slnx` makes all eighteen. They run on .NET 8 and .NET 10. MIT — see

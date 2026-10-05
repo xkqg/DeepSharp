@@ -51,7 +51,7 @@ internal static class VerbReference
 
             if (verb.Parameters.Count > 0)
             {
-                page.Append("| key | holds | a new block starts with |\n")
+                page.Append("| key | holds | an example |\n")
                     .Append("|---|---|---|\n");
 
                 foreach (var row in verb.Parameters.SelectMany(parameter => parameter.Accept(new WhatAParameterHolds())))

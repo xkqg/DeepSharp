@@ -35,7 +35,8 @@ internal static class PageAsks
             asking.Asked.Action ?? throw Missing(asking, "action"),
             asking.Asked.Payload ?? string.Empty)),
 
-        // A cell added after the one the page names, or at the end when it names none; it starts empty.
+        // A cell added after the one the page names, or at the end when it names none; it starts empty, but for a pipeline
+        // block, which starts as the step of the course that belongs there.
         ["add"] = async asking => asking.Asked.After is { } after
             ? await asking.Host.InsertAsync(after, asking.Kind)
             : await asking.Host.AddAsync(asking.Kind),

@@ -12,7 +12,7 @@
 
     <!-- One number for every packable project. It is handed out when the work starts, never invented here,
          and the changelog heading carries the same one. -->
-    <Version>0.7.0</Version>
+    <Version>0.7.1</Version>
 
     <!-- Which frameworks a project targets is the project's own business, said in the project itself. The
          packages and the two suites are built for .NET 8 and .NET 10, because Verso's hosts run on either;
@@ -47,11 +47,11 @@
        meant is written into a suppression file beside the project, and said out loud in the changelog's upgrading
        notes. -->
   <PropertyGroup>
-    <PublishedBefore>;DeepSharp;DeepSharp.Backends.TorchSharp;DeepSharp.Charts;DeepSharp.Import.Keras;DeepSharp.Import.Onnx;DeepSharp.Import.PyTorch;DeepSharp.Learners.Networks;DeepSharp.Pipelines;DeepSharp.Pipelines.DataFrame;DeepSharp.Pipelines.Excel;DeepSharp.Pipelines.Indicators;DeepSharp.Pipelines.Json;DeepSharp.Pipelines.Parquet;DeepSharp.Verso.Api;DeepSharp.Verso.Notebooks;DeepSharp.Verso.Serve;</PublishedBefore>
+    <PublishedBefore>;DeepSharp;DeepSharp.Backends.TorchSharp;DeepSharp.Charts;DeepSharp.Import.Keras;DeepSharp.Import.Onnx;DeepSharp.Import.PyTorch;DeepSharp.Learners.ML;DeepSharp.Learners.MLNet;DeepSharp.Learners.Networks;DeepSharp.Pipelines;DeepSharp.Pipelines.DataFrame;DeepSharp.Pipelines.Excel;DeepSharp.Pipelines.Indicators;DeepSharp.Pipelines.Json;DeepSharp.Pipelines.Parquet;DeepSharp.Verso.Api;DeepSharp.Verso.Notebooks;DeepSharp.Verso.Serve;</PublishedBefore>
   </PropertyGroup>
 
   <PropertyGroup Condition="$(PublishedBefore.Contains(';$(MSBuildProjectName);'))">
-    <PackageValidationBaselineVersion>0.6.1</PackageValidationBaselineVersion>
+    <PackageValidationBaselineVersion>0.7.0</PackageValidationBaselineVersion>
   </PropertyGroup>
 
   <ItemGroup>

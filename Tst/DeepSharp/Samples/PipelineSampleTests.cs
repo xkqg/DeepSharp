@@ -33,6 +33,15 @@ public class PipelineSampleTests
         Assert.Matches(@"  fare: 12 of 623 rows hold 0, .* Answered by saying in the schema that 0 stands for a gap\.", said);
         Assert.Matches(@"  age: 133 of 623 rows are gaps\. settle\.gaps .* fill\.missing .* Answered by fill\.missing\.", said);
         Assert.Contains("=== Titanic ===", said, StringComparison.Ordinal);
+
+        // The table's course, started from: every step but the network waiting for what only its person knows, and then said for
+        // the passenger list, whose rows it divides as the passengers' own chain does.
+        Assert.Contains("=== the table's course, before anything is said ===", said, StringComparison.Ordinal);
+        Assert.Contains("  Step 1, 'read.csv': waits for what only you can say: 'path'.", said, StringComparison.Ordinal);
+        Assert.Contains("  Step 10, 'normalise': waits for what only you can say: 'column'.", said, StringComparison.Ordinal);
+        Assert.DoesNotContain("'evidence.report': waits", said, StringComparison.Ordinal);
+        Assert.Contains("=== Titanic, from the table's course ===", said, StringComparison.Ordinal);
+        Assert.Equal(2, said.Split("rows      891 (train 623, validation 133, test 135, predict 0)").Length - 1);
         Assert.Contains("=== Apple ===", said, StringComparison.Ordinal);
         // A scaling that names no kind lands the training rows between minus one and one, so age's centre is the middle
         // of its training range rather than its mean: the numbers the wiki's Titanic pipeline has always shown.

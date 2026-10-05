@@ -13,7 +13,7 @@ public sealed class TextParameter : StepParameter<string>
     /// <summary>Words a step needs.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     public TextParameter(string key, string description, string example)
         : this(key, description, example, optional: false)
     {
@@ -22,7 +22,7 @@ public sealed class TextParameter : StepParameter<string>
     /// <summary>Words a step needs, or can do without.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with, when the step needs the words.</param>
+    /// <param name="example">An example of the value, when the step needs the words.</param>
     /// <param name="optional">
     /// Whether the step can do without them — which sheet of a workbook, when the first will do. Left out, they are the
     /// empty text: nothing is written for them, nothing is read, and a new block starts without them.
@@ -72,7 +72,7 @@ public sealed class TextParameter : StepParameter<string>
 /// <summary>A parameter holding the path of a file the pipeline reads.</summary>
 /// <param name="key">The key it is written under.</param>
 /// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
+/// <param name="example">An example of the value.</param>
 /// <remarks>
 /// Words, said to be a path so that whatever resolves a path — against the folder a notebook sits in, say —
 /// knows which of a step's words to resolve.
@@ -80,6 +80,9 @@ public sealed class TextParameter : StepParameter<string>
 public sealed class FilePathParameter(string key, string description, string example)
     : StepParameter<string>(key, description, example)
 {
+    /// <inheritdoc />
+    internal override bool IsLeftToThePerson => true;
+
     /// <inheritdoc />
     public override string Read(JsonElement step) => step.RequiredString(Key);
 
@@ -113,7 +116,7 @@ public sealed class ColumnParameter : StepParameter<string>
     /// <summary>A column the step needs.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     /// <param name="accepts">The kinds of column the step can work on.</param>
     public ColumnParameter(string key, string description, string example, IReadOnlyList<ColumnKind> accepts)
         : base(key, description, example) =>
@@ -137,7 +140,7 @@ public sealed class ColumnParameter : StepParameter<string>
     /// <summary>A column the step reads, said with whether the step can do without it.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with, when the step needs the column.</param>
+    /// <param name="example">An example of the value, when the step needs the column.</param>
     /// <param name="accepts">The kinds of column the step can work on.</param>
     /// <param name="optional">Whether the step can do without it.</param>
     [Obsolete("Use ColumnParameter(key, description, example, accepts) for a column the step needs, and ColumnParameter(key, description, accepts) for one it can do without.")]
@@ -150,6 +153,9 @@ public sealed class ColumnParameter : StepParameter<string>
 
     /// <summary>Whether the step can do without it.</summary>
     public bool Optional { get; }
+
+    /// <inheritdoc />
+    internal override bool IsLeftToThePerson => true;
 
     /// <inheritdoc />
     public override IReadOnlyList<string> RequiredKeys => Optional ? [] : Keys;
@@ -193,13 +199,16 @@ public sealed class ColumnParameter : StepParameter<string>
 /// <summary>A parameter naming a column the step makes.</summary>
 /// <param name="key">The key it is written under.</param>
 /// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
+/// <param name="example">An example of the value.</param>
 /// <param name="optional">Whether a file may leave it out, in which case the step decides the name itself.</param>
 public sealed class NewColumnParameter(string key, string description, string example, bool optional = false)
     : StepParameter<string?>(key, description, example)
 {
     /// <summary>Whether a file may leave it out.</summary>
     public bool Optional { get; } = optional;
+
+    /// <inheritdoc />
+    internal override bool IsLeftToThePerson => true;
 
     /// <inheritdoc />
     public override IReadOnlyList<string> RequiredKeys => Optional ? [] : Keys;
@@ -236,7 +245,7 @@ public sealed class ColumnsParameter : StepParameter<IReadOnlyList<string>>
     /// <summary>Columns the step reads: at least one, each named once, unless said otherwise.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     /// <param name="accepts">The kinds of column the step can work on.</param>
     public ColumnsParameter(string key, string description, IReadOnlyList<string> example, IReadOnlyList<ColumnKind> accepts)
         : base(key, description, example) =>
@@ -245,7 +254,7 @@ public sealed class ColumnsParameter : StepParameter<IReadOnlyList<string>>
     /// <summary>Columns the step reads, said with whether none may be named and whether one may stand in several places.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     /// <param name="accepts">The kinds of column the step can work on.</param>
     /// <param name="optional">Whether none may be named.</param>
     /// <param name="repeatable">Whether one column may stand in more than one place.</param>
@@ -272,6 +281,9 @@ public sealed class ColumnsParameter : StepParameter<IReadOnlyList<string>>
     /// low and close are. Otherwise the list is a set of columns, and a column is named in it once.
     /// </summary>
     public bool Repeatable { get; init; }
+
+    /// <inheritdoc />
+    internal override bool IsLeftToThePerson => true;
 
     /// <inheritdoc />
     public override IReadOnlyList<string> RequiredKeys => Optional ? [] : Keys;
@@ -366,7 +378,7 @@ public sealed class NumberParameter : StepParameter<double>
     /// <summary>A number, any finite one unless a bound or a least value is said.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     public NumberParameter(string key, string description, double example)
         : base(key, description, example)
     {
@@ -375,7 +387,7 @@ public sealed class NumberParameter : StepParameter<double>
     /// <summary>A number, said with the bound it has to be above and the least value it may hold.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     /// <param name="above">A bound the number has to be strictly above, when there is one.</param>
     /// <param name="atLeast">The least value the number may hold, when there is one.</param>
     [Obsolete("Use NumberParameter(key, description, example) with { Above = …, AtLeast = … }.")]
@@ -391,6 +403,15 @@ public sealed class NumberParameter : StepParameter<double>
 
     /// <summary>The least value the number may hold, when there is one.</summary>
     public double? AtLeast { get; init; }
+
+    /// <summary>
+    /// Whether the number is a bound of the person's own column, which nothing could suggest: the lowest value a column can
+    /// hold, say. A number that only settles how — how far out a step cuts — is not, and starts as its step starts it.
+    /// </summary>
+    internal bool IsABound { get; init; }
+
+    /// <inheritdoc />
+    internal override bool IsLeftToThePerson => IsABound;
 
     /// <inheritdoc />
     public override double Read(JsonElement step) => step.RequiredNumber(Key);
@@ -431,7 +452,7 @@ public sealed class WholeNumberParameter : StepParameter<int>
     /// <summary>A whole number a file always writes, any one unless a least value is said.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     public WholeNumberParameter(string key, string description, int example)
         : base(key, description, example)
     {
@@ -440,7 +461,7 @@ public sealed class WholeNumberParameter : StepParameter<int>
     /// <summary>A whole number, said with the least value it may hold and the value leaving it out means.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     /// <param name="atLeast">The smallest value it may hold, when there is one.</param>
     /// <param name="leftOut">The value a file means by leaving the key out, when it may.</param>
     [Obsolete("Use WholeNumberParameter(key, description, example) with { AtLeast = …, LeftOut = … }.")]
@@ -543,7 +564,7 @@ public sealed class ShareParameter(string key, string description)
 /// <summary>A parameter holding true or false.</summary>
 /// <param name="key">The key it is written under.</param>
 /// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
+/// <param name="example">An example of the value.</param>
 public sealed class TrueOrFalseParameter(string key, string description, bool example)
     : StepParameter<bool>(key, description, example)
 {
@@ -571,7 +592,7 @@ public sealed class TrueOrFalseParameter(string key, string description, bool ex
 /// <typeparam name="TEnum">The set of words.</typeparam>
 /// <param name="key">The key it is written under.</param>
 /// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
+/// <param name="example">An example of the value.</param>
 public sealed class OneOfParameter<TEnum>(string key, string description, TEnum example)
     : StepParameter<TEnum>(key, description, example)
     where TEnum : struct, Enum
@@ -613,7 +634,7 @@ public sealed class OneOfParameter<TEnum>(string key, string description, TEnum 
 /// <typeparam name="TEnum">The set of words.</typeparam>
 /// <param name="key">The key it is written under.</param>
 /// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
+/// <param name="example">An example of the value.</param>
 public sealed class SeveralOfParameter<TEnum>(string key, string description, IReadOnlyList<TEnum> example)
     : StepParameter<IReadOnlyList<TEnum>>(key, description, example)
     where TEnum : struct, Enum
@@ -625,7 +646,7 @@ public sealed class SeveralOfParameter<TEnum>(string key, string description, IR
     /// <summary>A parameter holding several of some of a named set of words.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     /// <param name="only">The words of the set it may hold; the others are refused, and offered nowhere.</param>
     /// <exception cref="ArgumentException">It may hold none of the set's words.</exception>
     /// <remarks>
@@ -744,7 +765,7 @@ public sealed class FillStrategyParameter : StepParameter<FillStrategy>
     /// <summary>A strategy, one of those a step allows; what filling does there is said as <see cref="What"/>.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     /// <param name="allowed">The strategies this step may use.</param>
     public FillStrategyParameter(string key, string description, FillStrategy example, IReadOnlyList<string> allowed)
         : base(key, description, example) =>
@@ -753,7 +774,7 @@ public sealed class FillStrategyParameter : StepParameter<FillStrategy>
     /// <summary>A strategy, said with what filling does there.</summary>
     /// <param name="key">The key it is written under.</param>
     /// <param name="description">What it means.</param>
-    /// <param name="example">The value a new block starts with.</param>
+    /// <param name="example">An example of the value.</param>
     /// <param name="allowed">The strategies this step may use.</param>
     /// <param name="what">What the strategy does, for the message: "filling a gap".</param>
     [Obsolete("Use FillStrategyParameter(key, description, example, allowed) with { What = … }.")]
@@ -919,7 +940,7 @@ public sealed class SplitSharesParameter() : StepParameter<SplitShares>(
 /// </summary>
 /// <param name="key">The key it is written under.</param>
 /// <param name="description">What it means.</param>
-/// <param name="example">The value a new block starts with.</param>
+/// <param name="example">An example of the value.</param>
 public sealed class ColumnDeclarationsParameter(string key, string description, IReadOnlyList<ColumnDeclaration> example)
     : StepParameter<IReadOnlyList<ColumnDeclaration>>(key, description, example)
 {
@@ -968,6 +989,9 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
 
     /// <summary>The keys a file has to hold for every declared column.</summary>
     public IReadOnlyList<string> RequiredColumnKeys => [.. Parts.Where(part => part.Required).Select(part => part.Parameter.Key)];
+
+    /// <inheritdoc />
+    internal override bool IsLeftToThePerson => true;
 
     /// <inheritdoc />
     public override IReadOnlyList<ColumnDeclaration> Read(JsonElement step)

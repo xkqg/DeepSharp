@@ -1,15 +1,17 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Text.Json.Nodes;
 using DeepSharp.Pipelines;
 using static System.FormattableString;
 
 namespace DeepSharp.Sample.Pipelines;
 
 /// <summary>
-/// The two walked pipelines, each started where a host hands pipelines out: the passenger list, asked first what each of
-/// its columns holds and profiled for what should not be there, and the price series, split along its dates. The
-/// passengers' rows are handed over and served, and their pipeline is saved as a file and run again from it.
+/// The walked pipelines, each started where a host hands pipelines out: the passenger list, asked first what each of its
+/// columns holds and profiled for what should not be there, and then started again from the table's course; and the price
+/// series, split along its dates. The passengers' rows are handed over and served, and their pipeline is saved as a file and
+/// run again from it.
 /// </summary>
 public static class PipelineSample
 {
@@ -30,6 +32,8 @@ public static class PipelineSample
 
         var passengers = Passengers(pipelines, titanic);
         Report("Titanic", passengers, output);
+
+        Report("Titanic, from the table's course", StartedFromACourse(titanic, output), output);
 
         var prices = Prices(pipelines, Path.Join(data, "apple.csv"));
         Report("Apple", prices, output);
@@ -128,6 +132,44 @@ public static class PipelineSample
             .Target("survived")
             .Build()
             .Run();
+
+    // A course, started from instead of written out from memory: every step of the table's course in the order the steps belong,
+    // each waiting for what only a person knows. This program brings no network, so the course leaves that step out; said for the
+    // passenger list, the rest is the pipeline the passengers' chain above makes, in the order the course teaches.
+    private static PreparedData StartedFromACourse(string path, TextWriter output)
+    {
+        var catalog = StepCatalog.BuiltIn();
+        var course = PipelineCourse.Table.Without("learn.network");
+
+        output.WriteLine("=== the table's course, before anything is said ===");
+
+        foreach (var waiting in course.Waiting(catalog))
+        {
+            output.WriteLine($"  {waiting}");
+        }
+
+        output.WriteLine();
+
+        return Pdd.From(
+            course
+                .Say("read.csv", new JsonObject { ["path"] = path })
+                .Say("declare", Json("""
+                    {"columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "sibsp", "kind": "integer", "optional": false},
+                                 {"name": "parch", "kind": "integer", "optional": false}, {"name": "fare", "kind": "number", "optional": false},
+                                 {"name": "age", "kind": "number", "optional": true}]}
+                    """))
+                .Say("settle.gaps", new JsonObject { ["column"] = "fare" })
+                .Say("feature.add", new JsonObject { ["column"] = "family", ["left"] = "sibsp", ["arithmetic"] = "plus", ["right"] = "parch" })
+                .Say("scale.given", new JsonObject { ["column"] = "fare", ["lowest"] = 0, ["highest"] = 512 })
+                .Say("split.stratified", new JsonObject { ["column"] = "survived" })
+                .Say("target", new JsonObject { ["column"] = "survived" })
+                .Say("drop.columns", new JsonObject { ["columns"] = new JsonArray("sibsp", "parch") })
+                .Say("fill.missing", new JsonObject { ["column"] = "age" })
+                .Say("normalise", new JsonObject { ["column"] = "age" }),
+            catalog).Run();
+    }
+
+    private static JsonObject Json(string text) => JsonNode.Parse(text)!.AsObject();
 
     // A series in time: the split runs along the date, and the day of the week is written as a place on a circle so that
     // Monday and Sunday are neighbours.

@@ -42,6 +42,8 @@ Src/DeepSharp.Pipelines/          the data side
                                     and column, and a larger file read a piece of its UTF-8 at a time
     PipelineText.cs                 a pipeline's text as one writer writes it, and whether two pipelines are one fit
     PipelinePreset.cs               what a pipeline decided about its columns, saved on its own
+    PipelineCourse.cs               a course to fill in: the steps of a prepared pipeline in the order they belong, each
+                                    waiting for what only a person knows — not Course.cs below, the steps a run takes
     ColumnState.cs                  which columns there are at each step, followed from the schema down
     ColumnChoices.cs                what can be done to a column, and how each stands
     Steps.cs Schema.cs Splits.cs RowOrder.cs
@@ -80,7 +82,7 @@ Src/DeepSharp.Learners.ML/           where a trainer from ML.NET is declared, an
 Src/DeepSharp.Learners.MLNet/        the half that carries ML.NET: the rows handed over, the tree fitted, the file written
 Src/DeepSharp.Backends.TorchSharp/   an engine on libtorch, through TorchSharp, on the processor or a graphics card
 Src/DeepSharp.Charts/                every chart, as the text of an SVG, drawn with MatPlotLibNet; the report, as HTML
-Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso
+Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso, and the buttons that write a course into it
 Src/DeepSharp.Verso.Api/             an application of your own that hosts the notebook
     NotebookHost.cs                 one open notebook: its state, its turn, and the read every look takes
     NotebookHost.Editing.cs NotebookHost.Running.cs NotebookHost.Panels.cs NotebookHost.Publishing.cs
@@ -528,6 +530,77 @@ One thing does not survive being written down, and it decides the shape of the r
 custom step is therefore registered under a name and looked up while parsing, and a file naming a step that
 nobody registered **refuses to load** instead of quietly skipping it. That pushes features towards a named
 vocabulary, which is exactly what makes the file portable.
+
+### A course is the order, said once, and a file like the preset
+
+A pipeline written from nothing starts with an empty chain and a reader who has to know which verb comes where. A course
+says it: every step of a prepared pipeline in the order the steps belong, each present and waiting for what only a person
+knows. It is a value, `PipelineCourse`, and a file of its own, and it stands above the step instead of being one.
+
+What a course holds for a step is the verb and what has been said of it, never a half-made step, because a step cannot be
+half made. The reader refuses a step that lacks a key — measured over every verb that takes a value of its own, naming the
+key it lacks — and a key written as nothing is refused in the same words as one left out, so a second reader that took
+`null` to mean "not yet" would buy nothing and would be a second set of rules. What already carries it is the pair
+`StepCatalog.Make` takes, a verb and the values said under its keys, and a step is made from that pair only when
+everything it needs is there. The values said are kept as the canonical text of a JSON object, keys in alphabetical order
+and nothing for what is not said, so two steps that say the same are the same wherever they were written; a course's
+equality is written by hand, as the preset's is, because a record compares a list by reference and would call two courses
+that say the same unequal.
+
+Which keys wait is a fact about the parameter, not about the verb. Every kind of parameter that names something of the
+person's — a column, the columns, a new column, a file, the columns a schema declares, a bound — says so and waits as
+nothing; every kind that only settles how — a seed, a share, a word from a set — starts as its verb starts it. A number
+is a bound only where the step says it is, because a step's own starting distance is a setting and not something of the
+person's. A step that kept the template's example for a column would pass for one somebody chose: `column` reads as well
+as any other name, and it would be found wrong only by the rule that notices no such column exists. A name the step may
+leave out stays out — of the skeleton and of the step the course makes — since leaving it out is how the step decides it
+itself; so the course makes its steps from the skeleton and never from the template. The skeleton a block starts with is
+written from the same parameters as the template and the validator — the third thing that falls out of the one
+description rather than a list kept beside it — and a test holds it to the template verb by verb.
+
+A course is judged by one rule at every door. While a step still waits it is judged by the keys it holds, whether its
+verb takes them; once nothing it waits for is missing it is judged by the verb itself, which refuses what it refuses in
+its own words. A value is judged beside the keys it is tied to, and some of those have not been said: a lower bound of
+1990 judged beside an upper bound that is still the example 1 is refused for a number nobody wrote, and a course written
+half way could not be read back. The file reads a step by that rule and the declaration refuses by it, so
+`ToDeclaration` says every fault together — every step that waits, every verb the catalog does not know, every key a
+verb does not take and every value a complete step refuses — and a notebook's block, which is read as a step only once
+it waits for nothing, does the same.
+
+Two courses ship, because the rules say a table and a series in time cannot share one order. A series must be put in
+order and must not be shuffled, it is divided along the clock, and an answer that reads ahead refuses a split without a
+gap at least as wide as how far it reads, so the series' course says `gap` where the table's leaves it out. The order
+within each is listed by hand, owned by `PipelineCourse` and held by tests rather than derived. It cannot be derived from
+the rules and the capabilities: of the 3,628,800 orders of ten steps, 252,000 break no rule, and the rules fix only the
+source before the schema, the schema before the settling and, for a series, the order after the schema and the split
+before the answer that reads ahead; the rest is a flow, and a flow is something a person teaches. What the tests hold is
+that each course, filled in for the passenger list and for the price series, breaks no rule, and that each pair of steps
+the flow orders is said beside its reason. The flow is this. The gaps are settled before the features, because what fills
+a gap is learned from the training rows and cannot stand where the features are worked out. The features and then a scale
+from bounds, both above the split, since a scale from bounds learns nothing from the rows. The answer right below the
+split, because a return must be made from its column as it was read, so it can stand there whatever the answer is. What
+is not needed is dropped before what learns. A gap is filled and then the column is scaled. The report, and then the
+network.
+
+It is a third kind of file under the version the pipeline's file and the preset share, and it moves nothing. Every
+published reader stamps 7 and refuses 8 whole, and the number is written beside the saved columns of every notebook too,
+so raising it would have made every earlier reader refuse every file the new version writes, and a notebook of the
+earlier version that met a saved-columns file written at 8 could never write it again — for a file no course touches. The
+course goes through the same door as the preset: read with a catalog, every fault at its line and column, a newer version
+refused whole, each step read through the one maker a form uses so a verb's own refusal is the one a person reads. A file
+holds `version` and `course`, and one of another kind is refused by name. It names its version without exception, as a
+preset does, because what it says of a verb is read as that version meant it.
+
+A course stands beside the preset and does not absorb it. The preset is derived from the declaration and written whole
+after every accepted change from exactly four things, so a course kept inside it would be gone at the next block; a preset
+keeps no position by design; and taking one over needs a whole pipeline, which a half-filled course never is. The saved
+columns hold the schema, the drops and the output, and a course the whole order; nothing here fills a course from saved
+columns, since which row of a course an output stands for is a choice the saved file does not make. Nor does the chain take a course over: a
+chain refuses a fault before every step it adds, so it cannot hold a step that is not yet made. A course is said more of
+with `Say`, which fills in the one step a verb has; `Also` adds one more step of a verb right after the last one of it,
+since a scale is written once a column; `Without` leaves the steps of some verbs out; and the list is otherwise one a
+person edits through `Steps` and `Of`. `Pdd.From` starts the chain from a course filled in all the way, refusing one
+that is not with every fault the declaration would say.
 
 ### One validator, and a template that falls out of the same model
 
@@ -1258,6 +1331,33 @@ blocks holding it already, such as the echo of the click, does nothing. A take-o
 listed with every rule and offers no box, and a file that cannot be read says so at the block. The button is offered
 only for a saved notebook whose blocks make one pipeline, with columns saved beside it.
 
+Two more buttons write a course into the blocks, **Course for a table** and **Course for a series**, and each writes every
+step the blocks do not hold yet, as its skeleton, in one turn: one pass through the notebook's turn, every insert one
+write, one catch-up. A press costs a notebook two published versions whether it writes anything or not — measured — so
+twelve blocks written one turn at a time would have cost twenty-four more. A block that waits does not read, so it shows
+its own refusal naming the key it waits for, and the pipeline, the longest run of blocks from the top that makes a
+declaration, stops there: the blocks below are not judged, and measured at every stage of filling in, no rule faults a
+block nobody has touched. Written as their templates, with a placeholder column in each, the same blocks showed five
+faults on blocks nobody had touched, and the faults never cleared as the first blocks were filled in — the course would
+have taught that the block above is wrong, on its first press. What the blocks already say is read from their text alone,
+since a block that waits still counts as the step it names. A course goes on from behind the last step the blocks say,
+never over a block and never moving one; a step the blocks left out is not written back, since leaving one out is a
+decision, and when a later step needs one the rule that needs it says so at that block; a block of another kind of the
+same thing — the kinds a declaration holds only one of: a source, the schema, an order, a split, an answer, a learner, a
+report — stands for the step, and a test holds that list to the declaration's own rules, but for the order, whose two
+verbs are opposite choices — a series is put in its order and a table shuffled — so a shuffle never says a series'
+order and a notebook that shuffles is not steered to the series' course; a block that takes columns away is free, saying
+the course's drop wherever it stands, since a drop may stand before what learns or after it, and letting an early one
+move the course on would have offered learned steps in a pipeline that never splits them; and a notebook whose blocks
+take the steps in another order than the course teaches is offered none, since a course continued from there would say
+one thing and the blocks another.
+
+The host's add door asks for the step that belongs at the place the block is added: the first step the blocks above do
+not say, so long as the blocks below do not already stand past it. A block inserted between two others therefore never
+lands out of order and takes the notebook off its course, and where no step belongs it starts empty. A new notebook asks
+the same of no blocks at all, so its first block is the course's first step with its path waiting, as every other block
+of a course is, and not a file name that is only an example.
+
 The schema block's form changes the schema alone, through the schema's own operations. A column set "not taken"
 stays in the schema, excluded with its kind, and a step below that reads it says so at its own block rather than
 being rewritten; picking a kind for a column not taken takes it in with that kind, where the source has it. The grid
@@ -1452,7 +1552,9 @@ its card is handed on all the same, as Verso's own editors hand every click on, 
 card it shows until it draws again — a walk down a select sends several — and the part knows what became of the block
 the card was drawn for. What a part answers a click with is what the cell shows next. A cell is added after another
 or at the end, of a kind the engine has — Verso's editors' list with each language folded in, code in the blocks' own
-language left out, since such a cell is no block — and starts empty, as the engine inserts every kind; it is taken
+language left out, since such a cell is no block — and starts empty, as the engine inserts every kind, but for a pipeline block, which starts as the step of the
+course that belongs where it is added — neither the engine nor Verso's editors ask a cell type what a cell starts with, and the host
+is where a cell is added; it is taken
 away, moved past the neighbour it passes, which no other view can have moved the way it can move a place counted by
 index, or turned into another kind in one step, keeping its text and losing what it showed. Each goes through the port
 the notebook's layout guards, the engine's own, so the dashboard, which lets cells be run and resized and nothing
@@ -1461,7 +1563,7 @@ says which layout the notebook is shown in and what it allows, so a page offers 
 each change tells the notebook, as typing does. As a person types, the cell's kernel is asked what may come next and
 what a word means, as Verso's editors ask it, in the notebook's turn like anything else; a kernel not yet started is
 started then, as those editors start it, and never in the background. A new notebook is made as one block, the step
-that reads a CSV file — the one place a block starts with text, since Verso's engine and editors never ask a cell type
+that reads a CSV file — the other place a block starts with text, since Verso's engine and editors never ask a cell type
 for it — written whole under a name of its own and moved into its place by the file system in one step that never
 replaces a file, so nothing meets half a notebook and a file already there is left as it was. It is a `.verso` file,
 the one format that keeps a block, and a name an open notebook holds is refused, even when its file has gone.

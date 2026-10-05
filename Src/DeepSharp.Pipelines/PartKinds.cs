@@ -196,7 +196,7 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
     /// <summary>A parameter whose value is parts of these names.</summary>
     /// <param name="key">The key the parts are written under.</param>
     /// <param name="description">What the parts are, for whoever writes them.</param>
-    /// <param name="example">The parts a new block starts with.</param>
+    /// <param name="example">An example of the parts.</param>
     /// <param name="kinds">The names a part may give, and what each takes.</param>
     /// <exception cref="ArgumentException">There are no names at all, or two share one.</exception>
     /// <exception cref="ArgumentNullException">There are no names, or no parts to start with.</exception>
