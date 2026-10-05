@@ -30,7 +30,7 @@ public sealed partial class TutorialExampleTests : IDisposable
 
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
-    [GeneratedRegex("\"(?<file>[\\w.-]+\\.(?:csv|html|svg|json))\"")]
+    [GeneratedRegex("\"(?<file>[A-Za-z0-9._-]+\\.(?:csv|html|svg|json))\"")]
     private static partial Regex FileName();
 
     // The program with every file it names — the data it reads, the pages and pictures it writes — in the folder of this test,
