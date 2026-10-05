@@ -27,7 +27,6 @@ internal sealed class PageSocket : IAsyncDisposable
     private readonly Channel<JsonElement> _told = Channel.CreateUnbounded<JsonElement>();
     private readonly ConcurrentDictionary<long, TaskCompletionSource<Answered>> _asked = new();
     private readonly ConcurrentQueue<string> _frames = new();
-    private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Task _reading;
     private long _next;
 
@@ -40,8 +39,8 @@ internal sealed class PageSocket : IAsyncDisposable
     /// <summary>Every frame the server sent, in the order it came: its type, and its id or version.</summary>
     public IReadOnlyCollection<string> Frames => _frames;
 
-    /// <summary>Ends when the server has closed the socket.</summary>
-    public Task Ended => _ended.Task;
+    /// <summary>Ends when the read of the socket has ended: the server has closed it, or went without a word.</summary>
+    public Task Ended => _reading;
 
     /// <summary>The status the server closed the socket with; nothing while it is open.</summary>
     public WebSocketCloseStatus? CloseStatus => _socket.CloseStatus;
@@ -188,26 +187,22 @@ internal sealed class PageSocket : IAsyncDisposable
     /// </remarks>
     public async ValueTask DisposeAsync()
     {
-        try
+        using (_socket)
         {
-            if (_socket.State == WebSocketState.Open)
+            try
             {
-                await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "the page left", CancellationToken.None).WaitAsync(Patience, CancellationToken.None);
+                if (_socket.State == WebSocketState.Open)
+                {
+                    await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "the page left", CancellationToken.None).WaitAsync(Patience, CancellationToken.None);
+                }
             }
-        }
-        catch (Exception done) when (done is WebSocketException or OperationCanceledException or TimeoutException)
-        {
-            // The server went first, or never answered: the socket is let go as it is, and the read with it.
-            _socket.Abort();
-        }
+            catch (Exception done) when (done is WebSocketException or OperationCanceledException or TimeoutException)
+            {
+                // The server went first, or never answered: the socket is let go as it is, and the read with it.
+                _socket.Abort();
+            }
 
-        try
-        {
             await _reading.WaitAsync(Patience, CancellationToken.None);
-        }
-        finally
-        {
-            _socket.Dispose();
         }
     }
 
@@ -281,7 +276,6 @@ internal sealed class PageSocket : IAsyncDisposable
         finally
         {
             _told.Writer.TryComplete();
-            _ended.TrySetResult();
         }
     }
 
