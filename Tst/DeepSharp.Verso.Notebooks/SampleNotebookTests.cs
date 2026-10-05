@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Pipelines;
 using DeepSharp.Verso.Notebooks;
 using Verso.Serializers;
 
@@ -10,7 +11,7 @@ namespace DeepSharp.Tests.Notebooks;
 /// The notebook that ships with the samples is run as a person runs it, beside the passenger list in its folder: its blocks
 /// show the passengers where each lands, its C# cell trains a network on the pipeline the blocks hand over and hands its
 /// predictions back, and its report block then draws what the network was measured by — so the file a first command opens,
-/// <c>deepsharp-serve Samples/titanic.verso</c>, cannot drift from the notebook.
+/// <c>deepsharp-serve Samples/titanic.verso</c>, cannot drift from the notebook, nor teach another order than the course.
 /// </summary>
 public sealed class SampleNotebookTests : IDisposable
 {
@@ -29,7 +30,7 @@ public sealed class SampleNotebookTests : IDisposable
     public void Dispose() => Directory.Delete(_folder, recursive: true);
 
     [Fact]
-    public async Task TheSample_IsTheFileVersoWritesForIt_ABlockReadingThePassengerListFirst_AndAReportBlockLast()
+    public async Task TheSample_IsTheFileVersoWritesForIt_ABlockReadingThePassengerListFirst_TheReportBlockBeforeTheNetworkLast()
     {
         var text = await File.ReadAllTextAsync(Sample, TestContext.Current.CancellationToken);
         var serializer = new VersoSerializer();
@@ -39,7 +40,12 @@ public sealed class SampleNotebookTests : IDisposable
         Assert.Equal(text.ReplaceLineEndings("\n"), (await serializer.SerializeAsync(notebook)).ReplaceLineEndings("\n"));
         Assert.Contains("\"read.csv\"", blocks[0].Source, StringComparison.Ordinal);
         Assert.Contains("\"data/titanic.csv\"", blocks[0].Source, StringComparison.Ordinal);
-        Assert.Contains("\"evidence.report\"", blocks[^1].Source, StringComparison.Ordinal);
+        Assert.Contains("\"evidence.report\"", blocks[^2].Source, StringComparison.Ordinal);
+        Assert.Contains("\"learn.network\"", blocks[^1].Source, StringComparison.Ordinal);
+
+        // The blocks take the table's course in the order the course teaches: the answer right below the split, what learns
+        // below it, the report before the network.
+        Assert.True(CourseProgress.Of(PipelineCourse.Table, notebook.Cells, NotebookVerbs.Catalog()).Follows);
 
         // The cell names its packages as a person's cell does, by their NuGet ids.
         Assert.StartsWith("#r \"nuget: DeepSharp.Learners.Networks\"", Assert.Single(notebook.Cells, cell => cell.Type == "code").Source, StringComparison.Ordinal);
@@ -55,7 +61,7 @@ public sealed class SampleNotebookTests : IDisposable
     public async Task TheSample_ShowsThePassengers_TrainsANetworkInItsCell_AndItsReportBlockThenDrawsTheMeasures()
     {
         await using var notebook = await Notebook.OpenAsync(Path.Join(_folder, "titanic.verso"));
-        var report = notebook.Scaffold.Cells.Last(cell => cell.Type == StepCellType.StepType);
+        var report = notebook.Scaffold.Cells.Single(cell => cell.Type == StepCellType.StepType && cell.Source.Contains("\"evidence.report\"", StringComparison.Ordinal));
         var trains = notebook.Scaffold.Cells.Single(cell => cell.Type == "code");
 
         // The data at the report block — every passenger, each marked with the part it lands in — and, with nothing trained

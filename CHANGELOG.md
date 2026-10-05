@@ -85,6 +85,20 @@ remember which verb comes where.
 
 ### Changed
 
+- **The tutorial, the reference, the sample notebook and both sample programs teach the order of the course.** The README's
+  chain already named the answer right below the split, dropped what no model reads, then scaled, reported and named the
+  network. The ten pages of the tutorial, the reference page, the sample notebook and the two sample programs named the
+  answer after the fill and the scale, some dropped after the scale, and the notebook put its network before its report.
+  That breaks no rule for a class and does for a return made from a column the scale has changed, where the pipeline
+  refuses the pair, so a reader who learned one order could meet a refusal in the other. Every one of them now teaches the
+  course's order, and the tutorial's steps six to nine stand as the course's do: the answer, filling and scaling,
+  measuring, the network. The sample notebook's report block is the one before its last, and draws the measures as it did.
+
+- **The tutorial's pipelines are run, not only compiled.** A test runs the pipeline on each page over the published data,
+  and a second reads every chain of the README, the wiki and the samples, and the order of the tutorial's pages, against the
+  courses. The first found a page whose block asked a model for a column of dates and stopped there; it drops the date
+  below the split now, before what learns, and says why.
+
 - **The verb reference heads its column "an example".** `VERBS.md` showed each key's template value under "a new block
   starts with"; a block of a course starts as the verb's skeleton, with what only you know waiting, so the column now says
   what it is: an example of the value.

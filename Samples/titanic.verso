@@ -26,6 +26,11 @@
       "source": "{\n  \u0022step\u0022: \u0022split.stratified\u0022,\n  \u0022column\u0022: \u0022survived\u0022,\n  \u0022train\u0022: 0.7,\n  \u0022validation\u0022: 0.15,\n  \u0022test\u0022: 0.15,\n  \u0022predict\u0022: 0,\n  \u0022seed\u0022: 20260923\n}"
     },
     {
+      "id": "684279f6-b903-43b6-9a88-a3282a3dcba7",
+      "type": "deepsharp.step",
+      "source": "{\n  \u0022step\u0022: \u0022target\u0022,\n  \u0022column\u0022: \u0022survived\u0022\n}"
+    },
+    {
       "id": "479a677b-101c-49c4-85c3-bc67bed7836d",
       "type": "deepsharp.step",
       "source": "{\n  \u0022step\u0022: \u0022fill.missing\u0022,\n  \u0022column\u0022: \u0022age\u0022,\n  \u0022with\u0022: \u0022median\u0022\n}"
@@ -56,9 +61,9 @@
       "source": "{\n  \u0022step\u0022: \u0022normalise\u0022,\n  \u0022column\u0022: \u0022parch\u0022,\n  \u0022scale\u0022: \u0022midrange\u0022,\n  \u0022outOfRange\u0022: \u0022pass\u0022\n}"
     },
     {
-      "id": "684279f6-b903-43b6-9a88-a3282a3dcba7",
+      "id": "b3c23145-fafa-40ad-9d25-9f431d8b14f5",
       "type": "deepsharp.step",
-      "source": "{\n  \u0022step\u0022: \u0022target\u0022,\n  \u0022column\u0022: \u0022survived\u0022\n}"
+      "source": "{\n  \u0022step\u0022: \u0022evidence.report\u0022,\n  \u0022metrics\u0022: [\n    \u0022accuracy\u0022,\n    \u0022precision\u0022,\n    \u0022recall\u0022,\n    \u0022confusionmatrix\u0022\n  ],\n  \u0022parts\u0022: [\n    \u0022validation\u0022,\n    \u0022test\u0022\n  ],\n  \u0022shown\u0022: [\n    \u0022numbers\u0022,\n    \u0022drawn\u0022\n  ]\n}"
     },
     {
       "id": "00000000-0000-4000-8000-00000000000c",
@@ -66,14 +71,9 @@
       "source": "{\n  \u0022step\u0022: \u0022learn.network\u0022,\n  \u0022layers\u0022: [\n    {\n      \u0022kind\u0022: \u0022dense\u0022,\n      \u0022units\u0022: 16\n    },\n    {\n      \u0022kind\u0022: \u0022relu\u0022\n    },\n    {\n      \u0022kind\u0022: \u0022dense\u0022,\n      \u0022units\u0022: 1\n    }\n  ],\n  \u0022optimizer\u0022: {\n    \u0022kind\u0022: \u0022adam\u0022,\n    \u0022rate\u0022: 0.01,\n    \u0022firstMoment\u0022: 0.9,\n    \u0022secondMoment\u0022: 0.999,\n    \u0022epsilon\u0022: 1e-07\n  },\n  \u0022loss\u0022: {\n    \u0022kind\u0022: \u0022binaryCrossEntropy\u0022\n  },\n  \u0022stopping\u0022: {\n    \u0022kind\u0022: \u0022patience\u0022,\n    \u0022patience\u0022: 10,\n    \u0022least\u0022: 0,\n    \u0022best\u0022: true\n  },\n  \u0022engine\u0022: \u0022light\u0022,\n  \u0022seed\u0022: 20260929,\n  \u0022epochs\u0022: 100,\n  \u0022batch\u0022: 32\n}"
     },
     {
-      "id": "b3c23145-fafa-40ad-9d25-9f431d8b14f5",
-      "type": "deepsharp.step",
-      "source": "{\n  \u0022step\u0022: \u0022evidence.report\u0022,\n  \u0022metrics\u0022: [\n    \u0022accuracy\u0022,\n    \u0022precision\u0022,\n    \u0022recall\u0022,\n    \u0022confusionmatrix\u0022\n  ],\n  \u0022parts\u0022: [\n    \u0022validation\u0022,\n    \u0022test\u0022\n  ],\n  \u0022shown\u0022: [\n    \u0022numbers\u0022,\n    \u0022drawn\u0022\n  ]\n}"
-    },
-    {
       "id": "bdd256b4-093f-4322-9fad-0478e63b1682",
       "type": "markdown",
-      "source": "One of the blocks above names the network these rows are prepared for: its layers, what moves them, what judges them and when the run stops. The last block names what that network is measured by. The C# cell below trains exactly the network the blocks name \u2014 it reads the pipeline they hand over, after **Show the data here** on any block or the toolbar\u0027s run, trains it, and hands back what it predicted. **Show the data here** on the report block then draws the report under its grid."
+      "source": "The last block names the network these rows are prepared for: its layers, what moves them, what judges them and when the run stops. The block before it names what that network is measured by. The C# cell below trains exactly the network the blocks name \u2014 it reads the pipeline they hand over, after **Show the data here** on any block or the toolbar\u0027s run, trains it, and hands back what it predicted. **Show the data here** on the report block then draws the report under its grid."
     },
     {
       "id": "19abdf82-ed61-49d8-bcd7-693783ebffc4",

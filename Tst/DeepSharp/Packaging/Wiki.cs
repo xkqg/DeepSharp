@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace DeepSharp.Tests;
@@ -29,6 +30,9 @@ internal static partial class Wiki
     [GeneratedRegex("^(?<kind>example|continues): (?<name>[a-z-]+)$")]
     private static partial Regex Marker();
 
+    [GeneratedRegex("^\\| (?<at>\\d+) \\| \\[\\[(?<title>[^\\]]+)\\]\\] \\|", RegexOptions.Multiline)]
+    private static partial Regex TutorialRow();
+
     /// <summary>Every page of the wiki, its blocks read into programs and cells.</summary>
     /// <returns>The pages, by name.</returns>
     public static IReadOnlyList<WikiPage> Pages()
@@ -38,6 +42,21 @@ internal static partial class Wiki
             $"The wiki is not beside the repository, at {Folder}: clone it there — git clone https://github.com/xkqg/DeepSharp.wiki.git — as the build machine does.");
 
         return [.. Directory.GetFiles(Folder, "*.md").Order(StringComparer.Ordinal).Select(path => Read(Path.GetFileName(path), File.ReadAllText(path).ReplaceLineEndings("\n")))];
+    }
+
+    /// <summary>The steps of the tutorial, in the order the table on its start page gives them, each with the page it names.</summary>
+    /// <returns>The steps, numbered as the table numbers them.</returns>
+    public static IReadOnlyList<TutorialStep> Tutorial()
+    {
+        var pages = Pages().ToDictionary(page => page.Name, StringComparer.Ordinal);
+        var table = File.ReadAllText(Path.Join(Folder, "Getting-Started.md")).ReplaceLineEndings("\n");
+
+        return [.. TutorialRow().Matches(table).Select(row =>
+        {
+            var title = row.Groups["title"].Value;
+
+            return new TutorialStep(int.Parse(row.Groups["at"].Value, CultureInfo.InvariantCulture), title, pages[$"{title.Replace(' ', '-')}.md"]);
+        })];
     }
 
     /// <summary>A page's C# blocks: each a program of its own, a program going on from an example, or a notebook's cell.</summary>
@@ -110,3 +129,9 @@ internal readonly record struct WikiProgram(int Line, IReadOnlyList<WikiBlock> B
 /// <param name="Programs">The programs its blocks make.</param>
 /// <param name="Cells">The notebook cells it holds.</param>
 internal readonly record struct WikiPage(string Name, IReadOnlyList<WikiProgram> Programs, IReadOnlyList<WikiBlock> Cells);
+
+/// <summary>A step of the tutorial: its number in the table, the title the table links to, and the page.</summary>
+/// <param name="At">The step's number.</param>
+/// <param name="Title">The title the table links to, as a link writes it.</param>
+/// <param name="Page">The page.</param>
+internal readonly record struct TutorialStep(int At, string Title, WikiPage Page);

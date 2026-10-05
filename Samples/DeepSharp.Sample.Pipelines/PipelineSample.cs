@@ -121,6 +121,8 @@ public static class PipelineSample
             // what is left. So this says fifteen too — and nothing can ask for more rows than there are.
             .SplitStratified("survived", train: 0.70, validation: 0.15)
             // ---- nothing above this line is allowed to learn from the data ----
+            // The answer is named right below the line, before anything that learns.
+            .Target("survived")
             // The median of the ages is learned from the training rows, so the fill stands here. Nothing is worked out
             // from 'age' above the line; if something were, its gaps would travel into it, and the answer would be to
             // settle them where the features are worked out, with a value no row decided — which is what SettleGaps is
@@ -129,7 +131,6 @@ public static class PipelineSample
             .FillMissing(fill => fill.Median("age"))
             .EncodeCategories()
             .Normalise("age", "fare", "family")
-            .Target("survived")
             .Build()
             .Run();
 
@@ -202,10 +203,10 @@ public static class PipelineSample
             // the ninety that remain — here 65, 15 and the 10 that are left.
             .Predict(10)
             .SplitByTime("Date", train: 65, validation: 15)
+            .EncodeCategories()
             .Normalise(scale => scale
                 .Robust("AAPL.Close", "AAPL.Volume", "range")   // prices and volumes: the spike is not the data
                 .MinMax("rsi"))                                 // already between nought and a hundred
-            .EncodeCategories()
             .Build()
             .Run();
 

@@ -43,10 +43,10 @@ public static class NetworkSample
             .Declare(schema => schema.Integer("survived", "sibsp", "parch").Category("pclass", "sex").Optional("age", ColumnKind.Number).Number("fare"))
             .SplitStratified("survived", train: 0.70, validation: 0.15)
             // ---- nothing above this line learns from the rows ----
+            .Target("survived")                           // the answer, named right below the line and before what learns
             .FillMissing("age", With.Median)
             .EncodeCategories()
             .Normalise("age", "fare", "sibsp", "parch")   // a network takes them between -1 and 1, which is the default
-            .Target("survived")
             // Declared with the pipeline, before a number exists: every run is measured the same way.
             .Report(report => report
                 .Measure(Metric.Accuracy, Metric.Precision, Metric.Recall, Metric.ConfusionMatrix)
@@ -86,9 +86,9 @@ public static class NetworkSample
             .Cyclical("Date", Period.DayOfWeek)
             .SplitByTime("Date", train: 0.70, validation: 0.15, gap: 5)
             .Ahead("AAPL.Close", 5, AheadAs.Return)
+            .Drop("Date")                                    // what no model reads, before what learns
             // ---- nothing above this line learns from the rows ----
             .Normalise("AAPL.Close", "AAPL.Volume")
-            .Drop("Date")
             .Report(report => report.Measure(Metric.Rmse, Metric.Mae, Metric.R2).On(Part.Train, Part.Validation, Part.Test).As(Shown.Numbers, Shown.Drawn))
             .Build()
             .Run();
@@ -121,15 +121,15 @@ public static class NetworkSample
                 .DayOfWeek("dteday")
                 .MonthOfYear("dteday"))
             .SplitByTime("dteday", train: 0.70, validation: 0.15)
+            .Distribution(Hours, scaleBy: "cnt")             // the answer, named right below the line
             .NormaliseRow(Norm.L1, Hours)
+            .Drop("dteday")
+            .Drop("cnt")
             // ---- nothing above this line learns from the rows ----
             .EncodeCategories()
             .Normalise(scale => scale                        // a kind a group: the weather lands where the features do,
                 .Columns("temp", "atemp", "hum")             // and the wind, which gusts, is divided by its largest
                 .MaxAbs("windspeed"))
-            .Drop("dteday")
-            .Distribution(Hours, scaleBy: "cnt")
-            .Drop("cnt")
             .Report(report => report.Measure(Metric.Rmse, Metric.Mae, Metric.R2).On(Part.Train, Part.Validation, Part.Test).As(Shown.Numbers, Shown.Drawn))
             .Build()
             .Run();

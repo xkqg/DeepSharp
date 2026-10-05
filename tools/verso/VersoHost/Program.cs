@@ -150,7 +150,7 @@ if (handler is null || AssemblyLoadContext.GetLoadContext(handler.GetType().Asse
 }
 
 ICellInteractionHandler part = handler;
-var report = blocks[^1];
+var report = blocks.Single(block => block.Source.Contains("\"evidence.report\"", StringComparison.Ordinal));
 
 Holds($"{Path.GetFileName(path)} opened through Verso's own serializer: {blocks.Length} blocks and a C# cell, the blocks drawn by the installed package's part");
 

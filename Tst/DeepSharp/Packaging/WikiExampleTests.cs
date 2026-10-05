@@ -6,9 +6,6 @@ using DeepSharp.Learners.Networks;
 using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 using DeepSharp.Tests.Learners;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace DeepSharp.Tests.Packaging;
 
@@ -23,25 +20,6 @@ namespace DeepSharp.Tests.Packaging;
 /// </summary>
 public sealed class WikiExampleTests
 {
-    // What a console project has without a using of its own: the SDK's implicit usings.
-    private const string ImplicitUsings = """
-        global using System;
-        global using System.Collections.Generic;
-        global using System.IO;
-        global using System.Linq;
-        global using System.Net.Http;
-        global using System.Threading;
-        global using System.Threading.Tasks;
-        """;
-
-    // What the .NET SDK leaves unsaid in every project it builds: that one version of an assembly is taken for another the
-    // runtime unifies it with — on .NET 8, System.Text.Json 8 as referenced beside the 10 a package brings.
-    private static readonly Dictionary<string, ReportDiagnostic> SdkQuiets = new()
-    {
-        ["CS1701"] = ReportDiagnostic.Suppress,
-        ["CS1702"] = ReportDiagnostic.Suppress,
-    };
-
     [Fact]
     public void EveryCSharpBlockOfTheWiki_CompilesAgainstThePackagesAsBuilt_WithoutAWarning()
     {
@@ -53,7 +31,7 @@ public sealed class WikiExampleTests
         {
             foreach (var program in page.Programs)
             {
-                var diagnostics = Compiled(program).Diagnostics;
+                var diagnostics = program.Compiled().Diagnostics;
 
                 faults.AddRange(diagnostics.Select(diagnostic => $"{page.Name}, the block at line {program.Line}: {diagnostic}"));
                 compiled++;
@@ -72,7 +50,7 @@ public sealed class WikiExampleTests
         // as the page says, and answers what it answered before it was saved.
         var page = Wiki.Pages().Single(each => each.Name == "Networks.md");
         var program = page.Programs.Single(each => each.Blocks.Any(block => block.Code.Contains(": Network,", StringComparison.Ordinal)));
-        var compiled = Compiled(program);
+        var compiled = program.Compiled();
         var context = new AssemblyLoadContext("wiki", isCollectible: true);
 
         Assert.Empty(compiled.Diagnostics);
@@ -112,41 +90,4 @@ public sealed class WikiExampleTests
         Assert.Equal([1, 2], read.Programs.Select(program => program.Blocks.Count));
         Assert.Single(read.Cells);
     }
-
-    // A program compiled: its blocks put together as one — every block's usings first, then every block's statements in
-    // the order they stand, then every type they declare — against every assembly this suite runs with, the packages as
-    // built among them. What comes back is every warning and error, and the image.
-    private static CompiledProgram Compiled(WikiProgram program)
-    {
-        var units = program.Blocks.Select(block => CSharpSyntaxTree.ParseText(block.Code).GetCompilationUnitRoot()).ToArray();
-        var statements = units.SelectMany(unit => unit.Members.OfType<GlobalStatementSyntax>()).ToArray();
-        var source = string.Join(
-            '\n',
-            [
-                .. units.SelectMany(unit => unit.Usings).Select(each => each.ToString()).Distinct(StringComparer.Ordinal),
-                .. statements.Select(statement => statement.ToFullString()),
-                .. units.SelectMany(unit => unit.Members.Where(member => member is not GlobalStatementSyntax)).Select(member => member.ToFullString()),
-            ]);
-        var references = ((string)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES")!)
-            .Split(Path.PathSeparator)
-            .Select(path => MetadataReference.CreateFromFile(path));
-        var compilation = CSharpCompilation.Create(
-            $"Wiki{program.Line}",
-            [CSharpSyntaxTree.ParseText(ImplicitUsings), CSharpSyntaxTree.ParseText(source)],
-            references,
-            new CSharpCompilationOptions(
-                    statements.Length > 0 ? OutputKind.ConsoleApplication : OutputKind.DynamicallyLinkedLibrary,
-                    nullableContextOptions: NullableContextOptions.Enable)
-                .WithSpecificDiagnosticOptions(SdkQuiets));
-
-        using var image = new MemoryStream();
-        var emitted = compilation.Emit(image);
-
-        return new CompiledProgram(
-            [.. emitted.Diagnostics.Where(each => each.Severity >= DiagnosticSeverity.Warning).Select(each => each.ToString())],
-            image.ToArray());
-    }
-
-    // A compiled program: every warning and error, and the image.
-    private readonly record struct CompiledProgram(IReadOnlyList<string> Diagnostics, byte[] Image);
 }

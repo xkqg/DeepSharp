@@ -580,7 +580,11 @@ a gap is learned from the training rows and cannot stand where the features are 
 from bounds, both above the split, since a scale from bounds learns nothing from the rows. The answer right below the
 split, because a return must be made from its column as it was read, so it can stand there whatever the answer is. What
 is not needed is dropped before what learns. A gap is filled and then the column is scaled. The report, and then the
-network.
+network. Everything that shows an order is held to this one: a test reads every chain the README, the wiki and the samples
+write, and the order of the tutorial's pages, against the stages of the two courses — a tutorial written before the course
+once named the answer after the fill and the scale, which breaks no rule for a class and does for a return made from a
+column they change — and another runs the tutorial's pipelines over the published data, since a block that compiles can
+still stop where it runs: one of them asked a model for a column of dates for as long as it was wrong.
 
 It is a third kind of file under the version the pipeline's file and the preset share, and it moves nothing. Every
 published reader stamps 7 and refuses 8 whole, and the number is written beside the saved columns of every notebook too,
@@ -1030,7 +1034,7 @@ time because there is no time in the file, and a whole divided among its parts t
 own total. The pipelines sample asks the passenger list what each of its columns holds and has a profile say what
 should not be there; the networks sample trains a network on each of the three, through both doors; the sample notebook
 writes the Titanic pipeline block by block, trains a network in its C# cell on what the blocks hand over, and draws the
-report at its last block; and a test runs each as it stands, the notebook in the host an application of your own uses,
+report at its report block; and a test runs each as it stands, the notebook in the host an application of your own uses,
 while the check of the notebook package as Verso installs it opens that same notebook. Landed rather than downloaded at run time, for the same reason a live source is fetched and
 landed: a sample that reaches the network is a sample that behaves differently on the day the network does.
 
