@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Net.WebSockets;
@@ -497,6 +498,52 @@ public sealed partial class NotebookEndpointTests : IDisposable
         await socket.Ended.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         await stopping.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken);
         await served.DisposeAsync();
+    }
+
+    // A page that leaves must leave nothing behind that fails later: a read of its socket that goes on past its leaving
+    // fails on a socket that is gone, and since nothing waits for that failure the engine tells it to whichever run is
+    // working when it is collected — in whichever test that is.
+    [Fact]
+    public async Task PagesThatComeAndGo_LeaveNoFailedReadBehind()
+    {
+        var left = new ConcurrentQueue<string>();
+
+        void Saw(object? sender, UnobservedTaskExceptionEventArgs unobserved)
+        {
+            // Only what is the socket's own: other tests of this process may leave failures of theirs.
+            if (unobserved.Exception.ToString().Contains(nameof(PageSocket), StringComparison.Ordinal))
+            {
+                left.Enqueue(unobserved.Exception.InnerException?.GetType().Name ?? unobserved.Exception.GetType().Name);
+                unobserved.SetObserved();
+            }
+        }
+
+        TaskScheduler.UnobservedTaskException += Saw;
+
+        try
+        {
+            await using var served = await StartAsync();
+
+            await Task.WhenAll(Enumerable.Range(0, 16).Select(async _ =>
+            {
+                for (var page = 0; page < 125; page++)
+                {
+                    await NotebookAsync(served);
+                }
+            }));
+
+            // A task is told to have been waited for by nobody only when it is collected.
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            Assert.True(left.IsEmpty, $"{left.Count} of 2000 pages left a read behind that failed: {string.Join(", ", left.Distinct())}");
+        }
+        finally
+        {
+            TaskScheduler.UnobservedTaskException -= Saw;
+        }
     }
 
     [Theory]

@@ -28,12 +28,13 @@ internal sealed class PageSocket : IAsyncDisposable
     private readonly ConcurrentDictionary<long, TaskCompletionSource<Answered>> _asked = new();
     private readonly ConcurrentQueue<string> _frames = new();
     private readonly TaskCompletionSource _ended = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    private readonly Task _reading;
     private long _next;
 
     private PageSocket(ClientWebSocket socket)
     {
         _socket = socket;
-        _ = ReadAsync();
+        _reading = ReadAsync();
     }
 
     /// <summary>Every frame the server sent, in the order it came: its type, and its id or version.</summary>
@@ -179,22 +180,35 @@ internal sealed class PageSocket : IAsyncDisposable
     }
 
     /// <summary>Leaves, as a page does: a close frame, and the server's own in answer.</summary>
-    /// <returns>When it is closed.</returns>
+    /// <returns>When it is closed, and the read of it has ended.</returns>
+    /// <remarks>
+    /// The socket is let go only once the read of it has ended. A read that went on past that would fail on a socket that is
+    /// gone, and since nothing waits for it, the engine would tell that failure to whichever run is working when the task
+    /// is collected — a run in another test.
+    /// </remarks>
     public async ValueTask DisposeAsync()
     {
-        if (_socket.State == WebSocketState.Open)
+        try
         {
-            try
+            if (_socket.State == WebSocketState.Open)
             {
                 await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "the page left", CancellationToken.None).WaitAsync(Patience, CancellationToken.None);
             }
-            catch (Exception done) when (done is WebSocketException or TimeoutException)
-            {
-                // The server went first.
-            }
+        }
+        catch (Exception done) when (done is WebSocketException or OperationCanceledException or TimeoutException)
+        {
+            // The server went first, or never answered: the socket is let go as it is, and the read with it.
+            _socket.Abort();
         }
 
-        _socket.Dispose();
+        try
+        {
+            await _reading.WaitAsync(Patience, CancellationToken.None);
+        }
+        finally
+        {
+            _socket.Dispose();
+        }
     }
 
     private static T Read<T>(JsonElement element) => element.Deserialize<T>(Json)!;
@@ -260,9 +274,9 @@ internal sealed class PageSocket : IAsyncDisposable
                 }
             }
         }
-        catch (WebSocketException)
+        catch (Exception done) when (done is WebSocketException or OperationCanceledException)
         {
-            // The server went without a close frame.
+            // The server went without a close frame, or the socket was let go as it was while the read waited.
         }
         finally
         {
