@@ -101,9 +101,14 @@ internal sealed class StandIn : IDisposable
 
             try
             {
-                while (await stream.ReadAsync(new byte[256], patience.Token) > 0)
+                var unread = new byte[256];
+                int read;
+
+                do
                 {
+                    read = await stream.ReadAsync(unread, patience.Token);
                 }
+                while (read > 0);
             }
             catch (OperationCanceledException)
             {
