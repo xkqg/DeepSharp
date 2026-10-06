@@ -110,6 +110,14 @@ fetched once, with a record of what was asked and what came back, and what the p
   `DeepSharp.Learners.MLNet`; a test now holds the layout of this repository's `ARCHITECTURE.md` and of that page to every
   project in `Src`, and the README's table to every package.
 
+### Known in 0.8.0, fixed on main after it
+
+- **The wait the venue's budget asks for counted as a try.** When an address had used more than half of what a minute allows,
+  the landing waited for the next minute, and that wait ran inside the ten seconds a try may take: each ten seconds of it
+  timed out and used up one of the five tries. The landing still got through when nothing else went wrong, but a single
+  refusal after the wait ended it with Binance asked once and a message saying it had not answered. The packages published
+  as 0.8.0 have this; the time a try may take now begins when its request is sent, so the wait uses up no try.
+
 ## [0.7.1]
 
 A course to fill in: every step of a prepared pipeline in the order the steps belong, each present and waiting for what
