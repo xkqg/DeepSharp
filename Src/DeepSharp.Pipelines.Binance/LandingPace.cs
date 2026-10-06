@@ -34,7 +34,7 @@ internal static class LandingPace
     /// <summary>How long after a candle closes it is left to settle before it is taken.</summary>
     public static readonly TimeSpan SettleAfterClose = TimeSpan.FromSeconds(60);
 
-    /// <summary>How long one try may take: the time the venue itself gives a request.</summary>
+    /// <summary>How long one try may take, from the moment its request is sent: the time the venue itself gives a request.</summary>
     public static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>How many times a unit of work is tried, the first included.</summary>

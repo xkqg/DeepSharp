@@ -14,7 +14,7 @@ namespace DeepSharp.Tests.Pipelines;
 /// <remarks>
 /// A request is read to the end of its headers, handed to the stand-in as the message it is, and answered with the status,
 /// the headers and the body the stand-in gave — the venue's own date, weight and identifier among them — and the connection
-/// is closed. It listens on the loopback address alone.
+/// is closed once the client has read it. It listens on the loopback address alone.
 /// </remarks>
 internal sealed class StandIn : IDisposable
 {
@@ -89,6 +89,26 @@ internal sealed class StandIn : IDisposable
 
             await stream.WriteAsync(Encoding.ASCII.GetBytes(answer.ToString()), _stop.Token);
             await stream.WriteAsync(body, _stop.Token);
+            await stream.FlushAsync(_stop.Token);
+
+            // End as a server does: say nothing more, and let the socket go only once the client has read what it was given
+            // and closed its side, so that an answer is never cut off by a reset.
+            client.Client.Shutdown(SocketShutdown.Send);
+
+            using var patience = CancellationTokenSource.CreateLinkedTokenSource(_stop.Token);
+
+            patience.CancelAfter(TimeSpan.FromSeconds(2));
+
+            try
+            {
+                while (await stream.ReadAsync(new byte[256], patience.Token) > 0)
+                {
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // The client keeps its side open: the answer was given whole, and the socket goes now.
+            }
         }
     }
 }

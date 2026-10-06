@@ -18,6 +18,7 @@ namespace DeepSharp.Pipelines;
 /// refusal that was met by skipping the unit and marching on is how one rejected call becomes a storm, so the same unit is
 /// asked again behind a wait that rises, by as long as the venue says when it says, and only up to a ceiling. A venue that
 /// asks for more than a landing waits has asked for a stop. What says stop — a firewall, a ban, a region — stops at once.
+/// What the pace asks a try to wait for is no part of the try: the time a try may take begins when its request is sent.
 /// What the venue refused in its own words is carried in them, and is not asked again.
 /// </para>
 /// <para>
@@ -30,7 +31,8 @@ namespace DeepSharp.Pipelines;
 /// <param name="clock">The clock every wait and every timeout runs on.</param>
 internal sealed class Courier(VenueWire wire, Pacer pace, TimeProvider clock)
 {
-    private readonly ResiliencePipeline _pipeline = new ResiliencePipelineBuilder { TimeProvider = clock }
+    // The tries: the same unit is asked again behind a wait that rises, for as long as trying again can help.
+    private readonly ResiliencePipeline _tries = new ResiliencePipelineBuilder { TimeProvider = clock }
         .AddRetry(new RetryStrategyOptions
         {
             MaxRetryAttempts = LandingPace.MostAttempts - 1,
@@ -40,6 +42,11 @@ internal sealed class Courier(VenueWire wire, Pacer pace, TimeProvider clock)
             ShouldHandle = arguments => ValueTask.FromResult(IsWorthAnotherTry(arguments.Outcome.Exception)),
             DelayGenerator = arguments => ValueTask.FromResult<TimeSpan?>(WaitBefore(arguments.AttemptNumber, arguments.Outcome.Exception)),
         })
+        .Build();
+
+    // What one try may take: the venue's answer and nothing before it. The wait the pace asks for is not a try, so no
+    // timeout runs while it lasts — a timed wait would spend a try for every ten seconds of it.
+    private readonly ResiliencePipeline _answer = new ResiliencePipelineBuilder { TimeProvider = clock }
         .AddTimeout(LandingPace.AttemptTimeout)
         .Build();
 
@@ -55,16 +62,21 @@ internal sealed class Courier(VenueWire wire, Pacer pace, TimeProvider clock)
     {
         try
         {
-            return await _pipeline.ExecuteAsync(
+            return await _tries.ExecuteAsync(
                 async token =>
                 {
                     await pace.BeforeAsync(token);
 
-                    var reply = await wire.GetAsync(pathAndQuery, token);
+                    return await _answer.ExecuteAsync(
+                        async attempt =>
+                        {
+                            var reply = await wire.GetAsync(pathAndQuery, attempt);
 
-                    pace.Told(reply);
+                            pace.Told(reply);
 
-                    return reply.Status == HttpStatusCode.OK ? read(reply) : throw new VenueStatusException(reply.Status, reply.RetryAfter, reply.Words());
+                            return reply.Status == HttpStatusCode.OK ? read(reply) : throw new VenueStatusException(reply.Status, reply.RetryAfter, reply.Words());
+                        },
+                        token);
                 },
                 cancellation);
         }

@@ -373,7 +373,8 @@ since it brings HTTP, retries and a rate limiter that a project serving a traine
   closer than half a second, every try included; the weight an address has used is read from each answer, and the
   landing waits for the next minute once that is half of what the minute allows, taken from what Binance says of the
   symbol; a status that says busy or fault is tried again behind a wait that doubles, as long as Binance asks when it
-  asks and never past two minutes, and one unit of work is tried five times and fails once; a firewall, a ban or a
+  asks and never past two minutes, and one unit of work is tried five times and fails once — the wait the brake asks for
+  is no part of a try, and no timeout runs while it lasts, so a minute spent waiting uses up none of the five; a firewall, a ban or a
   region it does not answer from stops the landing at once. A token bucket was tried for this and granted nothing on a
   clock a test holds, which is the reason the pace and the count run on one clock the landing is handed.
 - **Time is a seam, and the retries are borrowed.** Every wait and every timeout runs on a `TimeProvider` the landing is

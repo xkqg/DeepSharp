@@ -103,7 +103,7 @@ public sealed class BinanceResilienceTests
         _venue.WeightLimit = 100;
         _venue.Spend(60);
 
-        var walked = await _clock.RunAsync(Asked("1d", Jan1, Jan1.AddDays(3)).WalkAsync(TestContext.Current.CancellationToken), TimeSpan.FromSeconds(1));
+        var walked = await _clock.RunAsync(Asked("1d", Jan1, Jan1.AddDays(3)).WalkAsync(TestContext.Current.CancellationToken));
         var seen = _venue.Seen;
 
         Assert.Equal(3, walked.Candles.Count);
@@ -111,6 +111,22 @@ public sealed class BinanceResilienceTests
         Assert.True(seen[1].At < new DateTime(2026, 10, 6, 8, 1, 0, DateTimeKind.Utc), $"The request that learns what an address may spend came at {seen[1].At:O}.");
         Assert.True(seen[2].At >= new DateTime(2026, 10, 6, 8, 1, 0, DateTimeKind.Utc), $"The first page came at {seen[2].At:O}, inside the minute that was spent.");
         Assert.True(seen[2].At < new DateTime(2026, 10, 6, 8, 1, 10, DateTimeKind.Utc), $"The first page came at {seen[2].At:O}, long after the minute was over.");
+    }
+
+    [Fact]
+    public async Task TheWaitOfTheBrake_IsNotATry_SoARefusalThatFollowsIt_IsStillAskedAgain()
+    {
+        // The brake holds a request for most of a minute. That wait is not a try, and no try's timeout runs while it lasts: were
+        // it timed, each ten seconds of it would use up one of the five tries, and the one refusal that follows would end the
+        // landing with Binance having been asked once.
+        _venue.WeightLimit = 100;
+        _venue.Spend(60);
+        _venue.Fail(HttpStatusCode.ServiceUnavailable, path: Klines);
+
+        var walked = await _clock.RunAsync(Asked("1d", Jan1, Jan1.AddDays(3)).WalkAsync(TestContext.Current.CancellationToken));
+
+        Assert.Equal(3, walked.Candles.Count);
+        Assert.Equal(2, KlineRequests().Count());
     }
 
     [Fact]

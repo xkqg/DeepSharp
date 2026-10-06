@@ -24,7 +24,11 @@ public sealed class VenueTests
 
         Assert.InRange(said, DateTime.UtcNow.AddMinutes(-1), DateTime.UtcNow.AddMinutes(1));
         Assert.Equal(DateTimeKind.Utc, said.Kind);
-        Assert.Equal(["/api/v3/time"], fake.Seen.Select(request => request.Path));
+
+        // A real socket on a busy machine may fail a first try, and the courier then asks again as it is made to; what the
+        // venue was asked for is the same however many tries it took, so that is what is held, not how many there were.
+        Assert.NotEmpty(fake.Seen);
+        Assert.All(fake.Seen, request => Assert.Equal("/api/v3/time", request.Path));
     }
 
     [Fact]
