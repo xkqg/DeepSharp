@@ -156,7 +156,9 @@ public sealed class BinanceLandingFormatTests
     [Fact]
     public void NoCandles_AreNotWrittenOutOfNothing()
     {
-        Assert.Throws<ArgumentNullException>(() => ((IReadOnlyList<Candle>)null!).AsCsv());
+        IReadOnlyList<Candle> none = null!;
+
+        Assert.Throws<ArgumentNullException>(() => none.AsCsv());
     }
 
     [Theory]

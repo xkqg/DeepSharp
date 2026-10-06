@@ -76,8 +76,10 @@ fetched once, with a record of what was asked and what came back, and what the p
   of another window are refused, touching nothing, since a pipeline may already have been fitted behind the first
   landing. A file without its record, as when a program stopped between the two writes, is landed again, and the record is
   written only if Binance said the same. Of two landings of one window at once, one stands and the other finds the same
-  bytes or is refused. Nothing is written until the whole window has been read, so a landing that is cancelled or stopped
-  leaves nothing behind.
+  bytes or is refused: within a process on every system, and between processes where the system refuses a move onto a
+  taken place in one step, as Windows does — on Linux and macOS .NET looks at the place and then renames, and a landing
+  replaced all the same is caught by its record's fingerprint and refused by the next landing. Nothing is written until the
+  whole window has been read, so a landing that is cancelled or stopped leaves nothing behind.
 
 - **A landing is a guest.** Binance counts what an address spends by the minute, whoever spends it. No two requests are
   closer than half a second, every try included; the weight used is read from every answer, and the landing waits for the
@@ -97,7 +99,7 @@ fetched once, with a record of what was asked and what came back, and what the p
   lower-case hexadecimal — the one spelling of "the same bytes" the library has, now used by the notebook's cache and by the
   landing. `WriteWhole`, `WriteWholeAsync` and `WriteWholeOnceAsync` write a file under a name of its own, to the disk, and
   move it into place, so whoever looks finds nothing, the old file or the whole of the new one; the last never replaces what
-  stands and treats the same bytes standing as the same file.
+  stands and treats the same bytes standing as the same file, the writers of one place within a process taking turns at it.
 
 - **A page for live sources in the wiki,** [Live sources](https://github.com/xkqg/DeepSharp/wiki/Live-sources), and the
   roadmap shows the row as done.

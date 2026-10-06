@@ -90,8 +90,8 @@ public static class FileBytesExtensions
         /// <exception cref="IOException">Other bytes already stand there, or the move was refused for another reason.</exception>
         /// <remarks>
         /// For a file that is written once and then read for what it was. The move never replaces: of many writers racing
-        /// for one place exactly one file stands, the same bytes already there are the same file, and other bytes are
-        /// refused with the first left as it was. A move refused while nothing stands there is not swallowed.
+        /// for one place in a process exactly one file stands, the same bytes already there are the same file, and other
+        /// bytes are refused with the first left as it was. A move refused while nothing stands there is not swallowed.
         /// </remarks>
         public Task WriteWholeOnceAsync(string path, CancellationToken cancellation = default)
         {

@@ -203,11 +203,16 @@ public sealed class VenueWireTests
             UserAgent = request.Headers.UserAgent.ToString();
             Accept = request.Headers.Accept.ToString();
 
+            return Task.FromResult(Answered());
+        }
+
+        private HttpResponseMessage Answered()
+        {
             var response = new HttpResponseMessage(status) { Content = new ByteArrayContent(Encoding.UTF8.GetBytes(body)) };
 
             answer?.Invoke(response);
 
-            return Task.FromResult(response);
+            return response;
         }
     }
 }

@@ -20,7 +20,9 @@ namespace DeepSharp.Pipelines;
 /// <para>
 /// The move of the file is the commit: the file is written whole under a name of its own and moved into place without
 /// replacing anything, so of two landings of one window racing each other one stands and the other either finds the same
-/// bytes — and is the same landing — or is refused. The record is written after the commit, and not under the caller's
+/// bytes — and is the same landing — or is refused. That holds within a process on every system; between processes the
+/// system's own refusal decides, and where it is a look and then a rename, a landing replaced all the same is caught by
+/// the fingerprint its record names. The record is written after the commit, and not under the caller's
 /// cancellation: a landing that has been moved into place is finished with, and a record is what says what it was. Nothing is
 /// written before the whole window has been walked, so a landing that was cancelled or stopped leaves nothing behind.
 /// </para>

@@ -107,20 +107,7 @@ internal sealed class FakeBinanceVenue(TimeProvider clock) : HttpMessageHandler
     {
         for (var each = 0; each < times; each++)
         {
-            Script(path, _ =>
-            {
-                var response = new HttpResponseMessage(status)
-                {
-                    Content = new StringContent(body ?? "{\"code\":-1003,\"msg\":\"Too many requests; current limit of IP(s) is 6000 requests per minute.\"}", Encoding.UTF8, "application/json"),
-                };
-
-                if (retryAfter is { } wait)
-                {
-                    response.Headers.RetryAfter = new RetryConditionHeaderValue(wait);
-                }
-
-                return Task.FromResult(response);
-            });
+            Script(path, _ => Task.FromResult(Refusal(status, body, retryAfter)));
         }
     }
 
@@ -170,7 +157,7 @@ internal sealed class FakeBinanceVenue(TimeProvider clock) : HttpMessageHandler
     {
         for (var each = 0; each < times; each++)
         {
-            Script(path, _ => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<html>not what the venue answers with</html>", Encoding.UTF8, "text/html") }));
+            Script(path, _ => Task.FromResult(Page(HttpStatusCode.OK, "<html>not what the venue answers with</html>", "text/html")));
         }
     }
 
@@ -250,8 +237,23 @@ internal sealed class FakeBinanceVenue(TimeProvider clock) : HttpMessageHandler
         _ => Json(HttpStatusCode.NotFound, string.Empty),
     };
 
-    private static HttpResponseMessage Json(HttpStatusCode status, string body) =>
-        new(status) { Content = new StringContent(body, Encoding.UTF8, "application/json") };
+    private static HttpResponseMessage Page(HttpStatusCode status, string body, string mediaType) =>
+        new(status) { Content = new StringContent(body, Encoding.UTF8, mediaType) };
+
+    private static HttpResponseMessage Json(HttpStatusCode status, string body) => Page(status, body, "application/json");
+
+    // What the venue says when a request is refused: its own words unless the caller gave others, and how long to wait when it says.
+    private static HttpResponseMessage Refusal(HttpStatusCode status, string? body, TimeSpan? retryAfter)
+    {
+        var response = Json(status, body ?? "{\"code\":-1003,\"msg\":\"Too many requests; current limit of IP(s) is 6000 requests per minute.\"}");
+
+        if (retryAfter is { } wait)
+        {
+            response.Headers.RetryAfter = new RetryConditionHeaderValue(wait);
+        }
+
+        return response;
+    }
 
     private static HttpResponseMessage Refused(int code, string message) =>
         Json(HttpStatusCode.BadRequest, $"{{\"code\":{code.ToString(CultureInfo.InvariantCulture)},\"msg\":\"{message}\"}}");

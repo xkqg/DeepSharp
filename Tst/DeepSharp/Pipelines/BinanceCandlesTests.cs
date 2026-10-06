@@ -42,7 +42,7 @@ public sealed class BinanceCandlesTests
 
     private static DateTime After(string interval, DateTime from, int candles) => interval switch
     {
-        "1w" => from.AddDays(7 * candles),
+        "1w" => from.AddDays(7d * candles),
         "1M" => from.AddMonths(candles),
         _ => from + (Fixed.Single(each => each.Venue == interval).Span * candles),
     };

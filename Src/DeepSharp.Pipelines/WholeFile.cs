@@ -8,14 +8,29 @@ namespace DeepSharp.Pipelines;
 /// looks finds nothing or the whole of it, and whatever stops a write leaves nothing of its own behind.
 /// </summary>
 /// <remarks>
+/// <para>
 /// The name is this write's alone, so nothing of this program holds it and nothing else ever reads it. The bytes are on
 /// the disk, not only in the system's cache, before the move makes them the file. A file written once is moved without
-/// replacing anything — the system refuses that move deterministically, where a replacing one can fail a reader or
-/// silently replace what a racing writer had just put there — and a refusal is read for what it says: the same bytes
-/// already standing are the same file, other bytes are somebody else's and stay.
+/// replacing anything — a replacing move can fail a reader or silently replace what a racing writer had just put there —
+/// and a refusal is read for what it says: the same bytes already standing are the same file, other bytes are somebody
+/// else's and stay.
+/// </para>
+/// <para>
+/// Windows refuses a move onto a place that is taken in one step. On Linux and macOS .NET looks at the place and then
+/// renames, so two writers that race for one place can both be told it is free and the later replaces the earlier. The
+/// writers of one place therefore take turns at it, in this process, which is where they race in practice. Between
+/// processes the system's own refusal is all there is, and a file replaced all the same is caught by whoever kept the
+/// fingerprint of what they wrote, as the record of a landing does.
+/// </para>
 /// </remarks>
 internal static class WholeFile
 {
+    // Sixty-four turns, a place at the one its path's hash names: two places that share a turn wait for each other and
+    // nothing worse, and nothing grows with the number of files written.
+    private static readonly SemaphoreSlim[] Turns = [.. Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1))];
+
+    private static SemaphoreSlim TurnAt(string path) => Turns[(uint)StringComparer.Ordinal.GetHashCode(Path.GetFullPath(path)) % (uint)Turns.Length];
+
     // A name of its own beside the file, hidden where the system hides what starts with a dot.
     private static string OwnNameBeside(string path)
     {
@@ -96,18 +111,29 @@ internal static class WholeFile
         {
             await Fill(own, bytes, cancellation);
 
+            var turn = TurnAt(path);
+
+            await turn.WaitAsync(cancellation);
+
             try
             {
-                File.Move(own, path, overwrite: false);
-            }
-            catch (IOException) when (File.Exists(path))
-            {
-                var standing = await File.ReadAllBytesAsync(path, cancellation);
-
-                if (!standing.AsSpan().SequenceEqual(bytes))
+                try
                 {
-                    throw new IOException($"'{path}' holds other bytes than the ones written, and a file written once is never replaced: the first stays.");
+                    File.Move(own, path, overwrite: false);
                 }
+                catch (IOException) when (File.Exists(path))
+                {
+                    var standing = await File.ReadAllBytesAsync(path, cancellation);
+
+                    if (!standing.AsSpan().SequenceEqual(bytes))
+                    {
+                        throw new IOException($"'{path}' holds other bytes than the ones written, and a file written once is never replaced: the first stays.");
+                    }
+                }
+            }
+            finally
+            {
+                turn.Release();
             }
         }
         finally

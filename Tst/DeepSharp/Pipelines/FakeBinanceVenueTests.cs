@@ -13,18 +13,23 @@ namespace DeepSharp.Tests.Pipelines;
 /// expects proves nothing. So the stand-in is written from the venue's own rules, and these tests are what hold it to them.
 /// What it holds is generated from a seed, never captured: no number in it was ever Binance's.
 /// </summary>
-public sealed class FakeBinanceVenueTests
+public sealed class FakeBinanceVenueTests : IDisposable
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 6, 8, 0, 0, TimeSpan.Zero);
 
     private readonly FakeTimeProvider _clock = new(Now);
 
-    private (FakeBinanceVenue Venue, HttpClient Client) Venue(int seed = 7)
-    {
-        var venue = new FakeBinanceVenue(_clock) { Seed = seed };
+    private readonly FakeBinanceVenue _venue;
 
-        return (venue, new HttpClient(venue) { BaseAddress = new Uri("https://venue.test") });
+    private readonly HttpClient _client;
+
+    public FakeBinanceVenueTests()
+    {
+        _venue = new FakeBinanceVenue(_clock);
+        _client = new HttpClient(_venue) { BaseAddress = new Uri("https://venue.test") };
     }
+
+    public void Dispose() => _client.Dispose();
 
     private static async Task<JsonElement> RowsAsync(HttpClient client, string query)
     {
@@ -42,7 +47,7 @@ public sealed class FakeBinanceVenueTests
     {
         // Measured on the real venue: a start at one day's open and an end at the next day's open answered with two candles,
         // so the end is inclusive of a candle that opens at that very moment.
-        var (_, client) = Venue();
+        var client = _client;
         var rows = await RowsAsync(client, "symbol=BTCEUR&interval=1d&startTime=1704067200000&endTime=1704153600000&limit=10");
 
         Assert.Equal([1704067200000, 1704153600000], Opens(rows));
@@ -52,7 +57,7 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AStartBetweenTwoCandles_SkipsForwardToTheNextOne()
     {
-        var (_, client) = Venue();
+        var client = _client;
         var rows = await RowsAsync(client, "symbol=BTCEUR&interval=1d&startTime=1704067200001&endTime=1704326400000&limit=10");
 
         Assert.Equal([1704153600000, 1704240000000, 1704326400000], Opens(rows));
@@ -61,7 +66,7 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AnAnswerHoldsAtMostTheLimit_AndNeverMoreThanAThousand()
     {
-        var (_, client) = Venue();
+        var client = _client;
 
         Assert.Equal(3, Opens(await RowsAsync(client, "symbol=BTCEUR&interval=1m&startTime=1704067200000&endTime=1704153600000&limit=3")).Length);
         Assert.Equal(1000, Opens(await RowsAsync(client, "symbol=BTCEUR&interval=1m&startTime=1704067200000&endTime=1704153600000&limit=1000")).Length);
@@ -72,7 +77,8 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AWindowBeforeTheListing_StartsWhereTheListingDoes_AndOneAfterTheEnd_AnswersNothing()
     {
-        var (venue, client) = Venue();
+        var venue = _venue;
+        var client = _client;
 
         venue.ListedAt = new DateTime(2020, 1, 3, 0, 0, 0, DateTimeKind.Utc);
 
@@ -86,7 +92,7 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task TheCandleThatIsStillOpen_IsInTheAnswer_WithAClosingMomentStillToCome()
     {
-        var (_, client) = Venue();
+        var client = _client;
         var today = new DateTimeOffset(2026, 10, 6, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds();
         var rows = await RowsAsync(client, $"symbol=BTCEUR&interval=1d&startTime={today - 86_400_000}&limit=10");
 
@@ -97,7 +103,7 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task EveryCandleHasTheTwelveFieldsInTheTypesTheVenueWritesThem()
     {
-        var (_, client) = Venue();
+        var client = _client;
         var row = (await RowsAsync(client, "symbol=BTCEUR&interval=1d&startTime=1704067200000&limit=1"))[0];
 
         Assert.Equal(12, row.GetArrayLength());
@@ -110,13 +116,11 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task ADecimalIsSpelledWithEightDigits_AsTheVenueSpellsOne()
     {
-        var (_, client) = Venue();
+        var client = _client;
         var row = (await RowsAsync(client, "symbol=BTCEUR&interval=1d&startTime=1704067200000&limit=1"))[0];
 
-        foreach (var at in new[] { 1, 2, 3, 4, 5, 7, 9, 10 })
+        foreach (var text in new[] { 1, 2, 3, 4, 5, 7, 9, 10 }.Select(at => row[at].GetString()!))
         {
-            var text = row[at].GetString()!;
-
             Assert.Matches(@"^\d+\.\d{8}$", text);
         }
     }
@@ -124,7 +128,7 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task ACandleIsInternallyConsistent_TheHighIsTheHighestAndTheLowTheLowest()
     {
-        var (_, client) = Venue();
+        var client = _client;
 
         foreach (var row in (await RowsAsync(client, "symbol=BTCEUR&interval=1h&startTime=1704067200000&limit=200")).EnumerateArray())
         {
@@ -137,7 +141,7 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task TheSameAsk_GivesTheSameBytes_AndTwoWindowsSideBySideMakeTheirUnion()
     {
-        var (_, client) = Venue();
+        var client = _client;
         var whole = Opens(await RowsAsync(client, "symbol=BTCEUR&interval=1d&startTime=1704067200000&endTime=1704672000000&limit=1000"));
         var first = await RowsAsync(client, "symbol=BTCEUR&interval=1d&startTime=1704067200000&endTime=1704326399999&limit=1000");
         var second = await RowsAsync(client, "symbol=BTCEUR&interval=1d&startTime=1704326400000&endTime=1704672000000&limit=1000");
@@ -151,8 +155,13 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AnotherSeed_AnswersOtherNumbers_ForTheCandleThatOpensAtTheSameMoment()
     {
-        var one = await RowsAsync(Venue(seed: 1).Client, "symbol=BTCEUR&interval=1d&startTime=1704067200000&limit=1");
-        var other = await RowsAsync(Venue(seed: 2).Client, "symbol=BTCEUR&interval=1d&startTime=1704067200000&limit=1");
+        _venue.Seed = 1;
+
+        var one = await RowsAsync(_client, "symbol=BTCEUR&interval=1d&startTime=1704067200000&limit=1");
+
+        _venue.Seed = 2;
+
+        var other = await RowsAsync(_client, "symbol=BTCEUR&interval=1d&startTime=1704067200000&limit=1");
 
         Assert.Equal(Opens(one), Opens(other));
         Assert.NotEqual(one.GetRawText(), other.GetRawText());
@@ -161,7 +170,8 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task ACandleTheVenueDoesNotHold_IsNotInTheAnswer_AndNothingIsPutInItsPlace()
     {
-        var (venue, client) = Venue();
+        var venue = _venue;
+        var client = _client;
 
         venue.HoleAt(new DateTime(2024, 1, 2, 0, 0, 0, DateTimeKind.Utc));
 
@@ -173,7 +183,7 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AnUnknownSymbol_IsRefusedInTheVenuesWords()
     {
-        var (_, client) = Venue();
+        var client = _client;
         using var response = await client.GetAsync("/api/v3/klines?symbol=NOPE&interval=1d", TestContext.Current.CancellationToken);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement;
 
@@ -185,7 +195,7 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AnUnknownInterval_IsRefusedInTheVenuesWords()
     {
-        var (_, client) = Venue();
+        var client = _client;
         using var response = await client.GetAsync("/api/v3/klines?symbol=BTCEUR&interval=2d", TestContext.Current.CancellationToken);
         var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement;
 
@@ -197,7 +207,8 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task TheTimeEndpoint_AnswersTheVenuesOwnClock()
     {
-        var (venue, client) = Venue();
+        var venue = _venue;
+        var client = _client;
 
         venue.ClockSkew = TimeSpan.FromMilliseconds(-770);
 
@@ -210,7 +221,7 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task TheWeightSpentIsCountedByTheVenuesMinute_ATimeCallOneAndAKlinesCallTwo()
     {
-        var (_, client) = Venue();
+        var client = _client;
 
         using var time = await client.GetAsync("/api/v3/time", TestContext.Current.CancellationToken);
         using var klines = await client.GetAsync("/api/v3/klines?symbol=BTCEUR&interval=1d&limit=1", TestContext.Current.CancellationToken);
@@ -230,7 +241,8 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task WeightSomebodyElseSpends_IsInTheSameMinuteAndTheSameCount()
     {
-        var (venue, client) = Venue();
+        var venue = _venue;
+        var client = _client;
 
         venue.Spend(500);
 
@@ -242,7 +254,8 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task TheExchangeInformationSaysWhatAnAddressMaySpendAMinute()
     {
-        var (venue, client) = Venue();
+        var venue = _venue;
+        var client = _client;
 
         venue.WeightLimit = 1200;
 
@@ -259,7 +272,8 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AnAnswerCanBeScriptedToHoldWhatTheTestNeeds()
     {
-        var (venue, client) = Venue();
+        var venue = _venue;
+        var client = _client;
 
         venue.Respond("[[1,2]]");
 
@@ -271,7 +285,7 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AnswersCarryTheVenuesDate_AndAnIdentifierOfTheRequest()
     {
-        var (_, client) = Venue();
+        var client = _client;
         using var response = await client.GetAsync("/api/v3/time", TestContext.Current.CancellationToken);
 
         Assert.Equal(Now, response.Headers.Date);
@@ -281,7 +295,8 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AScriptedFailure_IsAnsweredAsScripted_ThenTheVenueAnswersAgain()
     {
-        var (venue, client) = Venue();
+        var venue = _venue;
+        var client = _client;
 
         venue.Fail(HttpStatusCode.TooManyRequests, times: 2, retryAfter: TimeSpan.FromSeconds(3));
 
@@ -298,7 +313,8 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AStalledAnswer_NeverComes_UntilTheCallerGivesUp()
     {
-        var (venue, client) = Venue();
+        var venue = _venue;
+        var client = _client;
 
         venue.Stall(times: 1);
 
@@ -310,7 +326,8 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task AnAnswerThatIsNotJson_IsScriptable_ToSeeWhatARefusalSaysOfIt()
     {
-        var (venue, client) = Venue();
+        var venue = _venue;
+        var client = _client;
 
         venue.Garble(times: 1);
 
@@ -325,7 +342,8 @@ public sealed class FakeBinanceVenueTests
     [Fact]
     public async Task EveryRequestIsKept_WithWhenItCameAndWhatItAskedFor()
     {
-        var (venue, client) = Venue();
+        var venue = _venue;
+        var client = _client;
 
         using var _ = await client.GetAsync("/api/v3/klines?symbol=BTCEUR&interval=1d&startTime=1704067200000&limit=2", TestContext.Current.CancellationToken);
 

@@ -341,7 +341,10 @@ since it brings HTTP, retries and a rate limiter that a project serving a traine
   written before it.
 - **The move of the file is the commit.** The candles are written whole under a name of their own and moved into place
   without replacing anything, so of two landings of one window racing each other one stands and the other either finds
-  the same bytes — and is the same landing — or is refused. The record is written after it, and not under the caller's
+  the same bytes — and is the same landing — or is refused. Windows refuses a move onto a taken place in one step; on
+  Linux and macOS .NET looks at the place and then renames, so the writers of one place take turns at it within a
+  process, and between processes a landing replaced all the same is caught by its record, whose fingerprint then names
+  other bytes, which the next landing refuses. The record is written after it, and not under the caller's
   cancellation; it says nothing of being complete, since a marker written beside the work is a promise nobody checked and
   the move is what completes it. Nothing is written before the whole window has been read, so a landing that was
   cancelled or stopped leaves nothing behind.

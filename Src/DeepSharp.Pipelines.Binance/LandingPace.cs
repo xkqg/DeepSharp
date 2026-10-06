@@ -59,7 +59,7 @@ internal static class LandingPace
 
     private static string Counted(double count, string unit)
     {
-        var rounded = Math.Round(count);
+        var rounded = (long)Math.Round(count);
 
         return string.Create(CultureInfo.InvariantCulture, $"{rounded} {unit}{(rounded == 1 ? string.Empty : "s")}");
     }
