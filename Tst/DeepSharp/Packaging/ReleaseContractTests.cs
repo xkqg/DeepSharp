@@ -201,7 +201,7 @@ public class ReleaseContractTests
     }
 
     /// <summary>The projects that produce a package, named the way a workflow would name them.</summary>
-    private static IEnumerable<string> PackableProjects() =>
+    internal static IEnumerable<string> PackableProjects() =>
         Directory.EnumerateFiles(Path.Join(Root, "Src"), "*.csproj", SearchOption.AllDirectories)
             .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
                                           StringComparison.Ordinal))
@@ -296,6 +296,7 @@ public class ReleaseContractTests
     [InlineData("verso")]
     [InlineData("torch")]
     [InlineData("ml")]
+    [InlineData("live")]
     public void ACheckOfThePackagesJustMade_ExtractsThemIntoAFolderOfItsOwn_NeverIntoTheMachinesPackageCache(string check)
     {
         // A version is extracted into the machine's package cache once, and never again: a check run on packages packed
@@ -305,6 +306,45 @@ public class ReleaseContractTests
         var script = Read("tools", check, "check.sh");
 
         Assert.Matches(@"NUGET_PACKAGES=""(\$\(native "")?\$(work|run)/", script);
+    }
+
+    [Theory]
+    [InlineData("ci.yml", "ml")]
+    [InlineData("publish.yml", "ml")]
+    [InlineData("ci.yml", "live")]
+    [InlineData("publish.yml", "live")]
+    public void TheLearnerAndTheLanding_AreCheckedFromThePackagesJustMade_BeforeAnyPackageLeavesTheRun(string file, string check)
+    {
+        // The ML.NET learner's two halves, and the landing of Binance's candles with the pipeline that reads it, are each
+        // started from the packages just made — after the pack and before anything is pushed — since what a person runs is the
+        // package, and a package can lack what the build had while every suite, which runs the build, stays green.
+        string workflow = Read(".github", "workflows", file);
+        var step = workflow.IndexOf($"bash tools/{check}/check.sh nupkgs", StringComparison.Ordinal);
+        var push = workflow.IndexOf("dotnet nuget push", StringComparison.Ordinal);
+
+        Assert.True(step > workflow.IndexOf("dotnet pack DeepSharp.slnx", StringComparison.Ordinal), $"{file} does not check {check} from the packages it made");
+        Assert.True(push < 0 || step < push, $"{file} pushes the packages before checking {check} from them");
+    }
+
+    [Fact]
+    public void TheLandingsCheck_ReachesOnlyAStandInOnThisMachine_NeverTheRealVenue()
+    {
+        // The check lands a window from the package just made, which sends requests. They go to a stand-in on this machine
+        // that answers as the venue does, written once for the tests and the check alike: nothing in the check's script or
+        // its host names an address of Binance's, since a build that reached the venue would be a guest of a budget it shares
+        // with the owner's own programs.
+        var files = Directory.EnumerateFiles(Path.Join(Root, "tools", "live"), "*.*", SearchOption.AllDirectories)
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
+                           && !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .ToArray();
+
+        Assert.NotEmpty(files);
+        Assert.All(files, file => Assert.DoesNotMatch(@"binance\.(com|vision)", File.ReadAllText(file)));
+        Assert.Contains("FakeBinanceVenue.cs", Read("tools", "live", "check.sh"), StringComparison.Ordinal);
+        Assert.Contains("StandIn.cs", Read("tools", "live", "check.sh"), StringComparison.Ordinal);
+        Assert.True(File.Exists(Path.Join(Root, "Tst", "DeepSharp", "Pipelines", "FakeBinanceVenue.cs")));
+        Assert.True(File.Exists(Path.Join(Root, "Tst", "DeepSharp", "Pipelines", "StandIn.cs")));
+        Assert.False(File.Exists(Path.Join(Root, "tools", "live", "LiveCheckHost", "StandIn.cs")), "The socket has two homes: the tests' and the check's.");
     }
 
     [Theory]
@@ -364,14 +404,17 @@ public class ReleaseContractTests
         Assert.Contains("<EnablePackageValidation>true</EnablePackageValidation>", props, StringComparison.Ordinal);
         Assert.Equal(publishedBefore.Order(StringComparer.Ordinal), listed.Order(StringComparer.Ordinal));
 
-        // Every package is packed, and every one of them shipped before this release: none is new, so none goes without a
-        // baseline. A package that is new next release is added to the packable ones and left out of the list above, and
-        // this test says so until it ships.
-        Assert.Equal(packable.Order(StringComparer.Ordinal), publishedBefore.Order(StringComparer.Ordinal));
+        // A package new this release is in neither list above: it is packed, and nothing is asked of a baseline it never
+        // had. Naming them here is what keeps "new" from becoming a word anybody can use for a package that simply
+        // dropped out of the published list by accident.
+        string[] newThisRelease = ["DeepSharp.Pipelines.Binance"];
+
+        Assert.All(newThisRelease, package => Assert.DoesNotContain($";{package};", props, StringComparison.Ordinal));
+        Assert.Equal(packable.Order(StringComparer.Ordinal), publishedBefore.Concat(newThisRelease).Order(StringComparer.Ordinal));
 
         // The baseline is the release nuget.org carries, which is the one before this build's. Left behind it, a surface
         // the last release added could be removed with nothing to say so.
-        Assert.Equal("0.7.0", baseline);
+        Assert.Equal("0.7.1", baseline);
         Assert.True(Version.Parse(baseline) < Version.Parse(DeclaredVersion()), "The baseline is the release before this one, never this one.");
     }
 

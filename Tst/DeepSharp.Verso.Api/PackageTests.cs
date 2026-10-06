@@ -19,7 +19,10 @@ public class PackageTests
     [Fact]
     public void ThePackageReferencesTheRuntimeAndAClosedListOfPackages()
     {
-        string[] allowed = ["DeepSharp.Verso.Notebooks", "Verso", "Verso.Abstractions"];
+        // The notebook's package carries the pipeline library, so the host reaches it without bringing anything of its own:
+        // it writes a notebook whole by the one routine the core has, instead of by a copy of that routine. The decision is
+        // held by the test below, which says the host depends on the engine and the notebook's package alone.
+        string[] allowed = ["DeepSharp.Pipelines", "DeepSharp.Verso.Notebooks", "Verso", "Verso.Abstractions"];
         var runtime = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
 
         var outside = typeof(NotebookHost).Assembly.GetReferencedAssemblies()
@@ -29,6 +32,17 @@ public class PackageTests
             .ToArray();
 
         Assert.True(outside.Length == 0, $"The host's package references {string.Join(", ", outside)}.");
+    }
+
+    [Fact]
+    public void WhatThePackageDependsOn_IsVersosEngineAndTheNotebooksPackageAlone_TheCoreReachingTheHostThroughTheLatter()
+    {
+        var project = Project();
+
+        Assert.Equal(["Verso"], project.Descendants("PackageReference").Select(reference => reference.Attribute("Include")!.Value));
+        Assert.Equal(
+            [@"..\DeepSharp.Verso.Notebooks\DeepSharp.Verso.Notebooks.csproj"],
+            project.Descendants("ProjectReference").Select(reference => reference.Attribute("Include")!.Value));
     }
 
     [Fact]

@@ -100,6 +100,13 @@ jobs:
         timeout-minutes: 10
         run: bash tools/ml/check.sh nupkgs
 
+      # A window of Binance's candles landed from the package just made, from a stand-in venue on this machine and never the
+      # real one, and the pipeline that reads the landing read back and run by the pipeline library alone: carrying nothing of
+      # that package, and nothing of Polly, at all.
+      - name: Check the Binance landing from its package
+        timeout-minutes: 10
+        run: bash tools/live/check.sh nupkgs
+
   # The ML.NET learner's own suite, which carries that library's native side, on Windows as well as the ubuntu run the
   # coverage gate already gives it: a trainer's native code is reached on both the platforms a person trains on.
   ml-windows:

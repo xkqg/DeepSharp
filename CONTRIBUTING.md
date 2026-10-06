@@ -100,6 +100,16 @@ fail on a warning: the README's example runs, every C# block of the wiki compile
 notebook's cell runs in Verso's own engine. The wiki is a repository of its own; clone it beside this one, as
 `DeepSharp.wiki`, where those tests and the build machine read it.
 
+## Nothing here asks Binance
+
+`DeepSharp.Pipelines.Binance` fetches from Binance, and the address a build runs on shares one request budget with
+whatever else runs there, so a test, a check or a program in a document that a suite runs never sends it a request. The
+suites that run documents send every address but this machine's to a proxy nothing listens at, before any test is found;
+the check of the package lands from a stand-in venue on this machine; and a test holds the documents that are run to
+never naming the landing — a page that lands is compiled and never run. The venue the tests ask is generated, and no
+payload of Binance's goes into the repository, since the data comes under terms of its own. Seeing Binance's real answer
+for a change is one request made by hand, to `/api/v3/time` or for a page of at most ten candles, and never a loop.
+
 ## Commits
 
 The subject line says what changed, in plain English, in the present tense: *the shape refuses an axis that

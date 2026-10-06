@@ -18,6 +18,16 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.8.0 lands what an exchange answers with as a file, and the pipeline reads it like any other.** A source that answers
+differently every time it is asked cannot be read while a model trains: the pipeline would train on other numbers
+tomorrow and still claim to be the same pipeline. `DeepSharp.Pipelines.Binance` fetches the candles of a market on
+Binance over a closed window, once, and keeps them as a file beside a record of what was asked and what came back;
+`await pipeline.ReadBinanceAsync(new BinanceCandles("BTCEUR", "1d", from, to))` lands the window where it is not landed
+yet and adds an ordinary `.ReadCsv` of the landing, so what the pipeline's file names is a file and nothing of Binance.
+The HTTP, the retries and the pacing are that package's alone — a project that only serves a trained model never carries
+them — and it asks as a guest: an address's budget is shared with whatever else runs on it, so it goes slowly, waits
+once the address has used half of what a minute allows, and stops the moment Binance says stop.
+
 **0.7.1 gives a pipeline a course to fill in.** The steps of a prepared pipeline in the order they belong, each waiting
 for what only you know: the file, the columns, the bounds. `PipelineCourse.Table` is the course for rows that do not
 depend on one another and `PipelineCourse.SeriesInTime` the one for rows that follow each other in time, because the
@@ -55,12 +65,14 @@ the words PyTorch uses, and running it trains exactly that network. The whole co
 is one declaration, saved as one file and replayed from it. Beneath it stands what came before: a network trains, is
 measured by its pipeline's report and serves on the light engine `DeepSharp` ships or on libtorch, on the processor or
 a graphics card, without a line of it changing; a model PyTorch, Keras or an ONNX exporter saved is read into the same
-network; the pipeline reads Parquet files, Excel workbooks and JSON files as it reads a comma-separated one, and runs
-for the learner that learns from it; layers, losses and optimizers; a training loop that stops once the validation
+network; the pipeline reads Parquet files, Excel workbooks and JSON files as it reads a comma-separated one, and what
+an exchange answers with once it is landed as a file, and runs for the learner that learns from it; layers, losses and
+optimizers; a training loop that stops once the validation
 rows no longer improve; the report and the charts; tensors whose gradients are worked out automatically, the data half
 — which proposes what each column holds and names what should not be there — and a notebook to see the data in, whose
-blocks now hold the network too. The [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what comes next,
-and the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each release added.
+blocks now hold the network too. The [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what is done and what
+is left out on purpose, and the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each
+release added.
 
 ```
 dotnet add package DeepSharp
@@ -105,7 +117,8 @@ var file = trained.ToJson();                                 // the network and 
 
 `btceur-1d.csv` is a file of your own, and none ships here: a day a row of bitcoin's price in euros, as an exchange
 exports its daily candles, under a header that names `timestamp`, `close` and `trades` — when the day starts, the price
-it closed at, and how many trades it saw, empty on a day the exchange did not count them. The samples below run the same
+it closed at, and how many trades it saw, empty on a day the exchange did not count them. `DeepSharp.Pipelines.Binance`
+lands a file with those columns among its ten, as the section on reading the data shows. The samples below run the same
 verbs on published data.
 
 The course from raw data to a validated model is declared once as an artefact and replayed, and anything
@@ -161,6 +174,41 @@ step, why each step stands where it does, and the code.
 replayed as the comma-separated file is, and the Titanic passenger list in each of the four formats gives the same rows
 under the same keys in the same parts. `DeepSharp.Pipelines.DataFrame` reads Microsoft's data frame, and through it a
 database query. A Parquet file and a database say what each column holds, and the proposal of kinds takes what they say.
+
+A source that answers differently every time it is asked, such as an exchange's prices, is not read while a model trains:
+the pipeline would train on other numbers tomorrow and still claim to be the same pipeline. It is fetched once, over a
+closed window, and landed as a file that the pipeline then reads like any other. `DeepSharp.Pipelines.Binance` does that
+for the candles of a market on Binance:
+
+```csharp
+using DeepSharp.Pipelines;
+
+var from = new DateTime(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+var candles = new BinanceCandles("BTCEUR", "1d", from, from.AddYears(1));   // a window with both ends, named by what it holds
+
+var landed = await candles.LandAsync(SourceFolder.WorkingDirectory);       // asks Binance once, writes the candles and a record
+```
+
+`landed` is the name of a file in the working directory — `BTCEUR-1d-20240101T000000Z-20250101T000000Z.csv`, a row a day under
+`timestamp`, `open`, `high`, `low`, `close`, `volume`, `quoteVolume`, `trades`, `takerBuyVolume` and
+`takerBuyQuoteVolume`, every number as Binance wrote it — and a record beside it that says what was asked, when, of whom,
+what came back page by page, and the fingerprint of the file. A pipeline written in code reads a relative path from the
+working directory, so it reads that file like any other, with `.ReadCsv(landed)`; or
+`await pipeline.ReadBinanceAsync(candles)` lands the window there and reads it in one line. The
+pipeline's file names the file and nothing of Binance, so a program that only serves the trained model reads it without
+the package, without HTTP and without a retry. Asking for the same window again asks Binance nothing: the file is held to
+the fingerprint its record names and reused, and one that was changed since is refused rather than replaced.
+
+The window runs from `from` up to, not including, `to`, and both ends are where a candle of that length begins — midnight
+for a day, a Monday for a week, the first for a month — because Binance moves a start that is not, and a rounded window
+would stop naming what it holds. The package goes as a guest. Binance counts what an address spends, and every
+other program on the address spends from the same count, so it asks one request at a time, at least half a second apart,
+waits for the next minute once the address has used half of what a minute allows whoever used it, and waits as long as
+Binance asks when it asks, up to two minutes — a longer ask, a ban or a block is a stop. A landing writes only once the
+whole window has been read, so a stop leaves nothing behind; a candle Binance does not have is counted in the record and
+left out, never made up. What lands is Binance's data, under Binance's terms, and this package is not affiliated with
+Binance. The wiki's [Live sources](https://github.com/xkqg/DeepSharp/wiki/Live-sources) page has the rest: what a landing
+refuses, what its record holds, and the check that never reaches Binance.
 
 A pipeline runs for the learner that learns from it. `Needs` says what that learner needs of its features:
 `pipeline.RunFor(Needs.NoScale)` leaves out a step that only scales a feature, for a tree indifferent to scale, and
@@ -342,6 +390,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | [Starting from a course](https://github.com/xkqg/DeepSharp/wiki/Starting-from-a-course) | Every step of a prepared pipeline in the order the steps belong, each waiting for what only you know: a table's and a series', as a value, a file and two buttons in the notebook. |
 | [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) | The idea this library is built around, and the mistake it removes. |
 | [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) | Every verb in the order you write it: readers, features, the split, gaps, scales, what a model is asked to predict, the handover, and a run for each learner. |
+| [Live sources](https://github.com/xkqg/DeepSharp/wiki/Live-sources) | A source that answers differently every time it is asked, fetched once over a closed window and landed as a file: Binance's candles, what a landing is, what it refuses, and how it keeps to a budget it shares. |
 | [Networks](https://github.com/xkqg/DeepSharp/wiki/Networks) | Layers, losses, optimizers and the loop; a network in Keras's words or as code; trained behind a pipeline, measured, drawn and saved as one file. |
 | [TorchSharp backend](https://github.com/xkqg/DeepSharp/wiki/TorchSharp-backend) | The engine on libtorch: what your application brings, what the engine is held to, and when it is the faster. |
 | [Importing a model](https://github.com/xkqg/DeepSharp/wiki/Importing-a-model) | A model PyTorch, Keras or an ONNX exporter saved, read into the same network: what each reader reads, and what it refuses. |
@@ -349,7 +398,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | [Architecture](https://github.com/xkqg/DeepSharp/wiki/Architecture) | The design decisions, and what was deliberately left out. |
 | [Next to TorchSharp, TensorFlow.NET and ML.NET](https://github.com/xkqg/DeepSharp/wiki#how-this-sits-next-to-torchsharp-tensorflownet-and-mlnet) | What those give you, what they do not, why the choice of engine stays a choice, and where a trainer from ML.NET fits. |
 | [Quality](https://github.com/xkqg/DeepSharp/wiki/Quality) | What has to be true before anything is allowed in. |
-| [Roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) | What is next, and in which order. |
+| [Roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) | What is done, in the order each row needed the one above it, and what is left out on purpose. |
 | [Contributing](https://github.com/xkqg/DeepSharp/blob/main/CONTRIBUTING.md) | A failing test first, no warnings, a coverage check that fails rather than reports. |
 | [Security](https://github.com/xkqg/DeepSharp/wiki/Security) | What counts as a vulnerability here, and how to report one. |
 
@@ -364,6 +413,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | `DeepSharp.Pipelines.Json` | `.ReadJson(path)`: a JSON file holding an array of records, each value as the file writes it. Brings nothing: .NET reads JSON itself. |
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). A CSV comes through as the text the file writes, and a query with the kinds the database gives its columns. |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
+| `DeepSharp.Pipelines.Binance` | A live source, landed: `new BinanceCandles("BTCEUR", "1d", from, to)` over a closed window, `LandAsync` into a folder, or `await pipeline.ReadBinanceAsync(candles)` to land it and read it. The candles of a market on Binance become a file beside a record of what was asked and what came back, which the pipeline reads like any other file, by the fingerprint its record names; asking again asks Binance nothing. Brings Polly.Core 8.8.0, which does the retrying; that, the HTTP and the pacing stay in this package, since the pipeline's file names the landed file and nothing of Binance. Not affiliated with Binance; what lands is Binance's data, under Binance's terms. |
 | `DeepSharp.Learners.Networks` | Where a network meets a pipeline: declared in the chain that prepares its rows — `.WithTorch(…)` or `.WithTensorflow(…)`, and `pipeline.Train()` runs it — or written as code and fitted by hand; trained on its training rows, judged by its validation rows, measured by its report, and saved with it as one file that refuses any other fit of it; what it predicts for rows served later comes back in the answer's own units, on whichever engine it is handed, naming what each row holds that the network learned nothing about; and a checkpoint is the same file with what the run needs to go on, refused to a run under another seed, batch size, early stopping or engine. Brings the two packages it joins. |
 | `DeepSharp.Learners.ML` | Where a trainer from ML.NET meets a pipeline: the chain says which trainer its rows are prepared for — `.WithML(trainer => trainer.FastTree())` — and the run made for it leaves out the steps a tree does without and writes down which, so a tree and a network are measured by one report on the same rows. This package declares that trainer and reads and writes the model it produces, and it carries no ML.NET at all, so a notebook, a server or an application that only reads a model never brings the library. |
 | `DeepSharp.Learners.MLNet` | The half that carries ML.NET: it hands the prepared rows to Microsoft.ML, fits the tree the declaration names with `pipeline.TrainWithML()`, and writes the model beside the pipeline it was trained behind as one file. It names one trainer family on purpose — boosted trees and a forest — because a tree repeats from the seed the declaration carries, which is what a declaration meant to be replayed has to promise. Brings Microsoft.ML 5.0.0 and Microsoft.ML.FastTree 5.0.0. |
@@ -376,7 +426,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | `DeepSharp.Verso.Api` | An application of your own hosting the notebook: one open notebook for each file, however many views show it, with the notebook's parts registered by the package itself — so a program published as a single file has them too. Typing, running, a click on a block's controls and the toolbar's buttons take their turn one at a time; a cell is added after another or at the end, of any kind the engine has, taken away, moved past its neighbour or turned into another kind, each only where the notebook's layout allows it; as a cell's text is typed, its kernel offers what may come next and says what a word means, even while a run is under way; a new notebook is made as one block that reads a CSV file, never over a file that is there already, and a pipeline block added to one arrives as the step of the course that belongs there instead of empty; a run can be stopped, one that never ends or one that still waits for another notebook's C# run, a file a button hands over goes to whoever pressed it, the properties panel comes back field by field, the layout, the theme and the title are changed as Verso's editors change them, and what a person does to the dashboard's tiles goes to the layout's own part. The notebook opens and saves as Verso's browser editor does, writing nothing into it that the engine only falls back on; every view is told what changed, version by version — the cells, the run under way and what runs that no run owns, the toolbar, whether anything is unsaved, what became of the kernels, what the dashboard or the presentation draws, and what the notebook says of itself; a notebook no view shows can close by itself when nothing in it is unsaved, a close stops the run under way instead of waiting for it, and the cells, and what they show, come back as plain values. Brings Verso's engine, 1.2.2. |
 | `DeepSharp.Verso.Serve` | DeepSharp's own server: `deepsharp-serve`, a .NET tool, shows a notebook or a folder of them in your browser, on Verso's engine and built on `DeepSharp.Verso.Api`, with nothing else to install. It listens on this computer alone, answers only the address it prints, makes a change only for its own page, and writes into its folder only the notebooks it serves, what they save beside themselves, and a new notebook a page asks for, never over a file that is there; Ctrl+C ends it at once, whatever a notebook runs. Its page does what Verso's editor does, over one connection a tab, and carries everything it draws with, so it fetches nothing: the blocks, failures, JSON, CSV, progress, Mermaid diagrams and KaTeX formulas drawn as Verso draws them, a widget in a sandboxed frame, the dashboard and the presentation as the engine arranges them; the Metadata, Properties and View panels; Verso's keys, and what a cell's kernel offers and what a word means as its text is typed; the kernels' status, a dot while anything is unsaved, and the Stop where Run All stood. A cell is added, taken away once you say yes, moved or turned into another kind there, where the notebook's layout allows it; a file a button hands over arrives as a download; a dropped connection comes back by itself, keeping what was typed; and a folder's page makes a new notebook. |
 
-`dotnet pack DeepSharp.slnx` makes all eighteen. They run on .NET 8 and .NET 10. MIT — see
+`dotnet pack DeepSharp.slnx` makes all nineteen. They run on .NET 8 and .NET 10. MIT — see
 [LICENSE](https://github.com/xkqg/DeepSharp/blob/main/LICENSE); each library a package brings comes under the licence its
 own package states. The page `deepsharp-serve` serves carries Mermaid and KaTeX, each under its own MIT licence, and
 DOMPurify under the Apache License 2.0, and the tool's

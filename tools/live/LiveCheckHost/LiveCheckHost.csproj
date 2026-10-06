@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- An application that references the Binance landing's package the way a person does: from nuget, never from this
+       repository's source. It is built twice - once bringing the package that lands a window, and once bringing only the
+       pipeline library - because the whole point of the package is that a project which only serves a trained model never
+       carries it: the pipeline it saves is read by the library alone. The stand-in venue it lands from, and the socket that
+       puts that venue on this machine, are the two files the tests use too, compiled in by the script. -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <Landing Condition="'$(Landing)' == ''">none</Landing>
+    <DefineConstants Condition="'$(Landing)' == 'binance'">$(DefineConstants);LANDS</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DeepSharp.Pipelines" Version="*" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(Landing)' == 'binance'">
+    <PackageReference Include="DeepSharp.Pipelines.Binance" Version="*" />
+    <Compile Include="$(VenueSource)" Link="FakeBinanceVenue.cs" />
+    <Compile Include="$(StandInSource)" Link="StandIn.cs" />
+  </ItemGroup>
+
+</Project>

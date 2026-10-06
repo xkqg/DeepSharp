@@ -44,6 +44,17 @@ internal static partial class Wiki
         return [.. Directory.GetFiles(Folder, "*.md").Order(StringComparer.Ordinal).Select(path => Read(Path.GetFileName(path), File.ReadAllText(path).ReplaceLineEndings("\n")))];
     }
 
+    /// <summary>The programs a suite runs rather than only compiles: the pipelines of the tutorial's pages and of its start page.</summary>
+    /// <returns>Each program, with the name of the page it stands on.</returns>
+    public static IReadOnlyList<WikiRun> Runnable()
+    {
+        var pages = Tutorial().Select(step => step.Page).Append(Pages().Single(page => page.Name == "Getting-Started.md"));
+
+        return [.. pages.SelectMany(page => page.Programs
+            .Where(each => each.Blocks.Any(block => block.Code.Contains("Pdd.Create()", StringComparison.Ordinal)))
+            .Select(program => new WikiRun(page.Name, program)))];
+    }
+
     /// <summary>The steps of the tutorial, in the order the table on its start page gives them, each with the page it names.</summary>
     /// <returns>The steps, numbered as the table numbers them.</returns>
     public static IReadOnlyList<TutorialStep> Tutorial()
@@ -135,3 +146,8 @@ internal readonly record struct WikiPage(string Name, IReadOnlyList<WikiProgram>
 /// <param name="Title">The title the table links to, as a link writes it.</param>
 /// <param name="Page">The page.</param>
 internal readonly record struct TutorialStep(int At, string Title, WikiPage Page);
+
+/// <summary>A program a suite runs: the name of the page it stands on, and the program.</summary>
+/// <param name="Page">The page's file name.</param>
+/// <param name="Program">The program.</param>
+internal readonly record struct WikiRun(string Page, WikiProgram Program);

@@ -45,7 +45,7 @@ public sealed class StepKernel : NotebookExtension, ILanguageKernel
     /// takes it back too, unless the blocks still make it, once the notebook hears of it: at the next gesture, or at once
     /// from a host that changes cells itself. Either of those two reads the blocks and hands it over again. The text reads back
     /// through a catalog of the verbs this package brings,
-    /// <c>StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson()</c>, and a relative source path in it
+    /// <c>StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson().WithNetworks().WithML()</c>, and a relative source path in it
     /// is read from the folder handed over beside it, under <see cref="Folder"/>.
     /// <para>
     /// Not a name a C# variable can have, on purpose. Verso declares a variable for every value a cell can name,

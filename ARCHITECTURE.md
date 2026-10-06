@@ -73,6 +73,8 @@ Src/DeepSharp.Pipelines.Parquet/     a reader of Apache Parquet files, through P
 Src/DeepSharp.Pipelines.Excel/       a reader of Excel workbooks, through ExcelDataReader
 Src/DeepSharp.Pipelines.Json/        a reader of JSON files holding an array of records
 Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
+Src/DeepSharp.Pipelines.Binance/     a live source: the candles of a market on Binance, fetched once over a closed window
+                                     and landed as a file beside its record; the HTTP and the retries, through Polly.Core
 Src/DeepSharp.Import.PyTorch/        a reader of what PyTorch saved — a safetensors file, through Onnxify.Safetensors,
                                      and torch.save's .pt, its pickle read by a weights-only interpreter of its own
 Src/DeepSharp.Import.Keras/          a reader of the models Keras saved, .keras and .h5, through PureHDF
@@ -94,7 +96,8 @@ Src/DeepSharp.Verso.Serve/           DeepSharp's own server, the notebook in a b
 Samples/                          runnable programs, a sample notebook, and the published data they read
 tools/                            the coverage check, the script that draws the icon, and the checks that start what a
                                   person installs from the packages just made: deepsharp-serve, the notebook as Verso
-                                  installs it, and the libtorch engine in an application of its own
+                                  installs it, the libtorch engine, the ML.NET learner and the landing of a live source,
+                                  each in an application of its own
 Tst/DeepSharp/                    the tests of the libraries
 Tst/DeepSharp.Import.TestParts/   importers those tests read files with, written outside the library's internals, as a
                                   reader of another framework's files is
@@ -111,7 +114,9 @@ Tst/DeepSharp.Verso.Serve.TestParts/  parts the server's tests carry beside it, 
 The tensor library and the pipeline library do not reference each other, and a test reads their assembly
 references to keep it that way. They meet in `DeepSharp.Learners.Networks`, which references both and which neither
 references, and the charts reference both and MatPlotLibNet; what each of those packages references is a closed list a
-test reads.
+test reads. The host references Verso's engine and the notebook's package and reaches the core through the second, so it
+writes a notebook whole by the core's one routine rather than by a copy of its own, and a test holds its dependencies to
+those two.
 
 A learner that brings an outside library is split in two, and the split is the dependency rather than the design. The
 notebook, the host, the server and the core's own suite are all forced to carry whichever package brings a verb — three
@@ -236,6 +241,10 @@ refused with the name of the package it needs. A reader of a file also opens its
 are in hand, through `IReadsAFile`, so whoever fingerprints a file parses the very bytes it hashed rather than reading
 the file a second time.
 
+A live source has a door of the same kind, `await ….ReadBinanceAsync(candles)`, an extension in the package that brings
+the HTTP. It is not a verb of the pipeline's file: it lands the window and adds the ordinary `read.csv` of what it
+landed, so the file names a landing and nothing of the venue, and a catalog that was never taught anything reads it.
+
 The escape hatch is one method wide: `.Read(IRowSource)` takes rows and a declared schema, so a format
 nobody shipped is still a few lines away rather than a fork.
 
@@ -252,8 +261,10 @@ and by costing a thin adapter rather than an implementation:
   systems, and **JSON** is what an API hands back. Each is an existing .NET library plus a few lines — Parquet.Net,
   ExcelDataReader, and the System.Text.Json that comes with .NET, so the JSON package brings its reader and nothing
   else.
-- **Live sources** are their own family, fetched and landed rather than read during training. None is built yet;
-  each will be a package of its own, and `.ReadBinance(symbol, interval, from, to)` is the shape one takes.
+- **Live sources** are their own family, fetched and landed rather than read during training. The first is built:
+  `DeepSharp.Pipelines.Binance` lands the candles of a market on Binance, and
+  `await pipeline.ReadBinanceAsync(new BinanceCandles(symbol, interval, from, to))` is the shape one takes. A further
+  source would be a package of its own as well, for what it carries.
 
 Everything else stays one `IRowSource` implementation away — rows plus a declared schema, which is the one
 door the DataFrame opens for anything enumerable. Not shipping a reader is not the same as refusing a
@@ -302,12 +313,82 @@ training would train on different numbers tomorrow while claiming to be the same
 
 Fetching and reading are therefore separate. A fetch pages the endpoint and lands the result as a file,
 recording what it asked for and when; the pipeline then reads that file like any other, by fingerprint. A
-convenience method may do both on first use and read the landing thereafter — the declaration names the
-window, the landing names the bytes.
+convenience method does both: it lands the window on first use and reads the landing thereafter — the
+declaration names the window, the landing names the bytes.
 
 Two consequences, neither optional: the window is closed (a `from` and a `to`, never "the most recent
 thousand", which is a moving target dressed as a source), and each live source lives in its own package,
 since it brings HTTP, retries and a rate limiter that a project serving a trained model has no use for.
+
+`DeepSharp.Pipelines.Binance` is the first, and it is shaped by those two sentences. A program writes
+`await pipeline.ReadBinanceAsync(new BinanceCandles(symbol, interval, from, to))`, or lands a window by itself with
+`candles.LandAsync(folder)` and reads the file it names with `.ReadCsv`.
+
+- **The window is what it is called.** A `BinanceCandles` holds a symbol, one of the sixteen lengths Binance documents and
+  two moments, and nothing about how it is fetched: the handler its requests go through, the clock and the address are
+  chosen beside it with `Through`, `On` and `At`, each giving another window of the same candles. It is half open — the
+  candles that open at or after `from` and before `to` — and each end must be where a candle of that length opens:
+  midnight for a day, a Monday for a week, the first for a month, and for three days every third day counted from the
+  first of January 1970. An end that is not such a moment is refused, with the two nearest named, rather than rounded:
+  Binance moves a start forward to the next candle, so a rounded window would stop naming what it holds. A moment that
+  says nothing of its zone is universal, as the pipeline's own are. A window that would take more than two thousand pages
+  of a thousand candles is refused where it is written, because the budget it would spend is not only this program's.
+- **The path of the landing is the window.** The file is `BTCEUR-1d-20240101T000000Z-20250101T000000Z.csv`, in the folder
+  the pipeline reads from, with its record beside it as `….manifest.json`. The name has no colon and spells a month `1mo`,
+  because `1m` and `1M` are one name to a file system that does not tell the cases apart. What a saved pipeline names
+  of the window is therefore the relative path in a plain `read.csv` step: no verb was added and the file stays at
+  version 7. A step that lands would be a step no replay ever opens, and a version 8 closes a door behind every file
+  written before it.
+- **The move of the file is the commit.** The candles are written whole under a name of their own and moved into place
+  without replacing anything, so of two landings of one window racing each other one stands and the other either finds
+  the same bytes — and is the same landing — or is refused. The record is written after it, and not under the caller's
+  cancellation; it says nothing of being complete, since a marker written beside the work is a promise nobody checked and
+  the move is what completes it. Nothing is written before the whole window has been read, so a landing that was
+  cancelled or stopped leaves nothing behind.
+- **What stands decides what is done, and nothing that stands is replaced.** Nothing stands: the window is landed. The
+  file and its record both stand: the file's bytes are held to the fingerprint the record names and reused, and the
+  venue is not asked. A record without its file, a file that is not its record's, a record of a newer version, one that
+  cannot be read, one of another window: refused, touching nothing, because the first landing is what a pipeline may
+  already have been fitted behind. A file without its record, as when a program stopped between the two writes: the
+  window is read again, and the record is written only if the venue said the same — other numbers are refused and the
+  first landing stays.
+- **The file holds the venue's own words, in one fixed form.** UTF-8 with no mark, line feeds, one line feed at the end,
+  the invariant culture; `timestamp` as ISO 8601 in universal time to the second, and every price and volume exactly as
+  Binance spelled it, since a row is known by what it says and a decimal written again is a different row. The ten
+  columns and the spelling of each are held by a test that compares bytes, because other people's pipelines are
+  declared against them from the day they ship. Two of the venue's twelve fields are not there: when a candle closes is the
+  next one's opening less a millisecond, and the other is one Binance's own documentation says it ignores. A candle the
+  venue lacks is counted in the record and left out; nothing is put in its place.
+- **One fingerprint.** The SHA-256 of a file's bytes, in lower-case hexadecimal, is one method of the core, used by the
+  notebook's cache of what it read, by the landing and by whoever asks. A second way of saying that two files are the same is
+  how two parts of a library come to disagree about whether a file changed. The core also writes a file whole — under a
+  name of its own, to the disk, then moved into place — and the notebook's files and the landing use that one too.
+- **The venue's dialect lives in one internal class, and the budget is a guest's.** Binance's end of a range is
+  inclusive, so a window is asked for up to a millisecond before it ends and a candle that opens at its end is refused.
+  Binance counts what an address spends by the minute, whoever spends it, and the owner of a machine may have other
+  programs on the address; a landing is a one-off with no deadline, so it yields by construction. No two requests are
+  closer than half a second, every try included; the weight an address has used is read from each answer, and the
+  landing waits for the next minute once that is half of what the minute allows, taken from what Binance says of the
+  symbol; a status that says busy or fault is tried again behind a wait that doubles, as long as Binance asks when it
+  asks and never past two minutes, and one unit of work is tried five times and fails once; a firewall, a ban or a
+  region it does not answer from stops the landing at once. A token bucket was tried for this and granted nothing on a
+  clock a test holds, which is the reason the pace and the count run on one clock the landing is handed.
+- **Time is a seam, and the retries are borrowed.** Every wait and every timeout runs on a `TimeProvider` the landing is
+  handed, so a test moves a clock and waits for nothing; nothing here is static and a landing leaves no thread and no timer
+  running. The retry and the timeout of one try are Polly's, in this package alone and in nothing the package publishes: a
+  test pins that none of its types is named by a member a caller sees, and the one failure Polly raises, a try that did not
+  answer in time, is told in this package's own words with nothing of Polly's as its cause.
+- **A project that serves the model never carries any of it.** The pipeline file names a landed file; the core reads it
+  with its own reader. A test pins that the assemblies a model server references name neither HTTP nor Polly nor Binance,
+  and a check installs the packages as a person would and runs twice — once landing a window, once reading the
+  pipeline that landing wrote with the library alone, where neither the package nor Polly is loaded.
+- **No test, and no document a suite runs, reaches Binance.** The address is shared, so before any test is found the
+  core's suite and the notebook's send every address but this machine's to a proxy nothing listens at. A program in a
+  document that a suite runs may not name the source, and a test holds it to that; a page that lands is compiled and
+  never run. The venue the tests ask is generated, not captured: it answers the shapes that were measured against
+  Binance — the inclusive end, the start moved forward, a page of at most a thousand, the weight header, each refusal —
+  and no payload of Binance's is in the repository, since the data comes under terms of its own. The record names those
+  terms and the host the candles came from.
 
 ### The evidence is part of the declaration
 
@@ -853,7 +934,7 @@ which outside thing it carries.
 DeepSharp                   tensors, the backend seam, the light engine, the layers and networks, the training loop
 DeepSharp.Pipelines               the pipeline, ending at prepared splits and the declared evidence
 DeepSharp.Pipelines.<Format>      a reader: Parquet, Excel, Json
-DeepSharp.Pipelines.<Source>      a live source: it fetches and lands, it does not read during training
+DeepSharp.Pipelines.<Source>      a live source, Binance so far: it fetches and lands, it does not read during training
 DeepSharp.Learners.<Name>   something that learns from prepared data, behind the learner seam
 DeepSharp.Backends.<Name>   an engine behind ITensorBackend
 DeepSharp.Import.<Name>     reading weights or a model trained somewhere else
@@ -897,9 +978,13 @@ to implement **one** interface, and the four are not interchangeable:
 | `IImporter` | what does a model trained elsewhere look like here | a reader of one framework's saved models or weight files |
 
 A package that implements two of them is doing two jobs and should be two packages; a package that
-implements none is a convenience and belongs in whatever it is convenient for. A front end is the one
-deliberate exception: the notebook implements none of the four, because it is not a part of the pipeline but a
-way of writing one and looking at it, and it sits beside the seams the way the charts do.
+implements none is a convenience and belongs in whatever it is convenient for. Three kinds are the deliberate
+exceptions, each a package for a reason of its own. A front end: the notebook implements none of the four, because it
+is not a part of the pipeline but a way of writing one and looking at it, and it sits beside the seams the way the
+charts do. A live source: it feeds the second seam without implementing it, since what it lands is a file, and the
+core's own comma-separated reader is the `IRowSource` of that landed fetch; it is a package for what it carries, the
+HTTP, the retries and the pacing that a project serving a trained model has no use for. And the indicators, which are
+verbs over a series and implement no seam either, a package for the library whose arithmetic they borrow.
 
 A seam is only real when two implementations of it differ in kind, so each one is held to that: the backend
 has a pure-managed engine beside a native one, rows arrive from a file and from a database reader, a
@@ -2664,6 +2749,9 @@ The one rule about a dependency is where it lands. Anything heavy gets its own p
 does not want it never carries it, and the core stays light enough to travel inside an application. A model
 is written against the seam and cannot tell which engine is underneath.
 
+A retry is on that list as well: the retries and the timeout of a try in the package that fetches from Binance are
+Polly's, and nothing else in the repository carries Polly.
+
 ## What is not borrowed
 
 Tuning earned elsewhere does not come here. A speed-up measured on one machine, one family of models and
@@ -2694,3 +2782,14 @@ else: that is borrowing a library, not borrowing a result.
   scikit-learn's do.
 - **A required engine.** No backend is mandatory. The core carries the light one; anything heavier is its
   own package, and a model cannot tell which is underneath it.
+- **An account.** The package that lands candles asks for Binance's public market data and nothing else: it has no
+  credential parameter, signs nothing and sends no order, because a key would make it a client of somebody's account,
+  which is another library, and a log that holds one is a leak.
+- **A second venue, and an interface for one.** The wire format of Binance lives in one internal class, and the seams a
+  test uses are the handler and the clock. An interface shaped around a single venue is that venue with a longer name;
+  the second source, when there is one, shows what the two share.
+- **A limiter object.** The pace and the count of what an address has spent are two numbers on one clock, which is what
+  lets a test hold them. A rate-limiting type that cannot be handed a clock cannot be tested without waiting.
+- **A landing that is rewritten.** A file that was landed is never replaced by a newer one, and no option asks it to: a
+  pipeline may have been fitted behind the first, and the numbers a venue gives for a past day are not promised to be the
+  same tomorrow.

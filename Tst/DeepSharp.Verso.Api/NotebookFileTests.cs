@@ -163,4 +163,36 @@ public sealed class NotebookFileTests : IDisposable
             await host.CloseAsync();
         }
     }
+
+    [Fact]
+    public async Task AFileThatCannotBeWritten_IsRefused_LeavesNoNameOfItsOwnBesideIt_AndTheNotebookKeepsItsFile()
+    {
+        var path = Path.Join(_folder, "first.verso");
+        var taken = Path.Join(_folder, "taken.verso");
+        var notebook = new NotebookModel { DefaultKernelId = "csharp" };
+
+        notebook.Cells.Add(new CellModel { Type = "code", Language = "csharp", Source = "1 + 1" });
+
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        // A folder where the file goes refuses the file on every system.
+        Directory.CreateDirectory(taken);
+
+        var engine = new ExtensionHost();
+        var host = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+
+        try
+        {
+            var file = new NotebookFile(path, await SavedAsync(engine, path), engine, host.Scaffold);
+            var refused = await Record.ExceptionAsync(() => file.SaveAsAsync(taken));
+
+            Assert.True(refused is IOException or UnauthorizedAccessException, $"The save was not refused as a move is: {refused?.ToString() ?? "nothing was thrown"}");
+            Assert.Equal(path, file.Path);
+            Assert.Empty(Directory.GetFiles(_folder, ".*.tmp"));
+        }
+        finally
+        {
+            await host.CloseAsync();
+        }
+    }
 }

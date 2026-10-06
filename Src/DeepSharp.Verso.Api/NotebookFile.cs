@@ -1,6 +1,8 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Text;
+using DeepSharp.Pipelines;
 using Verso;
 using Verso.Abstractions;
 using Verso.Extensions;
@@ -89,11 +91,9 @@ internal sealed class NotebookFile(string path, NotebookModel saved, ExtensionHo
             notebook = await guard.PreSerializeAsync(notebook, to);
         }
 
-        var whole = System.IO.Path.Join(System.IO.Path.GetDirectoryName(to), $".{System.IO.Path.GetFileName(to)}.{Guid.NewGuid():N}.tmp");
         var text = await serializer.SerializeAsync(notebook);
 
-        await File.WriteAllTextAsync(whole, text);
-        File.Move(whole, to, overwrite: true);
+        await Encoding.UTF8.GetBytes(text).WriteWholeAsync(to);
 
         // From now on, what is unsaved is what differs from what this file holds.
         _saved = await serializer.ReadAsync(extensions, text, to);

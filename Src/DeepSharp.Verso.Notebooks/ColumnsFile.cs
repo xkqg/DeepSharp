@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Text;
 using DeepSharp.Pipelines;
 using Verso.Abstractions;
 
@@ -106,23 +107,18 @@ internal readonly record struct ColumnsFile(string Path)
     /// <returns>Why nothing was saved, as the block says it; nothing when the file holds what the save meant it to.</returns>
     public CellOutput? Write(ColumnsSave save) => save.Unreadable ?? (save.Text is { } text ? Written(text) : null);
 
-    // Written under a name of its own for this write and moved into place; a write or a move refused leaves nothing of its
-    // own behind — the name is this write's alone, so nothing of this program holds it.
+    // Written whole, by the core's one rule: under a name of its own beside the file and moved into place, so nothing ever
+    // meets half a file, and a write or a move refused leaves nothing of its own behind.
     private CellOutput? Written(string text)
     {
-        var own = $"{Path}.{Guid.NewGuid():N}.tmp";
-
         try
         {
-            File.WriteAllText(own, text);
-            File.Move(own, Path, overwrite: true);
+            Encoding.UTF8.GetBytes(text).WriteWhole(Path);
 
             return null;
         }
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
         {
-            File.Delete(own);
-
             return StepCard.ColumnsNotWritten(refused.Message);
         }
     }

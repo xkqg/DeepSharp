@@ -45,6 +45,7 @@ public class ParameterListTests
         ["DeepSharp.Learners.MLNet"] = "DeepSharp.Learners.MLNet.Tests",
         ["DeepSharp.Learners.Networks"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines"] = "DeepSharp.Tests",
+        ["DeepSharp.Pipelines.Binance"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines.DataFrame"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines.Excel"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines.Indicators"] = "DeepSharp.Tests",

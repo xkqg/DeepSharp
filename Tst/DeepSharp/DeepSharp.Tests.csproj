@@ -24,6 +24,8 @@
     <!-- An outside JSON Schema validator, here only, to prove that the schema the steps describe accepts
          what the library writes and refuses what its reader refuses. The core has no business carrying one. -->
     <PackageReference Include="Corvus.Json.Validator" Version="5.*" />
+    <!-- A clock a test advances, so the landing's pacing and its retries are tested without waiting for either. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.*" />
     <!-- The README's example is compiled and run as it stands on the page, so the page cannot drift from the code. -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.*" />
   </ItemGroup>
@@ -35,6 +37,7 @@
     <ProjectReference Include="..\..\Src\DeepSharp.Learners.ML\DeepSharp.Learners.ML.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Learners.Networks\DeepSharp.Learners.Networks.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.Binance\DeepSharp.Pipelines.Binance.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.DataFrame\DeepSharp.Pipelines.DataFrame.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.Excel\DeepSharp.Pipelines.Excel.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Pipelines.Indicators\DeepSharp.Pipelines.Indicators.csproj" />

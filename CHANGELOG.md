@@ -3,6 +3,111 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0]
+
+A live source, landed: the candles an exchange answers with, fetched once over a closed window and kept as a file that
+the pipeline then reads like any other. A source that answers differently every time it is asked cannot be read while a
+model trains — the pipeline would train on other numbers tomorrow and still claim to be the same pipeline — so it is
+fetched once, with a record of what was asked and what came back, and what the pipeline names is the file.
+
+### Upgrading from 0.7.1
+
+- **The pipeline file stays at version 7, and no verb was added.** What a saved pipeline names of a landing is an ordinary
+  `read.csv` step with the landing's relative path, so no file written by 0.7.1 reads differently, no pipeline file or
+  saved-columns file this version writes differs from what 0.7.1 writes, and a program that only serves a trained model
+  reads a pipeline that was fitted behind a landing with `DeepSharp.Pipelines` alone: it carries no HTTP, no retry and
+  nothing of Binance. A version 8 would have closed a door behind every file written before it, to make room for a step
+  that no replay ever opens.
+
+- **One package is new, and nothing published before changes what it offers.** `DeepSharp.Pipelines.Binance` is the
+  nineteenth package. `DeepSharp.Pipelines` gains four members on `byte[]` — see Added — and nothing else of any package
+  published before this version changes its public surface, which the build checks against 0.7.1. The new package has
+  no earlier release to be held to, so the next one is held to this.
+
+- **A landing asks Binance, so the first run of one is the first time this library reaches the network.** Nothing else
+  here does, and nothing in the tests does: the suites that run documents send every address but this machine's to a
+  proxy nothing listens at, and a program in a document that a suite runs may not name the landing. A landing goes slowly
+  and stops when it is told to — see Added — because the budget it spends is the address's, shared with every other
+  program on it.
+
+- **The notebook's files are written by one routine instead of three copies of it.** The saved columns, a notebook a host
+  saves and a notebook a host creates were each written under a name of their own and moved into place, each by code of
+  its own. They go through the core's `WriteWhole`, `WriteWholeAsync` and `WriteWholeOnceAsync` now, which write the same
+  bytes: the one difference a person can see is that the name a saved-columns file is written under for a moment is
+  hidden, as the other two always were, and the bytes are on the disk before the move makes them the file.
+  `DeepSharp.Verso.Api` now reaches the core for this, which every application that hosts a notebook already carries
+  through the notebook's package, so what an application brings is the same.
+
+### Added
+
+- **`DeepSharp.Pipelines.Binance`, a live source.** `new BinanceCandles("BTCEUR", "1d", from, to)` names the candles of
+  a market over a window, and `await candles.LandAsync(SourceFolder.Of("data"))` lands them: it asks Binance, writes the
+  candles as a file and a record of the asking beside it, and gives the name of the file, which the pipeline reads with
+  `.ReadCsv` like any other. `await pipeline.ReadBinanceAsync(candles)` does both in one line — it lands the window where
+  it is not landed yet and adds the ordinary `.ReadCsv` of the landing. `Through`, `On` and `At` choose how a window is
+  sent — the handler its requests go through, the clock every wait runs on and the address — and never what it names.
+  `BinanceException` carries what Binance said, its status and its own code.
+
+- **The window is a closed one, and it is refused rather than rounded.** It runs from `from` up to, not including, `to`,
+  and each end must be where a candle of that length opens — midnight for a day, a Monday for a week, the first of a
+  month, and for three days every third day counted from the first of January 1970 — because Binance moves a start that is
+  not, and a rounded window would stop naming what it holds. All sixteen lengths Binance documents are taken. A window
+  that would take more than two thousand pages of a thousand candles is refused where it is written, and one that ends
+  where Binance has not closed its last candle at least a minute ago, by Binance's own clock, is refused before anything
+  is spent.
+
+- **The landing is the window.** The file is named by it — `BTCEUR-1d-20240101T000000Z-20250101T000000Z.csv`, the month
+  spelled `1mo` so that it never collides with a minute — and holds the ten columns `timestamp`, `open`, `high`, `low`,
+  `close`, `volume`, `quoteVolume`, `trades`, `takerBuyVolume` and `takerBuyQuoteVolume`, each price and volume exactly as
+  Binance wrote it, `timestamp` as ISO 8601 in universal time to the second. A candle Binance does not have is counted in
+  the record and left out; nothing is made up. The bytes are fixed — UTF-8 with no mark, line feeds, the invariant
+  culture — and a test compares them, because pipelines are declared against them.
+
+- **The record says what was asked and what came back.** Beside the file, `….manifest.json`, of version 1: the venue, the
+  host and the terms of Binance's public data, the symbol, interval and window, when it was asked by the clock the
+  landing was handed and what Binance's own clock said, and for each page the moment it was asked from, its rows, the
+  SHA-256 of its body and the `Date` and `x-mbx-uuid` it came with; then the rows, the gaps, the first and last candle,
+  the file's name and the fingerprint of its bytes. It says nothing of being complete: the file's move into place is
+  what completes a landing, and the record is written after it.
+
+- **What stands decides what is done, and nothing that stands is replaced.** Nothing stands: the window is landed. The file
+  and its record both stand: the bytes are held to the fingerprint the record names and reused, and Binance is not asked.
+  A record without its file, a file that is not its record's, a record of a newer version, one that cannot be read and one
+  of another window are refused, touching nothing, since a pipeline may already have been fitted behind the first
+  landing. A file without its record, as when a program stopped between the two writes, is landed again, and the record is
+  written only if Binance said the same. Of two landings of one window at once, one stands and the other finds the same
+  bytes or is refused. Nothing is written until the whole window has been read, so a landing that is cancelled or stopped
+  leaves nothing behind.
+
+- **A landing is a guest.** Binance counts what an address spends by the minute, whoever spends it. No two requests are
+  closer than half a second, every try included; the weight used is read from every answer, and the landing waits for the
+  next minute once that is half of what the minute allows. A busy answer or a fault of Binance's is tried again, five tries
+  to a unit of work, behind a wait that doubles — as long as Binance asks when it asks, up to two minutes, and a longer ask
+  is a stop — and a try that does not answer in ten seconds is given up. A firewall, a ban or a region Binance does not
+  answer from stops the landing at once, naming how long when Binance says. Binance's own words for a refusal are carried
+  in the exception and the request is not asked again.
+
+- **A project that serves the model never carries any of it.** The retries are Polly's, `Polly.Core` 8.8.0, and they and the
+  HTTP are in `DeepSharp.Pipelines.Binance` alone; none of Polly's types is named by anything the package publishes.
+  A check, `tools/live/check.sh`, builds an application against the packages just made and runs it twice — once landing a
+  window from a stand-in venue on the machine, once reading the pipeline that landing wrote with `DeepSharp.Pipelines`
+  alone, where neither the package nor Polly is loaded — and CI and the publish workflow run it before any package leaves.
+
+- **In the core, `byte[].Fingerprint()` and three ways to write a file whole.** `Fingerprint` is the SHA-256 of the bytes in
+  lower-case hexadecimal — the one spelling of "the same bytes" the library has, now used by the notebook's cache and by the
+  landing. `WriteWhole`, `WriteWholeAsync` and `WriteWholeOnceAsync` write a file under a name of its own, to the disk, and
+  move it into place, so whoever looks finds nothing, the old file or the whole of the new one; the last never replaces what
+  stands and treats the same bytes standing as the same file.
+
+- **A page for live sources in the wiki,** [Live sources](https://github.com/xkqg/DeepSharp/wiki/Live-sources), and the
+  roadmap shows the row as done.
+
+### Fixed
+
+- **The wiki's Architecture page lists every package.** It had no row for `DeepSharp.Learners.ML` and
+  `DeepSharp.Learners.MLNet`; a test now holds the layout of this repository's `ARCHITECTURE.md` and of that page to every
+  project in `Src`, and the README's table to every package.
+
 ## [0.7.1]
 
 A course to fill in: every step of a prepared pipeline in the order the steps belong, each present and waiting for what

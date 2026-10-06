@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Pipelines.Binance</PackageId>
+    <Description>Lands the candles an exchange answers with as a file that a DeepSharp pipeline then reads like any other. Binance's, fetched once over a closed window and kept beside the pipeline with a record of what was asked and what came back, so the same pipeline gives the same numbers tomorrow: await pipeline.ReadBinanceAsync(new BinanceCandles("BTCEUR", "1d", from, to)) lands the window if it is not there and adds an ordinary .ReadCsv of the landing. The retries, the pacing by the venue's own count of what this address has spent, and the HTTP live in this package alone, so a project that only serves a trained model never carries them: the pipeline file names the landed file and nothing of Binance. Not affiliated with Binance; what lands is Binance's data, under Binance's terms.</Description>
+    <PackageTags>machine-learning;pipeline;data-preparation;binance;market-data;candles;klines;etl;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Polly.Core 8.8.0, BSD-3-Clause (github.com/App-vNext/Polly): the retry and the timeout of a try, borrowed rather than
+         written. It brings nothing else on .NET 8 or .NET 10, and nothing of it is in what this package publishes. -->
+    <PackageReference Include="Polly.Core" Version="8.8.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- What the landing is made of — the wire, the writer, the manifest — is reached by the package's own tests directly,
+         as the core library's is. -->
+    <InternalsVisibleTo Include="DeepSharp.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

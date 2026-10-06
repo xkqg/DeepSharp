@@ -47,4 +47,29 @@ public sealed class FileBytesTests : IDisposable
     {
         Assert.Throws<ArgumentNullException>(() => ((byte[])null!).AsText());
     }
+
+    [Theory]
+    [InlineData("", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")]
+    [InlineData("abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")]
+    public void AFilesBytes_Fingerprint_IsTheLowercaseSha256OfThem(string text, string expected)
+    {
+        Assert.Equal(expected, Encoding.ASCII.GetBytes(text).Fingerprint());
+    }
+
+    [Fact]
+    public void ManyBytes_Fingerprint_IsWhatTheSystemsOwnHashOfTheFileSays()
+    {
+        var bytes = new byte[10_000];
+
+        new Random(20261006).NextBytes(bytes);
+        File.WriteAllBytes(Path.Join(_folder, "random.bin"), bytes);
+
+        Assert.Equal(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(Path.Join(_folder, "random.bin")))).ToLowerInvariant(), bytes.Fingerprint());
+    }
+
+    [Fact]
+    public void NoBytes_AreNotFingerprinted()
+    {
+        Assert.Throws<ArgumentNullException>(() => ((byte[])null!).Fingerprint());
+    }
 }

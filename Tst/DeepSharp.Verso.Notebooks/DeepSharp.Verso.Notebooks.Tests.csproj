@@ -50,6 +50,8 @@
     <Compile Include="..\DeepSharp\Packaging\Wiki.cs" Link="Wiki.cs" />
     <!-- The parameter rule, read from the packages this suite references: each suite reads its own. -->
     <Compile Include="..\DeepSharp\ParameterListTests.cs" Link="ParameterListTests.cs" />
+    <!-- No test reaches the network: the notebook runs the wiki's cells, and a cell that fetched from an exchange would be a guest of it. -->
+    <Compile Include="..\DeepSharp\NoVenue.cs" Link="NoVenue.cs" />
   </ItemGroup>
 
   <ItemGroup>

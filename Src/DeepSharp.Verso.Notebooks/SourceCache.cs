@@ -1,7 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using System.Security.Cryptography;
 using DeepSharp.Pipelines;
 
 namespace DeepSharp.Verso.Notebooks;
@@ -66,7 +65,7 @@ internal sealed class SourceCache
 
         var path = folder.Resolve(read.Path);
         var bytes = File.ReadAllBytes(path);
-        var fingerprint = Fingerprint(bytes);
+        var fingerprint = bytes.Fingerprint();
 
         // A step is known by what it says, never by which object says it: every gesture reads the blocks afresh.
         if (Volatile.Read(ref _kept) is { } kept && kept.Read.Equals(read) && kept.Path == path && kept.Fingerprint == fingerprint)
@@ -96,7 +95,7 @@ internal sealed class SourceCache
 
         try
         {
-            return SourceBytes.Of(Fingerprint(File.ReadAllBytes(folder.Resolve(read.Path))));
+            return SourceBytes.Of(File.ReadAllBytes(folder.Resolve(read.Path)).Fingerprint());
         }
         catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException)
         {
@@ -123,8 +122,6 @@ internal sealed class SourceCache
     /// <param name="declaration">The blocks, as the notebook reads them.</param>
     /// <returns>The step, or nothing when the rows are handed in or there is no step at all.</returns>
     internal static IReadsAFile? FileOf(PipelineDeclaration declaration) => declaration.Steps is [IReadsAFile read, ..] ? read : null;
-
-    private static string Fingerprint(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
     // Every verb of the notebook's own that reads a file, as its catalog knows them, in the order of their names.
     private static string Readers()

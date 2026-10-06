@@ -20,7 +20,7 @@ public sealed partial class CourseOrderInTheDocsTests
 {
     private static readonly Stage[] Stages =
     [
-        new("the source", ["read.csv"], ["ReadCsv", "ReadParquet", "ReadExcel", "ReadJson"]),
+        new("the source", ["read.csv"], ["ReadCsv", "ReadParquet", "ReadExcel", "ReadJson", "ReadBinanceAsync"]),
         new("the columns", ["declare"], ["Declare"]),
         new("the order", ["order.by"], ["OrderBy", "Shuffle"]),
         new("the gaps", ["settle.gaps"], ["SettleGaps"]),
@@ -95,8 +95,16 @@ public sealed partial class CourseOrderInTheDocsTests
             var last = string.Empty;
             ExpressionSyntax? receiver = call;
 
-            while (receiver is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access })
+            while (true)
             {
+                // A chain written after an awaited door stands on a parenthesis: the await is the same chain, read through.
+                receiver = ReadThrough(receiver);
+
+                if (receiver is not InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax access })
+                {
+                    break;
+                }
+
                 last = access.Name.Identifier.Text;
 
                 if (StageOfMethod(last) is var stage and >= 0)
@@ -115,6 +123,13 @@ public sealed partial class CourseOrderInTheDocsTests
             }
         }
     }
+
+    private static ExpressionSyntax? ReadThrough(ExpressionSyntax? expression) => expression switch
+    {
+        ParenthesizedExpressionSyntax parenthesized => ReadThrough(parenthesized.Expression),
+        AwaitExpressionSyntax awaited => ReadThrough(awaited.Expression),
+        _ => expression,
+    };
 
     private static bool IsBuilt(string path) =>
         path.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
@@ -190,6 +205,33 @@ public sealed partial class CourseOrderInTheDocsTests
 
         Assert.True(faults.Count == 0, $"{faults.Count} chains teach another order than the course:\n{string.Join('\n', faults)}");
         Assert.True(chains >= 30, $"The documents hold {chains} chains: what this reads is not what a person reads.");
+    }
+
+    [Fact]
+    public void AChainThatStartsWithAnAwaitedDoor_IsReadVerbForVerb_AsAnyOtherChainIs()
+    {
+        // A door that lands a window is awaited, and a chain written after it stands on a parenthesis: a walker that stopped
+        // there would skip every such chain and pass whatever order it was written in.
+        var chains = ChainsIn("""
+            var pipeline = (await Pdd.Create().ReadBinanceAsync(window))
+                .Declare(schema => schema.Timestamp("timestamp"))
+                .OrderBy("timestamp");
+            """).Where(chain => chain.Length > 1).ToArray();
+
+        Assert.Equal(["ReadBinanceAsync", "Declare", "OrderBy"], Assert.Single(chains).Select(written => written.Method));
+        Assert.True(Rising([.. chains[0].Select(written => written.Stage)]));
+    }
+
+    [Fact]
+    public void AChainThatStartsWithAnAwaitedDoor_IsHeldToTheOrderOfTheCourse()
+    {
+        var chains = ChainsIn("""
+            var pipeline = (await Pdd.Create().ReadBinanceAsync(window))
+                .OrderBy("timestamp")
+                .Declare(schema => schema.Timestamp("timestamp"));
+            """).Where(chain => chain.Length > 1).ToArray();
+
+        Assert.False(Rising([.. Assert.Single(chains).Select(written => written.Stage)]));
     }
 
     [Fact]

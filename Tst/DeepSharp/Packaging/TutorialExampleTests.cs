@@ -43,37 +43,33 @@ public sealed partial class TutorialExampleTests : IDisposable
     [Fact]
     public async Task EveryPipelineOfTheTutorial_RunsOverThePublishedData_WithoutAFailure()
     {
-        var pages = Wiki.Tutorial().Select(step => step.Page).Append(Wiki.Pages().Single(page => page.Name == "Getting-Started.md"));
         var faults = new List<string>();
         var ran = 0;
 
-        foreach (var page in pages)
+        foreach (var (page, program) in Wiki.Runnable())
         {
-            foreach (var program in page.Programs.Where(each => each.Blocks.Any(block => block.Code.Contains("Pdd.Create()", StringComparison.Ordinal))))
+            var compiled = InTheFolder(program).Compiled();
+            var context = new AssemblyLoadContext("tutorial", isCollectible: true);
+
+            ran++;
+
+            try
             {
-                var compiled = InTheFolder(program).Compiled();
-                var context = new AssemblyLoadContext("tutorial", isCollectible: true);
+                using var image = new MemoryStream(compiled.Image);
+                var entry = context.LoadFromStream(image).EntryPoint!;
 
-                ran++;
-
-                try
+                if (entry.Invoke(null, entry.GetParameters().Length == 0 ? null : [Array.Empty<string>()]) is Task running)
                 {
-                    using var image = new MemoryStream(compiled.Image);
-                    var entry = context.LoadFromStream(image).EntryPoint!;
-
-                    if (entry.Invoke(null, entry.GetParameters().Length == 0 ? null : [Array.Empty<string>()]) is Task running)
-                    {
-                        await running;
-                    }
+                    await running;
                 }
-                catch (TargetInvocationException failed)
-                {
-                    faults.Add($"{page.Name}, the block at line {program.Line}: {failed.InnerException?.GetType().Name}: {failed.InnerException?.Message}");
-                }
-                finally
-                {
-                    context.Unload();
-                }
+            }
+            catch (TargetInvocationException failed)
+            {
+                faults.Add($"{page}, the block at line {program.Line}: {failed.InnerException?.GetType().Name}: {failed.InnerException?.Message}");
+            }
+            finally
+            {
+                context.Unload();
             }
         }
 

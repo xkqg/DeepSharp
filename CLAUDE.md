@@ -61,6 +61,7 @@ bash tools/serve/check.sh nupkgs                 # deepsharp-serve from its pack
 bash tools/verso/check.sh nupkgs                 # the notebook installed by Verso's own installer, and run, as CI does
 bash tools/torch/check.sh nupkgs                 # an application on the libtorch engine's package, with and without libtorch
 bash tools/ml/check.sh nupkgs                    # the ML.NET learner's two packages: one trains and writes, the other only reads
+bash tools/live/check.sh nupkgs                  # the Binance landing: lands from a stand-in venue on this machine, then the pipeline it wrote is read without the package
 ```
 
 There are six suites: the notebook's runs in the host an application of your own uses, `DeepSharp.Verso.Api`, the
@@ -72,3 +73,11 @@ brings that library and the native side it comes with: the core's suite never ca
 gate measures on .NET 10 and runs every suite on .NET 8 as well. Each test project is an executable — xunit v3 runs
 in-process, so `dotnet test` is not how a suite is run here. Pass `-- -class <full name>` or
 `-- -method <full name>` to run one: a single dash, because the runner refuses `--class` as an unknown option.
+
+## No request to Binance from here, ever
+
+`DeepSharp.Pipelines.Binance` fetches from Binance, and the address a build runs on shares one request budget with
+whatever else runs there. So no test, no check and no program in a document that a suite runs sends a request to it —
+`NoVenue` sends every address but this machine's to a dead proxy, the live check lands from a stand-in venue on this
+machine, and a test holds the documents a suite runs to never naming the landing. [CONTRIBUTING.md](CONTRIBUTING.md) has
+the reasons; one request by hand, never a loop, is all a change may spend to see Binance's real answer.

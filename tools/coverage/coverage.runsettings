@@ -17,6 +17,7 @@
                 <ModulePath>.*DeepSharp[.]Learners[.]MLNet[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Learners[.]Networks[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Pipelines[.]Binance[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]DataFrame[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]Excel[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]Indicators[.]dll$</ModulePath>

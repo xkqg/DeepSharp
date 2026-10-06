@@ -113,6 +113,13 @@ jobs:
         timeout-minutes: 10
         run: bash tools/ml/check.sh nupkgs
 
+      # A window of Binance's candles landed from the package about to be pushed, from a stand-in venue on this machine and
+      # never the real one, and the pipeline that reads the landing read back and run by the pipeline library alone: carrying
+      # nothing of that package, and nothing of Polly, at all.
+      - name: Check the Binance landing from its package
+        timeout-minutes: 10
+        run: bash tools/live/check.sh nupkgs
+
       # The key this returns is valid for one hour, so it is asked for here rather than at the top of the job.
       # `user` is the nuget.org profile name that owns the trusted-publishing policy — not an email address,
       # and not a secret.

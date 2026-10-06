@@ -2,6 +2,8 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Collections.Concurrent;
+using System.Text;
+using DeepSharp.Pipelines;
 using DeepSharp.Verso.Notebooks;
 using Verso.Abstractions;
 using Verso.Extensions;
@@ -108,20 +110,7 @@ public sealed class OpenNotebooks : IAsyncDisposable
 
         // Written whole under a name of its own, then moved into place by the file system in one step that never replaces
         // a file: whoever looks finds no notebook, or the whole of it.
-        var whole = Path.Join(Path.GetDirectoryName(file), $".{Path.GetFileName(file)}.{Guid.NewGuid():N}.tmp");
-
-        await File.WriteAllTextAsync(whole, await new VersoSerializer().SerializeAsync(notebook), CancellationToken.None);
-
-        try
-        {
-            File.Move(whole, file, overwrite: false);
-        }
-        catch
-        {
-            File.Delete(whole);
-
-            throw;
-        }
+        await Encoding.UTF8.GetBytes(await new VersoSerializer().SerializeAsync(notebook)).WriteWholeOnceAsync(file, CancellationToken.None);
 
         return await OpenAsync(file, cancellationToken);
     }
