@@ -302,7 +302,7 @@ internal sealed class Answered(IReadOnlyList<double[]> actual, IReadOnlyList<dou
     // The answer's shares times the logarithm of each over the prediction's: nought where the answer holds nothing, and
     // without end where it holds something the prediction gives nothing.
     private static double Divergence(double[] held, double[] said) =>
-        Enumerable.Range(0, held.Length).Sum(at => held[at] == 0 ? 0 : said[at] == 0 ? double.PositiveInfinity : held[at] * Math.Log(held[at] / said[at]));
+        Enumerable.Range(0, held.Length).Sum(at => held[at] is 0 ? 0 : said[at] is 0 ? double.PositiveInfinity : held[at] * Math.Log(held[at] / said[at]));
 }
 
 /// <summary>Each answer of a part's rows as a class, nought or one: the class held, and the class predicted.</summary>
@@ -607,7 +607,7 @@ internal sealed class Measurement
                     $"Row {readAt[row] + 1}: its {what} hold {below}, below nought, and {measures} compare shares, none of which is below nought."));
             }
 
-            if (rows[row].Sum() == 0 || (ordered && rows[row].Take(_output.InTheOrder()).Sum() == 0))
+            if (rows[row].Sum() is 0 || (ordered && rows[row].Take(_output.InTheOrder()).Sum() is 0))
             {
                 throw new InvalidOperationException(string.Create(
                     CultureInfo.InvariantCulture,

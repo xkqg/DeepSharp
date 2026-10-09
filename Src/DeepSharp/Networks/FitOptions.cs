@@ -177,16 +177,14 @@ public sealed class GradientClip
         var tensors = parameters.Select(parameter => parameter.Value).Distinct().ToArray();
         var squares = 0d;
 
-        foreach (var tensor in tensors.Where(tensor => tensor.Shape.Count > 0))
+        foreach (var gradient in tensors.Where(tensor => tensor.Shape.Count > 0).Select(tensor => gradients[tensor]))
         {
-            var gradient = gradients[tensor];
-
             squares += (double)backend.Mean(backend.Multiply(gradient, gradient)).Values[0] * gradient.Shape.Count;
         }
 
         var coefficient = MaxNorm / (Math.Sqrt(squares) + 1e-6);
 
-        if (!(coefficient < 1))
+        if (coefficient >= 1 || double.IsNaN(coefficient))
         {
             return gradients;
         }

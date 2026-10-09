@@ -197,7 +197,7 @@ public class ProfileRankAlertTests
     public void WordsAreNotCompared_AndOnlyTheColumnsNamedAre()
     {
         var prepared = Pdd.Create()
-            .Read(new InMemoryRowSource(["a", "b", "c", "w"], Rows.Select(value => (string[])[Text(value), Text(Math.Exp(value)), Text(Math.Exp(value)), value < 6 ? "x" : "y"]).ToArray()), "rows")
+            .Read(new InMemoryRowSource(["a", "b", "c", "w"], Rows.Select(value => new[] { Text(value), Text(Math.Exp(value)), Text(Math.Exp(value)), value < 6 ? "x" : "y" }).ToArray()), "rows")
             .Declare(schema => schema.Number("a", "b", "c").Category("w"))
             .Profile(0.5, "a", "b", "w")
             .Build()
@@ -213,7 +213,7 @@ public class ProfileRankAlertTests
     public void TheAnswer_IsNotComparedWithTheColumnsThatFollowIt()
     {
         var prepared = Pdd.Create()
-            .Read(new InMemoryRowSource(["a", "y", "c"], Rows.Select(value => (string[])[Text(value), Text(Math.Exp(value)), Text(Math.Exp(value) + 1)]).ToArray()), "rows")
+            .Read(new InMemoryRowSource(["a", "y", "c"], Rows.Select(value => new[] { Text(value), Text(Math.Exp(value)), Text(Math.Exp(value) + 1) }).ToArray()), "rows")
             .Declare(schema => schema.Number("a", "y", "c"))
             .Profile(0.5)
             .SplitAtRandom(0.7, 0.15)

@@ -23,7 +23,7 @@ public class OrderedLossTests
         new(
             ["t", "age", "planned", .. Bands],
             [
-                .. Enumerable.Range(1, 12).Select(t => (IReadOnlyList<string?>)
+                .. Enumerable.Range(1, 12).Select<int, IReadOnlyList<string?>>(t =>
                 [
                     t.ToString(CultureInfo.InvariantCulture),
                     (28 + (t % 6)).ToString(CultureInfo.InvariantCulture),

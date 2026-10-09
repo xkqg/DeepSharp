@@ -409,10 +409,12 @@ public sealed class ColumnsParameter : StepParameter<IReadOnlyList<string>>
     private protected override bool Same(IReadOnlyList<string> one, IReadOnlyList<string> other) =>
         one.SequenceEqual(other, StringComparer.Ordinal);
 
+    private static readonly string[] CountWords = ["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+
     // A count as a refusal says it: in words up to ten, as a person writes it, and in figures above.
     private static string Counted(int count) =>
         count is >= 0 and <= 10
-            ? ((string[])["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"])[count]
+            ? CountWords[count]
             : count.ToString(CultureInfo.InvariantCulture);
 
     /// <inheritdoc />

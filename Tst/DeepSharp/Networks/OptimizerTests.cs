@@ -142,7 +142,7 @@ public class OptimizerTests
     [Fact]
     public void AdamWAndNadam_RememberTheStepsAndBothRunningMeans_UnderPyTorchsNames()
     {
-        foreach (var optimizer in (Optimizer[])[new AdamW(0.01), new Nadam(0.01)])
+        foreach (var optimizer in new Optimizer[] { new AdamW(0.01), new Nadam(0.01) })
         {
             var output = Walked(optimizer);
             var memory = optimizer.KeptOf(output.Weight)!.Value;

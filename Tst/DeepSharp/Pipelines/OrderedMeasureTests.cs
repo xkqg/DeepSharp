@@ -100,7 +100,7 @@ public class OrderedMeasureTests
         new(
             ["t", "planned", .. Bands],
             [
-                .. Enumerable.Range(1, 12).Select(t => (IReadOnlyList<string?>)
+                .. Enumerable.Range(1, 12).Select<int, IReadOnlyList<string?>>(t =>
                 [
                     t.ToString(CultureInfo.InvariantCulture),
                     (20 + t).ToString(CultureInfo.InvariantCulture),
@@ -180,7 +180,7 @@ public class OrderedMeasureTests
             .Read(
                 new InMemoryRowSource(
                     ["t", "planned", .. Bands],
-                    [.. Enumerable.Range(1, 8).Select(t => (IReadOnlyList<string?>)[$"{t}", "10", t == 7 ? "0" : "2", t == 7 ? "0" : "3", t == 7 ? "0" : "4"])]),
+                    [.. Enumerable.Range(1, 8).Select<int, IReadOnlyList<string?>>(t => [$"{t}", "10", t == 7 ? "0" : "2", t == 7 ? "0" : "3", t == 7 ? "0" : "4"])]),
                 "eight flocks")
             .Declare(schema => schema.Integer("t").Number("planned").Number(Bands))
             .SplitByTime("t", 0.50, 0.25)

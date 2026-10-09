@@ -24,7 +24,7 @@ public class DistributionTests
         new(
             ["age", "chicks", .. Bands(bands)],
             [
-                .. Enumerable.Range(0, 6).Select(flock => (IReadOnlyList<string?>)
+                .. Enumerable.Range(0, 6).Select<int, IReadOnlyList<string?>>(flock =>
                 [
                     (30 + flock).ToString(CultureInfo.InvariantCulture),
                     (Enumerable.Range(0, bands).Sum(band => Birds(flock, band)) + (flock == 2 ? birdsOffBy : 0)).ToString(CultureInfo.InvariantCulture),
@@ -258,7 +258,7 @@ public class DistributionTests
         new(
             ["age", "planned", .. Bands(bands)],
             [
-                .. Enumerable.Range(0, 6).Select(flock => (IReadOnlyList<string?>)
+                .. Enumerable.Range(0, 6).Select<int, IReadOnlyList<string?>>(flock =>
                 [
                     (30 + flock).ToString(CultureInfo.InvariantCulture),
                     (Enumerable.Range(0, bands).Sum(band => Birds(flock, band)) + (flock == moreThanPlannedAt ? -1 : flock % 3)).ToString(CultureInfo.InvariantCulture),

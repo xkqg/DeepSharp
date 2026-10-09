@@ -404,7 +404,7 @@ public sealed class AdamW : Optimizer, ISaved<AdamW>
     protected override Tensor Moved(Parameter parameter, Tensor gradient, double rate, ITensorBackend backend)
     {
         // PyTorch's order: the parameter shrunk first — not at all without a decay, as PyTorch skips it — then Adam's step.
-        var decayed = WeightDecay == 0 ? parameter.Value : backend.Scale(parameter.Value, Scalar(backend, 1 - (rate * WeightDecay)));
+        var decayed = WeightDecay is 0 ? parameter.Value : backend.Scale(parameter.Value, Scalar(backend, 1 - (rate * WeightDecay)));
 
         return _moments.After(parameter, gradient, Betas, backend).Step(decayed, rate, new AdamTerms(Betas, Epsilon), backend);
     }

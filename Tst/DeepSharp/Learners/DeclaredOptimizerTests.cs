@@ -48,9 +48,9 @@ public class DeclaredOptimizerTests
         var rmsProp = Assert.IsType<RmsProp>(Word("rmsprop").Declared().Moved());
         var nadam = Assert.IsType<Nadam>(Word("nadam").Declared().Moved());
 
-        Assert.Equal([0.001, 0.9, 0.999, 1e-8, 0.01], (double[])[adamW.Rate, adamW.Betas.First, adamW.Betas.Second, adamW.Epsilon, adamW.WeightDecay]);
-        Assert.Equal([0.01, 0.99, 1e-8, 0], (double[])[rmsProp.Rate, rmsProp.Alpha, rmsProp.Epsilon, rmsProp.Momentum]);
-        Assert.Equal([0.002, 0.9, 0.999, 1e-8, 0.004], (double[])[nadam.Rate, nadam.Betas.First, nadam.Betas.Second, nadam.Epsilon, nadam.MomentumDecay]);
+        Assert.Equal([0.001, 0.9, 0.999, 1e-8, 0.01], new[] { adamW.Rate, adamW.Betas.First, adamW.Betas.Second, adamW.Epsilon, adamW.WeightDecay });
+        Assert.Equal([0.01, 0.99, 1e-8, 0], new[] { rmsProp.Rate, rmsProp.Alpha, rmsProp.Epsilon, rmsProp.Momentum });
+        Assert.Equal([0.002, 0.9, 0.999, 1e-8, 0.004], new[] { nadam.Rate, nadam.Betas.First, nadam.Betas.Second, nadam.Epsilon, nadam.MomentumDecay });
     }
 
     [Theory]

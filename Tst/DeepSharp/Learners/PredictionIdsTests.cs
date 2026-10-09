@@ -15,7 +15,7 @@ public class PredictionIdsTests
 {
     private static InMemoryRowSource Flocks(int count, bool reversed = false)
     {
-        var rows = Enumerable.Range(1, count).Select(row => (IReadOnlyList<string?>)
+        var rows = Enumerable.Range(1, count).Select<int, IReadOnlyList<string?>>(row =>
         [
             (1000 + row).ToString(CultureInfo.InvariantCulture),
             ((1000 + row) / 10.0).ToString(CultureInfo.InvariantCulture),

@@ -20,7 +20,7 @@ public class NumbersTests
         new(
             ["age", "mean", "spread"],
             [
-                .. Enumerable.Range(0, 8).Select(flock => (IReadOnlyList<string?>)
+                .. Enumerable.Range(0, 8).Select<int, IReadOnlyList<string?>>(flock =>
                 [
                     (30 + flock).ToString(CultureInfo.InvariantCulture),
                     (2000 + (37.5 * flock)).ToString(CultureInfo.InvariantCulture),

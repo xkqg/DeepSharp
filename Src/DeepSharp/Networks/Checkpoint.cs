@@ -177,7 +177,7 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
         ({ } taken, null) => string.Create(
             CultureInfo.InvariantCulture,
             $"The checkpoint was taken of a run whose gradients were clipped to a norm of {taken.MaxNorm}, and going on without clipping them would move every step otherwise."),
-        ({ } taken, { } other) when taken.MaxNorm != other.MaxNorm => string.Create(
+        ({ } taken, { } other) when taken.MaxNorm.CompareTo(other.MaxNorm) != 0 => string.Create(
             CultureInfo.InvariantCulture,
             $"The checkpoint was taken of a run whose gradients were clipped to a norm of {taken.MaxNorm}, and going on clipping them to a norm of {other.MaxNorm} would move every step otherwise."),
         _ => null,

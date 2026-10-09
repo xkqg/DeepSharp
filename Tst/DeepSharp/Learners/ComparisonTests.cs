@@ -83,7 +83,7 @@ public class ComparisonTests
         var one = Compared().Run(deal => StudyTests.Passengers(deal), deal => StudyTests.Passengers(deal + 50), TestContext.Current.CancellationToken);
         var again = Compared().Run(deal => StudyTests.Passengers(deal), deal => StudyTests.Passengers(deal + 50), TestContext.Current.CancellationToken);
 
-        Assert.Contains(one.Differences, difference => difference != 0);
+        Assert.Contains(one.Differences, difference => difference is not 0);
         Assert.Equal(one.Differences, again.Differences);
     }
 

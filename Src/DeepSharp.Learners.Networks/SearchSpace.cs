@@ -35,7 +35,7 @@ public abstract class Dimension
 
     private protected static void ThrowIfNotARange(string name, double low, double high)
     {
-        if (!double.IsFinite(low) || !double.IsFinite(high) || !(low < high))
+        if (!double.IsFinite(low) || !double.IsFinite(high) || low >= high)
         {
             throw new ArgumentOutOfRangeException(
                 name,
@@ -283,7 +283,7 @@ public sealed class Candidate : IEquatable<Candidate>
     {
         var number = Number(name);
 
-        return number == Math.Floor(number) && Math.Abs(number) <= int.MaxValue
+        return double.IsInteger(number) && Math.Abs(number) <= int.MaxValue
             ? (int)number
             : throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"'{name}' is {number}, which is not a whole number."));
     }

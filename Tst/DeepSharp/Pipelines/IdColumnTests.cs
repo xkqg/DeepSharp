@@ -22,7 +22,7 @@ public sealed class IdColumnTests : IDisposable
     // and held to each other wherever the rows went.
     private static InMemoryRowSource Flocks(int count = 40, Func<int, string?>? id = null) => new(
         ["Flock", "Farm", "Age", "Weight", "When"],
-        [.. Enumerable.Range(1, count).Select(row => (IReadOnlyList<string?>)
+        [.. Enumerable.Range(1, count).Select<int, IReadOnlyList<string?>>(row =>
         [
             id is null ? (1000 + row).ToString(CultureInfo.InvariantCulture) : id(row),
             row % 3 == 0 ? "north" : "south",
@@ -206,10 +206,8 @@ public sealed class IdColumnTests : IDisposable
     {
         var prepared = Pdd.Create().Read(Flocks(), "flocks").Declare(WithId()).Drop("When", "Farm").SplitAtRandom(0.5, 0.25).Target("Weight").Build().Run();
 
-        foreach (var part in new[] { Part.Train, Part.Validation, Part.Test })
+        foreach (var batch in new[] { Part.Train, Part.Validation, Part.Test }.Select(part => prepared.Batch(part)))
         {
-            var batch = prepared.Batch(part);
-
             AssertAligned(batch.Ids!, batch.FeatureNames, batch.Features);
         }
 
@@ -234,7 +232,7 @@ public sealed class IdColumnTests : IDisposable
     {
         var rows = new InMemoryRowSource(
             ["Flock", "Age", "Weight"],
-            [.. Enumerable.Range(1, 30).Select(row => (IReadOnlyList<string?>)
+            [.. Enumerable.Range(1, 30).Select<int, IReadOnlyList<string?>>(row =>
             [
                 (1000 + row).ToString(CultureInfo.InvariantCulture),
                 row % 4 == 0 ? null : ((1000 + row) / 10.0).ToString(CultureInfo.InvariantCulture),

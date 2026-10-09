@@ -529,9 +529,9 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         var rmsProp = Assert.IsType<RmsProp>(Resumed(new RmsProp(0.03) { Alpha = 0.9, Epsilon = 1e-7, Momentum = 0.5 }).Optimizer);
         var nadam = Assert.IsType<Nadam>(Resumed(new Nadam(0.04) { Betas = new Betas(0.85, 0.98), Epsilon = 1e-5, MomentumDecay = 0.002 }).Optimizer);
 
-        Assert.Equal([0.02, 0.8, 0.99, 1e-6, 0.05], (double[])[adamW.Rate, adamW.Betas.First, adamW.Betas.Second, adamW.Epsilon, adamW.WeightDecay]);
-        Assert.Equal([0.03, 0.9, 1e-7, 0.5], (double[])[rmsProp.Rate, rmsProp.Alpha, rmsProp.Epsilon, rmsProp.Momentum]);
-        Assert.Equal([0.04, 0.85, 0.98, 1e-5, 0.002], (double[])[nadam.Rate, nadam.Betas.First, nadam.Betas.Second, nadam.Epsilon, nadam.MomentumDecay]);
+        Assert.Equal([0.02, 0.8, 0.99, 1e-6, 0.05], new[] { adamW.Rate, adamW.Betas.First, adamW.Betas.Second, adamW.Epsilon, adamW.WeightDecay });
+        Assert.Equal([0.03, 0.9, 1e-7, 0.5], new[] { rmsProp.Rate, rmsProp.Alpha, rmsProp.Epsilon, rmsProp.Momentum });
+        Assert.Equal([0.04, 0.85, 0.98, 1e-5, 0.002], new[] { nadam.Rate, nadam.Betas.First, nadam.Betas.Second, nadam.Epsilon, nadam.MomentumDecay });
 
         CompiledNetwork Resumed(Optimizer optimizer)
         {

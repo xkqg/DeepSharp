@@ -185,7 +185,7 @@ internal static class CoefficientExtensions
             {
                 var last = first;
 
-                while (last + 1 < keys.Length && keys[last + 1] == keys[first])
+                while (last + 1 < keys.Length && keys[last + 1].CompareTo(keys[first]) == 0)
                 {
                     last++;
                 }
@@ -246,6 +246,6 @@ internal static class CoefficientExtensions
         /// <see langword="true"/> when the values have a spread to correlate. That a column never changes is told by what it
         /// holds, not by a spread left over from rounding its average.
         /// </returns>
-        public bool Varies() => values.Length >= 2 && values.Any(value => value != values[0]);
+        public bool Varies() => values.Length >= 2 && values.Any(value => value.CompareTo(values[0]) != 0);
     }
 }
