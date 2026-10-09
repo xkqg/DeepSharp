@@ -43,7 +43,7 @@ public abstract class SpatialDropoutContract(ITensorBackend engine)
                     var across = Enumerable.Range(0, places).Select(place => values[(((example * places) + place) * 8) + channel]).Distinct().ToArray();
 
                     Assert.Single(across);
-                    Assert.True(across[0] == 0f || across[0] == 1.3333334f, $"{across[0]}");
+                    Assert.True(across[0] is 0f or 1.3333334f, $"{across[0]}");
                 }
             }
         }

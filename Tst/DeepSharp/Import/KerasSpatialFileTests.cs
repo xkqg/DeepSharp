@@ -193,7 +193,8 @@ public class KerasSpatialFileTests
     {
         var stack = Assert.IsType<LayerStack>(new KerasFile().Read(KerasFixtures.Open($"{model}.keras")).Network);
         var convolution = stack.Layers.OfType<Convolution>().ElementAt(which);
-        using var weights = H5File.Open(new MemoryStream(KerasFixtures.Entries($"{model}.keras")["model.weights.h5"]));
+        using var archive = new MemoryStream(KerasFixtures.Entries($"{model}.keras")["model.weights.h5"]);
+        using var weights = H5File.Open(archive);
 
         var kernel = weights.Dataset($"layers/{group}/vars/0");
 
