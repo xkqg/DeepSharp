@@ -324,7 +324,7 @@ public sealed record EncodeCategoriesStep : IFittedStep, IPipelineStep<EncodeCat
 
     /// <inheritdoc />
     IEnumerable<string> IEncodesCategories.Encoded(ColumnState before) =>
-        before.Columns.Where(column => column.Kind == ColumnKind.Category).Select(column => column.Name);
+        before.Columns.Where(Encodes).Select(column => column.Name);
 
     /// <inheritdoc />
     IReadOnlyDictionary<string, IReadOnlyList<string>> IEncodesCategories.CategoriesIn(FittedStepValues fitted) => fitted.Lists;
@@ -336,7 +336,7 @@ public sealed record EncodeCategoriesStep : IFittedStep, IPipelineStep<EncodeCat
         ArgumentNullException.ThrowIfNull(before);
 
         return before.Columns
-            .Where(column => column.Kind == ColumnKind.Category)
+            .Where(Encodes)
             .Aggregate(before, (state, column) => new EncodeStep(column.Name, How, Unseen).After(state));
     }
 
@@ -349,10 +349,13 @@ public sealed record EncodeCategoriesStep : IFittedStep, IPipelineStep<EncodeCat
     {
         ArgumentNullException.ThrowIfNull(before);
 
-        return before.Open || before.Columns.Any(column => column.Kind == ColumnKind.Category)
+        return before.Open || before.Columns.Any(Encodes)
             ? null
             : "nothing before it declares a category, so this pipeline has no categories to write down as numbers.";
     }
+
+    // Every category where it stands, but the column that names each row: an id is carried, never written down as numbers.
+    private static bool Encodes(KnownColumn column) => column.Kind == ColumnKind.Category && !column.IsId;
 
     /// <inheritdoc />
     public static string Name => "encode.categories";
@@ -381,7 +384,7 @@ public sealed record EncodeCategoriesStep : IFittedStep, IPipelineStep<EncodeCat
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(parts);
 
-        var categories = table.Columns.Where(column => column.Kind == ColumnKind.Category).ToArray();
+        var categories = table.Columns.Where(column => column.Kind == ColumnKind.Category && column.Name != table.Id).ToArray();
 
         if (categories.Length == 0)
         {

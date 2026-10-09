@@ -1,0 +1,66 @@
+{
+  "version": 7,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.8.0.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "Farm",
+          "kind": "category",
+          "optional": false
+        },
+        {
+          "name": "Heavy",
+          "kind": "boolean",
+          "optional": false
+        },
+        {
+          "name": "Animals",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Age",
+          "kind": "number",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "step": "scale.given",
+      "column": "Animals",
+      "lowest": 15000,
+      "highest": 25000,
+      "lands": "signed"
+    },
+    {
+      "step": "split.stratified",
+      "column": "Heavy",
+      "train": 0.7,
+      "validation": 0.15,
+      "test": 0.15,
+      "predict": 0,
+      "seed": 7
+    },
+    {
+      "step": "target",
+      "column": "Heavy"
+    },
+    {
+      "step": "encode.categories",
+      "as": "onehot",
+      "unseen": "reserve"
+    },
+    {
+      "step": "normalise",
+      "column": "Age",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    }
+  ]
+}

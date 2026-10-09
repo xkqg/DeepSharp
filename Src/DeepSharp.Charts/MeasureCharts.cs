@@ -46,6 +46,7 @@ public static class MeasureCharts
         /// <summary>Every measure that is a number as bars: each part's, beside predicting the training rows' average.</summary>
         /// <returns>The chart, as the text of an SVG.</returns>
         /// <exception cref="ArgumentException">The measures hold no number: the report names the confusion matrix alone.</exception>
+        /// <remarks>A measure without end — a divergence from a prediction of nought — stands at nothing, its panel saying whose it is and where.</remarks>
         public string Bars() => BarFigure(measures).ToSvg();
 
         /// <summary>
@@ -144,19 +145,40 @@ public static class MeasureCharts
         for (var metric = 0; metric < count; metric++)
         {
             var at = metric;
+            double[] model = [.. measures.Parts.Select(part => part.Values[at].Value)];
+            double[] average = [.. measures.Parts.Select(part => part.Values[at].Baseline)];
             BarGroup[] groups =
             [
-                new("model", [.. measures.Parts.Select(part => part.Values[at].Value)]),
-                new("average", [.. measures.Parts.Select(part => part.Values[at].Baseline)]),
+                new("model", [.. model.Select(Drawable)]),
+                new("average", [.. average.Select(Drawable)]),
             ];
 
+            string[] infinite = [.. new[] { Infinite("model's", model, parts), Infinite("average's", average, parts) }.Where(said => said.Length > 0)];
+            var title = measures.Parts[0].Values[at].Metric.Word() + (infinite.Length > 0 ? $": {string.Join("; ", infinite)}" : string.Empty);
+
             builder.AddSubPlot(1, count, metric + 1, axes => axes
-                .WithTitle(measures.Parts[0].Values[at].Metric.Word())
+                .WithTitle(title)
                 .GroupedBar(parts, groups)
                 .WithLegend());
         }
 
         return builder.Build();
+    }
+
+    // A measure without end — a divergence from a prediction of nought where the answer holds something — has no height to
+    // be drawn at: its bar stands at nothing, and the panel's title says whose it is and where.
+    private static double Drawable(double value) => double.IsFinite(value) ? value : 0;
+
+    private static string Infinite(string whose, double[] values, string[] parts)
+    {
+        string[] where = [.. parts.Where((_, at) => !double.IsFinite(values[at]))];
+
+        return where switch
+        {
+            [] => string.Empty,
+            [var only] => $"the {whose} is infinite on {only}",
+            _ => $"the {whose} is infinite on {string.Join(", ", where[..^1])} and {where[^1]}",
+        };
     }
 
     // A panel to each answer of each part, the parts across and the answers down, each drawn by the given hand.

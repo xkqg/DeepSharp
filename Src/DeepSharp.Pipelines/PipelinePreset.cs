@@ -269,10 +269,10 @@ public sealed record PipelinePreset
         declaration.Steps.OfType<DeclareStep>().SelectMany(declare => declare.Columns.Select(column => column.Name));
 
     // What decides a column: every part the schema writes of it — how it stands, which says whether it is excluded, its
-    // kind, the kind a category was, whether the source may lack it, how its moments are written, and which value stands
-    // for a gap; the name is the row itself.
+    // kind, the kind a category was, whether the source may lack it, how its moments are written, which value stands for a
+    // gap, and whether it is the id; the name is the row itself.
     private static ColumnDecision Decided(ColumnChoice choice) =>
-        new(choice.Standing, choice.Kind, choice.Was, choice.Optional, choice.Format, choice.Missing);
+        new(choice.Standing, choice.Kind, choice.Was, choice.Optional, choice.Format, choice.Missing) { Id = choice.Id };
 
     // The output, when it changes: by what each writes, as placing one decides.
     private static OutputChange? OutputChanged(INamesTheAnswer? before, INamesTheAnswer? after)
@@ -342,5 +342,9 @@ public sealed record PipelinePreset
     /// <param name="Optional">Whether the source may lack it.</param>
     /// <param name="Format">How its moments are written.</param>
     /// <param name="Missing">The value that stands for a gap in it.</param>
-    private readonly record struct ColumnDecision(ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, bool? Optional, string? Format, string? Missing);
+    private readonly record struct ColumnDecision(ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, bool? Optional, string? Format, string? Missing)
+    {
+        /// <summary>Whether it is the id.</summary>
+        public bool Id { get; init; }
+    }
 }

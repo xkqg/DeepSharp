@@ -34,6 +34,23 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         Single = true,
     };
 
+    private static readonly PartsParameter ScheduleKey = new(
+        "schedule",
+        "How the rate changes from epoch to epoch; left out, the optimizer's own rate every epoch.",
+        [NetworkWords.Schedules[0].Declared()],
+        NetworkWords.Schedules)
+    {
+        Single = true,
+        LeftOut = [NetworkWords.Schedules[0].Declared()],
+    };
+
+    private static readonly NumberParameter ClipKey = new(
+        "clip", "The most norm a step's gradients may have together before they move the network; left out, or nought, they are not clipped.", 0)
+    {
+        AtLeast = 0,
+        LeftOut = 0,
+    };
+
     private static readonly PartsParameter LossKey = new(
         "loss", "What the network's answers are judged by while it trains.", [NetworkWords.Losses[0].Declared()], NetworkWords.Losses)
     {
@@ -78,6 +95,22 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
 
     /// <summary>What the network's answers are judged by while it trains.</summary>
     public PartDeclaration Loss { get; }
+
+    /// <summary>How the rate changes from epoch to epoch; the optimizer's own rate every epoch, unless said.</summary>
+    /// <remarks>A file written before the key was known says nothing of it, and is read as the optimizer's own rate, as it ran.</remarks>
+    public PartDeclaration Schedule
+    {
+        get => field.Kind is null ? NetworkWords.Schedules[0].Declared() : field;
+        init => field = ScheduleKey.Require([value])[0];
+    }
+
+    /// <summary>The most norm a step's gradients may have together before they move the network; nought, unless said, for none.</summary>
+    /// <remarks>A file written before the key was known says nothing of it, and is read as a run whose gradients are not clipped, as it ran.</remarks>
+    public double Clip
+    {
+        get;
+        init => field = ClipKey.Require(value);
+    }
 
     /// <summary>When the run stops; at its last pass, unless said.</summary>
     public PartDeclaration Stopping
@@ -128,6 +161,8 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
     public static StepParameters<LearnNetworkStep> Parameters { get; } = new StepParameters<LearnNetworkStep>()
         .With(LayersKey, step => step.Layers)
         .With(OptimizerKey, step => One(step.Optimizer))
+        .With(ScheduleKey, step => One(step.Schedule))
+        .With(ClipKey, step => step.Clip)
         .With(LossKey, step => One(step.Loss))
         .With(StoppingKey, step => One(step.Stopping))
         .With(EngineKey, step => step.Engine)
@@ -150,6 +185,8 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
     public static LearnNetworkStep ReadFrom(JsonElement element) =>
         new(LayersKey.Read(element), OptimizerKey.Read(element)[0], LossKey.Read(element)[0])
         {
+            Schedule = ScheduleKey.Read(element)[0],
+            Clip = ClipKey.Read(element),
             Stopping = StoppingKey.Read(element)[0],
             Engine = EngineKey.Read(element),
             Seed = SeedKey.Read(element),
@@ -167,6 +204,8 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         && Layers.SequenceEqual(other.Layers)
         && Optimizer == other.Optimizer
         && Loss == other.Loss
+        && Schedule == other.Schedule
+        && Clip.Equals(other.Clip)
         && Stopping == other.Stopping
         && Engine == other.Engine
         && Seed == other.Seed
@@ -185,6 +224,8 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
 
         hash.Add(Optimizer);
         hash.Add(Loss);
+        hash.Add(Schedule);
+        hash.Add(Clip);
         hash.Add(Stopping);
         hash.Add(Engine);
         hash.Add(Seed);

@@ -703,7 +703,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
             return declaration.Including(column, ColumnKind.Text, []);
         }
 
-        if (SourceCache.FileOf(declaration) is null)
+        if (SourceCache.FilesOf(declaration) is null)
         {
             return null;
         }

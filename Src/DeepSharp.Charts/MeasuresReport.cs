@@ -20,7 +20,8 @@ namespace DeepSharp.Charts;
 /// many of them the model learned nothing about — then each confusion matrix, a class held to a row and a class predicted to
 /// a column, with the average's count in brackets. Drawn: every measure as bars beside the average, each confusion matrix as
 /// a heatmap of counts, and — where an amount is measured — what was predicted against what was there, and what was left
-/// over, each the chart <see cref="MeasureCharts"/> draws. Every number is written in the invariant culture, every name a
+/// over, each the chart <see cref="MeasureCharts"/> draws. A divergence without end is written as ∞ and drawn as no bar. Every
+/// number is written in the invariant culture, every name a
 /// pipeline gives is written as text, and the HTML carries its own look, so it stands on its own wherever it lands.
 /// </remarks>
 public sealed class MeasuresReport
@@ -125,7 +126,7 @@ public sealed class MeasuresReport
             html.Append(measures.ConfusionMatrices());
         }
 
-        if (measures.Metrics.Any(metric => metric is Metric.Rmse or Metric.Mae or Metric.R2))
+        if (measures.Metrics.Any(metric => metric.Family() == MetricFamily.Amounts))
         {
             html.Append(measures.PredictedAgainstActual()).Append(measures.Residuals());
         }
@@ -160,7 +161,8 @@ public sealed class MeasuresReport
         html.Append("</tbody></table>");
     }
 
-    private static string Number(double value) => value.ToString("G6", CultureInfo.InvariantCulture);
+    // A divergence without end is written as the infinity it is, in the sign a person reads.
+    private static string Number(double value) => double.IsPositiveInfinity(value) ? "∞" : value.ToString("G6", CultureInfo.InvariantCulture);
 
     private static string Invariant(int number) => number.ToString(CultureInfo.InvariantCulture);
 

@@ -74,7 +74,11 @@ public enum ColumnRole
 /// <param name="Missing">The value the schema says stands for a gap in the column; nothing when none does.</param>
 public readonly record struct ColumnChoice(
     string Name, ColumnStanding Standing, ColumnKind? Kind, ColumnKind? Was, bool? Optional, ColumnOffers Offers, ColumnRole Role, int? MadeBy = null,
-    string? Format = null, string? Missing = null);
+    string? Format = null, string? Missing = null)
+{
+    /// <summary>Whether the schema says the column names each row; false for every column it does not name.</summary>
+    public bool Id { get; init; }
+}
 
 /// <summary>Every column asked about, as each stands.</summary>
 /// <param name="Rows">One row per column asked, in the order they were asked.</param>
@@ -392,7 +396,10 @@ public static class ColumnChoiceExtensions
 
         return new(
             column, Standing(declaration, declared, column), declared?.Kind ?? KnownKind(declaration, column), declared?.Was, declared?.Optional, offers, role,
-            made ? MadeAt(declaration, column) : null, declared?.Format, declared?.Missing);
+            made ? MadeAt(declaration, column) : null, declared?.Format, declared?.Missing)
+        {
+            Id = declared?.Id ?? false,
+        };
     }
 
     private static ColumnStanding Standing(PipelineDeclaration declaration, ColumnDeclaration? declared, string column)

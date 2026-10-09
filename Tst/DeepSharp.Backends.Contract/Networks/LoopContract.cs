@@ -545,6 +545,281 @@ public abstract class LoopContract(ITensorBackend engine)
         Assert.True(right / (double)answers.Length > 0.75, $"{right} of {answers.Length}");
     }
 
+    [Fact]
+    public void AClippedStep_ScalesEveryGradientByTheMostNormOverTheirWholeNorm_AsPyTorchsClipGradNormDoes()
+    {
+        // One step of SGD at a rate of a tenth over the four passengers, their gradients' whole norm — 0.2446 — clipped to
+        // 0.05, as Fixtures/optimizers-pytorch.py printed PyTorch's clip_grad_norm_ and step.
+        var hidden = new Dense(WalkedRows.HiddenWeights(), WalkedRows.HiddenBias());
+        var output = new Dense(WalkedRows.OutputWeights(), WalkedRows.OutputBias());
+
+        new LayerStack(hidden, new Relu(), output).Compile(new Sgd(0.1), new BinaryCrossEntropy())
+            .Fit(new TrainingData(WalkedRows.Passengers(), WalkedRows.Survived()), validation: null, new FitOptions(seed: 1)
+            {
+                Backend = _backend, BatchSize = 4, GradientClip = new GradientClip(0.05),
+            });
+
+        AssertClose([-0.30000001192092896, 0.20028923451900482, 0.0026806776877492666, -0.20000000298023224], output.Weight.Value);
+        AssertClose([0.20405973494052887], output.Bias.Value);
+        AssertClose([0.10000000149011612, -0.09954631328582764, 0.05000000074505806, 0.0], hidden.Bias.Value);
+        AssertClose([0.10000000149011612, 0.24954630434513092, -0.15000000596046448, 0.0], Tensor.From(new Shape(4), hidden.Weight.Value.Values[4..8]));
+        AssertClose([0.0, 0.15045370161533356, -0.25, -0.10000000149011612], Tensor.From(new Shape(4), hidden.Weight.Value.Values[28..32]));
+    }
+
+    [Fact]
+    public void AClipTheGradientsNeverReach_LeavesEveryStepAsItIsWithout_BitForBit()
+    {
+        // Clipped to ten, the walk's gradients pass untouched — PyTorch's step without a clip — and a run whose gradients
+        // never reach the most norm is the run without one, to the last bit.
+        var hidden = new Dense(WalkedRows.HiddenWeights(), WalkedRows.HiddenBias());
+        var output = new Dense(WalkedRows.OutputWeights(), WalkedRows.OutputBias());
+
+        new LayerStack(hidden, new Relu(), output).Compile(new Sgd(0.1), new BinaryCrossEntropy())
+            .Fit(new TrainingData(WalkedRows.Passengers(), WalkedRows.Survived()), validation: null, new FitOptions(seed: 1)
+            {
+                Backend = _backend, BatchSize = 4, GradientClip = new GradientClip(10),
+            });
+
+        AssertClose([-0.30000001192092896, 0.20141485333442688, 0.01311309915035963, -0.20000000298023224], output.Weight.Value);
+        AssertClose([0.2198590189218521], output.Bias.Value);
+
+        var clipped = Rich();
+        var plain = Rich();
+        var never = clipped.Compile(new Adam(0.01), new MeanSquaredError())
+            .Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), new FitOptions(seed: 5) { Backend = _backend, Epochs = 4, BatchSize = 16, GradientClip = new GradientClip(1e6) });
+        var without = plain.Compile(new Adam(0.01), new MeanSquaredError())
+            .Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), new FitOptions(seed: 5) { Backend = _backend, Epochs = 4, BatchSize = 16 });
+
+        Assert.Equal(without.Epochs, never.Epochs);
+        Assert.Equal(Bits(plain), Bits(clipped));
+    }
+
+    [Fact]
+    public void AClipTheGradientsDoReach_MovesTheRunOtherwise_AndARunGoneOnFromItsCheckpointUnderTheSameClip_GoesOnBitForBit()
+    {
+        var straight = Rich();
+        var stopped = Rich();
+        var resumed = Rich();
+        var plain = Rich();
+        var kept = new List<Checkpoint>();
+
+        var whole = straight.Compile(new Adam(0.01), new MeanSquaredError()).Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), Options(6));
+        stopped.Compile(new Adam(0.01), new MeanSquaredError()).Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), Options(3, new Checkpoints(kept.Add)));
+        var rest = resumed.Compile(new Adam(0.01), new MeanSquaredError()).Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), Options(6, from: kept[^1]));
+        plain.Compile(new Adam(0.01), new MeanSquaredError())
+            .Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), new FitOptions(seed: 5) { Backend = _backend, Epochs = 6, BatchSize = 16 });
+
+        Assert.Equal(whole.Epochs, rest.Epochs);
+        Assert.Equal(Bits(straight), Bits(resumed));
+        Assert.NotEqual(Bits(plain), Bits(straight));
+
+        FitOptions Options(int epochs, Checkpoints? checkpoints = null, Checkpoint? from = null) => new(seed: 5)
+        {
+            Backend = _backend, Epochs = epochs, BatchSize = 16, GradientClip = new GradientClip(0.01), Checkpoints = checkpoints, ResumeFrom = from,
+        };
+    }
+
+    [Theory]
+    [InlineData(0.5, 0.25, "whose gradients were clipped to a norm of 0.5, and going on clipping them to a norm of 0.25 would move every step otherwise.")]
+    [InlineData(0.5, null, "whose gradients were clipped to a norm of 0.5, and going on without clipping them would move every step otherwise.")]
+    [InlineData(null, 0.5, "whose gradients were never clipped, and going on clipping them to a norm of 0.5 would move every step otherwise.")]
+    public void AResumeUnderOtherClipping_IsRefused_NamingWhatDiffers(double? taken, double? handed, string says)
+    {
+        var kept = new List<Checkpoint>();
+        var network = new LayerStack(new Dense(1, 1, Draws()));
+        network.Compile(new Sgd(0.05), new MeanSquaredError())
+            .Fit(Sloped(64, 2), validation: null, new FitOptions(seed: 3) { Backend = _backend, Epochs = 2, GradientClip = Clip(taken), Checkpoints = new Checkpoints(kept.Add) });
+
+        var wrong = Assert.Throws<ArgumentException>(() => network.Compile(new Sgd(0.05), new MeanSquaredError())
+            .Fit(Sloped(64, 2), validation: null, new FitOptions(seed: 3) { Backend = _backend, Epochs = 4, GradientClip = Clip(handed), ResumeFrom = kept[0] }));
+
+        Assert.Equal($"The checkpoint was taken of a run {says} (Parameter 'options')", wrong.Message);
+
+        static GradientClip? Clip(double? norm) => norm is { } most ? new GradientClip(most) : null;
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void AClipToANormOfNothing_BelowIt_OrOfNoFiniteNumber_IsRefused(double norm)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GradientClip(norm));
+        Assert.Equal(0.5, new GradientClip(0.5).MaxNorm);
+    }
+
+    [Fact]
+    public void ARunThatCompletes_IsTheSameToTheLastBit_HandedACallbackThatLooksAtEverythingAndATokenOrNeither()
+    {
+        // A callback reads what the run hands it and draws nothing; a token is read and draws nothing: neither moves a number.
+        var watched = Rich();
+        var plain = Rich();
+        var watchedKept = new List<Checkpoint>();
+        var plainKept = new List<Checkpoint>();
+        using var source = new CancellationTokenSource();
+        var looked = 0f;
+
+        var with = watched.Compile(new Adam(0.01), new MeanSquaredError(), new StepDecay(2, 0.5)).Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), Options(watchedKept, watching: true));
+        var without = plain.Compile(new Adam(0.01), new MeanSquaredError(), new StepDecay(2, 0.5)).Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), Options(plainKept));
+
+        Assert.Equal(without.Epochs, with.Epochs);
+        Assert.Equal(without.BestEpoch, with.BestEpoch);
+        Assert.Equal(without.Stopped, with.Stopped);
+        Assert.Equal(Bits(plain), Bits(watched));
+        Assert.Equal(plainKept.Count, watchedKept.Count);
+        Assert.NotEqual(0f, looked);
+
+        FitOptions Options(List<Checkpoint> kept, bool watching = false) => new(seed: 5)
+        {
+            Backend = _backend,
+            Epochs = 6,
+            BatchSize = 16,
+            EarlyStopping = new EarlyStopping { Patience = 2, RestoreBest = true },
+            Checkpoints = new Checkpoints(kept.Add),
+            Cancellation = watching ? source.Token : default,
+            OnEpoch = watching ? epoch => looked += watched.Forward(Sloped(24, 2, width: 3).Features, Pass.Evaluation(_backend)).Values[0] + (float)epoch.Loss : null,
+        };
+    }
+
+    [Fact]
+    public void TheCallback_IsHandedEveryEpoch_InOrder_OnTheThreadTheRunTrainsOn_AfterItsCheckpoint_BeforeTheNextEpochBegins()
+    {
+        var watcher = new Watcher();
+        var kept = new List<Checkpoint>();
+        var handed = new List<Epoch>();
+        var thread = Environment.CurrentManagedThreadId;
+
+        var history = new LayerStack(watcher, new Dense(2, 1, Draws())).Compile(new Sgd(0.01), new MeanSquaredError())
+            .Fit(Rows(64), Rows(16, from: 64), new FitOptions(seed: 7)
+            {
+                Backend = _backend,
+                Epochs = 3,
+                BatchSize = 16,
+                Checkpoints = new Checkpoints(kept.Add),
+                OnEpoch = epoch =>
+                {
+                    Assert.Equal(thread, Environment.CurrentManagedThreadId);
+                    Assert.Equal(epoch.Number + 1, kept.Count);
+                    Assert.All(watcher.Batches, batch => Assert.True(batch.Epoch <= epoch.Number));
+                    Assert.Equal(4 * (epoch.Number + 1), watcher.Batches.Count);
+                    handed.Add(epoch);
+                },
+            });
+
+        Assert.Equal(history.Epochs, handed);
+    }
+
+    [Fact]
+    public void ACancelAfterAnEpoch_ThrowsTheTokensCancel_ReturningNothing_AndLeavesTheNetworkAsTheEpochsItFinishedLeftIt()
+    {
+        // Cancelled as the second epoch is handed over, the run stops before the third's first batch: the network holds what
+        // two epochs left it, exactly as a run of two epochs leaves it, and no history comes back.
+        var cancelled = Rich();
+        var two = Rich();
+        using var source = new CancellationTokenSource();
+
+        var stopped = Assert.Throws<OperationCanceledException>(() => cancelled.Compile(new Adam(0.01), new MeanSquaredError())
+            .Fit(Sloped(96, 2, width: 3), validation: null, new FitOptions(seed: 5)
+            {
+                Backend = _backend, Epochs = 6, BatchSize = 16, Cancellation = source.Token, OnEpoch = epoch => Cancel(source, epoch.Number == 1),
+            }));
+        two.Compile(new Adam(0.01), new MeanSquaredError()).Fit(Sloped(96, 2, width: 3), validation: null, new FitOptions(seed: 5) { Backend = _backend, Epochs = 2, BatchSize = 16 });
+
+        Assert.Equal(source.Token, stopped.CancellationToken);
+        Assert.Equal(Bits(two), Bits(cancelled));
+    }
+
+    [Fact]
+    public void ACancelDuringABatch_LetsThatBatchFinish_AndStopsTheRunBeforeTheNext()
+    {
+        // Cancelled while the third batch of the first epoch is worked out: that batch's step is taken, and no fourth batch
+        // is — the network holds what the third left it.
+        using var source = new CancellationTokenSource();
+        var watcher = new Watcher { During = (seen, count) => Cancel(source, seen.Epoch == 0 && count == 3) };
+        var network = new LayerStack(watcher, new Dense(2, 1, Draws()));
+        var before = network.Slots().Select(slot => slot.Slot.Value).ToArray();
+
+        var stopped = Assert.Throws<OperationCanceledException>(() => network.Compile(new Sgd(0.01), new MeanSquaredError())
+            .Fit(Rows(96), Rows(16, from: 96), new FitOptions(seed: 7) { Backend = _backend, Epochs = 2, BatchSize = 16, Cancellation = source.Token }));
+
+        Assert.Equal(source.Token, stopped.CancellationToken);
+        Assert.Equal(3, watcher.Batches.Count);
+        Assert.Equal(0, watcher.Evaluations);
+        Assert.NotEqual(before, network.Slots().Select(slot => slot.Slot.Value));
+    }
+
+    [Fact]
+    public void ACancelDuringTheLastBatchOfAnEpoch_StopsTheRunBeforeItsValidationRowsAreLookedAt()
+    {
+        using var source = new CancellationTokenSource();
+        var watcher = new Watcher { During = (seen, count) => Cancel(source, count == 6) };
+        var network = new LayerStack(watcher, new Dense(2, 1, Draws()));
+        var handed = new List<Epoch>();
+
+        Assert.Throws<OperationCanceledException>(() => network.Compile(new Sgd(0.01), new MeanSquaredError())
+            .Fit(Rows(96), Rows(16, from: 96), new FitOptions(seed: 7) { Backend = _backend, Epochs = 2, BatchSize = 16, Cancellation = source.Token, OnEpoch = handed.Add }));
+
+        Assert.Equal(6, watcher.Batches.Count);
+        Assert.Equal(0, watcher.Evaluations);
+        Assert.Empty(handed);
+    }
+
+    [Fact]
+    public void ATokenCancelledBeforeTheRun_TrainsNothing_AndMovesNothing()
+    {
+        using var source = new CancellationTokenSource();
+        var watcher = new Watcher();
+        var network = new LayerStack(watcher, new Dense(2, 1, Draws()));
+        var before = network.Slots().Select(slot => slot.Slot.Value).ToArray();
+
+        source.Cancel();
+
+        Assert.Throws<OperationCanceledException>(() => network.Compile(new Sgd(0.01), new MeanSquaredError())
+            .Fit(Rows(32), validation: null, new FitOptions(seed: 7) { Backend = _backend, Cancellation = source.Token }));
+
+        Assert.Empty(watcher.Batches);
+        Assert.Equal(before, network.Slots().Select(slot => slot.Slot.Value));
+    }
+
+    [Fact]
+    public void ACallbackThatThrows_AbandonsTheRun_ItsExceptionReachingTheCallerAsItWasThrown()
+    {
+        var watcher = new Watcher();
+        var thrown = new InvalidOperationException("Enough.");
+
+        var caught = Assert.Throws<InvalidOperationException>(() => new LayerStack(watcher, new Dense(2, 1, Draws())).Compile(new Sgd(0.01), new MeanSquaredError())
+            .Fit(Rows(64), validation: null, new FitOptions(seed: 7) { Backend = _backend, Epochs = 5, BatchSize = 16, OnEpoch = epoch => Throw(epoch.Number == 1, thrown) }));
+
+        Assert.Same(thrown, caught);
+        Assert.Equal(8, watcher.Batches.Count);
+    }
+
+    [Fact]
+    public void ACheckpointTakenBeforeACancel_IsAsItWas_AndARunGoneOnFromIt_IsTheRunThatNeverStopped()
+    {
+        var straight = Rich();
+        var cancelled = Rich();
+        var resumed = Rich();
+        var kept = new List<Checkpoint>();
+        using var source = new CancellationTokenSource();
+
+        var whole = straight.Compile(new Adam(0.01), new MeanSquaredError()).Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), Options(6));
+        Assert.Throws<OperationCanceledException>(() => cancelled.Compile(new Adam(0.01), new MeanSquaredError())
+            .Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), Options(6, new Checkpoints(kept.Add), source.Token, epoch => Cancel(source, epoch.Number == 2))));
+        var rest = resumed.Compile(new Adam(0.01), new MeanSquaredError()).Fit(Sloped(96, 2, width: 3), Sloped(24, 2, width: 3), Options(6, from: kept[^1]));
+
+        Assert.Equal(3, kept.Count);
+        Assert.Equal(whole.Epochs, rest.Epochs);
+        Assert.Equal(Bits(straight), Bits(resumed));
+
+        FitOptions Options(int epochs, Checkpoints? checkpoints = null, CancellationToken cancellation = default, Action<Epoch>? onEpoch = null, Checkpoint? from = null) =>
+            new(seed: 5)
+            {
+                Backend = _backend, Epochs = epochs, BatchSize = 16, Checkpoints = checkpoints, Cancellation = cancellation, OnEpoch = onEpoch, ResumeFrom = from,
+            };
+    }
+
     // What a network predicts, worked out a chunk of rows at a time and brought back together in order: the core property
     // TrainedNetwork.Answered's chunking rests on, without needing the bridge package at all.
     private static float[] PredictedAChunkAtATime(CompiledNetwork compiled, Tensor rows, ITensorBackend engine, int size)
@@ -582,6 +857,19 @@ public abstract class LoopContract(ITensorBackend engine)
         Tensor.From(new Shape(batch.RowCount, batch.AnswerNames!.Count), [.. batch.Answers!.SelectMany(row => row.Select(value => (float)value))]));
 
     private static Draws Draws() => new RandomStream(42).Draw("initialise:test", 0, 0);
+
+    private static int[][] Bits(Layer network) =>
+        [.. network.Slots().Select(slot => slot.Slot.Value.Values.ToArray().Select(BitConverter.SingleToInt32Bits).ToArray())];
+
+    private static void AssertClose(double[] expected, Tensor actual)
+    {
+        Assert.Equal(expected.Length, actual.Values.Length);
+
+        for (var at = 0; at < expected.Length; at++)
+        {
+            Assert.Equal(expected[at], actual.Values[at], Math.Max(1e-9, Math.Abs(expected[at]) * 2e-5));
+        }
+    }
 
     // Early stopping as a theory writes it: none, or its patience, its least fall that counts, and whether the run ends
     // holding its best epoch or its last.
@@ -667,11 +955,33 @@ public abstract class LoopContract(ITensorBackend engine)
 
     private sealed record Seen(int Epoch, int Rows, ITensorBackend Backend, int[] Marks);
 
+    // Cancels the source when told to, as a run's caller would from wherever it watches the run.
+    private static void Cancel(CancellationTokenSource source, bool now)
+    {
+        if (now)
+        {
+            source.Cancel();
+        }
+    }
+
+    private static void Throw(bool now, Exception thrown)
+    {
+        if (now)
+        {
+            throw thrown;
+        }
+    }
+
     // Passes its input on, and writes down every training batch it sees: its epoch, its rows, the backend it came through,
-    // and the numbers the rows carry in their first column.
+    // and the numbers the rows carry in their first column — handing each to what it is told to do during a batch — and
+    // counts the evaluation passes it sees.
     private sealed class Watcher : Layer
     {
         public List<Seen> Batches { get; } = [];
+
+        public int Evaluations { get; private set; }
+
+        public Action<Seen, int>? During { get; init; }
 
         protected override Tensor Compute(Tensor input, Pass pass)
         {
@@ -679,8 +989,14 @@ public abstract class LoopContract(ITensorBackend engine)
             {
                 var width = input.Shape[1];
                 var marks = Enumerable.Range(0, input.Shape[0]).Select(row => (int)MathF.Round(input.Values[row * width] * 1024)).ToArray();
+                var seen = new Seen(pass.Epoch, input.Shape[0], pass.Backend, marks);
 
-                Batches.Add(new Seen(pass.Epoch, input.Shape[0], pass.Backend, marks));
+                Batches.Add(seen);
+                During?.Invoke(seen, Batches.Count);
+            }
+            else
+            {
+                Evaluations++;
             }
 
             return input;

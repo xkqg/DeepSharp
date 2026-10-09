@@ -278,6 +278,57 @@ public class ParameterKindTests
     }
 
     [Fact]
+    public void TrueOrFalseThatAFileMayLeaveOut_MeansItsLeftOutValueWhenAbsent_AndIsNeverWrittenAsIt()
+    {
+        // Whether a distribution's bands are in an order: not, unless said, which a file written before the key existed
+        // says by not having it; so the value that means it is never written, and the step writes itself as it did.
+        var ordered = new TrueOrFalseParameter("ordered", "Whether the bands are in an order.", true) { LeftOut = false };
+        var best = new TrueOrFalseParameter("best", "Whether the best is kept.", true);
+
+        Assert.False(ordered.LeftOut);
+        Assert.Null(best.LeftOut);
+        Assert.Empty(ordered.RequiredKeys);
+        Assert.Equal(["best"], best.RequiredKeys);
+        Assert.False(ordered.Read(Step("""{"step":"x"}""")));
+        Assert.True(ordered.Read(Step("""{"step":"x","ordered":true}""")));
+        Assert.False(ordered.Read(Step("""{"step":"x","ordered":false}""")));
+        Assert.Equal("{}", Written(ordered, false));
+        Assert.Equal("""{"ordered":true}""", Written(ordered, true));
+        Assert.Equal("""{"best":false}""", Written(best, false));
+        Assert.Throws<FormatException>(() => best.Read(Step("""{"step":"x"}""")));
+        Assert.Throws<ArgumentNullException>(() => ordered.Write(null!, true));
+    }
+
+    [Fact]
+    public void ColumnsThatNameAtLeastSome_RefuseFewer_SayingHowManyAndWhy()
+    {
+        // An answer of several columns is said once, by the parameter that names them, whichever output names them.
+        var columns = new ColumnsParameter("columns", "The columns of one answer.", ["a", "b"], ColumnKinds.Numbers) { AtLeast = 2 };
+
+        Assert.Equal(2, columns.AtLeast);
+        Assert.Null(new ColumnsParameter("columns", "Which.", ["a"], ColumnKinds.Any).AtLeast);
+        Assert.Equal(["a", "b"], columns.Require(["a", "b"]));
+
+        var refused = Assert.Throws<ArgumentException>(() => columns.Require(["a"]));
+
+        Assert.Contains("'columns' names at least two columns", refused.Message, StringComparison.Ordinal);
+        Assert.Equal("columns", refused.ParamName);
+        Assert.Contains("names at least 12 columns", Assert.Throws<ArgumentException>(
+            () => new ColumnsParameter("columns", "Months.", ["a"], ColumnKinds.Any) { AtLeast = 12 }.Require(["a"])).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnOptionalNewColumnLeftOut_IsNotWritten()
+    {
+        // A column a step can make, or not — what is left of a whole — is left out of a file when it is not made.
+        var made = new NewColumnParameter("remainder", "What is left.", "other", optional: true);
+
+        Assert.Equal("{}", Written(made, null));
+        Assert.Equal("""{"remainder":"other"}""", Written(made, "other"));
+        Assert.Null(made.Read(Step("""{"step":"x"}""")));
+    }
+
+    [Fact]
     public void TheLongFormsAnEarlierReleasePublished_MakeTheParametersTheShortFormsMake()
     {
         // 0.4.0 published these constructors with five and six parameters, and code written against it still calls them.
@@ -340,10 +391,10 @@ public class ParameterKindTests
         // category says what it was, only a timestamp how its moments are written.
         var declared = new ColumnDeclarationsParameter("columns", "The columns.", [new ColumnDeclaration("a", ColumnKind.Number, false)]);
 
-        Assert.Equal(["name", "kind", "optional", "excluded", "was", "format", "missing"], declared.Parts.Select(part => part.Parameter.Key));
+        Assert.Equal(["name", "kind", "optional", "excluded", "was", "format", "missing", "id"], declared.Parts.Select(part => part.Parameter.Key));
         Assert.Equal(["name", "kind", "optional"], declared.RequiredColumnKeys);
-        Assert.Equal([true, true, true, false, false, false, false], declared.Parts.Select(part => part.Required));
-        Assert.Equal([null, null, null, null, ColumnKind.Category, ColumnKind.Timestamp, null], declared.Parts.Select(part => part.Only));
+        Assert.Equal([true, true, true, false, false, false, false, false], declared.Parts.Select(part => part.Required));
+        Assert.Equal([null, null, null, null, ColumnKind.Category, ColumnKind.Timestamp, null, null], declared.Parts.Select(part => part.Only));
     }
 
     [Fact]
@@ -466,7 +517,7 @@ public class ParameterKindTests
             new SeveralOfParameter<TimePart>("parts", "Parts.", [TimePart.Month]),
             new FillStrategyParameter("with", "A strategy.", With.Mean, ["mean"]) { What = "filling a gap" },
             new SplitSharesParameter(),
-            new ColumnDeclarationsParameter("columns", "Declared columns.", [new ColumnDeclaration("x", ColumnKind.Text, false)]),
+            new ColumnDeclarationsParameter("columns", "Declared columns.", [new ColumnDeclaration("x", ColumnKind.Text, false)]),
             new PartsParameter("layers", "The layers.", [new PartDeclaration("relu", [])], [new PartKind("relu", "A layer.", [])]),
         ];
 
@@ -507,8 +558,8 @@ public class ParameterKindTests
 
         public string Visit(SplitSharesParameter parameter) => "SplitShares";
 
-        public string Visit(ColumnDeclarationsParameter parameter) => "ColumnDeclarations";
-
+        public string Visit(ColumnDeclarationsParameter parameter) => "ColumnDeclarations";
+
         public string Visit(PartsParameter parameter) => "Parts";
     }
 

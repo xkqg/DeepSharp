@@ -104,7 +104,7 @@ public class TimestampFormatTests
     [Fact]
     public void AFileIsWrittenAgainstTheNewestVersion_AndOneWrittenAgainstTheSecondIsReadStill()
     {
-        Assert.Equal(7, PipelineDeclaration.Version);
+        Assert.Equal(8, PipelineDeclaration.Version);
 
         var second = """{"version":2,"declaration":[{"step":"read.csv","path":"x.csv"},{"step":"declare","remainder":"drop","columns":[{"name":"when","kind":"timestamp","optional":false}]}]}""";
 

@@ -33,6 +33,7 @@ public class PipelineTextTests
         ("evidence.profile", 2),
         ("evidence.report", 3),
         ("feature.add", 1),
+        ("feature.cycle", 8),
         ("feature.cyclical", 1),
         ("feature.indicator", 1),
         ("feature.timeParts", 1),
@@ -47,6 +48,7 @@ public class PipelineTextTests
         ("outliers.clip", 1),
         ("read.csv", 1),
         ("read.excel", 1),
+        ("read.join", 8),
         ("read.json", 1),
         ("read.parquet", 1),
         ("read.rows", 1),
@@ -60,6 +62,7 @@ public class PipelineTextTests
         ("target.ahead", 2),
         ("target.distribution", 2),
         ("target.labels", 2),
+        ("target.numbers", 8),
     ];
 
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };

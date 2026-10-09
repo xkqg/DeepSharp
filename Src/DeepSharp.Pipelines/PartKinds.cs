@@ -224,15 +224,29 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
     /// <summary>Whether one part is written as itself rather than as a list; a list, unless said.</summary>
     public bool Single { get; init; }
 
+    /// <summary>
+    /// The parts a file means by leaving the key out, or nothing when the key is required. They are never written, so a step
+    /// that gained the parameter writes itself as it did before, and keeps its keys.
+    /// </summary>
+    /// <exception cref="ArgumentException">They are not parts this parameter takes, as <see cref="Require"/> holds them.</exception>
+    public IReadOnlyList<PartDeclaration>? LeftOut
+    {
+        get;
+        init => field = value is null ? null : Require(value);
+    }
+
     /// <summary>The names a part may give, as the file writes them.</summary>
     public IReadOnlyList<string> Names => [.. Kinds.Select(kind => kind.Name)];
+
+    /// <inheritdoc />
+    public override IReadOnlyList<string> RequiredKeys => LeftOut is null ? Keys : [];
 
     /// <inheritdoc />
     public override IReadOnlyList<PartDeclaration> Read(JsonElement step)
     {
         if (!step.TryGetProperty(Key, out var parts))
         {
-            throw new FormatException($"This step is written with '{Key}': {Told()}.");
+            return LeftOut ?? throw new FormatException($"This step is written with '{Key}': {Told()}.");
         }
 
         if (Single)
@@ -248,10 +262,16 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
     }
 
     /// <inheritdoc />
+    /// <remarks>Nothing is written for the parts leaving the key out means.</remarks>
     public override void Write(Utf8JsonWriter writer, IReadOnlyList<PartDeclaration> value)
     {
         ArgumentNullException.ThrowIfNull(writer);
         ArgumentNullException.ThrowIfNull(value);
+
+        if (LeftOut is { } left && value.SequenceEqual(left))
+        {
+            return;
+        }
 
         if (Single)
         {

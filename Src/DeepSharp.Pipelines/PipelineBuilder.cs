@@ -68,6 +68,22 @@ public sealed class PipelineBuilder
         return Add(new ReadRowsStep(description));
     }
 
+    /// <summary>Declares that the rows come from two comma-separated files, joined on the columns they share.</summary>
+    /// <param name="left">Where the file whose rows the joined rows are will be, when the pipeline runs.</param>
+    /// <param name="right">Where the file each left row takes its partner from will be.</param>
+    /// <param name="on">The columns a left row and its partner share, named alike in both files.</param>
+    /// <param name="unmatched">What becomes of a left row whose key the right file does not hold: said, never assumed.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">A path is empty, no column is named, or one is named twice.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">What becomes of an unmatched row is none of the words.</exception>
+    /// <remarks>
+    /// Two files that are one source, so the join is in the pipeline's file rather than done by hand before it.
+    /// <see cref="ReadJoinStep"/> says how the keys are compared, which rows come out, and why rows served later arrive
+    /// already joined.
+    /// </remarks>
+    public PipelineBuilder ReadJoin(string left, string right, IEnumerable<string> on, Unmatched unmatched) =>
+        Add(new ReadJoinStep(left, right, on, unmatched));
+
     /// <summary>What the source's cells say each of its columns holds, for a person to write the schema from.</summary>
     /// <returns>The proposal, worked out over every row the source holds.</returns>
     /// <exception cref="InvalidOperationException">The pipeline does not say yet where its rows come from.</exception>
@@ -181,6 +197,44 @@ public sealed class PipelineBuilder
     /// </remarks>
     public PipelineBuilder Cyclical(Action<PeriodLine> period) => Many(period, nameof(period));
 
+    /// <summary>Writes a number as a place on a circle of a length you give, so its ends meet.</summary>
+    /// <param name="column">The column holding the number.</param>
+    /// <param name="length">How long one turn is, in the column's own units: 7 for an age in days placed on a week.</param>
+    /// <param name="form">How to write the two values down.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// The other question from <see cref="Cyclical(string, Period, Form)"/>, which places a moment in time on the calendar's
+    /// cycles. The length is said, never taken from the rows.
+    /// </remarks>
+    public PipelineBuilder Cycle(string column, double length, Form form) =>
+        Add(new CycleStep(column, length, form));
+
+    /// <summary>Writes a number as a place on a circle of a length you give, so its ends meet.</summary>
+    /// <param name="column">The column holding the number.</param>
+    /// <param name="length">How long one turn is, in the column's own units: 7 for an age in days placed on a week.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>
+    /// Written where this pipeline says its features land — between minus one and one, unless
+    /// <see cref="DefaultFeatures"/> says otherwise. A place on a circle is a feature like any other.
+    /// </remarks>
+    public PipelineBuilder Cycle(string column, double length) =>
+        Add(new CycleStep(column, length, FeaturesLandIn));
+
+    /// <summary>Writes numbers as places on circles in one line, the length of a turn named per group of columns.</summary>
+    /// <param name="cycle">
+    /// Names the lengths and the columns each holds for:
+    /// <c>cycle =&gt; cycle.Every(7).Of("age", "day").Every(30).Of("phase")</c>.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">The line names no column.</exception>
+    /// <exception cref="InvalidOperationException">This builder has already been split and is finished.</exception>
+    /// <remarks>
+    /// One step a column, exactly as writing the verb once for each does, so the file, the notebook's blocks and every fit are
+    /// what they are. How the two values of a place are written down is a choice about one column and stays on
+    /// <see cref="Cycle(string, double, Form)"/>. <see cref="CycleLine"/> has the lengths.
+    /// </remarks>
+    public PipelineBuilder Cycle(Action<CycleLine> cycle) => Many(cycle, nameof(cycle));
+
     /// <summary>Pulls a column into another shape, by arithmetic that learns nothing.</summary>
     /// <param name="column">The column to reshape.</param>
     /// <param name="maths">Which shape: a logarithm, a root, a reciprocal.</param>
@@ -286,12 +340,29 @@ public sealed class PipelineBuilder
     /// <remarks>Evidence, declared before the numbers exist; the run keeps it, the file does not.</remarks>
     public PipelineBuilder Profile(params string[] columns) => Add(new ProfileStep(columns));
 
+    /// <summary>Profiles the columns where it stands, and flags columns of numbers that keep one another's order.</summary>
+    /// <param name="rankAbove">
+    /// How alike in order two columns may be: two whose Spearman coefficient, on the rows where both hold a number, is above
+    /// this in size are flagged. A share above nought, at most one.
+    /// </param>
+    /// <param name="columns">The columns to profile; none, for every column here.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public PipelineBuilder Profile(double rankAbove, params string[] columns) => Add(new ProfileStep(columns, rankAbove));
+
     /// <summary>Sets out the rows a correlation between columns is drawn from, on the rows the split trains on.</summary>
     /// <param name="columns">Two or more columns holding numbers.</param>
     /// <param name="shown">Drawn, or as the numbers themselves.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
     public PipelineBuilder Correlation(IEnumerable<string> columns, Shown shown = Shown.Drawn) =>
         Add(new CorrelationStep(columns, shown));
+
+    /// <summary>Sets out the rows a correlation between columns is drawn from, and which coefficient is shown.</summary>
+    /// <param name="columns">Two or more columns holding numbers.</param>
+    /// <param name="shown">Drawn, or as the numbers themselves.</param>
+    /// <param name="coefficient">Pearson's, how well two columns lie on a line, or Spearman's, how well they keep the same order.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public PipelineBuilder Correlation(IEnumerable<string> columns, Shown shown, Coefficient coefficient) =>
+        Add(new CorrelationStep(columns, shown, coefficient));
 
     /// <summary>Drops every row that has a gap in any of these columns.</summary>
     /// <param name="columns">The columns a row may not have a gap in.</param>
@@ -384,7 +455,7 @@ public sealed class PipelineBuilder
 
         // It governs what is written after it, so a step already standing that it would have governed would be left
         // written one way while everything after it is written another.
-        if (_steps.OfType<CyclicalStep>().FirstOrDefault() is { } governed)
+        if (_steps.OfType<IPlacesOnACircle>().FirstOrDefault() is { } governed)
         {
             throw new InvalidOperationException(
                 $"Step {_steps.IndexOf(governed) + 1}, '{governed.Verb}', is already written and would have been "
@@ -474,6 +545,19 @@ public sealed class PipelineBuilder
     /// </remarks>
     public FittingBuilder SplitAtRandom(double train, double validation = 0, int seed = 20260923) =>
         Split(new SplitAtRandomStep(SplitShares.Of(train, validation, _predict), seed));
+
+    /// <summary>Splits the rows at random with the rows to be measured on dealt by a number of their own.</summary>
+    /// <param name="train">The share the model learns from.</param>
+    /// <param name="validation">The share used while choosing between models; none, unless you say.</param>
+    /// <param name="seed">The number that deals the rows the model learns from and chooses with.</param>
+    /// <param name="testSeed">The number that deals the rows to be measured on, none or more.</param>
+    /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
+    /// <remarks>
+    /// The rows to be measured on are the same rows whatever the seed is, so a search that tries many seeds,
+    /// to see how much a result owes to the luck of the deal, measures every trial on the rows no trial learned from.
+    /// </remarks>
+    public FittingBuilder SplitAtRandom(double train, double validation, int seed, int testSeed) =>
+        Split(new SplitAtRandomStep(SplitShares.Of(train, validation, _predict), seed, testSeed));
 
     /// <summary>Splits at random while keeping the mixture of one column the same in every part.</summary>
     /// <param name="column">The column whose mixture is kept.</param>
@@ -743,12 +827,29 @@ public sealed class FittingBuilder
     /// <returns>This builder, so the next verb can be written after it.</returns>
     public FittingBuilder Profile(params string[] columns) => Add(new ProfileStep(columns));
 
+    /// <summary>Profiles the columns where it stands, and flags columns of numbers that keep one another's order.</summary>
+    /// <param name="rankAbove">
+    /// How alike in order two columns may be: two whose Spearman coefficient, on the rows where both hold a number, is above
+    /// this in size are flagged. A share above nought, at most one.
+    /// </param>
+    /// <param name="columns">The columns to profile; none, for every column here.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public FittingBuilder Profile(double rankAbove, params string[] columns) => Add(new ProfileStep(columns, rankAbove));
+
     /// <summary>Sets out the rows a correlation between columns is drawn from, on the training rows.</summary>
     /// <param name="columns">Two or more columns holding numbers.</param>
     /// <param name="shown">Drawn, or as the numbers themselves.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>
     public FittingBuilder Correlation(IEnumerable<string> columns, Shown shown = Shown.Drawn) =>
         Add(new CorrelationStep(columns, shown));
+
+    /// <summary>Sets out the rows a correlation between columns is drawn from, and which coefficient is shown.</summary>
+    /// <param name="columns">Two or more columns holding numbers.</param>
+    /// <param name="shown">Drawn, or as the numbers themselves.</param>
+    /// <param name="coefficient">Pearson's, how well two columns lie on a line, or Spearman's, how well they keep the same order.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public FittingBuilder Correlation(IEnumerable<string> columns, Shown shown, Coefficient coefficient) =>
+        Add(new CorrelationStep(columns, shown, coefficient));
 
     /// <summary>Says what happens to a value in a column that is not a number.</summary>
     /// <param name="column">The column to watch.</param>
@@ -775,6 +876,28 @@ public sealed class FittingBuilder
     public FittingBuilder Distribution(IEnumerable<string> columns, string? scaleBy = null) =>
         Add(new DistributionStep(columns, scaleBy));
 
+    /// <summary>
+    /// Names the columns a model is asked to predict as one answer — how a whole is divided among them — saying whether they
+    /// are in an order, and what is left of the whole.
+    /// </summary>
+    /// <param name="columns">The columns, in their order: at least two.</param>
+    /// <param name="scaleBy">
+    /// The column saying how many the shares are shares of, so predictions come back as how many fell in each; nothing
+    /// to have them come back as shares.
+    /// </param>
+    /// <param name="ordered">Whether the columns are in an order that means something, as bands of weight are.</param>
+    /// <param name="remainder">
+    /// The column made for what is left of the whole once the columns are counted, when fewer arrive than were planned; nothing
+    /// when the columns hold the whole. It needs <paramref name="scaleBy"/>, and the columns hold counts where it stands.
+    /// </param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">
+    /// There are fewer than two columns, one has no name, or one is named twice; or a remainder is named without
+    /// <paramref name="scaleBy"/>, or under the name of one of the columns.
+    /// </exception>
+    public FittingBuilder Distribution(IEnumerable<string> columns, string? scaleBy, bool ordered, string? remainder = null) =>
+        Add(new DistributionStep(columns, scaleBy, ordered, remainder));
+
     /// <summary>Names the columns a model is asked to predict as one answer of labels, each nought or one.</summary>
     /// <param name="columns">The columns, in their order: at least two.</param>
     /// <param name="ones">How many of them hold a one on every row: one when a row is exactly one of its things; nought for any number.</param>
@@ -782,6 +905,13 @@ public sealed class FittingBuilder
     /// <exception cref="ArgumentException">There are fewer than two columns, one has no name, or one is named twice.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The number of ones is below nought.</exception>
     public FittingBuilder Labels(IEnumerable<string> columns, int ones = 0) => Add(new LabelsStep(columns, ones));
+
+    /// <summary>Names the columns a model is asked to predict as one answer of free numbers, each any finite number.</summary>
+    /// <param name="columns">The columns, in their order: at least two.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentException">There are fewer than two columns, one has no name, or one is named twice.</exception>
+    /// <remarks>The numbers come back in their own units, through whatever the steps above did to each.</remarks>
+    public FittingBuilder Numbers(IEnumerable<string> columns) => Add(new NumbersStep(columns));
 
     /// <summary>Names an answer read from a column rows later, in the declared order: the value then, or the return by then.</summary>
     /// <param name="column">The column the answer is read from.</param>

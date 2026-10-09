@@ -52,6 +52,18 @@ public readonly record struct Batch(
     public IReadOnlyList<RowKey>? Keys { get; init; }
 
     /// <summary>
+    /// The id of each row, in the order the rows are handed over: the text of the column the schema says names each row
+    /// (<see cref="ColumnDeclaration.Id"/>), as its declared kind writes it; nothing when no column is the id, the schema
+    /// excludes it, a step left it out, or the rows came without it where the schema allows that — and nothing, for a batch
+    /// <see cref="Handover.Batch(PreparedData, Pipelines.Part, Needs)"/> did not make.
+    /// </summary>
+    /// <remarks>
+    /// Carried beside the rows and never among the features, so whatever was predicted for a row can be put back beside the
+    /// flock it names. Every row has one: a row whose id is a gap is refused where the rows are handed over.
+    /// </remarks>
+    public IReadOnlyList<string>? Ids { get; init; }
+
+    /// <summary>
     /// Each feature the run handed over as the places of its categories, with the categories its training rows held, in
     /// the order of their places: empty when it handed none over so; nothing, for a batch
     /// <see cref="Handover.Batch(PreparedData, Pipelines.Part, Needs)"/> did not make.
@@ -98,6 +110,14 @@ public readonly record struct ServedBatch(
     /// <see cref="Handover.Served(PreparedData, IRowSource, Needs)"/> did not make.
     /// </remarks>
     public IReadOnlyList<RowKey>? Keys { get; init; }
+
+    /// <summary>
+    /// The id of each served row, in the order of <see cref="HandedInAt"/>: the text of the column the schema says names each
+    /// row, as <see cref="Batch.Ids"/> says them for the training rows; nothing when no column is the id or the rows were
+    /// handed in without it where the schema allows that, and nothing for a batch
+    /// <see cref="Handover.Served(PreparedData, IRowSource, Needs)"/> did not make.
+    /// </summary>
+    public IReadOnlyList<string>? Ids { get; init; }
 
     /// <summary>
     /// Each feature the run hands over as the places of its categories, with the categories its training rows held, in the
@@ -157,7 +177,7 @@ public static class Handover
         /// <exception cref="InvalidOperationException">
         /// The pipeline holds no rows, as one read from its file holds none; the run left out a step a learner of numbers needs,
         /// a column still holds words, an answer column is not there, a value
-        /// is a gap or not a finite number, or the output refuses a row's answers.
+        /// is a gap or not a finite number, the output refuses a row's answers, or a row's id is a gap.
         /// </exception>
         /// <remarks>Handed over for a learner of numbers, <see cref="Needs.Numbers"/>, which takes every step as declared.</remarks>
         public Batch Batch(Part part) => prepared.Batch(part, Needs.Numbers);
@@ -206,6 +226,7 @@ public static class Handover
                 Answers = answered.Answers,
                 Part = part,
                 Keys = features.Keys,
+                Ids = IdsOf(prepared.Table, rows),
                 Categories = features.Categories,
             };
         }
@@ -247,6 +268,7 @@ public static class Handover
             return new ServedBatch(features.Names, features.Rows, [.. all.Select(row => table.Identities[row].ReadAt)])
             {
                 Keys = features.Keys,
+                Ids = IdsOf(table, all),
                 Categories = features.Categories,
             };
         }
@@ -290,9 +312,9 @@ public static class Handover
         var answers = AnswersNamed(prepared, table);
 
         // Every answer the output names is left out of what a model is shown, not only the first: the others would
-        // reach it as features.
+        // reach it as features. So is the id, which names a row and is carried beside it.
         var features = table.Columns
-            .Where(column => !answers.Contains(column.Name, StringComparer.Ordinal))
+            .Where(column => !answers.Contains(column.Name, StringComparer.Ordinal) && column.Name != table.Id)
             .ToArray();
 
         var words = features.FirstOrDefault(column => column is TextColumn);
@@ -345,6 +367,21 @@ public static class Handover
             handed,
             [.. rows.Select(row => table.Identities[row].Key)],
             prepared.Course.CategoriesHanded(prepared.Fitted).Where(each => names.Contains(each.Key)).ToDictionary(StringComparer.Ordinal));
+    }
+
+    // The id of each row, as the column that names it holds it at the end of the pipeline; nothing when no column does, or
+    // none reached the end. A gap names no row, and is refused where the rows are handed over.
+    private static IReadOnlyList<string>? IdsOf(Table table, int[] rows)
+    {
+        if (table.Id is not { } id || !table.Has(id))
+        {
+            return null;
+        }
+
+        var column = table[id];
+
+        return [.. rows.Select(row => column.TextAt(row) ?? throw new InvalidOperationException(
+            string.Create(CultureInfo.InvariantCulture, $"Row {table.Identities[row].ReadAt + 1} has no '{id}': the id names every row it is carried with, so a gap there is refused. Fill it in the rows, or drop the rows without one.")))];
     }
 
     // The answers half: each row's answers, as many as the output names, refused as a feature is, and by the output.

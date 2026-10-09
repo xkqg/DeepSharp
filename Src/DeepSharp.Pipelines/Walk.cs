@@ -155,6 +155,13 @@ internal sealed class Walk(Course course, WalkMode mode, SourceFolder folder)
                 seen.Learned("rows.gap", gap);
             }
 
+            // A source that leaves rows out says how many beside what each part holds: rows a join found no partner for
+            // were never divided, and a fit that did not say so would pass for one over every row of the file.
+            if (_rows is JoinedRows { LeftOut: { } leftOut })
+            {
+                seen.Learned("rows.unmatched", leftOut);
+            }
+
             seen.Learned("digest", table.Digest());
             describe(table, parts, seen);
 
@@ -374,13 +381,41 @@ internal sealed class ReplayWhatWasFitted(IReadOnlyDictionary<int, FittedStepVal
     {
         string[] lacking = [.. Awaited(declaration).Where(answer => !source.ColumnNames.Contains(answer, StringComparer.Ordinal))];
 
+        ThrowIfNotJoined(declaration, source, lacking);
+
         return lacking.Length == 0 ? source : new RowsAwaitingAnAnswer(source, lacking);
     }
 
+    // A source of several files is read as one for the rows a pipeline is fitted on, and is not read again for rows served:
+    // rows handed in take its place, so they arrive already joined. Rows that lack a column the schema takes are refused in
+    // those words, where a source of one file is refused by the schema as it always was.
+    private static void ThrowIfNotJoined(PipelineDeclaration declaration, IRowSource source, string[] awaited)
+    {
+        if (declaration.Steps is not [IReadsFiles, ..] || declaration.Steps[declaration.ColumnsAt] is not DeclareStep schema)
+        {
+            return;
+        }
+
+        string[] absent =
+        [
+            .. schema.Taking
+                .Where(column => !column.Optional && !source.ColumnNames.Contains(column.Name, StringComparer.Ordinal) && !awaited.Contains(column.Name, StringComparer.Ordinal))
+                .Select(column => $"'{column.Name}'"),
+        ];
+
+        if (absent.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"This pipeline reads its rows from files it joins, and rows served to it arrive already joined, the columns of every "
+                + $"file in them: these have no {string.Join(" or ", absent)}. The join is made for the rows a pipeline is fitted on, "
+                + "and is not made again for rows handed in.");
+        }
+    }
+
     /// <inheritdoc />
-    /// <remarks>An answer the output makes from later rows is not in any row handed in, and is not asked of them.</remarks>
+    /// <remarks>An answer the output makes — from later rows, or from the rest of its answers — is not in any row handed in, and is not asked of them.</remarks>
     public override IReadOnlyList<string> Awaited(PipelineDeclaration declaration) =>
-        declaration.Output is { MakesItsAnswer: false } output ? output.Answers : [];
+        declaration.Output?.Brought() ?? [];
 
     /// <inheritdoc />
     /// <remarks>A served row has no later rows to make its answer from: the answer is a gap in every row, which is what it is.</remarks>

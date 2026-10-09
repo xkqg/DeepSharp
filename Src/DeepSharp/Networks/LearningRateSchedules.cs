@@ -202,3 +202,80 @@ public sealed class CosineDecay : LearningRateSchedule, ISaved<CosineDecay>
     protected override double Rate(int epoch, double initial) =>
         Minimum + ((initial - Minimum) * (1 + Math.Cos(Math.PI * epoch / Epochs)) / 2);
 }
+
+/// <summary>
+/// The rate rising in a straight line from a share of itself to the whole of it over so many epochs, and then held — or
+/// handed over to the schedule that follows it: PyTorch's <c>LinearLR</c>, and its <c>SequentialLR</c> after it.
+/// </summary>
+/// <remarks>
+/// The rate of an epoch of the warm-up is the optimizer's times the start, plus what is left to one times the share of the
+/// warm-up gone by — PyTorch's closed form, its end the rate itself. The schedule it hands over to counts its epochs from the
+/// end of the warm-up, as PyTorch's <c>SequentialLR</c> starts the next schedule at its milestone. A warm-up never starts at
+/// nothing, as some do: a rate of nothing is refused everywhere here.
+/// </remarks>
+public sealed class LinearWarmup : LearningRateSchedule, ISaved<LinearWarmup>
+{
+    /// <summary>Declares a rate that warms up over so many epochs.</summary>
+    /// <param name="epochs">How many epochs the warm-up takes.</param>
+    /// <param name="start">The share of the rate the first epoch takes, above nothing and at most one; a third, unless said, as PyTorch leaves it.</param>
+    /// <param name="then">The schedule the warm-up hands over to; the optimizer's own rate, every epoch, unless said.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The warm-up takes fewer than one epoch, or its start is no share above nothing and at most one.</exception>
+    public LinearWarmup(int epochs, double start = 1.0 / 3, LearningRateSchedule? then = null)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(epochs, 1);
+
+        if (!double.IsFinite(start) || start <= 0 || start > 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(start), start, "A warm-up starts at a share of the rate above nothing, and at most at the rate itself.");
+        }
+
+        Epochs = epochs;
+        Start = start;
+        Then = then;
+    }
+
+    /// <summary>How many epochs the warm-up takes.</summary>
+    public int Epochs { get; }
+
+    /// <summary>The share of the rate the first epoch takes.</summary>
+    public double Start { get; }
+
+    /// <summary>The schedule the warm-up hands over to; nothing when the optimizer's own rate follows it.</summary>
+    public LearningRateSchedule? Then { get; }
+
+    /// <inheritdoc />
+    public static string Name => "linearWarmup";
+
+    /// <inheritdoc />
+    /// <remarks>The schedule it hands over to is rebuilt through the catalog where it stands, under <c>then</c>; a warm-up that names none holds the rate.</remarks>
+    public static LinearWarmup Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        var epochs = rebuilding.Whole(settings, "epochs");
+        var start = rebuilding.Number(settings, "start");
+        var then = settings.Member("then") is null ? null : rebuilding.Schedule(settings, "then");
+
+        return new(epochs, start, then);
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">The schedule it hands over to is of no kind a file can name.</exception>
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber("epochs", Epochs);
+        writer.WriteNumber("start", Start);
+
+        if (Then is { } then)
+        {
+            writer.WritePropertyName("then");
+            NetworkDocument.WriteKind(writer, then);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override double Rate(int epoch, double initial) =>
+        epoch < Epochs ? initial * (Start + ((1 - Start) * epoch / Epochs)) : Then?.RateAt(epoch - Epochs, initial) ?? initial;
+}

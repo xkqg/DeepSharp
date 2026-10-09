@@ -208,7 +208,7 @@ public class DeclaredNetworkTests
 
         Assert.Throws<ArgumentNullException>(() => none.Described());
         Assert.Contains("'dense'", Assert.Throws<NotSupportedException>(() => new[] { new PartDeclaration("transformer", []) }.Described()).Message, StringComparison.Ordinal);
-        Assert.Contains("'adam'", Assert.Throws<NotSupportedException>(() => new PartDeclaration("rmsprop", []).Moved()).Message, StringComparison.Ordinal);
+        Assert.Contains("'adam'", Assert.Throws<NotSupportedException>(() => new PartDeclaration("adagrad", []).Moved()).Message, StringComparison.Ordinal);
         Assert.Contains("'crossEntropy'", Assert.Throws<NotSupportedException>(() => new PartDeclaration("hinge", []).Judged()).Message, StringComparison.Ordinal);
         Assert.Contains("'never'", Assert.Throws<NotSupportedException>(() => new PartDeclaration("whenever", []).Stops()).Message, StringComparison.Ordinal);
     }

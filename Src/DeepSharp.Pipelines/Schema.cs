@@ -73,6 +73,18 @@ public sealed record ColumnDeclaration(string Name, ColumnKind Kind, bool Option
     /// written otherwise, so a column of numbers can say that <c>?</c> is a gap. Nothing when no value stands for one.
     /// </summary>
     public string? Missing { get; init; }
+
+    /// <summary>
+    /// Whether the column names each row — a flock number, a customer code — and is carried with it rather than learned from:
+    /// handed over beside the rows as <see cref="Batch.Ids"/> and <see cref="ServedBatch.Ids"/>, and never a feature.
+    /// </summary>
+    /// <remarks>
+    /// One column at most, of whole numbers, categories or words: what names a row is not measured. No step that takes every
+    /// column of a kind where it stands takes the id — not the encoder of every category, a profile of every column, nor the
+    /// warm-up a drop counts — and a step that names it outright is held to its own rules, as for any column. It is not an
+    /// answer. Written in a file only where it is said, so a column declared before there were ids is written as it was.
+    /// </remarks>
+    public bool Id { get; init; }
 }
 
 /// <summary>
@@ -135,6 +147,16 @@ public sealed class SchemaBuilder
     /// this allows; an empty value in a column that is there is a gap, and gaps are filled after the split.
     /// </remarks>
     public SchemaBuilder Optional(string name, ColumnKind kind) => Add([name], kind, optional: true);
+
+    /// <summary>The column that names each row: carried with it, and never a feature.</summary>
+    /// <param name="name">The column name.</param>
+    /// <param name="kind">What it holds: whole numbers, categories or words.</param>
+    /// <returns>This schema, so the next column can be written after it.</returns>
+    /// <remarks>
+    /// A flock number kept beside every row comes back with the rows it names (<see cref="Batch.Ids"/>), whatever part they
+    /// land in and whatever order they are served in, and no model is shown it. <see cref="ColumnDeclaration.Id"/> says the rest.
+    /// </remarks>
+    public SchemaBuilder Id(string name, ColumnKind kind) => Add(new ColumnDeclaration(name, kind, Optional: false) { Id = true }, nameof(name));
 
     /// <summary>The columns declared so far, in the order they were written.</summary>
     public IReadOnlyList<ColumnDeclaration> Columns => _columns;
@@ -358,6 +380,28 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
 
         return Columns[at].Missing == missing ? this : Replaced(at, Columns[at] with { Missing = missing });
     }
+
+    /// <summary>This schema with a column said to be the id, or no longer.</summary>
+    /// <param name="name">The column.</param>
+    /// <param name="id">Whether it names each row.</param>
+    /// <returns>The schema with the column so; this schema when it is so already.</returns>
+    /// <exception cref="ArgumentException">
+    /// The schema does not name the column, another column is the id already, or the column holds what an id cannot.
+    /// </exception>
+    public DeclareStep WithColumnId(string name, bool id)
+    {
+        var at = IndexOf(name);
+
+        if (at < 0)
+        {
+            throw new ArgumentException($"The schema does not name '{name}', so it names no row.", nameof(name));
+        }
+
+        return Columns[at].Id == id ? this : Replaced(at, Columns[at] with { Id = id });
+    }
+
+    /// <summary>The column taking part that names each row, when there is one.</summary>
+    internal string? IdColumn => Taking.FirstOrDefault(column => column.Id)?.Name;
 
     private int IndexOf(string name)
     {

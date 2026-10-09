@@ -63,7 +63,24 @@ public sealed class Sequential
     /// <param name="units">How many values it makes of each example.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one value.</exception>
-    public Sequential Dense(int units) => Add(new DenseWord(units));
+    public Sequential Dense(int units) => Add(new DenseWord(units, null));
+
+    /// <summary>A fully connected layer whose weights start as the given initialiser draws them.</summary>
+    /// <param name="units">How many values it makes of each example.</param>
+    /// <param name="weights">How the weights start; the bias starts as PyTorch starts it, as it does without this.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one value.</exception>
+    /// <exception cref="ArgumentNullException">There is no initialiser.</exception>
+    /// <remarks>
+    /// How a layer starts is not written into a network's file, which holds the numbers it learned: the initialiser is a
+    /// matter of the code that describes the network, under the run's seed, and a network read back starts nowhere.
+    /// </remarks>
+    public Sequential Dense(int units, Initialiser weights)
+    {
+        ArgumentNullException.ThrowIfNull(weights);
+
+        return Add(new DenseWord(units, weights));
+    }
 
     /// <summary>Keeps each value above nothing, and nothing otherwise.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
@@ -322,19 +339,23 @@ public sealed class Sequential
 
     private sealed record DenseWord : IWord
     {
-        public DenseWord(int units)
+        public DenseWord(int units, Initialiser? weights)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(units, 1);
             Units = units;
+            Weights = weights;
         }
 
         public int Units { get; }
+
+        // How the weights start; PyTorch's start when nothing is said.
+        public Initialiser? Weights { get; }
 
         public string? Refusal(Shape each) => each.Rank == 1 ? null : $"dense, takes each example as a row of numbers, and each reaching it is {each}: flatten it first.";
 
         public Shape After(Shape each) => new(Units);
 
-        public Layer Make(Shape each, Draws draws) => new Dense(each[0], Units, draws);
+        public Layer Make(Shape each, Draws draws) => new Dense(each[0], Units, draws, Weights);
     }
 
     private sealed record DropoutWord(double Rate) : IWord

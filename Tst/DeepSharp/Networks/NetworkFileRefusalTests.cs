@@ -709,6 +709,82 @@ public class NetworkFileRefusalTests
         Assert.Equal([Place(broken, at, message)], TrainingRefused(broken).Faults);
     }
 
+    [Theory]
+    [InlineData("{\"kind\": \"dense\", \"inputs\": 1, \"outputs\": 1}", "\"then\"", "'dense' is a layer, and a learning-rate schedule stands here.")]
+    [InlineData("3", "\"then\"", "Where a learning-rate schedule stands, an object names its kind under 'kind'.")]
+    [InlineData("{\"kind\": \"linearWarmup\", \"epochs\": 2, \"start\": 0}", "\"then\"",
+        "A warm-up starts at a share of the rate above nothing, and at most at the rate itself.")]
+    [InlineData("{\"kind\": \"stepDecay\", \"every\": 2, \"factor\": 0.5, \"gamma\": 0.5}", "\"gamma\"", "'gamma' is not a setting of 'stepDecay'.")]
+    public void AWarmupThatHandsOverToWhatIsNoScheduleThatCouldBe_IsRefusedWhereItStands(string then, string at, string message)
+    {
+        // The schedule a warm-up hands over to is rebuilt through the catalog where it stands, as a stack's layers are.
+        var broken = Broken(Run, "{\"kind\": \"constant\"}", "{\"kind\": \"linearWarmup\", \"epochs\": 2, \"start\": 0.5, \"then\": " + then + "}");
+
+        Assert.Equal([Place(broken, at, message)], TrainingRefused(broken).Faults);
+    }
+
+    [Fact]
+    public void AWarmupThatHandsOverToASchedule_IsReadBackHandingOverToIt_AndOneThatNamesNone_HoldsTheOptimizersRate()
+    {
+        var catalog = NetworkCatalog.BuiltIn();
+        var handing = Broken(Run, "{\"kind\": \"constant\"}", "{\"kind\": \"linearWarmup\", \"epochs\": 2, \"start\": 0.5, \"then\": {\"kind\": \"exponentialDecay\", \"factor\": 0.5}}");
+        var holding = Broken(Run, "{\"kind\": \"constant\"}", "{\"kind\": \"linearWarmup\", \"epochs\": 2, \"start\": 0.5}");
+
+        var handed = Assert.IsType<LinearWarmup>(NetworkDocument.ReadTraining(handing, "training", catalog, NetworkDocument.ReadNetwork(handing, "network", catalog)).Compiled.Schedule);
+        var held = Assert.IsType<LinearWarmup>(NetworkDocument.ReadTraining(holding, "training", catalog, NetworkDocument.ReadNetwork(holding, "network", catalog)).Compiled.Schedule);
+
+        Assert.Equal(0.5, Assert.IsType<ExponentialDecay>(handed.Then).Factor);
+        Assert.Equal(0.05, handed.RateAt(3, 0.1), 1e-15);
+        Assert.Equal(0.025, handed.RateAt(4, 0.1), 1e-15);
+        Assert.Null(held.Then);
+        Assert.Equal(0.1, held.RateAt(3, 0.1), 1e-15);
+    }
+
+    [Fact]
+    public void ANormTheGradientsWereClipped_IsReadFromAPartOfTheThirdVersion_AndRefusedInOneOfAnEarlier()
+    {
+        // The second version cannot say a clip: a part of it that holds one is refused, where the third reads it, and a run
+        // going on from it is held to it.
+        var second = Broken(Recorded, "\"batchSize\": 32,", "\"batchSize\": 32, \"clipNorm\": 0.5,");
+        var third = Broken(second, "\"version\": 2,\n    \"seed\"", "\"version\": 3,\n    \"seed\"");
+        var catalog = NetworkCatalog.BuiltIn();
+        var resumed = NetworkDocument.ReadTraining(third, "training", catalog, NetworkDocument.ReadNetwork(third, "network", catalog));
+
+        Assert.Equal(
+            [Place(second, "\"clipNorm\"", "The norm a run's gradients were clipped to is written from the third version of a training part on, and this one is of the second.")],
+            TrainingRefused(second).Faults);
+
+        // A part of the first version that holds a clip says something of its run, so it is held to saying all of it.
+        var first = Broken(Run, "\"seed\": 5,", "\"seed\": 5, \"clipNorm\": 0.5,");
+
+        Assert.Equal(
+            [
+                Place(first, "\"training\"", BatchSizeFault),
+                Place(first, "\"training\"", EarlyStoppingFault),
+                Place(first, "\"clipNorm\"", "The norm a run's gradients were clipped to is written from the third version of a training part on, and this one is of the first."),
+            ],
+            TrainingRefused(first).Faults);
+        Assert.Contains("clipped to a norm of 0.5, and going on without clipping them", Assert.Throws<ArgumentException>(() => resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5)
+        {
+            Epochs = 3, EarlyStopping = new EarlyStopping { Patience = 5, RestoreBest = true }, ResumeFrom = resumed.Checkpoint,
+        })).Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-0.5")]
+    [InlineData("\"x\"")]
+    [InlineData("null")]
+    public void ANormTheGradientsWereClipped_ThatIsNoNumberAboveNothing_IsRefusedWhereItStands(string norm)
+    {
+        var broken = Broken(
+            Broken(Recorded, "\"batchSize\": 32,", "\"batchSize\": 32, \"clipNorm\": " + norm + ","), "\"version\": 2,\n    \"seed\"", "\"version\": 3,\n    \"seed\"");
+
+        Assert.Equal(
+            [Place(broken, "\"clipNorm\"", "The norm the run's gradients were clipped to is written under 'clipNorm', as a number above nothing.")],
+            TrainingRefused(broken).Faults);
+    }
+
     [Fact]
     public void AParameterNameHoldingAForgedLineBreak_IsShownEscaped_NeverBreakingTheMessageIntoASecondLine()
     {
@@ -744,7 +820,7 @@ public class NetworkFileRefusalTests
         Assert.Equal(
             [
                 Place(broken, "\"training\"", message),
-                Place(broken, $"\"{written}\"", $"The 'training' part has no '{written}'. It holds: version, seed, batchSize, earlyStopping, engine, optimizer, schedule, memory, judgement, history."),
+                Place(broken, $"\"{written}\"", $"The 'training' part has no '{written}'. It holds: version, seed, batchSize, earlyStopping, clipNorm, engine, optimizer, schedule, memory, judgement, history."),
             ],
             TrainingRefused(broken).Faults);
     }

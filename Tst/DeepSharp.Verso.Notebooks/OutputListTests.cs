@@ -77,7 +77,7 @@ public sealed class OutputListTests : IDisposable
 
         await ChooseAsync(notebook);
 
-        Assert.Equal(["target", "target.ahead", "target.distribution", "target.labels"], List(notebook).TypeSelect().Options);
+        Assert.Equal(["target", "target.ahead", "target.distribution", "target.labels", "target.numbers"], List(notebook).TypeSelect().Options);
         Assert.Equal("target", List(notebook).TypeSelect().Value);
 
         var picked = await PickAsync(notebook, "target.distribution");

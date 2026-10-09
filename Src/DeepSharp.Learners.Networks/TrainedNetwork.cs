@@ -128,6 +128,7 @@ public sealed class TrainedNetwork
         return new Predictions(TrainedOn.Answers, Prepared.BackToOriginal(Answered(Network, Loss, served.Features, new Chunking(backend, ServingBatchSize)), served, rows), served.HandedInAt)
         {
             Unfamiliar = Unfamiliar(TrainedOn, served.Features),
+            Ids = served.Ids,
         };
     }
 
@@ -353,6 +354,13 @@ public readonly record struct Predictions(IReadOnlyList<string> AnswerNames, IRe
     /// <see cref="Unseen.Refuse"/>, and refuses it where it is read.
     /// </remarks>
     public IReadOnlyList<IReadOnlyList<string>>? Unfamiliar { get; init; }
+
+    /// <summary>
+    /// For each served row, in the order of <see cref="Answers"/>, the id the schema names for it, as the row holds it: the
+    /// number a team keeps beside its rows, so an answer is paired with its row by what the row says and not by where it
+    /// stood. Nothing when the schema names no id.
+    /// </summary>
+    public IReadOnlyList<string>? Ids { get; init; }
 }
 
 /// <summary>A fault in the one file: the part it is in, and what is wrong.</summary>

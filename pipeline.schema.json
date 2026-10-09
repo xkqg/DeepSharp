@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 7
+      "maximum": 8
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -46,6 +46,7 @@
             "evidence.profile",
             "evidence.report",
             "feature.add",
+            "feature.cycle",
             "feature.cyclical",
             "feature.indicator",
             "feature.timeParts",
@@ -60,6 +61,7 @@
             "outliers.clip",
             "read.csv",
             "read.excel",
+            "read.join",
             "read.json",
             "read.parquet",
             "read.rows",
@@ -72,7 +74,8 @@
             "target",
             "target.ahead",
             "target.distribution",
-            "target.labels"
+            "target.labels",
+            "target.numbers"
           ]
         }
       },
@@ -228,6 +231,21 @@
           },
           "then": {
             "$ref": "#/$defs/feature.add"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "feature.cycle"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/feature.cycle"
           }
         },
         {
@@ -444,6 +462,21 @@
           "if": {
             "properties": {
               "step": {
+                "const": "read.join"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/read.join"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
                 "const": "read.json"
               }
             },
@@ -634,6 +667,21 @@
           "then": {
             "$ref": "#/$defs/target.labels"
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "target.numbers"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/target.numbers"
+          }
         }
       ]
     },
@@ -812,6 +860,10 @@
                 "type": "string",
                 "pattern": "\\S",
                 "description": "A value that stands for a gap in the column, read as the gap it is: 0, say, where a file writes 0 for a fare nobody knows. Left out, none does."
+              },
+              "id": {
+                "description": "Whether the column names each row: carried with the rows, as read, and never a feature. Left out, it does not.",
+                "type": "boolean"
               }
             },
             "required": [
@@ -1079,6 +1131,21 @@
             }
           ],
           "description": "How it is shown: drawn as a coloured grid, or as the numbers themselves."
+        },
+        "coefficient": {
+          "anyOf": [
+            {
+              "enum": [
+                "pearson",
+                "spearman"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Pp][Ee][Aa][Rr][Ss][Oo][Nn]|[Ss][Pp][Ee][Aa][Rr][Mm][Aa][Nn])$"
+            }
+          ],
+          "description": "Which coefficient is shown: how well two columns lie on a line (pearson), or how well they keep the same order (spearman). Left out, pearson."
         }
       },
       "required": [
@@ -1103,6 +1170,12 @@
             "type": "string",
             "pattern": "\\S"
           }
+        },
+        "rankAbove": {
+          "description": "How alike in order two columns of numbers may be before the profile says so: a share above nought, at most one. Two columns whose Spearman coefficient, on the rows where both hold a number, is above this in size are flagged. Left out, none is.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
         }
       },
       "required": [
@@ -1118,7 +1191,7 @@
           "const": "evidence.report"
         },
         "metrics": {
-          "description": "The measures, in the order they are shown: rmse, mae and r2 for amounts; accuracy, precision, recall and the confusion matrix for classes.",
+          "description": "The measures, in the order they are shown: rmse, mae and r2 for amounts; accuracy, precision, recall and the confusion matrix for classes; kl for shares of a whole; emd and rps for shares in an order.",
           "type": "array",
           "minItems": 1,
           "items": {
@@ -1131,12 +1204,15 @@
                   "accuracy",
                   "precision",
                   "recall",
-                  "confusionmatrix"
+                  "confusionmatrix",
+                  "emd",
+                  "kl",
+                  "rps"
                 ]
               },
               {
                 "type": "string",
-                "pattern": "^(?:[Rr][Mm][Ss][Ee]|[Mm][Aa][Ee]|[Rr]2|[Aa][Cc][Cc][Uu][Rr][Aa][Cc][Yy]|[Pp][Rr][Ee][Cc][Ii][Ss][Ii][Oo][Nn]|[Rr][Ee][Cc][Aa][Ll][Ll]|[Cc][Oo][Nn][Ff][Uu][Ss][Ii][Oo][Nn][Mm][Aa][Tt][Rr][Ii][Xx])$"
+                "pattern": "^(?:[Rr][Mm][Ss][Ee]|[Mm][Aa][Ee]|[Rr]2|[Aa][Cc][Cc][Uu][Rr][Aa][Cc][Yy]|[Pp][Rr][Ee][Cc][Ii][Ss][Ii][Oo][Nn]|[Rr][Ee][Cc][Aa][Ll][Ll]|[Cc][Oo][Nn][Ff][Uu][Ss][Ii][Oo][Nn][Mm][Aa][Tt][Rr][Ii][Xx]|[Ee][Mm][Dd]|[Kk][Ll]|[Rr][Pp][Ss])$"
               }
             ]
           }
@@ -1238,6 +1314,49 @@
       ],
       "additionalProperties": false
     },
+    "feature.cycle": {
+      "description": "Writes a number as a place on a circle of a length you give, so that the ends of the cycle meet.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "feature.cycle"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column holding the number."
+        },
+        "length": {
+          "description": "How long one turn is, in the column's own units: 7 for an age in days on a week. Said by you, never worked out from the rows.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1.7976931348623157E+308
+        },
+        "form": {
+          "anyOf": [
+            {
+              "enum": [
+                "signed",
+                "unit",
+                "splitsign"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Ss][Ii][Gg][Nn][Ee][Dd]|[Uu][Nn][Ii][Tt]|[Ss][Pp][Ll][Ii][Tt][Ss][Ii][Gg][Nn])$"
+            }
+          ],
+          "description": "How the two values are written down: as they are, shifted between nothing and one, or split into how far up and how far down."
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "length",
+        "form"
+      ],
+      "additionalProperties": false
+    },
     "feature.cyclical": {
       "description": "Writes a moment in time as a place on a circle, so that the ends of a cycle meet.",
       "type": "object",
@@ -1257,15 +1376,17 @@
                 "hourofday",
                 "dayofweek",
                 "dayofmonth",
-                "monthofyear"
+                "monthofyear",
+                "dayofyear",
+                "season"
               ]
             },
             {
               "type": "string",
-              "pattern": "^(?:[Hh][Oo][Uu][Rr][Oo][Ff][Dd][Aa][Yy]|[Dd][Aa][Yy][Oo][Ff][Ww][Ee][Ee][Kk]|[Dd][Aa][Yy][Oo][Ff][Mm][Oo][Nn][Tt][Hh]|[Mm][Oo][Nn][Tt][Hh][Oo][Ff][Yy][Ee][Aa][Rr])$"
+              "pattern": "^(?:[Hh][Oo][Uu][Rr][Oo][Ff][Dd][Aa][Yy]|[Dd][Aa][Yy][Oo][Ff][Ww][Ee][Ee][Kk]|[Dd][Aa][Yy][Oo][Ff][Mm][Oo][Nn][Tt][Hh]|[Mm][Oo][Nn][Tt][Hh][Oo][Ff][Yy][Ee][Aa][Rr]|[Dd][Aa][Yy][Oo][Ff][Yy][Ee][Aa][Rr]|[Ss][Ee][Aa][Ss][Oo][Nn])$"
             }
           ],
-          "description": "Which cycle the moment is placed on: the hour of the day, the day of the week or of the month, the month of the year."
+          "description": "Which cycle the moment is placed on: the hour of the day, the day of the week, of the month or of the year, the month of the year, the season."
         },
         "form": {
           "anyOf": [
@@ -1931,9 +2052,344 @@
                 "epsilon"
               ],
               "additionalProperties": false
+            },
+            {
+              "description": "Adam, with every number shrunk towards nought before its step, apart from its gradient.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "adamw"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Aa][Dd][Aa][Mm][Ww])$"
+                    }
+                  ]
+                },
+                "rate": {
+                  "description": "How far one step moves the numbers.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "firstMoment": {
+                  "description": "How much of the running mean of the gradients carries on.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "secondMoment": {
+                  "description": "How much of the running mean of their squares carries on.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "epsilon": {
+                  "description": "The small number added so nothing is divided by nought.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "weightDecay": {
+                  "description": "How far every number is shrunk towards nought at each step, as a share of the step's rate.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "rate",
+                "firstMoment",
+                "secondMoment",
+                "epsilon",
+                "weightDecay"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "Moves every number by its gradient over the root of a running mean of the squares of its gradients.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "rmsprop"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Rr][Mm][Ss][Pp][Rr][Oo][Pp])$"
+                    }
+                  ]
+                },
+                "rate": {
+                  "description": "How far one step moves the numbers.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "alpha": {
+                  "description": "How much of the running mean of the squares of the gradients carries on.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "epsilon": {
+                  "description": "The small number added so nothing is divided by nought.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "momentum": {
+                  "description": "How much of the last step's velocity carries into the next.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "rate",
+                "alpha",
+                "epsilon",
+                "momentum"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "Adam with Nesterov's momentum, warmed up over the steps.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "nadam"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Nn][Aa][Dd][Aa][Mm])$"
+                    }
+                  ]
+                },
+                "rate": {
+                  "description": "How far one step moves the numbers.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "firstMoment": {
+                  "description": "How much of the running mean of the gradients carries on.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "secondMoment": {
+                  "description": "How much of the running mean of their squares carries on.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "epsilon": {
+                  "description": "The small number added so nothing is divided by nought.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "momentumDecay": {
+                  "description": "How fast the momentum warms up over the steps.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "rate",
+                "firstMoment",
+                "secondMoment",
+                "epsilon",
+                "momentumDecay"
+              ],
+              "additionalProperties": false
             }
           ],
           "description": "What moves the network's numbers at every step."
+        },
+        "schedule": {
+          "type": "object",
+          "oneOf": [
+            {
+              "description": "The rate the optimizer starts at, every epoch.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "constant"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Cc][Oo][Nn][Ss][Tt][Aa][Nn][Tt])$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The rate multiplied by a factor every so many epochs.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "stepDecay"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Ss][Tt][Ee][Pp][Dd][Ee][Cc][Aa][Yy])$"
+                    }
+                  ]
+                },
+                "every": {
+                  "description": "How many epochs pass between two falls of the rate.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "factor": {
+                  "description": "What the rate is multiplied by at each fall.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "every",
+                "factor"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The rate multiplied by a factor every epoch.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "exponentialDecay"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Ee][Xx][Pp][Oo][Nn][Ee][Nn][Tt][Ii][Aa][Ll][Dd][Ee][Cc][Aa][Yy])$"
+                    }
+                  ]
+                },
+                "factor": {
+                  "description": "What the rate is multiplied by from one epoch to the next.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "factor"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The rate falling along half a cosine to its least over so many epochs.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "cosineDecay"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Cc][Oo][Ss][Ii][Nn][Ee][Dd][Ee][Cc][Aa][Yy])$"
+                    }
+                  ]
+                },
+                "epochs": {
+                  "description": "How many epochs the rate falls over, along half a cosine.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "minimum": {
+                  "description": "The least rate, reached at the end of the fall.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "epochs",
+                "minimum"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The rate rising in a straight line from a share of itself to the whole of it over so many epochs, then held.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "linearWarmup"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Ll][Ii][Nn][Ee][Aa][Rr][Ww][Aa][Rr][Mm][Uu][Pp])$"
+                    }
+                  ]
+                },
+                "epochs": {
+                  "description": "How many epochs the rate warms up over.",
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "start": {
+                  "description": "The share of the rate the first epoch takes: above nought, and at most one.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "epochs",
+                "start"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "How the rate changes from epoch to epoch; left out, the optimizer's own rate every epoch."
+        },
+        "clip": {
+          "description": "The most norm a step's gradients may have together before they move the network; left out, or nought, they are not clipped.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.7976931348623157E+308
         },
         "loss": {
           "type": "object",
@@ -1995,6 +2451,28 @@
                     {
                       "type": "string",
                       "pattern": "^(?:[Bb][Ii][Nn][Aa][Rr][Yy][Cc][Rr][Oo][Ss][Ss][Ee][Nn][Tt][Rr][Oo][Pp][Yy])$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "How far the shares have to move along the order of the bands to be the answer's: an answer of shares in an order, read through a softmax.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "earthMoversDistance"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Ee][Aa][Rr][Tt][Hh][Mm][Oo][Vv][Ee][Rr][Ss][Dd][Ii][Ss][Tt][Aa][Nn][Cc][Ee])$"
                     }
                   ]
                 }
@@ -2384,6 +2862,116 @@
       ],
       "additionalProperties": false
     },
+    "read.join": {
+      "description": "Reads two comma-separated files as one source: each row of the left file beside the one row of the right file its key names. Rows served later arrive already joined.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "read.join"
+        },
+        "left": {
+          "type": "object",
+          "oneOf": [
+            {
+              "description": "A comma-separated file, read as read.csv reads one: its first line names the columns.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "csv"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Cc][Ss][Vv])$"
+                    }
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "Where the comma-separated file will be, when the pipeline runs."
+                }
+              },
+              "required": [
+                "kind",
+                "path"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "The file whose rows the joined rows are: each of its rows, in its order, beside its partner."
+        },
+        "right": {
+          "type": "object",
+          "oneOf": [
+            {
+              "description": "A comma-separated file, read as read.csv reads one: its first line names the columns.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "csv"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Cc][Ss][Vv])$"
+                    }
+                  ]
+                },
+                "path": {
+                  "type": "string",
+                  "pattern": "\\S",
+                  "description": "Where the comma-separated file will be, when the pipeline runs."
+                }
+              },
+              "required": [
+                "kind",
+                "path"
+              ],
+              "additionalProperties": false
+            }
+          ],
+          "description": "The file each left row takes its partner from: the one row whose key is the left row's key."
+        },
+        "on": {
+          "description": "The columns a left row and its partner share, named alike in both files: each compared as the exact text of its cells, the spaces around it taken off.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        },
+        "unmatched": {
+          "anyOf": [
+            {
+              "enum": [
+                "refuse",
+                "drop"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Rr][Ee][Ff][Uu][Ss][Ee]|[Dd][Rr][Oo][Pp])$"
+            }
+          ],
+          "description": "What becomes of a left row whose key the right file does not hold: refuse stops the run, naming the row; drop leaves it out and counts it in the fit."
+        }
+      },
+      "required": [
+        "step",
+        "left",
+        "right",
+        "on",
+        "unmatched"
+      ],
+      "additionalProperties": false
+    },
     "read.json": {
       "description": "Reads the rows from a JSON file holding an array of records, one object a row, every value as the file writes it.",
       "type": "object",
@@ -2598,6 +3186,12 @@
           "type": "integer",
           "minimum": -2147483648,
           "maximum": 2147483647
+        },
+        "testSeed": {
+          "description": "The number that deals the rows to be measured on, none or more. Given, those rows are the same whatever the seed is, and the seed deals the rest. Left out, the seed deals every part.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
         }
       },
       "required": [
@@ -2785,7 +3379,7 @@
         "columns": {
           "description": "The columns the answer is divided among, in their order: at least two.",
           "type": "array",
-          "minItems": 1,
+          "minItems": 2,
           "uniqueItems": true,
           "items": {
             "type": "string",
@@ -2796,6 +3390,15 @@
           "type": "string",
           "pattern": "\\S",
           "description": "The column saying how many the shares are shares of, so predictions come back as how many fell in each; left out, they come back as shares."
+        },
+        "ordered": {
+          "description": "Whether the columns are in an order that means something, as bands of weight are, so a prediction is measured by how far its shares lie from the answer's along it; left out, they are not.",
+          "type": "boolean"
+        },
+        "remainder": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column made for what is left of the whole once the columns are counted, when fewer arrive than the column saying how many there were; left out, the columns hold the whole."
         }
       },
       "required": [
@@ -2814,7 +3417,7 @@
         "columns": {
           "description": "The columns holding the labels, each nought or one on every row: at least two.",
           "type": "array",
-          "minItems": 1,
+          "minItems": 2,
           "uniqueItems": true,
           "items": {
             "type": "string",
@@ -2826,6 +3429,30 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "columns"
+      ],
+      "additionalProperties": false
+    },
+    "target.numbers": {
+      "description": "Names the columns a model is asked to predict as one answer of free numbers, each any finite number.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "target.numbers"
+        },
+        "columns": {
+          "description": "The columns holding the numbers of the answer, in their order: at least two.",
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
         }
       },
       "required": [
@@ -2875,9 +3502,11 @@
                       "evidence.correlation",
                       "evidence.profile",
                       "evidence.report",
+                      "feature.cycle",
                       "learn.ml",
                       "learn.network",
                       "order.by",
+                      "read.join",
                       "scale.given",
                       "settle.gaps",
                       "shuffle",
@@ -2886,7 +3515,8 @@
                       "split.stratified",
                       "target.ahead",
                       "target.distribution",
-                      "target.labels"
+                      "target.labels",
+                      "target.numbers"
                     ]
                   }
                 }
@@ -2913,11 +3543,14 @@
                   "not": {
                     "enum": [
                       "evidence.report",
+                      "feature.cycle",
                       "learn.ml",
                       "learn.network",
+                      "read.join",
                       "scale.given",
                       "settle.gaps",
-                      "shuffle"
+                      "shuffle",
+                      "target.numbers"
                     ]
                   }
                 }
@@ -2943,11 +3576,14 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "feature.cycle",
                       "learn.ml",
                       "learn.network",
+                      "read.join",
                       "scale.given",
                       "settle.gaps",
-                      "shuffle"
+                      "shuffle",
+                      "target.numbers"
                     ]
                   }
                 }
@@ -2973,10 +3609,13 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "feature.cycle",
                       "learn.ml",
+                      "read.join",
                       "scale.given",
                       "settle.gaps",
-                      "shuffle"
+                      "shuffle",
+                      "target.numbers"
                     ]
                   }
                 }
@@ -3002,9 +3641,40 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "feature.cycle",
                       "learn.ml",
+                      "read.join",
                       "scale.given",
-                      "shuffle"
+                      "shuffle",
+                      "target.numbers"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 8
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "declaration": {
+            "items": {
+              "properties": {
+                "step": {
+                  "not": {
+                    "enum": [
+                      "feature.cycle",
+                      "read.join",
+                      "target.numbers"
                     ]
                   }
                 }

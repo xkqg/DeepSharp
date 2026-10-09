@@ -91,7 +91,7 @@ public class VerbShapeTests
         // here first.
         Assert.Equal(
             [
-                "Ahead", "ClipOutliers", "Cyclical", "Encode", "FillMissing", "FillNaN", "Normalise", "Reshape",
+                "Ahead", "ClipOutliers", "Cycle", "Cyclical", "Encode", "FillMissing", "FillNaN", "Normalise", "Reshape",
                 "ScaleGiven", "SettleGaps", "SplitByTime", "SplitStratified", "Target", "TimeParts",
                 "TimePartsAsNumbers",
             ],

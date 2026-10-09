@@ -20,7 +20,7 @@ internal readonly record struct SavedPipeline(
 /// <summary>
 /// The file a pipeline is saved as, written and read in this one place — and the file of saved columns beside a
 /// notebook, <c>{"version": 5, "source": [...], "declare": {...}, "drop": [...], "output": {...}}</c>, and a course,
-/// <c>{"version": 7, "course": [...]}</c>, with the same care. The course's part is in a file of its own.
+/// <c>{"version": 8, "course": [...]}</c>, with the same care. The course's part is in a file of its own.
 /// </summary>
 /// <remarks>
 /// <code>{"version": 5, "declaration": [ ... ], "fitted": [ {"step": ..., "prefix": ..., "learned": { ... }} ], "skipped": [ {"step": ..., "prefix": ...} ]}</code>

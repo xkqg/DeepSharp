@@ -154,6 +154,9 @@ public class ReportTests
     public void AmountsAreMeasuredForEveryKindOfOutput()
     {
         Assert.Empty(PipelineDeclaration.FaultsIn(Steps(new DistributionStep(["b", "c"], scaleBy: "a"), Report(Metric.Rmse, Metric.Mae, Metric.R2))));
+        Assert.All(
+            new INamesTheAnswer[] { new TargetStep("a"), new DistributionStep(["b", "c"]), new LabelsStep(["b", "c"]), new NumbersStep(["b", "c"]), new AheadStep("close", 5) },
+            output => Assert.True(output.Takes(MetricFamily.Amounts)));
         Assert.NotNull(AheadSplit().Ahead("close", 5, AheadAs.Return).Report(
             report => report.Measure(Metric.Rmse, Metric.Mae, Metric.R2).On(Part.Train, Part.Test).As(Shown.Drawn)).Declaration.Report);
     }
@@ -291,7 +294,7 @@ public class ReportTests
         var shown = Assert.IsType<SeveralOfParameter<Shown>>(description.Parameters.Single(parameter => parameter.Key == "shown"));
 
         Assert.Equal(["train", "validation", "test"], parts.Choices);
-        Assert.Equal(["rmse", "mae", "r2", "accuracy", "precision", "recall", "confusionmatrix"], metrics.Choices);
+        Assert.Equal(["rmse", "mae", "r2", "accuracy", "precision", "recall", "confusionmatrix", "emd", "kl", "rps"], metrics.Choices);
         Assert.Equal(["drawn", "numbers"], shown.Choices);
         Assert.Equal(["metrics", "parts", "shown"], description.Parameters.Select(parameter => parameter.Key));
 

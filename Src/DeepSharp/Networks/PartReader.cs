@@ -89,13 +89,18 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
     /// The batch size and the early stopping the run went under; nothing when a part of the first version, which 0.4.0 wrote,
     /// holds neither, and so says nothing of them; nothing too, with every fault noted, when either cannot be read.
     /// </summary>
-    /// <remarks>A part records both: one that holds only one of them, or — from the second version — neither, is refused.</remarks>
+    /// <remarks>
+    /// A part records both: one that holds only one of them, or — from the second version — neither, is refused. The norm the
+    /// run's gradients were clipped to is read where the part holds it, from the third version on; a part that holds none says
+    /// they were never clipped.
+    /// </remarks>
     public Pace? PaceOf()
     {
         var batchSize = part.Member(BatchSizeKey);
         var earlyStopping = part.Member(EarlyStoppingKey);
+        var clipNorm = part.Member(ClipNormKey);
 
-        if (version == FirstVersion && batchSize is null && earlyStopping is null)
+        if (version == FirstVersion && batchSize is null && earlyStopping is null && clipNorm is null)
         {
             return null;
         }
@@ -108,8 +113,9 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
         }
 
         var stopping = EarlyStoppingOf(earlyStopping);
+        var clip = ClipOf(clipNorm);
 
-        return rows is { } size ? new Pace(size, stopping) : null;
+        return rows is { } size ? new Pace(size, stopping) { Clip = clip } : null;
     }
 
     /// <summary>
@@ -191,7 +197,7 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
         {
             try
             {
-                optimizer.Recall((Parameter)slots[path], remembered);
+                optimizer.PutBack((Parameter)slots[path], remembered);
             }
             catch (ArgumentException refusal)
             {
@@ -393,6 +399,36 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
         Only(stopping, at, PatienceKey, MinDeltaKey, RestoreBestKey);
 
         return new EarlyStopping { Patience = patience, MinDelta = minDelta, RestoreBest = restoreBest };
+    }
+
+    // The clip the run's gradients went under: nothing where the part holds no norm — and nothing, with its fault noted, where
+    // it holds one that is no number above nothing, or holds one at all in a part of a version that cannot say it.
+    private GradientClip? ClipOf(JsonElement? written)
+    {
+        if (written is null)
+        {
+            return null;
+        }
+
+        string[] at = [.. _here, ClipNormKey];
+
+        if (version < NetworkDocument.Version)
+        {
+            text.Fault(
+                at,
+                $"The norm a run's gradients were clipped to is written from the third version of a training part on, and this one is of the {(version == FirstVersion ? "first" : "second")}.");
+
+            return null;
+        }
+
+        if (written.Value.AsNumber() is { } norm && norm > 0)
+        {
+            return new GradientClip(norm);
+        }
+
+        text.Fault(at, $"The norm the run's gradients were clipped to is written under '{ClipNormKey}', as a number above nothing.");
+
+        return null;
     }
 
     // A list of names written here; nothing when it is anything else.

@@ -39,6 +39,47 @@ public class SequentialTests
         Assert.Equal(Written(written), Written(lowered));
     }
 
+    [Fact]
+    public void ADenseLayerWithoutAnInitialiser_StartsAsPyTorchStartsIt_BitForBit_AsItAlwaysHas()
+    {
+        // The word as it was: PyTorch's start, drawn from the stream by the layer's place, exactly as a layer written as code
+        // draws it — and naming PyTorch's own initialiser changes nothing.
+        var stream = new RandomStream(7);
+        var plain = new Sequential().Dense(3).Lower(new Shape(5), stream);
+        var named = new Sequential().Dense(3, new KaimingUniform()).Lower(new Shape(5), new RandomStream(7));
+        var code = new Dense(5, 3, new RandomStream(7).Draw("initialise:0", 0, 0));
+
+        Assert.Equal(Bits(code), Bits(plain));
+        Assert.Equal(Bits(code), Bits(named));
+    }
+
+    [Fact]
+    public void ADenseLayerWithAnInitialiser_StartsItsWeightsAsThatInitialiserDraws_UnderTheSameSeed_AndItsBiasAsBefore()
+    {
+        // The initialiser decides the weights only: the bias is still drawn as PyTorch draws it, after the weights, from the
+        // same draws, and the network's file holds the numbers, not how they started.
+        var plainStack = new Sequential().Dense(3).Lower(new Shape(5), new RandomStream(7));
+        var glorotStack = new Sequential().Dense(3, new GlorotUniform()).Lower(new Shape(5), new RandomStream(7));
+        var plain = (Dense)plainStack.Layers[0];
+        var glorot = (Dense)glorotStack.Layers[0];
+        var zeros = (Dense)new Sequential().Dense(3, new Zeros()).Lower(new Shape(5), new RandomStream(7)).Layers[0];
+        var bound = Math.Sqrt(6.0 / (5 + 3));
+
+        Assert.NotEqual(plain.Weight.Value.Values.ToArray(), glorot.Weight.Value.Values.ToArray());
+        Assert.All(glorot.Weight.Value.Values.ToArray(), value => Assert.InRange(value, -bound, bound));
+        Assert.Contains(glorot.Weight.Value.Values.ToArray(), value => Math.Abs(value) > 1 / Math.Sqrt(5));
+        Assert.All(zeros.Weight.Value.Values.ToArray(), value => Assert.Equal(0f, value));
+        Assert.Equal(plain.Bias.Value.Values.ToArray(), glorot.Bias.Value.Values.ToArray());
+        Assert.Equal(LayersOf(plainStack), LayersOf(glorotStack));
+        Assert.Throws<ArgumentNullException>(() => new Sequential().Dense(3, null!));
+    }
+
+    // What a network's file says of its layers: their kinds and settings, without the numbers they hold.
+    private static string LayersOf(Network network) => JsonDocument.Parse(Written(network)).RootElement.GetProperty("layers").GetRawText();
+
+    private static int[][] Bits(Layer network) =>
+        [.. network.Slots().Select(slot => slot.Slot.Value.Values.ToArray().Select(BitConverter.SingleToInt32Bits).ToArray())];
+
     private static string Written(Network network)
     {
         using var stream = new MemoryStream();

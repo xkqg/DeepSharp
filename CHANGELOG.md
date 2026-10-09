@@ -3,6 +3,147 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.1]
+
+Optimizing: the numbers a network is trained with, searched for and measured by. A network's numbers are found by training,
+and the choices around that — which optimizer, how fast, how far a step may go, how the rate changes, which numbers to try
+and how a result is told from the luck of a split — are the part nobody can work out in advance. This release gives those
+choices a name in the code and in the pipeline's file, answers that are a distribution an order to be judged along, and
+makes the pipeline's side honest about the things it used to leave to the caller: two files as one source, an id that
+travels with its rows, a correlation worked out once.
+
+### Upgrading from 0.8.0
+
+- **The pipeline file is at version 8, and everything written before it still reads.** Three verbs are new — `read.join`,
+  `target.numbers` and `feature.cycle` — and so are optional keys on verbs that existed: `ordered` and `remainder` on
+  `target.distribution`, `testSeed` on `split.atRandom`, `id` on a column of the schema, `coefficient` on
+  `evidence.correlation`, `rankAbove` on `evidence.profile`, and `schedule` and `clip` on `learn.network`. Each is optional,
+  means what the file meant by not having it, and is not written when it holds that meaning, so a pipeline that says none of
+  them writes what it wrote before, but for its number. 0.8.0 refuses a file of the eighth whole, naming the version, as it
+  refuses any newer file. The repository holds files the published 0.8.0 packages wrote, and a test reads, writes again and
+  serves every one of them.
+
+- **The network's file has the number it had, except for one part.** A part is written as the oldest version that says what
+  it holds. The training part of a checkpoint whose gradients were clipped says the norm they were clipped to and is the
+  third version, which 0.8.0 refuses by its number; a network, and a checkpoint of a run that clipped nothing, are still the
+  second, which 0.8.0 reads. A new loss or optimizer is a name, and a library that does not know the name refuses it by
+  name.
+
+- **A checkpoint taken by 0.8.0 is read and serves, and a run cannot go on from it.** The light engine records DeepSharp's
+  own version, and a run is held to the engine its checkpoint was taken on, down to its version; this has been so at every
+  release, and a run that is to go on across a release must be taken again from its start.
+
+- **A weekday or a season written as a number is refused where it is declared.** `TimePartsAsNumbers` of `DayOfWeek` or
+  `Season` was accepted, written to a file and read back, and failed when the pipeline ran, parsing the word `sunday` as a
+  number. It is refused when the step is made, and when a file that holds one is read, naming `Cyclical` and categories,
+  which are the right doors; a file written by 0.8.0 that held one never ran.
+
+- **A pair of columns with no correlation is no longer shown as nought.** A column that never changes has no coefficient with
+  any other. The notebook's table used to write 0.000 for it and the heatmap drew a colour; the table now writes `n/a`, the
+  heatmap leaves the cell without a colour, and a sentence under either names the column.
+
+- **`Optimizer` can be derived from outside the assembly.** Its memory of a parameter's slots is public (`SlotMemory`) and a
+  subclass writes and recalls its own with `MemoryOf` and `Recall`, which are protected now where they were internal. No
+  optimizer could be written outside before, so nothing that compiled stops compiling; the build records the two changed
+  members as accepted differences from 0.8.0 (`CompatibilitySuppressions.xml`), and they go when this release becomes the
+  baseline.
+
+- **A metric that is no metric is no longer measured as recall.** A number cast to `Metric` that is none of its members used
+  to be measured by the arm that served the class measures; it now throws.
+
+- **A call with a literal `null` for the engines of `PreparedData.Train` is ambiguous** between the declared network's door
+  and the new one that takes a step: type the null (`(Engines?)null`), or leave the argument out.
+
+### Added
+
+- **AdamW, RMSprop and Nadam.** `AdamW` decays the numbers apart from the gradient, PyTorch's decoupled form; `RmsProp` has
+  PyTorch's alpha and momentum; `Nadam` has its momentum decay. Each is matched to PyTorch 2.14.1 step by step on every
+  engine, remembers its slots under PyTorch's names so a checkpoint carries them, is registered in the catalog by name and
+  has doors on a declared network: `AdamW`, `RmsProp`, `Nadam`. RMSprop and Nadam are declared in PyTorch's words only,
+  because Keras's differ in arithmetic and a declaration must name an optimizer this library runs. L2 weight decay,
+  Nesterov momentum and AMSGrad are still not built.
+
+- **Gradient clipping by norm, a warm-up, and an initialiser on a layer.** `FitOptions.GradientClip` clips the gradients of a
+  step by their norm together, PyTorch's `clip_grad_norm_`; gradients below the limit pass untouched to the last bit. A
+  checkpoint records the clip and a run gone on under another is refused. `LinearWarmup` raises the rate in a straight line
+  from a share of itself to the whole over so many epochs and may hand over to another schedule. `Sequential.Dense(units,
+  initialiser)` starts a layer's numbers another way. A declared network may say `schedule` and `clip`, with doors
+  `StepDecay`, `ExponentialDecay`, `CosineDecay`, `WarmUp` and `ClipGradients`.
+
+- **A run can be watched and stopped.** `FitOptions.OnEpoch` is handed each epoch as it ends and `FitOptions.Cancellation`
+  stops the run before its next batch or its next look at the validation rows; `pipeline.Train(engines, onEpoch, token)`
+  and the same on prepared rows pass them on. A cancelled run throws `OperationCanceledException` and returns nothing. A run
+  that neither stops is the run without them, to the last bit.
+
+- **An optimizer of your own.** Derive from `Optimizer`, register it with a `NetworkCatalog`, and its slots go through a
+  checkpoint file and on from it bit for bit. The words a declared `learn.network` is written in stay the shipped ones.
+
+- **A distribution in an order.** `target.distribution` may say `ordered`. The measures `emd`, `kl` and `rps` compare shares
+  — each row divided by its own total, so counts are compared as shares — and are refused where the report is written for
+  any output that is not a distribution, `emd` and `rps` for one that is not ordered. `emd` is the earth mover's distance in
+  bands, pinned to scipy; `rps` the ranked probability score, pinned to xskillscore; `kl` the Kullback–Leibler divergence in
+  nats with no epsilon added, infinite where the prediction holds nothing the answer holds, and drawn so. The loss
+  `earthMoversDistance` trains on the same distance, with a door `EarthMoversDistance()`, and is refused before anything is
+  trained when the output is not ordered. `MetricFamily` and `Metric.Family()` say which kind of answer a measure is for.
+
+- **What a flock that arrived short leaves.** `remainder` on `target.distribution`, with a column that says how many there
+  were, makes one more answer after the bands: what is left of the whole. The bands hold counts where the output stands, the
+  shares sum to one and come back as birds that add up to the planned flock; more birds than planned is refused naming the
+  row. The loss and the measures that follow the order compare the bands alone.
+
+- **`target.numbers`,** an answer of two or more free numbers, with the builder door `Numbers`. The rule that an answer
+  names at least two columns is now the column parameter's, written once.
+
+- **`read.join`,** one source that reads two comma-separated files and gives each row of the left one beside the row of the
+  right one its key names: `ReadJoin(left, right, on, unmatched)`. The key is the exact text of the columns, trimmed;
+  the join is many to one; `unmatched` is `Refuse` or `Drop` and has no default, a dropped row is counted as
+  `rows.unmatched`; a column both files have beside the keys is refused. Rows served later arrive already joined. The
+  notebook reads a source of several files through the new `IReadsFiles`, and keeps its views by a fingerprint of all of
+  them.
+
+- **An `id` column.** `schema.Id("Flock", kind)` marks the column a team keeps beside its rows. It is never a feature and is
+  not encoded, and a profile or a warm-up that is not told its columns leaves it out; it reaches the end as `Batch.Ids` and `ServedBatch.Ids`, and
+  a trained network's `Predictions.Ids` carries it beside the answers.
+
+- **`feature.cycle`,** a place on a circle of a length you declare — `Cycle("age", 7)`, or `Cycle(cycle => cycle.Every(7).Of("age"))` — and the periods `DayOfYear` and
+  `Season` for `feature.cyclical`; `IPlacesOnACircle` is what the rule against putting a moment on a circle twice reads.
+
+- **`testSeed` on `split.atRandom`,** and `SplitAtRandom(train, validation, seed, testSeed)`: the test rows and the rows kept
+  to predict on are dealt by it alone and are the same whatever the seed deals the rest with. Equal to the seed it deals
+  exactly as no test seed does.
+
+- **`Study` and `Comparison`.** A study tries candidates drawn from a `SearchSpace` — `NumberRange`, `LogRange`,
+  `WholeRange`, `Choices` — through an `ISampler` (`RandomSampler` ships), over one or several deals of the rows, chooses by
+  the validation loss and keeps the networks of the winner, whose report is the only one of the test rows anything can read;
+  it can be watched with `OnTrial` and stopped by a token. `Comparison` trains one network behind two pipelines on each of
+  many deals and reports the differences with their mean, spread and standard error.
+  `PreparedData.Train(step, engines, token)` trains a network a step declares on rows prepared once.
+
+- **A correlation worked out once.** `CorrelationInput.Correlate()` gives a `CorrelationMatrix` with Pearson's and
+  Spearman's coefficients, the pairs with none not a number; `evidence.correlation` may say which it shows; the profile may
+  flag columns whose Spearman coefficient is above a `rankAbove` that is never defaulted; `CorrelationMatrix.Heatmap()`
+  draws one.
+
+- **Two pages in the wiki:** [Writing a step of your own](https://github.com/xkqg/DeepSharp/wiki/Writing-a-step-of-your-own),
+  with the leak a step that learns from the answer can make, and
+  [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
+
+### Changed
+
+- **The correlation is the pipeline's, not the drawing library's.** The chart, the notebook's table and the profile read one
+  set of numbers. The class the charts package carried to draw on the whole of the scale from minus one to one is gone, and
+  the drawing library's own centred normalizer does the same; it was never public.
+
+- **The wiki says what the library does.** A pipeline has one output, which may name several columns, and the achieved
+  shares of a split — whole moments are kept together — are read from the fit; the measures of shares follow scipy's
+  definitions and not scikit-learn's.
+
+### Fixed
+
+- **The wait the venue's budget asks for no longer counts as a try.** When an address had used more than half of what a
+  minute allows, the landing waited for the next minute, and that wait ran inside the ten seconds a try may take: each ten
+  seconds of it timed out and used up one of the five tries. The time a try may take now begins when its request is sent.
+
 ## [0.8.0]
 
 A live source, landed: the candles an exchange answers with, fetched once over a closed window and kept as a file that
@@ -110,13 +251,13 @@ fetched once, with a record of what was asked and what came back, and what the p
   `DeepSharp.Learners.MLNet`; a test now holds the layout of this repository's `ARCHITECTURE.md` and of that page to every
   project in `Src`, and the README's table to every package.
 
-### Known in 0.8.0, fixed on main after it
+### Known in 0.8.0, fixed in 0.8.1
 
 - **The wait the venue's budget asks for counted as a try.** When an address had used more than half of what a minute allows,
   the landing waited for the next minute, and that wait ran inside the ten seconds a try may take: each ten seconds of it
   timed out and used up one of the five tries. The landing still got through when nothing else went wrong, but a single
   refusal after the wait ended it with Binance asked once and a message saying it had not answered. The packages published
-  as 0.8.0 have this; the time a try may take now begins when its request is sent, so the wait uses up no try.
+  as 0.8.0 have this; from 0.8.1 the time a try may take begins when its request is sent, so the wait uses up no try.
 
 ## [0.7.1]
 

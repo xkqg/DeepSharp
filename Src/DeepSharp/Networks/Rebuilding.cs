@@ -75,6 +75,23 @@ public sealed class Rebuilding
         return layers.Any(layer => layer is null) ? throw new Unreadable() : [.. layers.Cast<Layer>()];
     }
 
+    /// <summary>A learning-rate schedule a kind holds, written as an object under a setting, rebuilt through the catalog.</summary>
+    /// <param name="settings">The object the kind was written as.</param>
+    /// <param name="key">The setting.</param>
+    /// <returns>The schedule.</returns>
+    /// <exception cref="FormatException">
+    /// The setting is missing; what stands there — no object naming its kind, a kind of another role, a schedule its settings
+    /// refuse — is named at its own place.
+    /// </exception>
+    /// <remarks>A schedule that hands over to another holds it this way, as a stack holds its layers.</remarks>
+    public LearningRateSchedule Schedule(JsonElement settings, string key)
+    {
+        var element = Setting(settings, key, "a learning-rate schedule");
+        var reading = _readings.Peek();
+
+        return Rebuild(element, [.. reading.Path, key], NetworkCatalog.Role.Schedule) as LearningRateSchedule ?? throw new Unreadable();
+    }
+
     /// <summary>
     /// Whether a setting is written as a word a kind takes in place of the number it otherwise is — a window's padding as
     /// <c>same</c>, say — and, when it is, the setting is read; any other word is refused where it stands, in the words that
@@ -95,6 +112,25 @@ public sealed class Rebuilding
         }
 
         return true;
+    }
+
+    /// <summary>Whether a kind was written with a setting that it writes only when it is true: false, where it is left out.</summary>
+    /// <exception cref="FormatException">The setting is written as anything but true or false.</exception>
+    internal bool Holds(JsonElement settings, string key)
+    {
+        if (settings.Member(key) is not { } written)
+        {
+            return false;
+        }
+
+        _readings.Peek().Read.Add(key);
+
+        return written.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw Refusal(key, "true or false"),
+        };
     }
 
     /// <summary>Rebuilds the kind written at a place of the file, noting every fault at its place; nothing when it cannot be.</summary>

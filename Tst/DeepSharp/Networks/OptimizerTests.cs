@@ -132,11 +132,110 @@ public class OptimizerTests
         var weight = new Dense(1, 1, new RandomStream(1).Draw("initialise:test", 0, 0)).Weight;
         var adam = new Adam();
 
-        Assert.Null(adam.MemoryOf(weight));
+        Assert.Null(adam.KeptOf(weight));
 
-        var refused = Assert.Throws<ArgumentException>(() => adam.Recall(weight, new SlotMemory(0, new Dictionary<string, Tensor>())));
+        var refused = Assert.Throws<ArgumentException>(() => adam.PutBack(weight, new SlotMemory(0, new Dictionary<string, Tensor>())));
 
         Assert.Contains("counts no step", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AdamWAndNadam_RememberTheStepsAndBothRunningMeans_UnderPyTorchsNames()
+    {
+        foreach (var optimizer in (Optimizer[])[new AdamW(0.01), new Nadam(0.01)])
+        {
+            var output = Walked(optimizer);
+            var memory = optimizer.KeptOf(output.Weight)!.Value;
+
+            Assert.Equal(3, memory.Steps);
+            Assert.Equal(["exp_avg", "exp_avg_sq"], memory.Tensors.Keys.Order(StringComparer.Ordinal));
+            Assert.All(memory.Tensors.Values, tensor => Assert.Equal(output.Weight.Value.Shape, tensor.Shape));
+        }
+    }
+
+    [Fact]
+    public void RmsProp_RemembersTheMeanOfTheSquares_AndTheBufferOnlyWithMomentum()
+    {
+        var plain = new RmsProp(0.001);
+        var carried = new RmsProp(0.001) { Momentum = 0.9 };
+
+        var without = plain.KeptOf(Walked(plain).Weight)!.Value;
+        var with = carried.KeptOf(Walked(carried).Weight)!.Value;
+
+        Assert.Equal(3, without.Steps);
+        Assert.Equal(["square_avg"], without.Tensors.Keys);
+        Assert.Equal(["momentum_buffer", "square_avg"], with.Tensors.Keys.Order(StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void RmsPropWithoutMomentum_PutsBackTheMeanOfTheSquaresItKept_AndNoBuffer()
+    {
+        var kept = new RmsProp(0.001);
+        var weight = Walked(kept).Weight;
+        var again = new RmsProp(0.001);
+
+        again.PutBack(weight, kept.KeptOf(weight)!.Value);
+
+        Assert.Equal(kept.KeptOf(weight)!.Value.Tensors["square_avg"], again.KeptOf(weight)!.Value.Tensors["square_avg"]);
+        Assert.Equal(["square_avg"], again.KeptOf(weight)!.Value.Tensors.Keys);
+        Assert.Equal(3, again.KeptOf(weight)!.Value.Steps);
+    }
+
+    [Fact]
+    public void Nadam_KeepsTheProductOfItsMomentumsAsPyTorchsNAdamDoes_AndWorksItOutAgainFromTheStepsAMemoryCounts()
+    {
+        // PyTorch keeps mu_product as a float of its own; it is a function of the steps alone, so a checkpoint holds the
+        // steps and the product is worked out again — to the same float — where the memory is put back.
+        var nadam = new Nadam(0.01);
+        var weight = Walked(nadam).Weight;
+        var again = new Nadam(0.01);
+
+        again.PutBack(weight, nadam.KeptOf(weight)!.Value);
+
+        Assert.Equal(0.09121428430080414, nadam.MuProductOf(weight), 1e-9);
+        Assert.Equal(BitConverter.SingleToInt32Bits(nadam.MuProductOf(weight)), BitConverter.SingleToInt32Bits(again.MuProductOf(weight)));
+    }
+
+    [Fact]
+    public void AMemoryAnotherOptimizerKept_IsRefused_NamingWhatThisOneKeeps()
+    {
+        var adam = new Adam(0.01);
+        var weight = Walked(adam).Weight;
+        var adams = adam.KeptOf(weight)!.Value;
+        var rmsProp = new RmsProp(0.001) { Momentum = 0.9 };
+        var squares = new RmsProp(0.001);
+        var squared = squares.KeptOf(Walked(squares).Weight)!.Value;
+
+        Assert.Contains("square_avg", Assert.Throws<ArgumentException>(() => rmsProp.PutBack(weight, adams)).Message, StringComparison.Ordinal);
+        Assert.Contains("momentum_buffer", Assert.Throws<ArgumentException>(() => rmsProp.PutBack(weight, squared)).Message, StringComparison.Ordinal);
+        Assert.Contains("exp_avg", Assert.Throws<ArgumentException>(() => new AdamW().PutBack(weight, squared)).Message, StringComparison.Ordinal);
+        Assert.Contains("exp_avg", Assert.Throws<ArgumentException>(() => new Nadam().PutBack(weight, squared)).Message, StringComparison.Ordinal);
+        Assert.Contains("counts no step", Assert.Throws<ArgumentException>(() => new Nadam().PutBack(weight, adams with { Steps = 0 })).Message, StringComparison.Ordinal);
+        Assert.Contains("counts no step", Assert.Throws<ArgumentException>(() => new AdamW().PutBack(weight, adams with { Steps = 0 })).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheNewOptimizers_RememberNothingOfAParameterTheyNeverMoved()
+    {
+        var weight = new Dense(1, 1, new RandomStream(1).Draw("initialise:test", 0, 0)).Weight;
+
+        Assert.Null(new AdamW().KeptOf(weight));
+        Assert.Null(new RmsProp().KeptOf(weight));
+        Assert.Null(new Nadam().KeptOf(weight));
+    }
+
+    // Three steps of an optimizer over the Titanic walk; the output layer it moved.
+    private Dense Walked(Optimizer optimizer)
+    {
+        var output = new Dense(WalkedRows.OutputWeights(), WalkedRows.OutputBias());
+        var network = new LayerStack(new Dense(WalkedRows.HiddenWeights(), WalkedRows.HiddenBias()), new Relu(), output);
+
+        for (var step = 0; step < 3; step++)
+        {
+            Stepped(network, optimizer, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived());
+        }
+
+        return output;
     }
 
     private static void AssertClose(double[] expected, Tensor actual)

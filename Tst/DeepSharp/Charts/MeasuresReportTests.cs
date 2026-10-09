@@ -108,6 +108,30 @@ public class MeasuresReportTests
         Assert.Equal(matrices.ConfusionMatrices().TrimEnd(), Assert.Single(Svgs(matrices.Report().ToHtml())));
     }
 
+    [Fact]
+    public void MeasuresOfShares_AreWrittenAndDrawn_AnInfiniteOneAsInfinite_AndTheyDrawNoAnswerAgainstItsPrediction()
+    {
+        // Shares compared row by row have no one answer to draw against its prediction; a divergence without end is written
+        // as the infinity it is, and drawn as no bar.
+        var prepared = Pdd.Create()
+            .Read(CsvRowSource.FromText("t,c1,c2,c3\n" + string.Join('\n', Enumerable.Range(1, 12).Select(t => $"{t},{1 + (t % 3)},{2 + (t % 4)},1")) + "\n"), "twelve flocks")
+            .Declare(schema => schema.Integer("t").Number("c1", "c2", "c3"))
+            .SplitByTime("t", 0.50, 0.25)
+            .NormaliseRow(Norm.L1, "c1", "c2", "c3")
+            .Distribution(["c1", "c2", "c3"], scaleBy: null, ordered: true)
+            .Report(report => report.Measure(Metric.Kl, Metric.Emd).On(Part.Test).As(Shown.Numbers, Shown.Drawn))
+            .Build()
+            .Run();
+        var test = prepared.Batch(Part.Test);
+        var measures = prepared.Measure([new PartPredictions(test, [.. test.Features.Select(_ => new[] { 0.5, 0.5, 0 })])]);
+
+        var written = measures.Report().ToHtml();
+
+        Assert.Contains("<th>kl</th><th>baseline</th><th>emd</th><th>baseline</th>", written, StringComparison.Ordinal);
+        Assert.Contains("<td class=\"deepsharp-number\">∞</td>", written, StringComparison.Ordinal);
+        Assert.Equal([measures.Bars().TrimEnd()], Svgs(written));
+    }
+
     // Every SVG a piece of HTML holds, in order.
     private static IEnumerable<string> Svgs(string html)
     {

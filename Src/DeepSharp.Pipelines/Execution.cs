@@ -65,6 +65,30 @@ public interface IReadsAFile : INamesItsColumns
 }
 
 /// <summary>
+/// A source that is several files, read as one: where each lies, in the order the step names them, and its rows read from
+/// the files' bytes once they are in hand.
+/// </summary>
+/// <remarks>
+/// <see cref="IReadsAFile"/> for a step that reads more than one file — two files joined into one, say. A caller that reads
+/// the bytes to fingerprint them reads every file in this order, and hands the bytes back in it, so the rows are parsed from
+/// those very bytes and a change to any one file is a change to what the rows were read from. Like
+/// <see cref="INamesItsColumns"/>, it says something of a step that opens rows, and is no second thing the step does in a walk.
+/// </remarks>
+public interface IReadsFiles : INamesItsColumns
+{
+    /// <summary>Where each file will be, when the pipeline runs, as it was written, in the order the step reads them.</summary>
+    IReadOnlyList<string> Paths { get; }
+
+    /// <summary>The rows the files' bytes hold, read as this step reads its files.</summary>
+    /// <param name="bytes">Every byte of each file, in the order of <see cref="Paths"/>.</param>
+    /// <param name="files">What a refusal names each file as — the path its bytes were read from, say — in the same order.</param>
+    /// <returns>The rows, as text, with their column names.</returns>
+    /// <exception cref="ArgumentException">There is not one array of bytes and one name for every file the step reads.</exception>
+    /// <exception cref="FormatException">The bytes are not files this step can read.</exception>
+    IRowSource Open(IReadOnlyList<byte[]> bytes, IReadOnlyList<string> files);
+}
+
+/// <summary>
 /// A step that turns rows of text into named, typed columns.
 /// </summary>
 public interface IBindsColumns : IActsInAWalk

@@ -68,11 +68,15 @@
     <!-- What PyTorch and Keras saved and the ONNX graphs exported that the importers' tests read, and the programs that
          wrote the rows they trained on; those programs are not part of this build. -->
     <Compile Remove="Import\Fixtures\**" />
+    <!-- The files DeepSharp 0.8.0 wrote of a generated flock series, and the program that wrote them once; that program is
+         not part of this build. -->
+    <Compile Remove="Learners\Fixtures\**" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Files an earlier release wrote, read by this one as a person's application would read them. -->
     <None Update="Learners\Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Learners\Fixtures\*.csv" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

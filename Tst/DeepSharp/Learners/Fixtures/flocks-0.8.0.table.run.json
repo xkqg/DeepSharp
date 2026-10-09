@@ -1,0 +1,99 @@
+{
+  "version": 7,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.8.0.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "Farm",
+          "kind": "category",
+          "optional": false
+        },
+        {
+          "name": "Heavy",
+          "kind": "boolean",
+          "optional": false
+        },
+        {
+          "name": "Animals",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Age",
+          "kind": "number",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "step": "scale.given",
+      "column": "Animals",
+      "lowest": 15000,
+      "highest": 25000,
+      "lands": "signed"
+    },
+    {
+      "step": "split.stratified",
+      "column": "Heavy",
+      "train": 0.7,
+      "validation": 0.15,
+      "test": 0.15,
+      "predict": 0,
+      "seed": 7
+    },
+    {
+      "step": "target",
+      "column": "Heavy"
+    },
+    {
+      "step": "encode.categories",
+      "as": "onehot",
+      "unseen": "reserve"
+    },
+    {
+      "step": "normalise",
+      "column": "Age",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    }
+  ],
+  "fitted": [
+    {
+      "step": "split.stratified",
+      "prefix": "c67a3172b7cc4c181e9d5cfc34f70d717ef62a1f6d22fdd230d78452e4ae92b1",
+      "learned": {
+        "rows.predict": 0,
+        "rows.test": 54,
+        "rows.train": 252,
+        "rows.validation": 54,
+        "digest": "769e6c6b81a2d0a85bb3ad62a52139bcc7368a8666a2bb550aead4d05278a2de"
+      }
+    },
+    {
+      "step": "encode.categories",
+      "prefix": "9caf28525efc9cc6ee494644313b78836f10906c1ed3d889c688bf3c767c4963",
+      "learned": {
+        "Farm": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ]
+      }
+    },
+    {
+      "step": "normalise",
+      "prefix": "0d96199f42bf196d71af92511cb6ec63479943fa962c898179851f562a628f8d",
+      "learned": {
+        "centre": 34.5,
+        "spread": 6.5
+      }
+    }
+  ]
+}

@@ -57,10 +57,18 @@ CONFIG
     dotnet restore "$(native "$host")" -p:RestoreConfigFile="$config" -p:Libtorch="$libtorch" \
     || fail "$what: could not restore the application against the package just made"
 
+  # What the host is told, one word each: the passenger list's path can hold a space, as a temporary folder under
+  # "Program Files" does, and a path that is split in two is an argument too many.
+  local told=("$expect")
+
+  if [ "$expect" = titanic ]; then
+    told+=("$(native "$run/titanic.csv")")
+  fi
+
   TMP="$temp" TEMP="$temp" TMPDIR="$temp" NUGET_HTTP_CACHE_PATH="$(native "$run/temp/http")" \
     NUGET_PACKAGES="$(native "$run/temp/packages")" \
     dotnet run --project "$(native "$host")" --configuration Release --no-restore -p:Libtorch="$libtorch" -- \
-      "$expect" $([ "$expect" = titanic ] && echo "$(native "$run/titanic.csv")") \
+      "${told[@]}" \
     || fail "$what: the engine package, referenced as an application references it, did not do what the lines above say"
 }
 

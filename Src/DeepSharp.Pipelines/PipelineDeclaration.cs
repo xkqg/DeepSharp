@@ -39,16 +39,19 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         new AtMostOne<IOrdersRows>("order"),
         new RowOrderIsDeclaredBeforeItIsRead(),
         new AtMostOne<INamesTheAnswer>("output"),
+        new TheIdIsNoAnswer(),
         new AnActingOutputMakesItsAnswer(),
         new OnlyAnOutputReadsAhead(),
         new RowsAheadAreKeptApart(),
         new AReturnIsMadeFromItsColumnAsRead(),
+        new ARemainderIsMadeFromItsCountsAsRead(),
         new AtMostOne<INamesTheLearner>("learner"),
         new ALearnerStandsBelowItsOutput(),
         new AtMostOne<INamesTheMeasures>("report"),
         new AReportStandsBelowItsOutput(),
         new AReportMeasuresDividedRows(),
         new ClassesAreCountedWhereTheAnswersAreClasses(),
+        new SharesAreMeasuredWhereTheAnswersAreShares(),
         new ColumnsAreThereWhereTheyAreRead(),
     ];
 
@@ -121,12 +124,13 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// something an older library would not understand — as the schema did when a timestamp column began to say how
     /// its moments are written, as a run for a learner did when it began to write down the steps it left out, and as a
     /// declaration did when it began to name the learner it is written for, as settling a gap above the split did when
-    /// it became a verb of its own, and as naming a trainer from ML.NET did — so that library names the newer version
-    /// instead of the word it does not know.
+    /// it became a verb of its own, as naming a trainer from ML.NET did, and as a source that joins two files, an answer
+    /// of free numbers and a column that names the row did — so that library names the newer version instead of the word
+    /// it does not know.
     /// A property rather than a constant, so a package compiled against this version reads the number the running
     /// library has.
     /// </remarks>
-    public static int Version => 7;
+    public static int Version => 8;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;

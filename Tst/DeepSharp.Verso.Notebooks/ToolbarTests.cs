@@ -309,6 +309,34 @@ public sealed class ToolbarTests : IDisposable
         Assert.Equal(NotebookPipelineText(notebook), Text(await notebook.PressAsync(ExportPipelineAction.Id)));
     }
 
+    [Fact]
+    public async Task ExportingAfterARunOverAJoin_KeepsTheFitOnlyWhileBothFilesHoldTheBytesItLearnedFrom()
+    {
+        // A fit learned from two files belongs to the bytes of both: the second file changing is as much another source
+        // as the first changing.
+        var flocks = Enumerable.Range(1, 20).ToArray();
+        File.WriteAllText(Path.Join(_folder, "planned.csv"), "Flock,Age\n" + string.Concat(flocks.Select(flock => $"F{flock},{30 + flock}\n")));
+        var arrived = Path.Join(_folder, "arrived.csv");
+        File.WriteAllText(arrived, "Flock,Weight\n" + string.Concat(Enumerable.Reverse(flocks).Select(flock => $"F{flock},{flock * 2}\n")));
+
+        await using var notebook = await NotebookAsync(
+            """{"step": "read.join", "left": {"kind": "csv", "path": "planned.csv"}, "right": {"kind": "csv", "path": "arrived.csv"}, "on": ["Flock"], "unmatched": "refuse"}""",
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "Flock", "kind": "text", "optional": false, "id": true}, {"name": "Age", "kind": "number", "optional": false}, {"name": "Weight", "kind": "number", "optional": false}]}""",
+            """{"step": "split.atRandom", "train": 0.5, "validation": 0.25, "test": 0.25, "seed": 1}""",
+            """{"step": "normalise", "column": "Age", "scale": "standard", "outOfRange": "pass"}""");
+
+        await notebook.PressAsync(RunPipelineAction.Id);
+
+        var saved = Text(await notebook.PressAsync(ExportPipelineAction.Id));
+
+        Assert.Equal(HandedOver(notebook), saved);
+        Assert.Contains("\"fitted\"", saved, StringComparison.Ordinal);
+
+        File.AppendAllText(arrived, "F99,1\n");
+
+        Assert.Equal(NotebookPipelineText(notebook), Text(await notebook.PressAsync(ExportPipelineAction.Id)));
+    }
+
     [Theory]
     [InlineData("titanic.parquet", """{"step": "read.parquet", "path": "titanic.parquet"}""")]
     [InlineData("titanic.xlsx", """{"step": "read.excel", "path": "titanic.xlsx"}""")]

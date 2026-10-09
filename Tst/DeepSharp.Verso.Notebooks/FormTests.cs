@@ -149,7 +149,7 @@ public sealed class FormTests : IDisposable
 
         var verbs = Field(await SectionAsync(notebook, read), "step").Options!.Select(option => option.Value);
 
-        Assert.Equal(["read.csv", "read.excel", "read.json", "read.parquet", "read.rows"], verbs);
+        Assert.Equal(["read.csv", "read.excel", "read.join", "read.json", "read.parquet", "read.rows"], verbs);
 
         foreach (var verb in new[] { "read.parquet", "read.excel", "read.json", "read.csv" })
         {
@@ -307,8 +307,8 @@ public sealed class FormTests : IDisposable
         Assert.Equal(PropertyFieldType.Toggle, Field(section, "asCategories").FieldType);
 
         // Verso hands a choice of several back joined with commas, or as a list: both are read.
-        await ChangeAsync(notebook, parts, "parts", "hour,dayofweek");
-        Assert.Equal([TimePart.Hour, TimePart.DayOfWeek], ((TimePartsStep)Step(parts)).Parts);
+        await ChangeAsync(notebook, parts, "parts", "hour,month");
+        Assert.Equal([TimePart.Hour, TimePart.Month], ((TimePartsStep)Step(parts)).Parts);
 
         await ChangeAsync(notebook, parts, "parts", new[] { "month" });
         await ChangeAsync(notebook, parts, "asCategories", true);
@@ -350,6 +350,42 @@ public sealed class FormTests : IDisposable
         await ChangeAsync(notebook, split, "gap", "");
         Assert.Equal(0, ((SplitByTimeStep)Step(split)).Gap);
         Assert.DoesNotContain("gap", split.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task TrueOrFalseAFileMayLeaveOut_ShowsWhatLeavingItOutMeans_AndIsLeftOutBySwitchingToIt()
+    {
+        // Whether a distribution's bands are in an order: not, unless said, which a text written before the key existed says
+        // by not having it; switched back to not, the text says nothing of it again.
+        await using var notebook = await NotebookAsync(
+            """{"step": "target.distribution", "columns": ["w500", "w550"], "scaleBy": "chicks"}""");
+        var output = notebook.Scaffold.Cells[0];
+
+        Assert.Equal(PropertyFieldType.Toggle, Field(await SectionAsync(notebook, output), "ordered").FieldType);
+        Assert.Equal(false, Field(await SectionAsync(notebook, output), "ordered").CurrentValue);
+
+        await ChangeAsync(notebook, output, "ordered", true);
+        Assert.True(((DistributionStep)Step(output)).Ordered);
+        Assert.Contains("\"ordered\": true", output.Source, StringComparison.Ordinal);
+
+        await ChangeAsync(notebook, output, "ordered", false);
+        Assert.False(((DistributionStep)Step(output)).Ordered);
+        Assert.DoesNotContain("ordered", output.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task WhatIsLeftOfAWhole_IsMadeByNamingIt_AndLeftOutByClearingIt()
+    {
+        await using var notebook = await NotebookAsync(
+            """{"step": "target.distribution", "columns": ["w500", "w550"], "scaleBy": "chicks"}""");
+        var output = notebook.Scaffold.Cells[0];
+
+        await ChangeAsync(notebook, output, "remainder", "other");
+        Assert.Equal("other", ((DistributionStep)Step(output)).Remainder);
+
+        await ChangeAsync(notebook, output, "remainder", "");
+        Assert.Null(((DistributionStep)Step(output)).Remainder);
+        Assert.DoesNotContain("remainder", output.Source, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -657,6 +693,63 @@ public sealed class FormTests : IDisposable
 
         Assert.Equal(before, declare.Source);
         Assert.Contains("'sex' is not taken", (await SectionAsync(notebook, declare)).Description, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ATakenColumnThatCanNameARow_SaysWhetherItIsTheId_AndOneColumnAtMostIs()
+    {
+        await using var notebook = await NotebookAsync(Titanic);
+        var declare = notebook.Scaffold.Cells[1];
+        var section = await SectionAsync(notebook, declare);
+        var pclass = Field(section, "columns/id/pclass");
+
+        // Whole numbers, a category or words can name a row; a number or a moment is measured, and is offered no switch.
+        Assert.Equal(PropertyFieldType.Toggle, pclass.FieldType);
+        Assert.Equal("pclass names each row", pclass.DisplayName);
+        Assert.False((bool)pclass.CurrentValue!);
+        Assert.Equal(["columns/id/survived", "columns/id/pclass"], section.Fields.Where(field => field.Name.StartsWith("columns/id/", StringComparison.Ordinal)).Select(field => field.Name));
+
+        await ChangeAsync(notebook, declare, "columns/id/pclass", true);
+
+        Assert.True(((DeclareStep)Step(declare)).Columns.Single(column => column.Name == "pclass").Id);
+        Assert.True((bool)Field(await SectionAsync(notebook, declare), "columns/id/pclass").CurrentValue!);
+
+        var before = declare.Source;
+
+        await ChangeAsync(notebook, declare, "columns/id/survived", true);
+
+        Assert.Equal(before, declare.Source);
+        Assert.Contains("both said to be the id", (await SectionAsync(notebook, declare)).Description, StringComparison.Ordinal);
+
+        await ChangeAsync(notebook, declare, "columns/id/sex", true);
+
+        Assert.Equal(before, declare.Source);
+        Assert.Contains("'sex' is not taken", (await SectionAsync(notebook, declare)).Description, StringComparison.Ordinal);
+
+        await ChangeAsync(notebook, declare, "columns/id/pclass", false);
+
+        Assert.DoesNotContain(((DeclareStep)Step(declare)).Columns, column => column.Id);
+    }
+
+    [Fact]
+    public async Task AJoinsBlock_DrawsBothFiles_TheColumnsItIsMadeOn_AndWhatBecomesOfAnUnmatchedRow()
+    {
+        await using var notebook = await NotebookAsync(
+            """{"step": "read.join", "left": {"kind": "csv", "path": "planned.csv"}, "right": {"kind": "csv", "path": "arrived.csv"}, "on": ["Flock"], "unmatched": "drop"}""");
+        var join = notebook.Scaffold.Cells[0];
+        var section = await SectionAsync(notebook, join);
+
+        Assert.Equal("csv", Field(section, "left/0").CurrentValue);
+        Assert.Equal("planned.csv", Field(section, "left/0/path").CurrentValue);
+        Assert.Equal("arrived.csv", Field(section, "right/0/path").CurrentValue);
+        Assert.Equal("""["Flock"]""", Field(section, "on").CurrentValue);
+        Assert.Equal("drop", Field(section, "unmatched").CurrentValue);
+
+        await ChangeAsync(notebook, join, "right/0/path", "landed.csv");
+        await ChangeAsync(notebook, join, "on", """["Farm", "Flock"]""");
+        await ChangeAsync(notebook, join, "unmatched", "refuse");
+
+        Assert.Equal(new ReadJoinStep("planned.csv", "landed.csv", ["Farm", "Flock"], Unmatched.Refuse), Step(join));
     }
 
     [Fact]
@@ -1025,6 +1118,56 @@ public sealed class FormTests : IDisposable
         Assert.False(Claims(step, "layers/nowhere"));
         Assert.False(Claims(step, "stopping/1"));
         Assert.False(Claims(step, "layers", "transformer"));
+    }
+
+    [Fact]
+    public async Task ANumberAndAPartAFileMayLeaveOut_ShowWhatLeavingThemOutMeans_AreWrittenOnceSaid_AndLeftOutAgainWhenTheyMeanThatAgain()
+    {
+        // A network's schedule and the norm its gradients are clipped to: a block written before either was known says
+        // neither, and is drawn as the optimizer's own rate and no clipping; said, each is written; cleared, or chosen back,
+        // each is left out of the text again.
+        await using var notebook = await NotebookAsync();
+        var cell = notebook.AddBlock(NotebookVerbs.Catalog().ReadStep(NotebookVerbs.Catalog().Describe("learn.network").Template).AsBlockText());
+        var section = await SectionAsync(notebook, cell);
+
+        Assert.DoesNotContain("schedule", cell.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("clip", cell.Source, StringComparison.Ordinal);
+        Assert.Equal("constant", Field(section, "schedule/0").CurrentValue);
+        Assert.Equal("0", Field(section, "clip").CurrentValue);
+
+        await ChangeAsync(notebook, cell, "clip", "0.5");
+        await ChangeAsync(notebook, cell, "schedule/0", "linearWarmup");
+        await ChangeAsync(notebook, cell, "schedule/0/epochs", "3");
+
+        var said = Assert.IsType<LearnNetworkStep>(Step(cell));
+
+        Assert.Equal(0.5, said.Clip);
+        Assert.Equal("linearWarmup", said.Schedule.Kind);
+        Assert.Equal(3, said.Schedule.Whole("epochs"));
+        Assert.Contains("\"clip\": 0.5", cell.Source, StringComparison.Ordinal);
+        Assert.Equal("3", Field(await SectionAsync(notebook, cell), "schedule/0/epochs").CurrentValue);
+
+        await ChangeAsync(notebook, cell, "clip", "");
+        await ChangeAsync(notebook, cell, "schedule/0", "constant");
+
+        Assert.Equal(0, Assert.IsType<LearnNetworkStep>(Step(cell)).Clip);
+        Assert.DoesNotContain("schedule", cell.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("clip", cell.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ASettingOfAPartTheStepLeavesOut_IsWrittenInto_ThePartLeavingItOutMeans()
+    {
+        // A part drawn from what leaving its key out means is changed where it stands: written in, then changed.
+        await using var notebook = await NotebookAsync();
+        var cell = notebook.AddBlock(NotebookVerbs.Catalog().ReadStep(NotebookVerbs.Catalog().Describe("learn.network").Template).AsBlockText());
+        var step = Step(cell);
+        var schedule = NotebookVerbs.Catalog().Describe(step.Verb).Parameters.OfType<PartsParameter>().Single(parameter => parameter.Key == "schedule");
+        var edit = new FormEdit("schedule/0/every", FieldValue.Of("4"), FormScope.Unknown, step);
+
+        Assert.False(schedule.Accept(edit));
+        Assert.Equal("""{"kind":"constant"}""", edit.Json["schedule"]!.ToJsonString());
+        Assert.False(schedule.Accept(new FormEdit("schedule/0", FieldValue.Of("plateau"), FormScope.Unknown, step)));
     }
 
     // Whether some kind of the step claims a field, as the form asks before it writes a change.

@@ -55,6 +55,11 @@ public static class CompiledNetworkExtensions
                 throw new InvalidOperationException("This pipeline names no answer, so there is nothing to train a network on: declare its output.");
             }
 
+            if (compiled.Loss is EarthMoversDistance distance)
+            {
+                ThrowIfNotAlongItsOrder(distance, prepared.Declaration.Output);
+            }
+
             var train = prepared.Batch(Part.Train, TrainedNetwork.FeatureNeeds);
             var validation = prepared.Batch(Part.Validation, TrainedNetwork.FeatureNeeds);
             var history = compiled.Fit(Handed(train, prepared), validation.RowCount > 0 ? Handed(validation, prepared) : null, options);
@@ -70,6 +75,33 @@ public static class CompiledNetworkExtensions
                 History = history,
                 Measures = measures,
             };
+        }
+    }
+
+    // A distance along an order means something only of answers in one, and takes what is left of a whole for what it is only
+    // when the output makes it: either is refused before anything is trained.
+    private static void ThrowIfNotAlongItsOrder(EarthMoversDistance distance, INamesTheAnswer output)
+    {
+        if (!output.IsOrdered)
+        {
+            throw new InvalidOperationException(
+                $"The loss '{EarthMoversDistance.Name}' measures how far the shares lie from the answer's along the order of the bands, and the answers '{output.Verb}' names "
+                + "are no shares in an order: declare them with 'target.distribution' and 'ordered': true, or judge them by another loss.");
+        }
+
+        var left = output is DistributionStep { Remainder: { } remainder } ? remainder : null;
+
+        if (left is not null && !distance.Remainder)
+        {
+            throw new InvalidOperationException(
+                $"The output makes '{left}', what is left of the whole, which stands outside the order of the bands, and this loss takes it for one more band: "
+                + "compile with new EarthMoversDistance(remainder: true).");
+        }
+
+        if (left is null && distance.Remainder)
+        {
+            throw new InvalidOperationException(
+                $"This loss takes the last answer for what is left of the whole, and '{output.Verb}' makes no such answer: compile with new EarthMoversDistance().");
         }
     }
 

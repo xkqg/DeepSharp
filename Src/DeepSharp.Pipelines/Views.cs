@@ -106,11 +106,11 @@ internal readonly record struct ViewedDeclaration(IReadOnlyList<string> Answers,
     /// <summary>What a declaration says of its answers, its order and the rows it measures on.</summary>
     /// <param name="declaration">The declaration.</param>
     /// <returns>
-    /// Its answers, unless its output makes them from later rows; the columns its rows are ordered or divided by; and the
+    /// The answers its rows bring, none an output makes; the columns its rows are ordered or divided by; and the
     /// training rows when it declares a split, the undivided ones when it does not.
     /// </returns>
     public static ViewedDeclaration Of(PipelineDeclaration declaration) => new(
-        declaration.Output is { MakesItsAnswer: false } output ? output.Answers : [],
+        declaration.Output?.Brought() ?? [],
         [.. declaration.Steps.OfType<IOrdersRows>().SelectMany(order => order.OrderedBy), .. declaration.Steps.OfType<IDividesInTime>().Select(split => split.Column)],
         declaration.SplitAt >= 0 ? Standing.Train : Standing.Undivided);
 }

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 
 namespace DeepSharp.Learners.Networks;
@@ -73,6 +74,8 @@ public sealed class NetworkDeclaration
     private PartDeclaration _optimizer;
     private PartDeclaration _loss;
     private PartDeclaration _stopping;
+    private PartDeclaration _schedule = NetworkWords.Schedules[0].Declared();
+    private double _clip;
     private string _engine = LearnNetworkStep.LightEngine;
     private int _seed = 20260929;
     private int _epochs = 100;
@@ -153,6 +156,91 @@ public sealed class NetworkDeclaration
         return this;
     }
 
+    /// <summary>
+    /// Moves the network's numbers as Adam does, every number shrunk towards nought before its step, apart from its gradient:
+    /// PyTorch's AdamW.
+    /// </summary>
+    /// <param name="rate">How far one step moves them; a thousandth, unless said.</param>
+    /// <param name="weightDecay">How far every number is shrunk at each step, as a share of the step's rate; a hundredth, unless said.</param>
+    /// <param name="betas">How much of each running mean carries on; nine tenths and 0.999, unless said.</param>
+    /// <param name="epsilon">The small number added so nothing is divided by nought; a hundred-millionth, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>
+    /// The numbers left unsaid are PyTorch's in both vocabularies. Keras's AdamW decays the same way and leaves a decay of
+    /// 0.004 and an epsilon of a ten-millionth unsaid; a declaration in Keras's words that wants those names them.
+    /// </remarks>
+    public NetworkDeclaration AdamW(double rate = 0.001, double weightDecay = 0.01, Betas? betas = null, double epsilon = 1e-8)
+    {
+        var said = betas ?? new Betas(0.9, 0.999);
+
+        _optimizer = new PartDeclaration("adamw", [
+            new PartSetting("rate", PartValue.Of(rate)),
+            new PartSetting("firstMoment", PartValue.Of(said.First)),
+            new PartSetting("secondMoment", PartValue.Of(said.Second)),
+            new PartSetting("epsilon", PartValue.Of(epsilon)),
+            new PartSetting("weightDecay", PartValue.Of(weightDecay)),
+        ]);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Moves the network's numbers by their gradients over the root of a running mean of the squares of their gradients:
+    /// PyTorch's RMSprop. Declared in PyTorch's words only.
+    /// </summary>
+    /// <param name="rate">How far one step moves them; a hundredth, unless said.</param>
+    /// <param name="alpha">How much of the running mean of the squares carries on; 0.99, unless said.</param>
+    /// <param name="momentum">How much of the last step carries into the next; none, unless said.</param>
+    /// <param name="epsilon">The small number added to the root so nothing is divided by nought; a hundred-millionth, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="NotSupportedException">
+    /// The network is declared in Keras's words: Keras's RMSprop adds its epsilon under the root and carries the rate in its
+    /// momentum, so its words would name an optimizer this library does not run.
+    /// </exception>
+    public NetworkDeclaration RmsProp(double rate = 0.01, double alpha = 0.99, double momentum = 0, double epsilon = 1e-8)
+    {
+        RequirePyTorchsWords("RMSprop", "RmsProp");
+
+        _optimizer = new PartDeclaration("rmsprop", [
+            new PartSetting("rate", PartValue.Of(rate)),
+            new PartSetting("alpha", PartValue.Of(alpha)),
+            new PartSetting("epsilon", PartValue.Of(epsilon)),
+            new PartSetting("momentum", PartValue.Of(momentum)),
+        ]);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Moves the network's numbers as Adam does, with Nesterov's momentum warmed up over the steps: PyTorch's NAdam. Declared
+    /// in PyTorch's words only.
+    /// </summary>
+    /// <param name="rate">How far one step moves them; two thousandths, unless said.</param>
+    /// <param name="betas">How much of each running mean carries on; nine tenths and 0.999, unless said.</param>
+    /// <param name="momentumDecay">How fast the momentum warms up over the steps; four thousandths, unless said.</param>
+    /// <param name="epsilon">The small number added so nothing is divided by nought; a hundred-millionth, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="NotSupportedException">
+    /// The network is declared in Keras's words: Keras's Nadam holds its momentum's decay fixed and leaves other numbers
+    /// unsaid, so its words would name an optimizer this library does not run.
+    /// </exception>
+    public NetworkDeclaration Nadam(double rate = 0.002, Betas? betas = null, double momentumDecay = 0.004, double epsilon = 1e-8)
+    {
+        RequirePyTorchsWords("Nadam", "Nadam");
+
+        var said = betas ?? new Betas(0.9, 0.999);
+
+        _optimizer = new PartDeclaration("nadam", [
+            new PartSetting("rate", PartValue.Of(rate)),
+            new PartSetting("firstMoment", PartValue.Of(said.First)),
+            new PartSetting("secondMoment", PartValue.Of(said.Second)),
+            new PartSetting("epsilon", PartValue.Of(epsilon)),
+            new PartSetting("momentumDecay", PartValue.Of(momentumDecay)),
+        ]);
+
+        return this;
+    }
+
     /// <summary>Judges the answers by the mean of their squared differences: an answer that is an amount.</summary>
     /// <returns>The declaration.</returns>
     public NetworkDeclaration MeanSquaredError() => Judged("meanSquaredError");
@@ -164,6 +252,11 @@ public sealed class NetworkDeclaration
     /// <summary>Judges an answer that is a chance, read through a sigmoid.</summary>
     /// <returns>The declaration.</returns>
     public NetworkDeclaration BinaryCrossEntropy() => Judged("binaryCrossEntropy");
+
+    /// <summary>Judges an answer of shares in an order by how far its shares have to move along the order, read through a softmax.</summary>
+    /// <returns>The declaration.</returns>
+    /// <remarks>Only an output whose answers are in an order can mean it: a distribution said to be ordered.</remarks>
+    public NetworkDeclaration EarthMoversDistance() => Judged("earthMoversDistance");
 
     /// <summary>How the run goes: the number every draw is worked out from, how many passes, and how many rows a step.</summary>
     /// <param name="seed">The number every random draw of the run is worked out from.</param>
@@ -195,6 +288,57 @@ public sealed class NetworkDeclaration
         return this;
     }
 
+    /// <summary>Multiplies the rate by a factor every so many epochs: PyTorch's StepLR.</summary>
+    /// <param name="every">How many epochs pass between two falls.</param>
+    /// <param name="factor">What the rate is multiplied by at each fall; a tenth, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>One schedule a declaration: the last that is said is the one written.</remarks>
+    public NetworkDeclaration StepDecay(int every, double factor = 0.1) =>
+        Scheduled("stepDecay", new PartSetting("every", PartValue.Of(every)), new PartSetting("factor", PartValue.Of(factor)));
+
+    /// <summary>Multiplies the rate by a factor every epoch: PyTorch's ExponentialLR.</summary>
+    /// <param name="factor">What the rate is multiplied by from one epoch to the next.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>One schedule a declaration: the last that is said is the one written.</remarks>
+    public NetworkDeclaration ExponentialDecay(double factor) => Scheduled("exponentialDecay", new PartSetting("factor", PartValue.Of(factor)));
+
+    /// <summary>Lowers the rate along half a cosine to its least over so many epochs: PyTorch's CosineAnnealingLR.</summary>
+    /// <param name="epochs">How many epochs the fall takes.</param>
+    /// <param name="minimum">The least rate, reached at the last of them; nought, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>One schedule a declaration: the last that is said is the one written.</remarks>
+    public NetworkDeclaration CosineDecay(int epochs, double minimum = 0) =>
+        Scheduled("cosineDecay", new PartSetting("epochs", PartValue.Of(epochs)), new PartSetting("minimum", PartValue.Of(minimum)));
+
+    /// <summary>
+    /// Warms the rate up in a straight line from a share of itself to the whole of it over so many epochs, and holds it after:
+    /// PyTorch's LinearLR.
+    /// </summary>
+    /// <param name="epochs">How many epochs the warm-up takes.</param>
+    /// <param name="start">The share of the rate the first epoch takes, above nought and at most one; a third, unless said, as PyTorch leaves it.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>
+    /// One schedule a declaration: the last that is said is the one written, so a warm-up declared here hands over to the
+    /// optimizer's own rate. A warm-up that hands over to a decay is written as code, as a <c>LinearWarmup</c> holding the
+    /// schedule that follows it.
+    /// </remarks>
+    public NetworkDeclaration WarmUp(int epochs, double start = 1.0 / 3) =>
+        Scheduled("linearWarmup", new PartSetting("epochs", PartValue.Of(epochs)), new PartSetting("start", PartValue.Of(start)));
+
+    /// <summary>
+    /// Clips every step's gradients to the given norm together before they move the network, as PyTorch's
+    /// <c>clip_grad_norm_</c> clips them.
+    /// </summary>
+    /// <param name="norm">The most norm the gradients may have together.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The norm is not a number above nought.</exception>
+    public NetworkDeclaration ClipGradients(double norm)
+    {
+        _clip = new GradientClip(norm).MaxNorm;
+
+        return this;
+    }
+
     /// <summary>Runs on the engine that goes by this name.</summary>
     /// <param name="engine">The engine's name, as the application gives it — and with it, the device it works on.</param>
     /// <returns>The declaration.</returns>
@@ -208,6 +352,8 @@ public sealed class NetworkDeclaration
     // The step this declaration stands as, held to every rule a step written by hand is held to.
     internal LearnNetworkStep Step() => new(_layers, _optimizer, _loss)
     {
+        Schedule = _schedule,
+        Clip = _clip,
         Stopping = _stopping,
         Engine = _engine,
         Seed = _seed,
@@ -227,5 +373,23 @@ public sealed class NetworkDeclaration
         _loss = new PartDeclaration(kind, []);
 
         return this;
+    }
+
+    private NetworkDeclaration Scheduled(string kind, params PartSetting[] settings)
+    {
+        _schedule = new PartDeclaration(kind, settings);
+
+        return this;
+    }
+
+    // An optimizer whose Keras namesake runs other arithmetic is declared in PyTorch's words only, and refused in Keras's
+    // rather than written down as an optimizer they would name otherwise.
+    private void RequirePyTorchsWords(string keras, string door)
+    {
+        if (_words == Vocabularies.Keras)
+        {
+            throw new NotSupportedException(
+                $"Keras's {keras} works its steps out otherwise than PyTorch's, which this library runs, so a network declared in Keras's words cannot say it: declare it in PyTorch's, .WithTorch(network => network.{door}(…)).");
+        }
     }
 }

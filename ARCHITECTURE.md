@@ -336,8 +336,8 @@ since it brings HTTP, retries and a rate limiter that a project serving a traine
 - **The path of the landing is the window.** The file is `BTCEUR-1d-20240101T000000Z-20250101T000000Z.csv`, in the folder
   the pipeline reads from, with its record beside it as `….manifest.json`. The name has no colon and spells a month `1mo`,
   because `1m` and `1M` are one name to a file system that does not tell the cases apart. What a saved pipeline names
-  of the window is therefore the relative path in a plain `read.csv` step: no verb was added and the file stays at
-  version 7. A step that lands would be a step no replay ever opens, and a version 8 closes a door behind every file
+  of the window is therefore the relative path in a plain `read.csv` step: no verb was added, and the file did not move
+  for it. A step that lands would be a step no replay ever opens, and a new version closes a door behind every file
   written before it.
 - **The move of the file is the commit.** The candles are written whole under a name of their own and moved into place
   without replacing anything, so of two landings of one window racing each other one stands and the other either finds
@@ -394,6 +394,34 @@ since it brings HTTP, retries and a rate limiter that a project serving a traine
   and no payload of Binance's is in the repository, since the data comes under terms of its own. The record names those
   terms and the host the candles came from.
 
+### A join is a source that reads two files
+
+Planned flocks in one file and the flocks that arrived in another were joined by hand before the pipeline began, so the
+pipeline's file said nothing of it: which files, on which columns, and what became of a row without a partner.
+`read.join` is a source — the one source a pipeline has — that reads two comma-separated files and gives the rows of the
+left one, each beside the row of the right one its key names. Each file is read as `read.csv` reads one. The key is the
+exact text of the columns `on` names, with the spaces around it taken off, compared character by character: no case is
+folded and no number is read, so `07` is not `7`, which is the reading a row's own key gives a cell. A key cell that is
+empty is a gap and matches nothing.
+
+The join is many to one. A left key may stand on many rows and each takes the same partner, but a key the right file holds
+twice is refused before any left row is matched, naming the key and its rows: a left row cannot have two partners, and a
+join that fanned out would put the rows of one flock into more than one part. A column both files have beside the keys is
+refused by name rather than renamed, because only the person who wrote the files knows which of the two it is. What
+becomes of a left row with no partner is said and never assumed: `unmatched` is required and has no default, `refuse`
+stops the run naming the row and its key, and `drop` leaves the row out and counts it, as `rows.unmatched` beside the rows
+the split gave each part.
+
+The rows are the left file's, in its order, and a joined row is known as every row is, by every cell it holds, the right
+file's included. Rows served later arrive already joined: rows handed in take the place of the source for every source, so
+the join is not made again for them, and a served row that lacks a column the right file brings is refused saying so. No
+course has a place for a join, since both start from one file. A source that reads many files is a capability of its own,
+`IReadsFiles`, beside the one-file `IReadsAFile`, because the notebook keeps a view of the rows by a fingerprint of the
+bytes they were read from: a join taken for a one-file source would fingerprint one of its two files and show a stale view
+when the other changed. The fingerprint of several is a digest of each file's own, in order, and a source of one file keeps
+the fingerprint it had. Only comma-separated files are joined, because a step cannot nest another package's source; a
+file of another format is converted to a comma-separated one first.
+
 ### The evidence is part of the declaration
 
 A run also declares what it must produce as proof: which measures are computed — root-mean-square error,
@@ -416,11 +444,15 @@ a pipeline that names no answer, or never divides its rows, has nothing to measu
 written. It measures the rows a model learns from, is chosen on and is tested on, and no others. A measure that counts
 classes — accuracy, precision, recall, the confusion matrix — is refused where it is written against an output whose
 answers are amounts, a distribution's shares or a return; against one whose answers can be classes, a row whose answer
-is neither nought nor one is refused when it is measured, naming the row as it was read. `PreparedData.Measure` takes
+is neither nought nor one is refused when it is measured, naming the row as it was read. The measures that compare
+shares — `emd`, `kl` and `rps` — are refused the other way round: against any output that is not a distribution, and
+`emd` and `rps`, which follow an order, against one that does not say its bands are in one. `PreparedData.Measure` takes
 what a model predicted for each part and gives the measures in the answer's own units — the predictions and the
 answers both come back through the way back, because in normalised units every error is small and every model looks
 excellent — each beside the same measure of predicting, for every row, the average of the training rows' answers, and
-each by scikit-learn's definition, checked against it to a millionth of a millionth. Predictions are measured only when
+the measures of amounts and of classes by scikit-learn's definition, checked against it to a millionth of a millionth, and
+the three that compare shares by scipy's and Weigel's, checked against scipy and xskillscore (see "A distribution can be
+in an order"). Predictions are measured only when
 they are for the part's rows in the order the part hands them over, which the rows' keys are how to tell: answered in
 any other order, 346 of 349 price rows and 510 of 512 days of bikes were measured against another row's answer, and
 nothing in the numbers said so.
@@ -451,6 +483,34 @@ with such a method as HTML, finding the method by its name, so it does not matte
 loaded from; a C# cell that ends with the report shows it, and the notebook's report block draws the same rendering once
 the cell that trained the model hands its predictions back. A formatter of DeepSharp's own was the other way to show it,
 and it does not work: Verso picks a formatter by the types it names, and a cell's types are not the notebook's.
+
+### One correlation, worked out once
+
+A correlation was worked out by whatever drew it: the heatmap by one routine, the notebook's table by the same line again,
+and the profile by none — so a pair of columns could have two coefficients, and a caller who wanted the numbers had nothing
+to ask for. `CorrelationInput.Correlate()` now gives a `CorrelationMatrix`, worked out once from the rows the correlation
+was kept over — the complete ones, listwise, said with how many — in two kinds. Pearson's is the usual. Spearman's is
+Pearson's of the ranks, equal values sharing the average of the places they span, which is the one tie rule that gives
+scipy's number; the shortcut formula and the other tie rules give other numbers, measured. A pair with no coefficient — a
+column that never changes — is not a number, never nought, because nought is a measurement: the drawing library's own
+routine said nought for it, and drew it as one. The heatmap, the notebook's table and the profile's alert read these
+numbers and work out none of their own. No p-value is given: the usual one is trusted only for very many rows, and a
+coefficient with a number to hide behind is read as more than it says. The pipeline carries this arithmetic itself
+because it references no drawing or statistics library, and the profile needs the numbers.
+
+`evidence.correlation` may name its `coefficient`, `pearson` unless said and then not written, or `spearman`.
+`evidence.profile` may name `rankAbove`: two columns of numbers that follow one another's order, with a Spearman
+coefficient above it in size over the rows that hold a number in both, are flagged. A column that follows another's order
+without repeating its values is not found by the alert for columns that go with each other value for value, and a model is
+handed the same thing twice. The alert is pairwise, so a gap in an unrelated column loses no row, and it says how many
+rows it was worked out from. The threshold has no default: the coefficient above which two columns are too alike is put
+anywhere from 0.4 to 0.85 in published practice, and a number chosen for a person is a decision made for them. An alert is
+one for each column, with its strongest earlier partner, since each answers by leaving the same column out.
+
+A heatmap is drawn on the whole of its scale, from minus one to one, whatever the coefficients drawn happen to span. That
+is the drawing library's centred normalizer with its limits at minus one and one; the class this package once carried for
+it was never public, and making it public would have put a drawing-library type into the package's own surface.
+`CorrelationMatrix.Heatmap()` draws a matrix without the pipeline that made it. A cell with no coefficient has no colour.
 
 ### The rule that gives it meaning
 
@@ -556,7 +616,7 @@ builder existed.
 
 ```
 {
-  "version": 7,
+  "version": 8,
   "declaration": [ { "step": "read.csv", "path": "titanic.csv" }, … ],
   "fitted": [
     { "step": "split.stratified", "prefix": "9e27e6…",
@@ -730,6 +790,20 @@ understand, and that library now names the newer version instead of stumbling ov
 word: new in the third version, so a file that says it was written against the second and names one was written by no
 library that meant it, and it is refused by name, as the schema refuses it.
 
+The eighth version is that rule applied once. It adds three verbs — a source that reads two files, an output of free
+numbers, a place on a circle of any length — and the optional keys with which a pipeline says its bands are in an order,
+what is left of its whole, which rows are the test rows whatever the seed, which column is the id, which coefficient a
+correlation shows, how alike in order two columns may be, how a rate changes and how far gradients may go. A file written
+against the seventh still reads and means what it meant: every new key is optional, means what the file meant by not
+having it, and is not written when it holds that meaning, so a pipeline that says none of them writes what it wrote
+before, but for its number. 0.8.0 refuses a file of the eighth whole, naming the version, as it refuses any newer file;
+the files in the repository that the published 0.8.0 packages wrote are read, written again and served by every release
+after it. The network's file has a number of its own and a rule of its own: a part is written as the oldest version that
+says what it holds. The training part of a checkpoint whose gradients were clipped is the third, which 0.8.0 refuses by
+its number; everything else — a network, a checkpoint of a run that clipped nothing — is still the second, which 0.8.0
+reads. A new kind of loss or optimizer needs no new number: it is a name, and a library that does not know the name
+refuses it by name.
+
 ### The share you never write down
 
 Three numbers that have to add to one is a rule a caller can break, and the way it breaks is quiet: shares
@@ -804,6 +878,27 @@ array than it was given has dropped its warm-up rows, so the adapter re-aligns t
 offset. Silently accepting the short array shifts every value onto the wrong row, which changes nothing
 visible and corrupts everything afterwards. Indicators live in their own package, since a project that is
 not looking at market data has no use for the list.
+
+### A place on a circle is a number over a length
+
+`feature.cyclical` puts a moment on a circle by a period — the hour of a day, the day of a week or of a month, the month
+of a year — as a sine and a cosine, so December sits beside January. Two periods more are there: the day of the year,
+over the length of its own year, 365 or 366, so the last day of a leap year is the last place on its circle, and the
+season, a coarsening of the month. One place rule serves `feature.cyclical`, `feature.timeParts` and the new verb, so a
+moment's season is the same whichever asks.
+
+A quantity that is not a moment — an age in days around a week, a counter around twenty-four — has the same shape with a
+length the person declares. `feature.cycle` takes a column of numbers, a `length` above nought and a form, and writes
+`{column}_cycle{length}_sin` and `…_cos`. The length is said and never taken from the data's largest value, because the
+largest value seen is not a period, and a circle that shrinks when a day is missing is not the same circle. It is a verb
+of its own and not a flag on `feature.cyclical` for the reason `Target` and `Ahead` are two verbs: it is a different
+question, and a file that carried a length would be one the old verb meant two things by. The rule that keeps a pipeline
+from putting a moment on a circle twice recognises both through one capability, `IPlacesOnACircle`.
+
+A weekday written as a number, and a season, are refused where they are declared. `TimePartsAsNumbers` of `DayOfWeek`
+used to be accepted, written to a file and read back, and failed only when the pipeline ran, parsing the word 'sunday' as
+a number — there is no number a weekday has, because zero is Sunday in one calendar and Monday in another. The refusal
+names `Cyclical` and categories, which are the right doors.
 
 ### Normalising is a family, and two of its choices are declared
 
@@ -1215,6 +1310,53 @@ otherwise be answered with another row's numbers. What is kept as it was read is
 each answer comes back to, and every column a step on the way reads. Against those values the run checks every
 answer's way back before anything is handed over.
 
+### A distribution can be in an order, and a whole can have what is left over
+
+A flock weighed in seventy bands is one answer of seventy shares, and the bands have an order a share of a whole does not
+need: a prediction one band off is nearly right and one ten bands off is not. `target.distribution` may say `ordered`,
+false unless said and then not written. The output says it through a default member of the capability that names an
+answer, `IsOrdered`, as `AnswersCanBeClasses` is said; a measure or a loss that follows an order asks the output for it, and
+is refused against one that does not say so — a measure where the report is written, a loss before anything is trained.
+
+The measures that compare shares are `emd`, `kl` and `rps`. Each row of the answers and of the prediction is divided by its
+own total, so a distribution that comes back as counts is compared as shares, and the two are compared row by row and the
+rows averaged, beside the same measure of predicting the training rows' average shares. `emd` is the earth mover's
+distance — scipy's Wasserstein distance with the places of the bands as positions — in bands: how many bands the predicted
+shares have to move to be the answer's. A band's width is not in the declaration, so it is not a gram. `rps` is the ranked
+probability score, the squared distance between the cumulative shares added up over the thresholds. `kl` is the
+Kullback–Leibler divergence from the prediction to the answer, in nats, with no epsilon added: a prediction of nothing where
+the answer holds something is infinite, and is reported as infinite and drawn as a bar of nought with a title saying why.
+The continuous ranked probability score is not a measure here: that of a histogram is the Cramér distance and a term whose
+floor is above nought, so a perfect prediction would not score nought, and a name that promised it would mislead. R², the
+root mean square error and the mean absolute error still apply to a distribution, but they are averaged a column at a time
+and mislead over many bands: a prediction one band off scores an R² of 0.21 over four hundred and fifty of them.
+
+Training by the same distance is a loss, `earthMoversDistance`: the softmax of the outputs, the L1 distance of the
+cumulative shares added up over every threshold but the last, where both are one, and averaged over the batch. It uses only
+what an engine already has — the cumulative sum is a product with a triangle of ones, and the size of a number is the
+rectified number plus the rectified opposite, whose gradient at nought is nought, as PyTorch's is, so a prediction that
+equals its answer has none. The squared form, Cramér's, was measured and is not built: on synthetic flocks it ended three
+to five grams behind the cross-entropy it was meant to beat, with t-values of twelve to sixteen, and the L1 form less than
+two behind, which is inside the noise of a split at the better rate.
+
+A flock that arrives with fewer birds than were planned does not add up to the planned flock, and the planned flock is what
+a served row knows. `remainder` names one more answer, after the bands: what is left of the whole once the bands are
+counted. With it the output makes every answer from the counts as they were read, each band's count and what is left over
+how many there were, so the bands hold counts where it stands and nothing above it changes them; the shares then sum to
+one, and come back as birds that add up to the planned flock. A flock that arrives with more birds than were planned
+leaves less than nothing, which is no share of anything, and is refused, naming its row. What is left stands outside the
+order of the bands: the measures that follow the order compare the bands alone, the loss compares the bands as shares of
+what they hold together and adds the distance of the remainder's share, so a prediction is trained on the shape of the
+bands and on how much of the whole they hold, and moving a share into what is left is never taken for moving it along the
+order. The remainder is derived by the step, not read from a column, because the data has no such column.
+
+### An answer can be several free numbers
+
+`target.numbers` names two columns or more that are each any finite number: amounts that are not shares of a whole and not
+classes — a weight and an age at once. It is not a distribution and not labels, so the measures that count classes and those
+that compare shares are refused for it, its answers come back in their own units like those of `target`, and the rule that
+an answer names at least two columns is the column parameter's, written once for the three outputs that share it.
+
 ### A step says what it does by what it implements
 
 `IPipelineStep` stays narrow — a verb, how to write itself down, and which columns it reads, which it says
@@ -1266,6 +1408,30 @@ same where it stands — its columns, as they are there — because a repeated r
 meets again after learning it, which reads as skill and is not, and two records that differ only in a column the schema
 left out are that to a model. Both are the same digest of cells with their column names, never a string the cells are
 joined into, which two different rows can share.
+
+### An id is carried with the row and never learned
+
+Every column that is not an answer becomes a feature, which is the right default and the wrong one for a flock number: a
+whole number is read as a quantity, and a category is encoded into a column for each flock. A column the schema says is the
+`id` — at most one, of whole numbers, categories or text, and never an answer — is carried with every row as it was read
+and is nothing else. It is not a feature and an encoder does not learn it; a profile or a warm-up that is not told its
+columns leaves it out. It reaches the end of the pipeline as `Ids` on the batch of each part and on a served batch, in the
+order of the rows, as text, and a trained network's predictions carry them too, so what a team keeps beside a row is how a
+prediction finds it again. A gap in the id of a row that reaches the end is refused. The part is optional and not written
+when it is false, and an older reader refuses it by name. The row's own key is still what identifies a row to the library;
+the id is what identifies it to the person.
+
+### The test rows can be dealt apart from the rest
+
+A split at random ranks each row by a digest of the seed and what the row says. Move the seed and every part is dealt
+again, the test part included: two seeds shared 22 of a hundred and fifty test flocks. For one split that is what a seed is
+for. For a search that tries many splits to learn how much a result owes to the luck of the deal it is the flaw — the best
+of many candidates is chosen on rows that another split learned from, and the number reported for it is flattered, by a
+third to nearly a whole standard error of one split in a simulation of five to a hundred equal candidates. `testSeed` is an
+optional number on `split.atRandom`. Given, the rows to be measured on and the rows kept to predict on are dealt by it
+alone and are the same whatever the seed is, and the seed deals the rest into training and validation. Left out it is not
+written and the seed deals everything as it did; given equal to the seed it deals exactly as no test seed does, because a
+row's rank does not depend on the rows around it. Rows that are one record stay together, as they did.
 
 ### The data after any step, standing where the split puts it
 
@@ -2264,15 +2430,31 @@ as it was written. The loss is always named, never assumed, and each says which 
 of a whole, answers between nought and one — so a row it could not have meant is refused, named, before anything is
 trained on it.
 
+A loss can follow an order too: `earthMoversDistance` judges shares of a whole along the order of their columns, and is
+described with the answers it judges, under "A distribution can be in an order".
+
 ### Optimizers and schedules as PyTorch writes them
 
-`Sgd`, with momentum, and `Adam` follow PyTorch's formulas in PyTorch's order, matched step by step. Weight decay,
-Nesterov momentum, AMSGrad and AdamW are not built: each does nothing by default in PyTorch, and nothing asks for one
-yet. An optimizer keeps what it remembers of each parameter by the parameter itself, and writes it by path under
-PyTorch's names — `momentum_buffer`; `exp_avg`, `exp_avg_sq` and the steps — so a checkpoint carries it. A
-learning-rate schedule is worked out from the epoch in closed form — constant, falling in steps, exponential, a cosine
-— and asked once an epoch. None watches the validation loss: the rows a model is chosen on would then shape the weights
-it is chosen for.
+`Sgd`, with momentum, `Adam`, `AdamW`, `RmsProp` and `Nadam` follow PyTorch's formulas in PyTorch's order, matched step by
+step against torch 2.14.1 on every engine. AdamW decays the numbers apart from the gradient, as PyTorch's does: a number is
+shrunk by the rate times the decay before Adam's step, which is not the L2 decay that adds the decay to the gradient — that
+one, Nesterov momentum for Sgd and AMSGrad are not built: each does nothing by default in PyTorch, and nothing asks for
+one. Adam, AdamW and Nadam work their running means out in one routine, so the arithmetic is written once and Adam's
+bytes did not move. An optimizer keeps what it remembers of each parameter by the parameter itself, and writes it by path
+under PyTorch's names — `momentum_buffer`; `exp_avg`, `exp_avg_sq`, `square_avg` and the steps — so a checkpoint carries
+it. Nadam's momentum product is a function of the step count alone, so it is not stored: it is worked out again from the
+steps when a checkpoint is read, and every tensor a checkpoint holds keeps the shape of its parameter. A learning-rate
+schedule is worked out from the epoch in closed form — constant, falling in steps, exponential, a cosine, or a warm-up
+that rises in a straight line from a share of the rate to the whole of it and may hand over to another schedule — and
+asked once an epoch. None watches the validation loss: the rows a model is chosen on would then shape the weights it is
+chosen for. A reduce-on-plateau schedule was asked for and is not built, for that reason.
+
+`Optimizer` is open: the memory of its slots is public and a subclass writes and recalls its own, so an optimizer of
+one's own remembers across a checkpoint file and goes on from it bit for bit, as the shipped ones do. It is registered
+with a `NetworkCatalog` by name as a loss is, and a file that names one a catalog was not taught is refused by name. The
+words a declared `learn.network` is written in are the shipped ones, though: an optimizer or a loss of one's own is the
+code path — a network compiled and fitted by hand — and not a word in a pipeline's file, because a vocabulary a file names
+must be one every reader has.
 
 ### The loop is Keras's fit, and so is its judgement
 
@@ -2286,8 +2468,24 @@ least fall that counts, and the run stops once it has waited as long as its pati
 every slot, the running statistics too. A loss that is not a finite number — a batch's, or an epoch's on the validation
 rows — is refused with where it happened, since training or judging by it would learn nothing.
 
+Gradients can be clipped by their norm together, PyTorch's `clip_grad_norm_`: the norm of the norms of the parameters'
+gradients, each tensor counted once, and when the most norm over that norm plus a millionth is below one every gradient is
+scaled by it. Otherwise the gradients pass untouched, to the last bit, so a clip they never reach changes no run. It is
+worked out on the run's engine through the engine's own arithmetic, between the gradients and the optimizer's step.
+Clipping each value on its own is not built: an exact clamp is not an operation an engine is asked for, and adding one to
+the public tensor seam would break every engine written outside it.
+
+A run can be watched and stopped. `OnEpoch` is handed each epoch as it ends — once judged and its checkpoint kept, before
+the next begins — in order, on the thread that trains, and waited for. `Cancellation` is read before every batch and before
+every look at the validation rows. Neither draws a number, so a run that neither stops is the run without them, to the last
+bit. Cancelling throws an `OperationCanceledException` carrying the token and returns nothing: no history, and no best epoch
+put back. Returning what had been done so far was refused, because it hands a search half a trained network as if it were
+finished. The network holds what the last batch that finished left it and the optimizer the steps it took up to there, so
+fitting it again goes on from there; a checkpoint taken before is as it was taken. A callback that throws abandons the run
+the same way, and its exception reaches the caller as it was thrown.
+
 A checkpoint holds what the run needs to go on — every slot, what the optimizer remembers, how far early stopping had
-got and the epochs so far — and records what the run went under: the seed, the batch size, the early stopping and the
+got and the epochs so far — and records what the run went under: the seed, the batch size, the early stopping, the clip and the
 engine. The seed decides every draw; the batch size decides which rows each step takes, and a dropout's draws are
 counted by the step, so it moves them as surely as the seed does; the early stopping decides where the run ends and
 which weights it ends holding; the engine decides how every step's totals are rounded, and two engines that add up in
@@ -2300,7 +2498,7 @@ holding the hundredth epoch's weights rather than the best's. On another engine 
 from its file on libtorch or on the tests' native engine, after its first, fifth, tenth or twentieth epoch alike, it
 kept the same epoch and ended with weights up to 3.0e−7 from those of the run it was taken of, which the light engine
 goes on to the bit — another run, under the same seed, with nothing to tell the two apart. So a run handed another seed,
-another batch size, other early stopping or another engine than its checkpoint records is refused, naming each
+another batch size, other early stopping, another clip or another engine than its checkpoint records is refused, naming each
 difference, before anything is put back, as is a checkpoint of a network of other slots or other shapes. The engine is
 recorded as it names itself: one that implements `INamesItsVersionAndDevice` with the version of what works its
 arithmetic out and the device it works it out on, since another version or another device rounds otherwise too — the
@@ -2718,6 +2916,10 @@ Adam and PyTorch's differ in their epsilon, so the two doors write different fil
 because they are different runs. A `vocabulary` key would say which library was used to type the model, and nothing
 would read it.
 
+Two keys are optional, and a pipeline that says neither writes what it wrote before: `schedule`, a part from the schedule
+words, and `clip`, a number. Left out they mean a constant rate and no clipping, which is what a run did when the file had
+no such key, and a number that means none — nought for the clip — is not written.
+
 **The engine is a name, and the application says what it stands for.** A declaration that carried an engine object
 could not be a file; one that carried a package name would tie a model to a machine. So the step names an engine —
 `light` unless said — and an application hands that name an engine before the run, through `Engines.Use`. The same
@@ -2729,6 +2931,42 @@ name nothing was given is refused by name rather than falling back to something 
 and trains it — the same `TrainedNetwork` the hand-written door gives, number for number, which a test holds both
 doors to. The pipeline file gains a step and nothing else: a model saved by an earlier release still loads, because a
 network is held to its pipeline by the digest of the text that pipeline carries, and that text is kept verbatim.
+
+### A search chooses by the validation rows and keeps the test rows for the winner
+
+Which learning rate and how many units suit a set of rows is found by trying several networks and keeping the best.
+`Study`, in `DeepSharp.Learners.Networks`, does that by the rule the rest of the library is built on. The pipeline is run
+once for each deal — a division of the rows into training and validation — so what its steps learn is learned from that
+deal's training rows alone and replayed for every candidate trained on it, and a candidate is judged by the mean of its
+validation loss over the deals. The rows to be measured on are never what it chooses by.
+
+A trial is a candidate drawn from a space (`NumberRange`, `LogRange`, `WholeRange`, `Choices`), the network it declares,
+and its score on each deal. The winner leaves the study as a declaration: the `learn.network` step the best trial declared,
+which a pipeline keeps in its file and `pipeline.Train()` trains again. The space is not in the file, because a search is a
+procedure that finds a declaration and not a part of one. The sampler is a seam, `ISampler`, handed the trials that
+finished before it; the one that ships, `RandomSampler`, draws every number from its seed, the dimension's name and the
+trial's place alone, so trial five is the same candidate whether a study has ten trials or a hundred, and a dimension added
+later moves no other. Random search is the baseline a cleverer search has to beat, and in simulation a tree of Parzen
+estimators loses to it at thirty trials; one written elsewhere plugs in behind the seam, and no code of anybody else's is
+carried here. There is no pruner: a loss halfway through a run is not the loss it ends at, and a seam with nothing to prune
+by is a seam shaped around one implementation.
+
+Three decisions are in its shape. Trials run one after another and share nothing they change: a network is declared afresh
+for every trial and the engines are filled before the study starts, because one optimizer shared by trials running side by
+side had its memory corrupted, measured. Validation chooses between finished networks and may stop a run, and it never
+feeds a gradient. And the test rows are for the winner alone: with more than one deal, deals that do not share their test
+rows are refused, naming `testSeed`, and a trial keeps no network, so the only networks a study returns — the winner's, one
+for each deal — are the only ones whose report of the test rows anything can read. A study can be watched, by `OnTrial`, and
+stopped by a token, which throws and returns nothing: a study cut short has not found what it set out to find.
+
+`Comparison` is the same question one level up. Whether a change helped — a feature put in, a gap filled another way, a
+split at random against one in time — cannot be read from one division of the rows: the same network scores a few percent
+differently on two divisions, as much as most changes move it, and a paired comparison resolves a gram only over about
+twenty. A comparison trains one network behind two pipelines on each of many deals and reports the differences deal by deal
+with their mean and spread. It gives no verdict, because the raw difference between two splits is not the answer: on
+synthetic flocks a day feature gained seven grams on a split at random and lost ten on a chronological one, while the plain
+difference between the two splits said the chronological was better. A difference read against its own spread, in each use,
+is what shows a feature that knows the future of the rows it is measured on.
 
 ### Charts come from the training loop, not from the caller
 
@@ -2778,9 +3016,22 @@ else: that is borrowing a library, not borrowing a result.
   first unusual model.
 - **A random source the process shares.** Every draw is counted from a seed that is handed in, which is why a network
   described in Keras's words is built once the run's seed is known.
-- **A schedule that watches the validation loss**, and weight decay, Nesterov momentum, AMSGrad and AdamW. The first
-  would let the rows a model is chosen on shape its weights; each of the others does nothing by default in PyTorch, and
-  nothing asks for one yet.
+- **A schedule that watches the validation loss**, and weight decay, Nesterov momentum and AMSGrad. The first
+  would let the rows a model is chosen on shape its weights; it was asked for and is not built, for that reason. Each of
+  the others does nothing by default in PyTorch, and nothing asks for one yet; AdamW's decoupled decay is built.
+- **A clamp of each gradient value.** An exact clamp would be a new member of the public tensor seam, and every engine
+  written outside it would stop compiling; the norm is clipped instead.
+- **A squared cumulative loss, and a score named CRPS.** The first measured behind the cross-entropy it would replace; the
+  second, for a histogram, is not a number that is nought for a perfect prediction.
+- **A pruner, and a search written here that learns from its trials.** A loss halfway through a run is not its loss at the
+  end, and the sampler is a seam so that a cleverer one can be written elsewhere.
+- **A join that guesses.** No case is folded and no number is read in a key, a key the right file holds twice is refused,
+  a left row with no partner is refused or left out and never assumed, and a file that holds a row for each band is
+  pivoted before it is joined and not by the join.
+- **A word in a pipeline's file for a loss or an optimizer of one's own.** A vocabulary a file names must be one every
+  reader has; one's own is code.
+- **A drawing library's type in the package's surface.** The correlation heatmap is drawn on the whole of its scale by the
+  drawing library's own normalizer, and no type of it is made public to do so.
 - **A class label from a prediction.** A network answers a chance or a share; where the line between classes lies is
   a decision about the use. The measures that count classes read a chance of a half or more as the class, as
   scikit-learn's do.

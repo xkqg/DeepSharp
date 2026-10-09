@@ -1,0 +1,63 @@
+{
+  "version": 7,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.8.0.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "Seq",
+          "kind": "integer",
+          "optional": false
+        },
+        {
+          "name": "Animals",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Age",
+          "kind": "number",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "step": "order.by",
+      "columns": [
+        "Seq"
+      ]
+    },
+    {
+      "step": "split.byTime",
+      "column": "Seq",
+      "train": 0.7,
+      "validation": 0.15,
+      "test": 0.15,
+      "predict": 0,
+      "gap": 2
+    },
+    {
+      "step": "target.ahead",
+      "column": "Animals",
+      "ahead": 2,
+      "as": "return"
+    },
+    {
+      "step": "drop.columns",
+      "columns": [
+        "Seq"
+      ]
+    },
+    {
+      "step": "normalise",
+      "column": "Age",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    }
+  ]
+}

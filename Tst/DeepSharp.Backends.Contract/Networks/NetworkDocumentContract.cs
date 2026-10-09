@@ -90,7 +90,7 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
     {
         // 0.4.0 wrote every window's border as the number of rows and columns on each side, in the first version's part.
         var text = Written(new LayerStack(new Conv2D(1, 1, new Window(2, 2) { Padding = 1 }, new RandomStream(9).Draw("initialise:test", 0, 0))), new MeanSquaredError())
-            .Replace($"\"version\": {NetworkDocument.Version}", "\"version\": 1", StringComparison.Ordinal);
+            .Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
 
         var read = Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(text, "network", NetworkCatalog.BuiltIn()).Network);
 
@@ -116,6 +116,26 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
 
         Assert.Contains("\"crossEntropy\"", text, StringComparison.Ordinal);
         Assert.IsType<CrossEntropy>(NetworkDocument.ReadNetwork(text, "network", NetworkCatalog.BuiltIn()).Loss);
+    }
+
+    [Fact]
+    public void TheDistanceAlongAnOrder_IsWrittenWithWhatIsLeftOfTheWhole_OnlyWhenThereIsSuch()
+    {
+        var left = Written(new LayerStack(new Relu()), new EarthMoversDistance(remainder: true));
+        var whole = Written(new LayerStack(new Relu()), new EarthMoversDistance());
+
+        Assert.Contains("\"earthMoversDistance\"", left, StringComparison.Ordinal);
+        Assert.Contains("\"remainder\": true", left, StringComparison.Ordinal);
+        Assert.DoesNotContain("remainder", whole, StringComparison.Ordinal);
+        Assert.True(Assert.IsType<EarthMoversDistance>(NetworkDocument.ReadNetwork(left, "network", NetworkCatalog.BuiltIn()).Loss).Remainder);
+        Assert.False(Assert.IsType<EarthMoversDistance>(NetworkDocument.ReadNetwork(whole, "network", NetworkCatalog.BuiltIn()).Loss).Remainder);
+        Assert.False(Assert.IsType<EarthMoversDistance>(NetworkDocument.ReadNetwork(
+            left.Replace("\"remainder\": true", "\"remainder\": false", StringComparison.Ordinal), "network", NetworkCatalog.BuiltIn()).Loss).Remainder);
+
+        var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadNetwork(
+            left.Replace("\"remainder\": true", "\"remainder\": 3", StringComparison.Ordinal), "network", NetworkCatalog.BuiltIn()));
+
+        Assert.Contains("'remainder' is true or false here", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -193,7 +213,7 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
     {
         var newer = NetworkDocument.Version + 1;
         var text = Written(new LayerStack(new Relu()), new MeanSquaredError())
-            .Replace($"\"version\": {NetworkDocument.Version}", $"\"version\": {newer}", StringComparison.Ordinal);
+            .Replace("\"version\": 2", $"\"version\": {newer}", StringComparison.Ordinal);
 
         var wrong = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadNetwork(text, "network", NetworkCatalog.BuiltIn()));
 
@@ -205,7 +225,8 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
     public void TheNetworksPart_IsWrittenAsItsSecondVersion_AndOneOfTheFirst_IsReadAsSayingNothingOfWhatHeldOneValue()
     {
         // The second version records which features held one value on every training row; the first — 0.4.0's — did not,
-        // and is read as saying nothing of it, which is not the same as saying that none did.
+        // and is read as saying nothing of it, which is not the same as saying that none did. The third says nothing new of a
+        // network, so a network's part is still written as the second, which 0.8.0 reads.
         var text = Written(writer =>
         {
             writer.WritePropertyName("network");
@@ -213,7 +234,7 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         });
         var first = text.Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
 
-        Assert.Equal(2, NetworkDocument.Version);
+        Assert.Equal(3, NetworkDocument.Version);
         Assert.Contains("\"version\": 2", text, StringComparison.Ordinal);
         Assert.Null(NetworkDocument.ReadNetwork(first, "network", NetworkCatalog.BuiltIn()).TrainedOn!.Unvaried);
     }
@@ -249,6 +270,41 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         var wrong = Assert.Throws<InvalidOperationException>(() => Written(network, new MeanSquaredError()));
 
         Assert.Contains("0.weight", wrong.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnOptimizerWrittenOutsideTheLibrary_IsKeptByACheckpoint_NamedByItsFile_AndTheRunGoesOnAsIfItHadNeverStopped()
+    {
+        var straight = Rich();
+        var stopped = Rich();
+        var kept = new List<Checkpoint>();
+
+        straight.Compile(new CountingSteps(0.02), new MeanSquaredError())
+            .Fit(Rows(96), Rows(24, 7), new FitOptions(seed: 5) { Backend = _backend, Epochs = 6, BatchSize = 16 });
+
+        var compiled = stopped.Compile(new CountingSteps(0.02), new MeanSquaredError());
+        compiled.Fit(Rows(96), Rows(24, 7), new FitOptions(seed: 5) { Backend = _backend, Epochs = 3, BatchSize = 16, Checkpoints = new Checkpoints(kept.Add) });
+
+        // An optimizer is named by its file only once it is registered, and a file naming one nobody registered is refused.
+        var text = Checkpointed(compiled, kept[^1]);
+        var known = NetworkCatalog.BuiltIn();
+        var refused = Assert.Throws<NetworkFileException>(() =>
+            NetworkDocument.ReadTraining(text, "training", known, NetworkDocument.ReadNetwork(text, "network", known)));
+
+        Assert.Contains("countingSteps", refused.Message, StringComparison.Ordinal);
+
+        var catalog = NetworkCatalog.BuiltIn().Register<CountingSteps>();
+        var resumed = NetworkDocument.ReadTraining(text, "training", catalog, NetworkDocument.ReadNetwork(text, "network", catalog));
+        var optimizer = Assert.IsType<CountingSteps>(resumed.Compiled.Optimizer);
+        var weight = resumed.Compiled.Network.Parameters().First();
+
+        // Six steps an epoch, three epochs: what it remembered of the weight crossed in the file.
+        Assert.Equal(18, optimizer.StepsOf(weight));
+
+        resumed.Compiled.Fit(Rows(96), Rows(24, 7), new FitOptions(seed: 5) { Backend = _backend, Epochs = 6, BatchSize = 16, ResumeFrom = resumed.Checkpoint });
+
+        Assert.Equal(Bits(straight), Bits(resumed.Compiled.Network));
+        Assert.Equal(36, optimizer.StepsOf(weight));
     }
 
     [Fact]
@@ -314,7 +370,7 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         Assert.Equal(
             ["version", "seed", "batchSize", "earlyStopping", "engine", "optimizer", "schedule", "memory", "judgement", "history"],
             training.Select(key => key.Key));
-        Assert.Equal(NetworkDocument.Version, (int)training["version"]!);
+        Assert.Equal(2, (int)training["version"]!);
         Assert.Equal(16, (int)training["batchSize"]!);
         Assert.Equal("""{"patience":10,"minDelta":0.001,"restoreBest":true}""", training["earlyStopping"]!.ToJsonString());
         Assert.Contains("in batches of 16, and going on in batches of 32", wrong.Message, StringComparison.Ordinal);
@@ -342,6 +398,45 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         Assert.Equal((_backend as INamesItsVersionAndDevice)?.Device, (string?)engine["device"]);
         Assert.DoesNotContain("engine", JsonNode.Parse(text)!["network"]!.AsObject().Select(key => key.Key));
         Assert.Contains($"a run on the engine {ElsewhereBackend.NamedAs(_backend)}, and going on under the engine {ElsewhereBackend.Named}", wrong.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACheckpointOfARunWhoseGradientsWereClipped_IsWrittenAsTheThirdVersion_WithTheNorm_AndGoesOnFromItsFileBitForBit_OnlyUnderThatClip()
+    {
+        // The third version is the one that can say a clip, and is written only where there is one: a library that reads up
+        // to the second names the version it does not read, rather than a key it does not know.
+        var straight = Rich();
+        var stopped = Rich();
+        var kept = new List<Checkpoint>();
+
+        straight.Compile(new Adam(0.01), new MeanSquaredError()).Fit(Rows(96), Rows(24, 7), Options(6));
+        var compiled = stopped.Compile(new Adam(0.01), new MeanSquaredError());
+        compiled.Fit(Rows(96), Rows(24, 7), Options(3, checkpoints: new Checkpoints(kept.Add)));
+
+        var text = Checkpointed(compiled, kept[^1]);
+        var training = JsonNode.Parse(text)!["training"]!.AsObject();
+        var catalog = NetworkCatalog.BuiltIn();
+        var resumed = NetworkDocument.ReadTraining(text, "training", catalog, NetworkDocument.ReadNetwork(text, "network", catalog));
+        var refused = Assert.Throws<ArgumentException>(() => resumed.Compiled.Fit(Rows(96), Rows(24, 7), new FitOptions(seed: 5)
+        {
+            Backend = _backend, Epochs = 6, BatchSize = 16, ResumeFrom = resumed.Checkpoint,
+        }));
+
+        resumed.Compiled.Fit(Rows(96), Rows(24, 7), Options(6, from: resumed.Checkpoint));
+
+        Assert.Equal(3, (int)training["version"]!);
+        Assert.Equal(2, (int)JsonNode.Parse(text)!["network"]!["version"]!);
+        Assert.Equal(
+            ["version", "seed", "batchSize", "earlyStopping", "clipNorm", "engine", "optimizer", "schedule", "memory", "judgement", "history"],
+            training.Select(key => key.Key));
+        Assert.Equal(0.25, (double)training["clipNorm"]!);
+        Assert.Contains("clipped to a norm of 0.25, and going on without clipping them", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(Bits(straight), Bits(resumed.Compiled.Network));
+
+        FitOptions Options(int epochs, Checkpoints? checkpoints = null, Checkpoint? from = null) => new(seed: 5)
+        {
+            Backend = _backend, Epochs = epochs, BatchSize = 16, GradientClip = new GradientClip(0.25), Checkpoints = checkpoints, ResumeFrom = from,
+        };
     }
 
     [Fact]
@@ -401,6 +496,8 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
                      (new Sgd(0.05) { Momentum = 0.9 }, new StepDecay(3, 0.5)),
                      (new Adam(0.02) { Betas = new Betas(0.8, 0.99), Epsilon = 1e-6 }, new ExponentialDecay(0.95)),
                      (new Sgd(), new ConstantRate()),
+                     (new AdamW(), new LinearWarmup(3, 0.5, new CosineDecay(4, 0.01))),
+                     (new Nadam(), new LinearWarmup(2)),
                  })
         {
             var compiled = network.Compile(optimizer, new MeanSquaredError(), schedule);
@@ -420,6 +517,63 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
             Assert.Equal(schedule.GetType(), resumed.Compiled.Schedule.GetType());
             Assert.Equal(schedule.RateAt(4, 0.1), resumed.Compiled.Schedule.RateAt(4, 0.1));
         }
+    }
+
+    [Fact]
+    public void TheOptimizersPyTorchHasBeyondSgdAndAdam_AreWrittenWithEverySetting_AndReadBackHoldingThem()
+    {
+        var network = new LayerStack(new Dense(WalkedRows.OutputWeights(), WalkedRows.OutputBias()));
+        var catalog = NetworkCatalog.BuiltIn();
+
+        var adamW = Assert.IsType<AdamW>(Resumed(new AdamW(0.02) { Betas = new Betas(0.8, 0.99), Epsilon = 1e-6, WeightDecay = 0.05 }).Optimizer);
+        var rmsProp = Assert.IsType<RmsProp>(Resumed(new RmsProp(0.03) { Alpha = 0.9, Epsilon = 1e-7, Momentum = 0.5 }).Optimizer);
+        var nadam = Assert.IsType<Nadam>(Resumed(new Nadam(0.04) { Betas = new Betas(0.85, 0.98), Epsilon = 1e-5, MomentumDecay = 0.002 }).Optimizer);
+
+        Assert.Equal([0.02, 0.8, 0.99, 1e-6, 0.05], (double[])[adamW.Rate, adamW.Betas.First, adamW.Betas.Second, adamW.Epsilon, adamW.WeightDecay]);
+        Assert.Equal([0.03, 0.9, 1e-7, 0.5], (double[])[rmsProp.Rate, rmsProp.Alpha, rmsProp.Epsilon, rmsProp.Momentum]);
+        Assert.Equal([0.04, 0.85, 0.98, 1e-5, 0.002], (double[])[nadam.Rate, nadam.Betas.First, nadam.Betas.Second, nadam.Epsilon, nadam.MomentumDecay]);
+
+        CompiledNetwork Resumed(Optimizer optimizer)
+        {
+            var kept = new List<Checkpoint>();
+            var compiled = network.Compile(optimizer, new MeanSquaredError());
+            compiled.Fit(Rows(8, width: 4), validation: null, new FitOptions(seed: 1) { Backend = _backend, Checkpoints = new Checkpoints(kept.Add) });
+            var text = Checkpointed(compiled, kept[^1]);
+
+            return NetworkDocument.ReadTraining(text, "training", catalog, NetworkDocument.ReadNetwork(text, "network", catalog)).Compiled;
+        }
+    }
+
+    [Theory]
+    [InlineData("adamw")]
+    [InlineData("rmsprop")]
+    [InlineData("nadam")]
+    public void ARunOfEachNewOptimizer_WrittenToACheckpointsFileAndReadBack_GoesOnBitForBit(string kind)
+    {
+        // What each remembers crosses the file under PyTorch's names — Nadam's product of momentums worked out again from the
+        // steps — and the run goes on to where the run that never stopped came.
+        var straight = Rich();
+        var stopped = Rich();
+        var kept = new List<Checkpoint>();
+
+        straight.Compile(Optimizer(kind), new MeanSquaredError()).Fit(Rows(96), Rows(24, 7), new FitOptions(seed: 5) { Backend = _backend, Epochs = 6, BatchSize = 16 });
+        var compiled = stopped.Compile(Optimizer(kind), new MeanSquaredError());
+        compiled.Fit(Rows(96), Rows(24, 7), new FitOptions(seed: 5) { Backend = _backend, Epochs = 3, BatchSize = 16, Checkpoints = new Checkpoints(kept.Add) });
+
+        var text = Checkpointed(compiled, kept[^1]);
+        var catalog = NetworkCatalog.BuiltIn();
+        var resumed = NetworkDocument.ReadTraining(text, "training", catalog, NetworkDocument.ReadNetwork(text, "network", catalog));
+        resumed.Compiled.Fit(Rows(96), Rows(24, 7), new FitOptions(seed: 5) { Backend = _backend, Epochs = 6, BatchSize = 16, ResumeFrom = resumed.Checkpoint });
+
+        Assert.Equal(kind, JsonNode.Parse(text)!["training"]!["optimizer"]!["kind"]!.GetValue<string>());
+        Assert.Equal(Bits(straight), Bits(resumed.Compiled.Network));
+
+        static Optimizer Optimizer(string kind) => kind switch
+        {
+            "adamw" => new AdamW(0.01) { WeightDecay = 0.1 },
+            "rmsprop" => new RmsProp(0.001) { Momentum = 0.9 },
+            _ => new Nadam(0.01),
+        };
     }
 
     [Fact]
@@ -460,8 +614,8 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         var catalog = NetworkCatalog.BuiltIn();
 
         Assert.Equal(
-            ["adam", "batchNorm", "binaryCrossEntropy", "constant", "conv2d", "cosineDecay", "crossEntropy", "dense", "dropout", "exponentialDecay",
-             "flatten", "layerNorm", "meanSquaredError", "relu", "reshape", "sgd", "sigmoid", "stack", "stepDecay", "tanh"],
+            ["adam", "adamw", "batchNorm", "binaryCrossEntropy", "constant", "conv2d", "cosineDecay", "crossEntropy", "dense", "dropout", "earthMoversDistance",
+             "exponentialDecay", "flatten", "layerNorm", "linearWarmup", "meanSquaredError", "nadam", "relu", "reshape", "rmsprop", "sgd", "sigmoid", "stack", "stepDecay", "tanh"],
             catalog.Names.Order(StringComparer.Ordinal));
         Assert.Throws<ArgumentException>(() => catalog.Register<Dense>());
     }
@@ -555,5 +709,31 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         }
 
         protected override Tensor Compute(Tensor input, Pass pass) => _second.Forward(pass.Backend.Tanh(_first.Forward(input, pass)), pass);
+    }
+
+    // An optimizer written outside the library: plain steps against the gradient, counting the steps each parameter took.
+    private sealed class CountingSteps(double rate) : Optimizer(rate), ISaved<CountingSteps>
+    {
+        private readonly Dictionary<Parameter, int> _steps = [];
+
+        public static string Name => "countingSteps";
+
+        public static CountingSteps Rebuild(JsonElement settings, Rebuilding rebuilding) => new(rebuilding.Number(settings, "rate"));
+
+        public void WriteSettings(Utf8JsonWriter writer) => writer.WriteNumber("rate", Rate);
+
+        public int StepsOf(Parameter parameter) => _steps.GetValueOrDefault(parameter);
+
+        protected override SlotMemory? MemoryOf(Parameter parameter) =>
+            _steps.TryGetValue(parameter, out var steps) ? new SlotMemory(steps, new Dictionary<string, Tensor>()) : null;
+
+        protected override void Recall(Parameter parameter, SlotMemory memory) => _steps[parameter] = memory.Steps;
+
+        protected override Tensor Moved(Parameter parameter, Tensor gradient, double rate, ITensorBackend backend)
+        {
+            _steps[parameter] = StepsOf(parameter) + 1;
+
+            return backend.Subtract(parameter.Value, backend.Scale(gradient, Scalar(backend, rate)));
+        }
     }
 }

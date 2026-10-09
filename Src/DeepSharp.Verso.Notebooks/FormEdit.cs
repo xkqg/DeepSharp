@@ -82,7 +82,9 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
         return Written(parameter.Key, parameter.Optional, names);
     }
 
-    public bool Visit(NumberParameter parameter) => Set(parameter.Key, Number);
+    // A number a file may leave out is left out when its field is emptied.
+    public bool Visit(NumberParameter parameter) =>
+        Set(parameter.Key, () => parameter.LeftOut is not null && string.IsNullOrWhiteSpace(value.Text) ? null : Number());
 
     // A whole number a file may leave out is left out when its field is emptied.
     public bool Visit(WholeNumberParameter parameter) =>
@@ -93,8 +95,11 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
     public bool Visit(ShareParameter parameter) =>
         Set(parameter.Key, () => string.IsNullOrWhiteSpace(value.Text) ? null : Number());
 
+    // A word a file may leave out is left out when the word leaving it out is picked: the text then says nothing of it, as a
+    // text that never had it does.
     public bool Visit<TEnum>(OneOfParameter<TEnum> parameter)
-        where TEnum : struct, Enum => Set(parameter.Key, () => Words());
+        where TEnum : struct, Enum =>
+        Set(parameter.Key, () => parameter.LeftOut is { } left && string.Equals(Words(), left.Word(), StringComparison.OrdinalIgnoreCase) ? null : Words());
 
     public bool Visit<TEnum>(SeveralOfParameter<TEnum> parameter)
         where TEnum : struct, Enum => Set(parameter.Key, () => new JsonArray([.. value.Picked.Select(item => (JsonNode?)item)]));
@@ -147,8 +152,8 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
     // A column's kind, or "not taken", is the schema's own operation on the step as it reads, and the columns are
     // written back as the schema writes itself: a column not taken stays in it, excluded with its kind, and a step
     // below that reads it says so at its own block. Whether a taken column may be absent is written into it, and how a
-    // taken column's moments are written and which of its values stands for a gap are the schema's own operations too:
-    // an empty field reads the moments as ISO 8601, and says no value stands for a gap.
+    // taken column's moments are written, which of its values stands for a gap and whether it names each row are the
+    // schema's own operations too: an empty field reads the moments as ISO 8601, and says no value stands for a gap.
     public bool Visit(ColumnDeclarationsParameter parameter)
     {
         if (read is not DeclareStep declare)
@@ -205,6 +210,20 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
             return true;
         }
 
+        if (parameter.IsId(field, out var naming))
+        {
+            if (declare.Taking.All(column => column.Name != naming))
+            {
+                throw new FormatException($"'{naming}' is not taken, so whether it names each row says nothing.");
+            }
+
+            var id = Switch();
+
+            Declared(parameter, () => declare.WithColumnId(naming, id));
+
+            return true;
+        }
+
         return false;
     }
 
@@ -248,7 +267,16 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
     // the parts belong to: the place in the list and the setting's key are the whole of what a field says.
     public bool Visit(PartsParameter parameter)
     {
-        if (parameter.IsPlace(field, out var at) && Part(parameter, at) is not null)
+        var isPlace = parameter.IsPlace(field, out var at);
+
+        // A key the step leaves out holds the parts leaving it out means, and the form draws those: they are written in
+        // first, so a field drawn from them is changed where it stands.
+        if ((isPlace || parameter.IsSetting(field, out _, out _)) && _step[parameter.Key] is null && parameter.LeftOut is { } left)
+        {
+            _step[parameter.Key] = parameter.AsJson(left);
+        }
+
+        if (isPlace && Part(parameter, at) is not null)
         {
             var named = parameter.Kinds.FirstOrDefault(kind => kind.Name == Words());
 
@@ -257,7 +285,7 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
                 return false;
             }
 
-            Write(parameter, at, Started(named));
+            Write(parameter, at, named.Declared().AsJson());
 
             return true;
         }
@@ -302,24 +330,6 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
         {
             _step[parameter.Key]!.AsArray()[place] = part;
         }
-    }
-
-    // A part of this name as a new one starts: every setting at the value its own parameter offers.
-    private static JsonObject Started(PartKind kind)
-    {
-        var part = new JsonObject { ["kind"] = kind.Name };
-
-        foreach (var setting in kind.Declared().Settings)
-        {
-            part[setting.Key] = setting.Value.Holds switch
-            {
-                PartValues.Number => JsonValue.Create(setting.Value.Number),
-                PartValues.YesOrNo => JsonValue.Create(setting.Value.YesOrNo),
-                _ => JsonValue.Create(setting.Value.Text),
-            };
-        }
-
-        return part;
     }
 
     private bool Set(string key, Func<JsonNode?> written)

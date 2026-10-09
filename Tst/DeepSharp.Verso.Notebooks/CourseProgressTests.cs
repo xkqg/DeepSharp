@@ -85,6 +85,7 @@ public class CourseProgressTests
     [InlineData("split.byTime", "split.stratified")]
     [InlineData("split.atRandom", "split.stratified")]
     [InlineData("target.labels", "target")]
+    [InlineData("target.numbers", "target")]
     [InlineData("target.ahead", "target")]
     public void AStepOfAnotherKindOfTheSameThing_SaysTheCoursesStep(string standing, string row)
     {

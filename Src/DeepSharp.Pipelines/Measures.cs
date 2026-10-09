@@ -39,7 +39,8 @@ public readonly record struct PartPredictions(Batch Batch, IReadOnlyList<double[
 /// <param name="Value">What the model's predictions measured.</param>
 /// <param name="Baseline">
 /// What predicting, for every row, the average of the training rows' answers measured: scikit-learn's dummy model that
-/// predicts the mean, and for classes the one that predicts each class's share.
+/// predicts the mean, and for classes the one that predicts each class's share; for shares, the training rows' average
+/// shares.
 /// </param>
 public readonly record struct Measured(Metric Metric, double Value, double Baseline);
 
@@ -185,7 +186,11 @@ public sealed class Measures : Evidence
 /// <summary>The answers of a part's rows in their own units, and what was predicted for each, in the same units.</summary>
 /// <param name="actual">Each row's answers.</param>
 /// <param name="predicted">What was predicted for each row, as many numbers as it has answers.</param>
-/// <remarks>Every measure here is scikit-learn's; an amount of several columns is measured column by column and averaged, each column counting alike.</remarks>
+/// <remarks>
+/// The measures of amounts and of classes are scikit-learn's, an amount of several columns measured column by column and
+/// averaged, each column counting alike. The measures of shares follow scipy's definitions and Weigel's: each row divided by its
+/// own total, compared row by row, and the rows averaged.
+/// </remarks>
 internal sealed class Answered(IReadOnlyList<double[]> actual, IReadOnlyList<double[]> predicted)
 {
     /// <summary>Each row's answers.</summary>
@@ -194,18 +199,26 @@ internal sealed class Answered(IReadOnlyList<double[]> actual, IReadOnlyList<dou
     /// <summary>What was predicted for each row.</summary>
     public IReadOnlyList<double[]> Predicted { get; } = predicted;
 
+    /// <summary>How many of the answers, from the first, stand in the output's order; every one, unless said.</summary>
+    public int? InTheOrder { get; init; }
+
     private int Width => Actual[0].Length;
 
     /// <summary>A measure that is a number.</summary>
     /// <param name="metric">The measure: any but the confusion matrix.</param>
     /// <param name="ones">How many answers a row holds as one, when they are classes; nought for any number.</param>
     /// <returns>Its value.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The measure is the confusion matrix, or none of the measures.</exception>
     public double Of(Metric metric, int ones) => metric switch
     {
         Metric.Rmse => Averaged(RootMeanSquared),
         Metric.Mae => Averaged(MeanAbsolute),
         Metric.R2 => Averaged(Explained),
-        _ => Classes(ones).Of(metric),
+        Metric.Accuracy or Metric.Precision or Metric.Recall => Classes(ones).Of(metric),
+        Metric.Emd => RowByRow(InTheOrder ?? Width, Moved),
+        Metric.Kl => RowByRow(Width, Divergence),
+        Metric.Rps => RowByRow(InTheOrder ?? Width, Ranked),
+        _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "A measure that is a number is one of the measures, and the confusion matrix is none."),
     };
 
     /// <summary>The classes the rows hold and the classes the predictions name.</summary>
@@ -254,6 +267,42 @@ internal sealed class Answered(IReadOnlyList<double[]> actual, IReadOnlyList<dou
     private IEnumerable<int> Rows() => Enumerable.Range(0, Actual.Count);
 
     private static double Squared(double value) => value * value;
+
+    // Row by row, the first answers of each row and of its prediction each divided by their own total, compared as shares,
+    // and the rows averaged.
+    private double RowByRow(int answers, Func<double[], double[], double> compared) =>
+        Rows().Average(row => compared(Shares(Actual[row], answers), Shares(Predicted[row], answers)));
+
+    private static double[] Shares(double[] row, int answers)
+    {
+        var total = row.Take(answers).Sum();
+
+        return [.. row.Take(answers).Select(value => value / total)];
+    }
+
+    // How far the predicted shares have to move to be the answer's: the distance between the two, added up band by band, at
+    // every threshold but the last, where both are one.
+    private static double Moved(double[] held, double[] said) => Below(held, said).Sum(Math.Abs);
+
+    // The squared distance between the two added up band by band, at every threshold but the last.
+    private static double Ranked(double[] held, double[] said) => Below(held, said).Sum(Squared);
+
+    private static IEnumerable<double> Below(double[] held, double[] said)
+    {
+        var apart = 0.0;
+
+        for (var band = 0; band < held.Length - 1; band++)
+        {
+            apart += held[band] - said[band];
+
+            yield return apart;
+        }
+    }
+
+    // The answer's shares times the logarithm of each over the prediction's: nought where the answer holds nothing, and
+    // without end where it holds something the prediction gives nothing.
+    private static double Divergence(double[] held, double[] said) =>
+        Enumerable.Range(0, held.Length).Sum(at => held[at] == 0 ? 0 : said[at] == 0 ? double.PositiveInfinity : held[at] * Math.Log(held[at] / said[at]));
 }
 
 /// <summary>Each answer of a part's rows as a class, nought or one: the class held, and the class predicted.</summary>
@@ -270,6 +319,7 @@ internal sealed class Classed(bool[][] held, bool[][] predicted)
     /// <summary>A measure that counts classes.</summary>
     /// <param name="metric">Accuracy, precision or recall.</param>
     /// <returns>Its value.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The measure is none of the three.</exception>
     /// <remarks>
     /// Accuracy asks every answer of a row to be right, scikit-learn's accuracy of labels; precision and recall are taken
     /// for each answer and averaged over the answers, each counting alike — for one answer, its own.
@@ -278,7 +328,8 @@ internal sealed class Classed(bool[][] held, bool[][] predicted)
     {
         Metric.Accuracy => Rows().Count(row => Held[row].AsSpan().SequenceEqual(Predicted[row])) / (double)Held.Length,
         Metric.Precision => Averaged(column => Share(Both(column), Predicted.Count(row => row[column]))),
-        _ => Averaged(column => Share(Both(column), Held.Count(row => row[column]))),
+        Metric.Recall => Averaged(column => Share(Both(column), Held.Count(row => row[column]))),
+        _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "A measure that counts classes is accuracy, precision or recall."),
     };
 
     /// <summary>The confusion matrices of these classes, beside those of another prediction of the same rows.</summary>
@@ -457,14 +508,21 @@ internal sealed class Measurement
         }
 
         int[] readAt = [.. Enumerable.Range(0, _prepared.Table.RowCount).Where(row => _prepared.Parts[row] == part).Select(row => _prepared.Table.Identities[row].ReadAt)];
-        var model = new Answered(_prepared.BackToOriginal(handed.Answers!, part), _prepared.BackToOriginal(given.Predictions, part));
-        var average = new Answered(model.Actual, _prepared.BackToOriginal([.. Enumerable.Repeat(_average, rows)], part));
+        var inTheOrder = _output.InTheOrder();
+        var model = new Answered(_prepared.BackToOriginal(handed.Answers!, part), _prepared.BackToOriginal(given.Predictions, part)) { InTheOrder = inTheOrder };
+        var average = new Answered(model.Actual, _prepared.BackToOriginal([.. Enumerable.Repeat(_average, rows)], part)) { InTheOrder = inTheOrder };
 
         ThrowIfNotFinite(model.Predicted, readAt);
 
         if (_report.Metrics.Any(MetricExtensions.CountsClasses))
         {
             ThrowIfNotClasses(model.Actual, readAt);
+        }
+
+        if (_report.Metrics.Any(MetricExtensions.ComparesShares))
+        {
+            ThrowIfNoShares(model.Actual, "answers", readAt);
+            ThrowIfNoShares(model.Predicted, "prediction", readAt);
         }
 
         if (_report.Metrics.Contains(Metric.R2) && rows < 2)
@@ -529,6 +587,31 @@ internal sealed class Measurement
                             $"Row {readAt[row] + 1}: the prediction for '{_output.Answers[column]}' comes back as {predicted[row][column]}, which is not a finite number, and nothing measures it."),
                         "predictions");
                 }
+            }
+        }
+    }
+
+    // Where the report compares shares, a row is shares of its own total: nothing below nought, and something to divide by —
+    // among the answers in the output's order too, for a measure that follows it.
+    private void ThrowIfNoShares(IReadOnlyList<double[]> rows, string what, int[] readAt)
+    {
+        var measures = _report.Metrics.Where(MetricExtensions.ComparesShares).Listed();
+        var ordered = _report.Metrics.Any(metric => metric.Family() == MetricFamily.OrderedShares);
+
+        for (var row = 0; row < rows.Count; row++)
+        {
+            if (rows[row].FirstOrDefault(value => value < 0) is var below and < 0)
+            {
+                throw new InvalidOperationException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Row {readAt[row] + 1}: its {what} hold {below}, below nought, and {measures} compare shares, none of which is below nought."));
+            }
+
+            if (rows[row].Sum() == 0 || (ordered && rows[row].Take(_output.InTheOrder()).Sum() == 0))
+            {
+                throw new InvalidOperationException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Row {readAt[row] + 1}: its {what} add up to nought{(ordered ? " in the order" : string.Empty)}, so they are no shares of anything, and {measures} compare shares."));
             }
         }
     }

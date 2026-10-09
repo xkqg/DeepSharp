@@ -85,6 +85,37 @@ public static class TrainExtensions
 
             return pipeline.RunFor(step.Needs).Train(engines);
         }
+
+        /// <summary>
+        /// Runs the pipeline for the network it declares, and trains that network on what it hands over — handing every epoch
+        /// over as it ends, and stopping when asked.
+        /// </summary>
+        /// <param name="engines">The engines the names in the declaration stand for; the light engine alone, when nothing.</param>
+        /// <param name="onEpoch">
+        /// What is handed every epoch as it ends, once judged, before the next begins, on the thread the run trains on; nothing
+        /// for none. One that throws abandons the run, its exception reaching the caller as it was thrown.
+        /// </param>
+        /// <param name="cancellation">What stops the run before its next batch or its next look at the validation rows; nothing stops it, unless said.</param>
+        /// <returns>The network behind its pipeline, as <see cref="Train(Pipeline, Engines)"/> returns it.</returns>
+        /// <exception cref="ArgumentNullException">There is no pipeline.</exception>
+        /// <exception cref="InvalidOperationException">
+        /// The pipeline names no learner, or names an engine nothing was given; or anything the run itself refuses.
+        /// </exception>
+        /// <exception cref="OperationCanceledException">
+        /// The token was cancelled: nothing is returned, and nothing of the run is kept — every call trains a network of its own.
+        /// </exception>
+        /// <remarks>
+        /// Handing the epochs over, and a token that never stops the run, change no number: the run trains the network
+        /// <see cref="Train(Pipeline, Engines)"/> trains, to the last bit.
+        /// </remarks>
+        public TrainedNetwork Train(Engines? engines, Action<Epoch>? onEpoch, CancellationToken cancellation = default)
+        {
+            ArgumentNullException.ThrowIfNull(pipeline);
+
+            var step = Declared(pipeline.Declaration);
+
+            return pipeline.RunFor(step.Needs).Train(engines, onEpoch, cancellation);
+        }
     }
 
     extension(PreparedData prepared)
@@ -96,24 +127,83 @@ public static class TrainExtensions
         /// <exception cref="InvalidOperationException">
         /// The pipeline names no learner, or names an engine nothing was given; or anything <see cref="CompiledNetworkExtensions.Fit"/> refuses.
         /// </exception>
-        public TrainedNetwork Train(Engines? engines = null)
+        public TrainedNetwork Train(Engines? engines = null) => prepared.Train(engines, onEpoch: null);
+
+        /// <summary>
+        /// Trains the network a pipeline declares on the rows a run of it prepared — handing every epoch over as it ends, and
+        /// stopping when asked.
+        /// </summary>
+        /// <param name="engines">The engines the names in the declaration stand for; the light engine alone, when nothing.</param>
+        /// <param name="onEpoch">
+        /// What is handed every epoch as it ends, once judged, before the next begins, on the thread the run trains on; nothing
+        /// for none. One that throws abandons the run, its exception reaching the caller as it was thrown.
+        /// </param>
+        /// <param name="cancellation">What stops the run before its next batch or its next look at the validation rows; nothing stops it, unless said.</param>
+        /// <returns>The network behind its pipeline.</returns>
+        /// <exception cref="ArgumentNullException">There is nothing prepared.</exception>
+        /// <exception cref="InvalidOperationException">
+        /// The pipeline names no learner, or names an engine nothing was given; or anything <see cref="CompiledNetworkExtensions.Fit"/> refuses.
+        /// </exception>
+        /// <exception cref="OperationCanceledException">
+        /// The token was cancelled: nothing is returned, and nothing of the run is kept — every call trains a network of its own.
+        /// </exception>
+        public TrainedNetwork Train(Engines? engines, Action<Epoch>? onEpoch, CancellationToken cancellation = default)
         {
             ArgumentNullException.ThrowIfNull(prepared);
 
-            var step = Declared(prepared.Declaration);
+            return Trained(prepared, Declared(prepared.Declaration), new RunControls(engines, onEpoch, cancellation));
+        }
 
-            return step.Layers
-                .Described()
-                .Compile(step.Optimizer.Moved(), step.Loss.Judged())
-                .Fit(prepared, new FitOptions(step.Seed)
-                {
-                    Epochs = step.Epochs,
-                    BatchSize = step.Batch,
-                    EarlyStopping = step.Stopping.Stops(),
-                    Backend = (engines ?? new Engines()).Named(step.Engine),
-                });
+        /// <summary>
+        /// Trains the network a step declares on the rows a run of a pipeline prepared, whichever learner that pipeline names.
+        /// </summary>
+        /// <param name="step">The network to train: its layers, what moves them, what judges them, and how the run goes.</param>
+        /// <param name="engines">The engines the name in the step stands for; the light engine alone, when nothing.</param>
+        /// <param name="cancellation">What stops the run before its next batch or its next look at the validation rows; nothing stops it, unless said.</param>
+        /// <returns>The network behind its pipeline.</returns>
+        /// <exception cref="ArgumentNullException">There is nothing prepared, or no step.</exception>
+        /// <exception cref="InvalidOperationException">The step names an engine nothing was given; or anything <see cref="CompiledNetworkExtensions.Fit"/> refuses.</exception>
+        /// <exception cref="OperationCanceledException">
+        /// The token was cancelled: nothing is returned, and nothing of the run is kept — every call trains a network of its own.
+        /// </exception>
+        /// <remarks>
+        /// Every network step asks the same of the rows — every feature on one scale — so rows prepared once serve any number
+        /// of networks: what the preparation learned is learned from the training rows alone and replayed, whichever network
+        /// is trained behind it. A search over networks prepares the rows once for each split and trains its candidates here.
+        /// </remarks>
+        public TrainedNetwork Train(LearnNetworkStep step, Engines? engines = null, CancellationToken cancellation = default)
+        {
+            ArgumentNullException.ThrowIfNull(prepared);
+            ArgumentNullException.ThrowIfNull(step);
+
+            return Trained(prepared, step, new RunControls(engines, null, cancellation));
         }
     }
+
+    // The one place a declared network is lowered onto the loop and trained: every door above ends here.
+    private static TrainedNetwork Trained(PreparedData prepared, LearnNetworkStep step, RunControls controls) =>
+        step.Layers
+            .Described()
+            .Compile(step.Optimizer.Moved(), JudgedFor(step.Loss, prepared.Declaration.Output), step.Schedule.Scheduled())
+            .Fit(prepared, new FitOptions(step.Seed)
+            {
+                Epochs = step.Epochs,
+                BatchSize = step.Batch,
+                EarlyStopping = step.Stopping.Stops(),
+                GradientClip = step.Clip > 0 ? new GradientClip(step.Clip) : null,
+                Backend = (controls.Engines ?? new Engines()).Named(step.Engine),
+                Cancellation = controls.Cancellation,
+                OnEpoch = controls.OnEpoch,
+            });
+
+    // What a call may add to a declared run without changing any number of it: the engines its name stands for, a hook that
+    // hears each epoch, and a token that stops it.
+    private readonly record struct RunControls(Engines? Engines, Action<Epoch>? OnEpoch, CancellationToken Cancellation);
+
+    // The loss a declared part names, for the output it judges: a distance along an order leaves what is left of a
+    // distribution's whole outside that order, when the distribution makes one.
+    private static Loss JudgedFor(PartDeclaration loss, INamesTheAnswer? output) =>
+        loss.Judged() is EarthMoversDistance && output is DistributionStep { Remainder: not null } ? new EarthMoversDistance(remainder: true) : loss.Judged();
 
     private static LearnNetworkStep Declared(PipelineDeclaration declaration) =>
         declaration.Learner as LearnNetworkStep

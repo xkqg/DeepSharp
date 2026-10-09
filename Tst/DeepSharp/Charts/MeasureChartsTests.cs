@@ -124,6 +124,41 @@ public class MeasureChartsTests
     }
 
     [Fact]
+    public void TheMeasuresOfShares_AreDrawnAsBars_AndADivergenceWithoutEnd_HasNoBar_ItsPanelSayingWhose()
+    {
+        // A prediction of nought in a band the answer holds is a divergence without end: there is no height to draw it at,
+        // so its bar stands at nothing and the panel says it is infinite, and whose it is.
+        var measures = Bands((batch, row) => [0.5, 0.5, 0]);
+        var figure = MeasureCharts.BarFigure(measures);
+
+        Assert.Equal(["emd", "kl: the model's is infinite on train, validation and test", "rps"], figure.SubPlots.Select(axes => axes.Title));
+
+        var divergence = figure.SubPlots[1].Series.OfType<BarSeries>().ToArray();
+
+        Assert.Equal([0.0, 0.0, 0.0], divergence[0].Values);
+        Assert.Equal(measures.Parts.Select(part => part.Values[1].Baseline), divergence[1].Values);
+        Assert.All(measures.Parts, part => Assert.Equal(double.PositiveInfinity, part.Values[1].Value));
+        Assert.DoesNotContain("Infinity", measures.Bars(), StringComparison.Ordinal);
+        Assert.DoesNotContain("NaN", measures.Bars(), StringComparison.Ordinal);
+        Assert.Equal(["emd", "kl", "rps"], MeasureCharts.BarFigure(Bands((batch, row) => [0.3, 0.3, 0.4])).SubPlots.Select(axes => axes.Title));
+
+        // A band only the last flock holds: the training rows' average gives it nothing, and so does the model.
+        var unheld = Measured(
+            Pdd.Create()
+                .Read(CsvRowSource.FromText("t,c1,c2,c3\n" + string.Join('\n', Enumerable.Range(1, 12).Select(t => $"{t},{1 + (t % 3)},{2 + (t % 4)},{(t == 12 ? 1 : 0)}")) + "\n"), "twelve flocks")
+                .Declare(schema => schema.Integer("t").Number("c1", "c2", "c3"))
+                .SplitByTime("t", 0.50, 0.25)
+                .NormaliseRow(Norm.L1, "c1", "c2", "c3")
+                .Distribution(["c1", "c2", "c3"], scaleBy: null, ordered: true),
+            report => report.Measure(Metric.Kl).On(Part.Train, Part.Validation, Part.Test).As(Shown.Drawn),
+            (batch, row) => [0.5, 0.5, 0]);
+
+        Assert.Equal(
+            "kl: the model's is infinite on test; the average's is infinite on test",
+            Assert.Single(MeasureCharts.BarFigure(unheld).SubPlots).Title);
+    }
+
+    [Fact]
     public void AnOutputOfSeveralAnswers_HasAPanelForEachAnswerOfEachPart()
     {
         var measures = Shares();
@@ -205,6 +240,18 @@ public class MeasureChartsTests
                 .Distribution(["c1", "c2"]),
             report => report.Measure(Metric.Rmse).On(Part.Train, Part.Validation, Part.Test).As(Shown.Drawn),
             (batch, row) => [0.4, 0.6]);
+
+    // Twelve rows of three counts in bands, made shares of their sum, measured along the bands' order and by the divergence.
+    private static Measures Bands(Func<Batch, int, double[]> model) =>
+        Measured(
+            Pdd.Create()
+                .Read(CsvRowSource.FromText("t,c1,c2,c3\n" + string.Join('\n', Enumerable.Range(1, 12).Select(t => $"{t},{1 + (t % 3)},{2 + (t % 4)},{1 + (t % 2)}")) + "\n"), "twelve flocks")
+                .Declare(schema => schema.Integer("t").Number("c1", "c2", "c3"))
+                .SplitByTime("t", 0.50, 0.25)
+                .NormaliseRow(Norm.L1, "c1", "c2", "c3")
+                .Distribution(["c1", "c2", "c3"], scaleBy: null, ordered: true),
+            report => report.Measure(Metric.Emd, Metric.Kl, Metric.Rps).On(Part.Train, Part.Validation, Part.Test).As(Shown.Drawn),
+            model);
 
     private static Measures Measured(FittingBuilder builder, Action<ReportBuilder> report, Func<Batch, int, double[]> model)
     {

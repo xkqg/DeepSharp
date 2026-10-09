@@ -27,16 +27,22 @@ public static class NetworkDocument
     /// It goes up when a part can say something an older library would not understand, so that library names the newer
     /// version rather than the key it does not know. In the second, the network's part says which features held one value on
     /// every training row, and a convolution whose window is padded as 'same' says so with the word; a checkpoint's training
-    /// part says the batch size, the early stopping and the engine its run went under. A part of the first, which 0.4.0
-    /// wrote, is read as it was written and says nothing of them, every window's padding a number.
+    /// part says the batch size, the early stopping and the engine its run went under. In the third, a checkpoint's training
+    /// part says the norm its run's gradients were clipped to. A part is written as the oldest version that says what it
+    /// holds: a network's part, and the training part of a run whose gradients were never clipped, as the second, which
+    /// 0.8.0 reads; the training part of a clipped run as the third, which 0.8.0 refuses by its number. A part of the first,
+    /// which 0.4.0 wrote, is read as it was written and says nothing of them, every window's padding a number.
     /// </remarks>
-    public const int Version = 2;
+    public const int Version = 3;
 
     /// <summary>
     /// The version 0.4.0 wrote, whose training part records neither the batch size nor the early stopping of its run: the one
     /// a part may hold neither in, and the one a checkpoint that records neither is written again with.
     /// </summary>
     internal const int FirstVersion = 1;
+
+    /// <summary>The version a network's part is written as, and the training part of a run whose gradients were never clipped.</summary>
+    internal const int SecondVersion = 2;
 
     internal const string KindKey = "kind";
     internal const string PackageKey = "package";
@@ -76,6 +82,7 @@ public static class NetworkDocument
     internal const string PatienceKey = "patience";
     internal const string MinDeltaKey = "minDelta";
     internal const string RestoreBestKey = "restoreBest";
+    internal const string ClipNormKey = "clipNorm";
     internal const string EngineKey = "engine";
     internal const string NameKey = "name";
     internal const string DeviceKey = "device";
@@ -83,7 +90,7 @@ public static class NetworkDocument
     private static readonly string[] NetworkKeys = [VersionKey, LayersKey, ParametersKey, StateKey, LossKey, TrainedOnKey];
 
     private static readonly string[] TrainingKeys =
-        [VersionKey, SeedKey, BatchSizeKey, EarlyStoppingKey, EngineKey, OptimizerKey, ScheduleKey, MemoryKey, JudgementKey, HistoryKey];
+        [VersionKey, SeedKey, BatchSizeKey, EarlyStoppingKey, ClipNormKey, EngineKey, OptimizerKey, ScheduleKey, MemoryKey, JudgementKey, HistoryKey];
     private static readonly Assembly OwnAssembly = typeof(NetworkDocument).Assembly;
 
     /// <summary>Writes a network and its loss as one object, and what it was trained on when that is said.</summary>
@@ -104,8 +111,9 @@ public static class NetworkDocument
 
         var slots = network.Slots().ToArray();
 
+        // The third version says nothing new of a network, so its part is written as the second, which 0.8.0 reads too.
         writer.WriteStartObject();
-        writer.WriteNumber(VersionKey, Version);
+        writer.WriteNumber(VersionKey, SecondVersion);
         writer.WritePropertyName(LayersKey);
         WriteKind(writer, network);
         WriteSlots(writer, slots, slots.ToDictionary(named => named.Path, named => named.Slot.Value));
@@ -130,10 +138,11 @@ public static class NetworkDocument
     /// </exception>
     /// <remarks>
     /// Beside the seed it records the batch size and the early stopping the run went under — its patience, its least fall
-    /// that counts and whether it restores the best, or null for a run that had none — and the engine it was on, by its name
-    /// and, where the engine names them, its version and its device: what a run going on from it is handed again or refused.
-    /// A checkpoint that records none of them, read from a file 0.4.0 wrote, is written as that version wrote it, still
-    /// saying nothing of them, rather than with values nobody recorded.
+    /// that counts and whether it restores the best, or null for a run that had none — the norm its gradients were clipped to,
+    /// for a run whose were, and the engine it was on, by its name and, where the engine names them, its version and its
+    /// device: what a run going on from it is handed again or refused. The part is written as the third version where it says
+    /// a clip and as the second otherwise. A checkpoint that records none of them, read from a file 0.4.0 wrote, is written
+    /// as that version wrote it, still saying nothing of them, rather than with values nobody recorded.
     /// </remarks>
     public static void WriteTraining(Utf8JsonWriter writer, CompiledNetwork compiled, Checkpoint checkpoint)
     {
@@ -151,7 +160,7 @@ public static class NetworkDocument
         }
 
         writer.WriteStartObject();
-        writer.WriteNumber(VersionKey, state.Pace is null ? FirstVersion : Version);
+        writer.WriteNumber(VersionKey, state.Pace is not { } recorded ? FirstVersion : recorded.Clip is null ? SecondVersion : Version);
         writer.WriteNumber(SeedKey, state.Seed);
 
         if (state.Pace is { } pace)
@@ -300,9 +309,11 @@ public static class NetworkDocument
     /// <remarks>
     /// A training part records the batch size and the early stopping its run went under, and one that holds only one of them,
     /// or — from the second version — neither, is refused where it stands. A part of the first version, which 0.4.0 wrote, may
-    /// hold neither: its checkpoint says nothing of them, and goes on under whatever it is handed. The engine its run was on
-    /// is read where the part names one; a part that names none, as none 0.4.0 wrote does, says nothing of it, and its
-    /// checkpoint goes on on whatever engine it is handed.
+    /// hold neither: its checkpoint says nothing of them, and goes on under whatever it is handed. The norm its run's gradients
+    /// were clipped to is read from a part of the third version, and refused in one of an earlier, which cannot say it; a part
+    /// of the second or third that names none says they were never clipped. The engine its run was on is read where the part
+    /// names one; a part that names none, as none 0.4.0 wrote does, says nothing of it, and its checkpoint goes on on whatever
+    /// engine it is handed.
     /// </remarks>
     public static ResumedRun ReadTraining(string json, string property, NetworkCatalog catalog, SavedNetwork network)
     {
@@ -488,7 +499,8 @@ public static class NetworkDocument
     }
 
     // The batch size and the early stopping the run went under: its patience, its least fall that counts and whether it
-    // restores the best — or null, which says the run had none, where a part without the key says nothing of it.
+    // restores the best — or null, which says the run had none, where a part without the key says nothing of it — and the
+    // norm its gradients were clipped to, written only where they were, which only the third version can say.
     private static void WritePace(Utf8JsonWriter writer, Pace pace)
     {
         writer.WriteNumber(BatchSizeKey, pace.BatchSize);
@@ -496,15 +508,20 @@ public static class NetworkDocument
         if (pace.EarlyStopping is not { } stopping)
         {
             writer.WriteNull(EarlyStoppingKey);
-
-            return;
+        }
+        else
+        {
+            writer.WriteStartObject(EarlyStoppingKey);
+            writer.WriteNumber(PatienceKey, stopping.Patience);
+            writer.WriteNumber(MinDeltaKey, stopping.MinDelta);
+            writer.WriteBoolean(RestoreBestKey, stopping.RestoreBest);
+            writer.WriteEndObject();
         }
 
-        writer.WriteStartObject(EarlyStoppingKey);
-        writer.WriteNumber(PatienceKey, stopping.Patience);
-        writer.WriteNumber(MinDeltaKey, stopping.MinDelta);
-        writer.WriteBoolean(RestoreBestKey, stopping.RestoreBest);
-        writer.WriteEndObject();
+        if (pace.Clip is { } clip)
+        {
+            writer.WriteNumber(ClipNormKey, clip.MaxNorm);
+        }
     }
 
     // The engine the run was on, as it names itself: its name, and its version and its device where it names them.

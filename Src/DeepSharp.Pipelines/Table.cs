@@ -245,7 +245,15 @@ public sealed class Table
     /// <param name="columns">The columns, in the order they should be seen.</param>
     /// <param name="identities">One identity per row, in row order.</param>
     /// <returns>The table, owning both.</returns>
-    internal static Table Owning(List<IColumn> columns, RowIdentity[] identities) => new(columns, identities);
+    /// <param name="id">The column that names each row, when the schema says one does.</param>
+    internal static Table Owning(List<IColumn> columns, RowIdentity[] identities, string? id = null) => new(columns, identities) { Id = id };
+
+    /// <summary>The column that names each row, as the schema the rows were read by said; nothing when none does.</summary>
+    /// <remarks>
+    /// Carried with the table as its identities are, so a step that takes every column of a kind where it stands can leave
+    /// the id out, and the handover can carry it beside the rows. A table made by hand has none.
+    /// </remarks>
+    internal string? Id { get; private init; }
 
     /// <summary>Who each row is: where it was read, and the key of what it says, in row order.</summary>
     public IReadOnlyList<RowIdentity> Identities => _identities;
@@ -395,7 +403,7 @@ public sealed class Table
     /// <param name="names">The columns to leave out; a name the table does not have is passed over.</param>
     /// <returns>A table of the other columns — the same column objects, not copies — and the rows' identities.</returns>
     internal Table Without(IReadOnlyCollection<string> names) =>
-        Owning([.. _columns.Where(column => !names.Contains(column.Name))], [.. _identities]);
+        Owning([.. _columns.Where(column => !names.Contains(column.Name))], [.. _identities], Id);
 
     private Table Picked(IReadOnlyList<int> rows)
     {
@@ -406,7 +414,7 @@ public sealed class Table
             identities[at] = _identities[rows[at]];
         }
 
-        return Owning([.. _columns.Select(column => column.Rows(rows))], identities);
+        return Owning([.. _columns.Select(column => column.Rows(rows))], identities, Id);
     }
 
     /// <summary>Removes the column with this name, if it is there.</summary>

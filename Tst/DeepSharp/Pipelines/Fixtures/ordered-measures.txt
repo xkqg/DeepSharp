@@ -1,0 +1,10 @@
+scipy 1.18.1, numpy 2.5.3, xskillscore 0.0.29, xarray 2026.9.0, Python 3.14.7
+ordered emd: 0.24999999999999997
+ordered kl:  0.13278789899053445
+ordered rps: 0.02968749999999999
+nought where held emd: 0.875
+nought where held kl:  inf
+nought where held rps: 0.34375
+remainder emd: 0.26666666666666666
+remainder kl:  0.13116495914835158
+remainder rps: 0.032499999999999994

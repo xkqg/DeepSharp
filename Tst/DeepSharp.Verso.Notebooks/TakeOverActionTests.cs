@@ -310,6 +310,23 @@ public sealed class TakeOverActionTests : IDisposable
     }
 
     [Fact]
+    public async Task TheTakeOverOfAJoinsNotebook_NamesTheColumnsOfEitherFileTheSavedFileNeverShowed()
+    {
+        // A join names the columns its rows will have from the two files' first lines, so a take-over says what the second
+        // file brings that the saved decisions never showed.
+        File.WriteAllText(Path.Join(_folder, "planned.csv"), "Flock,Age\nF1,30\n");
+        File.WriteAllText(Path.Join(_folder, "arrived.csv"), "Flock,Weight\nF1,10\n");
+        await using var notebook = await NotebookAsync(
+            """{"step": "read.join", "left": {"kind": "csv", "path": "planned.csv"}, "right": {"kind": "csv", "path": "arrived.csv"}, "on": ["Flock"], "unmatched": "refuse"}""",
+            """{"step": "declare", "remainder": "drop", "columns": [{"name": "Flock", "kind": "text", "optional": false}, {"name": "Age", "kind": "number", "optional": false}]}""");
+
+        Saved(Blocks(notebook).Steps, ["Flock", "Age"]);
+        await ListAsync(notebook);
+
+        Assert.Contains("New in the source: Weight", Card(notebook), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task AColumnAStepMakes_IsNamedByThatStep_AndOneTheSourceLacksIsSaidToBeMissingFromIt()
     {
         await using var notebook = await NotebookAsync(Titanic);

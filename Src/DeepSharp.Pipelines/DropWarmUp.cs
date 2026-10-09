@@ -173,14 +173,16 @@ public sealed record DropWarmUpStep : IPipelineStep<DropWarmUpStep>, IDropsRows,
 
     private int WarmUp(Table table)
     {
-        var warmUp = table.Columns.Count == 0 ? 0 : table.Columns.Max(column => column.LeadingGaps());
+        // The columns a model is shown speak for the rows; the id names them, and its gaps say nothing of their history.
+        var columns = table.Columns.Where(column => column.Name != table.Id).ToArray();
+        var warmUp = columns.Length == 0 ? 0 : columns.Max(column => column.LeadingGaps());
 
         if (warmUp == 0)
         {
             return 0;
         }
 
-        var slowest = table.Columns.OrderByDescending(column => column.LeadingGaps()).First();
+        var slowest = columns.OrderByDescending(column => column.LeadingGaps()).First();
 
         // A table with no rows left is a run that should stop rather than succeed, whatever the limit says:
         // a handful of rows served to a long average are all warm-up, and the limit is far above a handful.

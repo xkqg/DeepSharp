@@ -166,17 +166,17 @@ public sealed class SourceCacheTests : IDisposable
         // advice meant for code, which can hand rows in.
         var cache = new SourceCache();
         var catalog = NotebookVerbs.Catalog();
-        string[] files = [.. catalog.Descriptions.Where(each => catalog.ReadStep(each.Template) is IReadsAFile).Select(each => each.Verb)];
+        string[] files = [.. catalog.Descriptions.Where(each => catalog.ReadStep(each.Template) is IReadsAFile or IReadsFiles).Select(each => each.Verb)];
 
         var handed = Assert.Throws<InvalidOperationException>(
             () => cache.RowsFor(new PipelineDeclaration([new ReadRowsStep("handed in")]), SourceFolder.WorkingDirectory));
         var none = Assert.Throws<InvalidOperationException>(() => cache.RowsFor(new PipelineDeclaration([]), SourceFolder.WorkingDirectory));
 
-        Assert.Equal(["read.csv", "read.excel", "read.json", "read.parquet"], files);
+        Assert.Equal(["read.csv", "read.excel", "read.join", "read.json", "read.parquet"], files);
         Assert.Equal(handed.Message, none.Message);
         Assert.All(files, verb => Assert.Contains($"'{verb}'", handed.Message, StringComparison.Ordinal));
         Assert.Equal(
-            "A notebook reads its rows from a file, with 'read.csv', 'read.excel', 'read.json' or 'read.parquet' as its first block, "
+            "A notebook reads its rows from a file, with 'read.csv', 'read.excel', 'read.join', 'read.json' or 'read.parquet' as its first block, "
             + "and hands none in; these blocks read no file, so there are no rows to show.",
             handed.Message);
         Assert.Equal(0, cache.Parsed);
@@ -381,5 +381,101 @@ public sealed class SourceCacheTests : IDisposable
         await kept.GestureAsync(fill, StepRenderer.Show);
 
         Assert.Contains(fill.Outputs, output => output.IsError && output.Content.Contains("fill.missing", StringComparison.Ordinal));
+    }
+
+    // ---- a source of two files: one entry, keyed on both files' bytes in the order the step names them
+
+    private static PipelineDeclaration Joining(string left, string right) =>
+        new([new ReadJoinStep(left, right, ["Flock"], Unmatched.Refuse)]);
+
+    // The key of several files as the cache is to make it: a SHA-256 over each file's own SHA-256, in order.
+    private static string Combined(params string[] paths) =>
+        Convert.ToHexString(SHA256.HashData([.. paths.SelectMany(path => SHA256.HashData(File.ReadAllBytes(path)))])).ToLowerInvariant();
+
+    [Fact]
+    public void AJoinOfTwoFiles_IsParsedOnce_UnderOneKeyOfBothFilesInTheirOrder()
+    {
+        var left = Written("planned.csv", "Flock,Age\nF1,30\nF2,31\n");
+        var right = Written("arrived.csv", "Flock,Weight\nF2,20\nF1,10\n");
+        var cache = new SourceCache();
+
+        var first = cache.RowsFor(Joining(left, right), SourceFolder.WorkingDirectory);
+        var second = cache.RowsFor(Joining(left, right), SourceFolder.WorkingDirectory);
+
+        Assert.Equal(1, cache.Parsed);
+        Assert.Same(first.Rows, second.Rows);
+        Assert.Equal(["Flock", "Age", "Weight"], first.Rows.ColumnNames);
+        Assert.Equal(Combined(left, right), first.Fingerprint);
+        Assert.NotEqual(Combined(right, left), first.Fingerprint);
+        Assert.Same(first.Rows, cache.KeptFor(Joining(left, right))!.Value.Rows);
+        Assert.Null(cache.KeptFor(Joining(right, left)));
+    }
+
+    [Fact]
+    public void ChangingOnlyTheSecondFileOfAJoin_MakesAnotherKey_AndItsRowsAreReadAgain()
+    {
+        // The stale view a key of one file would leave: the right file changes, the left does not.
+        var left = Written("planned.csv", "Flock,Age\nF1,30\nF2,31\n");
+        var right = Written("arrived.csv", "Flock,Weight\nF1,10\nF2,20\n");
+        var cache = new SourceCache();
+
+        var before = cache.RowsFor(Joining(left, right), SourceFolder.WorkingDirectory);
+        File.WriteAllText(right, "Flock,Weight\nF1,11\nF2,20\n");
+        var after = cache.RowsFor(Joining(left, right), SourceFolder.WorkingDirectory);
+
+        Assert.NotEqual(before.Fingerprint, after.Fingerprint);
+        Assert.Equal(2, cache.Parsed);
+        Assert.Equal("11", after.Rows.Rows.First()[2]);
+        Assert.Equal(SourceBytes.Of(after.Fingerprint), SourceCache.BytesOf(Joining(left, right), SourceFolder.WorkingDirectory));
+    }
+
+    [Fact]
+    public void TwoFilesSplitAnotherWay_AreAnotherKey_ThoughTheirBytesRunOnTheSame()
+    {
+        // A digest over the files laid end to end could not tell "ab" and "c" from "a" and "bc"; one over each file's own
+        // digest can.
+        var one = SourceCache.BytesOf(Joining(Written("l1.csv", "Flock\nF1\nF"), Written("r1.csv", "2\n")), SourceFolder.WorkingDirectory);
+        var other = SourceCache.BytesOf(Joining(Written("l2.csv", "Flock\nF1\n"), Written("r2.csv", "F2\n")), SourceFolder.WorkingDirectory);
+
+        Assert.NotEqual(one, other);
+        Assert.NotEqual(SourceBytes.Of("Flock\nF1\nF2\n"u8.ToArray().Fingerprint()), one);
+    }
+
+    [Fact]
+    public void WhatIsKnownOfTheBytesOfAJoin_IsUnreadable_WhenEitherFileIsGone()
+    {
+        var left = Written("planned.csv", "Flock,Age\nF1,30\n");
+
+        Assert.Equal(SourceBytes.Unreadable, SourceCache.BytesOf(Joining(left, Path.Join(_folder, "gone.csv")), SourceFolder.WorkingDirectory));
+        Assert.Equal(SourceBytes.Unreadable, SourceCache.BytesOf(Joining(Path.Join(_folder, "gone.csv"), left), SourceFolder.WorkingDirectory));
+    }
+
+    [Fact]
+    public async Task AViewOverAJoin_IsWorkedOutAgain_WhenOnlyTheSecondFileChanges_AndKeptWhileNeitherDoes()
+    {
+        File.WriteAllText(Path.Join(_folder, "planned.csv"), "Flock,Age\nF1,30\nF2,31\n");
+        File.WriteAllText(Path.Join(_folder, "arrived.csv"), "Flock,Weight\nF1,10\nF2,20\n");
+
+        await using var notebook = await Notebook.OpenAsync(Path.Join(_folder, "flocks.verso"));
+        notebook.AddBlock("""{"step": "read.join", "left": {"kind": "csv", "path": "planned.csv"}, "right": {"kind": "csv", "path": "arrived.csv"}, "on": ["Flock"], "unmatched": "refuse"}""");
+        notebook.AddBlock("""{"step": "declare", "remainder": "drop", "columns": [{"name": "Flock", "kind": "text", "optional": false, "id": true}, {"name": "Age", "kind": "number", "optional": false}, {"name": "Weight", "kind": "number", "optional": false}]}""");
+
+        var declare = notebook.Scaffold.Cells[1];
+        var session = notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session;
+
+        await notebook.GestureAsync(declare, StepRenderer.Show);
+        var first = declare.Outputs[1].Content;
+        await notebook.GestureAsync(declare, StepRenderer.Show);
+
+        Assert.Equal(1, session.ViewsRun);
+        Assert.Equal(1, session.Sources.Parsed);
+
+        File.WriteAllText(Path.Join(_folder, "arrived.csv"), "Flock,Weight\nF1,17\nF2,20\n");
+        await notebook.GestureAsync(declare, StepRenderer.Show);
+
+        Assert.Equal(2, session.ViewsRun);
+        Assert.Equal(2, session.Sources.Parsed);
+        Assert.NotEqual(first, declare.Outputs[1].Content);
+        Assert.Contains(">17<", declare.Outputs[1].Content, StringComparison.Ordinal);
     }
 }

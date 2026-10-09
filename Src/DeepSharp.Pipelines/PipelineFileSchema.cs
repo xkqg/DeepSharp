@@ -253,7 +253,7 @@ internal static class PipelineFileSchema
             // None named is the key left out, and an empty list reads the same way.
             if (!parameter.Optional)
             {
-                columns["minItems"] = 1;
+                columns["minItems"] = parameter.AtLeast ?? 1;
             }
 
             // As the reader: a set names each column once, and only a list of roles may name one again.

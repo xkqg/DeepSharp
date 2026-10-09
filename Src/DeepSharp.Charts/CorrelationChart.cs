@@ -4,7 +4,6 @@
 using DeepSharp.Pipelines;
 using MatPlotLibNet;
 using MatPlotLibNet.Models;
-using MatPlotLibNet.Numerics;
 using MatPlotLibNet.Rendering.TickFormatters;
 using MatPlotLibNet.Rendering.TickLocators;
 using MatPlotLibNet.Styling.ColorMaps;
@@ -18,26 +17,56 @@ public static class CorrelationChart
     {
         /// <summary>
         /// The correlation of the columns as a heatmap: every coefficient on the whole of its scale, from minus one to one, blue to
-        /// red, each cell labelled with its value.
+        /// red, each cell labelled with its value. The coefficient drawn is the one the correlation was declared with.
         /// </summary>
         /// <returns>The chart, as the text of an SVG.</returns>
         /// <exception cref="ArgumentException">Fewer than two rows were kept, which correlate nothing.</exception>
-        /// <remarks>The coefficients are MatPlotLibNet's, as is the drawing.</remarks>
+        /// <remarks>
+        /// The coefficients are the pipeline's, worked out once from the rows it kept
+        /// (<see cref="CorrelationInput.Correlate"/>); the drawing is MatPlotLibNet's. A pair with no coefficient — a column that
+        /// never changes — is a cell with no colour, not one coloured as nought.
+        /// </remarks>
         public string Heatmap() => HeatmapFigure(correlation).ToSvg();
     }
 
-    /// <summary>The figure <see cref="Heatmap"/> draws.</summary>
+    extension(CorrelationMatrix matrix)
+    {
+        /// <summary>
+        /// One kind of coefficient of a correlation as a heatmap: every coefficient on the whole of its scale, from minus one to
+        /// one, blue to red, each cell labelled with its value.
+        /// </summary>
+        /// <param name="coefficient">Which coefficient to draw; Pearson's, which says nothing more than the picture, unless asked.</param>
+        /// <returns>The chart, as the text of an SVG; Spearman's says so in a title.</returns>
+        /// <exception cref="ArgumentException">Fewer than two rows were kept, which correlate nothing.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">The coefficient is none of those there are.</exception>
+        /// <remarks>
+        /// For a correlation worked out by hand or kept beside others, to draw it without the pipeline that made it. A pair with
+        /// no coefficient is a cell with no colour, not one coloured as nought.
+        /// </remarks>
+        public string Heatmap(Coefficient coefficient = Coefficient.Pearson) => HeatmapFigure(matrix, coefficient).ToSvg();
+    }
+
+    /// <summary>The figure <see cref="Heatmap(CorrelationInput)"/> draws.</summary>
     internal static Figure HeatmapFigure(CorrelationInput correlation)
     {
         ArgumentNullException.ThrowIfNull(correlation);
 
-        if (correlation.Kept < 2)
+        return HeatmapFigure(correlation.Correlate(), correlation.Coefficient);
+    }
+
+    /// <summary>The figure <see cref="Heatmap(CorrelationMatrix, Coefficient)"/> draws.</summary>
+    internal static Figure HeatmapFigure(CorrelationMatrix matrix, Coefficient coefficient)
+    {
+        ArgumentNullException.ThrowIfNull(matrix);
+
+        var coefficients = matrix.Of(coefficient);
+
+        if (matrix.Kept < 2)
         {
-            throw new ArgumentException("A correlation is drawn from two rows at least, and fewer were kept.", nameof(correlation));
+            throw new ArgumentException("A correlation is drawn from two rows at least, and fewer were kept.", nameof(matrix));
         }
 
-        var names = correlation.Columns.ToArray();
-        var matrix = NpStats.Corrcoef([.. Enumerable.Range(0, names.Length).Select(column => correlation.Rows.Select(row => row[column]).ToArray())]);
+        var names = matrix.Columns.ToArray();
         var data = new double[names.Length, names.Length];
         var positions = Enumerable.Range(0, names.Length).Select(position => (double)position).ToArray();
 
@@ -45,19 +74,25 @@ public static class CorrelationChart
         {
             for (var column = 0; column < names.Length; column++)
             {
-                data[row, column] = matrix[row, column];
+                data[row, column] = coefficients[row, column];
             }
         }
 
         var size = 160 + (60 * names.Length);
+        var figure = new FigureBuilder().WithSize(size + 120, size);
 
-        return new FigureBuilder()
-            .WithSize(size + 120, size)
+        // Pearson's picture is the one this has always drawn and stays as it was; the other says what it is.
+        if (coefficient != Coefficient.Pearson)
+        {
+            figure = figure.WithTitle($"{coefficient} rank correlation");
+        }
+
+        return figure
             .AddSubPlot(1, 1, 1, axes => axes
                 .Heatmap(data, series =>
                 {
-                    series.ColorMap = ColorMaps.Coolwarm;
-                    series.Normalizer = FromMinusOneToOne.Instance;
+                    series.ColorMap = new BlankWhereUndefined(ColorMaps.Coolwarm);
+                    series.Normalizer = new CenteredNormNormalizer(0, 1);
                     series.ShowLabels = true;
                     series.LabelFormat = "0.00";
                 })

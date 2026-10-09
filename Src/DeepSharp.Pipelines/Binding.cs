@@ -75,7 +75,10 @@ public static class SchemaBinding
             identities[at] = new RowIdentity(at, digest.Of(rows[at]));
         }
 
-        return Table.Owning(columns, identities);
+        // The column that names each row, when the schema says one does and the rows have it.
+        var id = schema.IdColumn is { } named && columns.Any(column => column.Name == named) ? named : null;
+
+        return Table.Owning(columns, identities, id);
     }
 
     private static Dictionary<string, int> Positions(DeclareStep schema, IRowSource source)

@@ -1,0 +1,80 @@
+{
+  "version": 7,
+  "declare": {
+    "step": "declare",
+    "remainder": "drop",
+    "columns": [
+      {
+        "name": "Date",
+        "kind": "timestamp",
+        "optional": false
+      },
+      {
+        "name": "Seq",
+        "kind": "integer",
+        "optional": false
+      },
+      {
+        "name": "Farm",
+        "kind": "category",
+        "optional": false
+      },
+      {
+        "name": "Animals",
+        "kind": "number",
+        "optional": false
+      },
+      {
+        "name": "Age",
+        "kind": "number",
+        "optional": false
+      },
+      {
+        "name": "b1",
+        "kind": "number",
+        "optional": false
+      },
+      {
+        "name": "b2",
+        "kind": "number",
+        "optional": false
+      },
+      {
+        "name": "b3",
+        "kind": "number",
+        "optional": false
+      },
+      {
+        "name": "b4",
+        "kind": "number",
+        "optional": false
+      },
+      {
+        "name": "b5",
+        "kind": "number",
+        "optional": false
+      },
+      {
+        "name": "Temp",
+        "kind": "number",
+        "optional": true
+      }
+    ]
+  },
+  "drop": [
+    "Date",
+    "Seq",
+    "Animals"
+  ],
+  "output": {
+    "step": "target.distribution",
+    "columns": [
+      "b1",
+      "b2",
+      "b3",
+      "b4",
+      "b5"
+    ],
+    "scaleBy": "Animals"
+  }
+}

@@ -113,18 +113,23 @@ internal static class VerbReference
             [new(parameter.Key, $"the name of a column holding {Kinds(parameter.Accepts)}{(parameter.Optional ? "; may be left out" : string.Empty)}")];
 
         public IReadOnlyList<Row> Visit(NewColumnParameter parameter) =>
-            [new(parameter.Key, parameter.Optional
-                ? "the name of the column it makes; left out, the step decides"
-                : "the name of the column it makes")];
+            [new(parameter.Key, parameter switch
+            {
+                { Optional: false } => "the name of the column it makes",
+                { Example: null } => "the name of the column it makes; left out, it makes none",
+                _ => "the name of the column it makes; left out, the step decides",
+            })];
 
         public IReadOnlyList<Row> Visit(ColumnsParameter parameter) =>
-            [new(parameter.Key, $"a list of the names of columns holding {Kinds(parameter.Accepts)}{(parameter.Repeatable ? string.Empty : ", each named once")}{(parameter.Optional ? "; may be left out" : string.Empty)}")];
+            [new(parameter.Key, $"a list of the names of columns holding {Kinds(parameter.Accepts)}{(parameter.Repeatable ? string.Empty : ", each named once")}{(parameter.AtLeast is { } least ? string.Create(CultureInfo.InvariantCulture, $", {least} at least") : string.Empty)}{(parameter.Optional ? "; may be left out" : string.Empty)}")];
 
         public IReadOnlyList<Row> Visit(NumberParameter parameter) =>
-            [new(parameter.Key, parameter.Above is { } above
-                ? string.Create(CultureInfo.InvariantCulture, $"a number above {above}")
-                : parameter.AtLeast is { } least ? string.Create(CultureInfo.InvariantCulture, $"a number, {least} or more")
-                : "a number")];
+            [new(parameter.Key, string.Concat(
+                parameter.Above is { } above
+                    ? string.Create(CultureInfo.InvariantCulture, $"a number above {above}")
+                    : parameter.AtLeast is { } least ? string.Create(CultureInfo.InvariantCulture, $"a number, {least} or more")
+                    : "a number",
+                parameter.LeftOut is { } left ? string.Create(CultureInfo.InvariantCulture, $"; left out, {left}") : string.Empty))];
 
         public IReadOnlyList<Row> Visit(WholeNumberParameter parameter) =>
             [new(parameter.Key, string.Concat(
@@ -132,14 +137,15 @@ internal static class VerbReference
                 parameter.AtLeast is { } least ? string.Create(CultureInfo.InvariantCulture, $", at least {least}") : string.Empty,
                 parameter.LeftOut is { } left ? string.Create(CultureInfo.InvariantCulture, $"; left out, {left}") : string.Empty))];
 
-        public IReadOnlyList<Row> Visit(TrueOrFalseParameter parameter) => [new(parameter.Key, "`true` or `false`")];
+        public IReadOnlyList<Row> Visit(TrueOrFalseParameter parameter) =>
+            [new(parameter.Key, parameter.LeftOut is { } left ? $"`true` or `false`; left out, `{left.ToString(CultureInfo.InvariantCulture).ToLowerInvariant()}`" : "`true` or `false`")];
 
         public IReadOnlyList<Row> Visit(ShareParameter parameter) =>
             [new(parameter.Key, "a share, from nought to one; left out, there is none")];
 
         public IReadOnlyList<Row> Visit<TEnum>(OneOfParameter<TEnum> parameter)
             where TEnum : struct, Enum =>
-            [new(parameter.Key, $"one of {Choices(parameter.Choices)}")];
+            [new(parameter.Key, $"one of {Choices(parameter.Choices)}{(parameter.LeftOut is { } left ? $"; left out, {left.Word()}" : string.Empty)}")];
 
         public IReadOnlyList<Row> Visit<TEnum>(SeveralOfParameter<TEnum> parameter)
             where TEnum : struct, Enum =>
@@ -168,13 +174,15 @@ internal static class VerbReference
                                + "read by nothing — a category may say which kind it `was` before it became one, a timestamp "
                                + "the `format` its moments are written in, as .NET writes a date format, without which they are "
                                + "read as ISO 8601 writes them, and any column the value that is `missing` there, which is read "
-                               + "as a gap"),
+                               + "as a gap; one column of whole numbers, a category or text may say it is the `id`, which names "
+                               + "each row, is carried beside it and is never a feature"),
         ];
 
         public IReadOnlyList<Row> Visit(PartsParameter parameter) =>
         [
             new(parameter.Key, (parameter.Single ? "a part, written as a name and its settings: " : "a list of parts, each a name and its settings: ")
-                               + Joined([.. parameter.Kinds.Select(Named)])),
+                               + Joined([.. parameter.Kinds.Select(Named)])
+                               + (parameter.LeftOut is { } left ? $"; left out, {Joined([.. left.Select(part => $"`{part.Kind}`")])}" : string.Empty)),
         ];
 
         // One name a part may give, with the settings it takes, as a reader of the page needs them.

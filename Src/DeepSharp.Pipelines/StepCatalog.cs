@@ -34,6 +34,7 @@ public sealed class StepCatalog
 
         catalog.Register<ReadCsvStep>();
         catalog.Register<ReadRowsStep>();
+        catalog.Register<ReadJoinStep>();
         catalog.Register<DeclareStep>();
         catalog.Register<SplitByTimeStep>();
         catalog.Register<SplitAtRandomStep>();
@@ -41,12 +42,14 @@ public sealed class StepCatalog
         catalog.Register<FillMissingStep>();
         catalog.Register<AddFeatureStep>();
         catalog.Register<CyclicalStep>();
+        catalog.Register<CycleStep>();
         catalog.Register<NormaliseStep>();
         catalog.Register<NormaliseRowStep>();
         catalog.Register<EncodeStep>();
         catalog.Register<TargetStep>();
         catalog.Register<DistributionStep>();
         catalog.Register<LabelsStep>();
+        catalog.Register<NumbersStep>();
         catalog.Register<AheadStep>();
         catalog.Register<FillNaNStep>();
         catalog.Register<DropWarmUpStep>();

@@ -18,6 +18,20 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.8.1 is about optimizing: the numbers a network is trained with, searched for and measured by.** AdamW, RMSprop and
+Nadam join Sgd and Adam, each held to PyTorch's own numbers; gradients can be clipped by their norm, a rate can warm up,
+and a run can be watched epoch by epoch and stopped. `Study` tries many networks on rows a pipeline prepared, chooses by
+the validation rows and keeps the test rows for the winner alone — `testSeed` fixes the test rows while the rest are dealt
+again — and `Comparison` says, deal by deal and with its spread, whether a change helped. An answer that is a
+distribution can be in an order: `emd`, `kl` and `rps` measure it, `earthMoversDistance` trains on it, and
+`remainder` keeps what a flock that arrived short leaves; `target.numbers` is an answer of several free numbers. Two files
+are one source with `read.join`, an `id` column travels with its rows and comes back beside the predictions, a
+correlation is worked out once as numbers — Pearson's and Spearman's — and a profile can flag columns that keep one
+another's order. A weekday written as a number is refused where it is declared instead of failing when the pipeline
+runs, and a [step of your own](https://github.com/xkqg/DeepSharp/wiki/Writing-a-step-of-your-own) has a page. The
+pipeline file is at version 8: everything written before still reads, and 0.8.0 refuses a file of the eighth by its
+number.
+
 **0.8.0 lands what an exchange answers with as a file, and the pipeline reads it like any other.** A source that answers
 differently every time it is asked cannot be read while a model trains: the pipeline would train on other numbers
 tomorrow and still claim to be the same pipeline. `DeepSharp.Pipelines.Binance` fetches the candles of a market on
@@ -28,51 +42,8 @@ The HTTP, the retries and the pacing are that package's alone — a project that
 them — and it asks as a guest: an address's budget is shared with whatever else runs on it, so it goes slowly, waits
 once the address has used half of what a minute allows, and stops the moment Binance says stop.
 
-**0.7.1 gives a pipeline a course to fill in.** The steps of a prepared pipeline in the order they belong, each waiting
-for what only you know: the file, the columns, the bounds. `PipelineCourse.Table` is the course for rows that do not
-depend on one another and `PipelineCourse.SeriesInTime` the one for rows that follow each other in time, because the
-rules that keep a declaration honest say no one order teaches both. A course is a value — `Say` fills in a step,
-`Waiting` names what still waits and `Pdd.From` starts a pipeline from one filled in all the way — and a file of its own,
-read through the same door as the pipeline's. In a notebook, two buttons write the steps the blocks do not hold yet, each
-block as its verb's skeleton with a `null` where only you can say, and a block added in DeepSharp's own host arrives as
-the step that belongs there instead of empty.
-
-**0.7.0 trains a tree from ML.NET behind the same seam a network stands behind.** A table that a tree learns better
-than a network does not have to become a network: `.WithML(trainer => trainer.FastTree())` says which trainer the rows
-are prepared for, `pipeline.TrainWithML()` runs the pipeline for what that trainer needs — leaving out the scalings a
-tree does without, and writing down which — and the pipeline's own report then measures the tree and a network on the
-same rows. It names boosted trees and a forest and no other trainer, because a declaration promises that running it
-again gives the same model and only a tree keeps that promise from the seed the declaration carries. The library it
-brings travels in a package of its own, so a notebook or a server that only reads a model never carries ML.NET.
-
-**0.6.2 settles a gap where the features are worked out.** A column derived from one with a gap is itself a gap, and
-filling that column afterwards does not reach back into it — because what fills a gap is learned from the training rows,
-and so stands below the split. `.SettleGaps(gaps => gaps.Zero("trades"))` is the other half: a nought, a number you
-choose, or a refusal, none of them a value any row decided, so it stands where the features are and a feature worked out
-after it is worked out from settled columns. It writes nothing down, because there is nothing it learned.
-
-**0.6.1 gives every per-column verb one line.** `.Normalise(scale => scale.MidRange("age", "fare").Robust("volume"))`
-names a kind and the columns it holds for, and the gaps, the reshapings, the moments on a circle, the clipped extremes
-and the pieces of a moment take the same shape; `.DefaultFeatures(Form)` says once, above the split, where the features
-land, and a scaling that names no kind lands them between minus one and one. One step a column reaches the declaration
-either way, so the file is what it was. It also says apart what a fit learns, what it decides and what it merely saw,
-and it is where every extension method in the library became a member of an `extension(T value)` block — both of which
-leave the published surface and every saved file exactly as they were.
-
-**0.6.0 puts the model in the pipeline.** A pipeline says which network its rows are prepared for — the layers, what
-moves them, what judges them, when the run stops and the engine it runs on — in the words TensorFlow and Keras use or
-the words PyTorch uses, and running it trains exactly that network. The whole course from a file to a validated model
-is one declaration, saved as one file and replayed from it. Beneath it stands what came before: a network trains, is
-measured by its pipeline's report and serves on the light engine `DeepSharp` ships or on libtorch, on the processor or
-a graphics card, without a line of it changing; a model PyTorch, Keras or an ONNX exporter saved is read into the same
-network; the pipeline reads Parquet files, Excel workbooks and JSON files as it reads a comma-separated one, and what
-an exchange answers with once it is landed as a file, and runs for the learner that learns from it; layers, losses and
-optimizers; a training loop that stops once the validation
-rows no longer improve; the report and the charts; tensors whose gradients are worked out automatically, the data half
-— which proposes what each column holds and names what should not be there — and a notebook to see the data in, whose
-blocks now hold the network too. The [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what is done and what
-is left out on purpose, and the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md) records what each
-release added.
+Earlier releases are in the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md), which records what each one
+added, and the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what is done and what is left out on purpose.
 
 ```
 dotnet add package DeepSharp
@@ -391,6 +362,8 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) | The idea this library is built around, and the mistake it removes. |
 | [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) | Every verb in the order you write it: readers, features, the split, gaps, scales, what a model is asked to predict, the handover, and a run for each learner. |
 | [Live sources](https://github.com/xkqg/DeepSharp/wiki/Live-sources) | A source that answers differently every time it is asked, fetched once over a closed window and landed as a file: Binance's candles, what a landing is, what it refuses, and how it keeps to a budget it shares. |
+| [Writing a step of your own](https://github.com/xkqg/DeepSharp/wiki/Writing-a-step-of-your-own) | A verb of your own that stands in a pipeline like the ones that ship, and the leak a step that learns from the answer can make. |
+| [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network) | Which learning rate, how many units: a study that chooses by the validation rows and keeps the test rows for the winner, and a paired comparison of two pipelines. |
 | [Networks](https://github.com/xkqg/DeepSharp/wiki/Networks) | Layers, losses, optimizers and the loop; a network in Keras's words or as code; trained behind a pipeline, measured, drawn and saved as one file. |
 | [TorchSharp backend](https://github.com/xkqg/DeepSharp/wiki/TorchSharp-backend) | The engine on libtorch: what your application brings, what the engine is held to, and when it is the faster. |
 | [Importing a model](https://github.com/xkqg/DeepSharp/wiki/Importing-a-model) | A model PyTorch, Keras or an ONNX exporter saved, read into the same network: what each reader reads, and what it refuses. |
@@ -406,15 +379,15 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 
 | | |
 |---|---|
-| `DeepSharp` | The tensors, their shape and the storage their values live on, the seam the arithmetic runs behind, what every engine refuses, the light engine on .NET's own vector maths, and the gradients worked out through it; the layers — dense, activations, dropout, normalisations, convolution, its window padded as TensorFlow's 'same' if you say so — networks written as code or described in Keras's words, losses, optimizers and learning-rate schedules, the training loop with early stopping and checkpoints, a network written down as the kinds it is made of and the numbers it learned, and the load that puts numbers trained elsewhere into its slots. Brings System.Numerics.Tensors alone. |
-| `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales — one line naming the kind and the columns it holds for, landing the features between minus one and one unless the pipeline says otherwise — a profile that names what should not be there, the answer in four kinds, the report of what a trained model is measured by, the learner a declaration is written for, the handover — a run for each learner, and every feature declared to land between minus one and one for a learner that needs it — and the column decisions saved on their own and taken over, and a course to fill in — the steps of a prepared pipeline in the order they belong, each waiting for what only you know — saved as a file and replayed. Knows no tensor, and brings nothing but Microsoft's dependency-injection abstractions. |
+| `DeepSharp` | The tensors, their shape and the storage their values live on, the seam the arithmetic runs behind, what every engine refuses, the light engine on .NET's own vector maths, and the gradients worked out through it; the layers — dense, activations, dropout, normalisations, convolution, its window padded as TensorFlow's 'same' if you say so — networks written as code or described in Keras's words, losses, optimizers — Sgd, Adam, AdamW, RMSprop and Nadam, derivable by an optimizer of your own — and learning-rate schedules, the training loop with early stopping, gradient clipping, an epoch hook, cancellation and checkpoints, a network written down as the kinds it is made of and the numbers it learned, and the load that puts numbers trained elsewhere into its slots. Brings System.Numerics.Tensors alone. |
+| `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales — one line naming the kind and the columns it holds for, landing the features between minus one and one unless the pipeline says otherwise — a profile that names what should not be there, the answer in five kinds, ordered or not, the report of what a trained model is measured by — amounts, classes and shares —, the learner a declaration is written for, the handover — a run for each learner, and every feature declared to land between minus one and one for a learner that needs it — and the column decisions saved on their own and taken over, a source that joins two files, an id that travels with its rows, a correlation worked out once as numbers, and a course to fill in — the steps of a prepared pipeline in the order they belong, each waiting for what only you know — saved as a file and replayed. Knows no tensor, and brings nothing but Microsoft's dependency-injection abstractions. |
 | `DeepSharp.Pipelines.Parquet` | `.ReadParquet(path)`: an Apache Parquet file, which says what each of its columns holds. Brings Parquet.Net 6.1.0 and the compression libraries it reads with. |
 | `DeepSharp.Pipelines.Excel` | `.ReadExcel(path)` and `.ReadExcel(path, sheet)`: a sheet of an `.xlsx`, `.xls` or `.xlsb` workbook, each cell as the sheet types it. Brings ExcelDataReader 3.9.0. |
 | `DeepSharp.Pipelines.Json` | `.ReadJson(path)`: a JSON file holding an array of records, each value as the file writes it. Brings nothing: .NET reads JSON itself. |
 | `DeepSharp.Pipelines.DataFrame` | One reader for the long tail: a CSV, a database query, rows already in hand — anything that fills Microsoft's DataFrame, `Microsoft.Data.Analysis`, reached through [MatPlotLibNet.DataFrame](https://www.nuget.org/packages/MatPlotLibNet.DataFrame). A CSV comes through as the text the file writes, and a query with the kinds the database gives its columns. |
 | `DeepSharp.Pipelines.Indicators` | Twelve indicators over a series as pipeline verbs, the arithmetic borrowed from [MatPlotLibNet](https://github.com/xkqg/MatPlotLibNet) rather than written again. |
 | `DeepSharp.Pipelines.Binance` | A live source, landed: `new BinanceCandles("BTCEUR", "1d", from, to)` over a closed window, `LandAsync` into a folder, or `await pipeline.ReadBinanceAsync(candles)` to land it and read it. The candles of a market on Binance become a file beside a record of what was asked and what came back, which the pipeline reads like any other file, by the fingerprint its record names; asking again asks Binance nothing. Brings Polly.Core 8.8.0, which does the retrying; that, the HTTP and the pacing stay in this package, since the pipeline's file names the landed file and nothing of Binance. Not affiliated with Binance; what lands is Binance's data, under Binance's terms. |
-| `DeepSharp.Learners.Networks` | Where a network meets a pipeline: declared in the chain that prepares its rows — `.WithTorch(…)` or `.WithTensorflow(…)`, and `pipeline.Train()` runs it — or written as code and fitted by hand; trained on its training rows, judged by its validation rows, measured by its report, and saved with it as one file that refuses any other fit of it; what it predicts for rows served later comes back in the answer's own units, on whichever engine it is handed, naming what each row holds that the network learned nothing about; and a checkpoint is the same file with what the run needs to go on, refused to a run under another seed, batch size, early stopping or engine. Brings the two packages it joins. |
+| `DeepSharp.Learners.Networks` | Where a network meets a pipeline: declared in the chain that prepares its rows — `.WithTorch(…)` or `.WithTensorflow(…)`, and `pipeline.Train()` runs it — or written as code and fitted by hand; trained on its training rows, judged by its validation rows, measured by its report, and saved with it as one file that refuses any other fit of it; what it predicts for rows served later comes back in the answer's own units, on whichever engine it is handed, naming what each row holds that the network learned nothing about; a search over networks that chooses by the validation rows and keeps the test rows for the winner, and a paired comparison of two pipelines; and a checkpoint is the same file with what the run needs to go on, refused to a run under another seed, batch size, early stopping, clip or engine. Brings the two packages it joins. |
 | `DeepSharp.Learners.ML` | Where a trainer from ML.NET meets a pipeline: the chain says which trainer its rows are prepared for — `.WithML(trainer => trainer.FastTree())` — and the run made for it leaves out the steps a tree does without and writes down which, so a tree and a network are measured by one report on the same rows. This package declares that trainer and reads and writes the model it produces, and it carries no ML.NET at all, so a notebook, a server or an application that only reads a model never brings the library. |
 | `DeepSharp.Learners.MLNet` | The half that carries ML.NET: it hands the prepared rows to Microsoft.ML, fits the tree the declaration names with `pipeline.TrainWithML()`, and writes the model beside the pipeline it was trained behind as one file. It names one trainer family on purpose — boosted trees and a forest — because a tree repeats from the seed the declaration carries, which is what a declaration meant to be replayed has to promise. Brings Microsoft.ML 5.0.0 and Microsoft.ML.FastTree 5.0.0. |
 | `DeepSharp.Backends.TorchSharp` | The arithmetic on libtorch, on the processor or a graphics card: `TorchBackend.OnCpu()` or `TorchBackend.OnGpu(0)`, held to the same contract as the light engine, operation by operation. Brings TorchSharp 0.107.0; the application brings the libtorch it runs on. |

@@ -56,21 +56,32 @@ public sealed class CompiledNetwork
     /// <param name="train">The rows it learns from.</param>
     /// <param name="validation">The rows it is judged by at the end of every epoch, and never trained on; nothing for none.</param>
     /// <param name="options">
-    /// The seed, the epochs, the batches, early stopping, the engine, checkpoints, a checkpoint to go on from — under the seed,
-    /// the batch size and the early stopping it was taken under, on the engine it was taken on, and to as many epochs as asked.
+    /// The seed, the epochs, the batches, early stopping, a clip of the gradients, the engine, checkpoints, a checkpoint to go
+    /// on from — under the seed, the batch size, the early stopping and the clip it was taken under, on the engine it was taken on, and to as many epochs as asked.
     /// </param>
     /// <returns>What the run did, epoch by epoch.</returns>
     /// <exception cref="ArgumentException">
     /// There are no training rows; early stopping or keeping only the best checkpoints is asked for without validation rows,
     /// which is what judges an epoch; a row's answers are not ones the loss could have meant; the rows' examples are of
     /// another shape than a network described in Keras's words takes; or the checkpoint to go on from was taken under another
-    /// seed, another batch size or other early stopping, or on another engine — each difference named — or of another
+    /// seed, another batch size, other early stopping or another clip, or on another engine — each difference named — or of another
     /// network. Nothing is built, restored or trained before all of that is checked.
     /// </exception>
     /// <exception cref="InvalidOperationException">
     /// A batch's loss, or an epoch's validation loss, is not a finite number: something upstream went wrong, and training on it
     /// would learn nothing, as judging an epoch by it would say nothing.
     /// </exception>
+    /// <exception cref="OperationCanceledException">
+    /// The options' <see cref="FitOptions.Cancellation"/> was cancelled, which is read before every batch and before every look
+    /// at the validation rows. Nothing is returned, and no best epoch is put back: the network holds what the last batch it
+    /// finished left it, and the optimizer remembers the steps it took up to there, so a fit of it again goes on from there
+    /// rather than from its start. A checkpoint taken before is as it was taken; a run gone on from it is the run that never
+    /// stopped.
+    /// </exception>
+    /// <remarks>
+    /// Each epoch, once judged and its checkpoint kept, is handed to <see cref="FitOptions.OnEpoch"/> on this thread before the
+    /// next begins; an exception it throws abandons the run as a cancel does, and reaches the caller as it was thrown.
+    /// </remarks>
     public History Fit(TrainingData train, TrainingData? validation, FitOptions options)
     {
         ArgumentNullException.ThrowIfNull(train);
@@ -147,6 +158,8 @@ public sealed class CompiledNetwork
             {
                 checkpoints.Keep(loop.Checkpoint(epochs, judgement));
             }
+
+            options.OnEpoch?.Invoke(epochs[^1]);
         }
 
         if (options.EarlyStopping is { RestoreBest: true } && judgement?.BestSlots is { } best)
@@ -253,6 +266,8 @@ public sealed class CompiledNetwork
 
             for (int start = 0, step = 0; start < order.Length; start += options.BatchSize, step++)
             {
+                options.Cancellation.ThrowIfCancellationRequested();
+
                 var batch = train.Rows(order.AsSpan(start, Math.Min(options.BatchSize, order.Length - start)));
                 var recording = new RecordingBackend(_backend);
                 var outputs = compiled.Network.Forward(batch.Features, Pass.Training(recording, _stream, epoch, step));
@@ -266,7 +281,9 @@ public sealed class CompiledNetwork
                         $"The loss of batch {step + 1} of epoch {epoch + 1} is {value}, not a finite number: the rows, the rate or the network's start have driven it past what a float holds, and training on it would learn nothing."));
                 }
 
-                compiled.Optimizer.Step(_parameters, recording.GradientsOf(loss, _parameters.Select(parameter => parameter.Value)), rate, _backend);
+                var gradients = recording.GradientsOf(loss, _parameters.Select(parameter => parameter.Value));
+
+                compiled.Optimizer.Step(_parameters, options.GradientClip?.Clipped(_parameters, gradients, _backend) ?? gradients, rate, _backend);
                 total += (double)value * batch.Count;
             }
 
@@ -276,6 +293,8 @@ public sealed class CompiledNetwork
         // The loss on rows the network is judged by: evaluation passes a batch at a time, each weighted by the rows it held.
         internal double Evaluate(TrainingData rows, int epoch)
         {
+            options.Cancellation.ThrowIfCancellationRequested();
+
             var total = 0d;
 
             for (var start = 0; start < rows.Count; start += options.BatchSize)
@@ -313,7 +332,7 @@ public sealed class CompiledNetwork
 
             foreach (var named in compiled.Network.Slots())
             {
-                if (named.Slot is Parameter parameter && compiled.Optimizer.MemoryOf(parameter) is { } remembered)
+                if (named.Slot is Parameter parameter && compiled.Optimizer.KeptOf(parameter) is { } remembered)
                 {
                     memory[named.Path] = remembered;
                 }
@@ -328,7 +347,7 @@ public sealed class CompiledNetwork
         }
 
         // Puts the network, the optimizer and the history back where the checkpoint left them — a checkpoint already found to be
-        // of this run's seed, batch size, early stopping and engine, as far as it records them, and of this network's slots; the
+        // of this run's seed, batch size, early stopping, clip and engine, as far as it records them, and of this network's slots; the
         // judgement goes on only where this run is judged too.
         internal Judgement? Resume(Resumable state, List<Epoch> epochs, bool watched)
         {
@@ -338,7 +357,7 @@ public sealed class CompiledNetwork
             {
                 if (slot.Slot is Parameter parameter && state.Memory.TryGetValue(slot.Path, out var remembered))
                 {
-                    compiled.Optimizer.Recall(parameter, remembered);
+                    compiled.Optimizer.PutBack(parameter, remembered);
                 }
             }
 

@@ -390,6 +390,7 @@ public class ColumnFlowTests
         return verb switch
         {
             "feature.add" => new AddFeatureStep("sum", "a", Arithmetic.Plus, "b"),
+            "feature.cycle" => new CycleStep("a", 7, Form.SplitSign),
             "feature.cyclical" => new CyclicalStep("when", Period.HourOfDay, Form.SplitSign),
             "feature.timeParts" => new TimePartsStep("when", [TimePart.Hour, TimePart.Season]),
             "feature.indicator" => new AddIndicatorStep("bands", Indicator.BollingerBands, ["b"], 3),

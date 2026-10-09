@@ -204,6 +204,18 @@ public sealed class ColumnParameter : StepParameter<string>
 public sealed class NewColumnParameter(string key, string description, string example, bool optional = false)
     : StepParameter<string?>(key, description, example)
 {
+    /// <summary>A column the step makes only when a file names it.</summary>
+    /// <param name="key">The key it is written under.</param>
+    /// <param name="description">What it means, and what leaving it out means.</param>
+    /// <remarks>
+    /// Left out, the step makes no such column: nothing is written for it, nothing is read, and a new block starts without
+    /// it — which is why it has no example to start with.
+    /// </remarks>
+    public NewColumnParameter(string key, string description)
+        : this(key, description, null!, optional: true)
+    {
+    }
+
     /// <summary>Whether a file may leave it out.</summary>
     public bool Optional { get; } = optional;
 
@@ -218,9 +230,15 @@ public sealed class NewColumnParameter(string key, string description, string ex
         Optional && !step.TryGetProperty(Key, out _) ? null : step.RequiredString(Key);
 
     /// <inheritdoc />
+    /// <remarks>Nothing is written for a name a file may leave out and was not given, which is what leaving it out means.</remarks>
     public override void Write(Utf8JsonWriter writer, string? value)
     {
         ArgumentNullException.ThrowIfNull(writer);
+
+        if (Optional && value is null)
+        {
+            return;
+        }
 
         writer.WriteString(Key, value);
     }
@@ -282,11 +300,31 @@ public sealed class ColumnsParameter : StepParameter<IReadOnlyList<string>>
     /// </summary>
     public bool Repeatable { get; init; }
 
+    /// <summary>
+    /// The fewest columns it names, when that is more than one: an answer held in several columns names two at least, since
+    /// an answer held in one is a target. Nothing for one at least, or none when <see cref="Optional"/>.
+    /// </summary>
+    public int? AtLeast { get; init; }
+
+    /// <summary>Why fewer than <see cref="AtLeast"/> are refused, when it says more than what the columns mean.</summary>
+    internal string? Fewer { get; init; }
+
     /// <inheritdoc />
     internal override bool IsLeftToThePerson => true;
 
     /// <inheritdoc />
     public override IReadOnlyList<string> RequiredKeys => Optional ? [] : Keys;
+
+    /// <summary>The columns of one answer that several columns hold: two at least, each named once, each holding numbers.</summary>
+    /// <param name="description">What they mean.</param>
+    /// <param name="example">An example of the value.</param>
+    /// <returns>The parameter every output of several columns names its columns with, under 'columns'.</returns>
+    internal static ColumnsParameter OfOneAnswer(string description, IReadOnlyList<string> example) =>
+        new("columns", description, example, ColumnKinds.Numbers)
+        {
+            AtLeast = 2,
+            Fewer = "an answer held in one column is a target.",
+        };
 
     /// <inheritdoc />
     public override IReadOnlyList<string> Read(JsonElement step)
@@ -337,6 +375,11 @@ public sealed class ColumnsParameter : StepParameter<IReadOnlyList<string>>
             throw new ArgumentException($"'{Key}' names at least one column: {Description}", Key);
         }
 
+        if (AtLeast is { } least && value.Count < least)
+        {
+            throw new ArgumentException($"'{Key}' names at least {Counted(least)} columns: {Fewer ?? Description}", Key);
+        }
+
         var named = new HashSet<string>(StringComparer.Ordinal);
 
         foreach (var column in value)
@@ -365,6 +408,12 @@ public sealed class ColumnsParameter : StepParameter<IReadOnlyList<string>>
     /// <inheritdoc />
     private protected override bool Same(IReadOnlyList<string> one, IReadOnlyList<string> other) =>
         one.SequenceEqual(other, StringComparer.Ordinal);
+
+    // A count as a refusal says it: in words up to ten, as a person writes it, and in figures above.
+    private static string Counted(int count) =>
+        count is >= 0 and <= 10
+            ? ((string[])["no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"])[count]
+            : count.ToString(CultureInfo.InvariantCulture);
 
     /// <inheritdoc />
     /// <remarks>A column named in several places — the roles of an indicator — is one column read.</remarks>
@@ -405,6 +454,12 @@ public sealed class NumberParameter : StepParameter<double>
     public double? AtLeast { get; init; }
 
     /// <summary>
+    /// The value a file means by leaving the key out, or nothing when the key is required. That value is never written, so
+    /// a step that gained the parameter writes itself as it did before, and keeps its keys.
+    /// </summary>
+    public double? LeftOut { get; init; }
+
+    /// <summary>
     /// Whether the number is a bound of the person's own column, which nothing could suggest: the lowest value a column can
     /// hold, say. A number that only settles how — how far out a step cuts — is not, and starts as its step starts it.
     /// </summary>
@@ -414,14 +469,22 @@ public sealed class NumberParameter : StepParameter<double>
     internal override bool IsLeftToThePerson => IsABound;
 
     /// <inheritdoc />
-    public override double Read(JsonElement step) => step.RequiredNumber(Key);
+    public override IReadOnlyList<string> RequiredKeys => LeftOut is null ? Keys : [];
 
     /// <inheritdoc />
+    public override double Read(JsonElement step) =>
+        LeftOut is { } left && !step.TryGetProperty(Key, out _) ? left : step.RequiredNumber(Key);
+
+    /// <inheritdoc />
+    /// <remarks>Nothing is written for the value leaving the key out means.</remarks>
     public override void Write(Utf8JsonWriter writer, double value)
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        writer.WriteNumber(Key, value);
+        if (value != LeftOut)
+        {
+            writer.WriteNumber(Key, value);
+        }
     }
 
     /// <inheritdoc />
@@ -568,15 +631,29 @@ public sealed class ShareParameter(string key, string description)
 public sealed class TrueOrFalseParameter(string key, string description, bool example)
     : StepParameter<bool>(key, description, example)
 {
-    /// <inheritdoc />
-    public override bool Read(JsonElement step) => step.RequiredBoolean(Key);
+    /// <summary>
+    /// The value a file means by leaving the key out, or nothing when the key is required. That value is never written, so
+    /// a step that gained the parameter writes itself as it did before, and keeps its keys.
+    /// </summary>
+    public bool? LeftOut { get; init; }
 
     /// <inheritdoc />
+    public override IReadOnlyList<string> RequiredKeys => LeftOut is null ? Keys : [];
+
+    /// <inheritdoc />
+    public override bool Read(JsonElement step) =>
+        LeftOut is { } left && !step.TryGetProperty(Key, out _) ? left : step.RequiredBoolean(Key);
+
+    /// <inheritdoc />
+    /// <remarks>Nothing is written for the value leaving the key out means.</remarks>
     public override void Write(Utf8JsonWriter writer, bool value)
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        writer.WriteBoolean(Key, value);
+        if (value != LeftOut)
+        {
+            writer.WriteBoolean(Key, value);
+        }
     }
 
     /// <inheritdoc />
@@ -600,16 +677,32 @@ public sealed class OneOfParameter<TEnum>(string key, string description, TEnum 
     /// <summary>The words it may hold, as they are written.</summary>
     public IReadOnlyList<string> Choices => Vocabulary<TEnum>.Words;
 
-    /// <inheritdoc />
-    /// <remarks>One of the words, in whatever case it was typed, and nothing else.</remarks>
-    public override TEnum Read(JsonElement step) => Vocabulary<TEnum>.Read(step.RequiredString(Key), Key);
+    /// <summary>
+    /// The word a file means by leaving the key out, or nothing when the key is required. That word is never written, so a
+    /// step that gained the parameter writes itself as it did before, and keeps its keys.
+    /// </summary>
+    public TEnum? LeftOut { get; init; }
 
     /// <inheritdoc />
+    public override IReadOnlyList<string> RequiredKeys => LeftOut is null ? Keys : [];
+
+    /// <inheritdoc />
+    /// <remarks>One of the words, in whatever case it was typed, and nothing else.</remarks>
+    public override TEnum Read(JsonElement step) =>
+        LeftOut is { } left && !step.TryGetProperty(Key, out _) ? left : Vocabulary<TEnum>.Read(step.RequiredString(Key), Key);
+
+    /// <inheritdoc />
+    /// <remarks>Nothing is written for the word leaving the key out means.</remarks>
     public override void Write(Utf8JsonWriter writer, TEnum value)
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        writer.WriteString(Key, Vocabulary<TEnum>.WordFor(value, Key));
+        var word = Vocabulary<TEnum>.WordFor(value, Key);
+
+        if (LeftOut is not { } left || !EqualityComparer<TEnum>.Default.Equals(value, left))
+        {
+            writer.WriteString(Key, word);
+        }
     }
 
     /// <inheritdoc />
@@ -936,7 +1029,7 @@ public sealed class SplitSharesParameter() : StepParameter<SplitShares>(
 
 /// <summary>
 /// A parameter holding the columns a schema declares: each one's name, kind, whether it may be absent, whether it is
-/// excluded, and what a category was before.
+/// excluded, what a category was before, and whether it is the id.
 /// </summary>
 /// <param name="key">The key it is written under.</param>
 /// <param name="description">What it means.</param>
@@ -970,10 +1063,14 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
     public TextParameter Missing { get; } = new(
         "missing", "A value that stands for a gap in the column, read as the gap it is: 0, say, where a file writes 0 for a fare nobody knows. Left out, none does.", "0");
 
+    /// <summary>Whether one declared column is the id, as it is written inside the list.</summary>
+    public TrueOrFalseParameter Id { get; } = new(
+        "id", "Whether the column names each row: carried with the rows, as read, and never a feature. Left out, it does not.", false);
+
     /// <summary>The parts one declared column is written with, in the order they are written, each saying whether a file has to hold it.</summary>
     /// <remarks>
-    /// Whether it is excluded, what a category was, how a timestamp's moments are written and which value stands for a gap
-    /// are left out unless they say something, so a column written before any of them existed is written exactly as it
+    /// Whether it is excluded, what a category was, how a timestamp's moments are written, which value stands for a gap and
+    /// whether it is the id are left out unless they say something, so a column written before any of them existed is written exactly as it
     /// was, and keeps its key.
     /// </remarks>
     public IReadOnlyList<ColumnPart> Parts =>
@@ -985,6 +1082,7 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
         new(Was, Required: false, Only: ColumnKind.Category),
         new(Format, Required: false, Only: ColumnKind.Timestamp),
         new(Missing, Required: false),
+        new(Id, Required: false),
     ];
 
     /// <summary>The keys a file has to hold for every declared column.</summary>
@@ -1021,12 +1119,13 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
                 Was = column.TryGetProperty(Was.Key, out _) ? Was.Read(column) : null,
                 Format = column.TryGetProperty(Format.Key, out _) ? Format.Read(column) : null,
                 Missing = column.TryGetProperty(Missing.Key, out _) ? Missing.Read(column) : null,
+                Id = column.TryGetProperty(Id.Key, out _) && Id.Read(column),
             };
         })];
     }
 
     /// <inheritdoc />
-    /// <remarks>Excluded, what a category was, how a timestamp's moments are written and which value stands for a gap are written only where they say something.</remarks>
+    /// <remarks>Excluded, what a category was, how a timestamp's moments are written, which value stands for a gap and whether it is the id are written only where they say something.</remarks>
     public override void Write(Utf8JsonWriter writer, IReadOnlyList<ColumnDeclaration> value)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -1059,6 +1158,11 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
             if (column.Missing is { } missing)
             {
                 Missing.Write(writer, missing);
+            }
+
+            if (column.Id)
+            {
+                Id.Write(writer, column.Id);
             }
 
             writer.WriteEndObject();
@@ -1114,6 +1218,20 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
             {
                 throw new ArgumentException($"'{column.Name}' says nothing but spaces stands for a gap: a value that does is written out, 0 say.", Key);
             }
+
+            // What names a row is a label and never a measurement, so it is a whole number, a category or words.
+            if (column.Id && column.Kind is not (ColumnKind.Integer or ColumnKind.Category or ColumnKind.Text))
+            {
+                throw new ArgumentException(
+                    $"'{column.Name}' is said to be the id and holds {Vocabulary<ColumnKind>.WordFor(column.Kind, Kind.Key)}: an id names a row and is never measured, so it holds whole numbers, a category or text.",
+                    Key);
+            }
+        }
+
+        // One column names a row: two would be two answers to which row it is.
+        if (value.Where(column => column.Id).Select(column => column.Name).ToArray() is [var first, var second, ..])
+        {
+            throw new ArgumentException($"'{first}' and '{second}' are both said to be the id, and one column names each row.", Key);
         }
 
         var duplicate = value.GroupBy(column => column.Name).FirstOrDefault(group => group.Count() > 1);
@@ -1153,6 +1271,9 @@ public static class ColumnKinds
 
     /// <summary>What a gap can be filled with a number in: a number or a whole number.</summary>
     public static IReadOnlyList<ColumnKind> Fillable { get; } = [ColumnKind.Number, ColumnKind.Integer];
+
+    /// <summary>What is counted or measured, and so can stand on a cycle of a length: a number or a whole number, never true or false.</summary>
+    public static IReadOnlyList<ColumnKind> Quantities { get; } = [ColumnKind.Number, ColumnKind.Integer];
 
     /// <summary>What can hold a value that is not a number: a number with a fraction.</summary>
     public static IReadOnlyList<ColumnKind> Fractions { get; } = [ColumnKind.Number];

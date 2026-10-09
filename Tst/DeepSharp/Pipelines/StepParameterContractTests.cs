@@ -157,7 +157,7 @@ public class StepParameterContractTests
         // New in the second version: dropping columns, encoding every category, putting rows in order. Changed
         // in it: the three splits, which place a row by what it says rather than where it stands, and the
         // warm-up drop, which reads the declared order rather than the file's. New in the third: the report of
-        // what a trained model is measured by. New in the sixth: settling a gap where the features are worked out.
+        // what a trained model is measured by. New in the sixth: settling a gap where the features are worked out. New in the eighth: a number written as a place on a circle, and two files read as one.
         Dictionary<string, int> newer = new(StringComparer.Ordinal)
         {
             ["drop.columns"] = 2,
@@ -179,6 +179,9 @@ public class StepParameterContractTests
             ["target.labels"] = 2,
             ["target.ahead"] = 2,
             ["learn.network"] = 5,
+            ["feature.cycle"] = 8,
+            ["read.join"] = 8,
+            ["target.numbers"] = 8,
         };
 
         Assert.All(since, each => Assert.Equal(newer.GetValueOrDefault(each.Key, 1), each.Value));
@@ -196,39 +199,17 @@ public class StepParameterContractTests
 
         foreach (var parameter in description.Parameters)
         {
-            var kept = 0;
+            // Each other value alone; and, when none survives alone, beside each other value of each other parameter: a value
+            // that means something only beside another the template leaves out — what is left of a whole, beside the whole.
+            var alone = parameter.Accept(new OtherValues()).ToArray();
+            var kept = alone.Count(alternative => Survives(catalog, description, alternative));
 
-            foreach (var alternative in parameter.Accept(new OtherValues()))
+            if (kept == 0)
             {
-                var file = JsonNode.Parse(description.Template)!.AsObject();
-
-                foreach (var (key, value) in alternative)
-                {
-                    file[key] = value?.DeepClone();
-                }
-
-                IPipelineStep step;
-
-                try
-                {
-                    using var document = JsonDocument.Parse(file.ToJsonString());
-                    step = catalog.Read(document.RootElement);
-                }
-                catch (FormatException refused) when (refused.InnerException is ArgumentException)
-                {
-                    // A rule between two parameters — a quantile bound further out than half, an indicator
-                    // with the wrong number of columns — refuses this value beside the others as written.
-                    continue;
-                }
-
-                var written = JsonNode.Parse(Written(step))!.AsObject();
-
-                foreach (var (key, value) in alternative)
-                {
-                    Assert.Equal(value?.ToJsonString(), written[key]?.ToJsonString());
-                }
-
-                kept++;
+                kept = description.Parameters.Where(other => other != parameter)
+                    .SelectMany(other => other.Accept(new OtherValues()))
+                    .SelectMany(other => alone.Select(each => new Dictionary<string, JsonNode?>([.. other, .. each])))
+                    .Count(alternative => Survives(catalog, description, alternative));
             }
 
             Assert.True(kept > 0, $"'{verb}': no value of '{parameter.Key}' other than its example survives the file.");
@@ -274,6 +255,41 @@ public class StepParameterContractTests
     }
 
     /// <summary>For each kind of parameter, the values it can hold other than the one a new block starts with.</summary>
+    // Whether one set of values, written into the verb's template, is read and written back as it was; false when a rule
+    // between two parameters refuses it beside the others as written.
+    private static bool Survives(StepCatalog catalog, StepDescription description, Dictionary<string, JsonNode?> alternative)
+    {
+        var file = JsonNode.Parse(description.Template)!.AsObject();
+
+        foreach (var (key, value) in alternative)
+        {
+            file[key] = value?.DeepClone();
+        }
+
+        IPipelineStep step;
+
+        try
+        {
+            using var document = JsonDocument.Parse(file.ToJsonString());
+            step = catalog.Read(document.RootElement);
+        }
+        catch (FormatException refused) when (refused.InnerException is ArgumentException)
+        {
+            // A rule between two parameters — a quantile bound further out than half, an indicator
+            // with the wrong number of columns — refuses this value beside the others as written.
+            return false;
+        }
+
+        var written = JsonNode.Parse(Written(step))!.AsObject();
+
+        foreach (var (key, value) in alternative)
+        {
+            Assert.Equal(value?.ToJsonString(), written[key]?.ToJsonString());
+        }
+
+        return true;
+    }
+
     private sealed class OtherValues : IStepParameterVisitor<IEnumerable<Dictionary<string, JsonNode?>>>
     {
         private static IEnumerable<Dictionary<string, JsonNode?>> One(string key, JsonNode? value) => [new() { [key] = value }];
@@ -289,8 +305,9 @@ public class StepParameterContractTests
         public IEnumerable<Dictionary<string, JsonNode?>> Visit(ColumnsParameter parameter) =>
             One(parameter.Key, new JsonArray([.. parameter.Example.DefaultIfEmpty("column").Select((_, at) => (JsonNode?)$"other{at}")]));
 
+        // The value leaving a number out means is never written, so it is no other value a file could keep.
         public IEnumerable<Dictionary<string, JsonNode?>> Visit(NumberParameter parameter) =>
-            [.. new[] { parameter.Example * 2, parameter.Example + 1, parameter.Example / 2 }.SelectMany(value => One(parameter.Key, value))];
+            [.. new[] { parameter.Example * 2, parameter.Example + 1, parameter.Example / 2 }.Where(value => value != parameter.LeftOut).SelectMany(value => One(parameter.Key, value))];
 
         public IEnumerable<Dictionary<string, JsonNode?>> Visit(WholeNumberParameter parameter) =>
             [.. new[] { parameter.Example + 1, parameter.Example + 2 }.SelectMany(value => One(parameter.Key, value))];
@@ -335,11 +352,15 @@ public class StepParameterContractTests
             .. One(parameter.Key, new JsonArray(new JsonObject { ["name"] = "other", ["kind"] = "category", ["optional"] = false, ["was"] = "integer" })),
         ];
 
-        // Every name a part may give, each with the settings that name takes at a value other than the one it starts at.
+        // Every name a part may give, each with the settings that name takes at a value other than the one it starts at — but
+        // the part leaving the key out means, which is never written.
         public IEnumerable<Dictionary<string, JsonNode?>> Visit(PartsParameter parameter) =>
         [
-            .. parameter.Kinds.Select(kind => Other(parameter, kind)),
+            .. parameter.Kinds.Select(kind => Other(parameter, kind)).Where(other => parameter.LeftOut is null || !parameter.Read(Parsed(other)).SequenceEqual(parameter.LeftOut)),
         ];
+
+        private static JsonElement Parsed(Dictionary<string, JsonNode?> values) =>
+            JsonDocument.Parse(new JsonObject([.. values.Select(each => KeyValuePair.Create(each.Key, each.Value?.DeepClone()))]).ToJsonString()).RootElement;
 
         private static Dictionary<string, JsonNode?> Other(PartsParameter parameter, PartKind kind)
         {

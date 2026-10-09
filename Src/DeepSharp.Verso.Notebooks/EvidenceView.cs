@@ -7,7 +7,6 @@ using System.Text;
 using System.Text.Json.Nodes;
 using DeepSharp.Charts;
 using DeepSharp.Pipelines;
-using MatPlotLibNet.Numerics;
 using Verso.Abstractions;
 
 namespace DeepSharp.Verso.Notebooks;
@@ -19,7 +18,9 @@ namespace DeepSharp.Verso.Notebooks;
 /// The core measures and this only draws: a profile as a table with its alerts and the rows that are there more
 /// than once, a correlation as a heatmap or as its coefficients, with how many rows it was drawn from, out of how
 /// many, and by which rule — a correlation needs a value in every column of a row, so the rows with a gap in any
-/// of them are left out, and how many is part of what it shows. The correlation itself is MatPlotLibNet's. A
+/// of them are left out, and how many is part of what it shows. The coefficients are the pipeline's, worked out once
+/// from those rows, so the picture, the table and the profile's alerts read the same numbers; a pair with no coefficient — a
+/// column that never changes — is written as not available, never as nought. A
 /// trained model's measures are shown as DeepSharp.Charts renders its pipeline's report — the one rendering, which a C#
 /// cell that ends with the report shows too. Every drawing is DeepSharp.Charts', so a figure is drawn one way wherever it
 /// is shown. Every number is written in the invariant culture.
@@ -89,7 +90,8 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
         var html = new StringBuilder(Style).Append("<div class=\"deepsharp-evidence\"><div class=\"deepsharp-summary\">");
         var names = correlation.Columns.ToArray();
 
-        html.Append("Correlation of ").Append(Encoded(string.Join(", ", names))).Append(" over ")
+        html.Append(correlation.Coefficient == Coefficient.Spearman ? "Spearman correlation, on the ranks, of " : "Correlation of ")
+            .Append(Encoded(string.Join(", ", names))).Append(" over ")
             .Append(Invariant(correlation.Kept)).Append(" of the ").Append(Invariant(correlation.Total)).Append(' ')
             .Append(RowsWord(correlation.Over)).Append(", kept by the rule '")
             .Append(Encoded(correlation.Policy)).Append("': a row with a gap, or a value that is not a finite number, in any of these columns is left out.</div>");
@@ -99,14 +101,14 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
             return CellOutput.Html(html.Append("<div>That is too few rows to correlate anything.</div></div>").ToString());
         }
 
+        var coefficients = correlation.Correlate().Of(correlation.Coefficient);
+
         if (correlation.Shown != Shown.Numbers)
         {
-            return CellOutput.Html(html.Append(correlation.Heatmap()).Append("</div>").ToString());
+            return CellOutput.Html(Undefined(html.Append(correlation.Heatmap()), coefficients).Append("</div>").ToString());
         }
 
-        var matrix = NpStats.Corrcoef([.. Enumerable.Range(0, names.Length).Select(column => correlation.Rows.Select(row => row[column]).ToArray())]);
-
-        return CellOutput.Html(Numbers(html, names, matrix).Append("</div>").ToString());
+        return CellOutput.Html(Undefined(Numbers(html, coefficients), coefficients).Append("</div>").ToString());
     }
 
     /// <inheritdoc />
@@ -121,24 +123,24 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
         return CellOutput.Html(measures.Report().ToHtml());
     }
 
-    private static StringBuilder Numbers(StringBuilder html, string[] names, Mat matrix)
+    private static StringBuilder Numbers(StringBuilder html, CorrelationCoefficients coefficients)
     {
         html.Append("<table><thead><tr><th></th>");
 
-        foreach (var name in names)
+        foreach (var name in coefficients.Columns)
         {
             html.Append("<th>").Append(Encoded(name)).Append("</th>");
         }
 
         html.Append("</tr></thead><tbody>");
 
-        for (var row = 0; row < names.Length; row++)
+        for (var row = 0; row < coefficients.Size; row++)
         {
-            html.Append("<tr><th>").Append(Encoded(names[row])).Append("</th>");
+            html.Append("<tr><th>").Append(Encoded(coefficients.Columns[row])).Append("</th>");
 
-            for (var column = 0; column < names.Length; column++)
+            for (var column = 0; column < coefficients.Size; column++)
             {
-                html.Append("<td class=\"deepsharp-number\">").Append(matrix[row, column].ToString("0.000", CultureInfo.InvariantCulture)).Append("</td>");
+                html.Append("<td class=\"deepsharp-number\">").Append(CoefficientText(coefficients[row, column])).Append("</td>");
             }
 
             html.Append("</tr>");
@@ -146,6 +148,21 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
 
         return html.Append("</tbody></table>");
     }
+
+    // The columns that have no coefficient with any other, said under the picture or the table: their cells are blank or
+    // not available, and a reader should not have to guess why.
+    private static StringBuilder Undefined(StringBuilder html, CorrelationCoefficients coefficients)
+    {
+        foreach (var name in coefficients.Columns.Where((_, at) => double.IsNaN(coefficients[at, at])))
+        {
+            html.Append("<div><code>").Append(Encoded(name)).Append("</code> never changes over these rows, so it has no coefficient with any column.</div>");
+        }
+
+        return html;
+    }
+
+    private static string CoefficientText(double value) =>
+        double.IsNaN(value) ? "n/a" : value.ToString("0.000", CultureInfo.InvariantCulture);
 
     // An alert whose answer changes the columns has a box that gives it, drawn unticked: it carries its column, what
     // answering does and the value it says, and no data-payload, so Verso's router sends whether it is ticked. One answered

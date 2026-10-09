@@ -95,7 +95,7 @@ public class FormFieldNameTests
     {
         // The theories are only worth anything if they find every part: one added or taken away says so here first.
         Assert.Equal(
-            ["Absent", "Format", "Kind", "Member", "Missing"],
+            ["Absent", "Format", "Id", "Kind", "Member", "Missing"],
             Pairs().Select(each => each.Writer.Name).Order(StringComparer.Ordinal));
     }
 

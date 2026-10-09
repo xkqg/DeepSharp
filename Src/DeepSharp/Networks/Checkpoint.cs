@@ -9,8 +9,8 @@ namespace DeepSharp.Networks;
 /// <summary>
 /// What a run needs to go on from the end of an epoch as if it had never stopped: what every slot of the network held, what
 /// the optimizer remembers of every parameter, how far early stopping had got and the history so far — and what the run
-/// went under, which a run going on from it is handed again or refused: the seed, the batch size, the early stopping and
-/// the engine.
+/// went under, which a run going on from it is handed again or refused: the seed, the batch size, the early stopping, the
+/// norm its gradients were clipped to and the engine.
 /// </summary>
 /// <remarks>
 /// Every part is kept by the path of the slot it belongs to, never by the objects of the network it was taken from, so a
@@ -61,8 +61,8 @@ internal sealed record Resumable(long Seed, IReadOnlyList<Epoch> History, IReadO
 
     /// <summary>
     /// Why a run handed these options cannot go on from here as the run the checkpoint was taken of would have: each value it
-    /// was taken under that they differ in — the seed, and whatever of its batch size, its early stopping and its engine it
-    /// records — named with both; nothing when they differ in none.
+    /// was taken under that they differ in — the seed, and whatever of its batch size, its early stopping, its clip and its
+    /// engine it records — named with both; nothing when they differ in none.
     /// </summary>
     /// <param name="options">What the run that is to go on from here is handed.</param>
     /// <returns>The refusal, a sentence for each difference; nothing when the run can go on.</returns>
@@ -124,22 +124,26 @@ internal readonly record struct Engine(string Name, string? Version, string? Dev
 }
 
 /// <summary>
-/// How a run went through its epochs beside its seed: how many rows a batch held, and the early stopping that judged where
-/// it ends — what a run going on from its checkpoint is handed again, or is refused.
+/// How a run went through its epochs beside its seed: how many rows a batch held, the early stopping that judged where it
+/// ends, and the norm its gradients were clipped to — what a run going on from its checkpoint is handed again, or is refused.
 /// </summary>
 /// <param name="BatchSize">How many rows a batch held, the last of an epoch holding what was left.</param>
 /// <param name="EarlyStopping">The early stopping the run went under; nothing when it had none.</param>
 internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping)
 {
+    /// <summary>The clip its gradients went under; nothing when they were never clipped.</summary>
+    public GradientClip? Clip { get; init; }
+
     /// <summary>How a run handed these options goes through its epochs.</summary>
     /// <param name="options">What the run is handed.</param>
-    /// <returns>Its batch size and its early stopping.</returns>
-    public static Pace Of(FitOptions options) => new(options.BatchSize, options.EarlyStopping);
+    /// <returns>Its batch size, its early stopping and its clip.</returns>
+    public static Pace Of(FitOptions options) => new(options.BatchSize, options.EarlyStopping) { Clip = options.GradientClip };
 
     /// <summary>
     /// Each way a run handed these options would go through its epochs otherwise than the run this was taken of, in the words
-    /// a refusal names it with: its batch size, and its early stopping — whether it has any, its patience, its least fall that
-    /// counts and whether it restores the best — each compared by what it says, never by which object says it.
+    /// a refusal names it with: its batch size; its early stopping — whether it has any, its patience, its least fall that
+    /// counts and whether it restores the best; and the norm its gradients are clipped to, or that they are not — each compared
+    /// by what it says, never by which object says it.
     /// </summary>
     /// <param name="options">What the run that is to go on is handed.</param>
     /// <returns>A sentence for each difference, naming what the checkpoint was taken under and what the run is handed.</returns>
@@ -152,9 +156,39 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
                 $"The checkpoint was taken of a run in batches of {BatchSize}, and going on in batches of {options.BatchSize} would take other rows into every step.");
         }
 
+        foreach (var stopping in StoppingUnlike(options.EarlyStopping))
+        {
+            yield return stopping;
+        }
+
+        if (ClipUnlike(options.GradientClip) is { } clip)
+        {
+            yield return clip;
+        }
+    }
+
+    // How the clip a run is handed differs from the one this was taken under, by the norm each says; nothing when it does not.
+    private string? ClipUnlike(GradientClip? handed) => (Clip, handed) switch
+    {
+        (null, null) => null,
+        (null, { } other) => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The checkpoint was taken of a run whose gradients were never clipped, and going on clipping them to a norm of {other.MaxNorm} would move every step otherwise."),
+        ({ } taken, null) => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The checkpoint was taken of a run whose gradients were clipped to a norm of {taken.MaxNorm}, and going on without clipping them would move every step otherwise."),
+        ({ } taken, { } other) when taken.MaxNorm != other.MaxNorm => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The checkpoint was taken of a run whose gradients were clipped to a norm of {taken.MaxNorm}, and going on clipping them to a norm of {other.MaxNorm} would move every step otherwise."),
+        _ => null,
+    };
+
+    // How the early stopping a run is handed differs from the one this was taken under, each difference in its own sentence.
+    private IEnumerable<string> StoppingUnlike(EarlyStopping? stopping)
+    {
         if (EarlyStopping is not { } taken)
         {
-            if (options.EarlyStopping is not null)
+            if (stopping is not null)
             {
                 yield return "The checkpoint was taken of a run with no early stopping, and going on with early stopping would stop it by a rule it never ran under.";
             }
@@ -162,7 +196,7 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
             yield break;
         }
 
-        if (options.EarlyStopping is not { } handed)
+        if (stopping is not { } handed)
         {
             yield return "The checkpoint was taken of a run with early stopping, and going on without it would never stop it early.";
 
@@ -195,7 +229,8 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
 /// <summary>What an optimizer remembers of one parameter: how many steps it took, and the tensors it keeps, by PyTorch's names for them.</summary>
 /// <param name="Steps">How many steps the parameter has taken, for an optimizer that counts them.</param>
 /// <param name="Tensors">The tensors, by name: <c>momentum_buffer</c>; <c>exp_avg</c> and <c>exp_avg_sq</c>.</param>
-internal readonly record struct SlotMemory(int Steps, IReadOnlyDictionary<string, Tensor> Tensors);
+/// <remarks>What <see cref="Optimizer"/> hands a checkpoint to keep, and is handed back when a run goes on from it.</remarks>
+public readonly record struct SlotMemory(int Steps, IReadOnlyDictionary<string, Tensor> Tensors);
 
 /// <summary>How far a run's early stopping, or its judging of the best epoch, has got.</summary>
 /// <param name="Wait">How many epochs since the best.</param>

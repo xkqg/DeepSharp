@@ -1,0 +1,420 @@
+[
+  {
+    "verb": "declare",
+    "since": 1,
+    "keys": [
+      "columns",
+      "remainder"
+    ],
+    "required": [
+      "columns",
+      "remainder"
+    ]
+  },
+  {
+    "verb": "drop.columns",
+    "since": 2,
+    "keys": [
+      "columns"
+    ],
+    "required": [
+      "columns"
+    ]
+  },
+  {
+    "verb": "drop.gaps",
+    "since": 2,
+    "keys": [
+      "columns"
+    ],
+    "required": [
+      "columns"
+    ]
+  },
+  {
+    "verb": "drop.warmup",
+    "since": 2,
+    "keys": [
+      "atMost"
+    ],
+    "required": [
+      "atMost"
+    ]
+  },
+  {
+    "verb": "encode",
+    "since": 1,
+    "keys": [
+      "as",
+      "column",
+      "unseen"
+    ],
+    "required": [
+      "as",
+      "column",
+      "unseen"
+    ]
+  },
+  {
+    "verb": "encode.categories",
+    "since": 2,
+    "keys": [
+      "as",
+      "unseen"
+    ],
+    "required": [
+      "as",
+      "unseen"
+    ]
+  },
+  {
+    "verb": "evidence.correlation",
+    "since": 2,
+    "keys": [
+      "columns",
+      "shown"
+    ],
+    "required": [
+      "columns",
+      "shown"
+    ]
+  },
+  {
+    "verb": "evidence.profile",
+    "since": 2,
+    "keys": [
+      "columns"
+    ],
+    "required": []
+  },
+  {
+    "verb": "evidence.report",
+    "since": 3,
+    "keys": [
+      "metrics",
+      "parts",
+      "shown"
+    ],
+    "required": [
+      "metrics",
+      "parts",
+      "shown"
+    ]
+  },
+  {
+    "verb": "feature.add",
+    "since": 1,
+    "keys": [
+      "arithmetic",
+      "column",
+      "left",
+      "right"
+    ],
+    "required": [
+      "arithmetic",
+      "column",
+      "left",
+      "right"
+    ]
+  },
+  {
+    "verb": "feature.cyclical",
+    "since": 1,
+    "keys": [
+      "column",
+      "form",
+      "period"
+    ],
+    "required": [
+      "column",
+      "form",
+      "period"
+    ]
+  },
+  {
+    "verb": "feature.timeParts",
+    "since": 1,
+    "keys": [
+      "asCategories",
+      "column",
+      "parts"
+    ],
+    "required": [
+      "asCategories",
+      "column",
+      "parts"
+    ]
+  },
+  {
+    "verb": "fill.missing",
+    "since": 1,
+    "keys": [
+      "column",
+      "refuseAbove",
+      "with"
+    ],
+    "required": [
+      "column",
+      "with"
+    ]
+  },
+  {
+    "verb": "fill.nan",
+    "since": 1,
+    "keys": [
+      "column",
+      "with"
+    ],
+    "required": [
+      "column",
+      "with"
+    ]
+  },
+  {
+    "verb": "learn.network",
+    "since": 5,
+    "keys": [
+      "batch",
+      "engine",
+      "epochs",
+      "layers",
+      "loss",
+      "optimizer",
+      "seed",
+      "stopping"
+    ],
+    "required": [
+      "batch",
+      "engine",
+      "epochs",
+      "layers",
+      "loss",
+      "optimizer",
+      "seed",
+      "stopping"
+    ]
+  },
+  {
+    "verb": "maths",
+    "since": 1,
+    "keys": [
+      "column",
+      "into",
+      "maths"
+    ],
+    "required": [
+      "column",
+      "maths"
+    ]
+  },
+  {
+    "verb": "normalise",
+    "since": 1,
+    "keys": [
+      "column",
+      "outOfRange",
+      "scale"
+    ],
+    "required": [
+      "column",
+      "outOfRange",
+      "scale"
+    ]
+  },
+  {
+    "verb": "normalise.row",
+    "since": 1,
+    "keys": [
+      "columns",
+      "norm"
+    ],
+    "required": [
+      "columns",
+      "norm"
+    ]
+  },
+  {
+    "verb": "order.by",
+    "since": 2,
+    "keys": [
+      "columns"
+    ],
+    "required": [
+      "columns"
+    ]
+  },
+  {
+    "verb": "outliers.clip",
+    "since": 1,
+    "keys": [
+      "at",
+      "bounds",
+      "column",
+      "outlier"
+    ],
+    "required": [
+      "at",
+      "bounds",
+      "column",
+      "outlier"
+    ]
+  },
+  {
+    "verb": "read.csv",
+    "since": 1,
+    "keys": [
+      "path"
+    ],
+    "required": [
+      "path"
+    ]
+  },
+  {
+    "verb": "read.rows",
+    "since": 1,
+    "keys": [
+      "description"
+    ],
+    "required": [
+      "description"
+    ]
+  },
+  {
+    "verb": "scale.given",
+    "since": 7,
+    "keys": [
+      "column",
+      "highest",
+      "lands",
+      "lowest"
+    ],
+    "required": [
+      "column",
+      "highest",
+      "lands",
+      "lowest"
+    ]
+  },
+  {
+    "verb": "settle.gaps",
+    "since": 6,
+    "keys": [
+      "column",
+      "with"
+    ],
+    "required": [
+      "column",
+      "with"
+    ]
+  },
+  {
+    "verb": "shuffle",
+    "since": 7,
+    "keys": [
+      "seed"
+    ],
+    "required": [
+      "seed"
+    ]
+  },
+  {
+    "verb": "split.atRandom",
+    "since": 2,
+    "keys": [
+      "predict",
+      "seed",
+      "test",
+      "train",
+      "validation"
+    ],
+    "required": [
+      "seed",
+      "test",
+      "train",
+      "validation"
+    ]
+  },
+  {
+    "verb": "split.byTime",
+    "since": 2,
+    "keys": [
+      "column",
+      "gap",
+      "predict",
+      "test",
+      "train",
+      "validation"
+    ],
+    "required": [
+      "column",
+      "test",
+      "train",
+      "validation"
+    ]
+  },
+  {
+    "verb": "split.stratified",
+    "since": 2,
+    "keys": [
+      "column",
+      "predict",
+      "seed",
+      "test",
+      "train",
+      "validation"
+    ],
+    "required": [
+      "column",
+      "seed",
+      "test",
+      "train",
+      "validation"
+    ]
+  },
+  {
+    "verb": "target",
+    "since": 1,
+    "keys": [
+      "column"
+    ],
+    "required": [
+      "column"
+    ]
+  },
+  {
+    "verb": "target.ahead",
+    "since": 2,
+    "keys": [
+      "ahead",
+      "as",
+      "column"
+    ],
+    "required": [
+      "ahead",
+      "as",
+      "column"
+    ]
+  },
+  {
+    "verb": "target.distribution",
+    "since": 2,
+    "keys": [
+      "columns",
+      "scaleBy"
+    ],
+    "required": [
+      "columns"
+    ]
+  },
+  {
+    "verb": "target.labels",
+    "since": 2,
+    "keys": [
+      "columns",
+      "ones"
+    ],
+    "required": [
+      "columns"
+    ]
+  }
+]

@@ -164,18 +164,156 @@ public sealed class CrossEntropy : Loss, ISaved<CrossEntropy>
 
     /// <inheritdoc />
     /// <remarks>Every share at least nothing, and a row's shares one, within the rounding of their sum.</remarks>
-    protected override string? Refused(IReadOnlyList<double> answers)
+    protected override string? Refused(IReadOnlyList<double> answers) => answers.NotShares();
+}
+
+/// <summary>
+/// The earth mover's distance between each row's shares and its answer, along the order of its columns: how far, column by
+/// column, the predicted shares have to move to be the answer's — for answers that are shares of a whole in an order, as
+/// bands of weight are.
+/// </summary>
+/// <remarks>
+/// The size of the difference between the shares added up from the first column and the answers added up the same way,
+/// summed over every column but the last — where both have added up to one — and averaged over the batch: the Wasserstein
+/// distance scipy measures between the two over the columns' places, a distance of one being one column. A prediction is
+/// each row's shares, as <see cref="CrossEntropy"/> gives them, and a row is refused as it refuses one. Only what the backend
+/// already does is used: the shares are added up by multiplying with a triangle of ones, and the size of a number is the
+/// rectified number and the rectified opposite, whose slope at nought is nought, as the slope of PyTorch's size is there.
+/// <para>
+/// With a remainder, the last answer is what is left of a whole once the columns before it are counted, which stands outside
+/// their order: the columns before it are compared as shares of what they hold together, and what is left by the size of how
+/// far its share is off, so a prediction is trained on the shape of the columns and on how much of the whole they hold, and
+/// moving a share into what is left is never taken for moving it along the order.
+/// </para>
+/// </remarks>
+public sealed class EarthMoversDistance : Loss, ISaved<EarthMoversDistance>
+{
+    private const string RemainderKey = "remainder";
+
+    /// <summary>The distance along the order of every column.</summary>
+    public EarthMoversDistance()
+        : this(remainder: false)
     {
-        if (answers.FirstOrDefault(share => share < 0) is var below and < 0)
+    }
+
+    /// <summary>The distance along the order of the columns, the last of them what is left of the whole when said.</summary>
+    /// <param name="remainder">Whether the last answer is what is left of the whole, outside the order of the others.</param>
+    public EarthMoversDistance(bool remainder) => Remainder = remainder;
+
+    /// <summary>Whether the last answer is what is left of the whole, outside the order of the others.</summary>
+    public bool Remainder { get; }
+
+    /// <inheritdoc />
+    public static string Name => "earthMoversDistance";
+
+    /// <inheritdoc />
+    public static EarthMoversDistance Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        return new(rebuilding.Holds(settings, RemainderKey));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Whether the last answer is what is left of the whole, only when it is.</remarks>
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        if (Remainder)
         {
-            return string.Create(CultureInfo.InvariantCulture, $"a share of {below} is below nothing, and a class's share of a row never is.");
+            writer.WriteBoolean(RemainderKey, true);
+        }
+    }
+
+    /// <inheritdoc />
+    public override OutputActivation Activation => OutputActivation.Softmax;
+
+    /// <inheritdoc />
+    /// <exception cref="ArgumentException">The outputs are not a matrix of rows and columns, or hold fewer than two columns in the order.</exception>
+    protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend)
+    {
+        var ordered = outputs.Shape.Rank == 2 ? outputs.Shape[1] - (Remainder ? 1 : 0) : 0;
+
+        if (ordered < 2)
+        {
+            throw new ArgumentException(
+                $"A distance along an order runs over a matrix of rows with two columns in the order at least{(Remainder ? ", and what is left after them" : string.Empty)}; these outputs are {outputs.Shape}.",
+                nameof(outputs));
         }
 
-        var sum = answers.Sum();
+        var shares = backend.Exp(backend.LogSoftmax(outputs));
 
-        return Math.Abs(sum - 1) <= 1e-6 * Math.Max(1, answers.Count)
-            ? null
-            : string.Create(CultureInfo.InvariantCulture, $"its shares sum to {sum}, and a row's classes share one whole.");
+        if (!Remainder)
+        {
+            return Summed(backend, backend.MatMul(backend.Subtract(shares, answers), Below(ordered)), ordered - 1);
+        }
+
+        var columns = Taking(outputs.Shape[1], ordered);
+        var shape = backend.Subtract(AsShares(backend, backend.MatMul(shares, columns), ordered), AsShares(backend, backend.MatMul(answers, columns), ordered));
+        var left = backend.MatMul(backend.Subtract(shares, answers), Last(outputs.Shape[1]));
+
+        return backend.Add(Summed(backend, backend.MatMul(shape, Below(ordered)), ordered - 1), backend.Mean(Size(backend, left)));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// Every share at least nothing, and a row's shares one, as <see cref="CrossEntropy"/> refuses them; with a remainder, the
+    /// columns before it hold something, or they have no shape to compare.
+    /// </remarks>
+    protected override string? Refused(IReadOnlyList<double> answers) =>
+        answers.NotShares() ?? (Remainder && answers.Take(answers.Count - 1).Sum() <= 0
+            ? "the columns before what is left hold nothing, so they have no order of shares to be measured along."
+            : null);
+
+    // Each row's columns as shares of what they hold together: each over the row's sum, which a square of ones spreads to
+    // every column.
+    private static Tensor AsShares(ITensorBackend backend, Tensor columns, int count) =>
+        backend.Divide(columns, backend.MatMul(columns, Filled(count, count, (_, _) => true)));
+
+    // The batch's mean of each row's sizes summed: the mean of every size, times how many a row holds.
+    private static Tensor Summed(ITensorBackend backend, Tensor differences, int perRow) =>
+        backend.Scale(backend.Mean(Size(backend, differences)), backend.Fill(new Shape(), perRow));
+
+    // The size of every number: the rectified number and the rectified opposite, whose slope at nought is nought.
+    private static Tensor Size(ITensorBackend backend, Tensor values) =>
+        backend.Add(backend.Relu(values), backend.Relu(backend.Scale(values, backend.Fill(new Shape(), -1))));
+
+    // A column added up to each threshold but the last: column i counts towards threshold j when it is not after it.
+    private static Tensor Below(int count) => Filled(count, count - 1, (row, column) => row <= column);
+
+    // The first columns of a row, as they are, and none after them.
+    private static Tensor Taking(int count, int taken) => Filled(count, taken, (row, column) => row == column);
+
+    // The last column of a row alone.
+    private static Tensor Last(int count) => Filled(count, 1, (row, _) => row == count - 1);
+
+    private static Tensor Filled(int rows, int columns, Func<int, int, bool> one) =>
+        Tensor.From(new Shape(rows, columns), [.. Enumerable.Range(0, rows * columns).Select(at => one(at / columns, at % columns) ? 1f : 0f)]);
+}
+
+/// <summary>What a row's answers must be to be shares of one whole.</summary>
+internal static class ShareExtensions
+{
+    extension(IReadOnlyList<double> answers)
+    {
+        /// <summary>Why a row's answers are no shares of one whole, when they are not.</summary>
+        /// <returns>
+        /// The reason — a share below nothing, or shares that do not sum to one within the rounding of their sum — or nothing.
+        /// </returns>
+        public string? NotShares()
+        {
+            if (answers.FirstOrDefault(share => share < 0) is var below and < 0)
+            {
+                return string.Create(CultureInfo.InvariantCulture, $"a share of {below} is below nothing, and a class's share of a row never is.");
+            }
+
+            var sum = answers.Sum();
+
+            return Math.Abs(sum - 1) <= 1e-6 * Math.Max(1, answers.Count)
+                ? null
+                : string.Create(CultureInfo.InvariantCulture, $"its shares sum to {sum}, and a row's classes share one whole.");
+        }
     }
 }
 

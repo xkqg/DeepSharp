@@ -181,7 +181,19 @@ public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns,
         Column = ColumnKey.Require(column);
         Parts = PartsKey.Require([.. parts]);
         AsCategories = asCategories;
+
+        // A weekday and a season are names, and a name asked for as a number used to be parsed as one in the middle of a run.
+        if (!asCategories && Parts.Where(AreNames).ToArray() is [_, ..] names)
+        {
+            throw new ArgumentException(
+                $"{string.Join(" and ", names.Select(part => $"'{part.Word()}'"))} {(names.Length == 1 ? "is a name" : "are names")}, "
+                + "not a quantity, so it cannot be asked for as a number: leave it a group, or place the moment on a circle with Cyclical.",
+                nameof(asCategories));
+        }
     }
+
+    // The pieces that are words: a name read as a number is not a number, so they are only ever a group.
+    private static bool AreNames(TimePart part) => part is TimePart.DayOfWeek or TimePart.Season;
 
     /// <inheritdoc />
     public static StepParameters<TimePartsStep> Parameters { get; } = new StepParameters<TimePartsStep>()
@@ -289,15 +301,10 @@ public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns,
         TimePart.DayOfMonth => moment.Day.ToString(CultureInfo.InvariantCulture),
         TimePart.Month => moment.Month.ToString(CultureInfo.InvariantCulture),
         TimePart.Quarter => (((moment.Month - 1) / 3) + 1).ToString(CultureInfo.InvariantCulture),
-        // Meteorological seasons, northern hemisphere: December to February is winter. A convention rather
-        // than a fact, so it is written down here where somebody can disagree with it on purpose.
-        TimePart.Season => moment.Month switch
-        {
-            12 or 1 or 2 => "winter",
-            3 or 4 or 5 => "spring",
-            6 or 7 or 8 => "summer",
-            _ => "autumn",
-        },
-        _ => moment.Year.ToString(CultureInfo.InvariantCulture),
+        // Meteorological seasons, northern hemisphere: December to February is winter. A convention rather than a fact,
+        // written down once, beside the cycle that places a moment on the seasons, where somebody can disagree on purpose.
+        TimePart.Season => moment.SeasonName,
+        TimePart.Year => moment.Year.ToString(CultureInfo.InvariantCulture),
+        _ => throw new ArgumentOutOfRangeException(nameof(part), part, "There is no such piece of a moment."),
     };
 }

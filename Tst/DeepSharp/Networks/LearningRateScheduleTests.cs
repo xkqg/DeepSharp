@@ -76,6 +76,62 @@ public class LearningRateScheduleTests
         Assert.Equal(0, schedule.RateAt(8, 0.1), 1e-12);
     }
 
+    [Fact]
+    public void ALinearWarmup_RisesFromItsStartToTheRateOverItsEpochs_AsPyTorchsLinearLRDoes_AndHoldsTheRateAfter()
+    {
+        // PyTorch's LinearLR(start_factor=0.25, total_iters=4), as Fixtures/optimizers-pytorch.py printed it.
+        AssertRates(
+            [0.025, 0.043750000000000004, 0.06250000000000001, 0.08125000000000002, 0.10000000000000002, 0.10000000000000002,
+             0.10000000000000002, 0.10000000000000002],
+            new LinearWarmup(epochs: 4, start: 0.25));
+        Assert.Equal(0.1, new LinearWarmup(epochs: 4, start: 0.25).RateAt(40, 0.1), 1e-12);
+    }
+
+    [Fact]
+    public void ALinearWarmup_StartsAtAThirdOfTheRate_UnlessItsStartIsSaid()
+    {
+        // PyTorch's LinearLR as it is left: a third of the rate, over five epochs.
+        AssertRates(
+            [0.03333333333333333, 0.04666666666666667, 0.060000000000000005, 0.07333333333333335, 0.08666666666666668, 0.1, 0.1],
+            new LinearWarmup(epochs: 5));
+        Assert.Equal(1.0 / 3, new LinearWarmup(5).Start);
+        Assert.Null(new LinearWarmup(5).Then);
+    }
+
+    [Fact]
+    public void ALinearWarmup_HandsOverToTheScheduleThatFollowsIt_CountedFromTheEndOfTheRamp_AsPyTorchsSequentialLRDoes()
+    {
+        // SequentialLR([LinearLR(0.25, 4), CosineAnnealingLR(T_max=6, eta_min=0.001)], milestones=[4]).
+        var schedule = new LinearWarmup(epochs: 4, start: 0.25, then: new CosineDecay(epochs: 6, minimum: 0.001));
+
+        AssertRates(
+            [0.025, 0.043750000000000004, 0.06250000000000001, 0.08125000000000002, 0.1, 0.09336825748732973, 0.07525000000000001,
+             0.0505, 0.025750000000000012, 0.007631742512670284, 0.001, 0.007631742512670284],
+            schedule);
+        Assert.IsType<CosineDecay>(schedule.Then);
+        Assert.Equal(4, schedule.Epochs);
+        Assert.Equal(0.25, schedule.Start);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-0.25)]
+    [InlineData(1.5)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void AWarmupThatStartsAtNothing_BelowIt_OrAboveTheRate_IsRefused(double start)
+    {
+        // A rate of nothing is refused everywhere: a warm-up starts above it, at most at the rate itself.
+        Assert.Throws<ArgumentOutOfRangeException>(() => new LinearWarmup(4, start));
+    }
+
+    [Fact]
+    public void AWarmupOverNoEpochs_IsRefused_AndOneThatStartsAtTheRate_IsTheRate()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new LinearWarmup(0));
+        Assert.All(Enumerable.Range(0, 6), epoch => Assert.Equal(0.1, new LinearWarmup(3, 1).RateAt(epoch, 0.1), 1e-15));
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]
@@ -106,7 +162,7 @@ public class LearningRateScheduleTests
     [Fact]
     public void AnEpochBeforeTheFirst_OrARateThatIsNotAPositiveNumber_IsRefused()
     {
-        LearningRateSchedule[] schedules = [new ConstantRate(), new StepDecay(3), new ExponentialDecay(0.9), new CosineDecay(8)];
+        LearningRateSchedule[] schedules = [new ConstantRate(), new StepDecay(3), new ExponentialDecay(0.9), new CosineDecay(8), new LinearWarmup(3, then: new CosineDecay(8))];
 
         Assert.All(schedules, schedule =>
         {

@@ -1,0 +1,41 @@
+{
+  "version": 7,
+  "course": [
+    {
+      "step": "read.csv"
+    },
+    {
+      "step": "declare"
+    },
+    {
+      "step": "settle.gaps"
+    },
+    {
+      "step": "feature.add"
+    },
+    {
+      "step": "scale.given"
+    },
+    {
+      "step": "split.stratified"
+    },
+    {
+      "step": "target"
+    },
+    {
+      "step": "drop.columns"
+    },
+    {
+      "step": "fill.missing"
+    },
+    {
+      "step": "normalise"
+    },
+    {
+      "step": "evidence.report"
+    },
+    {
+      "step": "learn.network"
+    }
+  ]
+}

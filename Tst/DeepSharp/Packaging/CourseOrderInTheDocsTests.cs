@@ -119,8 +119,24 @@ public sealed partial class CourseOrderInTheDocsTests
             {
                 written.Reverse();
 
-                yield return [.. written];
+                yield return [.. Placed(written)];
             }
+        }
+    }
+
+    // One door takes every step a person writes, so the door says nothing of where the step stands in the course: the split
+    // does. Above it a step puts columns on without learning; below it, it learns from the training rows.
+    private static IEnumerable<Written> Placed(List<Written> chain)
+    {
+        var split = StageNamed("the split");
+        var learned = StageNamed("what is learned");
+        var divided = false;
+
+        foreach (var each in chain)
+        {
+            divided |= each.Stage == split;
+
+            yield return divided && each.Method == "Add" ? each with { Stage = learned } : each;
         }
     }
 
@@ -232,6 +248,34 @@ public sealed partial class CourseOrderInTheDocsTests
             """).Where(chain => chain.Length > 1).ToArray();
 
         Assert.False(Rising([.. Assert.Single(chains).Select(written => written.Stage)]));
+    }
+
+    [Fact]
+    public void AStepAddedBelowTheSplit_IsSomethingLearned_AndOneAddedAboveIt_IsAFeature()
+    {
+        // One door takes every step a person writes, so the door says nothing of where in the course the step stands: the
+        // split does. Above it the step puts columns on without learning; below it, it learns from the training rows.
+        var below = Assert.Single(ChainsIn("""
+            var pipeline = Pdd.Create()
+                .ReadCsv("flocks.csv")
+                .Declare(schema => schema.Number("Age", "Weight"))
+                .SplitAtRandom(0.70, 0.15)
+                .Target("Weight")
+                .Add(new CentredStep("Age", "Age_centred"))
+                .Normalise("Age");
+            """), chain => chain.Length > 1);
+        var above = Assert.Single(ChainsIn("""
+            var pipeline = Pdd.Create()
+                .ReadCsv("flocks.csv")
+                .Declare(schema => schema.Number("Age", "Weight"))
+                .Add(new WeeksStep("Age", "AgeInWeeks"))
+                .SplitAtRandom(0.70, 0.15);
+            """), chain => chain.Length > 1);
+
+        Assert.Equal(StageNamed("what is learned"), below.Single(written => written.Method == "Add").Stage);
+        Assert.True(Rising([.. below.Select(written => written.Stage)]));
+        Assert.Equal(StageNamed("the features"), above.Single(written => written.Method == "Add").Stage);
+        Assert.True(Rising([.. above.Select(written => written.Stage)]));
     }
 
     [Fact]

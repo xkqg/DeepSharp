@@ -48,6 +48,12 @@ public enum Period
 
     /// <summary>The month of the year, where January follows December.</summary>
     MonthOfYear,
+
+    /// <summary>The day of the year, one turn to a year whatever its length: the last day of a year is next to the first of the next.</summary>
+    DayOfYear,
+
+    /// <summary>The season of the year, by the meteorological months of the northern hemisphere, where winter follows autumn.</summary>
+    Season,
 }
 
 /// <summary>
@@ -251,6 +257,16 @@ public sealed class PeriodLine : IDeclaresSteps
     /// <returns>This line, so the next cycle can be written after it.</returns>
     public PeriodLine MonthOfYear(params string[] columns) => Add(columns, Period.MonthOfYear);
 
+    /// <summary>Columns placed on the cycle of the year, by the day, one turn to a year whatever its length.</summary>
+    /// <param name="columns">The columns holding a moment.</param>
+    /// <returns>This line, so the next cycle can be written after it.</returns>
+    public PeriodLine DayOfYear(params string[] columns) => Add(columns, Period.DayOfYear);
+
+    /// <summary>Columns placed on the cycle of the seasons, where winter follows autumn.</summary>
+    /// <param name="columns">The columns holding a moment.</param>
+    /// <returns>This line, so the next cycle can be written after it.</returns>
+    public PeriodLine Season(params string[] columns) => Add(columns, Period.Season);
+
     private PeriodLine Add(string[] columns, Period period)
     {
         ArgumentNullException.ThrowIfNull(columns);
@@ -272,13 +288,13 @@ public sealed class PeriodLine : IDeclaresSteps
 /// neighbours, and a model handed the plain number is told they are as far apart as two values can be.
 /// A sine and a cosine put the wrap where it belongs, and nothing about it is learned from the data.
 /// </remarks>
-public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IAddsColumns, IDescribesColumns
+public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IPlacesOnACircle, IDescribesColumns
 {
     private static readonly ColumnParameter ColumnKey = new(
         "column", "The column holding the moment in time.", "when", ColumnKinds.Moments);
 
     private static readonly OneOfParameter<Period> PeriodKey = new(
-        "period", "Which cycle the moment is placed on: the hour of the day, the day of the week or of the month, the month of the year.", Period.MonthOfYear);
+        "period", "Which cycle the moment is placed on: the hour of the day, the day of the week, of the month or of the year, the month of the year, the season.", Period.MonthOfYear);
 
     private static readonly OneOfParameter<Form> FormKey = new(
         "form", "How the two values are written down: as they are, shifted between nothing and one, or split into how far up and how far down.", Form.Signed);
@@ -344,28 +360,10 @@ public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IAddsColumns, I
                 $"'{Column}' holds {table[Column].Kind.ToString().ToLowerInvariant()} and a cycle needs a moment in time.");
         }
 
-        var sines = new double?[table.RowCount];
-        var cosines = new double?[table.RowCount];
-
-        for (var row = 0; row < table.RowCount; row++)
-        {
-            if (moments[row] is not { } moment)
-            {
-                continue;
-            }
-
-            var turn = 2 * Math.PI * Place(moment) / Length;
-
-            sines[row] = Math.Sin(turn);
-            cosines[row] = Math.Cos(turn);
-        }
-
-        var stems = Stems.ToArray();
-
-        foreach (var column in Form.Written(stems[0], sines).Concat(Form.Written(stems[1], cosines)))
-        {
-            table.Put(column);
-        }
+        table.PutPlaces(
+            [.. Enumerable.Range(0, table.RowCount).Select(row => moments[row] is { } moment ? moment.PlaceOn(Period) : (CirclePlace?)null)],
+            Stems.ToArray(),
+            Form);
     }
 
     /// <summary>Reads this step back out of a file.</summary>
@@ -374,21 +372,6 @@ public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IAddsColumns, I
     public static CyclicalStep ReadFrom(JsonElement element) =>
         new(ColumnKey.Read(element), PeriodKey.Read(element), FormKey.Read(element));
 
-    private double Length => Period switch
-    {
-        Period.HourOfDay => 24,
-        Period.DayOfWeek => 7,
-        Period.DayOfMonth => 31,
-        _ => 12,
-    };
-
-    private double Place(DateTime moment) => Period switch
-    {
-        Period.HourOfDay => moment.Hour + (moment.Minute / 60.0),
-        Period.DayOfWeek => (int)moment.DayOfWeek,
-        Period.DayOfMonth => moment.Day - 1,
-        _ => moment.Month - 1,
-    };
 }
 
 /// <summary>

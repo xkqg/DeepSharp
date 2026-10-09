@@ -56,7 +56,7 @@ public class CourseFileTests
     {
         var course = PipelineCourse.Of([CourseStep.Of("settle.gaps", Json("""{"with":"zero"}"""))]);
 
-        const string Expected = "{\n  \"version\": 7,\n  \"course\": [\n    {\n      \"step\": \"settle.gaps\",\n      \"with\": \"zero\"\n    }\n  ]\n}";
+        const string Expected = "{\n  \"version\": 8,\n  \"course\": [\n    {\n      \"step\": \"settle.gaps\",\n      \"with\": \"zero\"\n    }\n  ]\n}";
 
         Assert.Equal(Expected, course.ToJson());
         Assert.Equal(["version", "course"], RootKeys(course.ToJson()));
@@ -144,10 +144,10 @@ public class CourseFileTests
     public void AFileWrittenAgainstANewerVersion_IsRefusedWhole_AndNothingInItIsRead()
     {
         // Whatever else is wrong with it is not said: it may hold words this reader never had.
-        var faults = Refused("""{"version": 8, "course": "not a list", "surprise": true}""");
+        var faults = Refused("""{"version": 9, "course": "not a list", "surprise": true}""");
 
         var fault = Assert.Single(faults);
-        Assert.Contains("version 8", fault.Message, StringComparison.Ordinal);
+        Assert.Contains("version 9", fault.Message, StringComparison.Ordinal);
         Assert.Contains("newer DeepSharp", fault.Message, StringComparison.Ordinal);
     }
 

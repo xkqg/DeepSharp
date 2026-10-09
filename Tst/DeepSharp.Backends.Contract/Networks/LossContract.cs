@@ -79,6 +79,142 @@ public abstract class LossContract(ITensorBackend engine)
         Assert.Equal(OutputActivation.Softmax, loss.Activation);
     }
 
+    // Three rows of five logits, and the answers each should have given: shares of a whole in an order, and — for the loss
+    // that leaves the last answer outside the order — four bands and what is left of the whole (Fixtures/earth-movers.py).
+    private static Tensor Logits() => Tensor.From(new Shape(3, 5),
+    [
+        0.3f, -0.2f, 0.5f, 0.1f, -0.4f,
+        1.0f, 0.2f, -0.5f, 0.0f, 0.3f,
+        -0.1f, 0.4f, 0.2f, -0.3f, 0.6f,
+    ]);
+
+    private static Tensor Ordered() => Tensor.From(new Shape(3, 5),
+    [
+        0.1f, 0.2f, 0.3f, 0.4f, 0f,
+        0f, 0f, 1f, 0f, 0f,
+        0.25f, 0.25f, 0.25f, 0.25f, 0f,
+    ]);
+
+    private static Tensor WithRemainder() => Tensor.From(new Shape(3, 5),
+    [
+        0.1f, 0.2f, 0.3f, 0.2f, 0.2f,
+        0f, 0.5f, 0.3f, 0f, 0.2f,
+        0.3f, 0.3f, 0.2f, 0.1f, 0.1f,
+    ]);
+
+    [Fact]
+    public void EarthMoversDistance_AlongTheBandsOrder_IsScipysWassersteinDistance_AndItsGradientsArePyTorchs()
+    {
+        var logits = Logits();
+        var recording = new RecordingBackend(_backend);
+        var loss = new EarthMoversDistance();
+
+        var value = loss.Of(logits, Ordered(), recording);
+        var gradients = recording.GradientsOf(value, [logits]);
+
+        // scipy's distance between each row's shares and its answer over the bands' places 0…4, averaged over the rows,
+        // is 0.8695898572880395; PyTorch's in float32 is 0.8695898056030273.
+        Assert.Equal(new Shape(), value.Shape);
+        Assert.Equal(0.8695898572880395, value.Values[0], 1e-6);
+        AssertClose(
+        [
+            0.1261894255876541, 0.027741065248847008, -0.04240083321928978, -0.09429077804088593, -0.01723889261484146,
+            0.06543775647878647, -0.0296354778110981, -0.04403422400355339, -0.024263476952910423, 0.03249542787671089,
+            -0.1061476618051529, -0.09455575048923492, -0.011547049507498741, 0.03294771909713745, 0.17930279672145844,
+        ], gradients[logits]);
+        AssertClose(
+            [0.24135645369561606, 0.14639008908590367, 0.2947934382435828, 0.1976059510944428, 0.11985406788045477],
+            Tensor.From(new Shape(5), loss.Predictions(logits, _backend).Values[..5]));
+        Assert.Equal(OutputActivation.Softmax, loss.Activation);
+        Assert.False(loss.Remainder);
+    }
+
+    [Fact]
+    public void EarthMoversDistance_WithWhatIsLeftOfTheWhole_ComparesTheBandsAsShapes_AndWhatIsLeftByHowFarItIsOff()
+    {
+        var logits = Logits();
+        var recording = new RecordingBackend(_backend);
+        var loss = new EarthMoversDistance(remainder: true);
+
+        var value = loss.Of(logits, WithRemainder(), recording);
+        var gradients = recording.GradientsOf(value, [logits]);
+
+        // scipy's distance between the four bands as shares of what they hold, and the remainder's share off by as much.
+        Assert.Equal(0.525544688264166, value.Values[0], 1e-6);
+        AssertClose(
+        [
+            0.1476447880268097, 0.034109484404325485, -0.042957600206136703, -0.10363365709781647, -0.035163022577762604,
+            0.12688620388507843, -0.016393940895795822, -0.044594116508960724, -0.013422223739326, -0.05247591435909271,
+            -0.11212530732154846, -0.07078030705451965, 0.035453327000141144, 0.0781555250287056, 0.06929676979780197,
+        ], gradients[logits]);
+        Assert.True(loss.Remainder);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EarthMoversDistance_HasTheGradientTheLossNudgedEitherWaySays_ForEveryLogit(bool remainder)
+    {
+        // The distance is a sum of sizes, each with a kink where it is nought; these rows lie four thousandths or more from
+        // every kink, and a nudge of a hundredth of a logit moves a share by a four-hundredth at most, so it crosses none.
+        const float nudge = 1e-2f;
+        var loss = new EarthMoversDistance(remainder);
+        var answers = remainder ? WithRemainder() : Ordered();
+        var logits = Logits();
+        var recording = new RecordingBackend(_backend);
+        var gradients = recording.GradientsOf(loss.Of(logits, answers, recording), [logits])[logits];
+
+        for (var at = 0; at < logits.Values.Length; at++)
+        {
+            var up = loss.Of(Nudged(logits, at, nudge), answers, _backend).Values[0];
+            var down = loss.Of(Nudged(logits, at, -nudge), answers, _backend).Values[0];
+
+            Assert.Equal((up - down) / (2 * nudge), gradients.Values[at], 1e-3);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EarthMoversDistance_OfAPredictionThatIsTheAnswer_IsNought_AndSoIsEveryGradient(bool remainder)
+    {
+        // At nought the size of a number has no slope of its own; taken as the rectified number and the rectified opposite,
+        // as PyTorch's size is, its slope there is nought, so a prediction that is the answer is left where it is.
+        var loss = new EarthMoversDistance(remainder);
+        var logits = Logits();
+        var answers = loss.Predictions(logits, _backend);
+        var recording = new RecordingBackend(_backend);
+
+        var value = loss.Of(logits, answers, recording);
+        var gradients = recording.GradientsOf(value, [logits])[logits];
+
+        Assert.Equal(0f, value.Values[0]);
+        Assert.All(gradients.Values.ToArray(), gradient => Assert.Equal(0f, gradient));
+    }
+
+    [Fact]
+    public void EarthMoversDistance_RefusesARowThatIsNotShares_AndWithWhatIsLeft_BandsThatHoldNothing()
+    {
+        var loss = new EarthMoversDistance();
+        var left = new EarthMoversDistance(remainder: true);
+
+        Assert.Null(loss.Refusal([0.25, 0.75]));
+        Assert.Contains("0.9", loss.Refusal([0.4, 0.5]), StringComparison.Ordinal);
+        Assert.Contains("-0.5", loss.Refusal([-0.5, 1.5]), StringComparison.Ordinal);
+        Assert.Null(left.Refusal([0.25, 0.25, 0.5]));
+        Assert.Contains("nothing", left.Refusal([0, 0, 1]), StringComparison.Ordinal);
+        Assert.Contains("0.9", left.Refusal([0.4, 0.5, 0]), StringComparison.Ordinal);
+        Assert.Equal(loss.Refusal([0.4, 0.5]), new CrossEntropy().Refusal([0.4, 0.5]));
+    }
+
+    [Fact]
+    public void EarthMoversDistance_NeedsTwoBandsInAMatrixOfRows()
+    {
+        Assert.Throws<ArgumentException>(() => new EarthMoversDistance().Of(Tensor.Zeros(new Shape(2, 1)), Tensor.Zeros(new Shape(2, 1)), _backend));
+        Assert.Throws<ArgumentException>(() => new EarthMoversDistance(remainder: true).Of(Tensor.Zeros(new Shape(2, 2)), Tensor.Zeros(new Shape(2, 2)), _backend));
+        Assert.Throws<ArgumentException>(() => new EarthMoversDistance().Of(Tensor.Zeros(new Shape(3)), Tensor.Zeros(new Shape(3)), _backend));
+    }
+
     [Fact]
     public void MeanSquaredError_OnThePricesFirstFourDays_IsPyTorchs_AndSoAreItsGradients()
     {
@@ -109,7 +245,7 @@ public abstract class LossContract(ITensorBackend engine)
     [Fact]
     public void OutputsAndAnswersOfDifferentShapes_AreRefused()
     {
-        Loss[] losses = [new MeanSquaredError(), new BinaryCrossEntropy(), new CrossEntropy()];
+        Loss[] losses = [new MeanSquaredError(), new BinaryCrossEntropy(), new CrossEntropy(), new EarthMoversDistance()];
 
         Assert.All(losses, loss =>
             Assert.Throws<ArgumentException>(() => loss.Of(Tensor.Zeros(new Shape(2, 3)), Tensor.Zeros(new Shape(2, 2)), _backend)));
@@ -152,6 +288,14 @@ public abstract class LossContract(ITensorBackend engine)
         Assert.Throws<ArgumentNullException>(() => loss.Of(Tensor.Zeros(new Shape(1, 1)), null!, _backend));
         Assert.Throws<ArgumentNullException>(() => loss.Of(Tensor.Zeros(new Shape(1, 1)), Tensor.Zeros(new Shape(1, 1)), null!));
         Assert.Throws<ArgumentNullException>(() => loss.Refusal(null!));
+    }
+
+    private static Tensor Nudged(Tensor values, int at, float by)
+    {
+        var nudged = values.Values.ToArray();
+        nudged[at] += by;
+
+        return Tensor.From(values.Shape, nudged);
     }
 
     private static void AssertClose(double[] expected, Tensor actual)

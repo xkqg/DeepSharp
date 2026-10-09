@@ -325,7 +325,7 @@ public class FilesWrittenBy040Tests
     }
 
     [Theory]
-    [InlineData("8", "by a newer DeepSharp")]
+    [InlineData("9", "by a newer DeepSharp")]
     [InlineData("2", "no DeepSharp wrote")]
     [InlineData("\"three\"", "no DeepSharp wrote")]
     [InlineData(null, "no DeepSharp wrote")]

@@ -561,7 +561,7 @@ internal sealed class ClassesAreCountedWhereTheAnswersAreClasses : IDeclarationR
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        if (steps.OfType<INamesTheAnswer>().FirstOrDefault() is not { AnswersCanBeClasses: false } output)
+        if (steps.OfType<INamesTheAnswer>().FirstOrDefault() is not { } output || output.Takes(MetricFamily.Classes))
         {
             yield break;
         }
@@ -576,7 +576,50 @@ internal sealed class ClassesAreCountedWhereTheAnswersAreClasses : IDeclarationR
             yield return new DeclarationFault(
                 at, steps[at].Verb,
                 $"counts classes with {report.Metrics.Where(MetricExtensions.CountsClasses).Listed()}, and the answers '{output.Verb}' "
-                + "names are amounts, not classes of nought or one: measure them with rmse, mae or r2.");
+                + $"names are amounts, not classes of nought or one: measure them with rmse, mae or r2{output.SharesMeasured()}.");
+        }
+    }
+}
+
+/// <summary>
+/// A measure of shares is named only where the output's answers are shares of a whole, and one that follows their order
+/// only where they are in one.
+/// </summary>
+/// <remarks>
+/// A divergence of a price from a prediction, or a distance along an order the bands do not have, is a number that means
+/// nothing; the output says whether its answers are shares in an order, so an output another package brings says it too.
+/// </remarks>
+internal sealed class SharesAreMeasuredWhereTheAnswersAreShares : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        if (steps.OfType<INamesTheAnswer>().FirstOrDefault() is not { } output)
+        {
+            yield break;
+        }
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is not INamesTheMeasures report)
+            {
+                continue;
+            }
+
+            if (report.Metrics.Where(metric => metric.Family() == MetricFamily.OrderedShares).ToArray() is [_, ..] ordered && !output.Takes(MetricFamily.OrderedShares))
+            {
+                yield return new DeclarationFault(
+                    at, report.Verb,
+                    $"measures shares along their order with {ordered.Listed()}, and the answers '{output.Verb}' names are no shares in an order: "
+                    + "they are when 'target.distribution' says its columns are, with 'ordered': true.");
+            }
+
+            if (report.Metrics.Where(metric => metric.Family() == MetricFamily.Shares).ToArray() is [_, ..] shares && !output.Takes(MetricFamily.Shares))
+            {
+                yield return new DeclarationFault(
+                    at, report.Verb,
+                    $"measures shares with {shares.Listed()}, and the answers '{output.Verb}' names are no shares of a whole: "
+                    + "name the columns a whole is divided among with 'target.distribution'.");
+            }
         }
     }
 }
@@ -601,20 +644,88 @@ internal sealed class AReturnIsMadeFromItsColumnAsRead : IDeclarationRule
 
             for (var above = 0; above < at; above++)
             {
-                var changes = steps[above] switch
-                {
-                    IFittedStep fitted => fitted.ColumnsRead.Any(read => read.Column == ahead.Column),
-                    IUndoesItself undoes => undoes.Undoes(ahead.Column),
-                    _ => false,
-                };
-
-                if (changes)
+                if (Changes(steps[above], ahead.Column))
                 {
                     yield return new DeclarationFault(
                         at, ahead.Verb,
                         $"is a return on '{ahead.Column}' as it was read, and step {above + 1}, '{steps[above].Verb}', changes "
                         + $"'{ahead.Column}' above it. Put the return above that step.");
                 }
+            }
+        }
+    }
+
+    /// <summary>Whether a step changes a column where it stands: learns from it in place, or has a way back for it.</summary>
+    /// <param name="step">The step.</param>
+    /// <param name="column">The column.</param>
+    /// <returns><see langword="true"/> when the column is not as it was read below the step.</returns>
+    /// <remarks>One rule for every answer made from columns as they were read.</remarks>
+    internal static bool Changes(IPipelineStep step, string column) => step switch
+    {
+        IFittedStep fitted => fitted.ColumnsRead.Any(read => read.Column == column),
+        IUndoesItself undoes => undoes.Undoes(column),
+        _ => false,
+    };
+}
+
+/// <summary>
+/// What is left of a distribution's whole is made from its counts as they were read: no step above it changes the bands or
+/// how many there were.
+/// </summary>
+/// <remarks>
+/// Each band's share and what is left are the counts over the whole, and they come back as birds by the whole as it was
+/// read. Made from a scaled whole, they would come back as birds that were never there.
+/// </remarks>
+internal sealed class ARemainderIsMadeFromItsCountsAsRead : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        for (var at = 0; at < steps.Count; at++)
+        {
+            // A remainder is named only with the whole it is left of, which the output refuses to be without.
+            if (steps[at] is not DistributionStep { Remainder: { } remainder } distribution)
+            {
+                continue;
+            }
+
+            for (var above = 0; above < at; above++)
+            {
+                if (distribution.Columns.Append(distribution.ScaleBy!).FirstOrDefault(column => AReturnIsMadeFromItsColumnAsRead.Changes(steps[above], column)) is { } changed)
+                {
+                    yield return new DeclarationFault(
+                        at, distribution.Verb,
+                        $"makes '{remainder}' from the counts as they were read, and step {above + 1}, '{steps[above].Verb}', changes "
+                        + $"'{changed}' above it. Put the output above that step.");
+                }
+            }
+        }
+    }
+}
+
+/// <summary>
+/// The column the schema says names each row is not an answer.
+/// </summary>
+/// <remarks>
+/// An id is carried beside the rows and never shown to a model, so asking a model for it would ask for what no row taught
+/// it: refused where the output names it, by name.
+/// </remarks>
+internal sealed class TheIdIsNoAnswer : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        if (steps.OfType<DeclareStep>().FirstOrDefault()?.IdColumn is not { } id)
+        {
+            yield break;
+        }
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (steps[at] is INamesTheAnswer output && output.Answers.Contains(id, StringComparer.Ordinal))
+            {
+                yield return new DeclarationFault(
+                    at, steps[at].Verb,
+                    $"names '{id}' as an answer, and the schema says '{id}' is the id: an id names each row and is carried beside it, "
+                    + "never asked for. Name another column, or say the id is another.");
             }
         }
     }

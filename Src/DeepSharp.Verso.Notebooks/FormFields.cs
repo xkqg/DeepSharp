@@ -71,7 +71,9 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
             parameter.Member(name), name, PropertyFieldType.Toggle, current.Contains(name, StringComparer.Ordinal), parameter.Description));
     }
 
-    public IEnumerable<PropertyField> Visit(NumberParameter parameter) => [Text(parameter, Written(parameter.Key))];
+    // A number a file may leave out shows the value leaving it out means.
+    public IEnumerable<PropertyField> Visit(NumberParameter parameter) =>
+        [Text(parameter, step.TryGetProperty(parameter.Key, out var written) ? written.GetRawText() : parameter.LeftOut?.ToString(CultureInfo.InvariantCulture))];
 
     // A whole number a file may leave out shows the value leaving it out means.
     public IEnumerable<PropertyField> Visit(WholeNumberParameter parameter) =>
@@ -83,9 +85,12 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
     public IEnumerable<PropertyField> Visit(ShareParameter parameter) =>
         [Text(parameter, step.TryGetProperty(parameter.Key, out _) ? Written(parameter.Key) : string.Empty)];
 
+    // A word a file may leave out shows the word leaving it out means.
     public IEnumerable<PropertyField> Visit<TEnum>(OneOfParameter<TEnum> parameter)
         where TEnum : struct, Enum =>
-        [Field.Of(parameter).Choose(step.GetProperty(parameter.Key).GetString(), parameter.Choices)];
+        [Field.Of(parameter).Choose(
+            step.TryGetProperty(parameter.Key, out var written) ? written.GetString() : parameter.LeftOut?.Word(),
+            parameter.Choices)];
 
     public IEnumerable<PropertyField> Visit<TEnum>(SeveralOfParameter<TEnum> parameter)
         where TEnum : struct, Enum =>
@@ -113,8 +118,9 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
             key, key, PropertyFieldType.Text, Written(key), parameter.Description, IsReadOnly: key == SplitSharesParameter.TestKey));
 
     // One pick per column the source has — the kind the schema gives it, or not taken — whether each column taken may
-    // be absent from the rows, for each taken timestamp how its moments are written, empty for ISO 8601, and for each
-    // taken column the value that stands for a gap, empty for none.
+    // be absent from the rows, for each taken timestamp how its moments are written, empty for ISO 8601, for each
+    // taken column the value that stands for a gap, empty for none, and for each taken column that can name a row —
+    // whole numbers, a category, words — whether it is the id.
     public IEnumerable<PropertyField> Visit(ColumnDeclarationsParameter parameter)
     {
         // The columns as the schema reads them: one it excludes is not taken, and keeps its kind for when it is again.
@@ -156,6 +162,12 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
                     parameter.Missing(name), $"{name} is a gap when it holds", PropertyFieldType.Text, taken.Declared.Missing,
                     parameter.Missing.Description));
             }
+
+            if (taken?.Declared.Kind is ColumnKind.Integer or ColumnKind.Category or ColumnKind.Text)
+            {
+                fields.Add(new(
+                    parameter.Id(name), $"{name} names each row", PropertyFieldType.Toggle, taken.Declared.Id, parameter.Id.Description));
+            }
         }
 
         return fields;
@@ -163,11 +175,12 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
 
     // The parts of a model, one group of fields each: which name the part gives, and a field for every setting that
     // name takes, drawn by the setting's own kind. The fields are named by the part's place, so a block of any step
-    // that declares parts is drawn the same way and nothing here knows which step it is.
+    // that declares parts is drawn the same way and nothing here knows which step it is. A key the step leaves out shows
+    // the parts leaving it out means.
     public IEnumerable<PropertyField> Visit(PartsParameter parameter)
     {
         var declared = parameter.Read(step);
-        var written = step.GetProperty(parameter.Key);
+        var written = step.TryGetProperty(parameter.Key, out var held) ? held : Shown(parameter.AsJson(declared));
         var fields = new List<PropertyField>();
 
         for (var place = 0; place < declared.Count; place++)
@@ -198,6 +211,14 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
         }
 
         return fields;
+    }
+
+    // What the step would hold had it written what it leaves out, to draw the fields of.
+    private static JsonElement Shown(System.Text.Json.Nodes.JsonNode node)
+    {
+        using var document = JsonDocument.Parse(node.ToJsonString());
+
+        return document.RootElement.Clone();
     }
 
     private string Written(string key) => step.GetProperty(key).GetRawText();

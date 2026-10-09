@@ -1,13 +1,16 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Security.Cryptography;
 using DeepSharp.Pipelines;
 
 namespace DeepSharp.Verso.Notebooks;
 
 /// <summary>The rows a notebook's source opens, the bytes they were read from, and what their cells say each column holds.</summary>
 /// <param name="Rows">The rows as the file reads them.</param>
-/// <param name="Fingerprint">A SHA-256 of the file's bytes.</param>
+/// <param name="Fingerprint">
+/// A SHA-256 of the file's bytes; of a source of several files, a SHA-256 over each file's own, in the order the step reads them.
+/// </param>
 /// <param name="Proposal">What the rows' cells say each column holds, proposed once for these bytes.</param>
 internal readonly record struct SourceRows(IRowSource Rows, string Fingerprint, KindProposal Proposal);
 
@@ -23,7 +26,9 @@ internal readonly record struct SourceRows(IRowSource Rows, string Fingerprint, 
 /// the one view kept, is worked out from the declaration each time.
 /// <para>
 /// One entry, keyed by the read step itself — compared by what it says — the path the core's one rule resolves, and a
-/// SHA-256 of the file's bytes. The bytes are read and hashed on every use and the step that reads the file parses the
+/// SHA-256 of the file's bytes. A source of several files — two files joined into one — is keyed on every path and on one
+/// SHA-256 over each file's own, in the order the step reads them: a change to any one file is another key, and two files
+/// split another way over the same bytes are too, which a digest of the files laid end to end could not tell apart. The bytes are read and hashed on every use and the step that reads the file parses the
 /// rows from those same bytes, whichever of the files a pipeline file names it reads, so a file changed on disk is
 /// opened again and the rows kept are always the ones the fingerprint names. The entry lives as
 /// long as the notebook's session and is shared with nothing else. It is one value, put in place whole — the rows and
@@ -56,27 +61,27 @@ internal sealed class SourceCache
     /// </remarks>
     public SourceRows RowsFor(PipelineDeclaration declaration, SourceFolder folder)
     {
-        if (FileOf(declaration) is not { } read)
+        if (FilesOf(declaration) is not { } read)
         {
             throw new InvalidOperationException(
                 $"A notebook reads its rows from a file, with {Readers()} as its first block, and hands none in; "
                 + "these blocks read no file, so there are no rows to show.");
         }
 
-        var path = folder.Resolve(read.Path);
-        var bytes = File.ReadAllBytes(path);
-        var fingerprint = bytes.Fingerprint();
+        string[] paths = [.. read.Paths.Select(folder.Resolve)];
+        byte[][] bytes = [.. paths.Select(File.ReadAllBytes)];
+        var fingerprint = Fingerprint(bytes);
 
         // A step is known by what it says, never by which object says it: every gesture reads the blocks afresh.
-        if (Volatile.Read(ref _kept) is { } kept && kept.Read.Equals(read) && kept.Path == path && kept.Fingerprint == fingerprint)
+        if (Volatile.Read(ref _kept) is { } kept && kept.Read.Equals(read.Step) && kept.Paths.SequenceEqual(paths) && kept.Fingerprint == fingerprint)
         {
             return new SourceRows(kept.Rows, fingerprint, kept.Proposal);
         }
 
-        var rows = read.Open(bytes, path);
+        var rows = read.Open(bytes, paths);
         var proposal = KindProposal.Of(rows);
 
-        Volatile.Write(ref _kept, new Kept(read, path, fingerprint, rows, proposal));
+        Volatile.Write(ref _kept, new Kept(read.Step, paths, fingerprint, rows, proposal));
         Interlocked.Increment(ref _parsed);
 
         return new SourceRows(rows, fingerprint, proposal);
@@ -88,14 +93,14 @@ internal sealed class SourceCache
     /// <returns>Their fingerprint; unreadable when the file cannot be read; unknown when the source is not a file.</returns>
     public static SourceBytes BytesOf(PipelineDeclaration declaration, SourceFolder folder)
     {
-        if (FileOf(declaration) is not { } read)
+        if (FilesOf(declaration) is not { } read)
         {
             return SourceBytes.Unknown;
         }
 
         try
         {
-            return SourceBytes.Of(File.ReadAllBytes(folder.Resolve(read.Path)).Fingerprint());
+            return SourceBytes.Of(Fingerprint([.. read.Paths.Select(path => File.ReadAllBytes(folder.Resolve(path)))]));
         }
         catch (Exception unreadable) when (unreadable is IOException or UnauthorizedAccessException)
         {
@@ -114,24 +119,42 @@ internal sealed class SourceCache
     /// columns as the person saw them.
     /// </remarks>
     public SourceRows? KeptFor(PipelineDeclaration declaration) =>
-        FileOf(declaration) is { } read && Volatile.Read(ref _kept) is { } kept && kept.Read.Equals(read)
+        FilesOf(declaration) is { } read && Volatile.Read(ref _kept) is { } kept && kept.Read.Equals(read.Step)
             ? new SourceRows(kept.Rows, kept.Fingerprint, kept.Proposal)
             : null;
 
-    /// <summary>The block that reads the notebook's file: its first, when that reads a file.</summary>
+    /// <summary>The block that reads the notebook's files: its first, when that reads a file or several.</summary>
     /// <param name="declaration">The blocks, as the notebook reads them.</param>
-    /// <returns>The step, or nothing when the rows are handed in or there is no step at all.</returns>
-    internal static IReadsAFile? FileOf(PipelineDeclaration declaration) => declaration.Steps is [IReadsAFile read, ..] ? read : null;
+    /// <returns>What it reads and how, or nothing when the rows are handed in or there is no step at all.</returns>
+    internal static SourceFiles? FilesOf(PipelineDeclaration declaration) => declaration.Steps switch
+    {
+        [IReadsAFile read, ..] => new SourceFiles(read, [read.Path], (bytes, paths) => read.Open(bytes[0], paths[0])),
+        [IReadsFiles read, ..] => new SourceFiles(read, read.Paths, read.Open),
+        _ => null,
+    };
 
-    // Every verb of the notebook's own that reads a file, as its catalog knows them, in the order of their names.
+    // One file's fingerprint as it always was; several files' as one SHA-256 over each file's own, in order — never over
+    // the files laid end to end, which two files split another way over the same bytes would share.
+    private static string Fingerprint(IReadOnlyList<byte[]> files) =>
+        files is [var one]
+            ? one.Fingerprint()
+            : Convert.ToHexString(SHA256.HashData([.. files.SelectMany(file => SHA256.HashData(file))])).ToLowerInvariant();
+
+    // Every verb of the notebook's own that reads a file or several, as its catalog knows them, in the order of their names.
     private static string Readers()
     {
         var catalog = NotebookVerbs.Catalog();
-        string[] verbs = [.. catalog.Descriptions.Where(each => catalog.ReadStep(each.Template) is IReadsAFile).Select(each => $"'{each.Verb}'")];
+        string[] verbs = [.. catalog.Descriptions.Where(each => catalog.ReadStep(each.Template) is IReadsAFile or IReadsFiles).Select(each => $"'{each.Verb}'")];
 
         return $"{string.Join(", ", verbs[..^1])} or {verbs[^1]}";
     }
 
     /// <summary>The one source kept, and what it was kept under.</summary>
-    private sealed record Kept(IReadsAFile Read, string Path, string Fingerprint, IRowSource Rows, KindProposal Proposal);
+    private sealed record Kept(IPipelineStep Read, IReadOnlyList<string> Paths, string Fingerprint, IRowSource Rows, KindProposal Proposal);
 }
+
+/// <summary>What a notebook's first block reads: the step, the paths of its files in its order, and how it reads their bytes.</summary>
+/// <param name="Step">The block's step, which an entry is known by.</param>
+/// <param name="Paths">The paths of the files as they were written, in the order the step reads them.</param>
+/// <param name="Open">How the step reads the files' bytes, handed with the paths a refusal names them by.</param>
+internal sealed record SourceFiles(IPipelineStep Step, IReadOnlyList<string> Paths, Func<IReadOnlyList<byte[]>, IReadOnlyList<string>, IRowSource> Open);

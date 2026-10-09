@@ -29,9 +29,9 @@ public class SkippedFileTests
         using var every = JsonDocument.Parse(Titanic.Run().ToJson());
         var root = file.RootElement;
 
-        Assert.Equal(7, PipelineDeclaration.Version);
+        Assert.Equal(8, PipelineDeclaration.Version);
         Assert.Equal(["version", "declaration", "fitted", "skipped"], root.EnumerateObject().Select(member => member.Name));
-        Assert.Equal(7, root.GetProperty("version").GetInt32());
+        Assert.Equal(8, root.GetProperty("version").GetInt32());
         Assert.Equal(
             ["encode.categories", "normalise", "normalise", "normalise", "normalise"],
             root.GetProperty("skipped").EnumerateArray().Select(entry => entry.GetProperty("step").GetString()));

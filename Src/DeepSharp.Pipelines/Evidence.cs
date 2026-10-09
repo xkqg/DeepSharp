@@ -222,12 +222,16 @@ public sealed class DataProfile : Evidence
 /// The rows a correlation is drawn from: the measured rows with a finite number in every column named.
 /// </summary>
 /// <remarks>
-/// The correlation itself is worked out by whatever draws it. What the pipeline says is which rows it may be
-/// worked out from, how many of the measured rows that is, and the rule that left the others out — because a
-/// correlation over the rows that happened to be complete is a different number from one over all of them.
+/// The pipeline says which rows the correlation is worked out from, how many of the measured rows that is, and the rule
+/// that left the others out — because a correlation over the rows that happened to be complete is a different number from
+/// one over all of them — and it works the correlation out itself, once: <see cref="Correlate"/>. A chart, a table of
+/// numbers and the profile's rank alert read those same coefficients, so one pair of columns has one number wherever it is
+/// shown.
 /// </remarks>
 public sealed class CorrelationInput : Evidence
 {
+    private readonly Lazy<CorrelationMatrix> _matrix;
+
     internal CorrelationInput(PipelineView view, IReadOnlyList<string> columns, IReadOnlyList<double[]> rows, Shown shown)
     {
         Over = view.Measured;
@@ -235,6 +239,7 @@ public sealed class CorrelationInput : Evidence
         Rows = rows;
         Total = view.MeasuredRows().Length;
         Shown = shown;
+        _matrix = new Lazy<CorrelationMatrix>(() => CorrelationMatrix.From(Columns, Rows));
     }
 
     /// <summary>Which rows it was drawn from: the training rows, or the undivided ones when nothing divides them.</summary>
@@ -257,6 +262,16 @@ public sealed class CorrelationInput : Evidence
 
     /// <summary>How it is shown.</summary>
     public Shown Shown { get; }
+
+    /// <summary>Which coefficient it is shown as: Pearson's unless the step declared Spearman's.</summary>
+    public Coefficient Coefficient { get; internal init; }
+
+    /// <summary>The coefficients between every pair of the columns, both kinds, worked out from the complete rows it kept.</summary>
+    /// <returns>
+    /// The coefficients, worked out the first time they are asked for and the same ones after: a pair with no coefficient
+    /// — a column that never changes, or fewer than two rows kept — is <see cref="double.NaN"/>.
+    /// </returns>
+    public CorrelationMatrix Correlate() => _matrix.Value;
 
     /// <inheritdoc />
     public override TResult Accept<TResult>(IEvidenceVisitor<TResult> visitor)
@@ -283,6 +298,15 @@ public sealed class CorrelationInput : Evidence
 /// only where their values repeat, each held by two rows or more on average: columns that never repeat a value would
 /// pair up by chance. An extreme is not something that should not be there: it is measured, and a step that clips
 /// or refuses one is declared.
+/// <para>
+/// A column can also follow another's order without repeating its values — a curve that only ever rises — and the alert for
+/// columns that go with each other value for value does not find it. Told how alike in order two columns may be
+/// (<see cref="RankAbove"/>), the profile says so of a pair whose Spearman coefficient is above that in size. It is
+/// worked out for each pair on the measured rows where both columns hold a finite number, so a column with gaps does not
+/// cost every other pair its rows, and the rows used are said. A column is said once, against the earlier column it follows
+/// most closely. Columns of numbers are compared; the answer is not, and neither is a column the profile already leaves
+/// out. The threshold is declared and never defaulted: how alike is too alike has no answer that holds for every column.
+/// </para>
 /// </remarks>
 public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence, IDescribesColumns
 {
@@ -292,14 +316,47 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
         Optional = true,
     };
 
+    private static readonly ShareParameter RankAboveKey = new(
+        "rankAbove",
+        "How alike in order two columns of numbers may be before the profile says so: a share above nought, at most one. Two columns "
+        + "whose Spearman coefficient, on the rows where both hold a number, is above this in size are flagged. Left out, none is.");
+
     /// <summary>Declares a profile of these columns, or of every column where it stands.</summary>
     /// <param name="columns">The columns to profile; none, for every column.</param>
     /// <exception cref="ArgumentException">A column has no name, or one is named twice.</exception>
-    public ProfileStep(IEnumerable<string>? columns = null) =>
+    public ProfileStep(IEnumerable<string>? columns = null)
+        : this(columns, null)
+    {
+    }
+
+    /// <summary>Declares a profile of these columns, or of every column where it stands, that also flags columns alike in order.</summary>
+    /// <param name="columns">The columns to profile; none, for every column.</param>
+    /// <param name="rankAbove">
+    /// How alike in order two columns of numbers may be: two whose Spearman coefficient, on the rows where both hold a number,
+    /// is above this in size are flagged. A share above nought, at most one; none, for no such alert.
+    /// </param>
+    /// <exception cref="ArgumentException">A column has no name, or one is named twice.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The threshold is not a share above nought.</exception>
+    public ProfileStep(IEnumerable<string>? columns, double? rankAbove)
+    {
         Columns = ColumnsKey.Require([.. columns ?? []]);
+        RankAbove = RankAboveKey.Require(rankAbove);
+
+        // A threshold of nought flags every pair, which says nothing, so the rule that it is above nought lives with the step.
+        if (RankAbove is 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(rankAbove), rankAbove, $"'{RankAboveKey.Key}' is a share above nought: {RankAboveKey.Description}");
+        }
+    }
 
     /// <summary>The columns to profile; empty for every column where the step stands.</summary>
     public IReadOnlyList<string> Columns { get; }
+
+    /// <summary>
+    /// How alike in order two columns of numbers may be before they are flagged, as a Spearman coefficient in size; none when
+    /// the profile does not look.
+    /// </summary>
+    public double? RankAbove { get; }
 
     /// <inheritdoc />
     public static string Name => "evidence.profile";
@@ -312,7 +369,9 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
 
     /// <inheritdoc />
     public static StepParameters<ProfileStep> Parameters { get; } =
-        new StepParameters<ProfileStep>().With(ColumnsKey, step => step.Columns);
+        new StepParameters<ProfileStep>()
+            .With(ColumnsKey, step => step.Columns)
+            .With(RankAboveKey, step => step.RankAbove);
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -321,12 +380,14 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
     public ColumnState After(ColumnState before) => before;
 
     /// <inheritdoc />
-    public bool Equals(ProfileStep? other) => other is not null && Columns.SequenceEqual(other.Columns);
+    public bool Equals(ProfileStep? other) => other is not null && RankAbove == other.RankAbove && Columns.SequenceEqual(other.Columns);
 
     /// <inheritdoc />
     public override int GetHashCode()
     {
         var hash = new HashCode();
+
+        hash.Add(RankAbove);
 
         foreach (var column in Columns)
         {
@@ -343,9 +404,15 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
 
         var table = view.Table;
         var measured = view.MeasuredRows();
-        var names = Columns.Count > 0 ? Columns : [.. table.Columns.Select(column => column.Name)];
+        // Every column where it stands but the id, which names the rows and is never measured; named outright, it is profiled.
+        var names = Columns.Count > 0 ? Columns : [.. table.Columns.Select(column => column.Name).Where(name => name != table.Id)];
         var profiles = names.Select(name => Profiled(view, table[name], measured)).ToArray();
         ProfileAlert[] alerts = [.. profiles.SelectMany(profile => Alerts(view, profile)), .. Pairs(view, names, measured)];
+
+        if (RankAbove is { } above)
+        {
+            alerts = [.. alerts, .. RankPairs(view, names, alerts, above)];
+        }
 
         return new DataProfile(view, profiles, alerts, Duplicates(view));
     }
@@ -353,7 +420,7 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
-    public static ProfileStep ReadFrom(JsonElement element) => new(ColumnsKey.Read(element));
+    public static ProfileStep ReadFrom(JsonElement element) => new(ColumnsKey.Read(element), RankAboveKey.Read(element));
 
     private static ColumnProfile Profiled(PipelineView view, IColumn column, int[] measured)
     {
@@ -532,6 +599,58 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
         }
     }
 
+    // Every column of numbers that follows the order of an earlier one, each once, against the earlier column it follows most
+    // closely and the first of them where two follow as closely. The columns left out are not compared: the answer, which is a
+    // model's to be near; and a column an alert already leaves out, which would only repeat itself.
+    private static IEnumerable<ProfileAlert> RankPairs(PipelineView view, IReadOnlyList<string> names, IReadOnlyList<ProfileAlert> found, double above)
+    {
+        var table = view.Table;
+        var left = found.Where(alert => alert.Answer.Action == AlertAction.LeaveOut).Select(alert => alert.Answer.Column).ToHashSet(StringComparer.Ordinal);
+        var counted = names
+            .Where(name => table.Has(name) && ColumnKinds.Numbers.Contains(table[name].Kind) && !left.Contains(name) && !view.Answers.Contains(name, StringComparer.Ordinal))
+            .Select(name => new Numbers(name, table.NumbersOf(name)))
+            .ToArray();
+        var measured = view.MeasuredRows();
+
+        for (var at = 1; at < counted.Length; at++)
+        {
+            var nearest = counted.Take(at)
+                .Select(earlier => counted[at].Against(earlier, measured))
+                .Where(pair => Math.Abs(pair.Coefficient) > above)
+                .Aggregate(default(RankedPair?), (best, pair) => best is { } kept && Math.Abs(kept.Coefficient) >= Math.Abs(pair.Coefficient) ? kept : pair);
+
+            if (nearest is { } closest)
+            {
+                yield return new ProfileAlert(
+                    [closest.Later, closest.Earlier],
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Its values keep the order of {closest.Earlier}'s: the Spearman coefficient between them is {closest.Coefficient:0.000} over {closest.Rows} rows, "
+                        + $"above the {above} asked for — so it says again, in order, what {closest.Earlier} says."),
+                    AlertAnswer.LeaveOut(closest.Later));
+            }
+        }
+    }
+
+    // A column of numbers, a gap where a cell holds none.
+    private sealed record Numbers(string Name, double?[] Values)
+    {
+        // The Spearman coefficient with an earlier column over the measured rows where both hold a finite number; NaN when it
+        // has none, and so never above anything.
+        public RankedPair Against(Numbers earlier, int[] measured)
+        {
+            int[] both = [.. measured.Where(row => Finite(Values[row]) && Finite(earlier.Values[row]))];
+            var coefficient = both.Select(row => Values[row]!.Value).ToArray().SpearmanWith(both.Select(row => earlier.Values[row]!.Value).ToArray());
+
+            return new RankedPair(Name, earlier.Name, coefficient, both.Length);
+        }
+
+        private static bool Finite(double? value) => value is { } number && double.IsFinite(number);
+    }
+
+    // Two columns, the one after the other, the coefficient between them and the rows it was worked out over.
+    private readonly record struct RankedPair(string Later, string Earlier, double Coefficient, int Rows);
+
     // A number, and how many of the measured rows hold it.
     private readonly record struct Held(double Value, int Rows);
 
@@ -658,7 +777,10 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
 /// <remarks>
 /// Only the rows with a finite number in every column named, and it says how many of the measured rows that is
 /// and by which rule: a correlation over the rows that happened to be complete is a different number from one
-/// over all of them, and a picture that does not say so is a picture of something else.
+/// over all of them, and a picture that does not say so is a picture of something else. The coefficient shown is declared
+/// too: Pearson's, how well two columns lie on a line, unless it says Spearman's, how well they keep the same order —
+/// which does not mind a curve that only ever rises, and is a file's <c>coefficient</c> from version 8, left out as
+/// Pearson's always was.
 /// </remarks>
 public sealed record CorrelationStep : IPipelineStep<CorrelationStep>, IProducesEvidence, IDescribesColumns
 {
@@ -668,16 +790,36 @@ public sealed record CorrelationStep : IPipelineStep<CorrelationStep>, IProduces
     private static readonly OneOfParameter<Shown> ShownKey = new(
         "shown", "How it is shown: drawn as a coloured grid, or as the numbers themselves.", Shown.Drawn);
 
+    private static readonly OneOfParameter<Coefficient> CoefficientKey = new(
+        "coefficient",
+        "Which coefficient is shown: how well two columns lie on a line (pearson), or how well they keep the same order (spearman). "
+        + "Left out, pearson.",
+        Coefficient.Pearson)
+    {
+        LeftOut = Coefficient.Pearson,
+    };
+
     /// <summary>Declares the rows a correlation between these columns is drawn from.</summary>
     /// <param name="columns">The columns: two or more, each holding numbers.</param>
     /// <param name="shown">How it is shown.</param>
     /// <exception cref="ArgumentException">There are fewer than two columns, one has no name, or one is named twice.</exception>
     public CorrelationStep(IEnumerable<string> columns, Shown shown = Shown.Drawn)
+        : this(columns, shown, Coefficient.Pearson)
+    {
+    }
+
+    /// <summary>Declares the rows a correlation between these columns is drawn from, and which coefficient is shown.</summary>
+    /// <param name="columns">The columns: two or more, each holding numbers.</param>
+    /// <param name="shown">How it is shown.</param>
+    /// <param name="coefficient">Pearson's, which is how well two columns lie on a line, or Spearman's, how well they keep the same order.</param>
+    /// <exception cref="ArgumentException">There are fewer than two columns, one has no name, or one is named twice.</exception>
+    public CorrelationStep(IEnumerable<string> columns, Shown shown, Coefficient coefficient)
     {
         ArgumentNullException.ThrowIfNull(columns);
 
         Columns = ColumnsKey.Require([.. columns]);
         Shown = ShownKey.Require(shown);
+        Coefficient = CoefficientKey.Require(coefficient);
 
         // A rule on the number of columns, so it lives with the step.
         if (Columns.Count < 2)
@@ -692,6 +834,9 @@ public sealed record CorrelationStep : IPipelineStep<CorrelationStep>, IProduces
     /// <summary>How it is shown.</summary>
     public Shown Shown { get; }
 
+    /// <summary>Which coefficient is shown: Pearson's, or Spearman's on the ranks.</summary>
+    public Coefficient Coefficient { get; }
+
     /// <inheritdoc />
     public static string Name => "evidence.correlation";
 
@@ -704,7 +849,8 @@ public sealed record CorrelationStep : IPipelineStep<CorrelationStep>, IProduces
     /// <inheritdoc />
     public static StepParameters<CorrelationStep> Parameters { get; } = new StepParameters<CorrelationStep>()
         .With(ColumnsKey, step => step.Columns)
-        .With(ShownKey, step => step.Shown);
+        .With(ShownKey, step => step.Shown)
+        .With(CoefficientKey, step => step.Coefficient);
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -713,7 +859,8 @@ public sealed record CorrelationStep : IPipelineStep<CorrelationStep>, IProduces
     public ColumnState After(ColumnState before) => before;
 
     /// <inheritdoc />
-    public bool Equals(CorrelationStep? other) => other is not null && Shown == other.Shown && Columns.SequenceEqual(other.Columns);
+    public bool Equals(CorrelationStep? other) =>
+        other is not null && Shown == other.Shown && Coefficient == other.Coefficient && Columns.SequenceEqual(other.Columns);
 
     /// <inheritdoc />
     public override int GetHashCode()
@@ -721,6 +868,7 @@ public sealed record CorrelationStep : IPipelineStep<CorrelationStep>, IProduces
         var hash = new HashCode();
 
         hash.Add(Shown);
+        hash.Add(Coefficient);
 
         foreach (var column in Columns)
         {
@@ -744,11 +892,12 @@ public sealed record CorrelationStep : IPipelineStep<CorrelationStep>, IProduces
             .Select(row => values.Select(column => column[row]!.Value).ToArray())
             .ToArray();
 
-        return new CorrelationInput(view, Columns, complete, Shown);
+        return new CorrelationInput(view, Columns, complete, Shown) { Coefficient = Coefficient };
     }
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
-    public static CorrelationStep ReadFrom(JsonElement element) => new(ColumnsKey.Read(element), ShownKey.Read(element));
+    public static CorrelationStep ReadFrom(JsonElement element) =>
+        new(ColumnsKey.Read(element), ShownKey.Read(element), CoefficientKey.Read(element));
 }

@@ -5,11 +5,6 @@ using System.Globalization;
 using DeepSharp.Charts;
 using DeepSharp.Verso.Notebooks;
 using DeepSharp.Pipelines;
-using MatPlotLibNet;
-using MatPlotLibNet.Numerics;
-using MatPlotLibNet.Rendering.TickFormatters;
-using MatPlotLibNet.Rendering.TickLocators;
-using MatPlotLibNet.Styling.ColorMaps;
 
 namespace DeepSharp.Tests.Notebooks;
 
@@ -111,71 +106,103 @@ public sealed class EvidenceDrawingTests : IDisposable
     }
 
     [Fact]
-    public async Task ACorrelation_IsDrawnAsItAlwaysWas_WhoeverDrawsIt()
+    public async Task ACorrelation_IsDrawnAsTheChartsPackageDrawsIt_WhoeverDrawsIt()
     {
+        // The picture is DeepSharp.Charts' and nothing is drawn here: what a C# cell that ends with the correlation shows is
+        // what the block shows. That the picture itself is the one it always was is the charts' to hold.
         const string evidence = """{"step": "evidence.correlation", "columns": ["age", "fare", "sibsp"], "shown": "drawn"}""";
 
         var shown = await ShownAtAsync(evidence);
         var input = Assert.IsType<CorrelationInput>(Measured(evidence));
 
-        Assert.Contains(AsTheNotebookDrewIt(input), shown, StringComparison.Ordinal);
-    }
-
-    // The heatmap the notebook drew a correlation as, kept here exactly as it was written: the picture a move of the drawing
-    // must leave as it stood.
-    private static string AsTheNotebookDrewIt(CorrelationInput correlation)
-    {
-        var names = correlation.Columns.ToArray();
-        var matrix = NpStats.Corrcoef([.. Enumerable.Range(0, names.Length).Select(column => correlation.Rows.Select(row => row[column]).ToArray())]);
-        var data = new double[names.Length, names.Length];
-        var positions = Enumerable.Range(0, names.Length).Select(position => (double)position).ToArray();
-
-        for (var row = 0; row < names.Length; row++)
-        {
-            for (var column = 0; column < names.Length; column++)
-            {
-                data[row, column] = matrix[row, column];
-            }
-        }
-
-        var size = 160 + (60 * names.Length);
-
-        return new FigureBuilder()
-            .WithSize(size + 120, size)
-            .AddSubPlot(1, 1, 1, axes => axes
-                .Heatmap(data, series =>
-                {
-                    series.ColorMap = ColorMaps.Coolwarm;
-                    series.Normalizer = new MinusOneToOne();
-                    series.ShowLabels = true;
-                    series.LabelFormat = "0.00";
-                })
-                .SetXTickLocator(new FixedLocator(positions))
-                .SetXTickFormatter(new CategoryFormatter(names))
-                .SetYTickLocator(new FixedLocator(positions))
-                .SetYTickFormatter(new CategoryFormatter(names, reversed: true))
-                .WithColorBar())
-            .ToSvg();
-    }
-
-    // The whole of a correlation's scale, minus one to one, whatever the coefficients span.
-    private sealed class MinusOneToOne : INormalizer
-    {
-        public double Normalize(double value, double min, double max) => Math.Clamp((value + 1) / 2, 0, 1);
+        Assert.Contains(input.Heatmap(), shown, StringComparison.Ordinal);
+        Assert.DoesNotContain("Spearman", shown, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task ACorrelationAskedForAsNumbers_WritesEachCoefficient()
+    public async Task ACorrelationAskedForAsNumbers_WritesEachCoefficient_AsThePipelineWorkedItOut()
     {
         const string evidence = """{"step": "evidence.correlation", "columns": ["age", "fare"], "shown": "numbers"}""";
 
         var shown = await ShownAtAsync(evidence);
         var input = Assert.IsType<CorrelationInput>(Measured(evidence));
-        var matrix = NpStats.Corrcoef([.. Enumerable.Range(0, 2).Select(column => input.Rows.Select(row => row[column]).ToArray())]);
+        var pearson = input.Correlate().Pearson;
 
         Assert.DoesNotContain("<svg", shown, StringComparison.Ordinal);
-        Assert.Contains($">{matrix[0, 1].ToString("0.000", CultureInfo.InvariantCulture)}<", shown, StringComparison.Ordinal);
+        Assert.Contains($">{pearson[0, 1].ToString("0.000", CultureInfo.InvariantCulture)}<", shown, StringComparison.Ordinal);
         Assert.Contains(">1.000<", shown, StringComparison.Ordinal);
+        Assert.DoesNotContain("Spearman", shown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACorrelationDeclaredAsSpearman_IsDrawnFromRanks_AndSaysSo()
+    {
+        const string evidence = """{"step": "evidence.correlation", "columns": ["age", "fare", "sibsp"], "shown": "drawn", "coefficient": "spearman"}""";
+
+        var shown = await ShownAtAsync(evidence);
+        var input = Assert.IsType<CorrelationInput>(Measured(evidence));
+
+        Assert.Equal(Coefficient.Spearman, input.Coefficient);
+        Assert.Contains(input.Heatmap(), shown, StringComparison.Ordinal);
+        Assert.Contains("Spearman", shown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ACorrelationDeclaredAsSpearmanAndAskedForAsNumbers_WritesSpearmansCoefficients()
+    {
+        const string evidence = """{"step": "evidence.correlation", "columns": ["age", "fare"], "shown": "numbers", "coefficient": "spearman"}""";
+
+        var shown = await ShownAtAsync(evidence);
+        var input = Assert.IsType<CorrelationInput>(Measured(evidence));
+        var matrix = input.Correlate();
+
+        Assert.NotEqual(matrix.Pearson[0, 1].ToString("0.000", CultureInfo.InvariantCulture), matrix.Spearman[0, 1].ToString("0.000", CultureInfo.InvariantCulture));
+        Assert.Contains($">{matrix.Spearman[0, 1].ToString("0.000", CultureInfo.InvariantCulture)}<", shown, StringComparison.Ordinal);
+        Assert.DoesNotContain($">{matrix.Pearson[0, 1].ToString("0.000", CultureInfo.InvariantCulture)}<", shown, StringComparison.Ordinal);
+        Assert.Contains("Spearman", shown, StringComparison.Ordinal);
+        Assert.Contains("ranks", shown, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(Shown.Numbers)]
+    [InlineData(Shown.Drawn)]
+    public void AColumnThatNeverChanges_HasNoCoefficient_AndTheViewSaysSoInsteadOfPrintingNought(Shown shown)
+    {
+        var view = new Pipeline(
+                Pdd.Create().Read(CsvRowSource.FromText("a,k,b\n1,5,2\n2,5,1\n3,5,4\n4,5,3\n"), "rows")
+                    .Declare(schema => schema.Number("a", "k", "b"))
+                    .Correlation(["a", "k", "b"], shown)
+                    .Declaration,
+                CsvRowSource.FromText("a,k,b\n1,5,2\n2,5,1\n3,5,4\n4,5,3\n"))
+            .ViewAt(3);
+
+        var drawn = view.Evidence[2].Accept(new EvidenceView()).Content;
+
+        Assert.Contains("<code>k</code> never changes over these rows, so it has no coefficient with any column", drawn, StringComparison.Ordinal);
+
+        if (shown == Shown.Numbers)
+        {
+            Assert.Equal(5, drawn.Split(">n/a<").Length - 1);
+            Assert.Contains(">0.600<", drawn, StringComparison.Ordinal);
+            Assert.DoesNotContain(">0.000<", drawn, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ACorrelationOfColumnsThatAllChange_SaysNothingAboutAnUndefinedCoefficient()
+    {
+        var view = new Pipeline(
+                Pdd.Create().Read(CsvRowSource.FromText("a,b\n1,2\n2,1\n3,4\n"), "rows")
+                    .Declare(schema => schema.Number("a", "b"))
+                    .Correlation(["a", "b"], Shown.Numbers)
+                    .Declaration,
+                CsvRowSource.FromText("a,b\n1,2\n2,1\n3,4\n"))
+            .ViewAt(3);
+
+        var drawn = view.Evidence[2].Accept(new EvidenceView()).Content;
+
+        Assert.DoesNotContain("never changes", drawn, StringComparison.Ordinal);
+        Assert.DoesNotContain("n/a", drawn, StringComparison.Ordinal);
     }
 
     [Fact]

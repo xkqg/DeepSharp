@@ -13,7 +13,8 @@ namespace DeepSharp.Verso.Notebooks;
 /// <remarks>
 /// A parameter with one value is one field under its own key. The others are named from the parameter and what the field
 /// is about — one column of a set, one place of a list of roles, the kind a schema gives one column, whether that column
-/// may be absent, how its moments are written, which of its values stands for a gap, the number a way of filling carries —
+/// may be absent, how its moments are written, which of its values stands for a gap, whether it names each row, the number a
+/// way of filling carries —
 /// so a field the form draws is always one it reads back. The parameter is what each name is asked of, rather than its key
 /// handed over beside what the field is about: two names of the same kind, side by side, are a pair a caller can hand over
 /// the wrong way round, and a receiver cannot be.
@@ -32,6 +33,8 @@ internal static class FormVocabulary
     private const string Gap = "missing";
 
     private const string TheNumber = "value";
+
+    private const string Naming = "id";
 
     extension(StepParameter parameter)
     {
@@ -133,6 +136,17 @@ internal static class FormVocabulary
         /// <param name="column">The column, when it is.</param>
         /// <returns><see langword="true"/> when it is.</returns>
         public bool IsMissing(string field, out string column) => After(field, $"{parameter.Key}/{Gap}/", out column);
+
+        /// <summary>Whether one column names each row.</summary>
+        /// <param name="column">The column.</param>
+        /// <returns>The field's name.</returns>
+        public string Id(string column) => $"{parameter.Key}/{Naming}/{column}";
+
+        /// <summary>Whether a field says one column names each row, and which column.</summary>
+        /// <param name="field">The field's name.</param>
+        /// <param name="column">The column, when it is.</param>
+        /// <returns><see langword="true"/> when it is.</returns>
+        public bool IsId(string field, out string column) => After(field, $"{parameter.Key}/{Naming}/", out column);
 
         /// <summary>The number a way of filling carries.</summary>
         /// <returns>The field's name.</returns>

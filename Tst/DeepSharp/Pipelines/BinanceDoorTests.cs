@@ -71,7 +71,7 @@ public sealed class BinanceDoorTests : IDisposable
 
         var json = declaration.ToJson();
 
-        Assert.Contains("\"version\": 7", json, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 8", json, StringComparison.Ordinal);
         Assert.Contains("\"step\": \"read.csv\"", json, StringComparison.Ordinal);
         Assert.Contains("\"path\": \"BTCEUR-1d-20240101T000000Z-20240131T000000Z.csv\"", json, StringComparison.Ordinal);
         Assert.DoesNotContain("binance", json, StringComparison.OrdinalIgnoreCase);

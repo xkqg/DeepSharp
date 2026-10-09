@@ -1,0 +1,243 @@
+{
+  "version": 7,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.8.0.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "Date",
+          "kind": "timestamp",
+          "optional": false
+        },
+        {
+          "name": "Seq",
+          "kind": "integer",
+          "optional": false
+        },
+        {
+          "name": "Farm",
+          "kind": "category",
+          "optional": false
+        },
+        {
+          "name": "Animals",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Age",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "b1",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "b2",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "b3",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "b4",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "b5",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Temp",
+          "kind": "number",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "step": "order.by",
+      "columns": [
+        "Date",
+        "Seq"
+      ]
+    },
+    {
+      "step": "feature.add",
+      "column": "animalsPerDay",
+      "left": "Animals",
+      "arithmetic": "dividedby",
+      "right": "Age"
+    },
+    {
+      "step": "feature.timeParts",
+      "column": "Date",
+      "asCategories": true,
+      "parts": [
+        "month"
+      ]
+    },
+    {
+      "step": "feature.timeParts",
+      "column": "Date",
+      "asCategories": false,
+      "parts": [
+        "quarter"
+      ]
+    },
+    {
+      "step": "feature.cyclical",
+      "column": "Date",
+      "period": "monthofyear",
+      "form": "signed"
+    },
+    {
+      "step": "evidence.profile",
+      "columns": [
+        "Farm",
+        "Animals",
+        "Age"
+      ]
+    },
+    {
+      "step": "evidence.correlation",
+      "columns": [
+        "Animals",
+        "Age"
+      ],
+      "shown": "numbers"
+    },
+    {
+      "step": "split.byTime",
+      "column": "Date",
+      "train": 0.7,
+      "validation": 0.15,
+      "test": 0.15,
+      "predict": 0,
+      "gap": 1
+    },
+    {
+      "step": "target.distribution",
+      "columns": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "scaleBy": "Animals"
+    },
+    {
+      "step": "normalise.row",
+      "norm": "l1",
+      "columns": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ]
+    },
+    {
+      "step": "drop.columns",
+      "columns": [
+        "Date",
+        "Seq",
+        "Animals"
+      ]
+    },
+    {
+      "step": "fill.missing",
+      "column": "Temp",
+      "with": "median"
+    },
+    {
+      "step": "encode.categories",
+      "as": "onehot",
+      "unseen": "reserve"
+    },
+    {
+      "step": "normalise",
+      "column": "Age",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "normalise",
+      "column": "animalsPerDay",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "normalise",
+      "column": "Date_quarter",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "normalise",
+      "column": "Temp",
+      "scale": "maxabs",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "evidence.report",
+      "metrics": [
+        "rmse",
+        "mae",
+        "r2"
+      ],
+      "parts": [
+        "validation",
+        "test"
+      ],
+      "shown": [
+        "numbers"
+      ]
+    },
+    {
+      "step": "learn.network",
+      "layers": [
+        {
+          "kind": "dense",
+          "units": 8
+        },
+        {
+          "kind": "relu"
+        },
+        {
+          "kind": "dense",
+          "units": 5
+        }
+      ],
+      "optimizer": {
+        "kind": "adam",
+        "rate": 0.01,
+        "firstMoment": 0.9,
+        "secondMoment": 0.999,
+        "epsilon": 1E-07
+      },
+      "loss": {
+        "kind": "crossEntropy"
+      },
+      "stopping": {
+        "kind": "never"
+      },
+      "engine": "light",
+      "seed": 20261009,
+      "epochs": 3,
+      "batch": 16
+    }
+  ]
+}

@@ -20,7 +20,11 @@ namespace DeepSharp.Pipelines;
 /// Where the step that wrote the column last lands its values: between minus one and one, or between nothing and one;
 /// nothing when that step does not land them in a range.
 /// </param>
-public readonly record struct KnownColumn(string Name, ColumnKind Kind, bool Surely, string? HalfOf = null, Form? Lands = null);
+public readonly record struct KnownColumn(string Name, ColumnKind Kind, bool Surely, string? HalfOf = null, Form? Lands = null)
+{
+    /// <summary>Whether the column names each row, as the schema says: carried with the rows, and taken by no step of every column.</summary>
+    internal bool IsId { get; init; }
+}
 
 /// <summary>
 /// A column a step reads, and the kinds of column it can work on.
@@ -70,7 +74,7 @@ public sealed class ColumnState
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        return new([.. table.Columns.Select(column => new KnownColumn(column.Name, column.Kind, Surely: true))], Unnamed.Nothing);
+        return new([.. table.Columns.Select(column => new KnownColumn(column.Name, column.Kind, Surely: true) { IsId = column.Name == table.Id })], Unnamed.Nothing);
     }
 
     /// <summary>Why a known column may turn out not to be there, when it may.</summary>
@@ -233,7 +237,7 @@ public sealed class ColumnState
         string[] excluded = [.. columns.Where(column => column.Excluded).Select(column => column.Name)];
 
         return new(
-            [.. taking.Select(column => new KnownColumn(column.Name, column.Kind, !column.Optional))],
+            [.. taking.Select(column => new KnownColumn(column.Name, column.Kind, !column.Optional) { IsId = column.Id })],
             new Unnamed([], Gone: excluded, Open: remainder == Remainder.Keep),
             taking.Where(column => column.Optional).ToDictionary(
                 column => column.Name, _ => "the schema allows the rows not to have it", StringComparer.Ordinal),

@@ -520,7 +520,7 @@ public class TakeOverTests
         var parts = catalog.Describe("declare").Parameters.OfType<ColumnDeclarationsParameter>().Single().Parts;
 
         // A part the listing does not compare would be applied unseen: every part is here, the name being the row itself.
-        Assert.Equal(["name", "kind", "optional", "excluded", "was", "format", "missing"], parts.Select(part => part.Parameter.Key));
+        Assert.Equal(["name", "kind", "optional", "excluded", "was", "format", "missing", "id"], parts.Select(part => part.Parameter.Key));
 
         static PipelineDeclaration Boarded(string? format) =>
             WithMaker(columns => columns.Integer("survived", "pclass").Optional("age", ColumnKind.Number).Number("fare")
@@ -540,6 +540,7 @@ public class TakeOverTests
             new("was", category, categoryWithoutWas, "pclass"),
             new("format", Boarded("dd/MM/yyyy"), Boarded(null), "boarded"),
             new("missing", Fares("0"), Fares(null), "fare"),
+            new("id", WithMaker(columns => columns.Integer("survived").Id("pclass", ColumnKind.Integer).Optional("age", ColumnKind.Number).Number("fare")), blocks, "pclass"),
         ];
 
         Assert.Equal(parts.Skip(1).Select(part => part.Parameter.Key), flips.Select(flip => flip.Part));
@@ -559,8 +560,11 @@ public class TakeOverTests
             new(new TargetStep("close"), new TargetStep("open"), "column"),
             new(new DistributionStep(["a", "b"]), new DistributionStep(["a", "w"]), "columns"),
             new(new DistributionStep(["a", "b"]), new DistributionStep(["a", "b"], "w"), "scaleBy"),
+            new(new DistributionStep(["a", "b"]), new DistributionStep(["a", "b"], null, ordered: true), "ordered"),
+            new(new DistributionStep(["a", "b"], "w"), new DistributionStep(["a", "b"], "w", ordered: false, remainder: "other"), "remainder"),
             new(new LabelsStep(["a", "b"]), new LabelsStep(["a", "w"]), "columns"),
             new(new LabelsStep(["a", "b"]), new LabelsStep(["a", "b"], 1), "ones"),
+            new(new NumbersStep(["a", "b"]), new NumbersStep(["a", "w"]), "columns"),
             new(new AheadStep("close", 5), new AheadStep("open", 5), "column"),
             new(new AheadStep("close", 5), new AheadStep("close", 3), "ahead"),
             new(new AheadStep("close", 5), new AheadStep("close", 5, AheadAs.Return), "as"),

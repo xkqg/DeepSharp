@@ -206,6 +206,16 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
     private static readonly WholeNumberParameter SeedKey = new(
         "seed", "The number that makes the shuffle repeatable: the same seed deals the same rows the same way.", 20260923);
 
+    // A seed is a whole number, so what leaving the key out means is a number no seed can be: below nought.
+    private static readonly WholeNumberParameter TestSeedKey = new(
+        "testSeed",
+        "The number that deals the rows to be measured on, none or more. Given, those rows are the same whatever the seed is, and the seed deals the rest. Left out, the seed deals every part.",
+        99)
+    {
+        AtLeast = 0,
+        LeftOut = -1,
+    };
+
     /// <summary>Declares a split at random.</summary>
     /// <param name="shares">How much goes to training, validation and test.</param>
     /// <param name="seed">The number that makes the shuffle repeatable.</param>
@@ -215,16 +225,35 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
         Seed = SeedKey.Require(seed);
     }
 
+    /// <summary>Declares a split at random whose rows to be measured on are dealt by a number of their own.</summary>
+    /// <param name="shares">How much goes to training, validation and test.</param>
+    /// <param name="seed">The number that deals the rows the model learns from and chooses with.</param>
+    /// <param name="testSeed">The number that deals the rows to be measured on, none or more.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The test seed is below nought.</exception>
+    public SplitAtRandomStep(SplitShares shares, int seed, int testSeed)
+        : this(shares, seed)
+    {
+        TestSeed = TestSeedKey.Require(testSeed);
+    }
+
     /// <inheritdoc />
     public static StepParameters<SplitAtRandomStep> Parameters { get; } = new StepParameters<SplitAtRandomStep>()
         .With(SharesKey, step => step.Shares)
-        .With(SeedKey, step => step.Seed);
+        .With(SeedKey, step => step.Seed)
+        .With(TestSeedKey, step => step.TestSeed ?? TestSeedKey.LeftOut!.Value);
 
     /// <summary>How much goes to training, validation and test.</summary>
     public SplitShares Shares { get; }
 
     /// <summary>The number that makes the shuffle repeatable.</summary>
     public int Seed { get; }
+
+    /// <summary>The number that deals the rows to be measured on, or nothing when the seed deals every part.</summary>
+    /// <remarks>
+    /// Given, the rows to be measured on and the rows kept for predicting are the same whatever <see cref="Seed"/> is, and
+    /// the seed deals what is left into training and validation.
+    /// </remarks>
+    public int? TestSeed { get; }
 
     /// <inheritdoc />
     public static string Name => "split.atRandom";
@@ -246,15 +275,37 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
     /// <remarks>
     /// Each row is ranked by a digest of the seed and what the row says, so the same rows are dealt the same
     /// way whatever order they arrive in, and every copy of a repeated row lands where its first copy does.
+    /// With a test seed the rows are first dealt by that number alone and only the rows to be measured on and the
+    /// rows kept for predicting are taken from it; the rows left are then ranked again by the seed and divided into
+    /// training and validation in the numbers the first deal gave them. A digest ranks a row without regard to the
+    /// rows around it, so a test seed equal to the seed leaves that second ranking in the order the first gave, and
+    /// deals as no test seed does.
     /// </remarks>
     public Part[] Assign(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        var ranked = table.Ranked(Enumerable.Range(0, table.RowCount), Seed);
+        var rows = Enumerable.Range(0, table.RowCount).ToArray();
+        var ranked = table.Ranked(rows, TestSeed ?? Seed);
         var parts = Shares.Over(table.RowCount).Placed(ranked);
 
         parts.KeptTogether(ranked, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
+
+        if (TestSeed is null)
+        {
+            return parts;
+        }
+
+        var left = rows.Where(row => parts[row] is Part.Train or Part.Validation).ToArray();
+        var training = left.Count(row => parts[row] == Part.Train);
+        var again = table.Ranked(left, Seed);
+
+        for (var at = 0; at < again.Length; at++)
+        {
+            parts[again[at]] = at < training ? Part.Train : Part.Validation;
+        }
+
+        parts.KeptTogether(again, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
 
         return parts;
     }
@@ -262,8 +313,11 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The file gives a test seed below nought.</exception>
     public static SplitAtRandomStep ReadFrom(JsonElement element) =>
-        new(SharesKey.Read(element), SeedKey.Read(element));
+        element.TryGetProperty(TestSeedKey.Key, out _)
+            ? new(SharesKey.Read(element), SeedKey.Read(element), TestSeedKey.Read(element))
+            : new(SharesKey.Read(element), SeedKey.Read(element));
 }
 
 /// <summary>

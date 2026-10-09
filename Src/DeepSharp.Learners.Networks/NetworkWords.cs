@@ -7,8 +7,8 @@ using DeepSharp.Pipelines;
 namespace DeepSharp.Learners.Networks;
 
 /// <summary>
-/// The words a declared network is written in: which layers there are, which optimizer, which loss and when a run
-/// stops, each with the settings it takes.
+/// The words a declared network is written in: which layers there are, which optimizer, which loss, how the rate changes
+/// and when a run stops, each with the settings it takes.
 /// </summary>
 /// <remarks>
 /// One vocabulary, and it is the one a network's own file already speaks — a layer is written under the name the saved
@@ -41,6 +41,30 @@ public static class NetworkWords
 
     private static readonly NumberParameter TinyKey = new("epsilon", "The small number added so nothing is divided by nought.", 1e-8) { Above = 0 };
 
+    private static readonly NumberParameter DecayKey = new("weightDecay", "How far every number is shrunk towards nought at each step, as a share of the step's rate.", 0.01) { AtLeast = 0 };
+
+    private static readonly NumberParameter SquaresRateKey = new("rate", "How far one step moves the numbers.", 0.01) { Above = 0 };
+
+    private static readonly NumberParameter AlphaKey = new("alpha", "How much of the running mean of the squares of the gradients carries on.", 0.99) { AtLeast = 0 };
+
+    private static readonly NumberParameter NesterovRateKey = new("rate", "How far one step moves the numbers.", 0.002) { Above = 0 };
+
+    private static readonly NumberParameter WarmingKey = new("momentumDecay", "How fast the momentum warms up over the steps.", 0.004) { AtLeast = 0 };
+
+    private static readonly WholeNumberParameter EveryKey = new("every", "How many epochs pass between two falls of the rate.", 10) { AtLeast = 1 };
+
+    private static readonly NumberParameter FallKey = new("factor", "What the rate is multiplied by at each fall.", 0.1) { Above = 0 };
+
+    private static readonly NumberParameter EpochFactorKey = new("factor", "What the rate is multiplied by from one epoch to the next.", 0.9) { Above = 0 };
+
+    private static readonly WholeNumberParameter CosineKey = new("epochs", "How many epochs the rate falls over, along half a cosine.", 100) { AtLeast = 1 };
+
+    private static readonly NumberParameter LeastRateKey = new("minimum", "The least rate, reached at the end of the fall.", 0) { AtLeast = 0 };
+
+    private static readonly WholeNumberParameter WarmupKey = new("epochs", "How many epochs the rate warms up over.", 5) { AtLeast = 1 };
+
+    private static readonly NumberParameter StartKey = new("start", "The share of the rate the first epoch takes: above nought, and at most one.", 1.0 / 3) { Above = 0 };
+
     private static readonly WholeNumberParameter PatienceKey = new("patience", "How many passes without a better one the run waits before it stops.", 10) { AtLeast = 0 };
 
     private static readonly NumberParameter LeastKey = new("least", "How far the validation loss has to fall below the best for a pass to count as better.", 0) { AtLeast = 0 };
@@ -64,6 +88,9 @@ public static class NetworkWords
     [
         new("sgd", "Moves every number against its gradient, carrying some of the last step's velocity.", [StepKey, CarriedKey]),
         new("adam", "Moves every number by a running mean of its gradients over the root of a running mean of their squares.", [StepKey, FirstKey, SecondKey, TinyKey]),
+        new("adamw", "Adam, with every number shrunk towards nought before its step, apart from its gradient.", [StepKey, FirstKey, SecondKey, TinyKey, DecayKey]),
+        new("rmsprop", "Moves every number by its gradient over the root of a running mean of the squares of its gradients.", [SquaresRateKey, AlphaKey, TinyKey, CarriedKey]),
+        new("nadam", "Adam with Nesterov's momentum, warmed up over the steps.", [NesterovRateKey, FirstKey, SecondKey, TinyKey, WarmingKey]),
     ];
 
     /// <summary>The losses a declared network is judged by.</summary>
@@ -72,6 +99,22 @@ public static class NetworkWords
         new("meanSquaredError", "The mean of the squared differences: an answer that is an amount.", []),
         new("crossEntropy", "The loss of one answer among several classes, read through a softmax.", []),
         new("binaryCrossEntropy", "The loss of an answer that is a chance, read through a sigmoid.", []),
+        new("earthMoversDistance", "How far the shares have to move along the order of the bands to be the answer's: an answer of shares in an order, read through a softmax.", []),
+    ];
+
+    /// <summary>How the rate a declared network is moved at changes from epoch to epoch, in the words a network's file writes it in.</summary>
+    /// <remarks>
+    /// Each is worked out from the epoch alone, so none listens to the validation loss. A warm-up declared here hands over to
+    /// the optimizer's own rate; one that hands over to a decay is written as code, where a <see cref="LinearWarmup"/> holds
+    /// the schedule that follows it.
+    /// </remarks>
+    public static IReadOnlyList<PartKind> Schedules { get; } =
+    [
+        new("constant", "The rate the optimizer starts at, every epoch.", []),
+        new("stepDecay", "The rate multiplied by a factor every so many epochs.", [EveryKey, FallKey]),
+        new("exponentialDecay", "The rate multiplied by a factor every epoch.", [EpochFactorKey]),
+        new("cosineDecay", "The rate falling along half a cosine to its least over so many epochs.", [CosineKey, LeastRateKey]),
+        new("linearWarmup", "The rate rising in a straight line from a share of itself to the whole of it over so many epochs, then held.", [WarmupKey, StartKey]),
     ];
 
     /// <summary>When a run stops: at its last pass, or once the validation loss stops falling.</summary>
@@ -118,6 +161,14 @@ public static class NetworkWords
         public Loss Judged() => Word(LossWords, loss, Losses)(loss);
     }
 
+    extension(PartDeclaration schedule)
+    {
+        /// <summary>How the rate changes from epoch to epoch, as a declared part names it.</summary>
+        /// <returns>The schedule.</returns>
+        /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
+        public LearningRateSchedule Scheduled() => Word(ScheduleWords, schedule, Schedules)(schedule);
+    }
+
     extension(PartDeclaration stopping)
     {
         /// <summary>When the run a declared part names stops, or nothing when it goes on to its last pass.</summary>
@@ -155,6 +206,24 @@ public static class NetworkWords
                 Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
                 Epsilon = optimizer.Number(TinyKey.Key),
             },
+            ["adamw"] = optimizer => new AdamW(optimizer.Number(StepKey.Key))
+            {
+                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
+                Epsilon = optimizer.Number(TinyKey.Key),
+                WeightDecay = optimizer.Number(DecayKey.Key),
+            },
+            ["rmsprop"] = optimizer => new RmsProp(optimizer.Number(SquaresRateKey.Key))
+            {
+                Alpha = optimizer.Number(AlphaKey.Key),
+                Epsilon = optimizer.Number(TinyKey.Key),
+                Momentum = optimizer.Number(CarriedKey.Key),
+            },
+            ["nadam"] = optimizer => new Nadam(optimizer.Number(NesterovRateKey.Key))
+            {
+                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
+                Epsilon = optimizer.Number(TinyKey.Key),
+                MomentumDecay = optimizer.Number(WarmingKey.Key),
+            },
         };
 
     private static IReadOnlyDictionary<string, Func<PartDeclaration, Loss>> LossWords { get; } =
@@ -163,6 +232,17 @@ public static class NetworkWords
             ["meanSquaredError"] = _ => new MeanSquaredError(),
             ["crossEntropy"] = _ => new CrossEntropy(),
             ["binaryCrossEntropy"] = _ => new BinaryCrossEntropy(),
+            ["earthMoversDistance"] = _ => new EarthMoversDistance(),
+        };
+
+    private static IReadOnlyDictionary<string, Func<PartDeclaration, LearningRateSchedule>> ScheduleWords { get; } =
+        new Dictionary<string, Func<PartDeclaration, LearningRateSchedule>>(StringComparer.Ordinal)
+        {
+            ["constant"] = _ => new ConstantRate(),
+            ["stepDecay"] = schedule => new StepDecay(schedule.Whole(EveryKey.Key), schedule.Number(FallKey.Key)),
+            ["exponentialDecay"] = schedule => new ExponentialDecay(schedule.Number(EpochFactorKey.Key)),
+            ["cosineDecay"] = schedule => new CosineDecay(schedule.Whole(CosineKey.Key), schedule.Number(LeastRateKey.Key)),
+            ["linearWarmup"] = schedule => new LinearWarmup(schedule.Whole(WarmupKey.Key), schedule.Number(StartKey.Key)),
         };
 
     private static IReadOnlyDictionary<string, Func<PartDeclaration, EarlyStopping?>> StoppingWords { get; } =

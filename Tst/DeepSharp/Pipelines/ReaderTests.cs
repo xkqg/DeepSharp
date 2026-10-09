@@ -190,17 +190,18 @@ public class ReaderTests
     [Fact]
     public void EveryStepThisLibraryShipsThatNamesItsColumns_ReadsAFile()
     {
-        // A source that can name its columns before anything runs is a file, and every such step this library ships opens
-        // its rows from the file's bytes as well: the one thing a notebook asks of its first block.
+        // A source that can name its columns before anything runs is a file, or files, and every such step this library
+        // ships opens its rows from the bytes as well: the one thing a notebook asks of its first block.
         var naming = Shipped.StepAssemblies
             .SelectMany(assembly => assembly.GetTypes())
             .Where(type => type is { IsClass: true, IsAbstract: false } && typeof(INamesItsColumns).IsAssignableFrom(type))
             .ToArray();
 
         Assert.Equal(
-            [typeof(ReadCsvStep), typeof(ReadExcelStep), typeof(ReadJsonStep), typeof(ReadParquetStep)],
+            [typeof(ReadCsvStep), typeof(ReadExcelStep), typeof(ReadJoinStep), typeof(ReadJsonStep), typeof(ReadParquetStep)],
             naming.OrderBy(type => type.Name, StringComparer.Ordinal));
-        Assert.All(naming, type => Assert.True(typeof(IReadsAFile).IsAssignableFrom(type), $"{type.Name} names its columns and reads no file."));
+        Assert.All(naming, type => Assert.True(
+            typeof(IReadsAFile).IsAssignableFrom(type) != typeof(IReadsFiles).IsAssignableFrom(type), $"{type.Name} names its columns and reads no file, or says both that it reads one and several."));
         Assert.All(naming, type => Assert.True(typeof(IOpensRows).IsAssignableFrom(type), $"{type.Name} reads a file and opens no rows."));
     }
 
