@@ -212,6 +212,15 @@ public sealed class TorchBackend : INamesItsVersionAndDevice
     }
 
     /// <inheritdoc />
+    /// <remarks>libtorch's argmax, which picks the first of values that tie and takes a value that is not a number as the largest.</remarks>
+    public Tensor FirstLargest(Tensor matrix)
+    {
+        matrix.RequireRowsToPickFrom(nameof(FirstLargest));
+
+        return One(matrix, matrix.Shape, static values => torch.nn.functional.one_hot(values.argmax(1), values.shape[1]).to_type(values.dtype));
+    }
+
+    /// <inheritdoc />
     /// <remarks>Stands on the storage it was handed, as a view of it: the values are the same values, in their order.</remarks>
     public Tensor Reshape(Tensor values, Shape shape)
     {

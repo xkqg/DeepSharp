@@ -8,6 +8,7 @@ using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 using DeepSharp.Tensors;
 using Onnxify.Safetensors;
+using static DeepSharp.Tests.Import.HandWrittenPickle;
 using static DeepSharp.Tests.Import.PyTorchNetworks;
 
 namespace DeepSharp.Tests.Import;
@@ -249,8 +250,9 @@ public class SafetensorsFileTests
     }
 
     [Fact]
-    public void AFlattenAnExampleHandsNeitherAnImageNorARow_IsRefusedAtTheLinearLayerReadingIt()
+    public void AFlattenAnExampleHandsNeitherARowASeriesAnImageNorAVolume_IsRefusedAtTheLinearLayerReadingIt()
     {
+        // Two axes that a reshape made are rows laid out as steps by features, which PyTorch flattens as they stand: no series.
         var network = new LayerStack(new Reshape(new Shape(2, 7)), new Flatten(), new Dense(Tensor.Zeros(new Shape(14, 1)), Tensor.Zeros(new Shape(1))));
 
         var refused = Assert.Throws<SlotLoadException>(() => new SafetensorsFile(network, new MeanSquaredError()) { Example = new Shape(14) }.Read(Written(
@@ -258,7 +260,7 @@ public class SafetensorsFileTests
 
         var fault = Assert.Single(refused.Faults);
         Assert.Equal(
-            "'2.weight' reads the rows the layer at 1 makes of 2x7, which is neither an image nor a row: an image's channels are turned to the end, and a row is read as it is.",
+            "'2.weight' reads the rows the layer at 1 makes of 2x7, which is no series, since no layer along one axis made it, and no image or volume: the channels of a series, an image or a volume are turned to the end, and a row is read as it is.",
             fault.Message);
     }
 
@@ -334,8 +336,8 @@ public class SafetensorsFileTests
             refused.Faults.Select(fault => fault.Slot));
         Assert.Equal(
             "'linear1.weight' is held by a network written as code, whose forward pass keeps to itself whether the layer at linear1 reads rows made of "
-            + "images, which PyTorch lays out channel by channel: state what that layer reads in Flattened — the rows, columns and channels of the images, or "
-            + "the length of a row.",
+            + "images, which PyTorch lays out channel by channel: state what that layer reads in Flattened — the steps and channels of a series, the rows, columns and "
+            + "channels of an image, the planes, rows, columns and channels of a volume, or the length of a row.",
             refused.Faults[0].Message);
         Assert.Equal(before, network.Slots().Select(named => named.Slot.Value), ReferenceEqualityComparer.Instance);
     }
@@ -447,7 +449,10 @@ public class SafetensorsFileTests
             noFlatten.Message,
             StringComparison.Ordinal);
         Assert.StartsWith("An example and what each flatten is handed say one thing twice: hand one of them.", both.Message, StringComparison.Ordinal);
-        Assert.StartsWith("What the layer at 4 is handed is stated as 12x3, and what is stated is an image — rows, columns and channels — or a row.", neither.Message, StringComparison.Ordinal);
+        Assert.StartsWith(
+            "What the layer at 4 is handed is stated as 12x3, and two axes are a series — steps and channels — only when the layer that walks axes nearest before it walks one axis.",
+            neither.Message,
+            StringComparison.Ordinal);
         Assert.StartsWith("What the layer at 4 is handed is stated as 2x3x3, which holds 18 values, and the layer at 5 reads 36.", tooFew.Message, StringComparison.Ordinal);
         Assert.StartsWith("What the layer at 0 is handed is stated as 2x2x2, which holds 8 values, and the layer at 1 reads 14.", tooFewForALinearLayer.Message, StringComparison.Ordinal);
         Assert.All([noFlatten, neither, tooFew, tooFewForALinearLayer, both], said => Assert.Equal("Flattened", said.ParamName));
@@ -492,22 +497,6 @@ public class SafetensorsFileTests
 
     private static float[] Transposed(float[] values, int rows, int columns) =>
         [.. Enumerable.Range(0, values.Length).Select(at => values[((at % rows) * columns) + (at / rows)])];
-
-    private static byte[] Floats(params float[] values) => [.. values.SelectMany(BitConverter.GetBytes)];
-
-    // The Titanic file with each tensor under another name.
-    private static MemoryStream Renamed(string file, Func<string, string> name)
-    {
-        var archive = SafeTensors.Deserialize(File.ReadAllBytes(PyTorchFixture.Path(file)));
-
-        return new MemoryStream(SafeTensors.Serialize(archive.Tensors().Select(pair => new KeyValuePair<string, TensorView>(name(pair.Key), pair.Value)), archive.Metadata.MetadataEntries));
-    }
-
-    // A safetensors file of the given tensors, written by the borrowed writer.
-    private static MemoryStream Written(Held[] tensors, IReadOnlyDictionary<string, string>? notes = null) =>
-        new(SafeTensors.Serialize(tensors.Select(held => new KeyValuePair<string, TensorView>(held.Name, new TensorView(held.Type, held.Shape, held.Bytes))), notes));
-
-    private readonly record struct Held(string Name, DataType Type, ulong[] Shape, byte[] Bytes);
 
     // What each linear layer and normalisation of the convolutions written as code reads.
     private static readonly Dictionary<string, Shape> StatedForTheCode = new()

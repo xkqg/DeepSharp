@@ -224,6 +224,39 @@ public sealed class CpuBackend : INamesItsVersionAndDevice
     });
 
     /// <inheritdoc />
+    public Tensor FirstLargest(Tensor matrix)
+    {
+        matrix.RequireRowsToPickFrom(nameof(FirstLargest));
+
+        var columns = matrix.Shape[1];
+        var values = matrix.Values;
+        var result = new float[values.Length];
+
+        for (var start = 0; start < values.Length; start += columns)
+        {
+            result[start + FirstLargestAt(values.Slice(start, columns))] = 1f;
+        }
+
+        return Tensor.Wrap(matrix.Shape, result);
+    }
+
+    // Where the first largest value of a row stands: a value that is not a number is the largest, the first of them the one picked.
+    private static int FirstLargestAt(ReadOnlySpan<float> row)
+    {
+        var at = 0;
+
+        for (var column = 1; column < row.Length && !float.IsNaN(row[at]); column++)
+        {
+            if (float.IsNaN(row[column]) || row[column] > row[at])
+            {
+                at = column;
+            }
+        }
+
+        return at;
+    }
+
+    /// <inheritdoc />
     public Tensor Divide(Tensor left, Tensor right) => Elementwise(left, right, TensorPrimitives.Divide, nameof(Divide));
 
     /// <inheritdoc />

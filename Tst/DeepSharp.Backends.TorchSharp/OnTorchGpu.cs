@@ -25,6 +25,12 @@ public sealed class DropoutTests() : DropoutContract(Card.First());
 
 public sealed class ConvolutionTests() : ConvolutionContract(Card.First());
 
+public sealed class SpatialConvolutionTests() : SpatialConvolutionContract(Card.First());
+
+public sealed class PoolingTests() : PoolingContract(Card.First());
+
+public sealed class SpatialDropoutTests() : SpatialDropoutContract(Card.First());
+
 public sealed class NormalisationTests() : NormalisationContract(Card.First());
 
 public sealed class LossTests() : LossContract(Card.First());

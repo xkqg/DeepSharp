@@ -10,7 +10,7 @@ namespace DeepSharp.Import.Keras;
 
 /// <summary>
 /// What one layer of a Keras model becomes here: the words it is written in, the activation it carries after them, the
-/// slots its numbers go into, in the order Keras keeps them, and the window it walks, when it has one.
+/// slots its numbers go into, in the order Keras keeps them, and the sides of the window it walks, when it has one.
 /// </summary>
 /// <param name="Words">What it writes into a description in Keras's words; nothing for a layer that is its activation alone.</param>
 /// <param name="Activation">The activation after it, by Keras's name for it: <c>linear</c> for none.</param>
@@ -19,20 +19,21 @@ internal readonly record struct KerasLayer(Action<Sequential>? Words, string Act
     /// <summary>The names of the slots its numbers go into, in the order Keras keeps its numbers.</summary>
     public IReadOnlyList<string> Slots { get; init; } = [];
 
-    /// <summary>The window it walks, for a convolution.</summary>
-    public Window? Window { get; init; }
+    /// <summary>The length of each side of the window it walks, outermost first, for a convolution: none for any other layer.</summary>
+    public int[] Sizes { get; init; } = [];
 
     /// <summary>
-    /// The shape a number of this layer is handed to its slot in: a convolution's kernel, which Keras writes as rows by
-    /// columns by channels in by channels out, as the window's places times the channels in by the channels out — the same
-    /// numbers in the same order — when its rows and columns are the window's; any other number as the file writes it.
+    /// The shape a number of this layer is handed to its slot in: a convolution's kernel, which Keras writes as one length
+    /// for each side of its window, then the channels in and the channels out, as the window's places times the channels in
+    /// by the channels out — the same numbers in the same order — when the lengths it begins with are the window's sides;
+    /// any other number as the file writes it.
     /// </summary>
     public Shape LaidOut(ulong[] lengths)
     {
         var written = new Shape([.. lengths.Select(length => checked((int)length))]);
 
-        return Window is { } window && written.Rank == 4 && new Shape(written[0], written[1]) == new Shape(window.Height, window.Width)
-            ? new Shape(written[0] * written[1] * written[2], written[3])
+        return Sizes.Length > 0 && written.Rank == Sizes.Length + 2 && written.Axes[..Sizes.Length].SequenceEqual(Sizes)
+            ? new Shape(Sizes.Aggregate(written[Sizes.Length], (rows, side) => checked(rows * side)), written[written.Rank - 1])
             : written;
     }
 }
@@ -46,14 +47,33 @@ internal abstract class KerasKind
     // Every kind read, in the order a refusal names them.
     private static readonly KerasKind[] Covered =
     [
-        new DenseKind(), new Conv2DKind(), new BatchNormalizationKind(), new LayerNormalizationKind(), new DropoutKind(),
+        new DenseKind(),
+        new ConvolutionKind("Conv1D", 1, (filters, window) => description => description.Conv1D(filters, window.Line())),
+        new ConvolutionKind("Conv2D", 2, (filters, window) => description => description.Conv2D(filters, window.Plane())),
+        new ConvolutionKind("Conv3D", 3, (filters, window) => description => description.Conv3D(filters, window.Volume())),
+        new PoolingKind("MaxPooling1D", 1, window => description => description.MaxPool1D(window.Line())),
+        new PoolingKind("MaxPooling2D", 2, window => description => description.MaxPool2D(window.Plane())),
+        new PoolingKind("MaxPooling3D", 3, window => description => description.MaxPool3D(window.Volume())),
+        new PoolingKind("AveragePooling1D", 1, window => description => description.AvgPool1D(window.Line())),
+        new PoolingKind("AveragePooling2D", 2, window => description => description.AvgPool2D(window.Plane())),
+        new PoolingKind("AveragePooling3D", 3, window => description => description.AvgPool3D(window.Volume())),
+        new GlobalPoolingKind("GlobalMaxPooling1D", 1, keepsAxes => description => description.GlobalMaxPool1D(keepsAxes)),
+        new GlobalPoolingKind("GlobalMaxPooling2D", 2, keepsAxes => description => description.GlobalMaxPool2D(keepsAxes)),
+        new GlobalPoolingKind("GlobalMaxPooling3D", 3, keepsAxes => description => description.GlobalMaxPool3D(keepsAxes)),
+        new GlobalPoolingKind("GlobalAveragePooling1D", 1, keepsAxes => description => description.GlobalAvgPool1D(keepsAxes)),
+        new GlobalPoolingKind("GlobalAveragePooling2D", 2, keepsAxes => description => description.GlobalAvgPool2D(keepsAxes)),
+        new GlobalPoolingKind("GlobalAveragePooling3D", 3, keepsAxes => description => description.GlobalAvgPool3D(keepsAxes)),
+        new BatchNormalizationKind(), new LayerNormalizationKind(), new DropoutKind(),
+        new SpatialDropoutKind("SpatialDropout1D", 1, rate => description => description.SpatialDropout1D(rate)),
+        new SpatialDropoutKind("SpatialDropout2D", 2, rate => description => description.SpatialDropout2D(rate)),
+        new SpatialDropoutKind("SpatialDropout3D", 3, rate => description => description.SpatialDropout3D(rate)),
         new FlattenKind(), new ReshapeKind(), new ActivationKind(), new ReluKind(),
     ];
 
     /// <summary>Every kind read, by the class name Keras writes it under.</summary>
     public static IReadOnlyDictionary<string, KerasKind> ByName { get; } = Covered.ToDictionary(kind => kind.Name, StringComparer.Ordinal);
 
-    /// <summary>The kinds read, named as a refusal names them: <c>Dense, Conv2D, … or ReLU</c>.</summary>
+    /// <summary>The kinds read, named as a refusal names them: <c>Dense, Conv1D, … or ReLU</c>.</summary>
     public static string Listed { get; } = $"{string.Join(", ", Covered[..^1].Select(kind => kind.Name))} or {Covered[^1].Name}";
 
     /// <summary>The class name Keras writes the kind under.</summary>
@@ -88,15 +108,24 @@ internal abstract class KerasKind
     }
 
     /// <summary>Notes a fault when a layer lays its images out other than with their channels last, as images here are.</summary>
-    protected static void RequireChannelsLast(KerasSettings layer)
+    protected static void RequireChannelsLast(KerasSettings layer) => RequireChannelsLast(layer, "images");
+
+    /// <summary>Notes a fault when a layer lays what it walks out other than with its channels last, as series, images and volumes here are.</summary>
+    /// <param name="layer">The layer's settings.</param>
+    /// <param name="things">What the layer walks, plural, as the fault says it: <c>series</c>, <c>images</c> or <c>volumes</c>.</param>
+    protected static void RequireChannelsLast(KerasSettings layer, string things)
     {
         var format = layer.Setting("data_format", "channels_last");
 
         if (format != "channels_last")
         {
-            layer.Refuse($"it lays its images out '{format.Quoted()}', and images here are laid out with their channels last.");
+            layer.Refuse($"it lays its {things} out '{format.Quoted()}', and {things} here are laid out with their channels last.");
         }
     }
+
+    /// <summary>What a layer that walks so many axes walks, plural: <c>series</c>, <c>images</c> or <c>volumes</c>.</summary>
+    /// <param name="axes">How many axes: one, two or three.</param>
+    protected static string ThingsWalkedAlong(int axes) => axes switch { 1 => "series", 2 => "images", _ => "volumes" };
 
     /// <summary>Notes a fault when a normalisation works over another axis than the last, or learns no shift or no scale.</summary>
     protected static void RequireLastAxisShiftAndScale(KerasSettings layer)
@@ -126,51 +155,6 @@ internal sealed class DenseKind : KerasKind
         RequireBias(layer);
 
         return new KerasLayer(description => description.Dense(units), ActivationOf(layer)) { Slots = ["weight", "bias"] };
-    }
-}
-
-/// <summary>Keras's <c>Conv2D</c>: a convolution whose window walks one stride down and across alike, padded as 'valid' or 'same'.</summary>
-internal sealed class Conv2DKind : KerasKind
-{
-    /// <inheritdoc />
-    public override string Name => "Conv2D";
-
-    /// <inheritdoc />
-    public override KerasLayer Read(KerasSettings layer)
-    {
-        var filters = layer.Setting<int>("filters");
-        var size = layer.Pair("kernel_size");
-        var strides = layer.Pair("strides");
-        var dilation = layer.Pair("dilation_rate");
-        var groups = layer.Setting("groups", 1);
-        var padding = layer.Setting("padding", "valid");
-
-        if (strides.Down != strides.Across)
-        {
-            layer.Refuse($"it strides {strides.Down} down and {strides.Across} across, and a window here walks one stride down and across alike.");
-        }
-
-        if (dilation != new Pair(1, 1))
-        {
-            layer.Refuse($"its window is dilated by {dilation.Down} down and {dilation.Across} across, and a window here covers neighbouring places.");
-        }
-
-        if (groups != 1)
-        {
-            layer.Refuse($"it splits its channels into {groups} groups, and a convolution here takes every channel of a place at once.");
-        }
-
-        if (padding is not ("valid" or "same"))
-        {
-            layer.Refuse($"it pads as '{padding.Quoted()}', and a window here pads as 'valid' or 'same'.");
-        }
-
-        RequireChannelsLast(layer);
-        RequireBias(layer);
-
-        var window = new Window(size.Down, size.Across) { Stride = strides.Down, PaddingMode = padding == "same" ? PaddingMode.Same : PaddingMode.Stated };
-
-        return new KerasLayer(description => description.Conv2D(filters, window), ActivationOf(layer)) { Slots = ["weight", "bias"], Window = window };
     }
 }
 

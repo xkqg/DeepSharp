@@ -9,9 +9,9 @@ using Onnx;
 namespace DeepSharp.Tests.Import;
 
 /// <summary>
-/// The ONNX graphs PyTorch exported that the ONNX reader's tests read (Fixtures/onnx-fixtures.py made them), what PyTorch
-/// answered through each network, and graphs made from them the way a graph comes to say something else: a node changed,
-/// added or taken out, a number written otherwise.
+/// The ONNX graphs PyTorch exported that the ONNX reader's tests read (Fixtures/onnx-fixtures.py and
+/// Fixtures/onnx-spatial-fixtures.py made them), what PyTorch answered through each network, and graphs made from them the
+/// way a graph comes to say something else: a node changed, added or taken out, a number written otherwise.
 /// </summary>
 internal static class OnnxFixtures
 {
@@ -20,6 +20,9 @@ internal static class OnnxFixtures
 
     /// <summary>What PyTorch answered, and the rows and images it answered for.</summary>
     public static JsonElement Answers { get; } = JsonDocument.Parse(File.ReadAllText(Path.Join(Folder, "onnx-fixtures.json"))).RootElement;
+
+    /// <summary>What PyTorch answered through the networks along a series, over an image and through a volume, and the examples it answered for.</summary>
+    public static JsonElement Spatial { get; } = JsonDocument.Parse(File.ReadAllText(Path.Join(Folder, "onnx-spatial-fixtures.json"))).RootElement;
 
     /// <summary>What TensorFlow answered through the network tf2onnx converted, and the images it answered for.</summary>
     public static JsonElement TensorFlow { get; } = JsonDocument.Parse(File.ReadAllText(Path.Join(Folder, "tf2onnx-fixtures.json"))).RootElement;
@@ -44,6 +47,22 @@ internal static class OnnxFixtures
         return new MemoryStream(model.ToByteArray());
     }
 
+    /// <summary>
+    /// A fixture whose numbers its exporter keeps in a file beside it, changed as said and written to the folder given beside a
+    /// copy of that file, and opened as its file so the numbers are found there.
+    /// </summary>
+    /// <param name="folder">The folder of its own to write them to.</param>
+    /// <param name="file">The fixture.</param>
+    /// <param name="edit">What is changed in its graph.</param>
+    public static FileStream EditedBeside(GraphFolder folder, string file, Action<ModelProto> edit)
+    {
+        var model = Model(file);
+        edit(model);
+        folder.Beside(file + ".data", File.ReadAllBytes(Path.Join(Folder, file + ".data")));
+
+        return folder.Written(model);
+    }
+
     extension(ModelProto model)
     {
         /// <summary>A graph's node, by its name.</summary>
@@ -51,6 +70,15 @@ internal static class OnnxFixtures
 
         /// <summary>A graph's initializer, by its name.</summary>
         public TensorProto Initializer(string name) => model.Graph.Initializer.Single(tensor => tensor.Name == name);
+
+        /// <summary>Writes the axes a node takes as its second input, whichever initializer holds them, in place.</summary>
+        /// <param name="node">The node's name.</param>
+        /// <param name="axes">The axes.</param>
+        public void SetAxes(string node, params long[] axes)
+        {
+            var name = model.Node(node).Input[1];
+            model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(name))] = Wholes(name, axes);
+        }
     }
 
     extension(NodeProto node)

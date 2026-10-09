@@ -3,7 +3,6 @@
 
 using System.Globalization;
 using DeepSharp.Networks;
-using DeepSharp.Tensors;
 
 namespace DeepSharp.Import.Onnx;
 
@@ -13,10 +12,13 @@ internal enum Flow
     /// <summary>A batch of rows: batch by values.</summary>
     Rows,
 
-    /// <summary>A batch of images: batch by channels by rows by columns in the graph, with its channels last here.</summary>
+    /// <summary>
+    /// A batch of series, images or volumes: batch by channels by steps, or by rows by columns, or by planes by rows by
+    /// columns in the graph, with its channels last here.
+    /// </summary>
     Images,
 
-    /// <summary>A batch of images each flattened into a row, channel by channel in the graph and place by place here.</summary>
+    /// <summary>A batch of series, images or volumes each flattened into a row, channel by channel in the graph and place by place here.</summary>
     FlattenedImages,
 
     /// <summary>
@@ -26,10 +28,12 @@ internal enum Flow
     ImagesLast,
 }
 
-/// <summary>What reaches a node: the value's layout, and the batch's length when the graph states one.</summary>
+/// <summary>What reaches a node: the value's layout, the batch's length when the graph states one, and along how many axes it walks.</summary>
 /// <param name="Flow">How the value is laid out.</param>
 /// <param name="Batch">The batch's length the graph's input states; nothing when it leaves it open.</param>
-internal readonly record struct Reaching(Flow Flow, long? Batch);
+/// <param name="Axes">How many axes a series, an image or a volume has beside its batch and its channels: one, two or three; none for rows.</param>
+/// <param name="Lifted">Whether a series has one more axis of one place than it has, made by the Unsqueeze before the pooling that takes it.</param>
+internal readonly record struct Reaching(Flow Flow, long? Batch, int Axes, bool Lifted = false);
 
 /// <summary>A number a node holds for one slot of the layer it becomes, and how it is laid out for that slot.</summary>
 /// <param name="Slot">The slot's name in the layer: <c>weight</c>, <c>running_var</c>.</param>
@@ -65,10 +69,11 @@ internal readonly record struct OnnxLayer(Action<Sequential>? Words, Flow After)
     public AddedBias? Adds { get; init; }
 
     /// <summary>
-    /// The border a convolution's pads write out, one side at a time, read as TensorFlow's 'same': held after lowering to the
-    /// border 'same' gives the image that reaches it. Nothing for a border stated alike on every side, or declared 'same'.
+    /// The border a convolution's or a pooling's pads write out, one side at a time, read as TensorFlow's 'same': held after
+    /// lowering to the border 'same' gives the images that reach it. Nothing for a border stated alike on every side, or
+    /// declared 'same'.
     /// </summary>
-    public Borders? Declared { get; init; }
+    public DeclaredPads? Declared { get; init; }
 }
 
 /// <summary>A bias an Add adds, as the graph holds it, and its name there.</summary>
@@ -86,7 +91,8 @@ internal abstract class OnnxKind
     // Every operator read, in the order a refusal names them.
     private static readonly OnnxKind[] Covered =
     [
-        new GemmKind(), new MatMulKind(), new AddKind(), new ConvKind(), new BatchNormalizationKind(), new LayerNormalizationKind(), new FlattenKind(), new ReshapeKind(),
+        new GemmKind(), new MatMulKind(), new AddKind(), new ConvKind(), new MaxPoolKind(), new AveragePoolKind(), new GlobalAveragePoolKind(), new GlobalMaxPoolKind(),
+        new ReduceKind("ReduceMean", new GlobalAveragePoolKind()), new ReduceKind("ReduceMax", new GlobalMaxPoolKind()), new BatchNormalizationKind(), new LayerNormalizationKind(), new FlattenKind(), new ReshapeKind(),
         new ActivationKind("Relu", description => description.Relu(), null), new ActivationKind("Tanh", description => description.Tanh(), null),
         new ActivationKind("Sigmoid", description => description.Sigmoid(), OutputActivation.Sigmoid), new SoftmaxKind(),
     ];
@@ -119,6 +125,29 @@ internal abstract class OnnxKind
 
     /// <summary>Whether what reaches a node is an image, whichever axis its channels stand on in the graph.</summary>
     protected static bool IsImage(Flow flow) => flow is Flow.Images or Flow.ImagesLast;
+
+    /// <summary>
+    /// Whether what reaches an operator over a series, an image or a volume is one with its channels after the batch, as ONNX's
+    /// operators over them take it; the fault noted at the node when it is not.
+    /// </summary>
+    /// <param name="node">The node.</param>
+    /// <param name="reaching">What reaches it.</param>
+    protected static bool TakesImages(OnnxNode node, Reaching reaching)
+    {
+        if (reaching.Flow == Flow.Images)
+        {
+            return true;
+        }
+
+        node.Refuse(reaching.Flow switch
+        {
+            Flow.ImagesLast => $"it takes images with their channels after the batch, as ONNX's {node.Operator} does, and the images reaching it have them last.",
+            Flow.Rows => $"it takes a series, an image or a volume with its channels after the batch, as ONNX's {node.Operator} does, and what reaches it is a row of values.",
+            _ => $"it takes a series, an image or a volume with its channels after the batch, as ONNX's {node.Operator} does, and what reaches it is an image flattened into a row.",
+        });
+
+        return false;
+    }
 
     /// <summary>Numbers of a normalisation, each read from the node's input at its place and laid out as written.</summary>
     protected static IReadOnlyList<LayerNumber> Along(OnnxNode node, Reaching reaching, GraphNumbers numbers, string[] slots) =>
@@ -228,148 +257,6 @@ internal sealed class AddKind : OnnxKind
         return new OnnxLayer(null, reaching.Flow) { Adds = new AddedBias(bias, numbers.Floats(bias)) };
     }
 }
-
-/// <summary>
-/// ONNX's <c>Conv</c> over images: a window walking one stride down and across alike, padded alike on every side or as
-/// TensorFlow's 'same' — SAME_UPPER, or its pads written out — its kernel channels out by channels in by rows by columns.
-/// </summary>
-internal sealed class ConvKind : OnnxKind
-{
-    private const string Pads = "and a window here pads every side alike, or as SAME_UPPER, TensorFlow's 'same'.";
-
-    /// <inheritdoc />
-    public override string Name => "Conv";
-
-    /// <inheritdoc />
-    public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
-    {
-        if (reaching.Flow == Flow.ImagesLast)
-        {
-            node.Refuse("it takes images with their channels after the batch, as ONNX's Conv does, and the images reaching it have them last.");
-
-            return new OnnxLayer(null, Flow.Images);
-        }
-
-        var kernel = numbers.Floats(node.Input(1));
-
-        if (kernel.Lengths is not [var filters, _, var rows, var columns])
-        {
-            node.Refuse(
-                $"its kernel, '{node.Input(1).Quoted()}', is written as {Written(kernel.Lengths)}, and a convolution here slides a window along an image's rows and columns: channels out by channels in by rows by columns.");
-
-            return new OnnxLayer(null, Flow.Images);
-        }
-
-        var strides = Axes(node, "strides");
-        var dilations = Axes(node, "dilations");
-        var groups = node.Whole("group", 1);
-        var padding = Padding(node, new Window(rows, columns) { Stride = strides.Down });
-
-        if (strides.Down != strides.Across)
-        {
-            node.Refuse(string.Create(CultureInfo.InvariantCulture, $"it strides {strides.Down} down and {strides.Across} across, and a window here walks one stride down and across alike."));
-        }
-
-        if (dilations != new Pair(1, 1))
-        {
-            node.Refuse(string.Create(CultureInfo.InvariantCulture, $"its window is dilated by {dilations.Down} down and {dilations.Across} across, and a window here covers neighbouring places."));
-        }
-
-        if (groups != 1)
-        {
-            node.Refuse(string.Create(CultureInfo.InvariantCulture, $"it splits its channels into {groups} groups, and a convolution here takes every channel of a place at once."));
-        }
-
-        if (node.Input(2).Length == 0)
-        {
-            node.Refuse(NoBias);
-        }
-
-        var window = new Window(rows, columns) { Stride = strides.Down, PaddingMode = padding.Mode, Padding = padding.Sides };
-
-        return new OnnxLayer(description => description.Conv2D(filters, window), Flow.Images)
-        {
-            Numbers = [new LayerNumber("weight", kernel, Laying.Kernel), new LayerNumber("bias", numbers.Floats(node.Input(2)), Laying.AsWritten)],
-            Declared = padding.Declared,
-        };
-    }
-
-    // A setting ONNX writes for each of an image's two axes, down and across; one each, when it is left out.
-    private static Pair Axes(OnnxNode node, string name)
-    {
-        var lengths = node.Wholes(name, [1, 1]);
-
-        if (lengths is [var down, var across])
-        {
-            return new Pair(down, across);
-        }
-
-        node.Refuse($"its '{name}' is written as [{string.Join(", ", lengths)}], and a convolution over an image writes a pair there.");
-
-        return new Pair(1, 1);
-    }
-
-    // The border the node declares: SAME_UPPER's, none for VALID, the one its pads state for every side alike, or TensorFlow's
-    // 'same' written out one side at a time, as tf2onnx writes it. At a stride of one 'same' pads every image alike — half
-    // the window's reach before, the odd place after — so pads written otherwise are refused here; at a longer stride the
-    // border 'same' gives depends on the image, and the pads are held to it once the network is lowered.
-    private static Padded Padding(OnnxNode node, Window window)
-    {
-        var declared = node.Text("auto_pad", "NOTSET");
-
-        if (declared == "SAME_UPPER")
-        {
-            return new Padded(PaddingMode.Same, 0);
-        }
-
-        if (declared == "VALID")
-        {
-            return new Padded(PaddingMode.Stated, 0);
-        }
-
-        if (declared != "NOTSET")
-        {
-            node.Refuse($"it pads as {declared.Quoted()}, {Pads}");
-
-            return new Padded(PaddingMode.Stated, 0);
-        }
-
-        var pads = node.Wholes("pads", [0, 0, 0, 0]);
-
-        if (pads.Length == 4 && pads.Distinct().Count() == 1)
-        {
-            return new Padded(PaddingMode.Stated, pads[0]);
-        }
-
-        if (pads is [var top, var left, var bottom, var right])
-        {
-            var sides = new Borders(top, bottom, left, right);
-            var same = window.Stride == 1
-                ? (window with { PaddingMode = PaddingMode.Same }).BordersOver(window.Height, window.Width) == sides
-                : bottom - top is 0 or 1 && right - left is 0 or 1;
-
-            if (same)
-            {
-                return new Padded(PaddingMode.Same, 0) { Declared = sides };
-            }
-        }
-
-        node.Refuse($"it pads [{string.Join(", ", pads)}] — rows and columns before, then after — {Pads}");
-
-        return new Padded(PaddingMode.Stated, 0);
-    }
-
-    /// <summary>A window's border, as a node declares it, and the sides its pads write out when they are 'same' written so.</summary>
-    private readonly record struct Padded(PaddingMode Mode, int Sides)
-    {
-        public Borders? Declared { get; init; }
-    }
-}
-
-/// <summary>Two lengths ONNX writes for an image's axes: down, along the rows, and across, along the columns.</summary>
-/// <param name="Down">Along the rows.</param>
-/// <param name="Across">Along the columns.</param>
-internal readonly record struct Pair(int Down, int Across);
 
 /// <summary>
 /// ONNX's <c>BatchNormalization</c>, answering from its running statistics: its momentum the share of them a batch leaves

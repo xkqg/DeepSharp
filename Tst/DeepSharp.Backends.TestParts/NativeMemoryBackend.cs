@@ -241,6 +241,39 @@ public sealed class NativeMemoryBackend : INamesItsVersionAndDevice
     public Tensor Positive(Tensor values) => Each(values, static value => value > 0f ? 1f : 0f);
 
     /// <inheritdoc />
+    public Tensor FirstLargest(Tensor matrix)
+    {
+        matrix.RequireRowsToPickFrom(nameof(FirstLargest));
+
+        var columns = matrix.Shape[1];
+        var from = Held(matrix);
+        var made = Fresh(matrix.Shape.Count);
+        var source = from.Values;
+        var target = made.Written;
+
+        target.Clear();
+
+        for (var start = 0; start < source.Length; start += columns)
+        {
+            var at = 0;
+
+            for (var column = 1; column < columns && !float.IsNaN(source[start + at]); column++)
+            {
+                if (float.IsNaN(source[start + column]) || source[start + column] > source[start + at])
+                {
+                    at = column;
+                }
+            }
+
+            target[start + at] = 1f;
+        }
+
+        GC.KeepAlive(from);
+
+        return Tensor.On(matrix.Shape, made);
+    }
+
+    /// <inheritdoc />
     public Tensor Tanh(Tensor values) => Each(values, MathF.Tanh);
 
     /// <inheritdoc />

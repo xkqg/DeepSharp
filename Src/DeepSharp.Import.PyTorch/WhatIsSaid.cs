@@ -28,10 +28,20 @@ internal readonly record struct WhatIsSaid(Shape? Example, IReadOnlyDictionary<s
     {
         foreach (var (path, shape) in Flattened)
         {
-            if (shape.Rank is not (1 or 3))
+            if (!shape.IsHandable)
             {
                 throw new ArgumentException(
-                    $"What the layer at {path} is handed is stated as {shape}, and what is stated is an image — rows, columns and channels — or a row.",
+                    $"What the layer at {path} is handed is stated as {shape}, and what is stated is a row, a series — steps and channels —, an image — rows, columns and channels — or a volume — planes, rows, columns and channels.",
+                    nameof(SafetensorsFile.Flattened));
+            }
+        }
+
+        foreach (var (path, shape) in Flattened.Where(stated => stated.Value.Rank == 2))
+        {
+            if (!layers.EndsInASeries(path))
+            {
+                throw new ArgumentException(
+                    $"What the layer at {path} is handed is stated as {shape}, and two axes are a series — steps and channels — only when the layer that walks axes nearest before it walks one axis.",
                     nameof(SafetensorsFile.Flattened));
             }
         }

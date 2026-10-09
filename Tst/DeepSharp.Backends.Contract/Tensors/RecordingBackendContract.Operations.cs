@@ -21,6 +21,14 @@ public abstract partial class RecordingBackendContract
         AssertGradientsMatchTheLossNudged((backend, inputs) => backend.Positive(inputs[0]), AwayFromNothing(3, 4));
 
     [Fact]
+    public void FirstLargest_PassesNothingBack_ForAPickIsFlatUntilAnotherValueOvertakes() =>
+        AssertGradientsMatchTheLossNudged((backend, inputs) => backend.FirstLargest(inputs[0]), Random(3, 4));
+
+    [Fact]
+    public void TheValuesMultipliedByTheirFirstLargest_PassTheGradientToThePickedValueAlone() =>
+        AssertGradientsMatchTheLossNudged((backend, inputs) => backend.Multiply(inputs[0], backend.FirstLargest(inputs[0])), Random(3, 4));
+
+    [Fact]
     public void Tanh_PassesTheGradientTimesOneLessItsSquare() =>
         AssertGradientsMatchTheLossNudged((backend, inputs) => backend.Tanh(inputs[0]), Random(3, 4));
 
@@ -95,7 +103,7 @@ public abstract partial class RecordingBackendContract
                  {
                      (pass.Relu, _backend.Relu), (pass.Positive, _backend.Positive), (pass.Tanh, _backend.Tanh),
                      (pass.Sigmoid, _backend.Sigmoid), (pass.Exp, _backend.Exp), (pass.Log, _backend.Log), (pass.Sqrt, _backend.Sqrt),
-                     (pass.Softplus, _backend.Softplus), (pass.LogSoftmax, _backend.LogSoftmax),
+                     (pass.Softplus, _backend.Softplus), (pass.LogSoftmax, _backend.LogSoftmax), (pass.FirstLargest, _backend.FirstLargest),
                  })
         {
             Assert.Equal<float[]>(plain(values).Values.ToArray(), recorded(values).Values.ToArray());

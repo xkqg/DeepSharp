@@ -25,6 +25,12 @@ public sealed class DropoutTests() : DropoutContract(TorchBackend.OnCpu());
 
 public sealed class ConvolutionTests() : ConvolutionContract(TorchBackend.OnCpu());
 
+public sealed class SpatialConvolutionTests() : SpatialConvolutionContract(TorchBackend.OnCpu());
+
+public sealed class PoolingTests() : PoolingContract(TorchBackend.OnCpu());
+
+public sealed class SpatialDropoutTests() : SpatialDropoutContract(TorchBackend.OnCpu());
+
 public sealed class NormalisationTests() : NormalisationContract(TorchBackend.OnCpu());
 
 public sealed class LossTests() : LossContract(TorchBackend.OnCpu());

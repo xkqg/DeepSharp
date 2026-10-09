@@ -6,8 +6,8 @@ written down here is not a decision, it is a habit.
 ## The layout
 
 ```
-Src/DeepSharp/Tensors/            the engine side: Shape, Tensor and the TensorStorage its values live on, Window and
-                                  the border it pads an image with, ITensorBackend and what it refuses
+Src/DeepSharp/Tensors/            the engine side: Shape, Tensor and the TensorStorage its values live on, Window,
+                                  Window1D and Window3D and the border each pads with, ITensorBackend and what it refuses
                                   (TensorOperandExtensions), the version and the device an engine names
                                   (INamesItsVersionAndDevice), CpuBackend, and the RecordingBackend gradients are worked
                                   out through
@@ -16,11 +16,19 @@ Src/DeepSharp/Networks/           the model side
                                     a layer, the numbers it learns and measures, one pass, a stack of layers
     Dense.cs Activations.cs Dropout.cs Normalisations.cs Convolution.cs
                                     the layers
+    Convolutions.cs Pooling.cs GlobalPooling.cs SpatialDropout.cs
+                                    convolutions along one and three axes, poolings, global poolings and the dropouts of
+                                    whole channels, each written once for all the axes it walks
+    SpatialWalk.cs WindowSettings.cs
+                                    a window along one, two or three axes as the one thing a convolution and a pooling
+                                    walk, and how a window is written to a network's file and read back
     Initialisers.cs RandomStream.cs Philox.cs Draws.cs
                                     what a layer starts at, and the one source every draw is counted from
     Losses.cs Optimizers.cs LearningRateSchedules.cs
                                     what is brought down, what moves the parameters, how the rate changes
-    Sequential.cs                   a network in Keras's words, lowered onto a stack
+    Sequential.cs SequentialSpatial.cs
+                                    a network in Keras's words, lowered onto a stack; the words that walk a series, an
+                                    image or a volume
     CompiledNetwork.cs FitOptions.cs TrainingData.cs History.cs Checkpoint.cs
                                     the training loop, early stopping, checkpoints, and what a run did
     NetworkDocument.cs NetworkCatalog.cs Rebuilding.cs PartReader.cs NetworkText.cs TrainedOn.cs
@@ -2133,7 +2141,8 @@ precision, ten million tenths came to a mean of 0.1087937.
 
 The layers, the losses and the convolution are written in the seam's operations as well, so the seam grows by what
 they need and nothing else: rectified and stepped values, tanh, the sigmoid, exp, log, a square root, softplus, a
-division, a row's log-shares, a reshape, and an image's windows unfolded into rows and folded back. There is no rule for
+division, a row's log-shares, which value of each row is the first largest, a reshape, and an image's windows unfolded into
+rows and folded back. There is no rule for
 stretching one shape over another: a row multiplied into every row is the row added to a tensor of noughts and then
 multiplied, and a statistic over rows is a transpose and a sum. Images are channels last, as Keras keeps them, so a
 batch of them needs no permuting between a convolution's unfolding and its matrix product. Softplus is an operation of
@@ -2396,8 +2405,8 @@ places with values up to 4.56 away; through a window of two, a stated border giv
 folding starts its first patch where it says, so a window padded as 'same' stands at the same places on every engine; the
 convolution came within 1.2e−7 of TensorFlow's rule on the light engine and 3.1e−7 on the tests' native one. What a
 window covers is one stride, down and across alike, a patch of neighbouring places and every channel of a place at once;
-a stride of its own for each axis, a dilated window, channels split into groups and pooling are not built, and a file
-that says any of them is refused at the setting or the kind it names.
+a stride of its own for each axis, a dilated window and channels split into groups are not built, and a file that says any
+of them is refused at the setting it names.
 
 Described in Keras's words, the normalisations take Keras's settings: `BatchNorm(momentum, epsilon)` takes Keras's
 momentum, the share the running statistics keep, and the layer keeps its complement; `LayerNorm(epsilon)` takes Keras's
@@ -2410,6 +2419,61 @@ What still works as PyTorch's is how a batch normalisation trains: its running v
 counted over one row fewer, where Keras counts it over every row. After one training batch of 96 places its running mean
 came within 1.9e−9 of Keras's and its running variance lay up to 8.4e−4 above it — that count's difference, to within
 1.9e−8.
+
+### A series, a volume and a pooling stand on the unfolding an image has
+
+The engine unfolds an image's windows into rows; that is the one thing a convolution needs of it, and the seam holds it for
+images alone. A convolution along a series is that convolution over an image one row tall. Its window pads along the series
+and never across the row, which a border stated for every side cannot say, so the window along a series works its border
+out by the two-dimensional window's own rule and hands the engine a window that states it side by side. `Window.BordersOver`
+stays the one rule, and no engine knows there was another. Keras's `padding='causal'` is the third way a window can be
+padded, beside a stated border and TensorFlow's 'same': the window's size less one places before the series and none after
+it, so a place never sees what follows its own; along a side of one place it pads nothing, which is why it is the same word
+for every window.
+
+Through a volume the unfolding is done twice. The first walks the planes and rows of the volume laid out as an image of
+planes by rows whose channels hold each row's columns and channels together, so each patch holds whole lines of columns; the
+second walks the columns of those lines, laid out as an image as tall as the window's planes and rows, and its patches are
+the volume's, a window's values plane by plane, row by row and column by column, every channel of a place together — Keras's
+kernel, flattened. No engine unfolds in three dimensions, none had to be written, and the gradient is the unfolding's own,
+folded back twice. The kernel of a convolution along any of the axes is therefore one thing: as many rows as the window holds
+values, channels in included, by as many columns as channels out, written once in `Convolution` and started as PyTorch
+starts it.
+
+A pooling is a window that makes one value of what it covers, for each channel on its own. Each channel of each example is
+taken apart as an example of its own with one channel — two turns of a matrix and a reshape — so the unfolding lays one
+channel's window side by side, a row for every place, and what a row comes to is a sum along it, divided, for an average, or
+its largest. The largest is the one thing the seam gained for all of this: `FirstLargest`, a matrix of ones and noughts
+that says which value of each row is the first largest, as `Positive` says which are above nothing. The values times it,
+added up along the row, are the row's largest, and the gradient of that goes to the value picked and to no other, the first
+of values that tie, as PyTorch's max pooling sends it. Three other ways were weighed and refused. A largest built of the
+rectifier — the larger of two is the first and the rectified difference — takes a pass for every value a window holds, and
+a global pooling over a thousand steps a thousand, and sends a tie's gradient to neither or both. A reduction on the seam that
+gave back the largest values would have needed a second operation to scatter a gradient back to where they came from. And a
+pooling the seam held whole, as it holds the unfolding, would have made every engine write a pooling's forward pass and its
+way back for each of one, two and three axes. The seam grew by one operation that is written once for each engine, flat
+either side of where it steps and so sending nothing back, as `Positive` is; an engine written outside has one more
+operation to write.
+
+A window over the border sees the values of the example only. A largest is not a nought the border supplies: the cells of
+the border are given a penalty far below any value a network holds before the first largest is picked, so a window over an
+edge of negative values picks one of them. An average leaves the border out of its count, as TensorFlow's and ONNX's does;
+PyTorch counts a border it was told to pad with, and `CountsPadding` says so. The rule is TensorFlow's documented one, and
+not every backend keeps it: Keras 3 on its torch backend averaged a window of three over the end of the series 1, 2, 3, 4 at a
+stride of two, padded as 'same', to 3.67 where TensorFlow's rule gives 3.5. A global pooling is the same
+with the whole example as the window — a row for each channel of each example — and gives a row of channels, or keeps the
+axes it pooled as axes of one place when it is asked to, as Keras's `keepdims` and ONNX's global pools do.
+
+A spatial dropout draws one number for each channel of each example and lays it in every place of the example, so a feature
+map is kept or left out whole; it is drawn from the run's stream for its place in the network, the epoch and the step, like
+dropout's. Every value and every gradient of a convolution and a pooling along one, two and three axes was matched to PyTorch
+2.14.1's on every engine — to a ten-thousandth for a convolution and a hundred-thousandth for a pooling — and where PyTorch
+cannot say what is asked, a stride with 'same', a causal border, a border no stated padding gives, the border was worked
+out as TensorFlow works it out and padded by hand, so the numbers are still PyTorch's arithmetic over that border.
+
+What is not built, and is refused at the setting that says it: a stride of its own for each axis, a dilated window, channels
+in groups, a pooling that rounds the number of places up (`ceil_mode`), a pooling to a size other than one place, a
+transposed convolution, a depthwise or a separable convolution, and a layer that only pads.
 
 ### A loss says what a network's numbers mean
 
@@ -2472,8 +2536,8 @@ Gradients can be clipped by their norm together, PyTorch's `clip_grad_norm_`: th
 gradients, each tensor counted once, and when the most norm over that norm plus a millionth is below one every gradient is
 scaled by it. Otherwise the gradients pass untouched, to the last bit, so a clip they never reach changes no run. It is
 worked out on the run's engine through the engine's own arithmetic, between the gradients and the optimizer's step.
-Clipping each value on its own is not built: an exact clamp is not an operation an engine is asked for, and adding one to
-the public tensor seam would break every engine written outside it.
+Clipping each value on its own is not built: nothing asks for it, and an exact clamp would be one more operation on the
+public tensor seam for every engine written outside it to write.
 
 A run can be watched and stopped. `OnEpoch` is handed each epoch as it ends — once judged and its checkpoint kept, before
 the next begins — in order, on the thread that trains, and waited for. `Cancellation` is read before every batch and before
@@ -2581,13 +2645,20 @@ one `PyTorchFile`'s, so the same numbers land in the same slots, bit for bit, wh
 some of it out otherwise, and how each number is laid out is said by the layer that holds its slot, never read off the
 number's shape: a square
 matrix turned round is as square as one that is not. A linear layer's weights are kept outputs by inputs there and are
-turned round; a convolution's kernel is kept channels out, channels in, rows, columns there, and here the window's rows,
-columns and channels in by the channels out; every bias and everything a normalisation keeps are kept alike; and the count
-of batches PyTorch keeps beside a batch normalisation's statistics is left out by its name, since nothing here keeps it.
-PyTorch lays an image out channel by channel and a network here row by row, so the rows a flatten makes of images are in
-another order there, and the numbers the next linear layer — and any normalisation before it — keeps for them are each
-put in their place here. That takes knowing what the flatten is handed: an example the network takes, run through it as
-zeros, or what the flatten is handed, said outright; told neither, the reader refuses those numbers rather than guess.
+turned round; a convolution's kernel is kept channels out, channels in, then the window's axes there, and here the window's
+axes — one, two or three — and channels in by the channels out; every bias and everything a normalisation keeps are kept
+alike; and the count of batches PyTorch keeps beside a batch normalisation's statistics is left out by its name, since
+nothing here keeps it. PyTorch lays a series, an image or a volume out channel by channel and a network here place by
+place, so the rows a flatten makes of them are in another order there, and the numbers the next linear layer — and any
+normalisation before it — keeps for them are each put in their place here. That takes knowing what the flatten is handed:
+an example the network takes, run through it as zeros, or what the flatten is handed, said outright; told neither, the
+reader refuses those numbers rather than guess. Of a shape of two axes the example or the statement gives, steps and
+channels are read only where the layer that walks axes nearest before the flatten walks one axis, with no reshape or linear
+layer between: two axes a reshape made are rows laid out as steps by features, which PyTorch flattens as they stand, and
+turning them would put the numbers in the wrong places without a word. The poolings, the global poolings and the dropouts
+of whole channels hold no numbers, so they take part in the walk and need no tensor; a state dictionary holds no stride,
+padding mode or `ceil_mode` either, so the network handed to the reader says them, and a dilated window or a stride of its
+own for each axis cannot be seen in it and is not detected, where channels in groups are, as a kernel of another shape.
 A network written as code shows its layers but not the order its forward pass runs them in, so its weights and kernels
 are turned as a stack's are, while whether one of its linear layers or normalisations reads rows made of images is read
 only as the caller states it for that layer, wherever such rows could reach it, and refused otherwise. A layer of a kind
@@ -2612,9 +2683,9 @@ A model Keras 3 saved — to its own `.keras` archive, or to the HDF5 file it sa
 does not become a second representation of a network: each layer it names is written in Keras's words here and lowered as
 any description in those words is, which is why those words take Keras's settings for the normalisations; each activation
 a Keras layer carries becomes a word of its own after it; and what comes out is a stack like any other. Keras lays its
-numbers out as the slots here keep them — a dense layer's weights inputs by outputs, a convolution's kernel rows by columns
-by channels in by channels out — so they go in unturned, a kernel under its slot's shape when its rows and columns are the
-window's. A layer's numbers are found by the name the file gives them, never by where they stand: Keras files them under a
+numbers out as the slots here keep them — a dense layer's weights inputs by outputs, a convolution's kernel the window's
+axes by channels in by channels out — so they go in unturned, a kernel under its slot's shape when its leading axes are
+the window's. A layer's numbers are found by the name the file gives them, never by where they stand: Keras files them under a
 group named after the layer's class and how many of that class came before it, while the layer bears a name of its own —
 in a network whose two dense layers were built after two others, `layers/dense` held the numbers of `dense_2` — so numbers
 matched by place would go into another layer of the same shape without a word.
@@ -2628,10 +2699,15 @@ both ways, answered the 135 test passengers within five roundings of a single-pr
 them to the bit — and the two passengers the sample serves within two, from either file. A network of every kind the
 reader builds — a reshape, windows padded as 'same' and 'valid', a batch normalisation, a layer normalisation, a dropout,
 and a softmax its categorical cross-entropy owns — answered within six roundings of Keras's shares, where PyTorch's
-epsilons put them up to 3.2e−3 away.
+epsilons put them up to 3.2e−3 away. The convolutions along a series and through a volume, the poolings, the global poolings
+and the spatial dropouts are read as the words they are: a pooling that says no stride strides by its pool size, a whole
+number stands for every axis, `keepdims` is `KeepsAxes`, and a convolution along a series may pad as 'causal'. A network over
+a series, one over images and one over volumes answered within a hundred-thousandth of Keras's output from either file.
+Where a padded average pooling strides, Keras on its torch backend does not follow TensorFlow's rule, so the reference for
+that case is TensorFlow's, worked out by hand, which is the rule here.
 
 What no network here is built of is refused at the layer that says it, every such layer at once: a stride of its own for
-each axis, a dilated window, channels in groups and pooling, as a network's own file refuses them; any other kind of layer
+each axis, a dilated window and channels in groups, as a network's own file refuses them; any other kind of layer
 or activation; a layer without a bias, a normalisation over another axis than the last or without its shift or its scale;
 and a model of another kind than a Sequential, working in another precision than single, or saved without its loss. The
 numbers are then held to the layers the description builds by `network.Load`, each fault at its dataset's path. The file
@@ -2647,20 +2723,22 @@ through — a graph is a forward pass and names none — and builds the network 
 were measured and are read: PyTorch's `torch.onnx.export`, by its default exporter and by the TorchScript one before it;
 Keras's own `model.export(format="onnx")`; and tf2onnx, which is how a TensorFlow SavedModel reaches ONNX. The graph is not
 kept: a graph beside the model is what this library leaves out, so the graph is read once, each node written in the words
-of the layer it is — a Gemm, or a MatMul with the Add of its bias after it, a dense layer; a Conv a convolution; a
-BatchNormalization with ONNX's momentum, which is Keras's, and its epsilon; a Flatten, or the Reshape PyTorch's default
+of the layer it is — a Gemm, or a MatMul with the Add of its bias after it, a dense layer; a Conv a convolution along one,
+two or three axes; a MaxPool or an AveragePool a pooling; a GlobalAveragePool or a GlobalMaxPool a global pooling, and so is
+the ReduceMean or ReduceMax over every place of each channel that PyTorch's default exporter writes an adaptive pooling to
+one place as; a BatchNormalization with ONNX's momentum, which is Keras's, and its epsilon; a Flatten, or the Reshape PyTorch's default
 exporter writes a flatten as — and the words lowered as any description is, onto a stack like any other. A Cast into
 single-precision numbers, which Keras's export puts round nearly every node, is nothing here. What reads as a stack is a
 chain: each node takes the value the one before it made. A node that takes another — a network adding its input back after
 a layer is the plainest case — is a branch no stack has, and is refused at that node, as is every node of an operator no
-layer here is: pooling, a leaky relu, and the rest.
+layer here is: a leaky relu, and the rest.
 
 Layouts are declared, never inferred. A weight matrix is turned round because its Gemm says it is written outputs by
 inputs, as PyTorch writes one, and is read as it stands when the Gemm says otherwise, or when a MatMul multiplies by it, as
 Keras and tf2onnx write a dense layer — a square matrix would look the same either way. A kernel is written channels out by
-channels in by rows by columns because ONNX defines Conv so, and is laid out rows by columns by channels in by channels
-out, as a slot here keeps it. An image in ONNX's Conv is channels, rows and columns; here its channels come last, so an
-image goes into the network and comes out of it that way. TensorFlow's images have their channels last already, and
+channels in by the window's axes because ONNX defines Conv so, and is laid out the window's axes by channels in by channels
+out, as a slot here keeps it. A series, an image or a volume in ONNX's Conv has its channels first; here they come last, so
+it goes into the network and comes out of it that way. TensorFlow's images have their channels last already, and
 tf2onnx says so: a Transpose moving them after the batch before the first convolution, and one moving them last again
 before the flatten. That exact pair is read as the layout it declares — the graph takes images as they are here, and its
 flatten flattens them place by place — and any other Transpose is refused. An image flattened into a row with its
@@ -2669,9 +2747,27 @@ row — the next dense layer's weights, and a batch normalisation's before it �
 the image's rows, columns and channels taken from an example of nothing sent through the layers as they were lowered, so
 the shape each layer makes is worked out by that layer and nowhere else. A graph that gives such a row as its output is
 refused: its values would come out in another order. tf2onnx writes TensorFlow's 'same' out as pads, one side at a time;
-pads that are the border `Window.BordersOver` gives the image reaching the convolution are read as 'same', and any others
-are refused — at a stride of one before the network is built, since 'same' pads every image alike there, and at a longer
-stride once the lowering has found the image.
+pads that are the border `Window.BordersOver` gives the series, image or volume reaching the layer, along each axis, are read
+as 'same', and any others are refused — at a stride of one before the network is built, since 'same' pads every example
+alike there, and at a longer stride once the lowering has found the example. `SAME_UPPER` is 'same'; `SAME_LOWER` puts the
+odd place before the axis where 'same' puts it after, so it is read only where the two coincide, and refused where they do
+not.
+
+A pooling is read as the pooling its attributes say: an average counts the border it pads with when `count_include_pad` is
+set, which is `CountsPadding`, and leaves it out otherwise, which is ONNX's default and TensorFlow's. What no layer here
+walks is refused at the node that says it: a window that overhangs the end of an axis (`ceil_mode`), a dilated window, a
+stride of its own for each axis, channels in groups, a max pooling's `storage_order`, and the second output of a max
+pooling when the graph uses it. The exporters were measured for what they write for the new layers. PyTorch's default
+exporter writes `AdaptiveAvgPool` and `AdaptiveMaxPool` to one place not as `GlobalAveragePool` and `GlobalMaxPool` but
+as a `ReduceMean` or `ReduceMax` over the spatial axes with `keepdims`, their axes an INT64 input counted from the end —
+an attribute for `ReduceMax` at opset 17 — and round a series an `Unsqueeze` and a `Squeeze` of the third axis of four;
+that exact pattern is read as one global pooling, and any other `Unsqueeze`, `Squeeze` or reduction is refused as an
+operator no layer here is, or over axes a global pooling does not reduce. Only the TorchScript exporter writes
+`GlobalAveragePool`, and it writes `GlobalMaxPool` only where the spatial lengths are left open; with fixed lengths it
+writes a `MaxPool` as wide as the axes. Both exporters fold a batch normalisation into the convolution before it, so a
+graph with a `BatchNormalization` node has it after an activation. ONNX's own reference evaluator, onnx 1.23.2, reduced the
+wrong axes of a global max pooling that was not four-dimensional and missed a max pooling's pads, so the graphs are held to
+ONNX Runtime beside PyTorch.
 
 The exporters were measured rather than assumed. PyTorch 2.10's default exporter folds a batch normalisation after a
 convolution into the convolution, writes a flatten as a reshape into rows of the example's length, and kept every number
@@ -3019,8 +3115,13 @@ else: that is borrowing a library, not borrowing a result.
 - **A schedule that watches the validation loss**, and weight decay, Nesterov momentum and AMSGrad. The first
   would let the rows a model is chosen on shape its weights; it was asked for and is not built, for that reason. Each of
   the others does nothing by default in PyTorch, and nothing asks for one yet; AdamW's decoupled decay is built.
-- **A clamp of each gradient value.** An exact clamp would be a new member of the public tensor seam, and every engine
-  written outside it would stop compiling; the norm is clipped instead.
+- **A clamp of each gradient value.** Nothing asks for it, and an exact clamp would be a second new member of the public
+  tensor seam in one release, which every engine written outside it would have to write; the norm is clipped instead.
+- **A window that is dilated, grouped, strided on its own for each axis or rounded up; a transposed, depthwise or separable
+  convolution; a layer that only pads; a pooling to a size other than one place.** A window covers neighbouring places,
+  every channel of a place, one stride on every axis and the places that fit whole, so a source that says otherwise is
+  refused where it says it and not read as something near. Each of them is a layer or a setting of its own, built when a
+  network needs it, with the same proof as the rest: its values and its gradient matched to the framework that has it.
 - **A squared cumulative loss, and a score named CRPS.** The first measured behind the cross-entropy it would replace; the
   second, for a histogram, is not a number that is nought for a perfect prediction.
 - **A pruner, and a search written here that learns from its trials.** A loss halfway through a run is not its loss at the

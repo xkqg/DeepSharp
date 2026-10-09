@@ -8,5 +8,4 @@ onnx-convolution.onnx: 14187 bytes, beside it 720 bytes; opset 20; Conv Relu Con
 onnx-convolution-torchscript.onnx: 3078 bytes; opset 20; Conv Relu Conv Flatten BatchNormalization Gemm Tanh Gemm
 kinds: shares of the first 0.29608127 0.34364086 0.36027789
 onnx-kinds.onnx: 7751 bytes, beside it 448 bytes; opset 20; Gemm LayerNormalization Sigmoid Gemm Softmax
-onnx-refused.onnx: 13013 bytes, beside it 2016 bytes; opset 20; Conv Conv Conv Conv MaxPool LeakyRelu Reshape Gemm
 onnx-branch.onnx: 5092 bytes, beside it 784 bytes; opset 20; Gemm Relu Add Gemm

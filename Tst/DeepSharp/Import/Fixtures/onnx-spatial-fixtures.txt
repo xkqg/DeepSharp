@@ -1,0 +1,53 @@
+torch 2.14.1+cpu, onnx 1.23.2, onnxscript 0.7.2, numpy 2.5.3, Python 3.14.7
+series: trunk makes (5, 5, 3), a row of 15, 5 channels
+  flat: first outputs -0.08555889 0.24198203 0.12467243
+  average: first outputs 0.13895398 -0.11198778 0.70170397
+  max: first outputs -0.15398782 0.16969067 0.19322786
+onnx-series.onnx: 16718 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv Reshape Gemm
+onnx-series-torchscript.onnx: 2257 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv Flatten Gemm
+onnx-series-global-average.onnx: 2240 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv GlobalAveragePool Flatten Gemm
+onnx-series-global-max.onnx: 2224 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv GlobalMaxPool Flatten Gemm
+onnx-series-global-average-default.onnx: 19985 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv Unsqueeze ReduceMean Squeeze Reshape Gemm
+onnx-series-global-max-default.onnx: 19992 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv Unsqueeze ReduceMax Squeeze Reshape Gemm
+onnx-series-global-max-opset17.onnx: 3198 bytes; opset 17; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv Unsqueeze ReduceMax Squeeze Reshape Gemm
+image: trunk makes (6, 5, 2, 3), a row of 30, 5 channels
+  flat: first outputs 0.09220197 -0.33072430 -0.33852926
+  average: first outputs -0.53582317 0.09633528 -0.23200661
+  max: first outputs 0.11738989 -0.66309416 -0.00116506
+onnx-image.onnx: 16639 bytes, beside it 792 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv Reshape Gemm
+onnx-image-torchscript.onnx: 2779 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv Flatten Gemm
+onnx-image-global-average.onnx: 2582 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv GlobalAveragePool Flatten Gemm
+onnx-image-global-max.onnx: 2566 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv GlobalMaxPool Flatten Gemm
+onnx-image-global-average-default.onnx: 17856 bytes, beside it 432 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv ReduceMean Reshape Gemm
+onnx-image-global-max-default.onnx: 17800 bytes, beside it 432 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv ReduceMax Reshape Gemm
+onnx-image-global-max-opset17.onnx: 2980 bytes, beside it 432 bytes; opset 17; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv ReduceMax Reshape Gemm
+volume: trunk makes (3, 4, 3, 2, 1), a row of 24, 4 channels
+  flat: first outputs 0.10643725 0.00278340 -0.05720221
+  average: first outputs 0.73519123 -0.03360504 -0.08187196
+  max: first outputs -0.70644754 -0.93034279 -0.57221884
+onnx-volume.onnx: 16761 bytes, beside it 936 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv Reshape Gemm
+onnx-volume-torchscript.onnx: 2985 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv Flatten Gemm
+onnx-volume-global-average.onnx: 2848 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv GlobalAveragePool Flatten Gemm
+onnx-volume-global-max.onnx: 2832 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv GlobalMaxPool Flatten Gemm
+onnx-volume-global-average-default.onnx: 17981 bytes, beside it 648 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv ReduceMean Reshape Gemm
+onnx-volume-global-max-default.onnx: 17925 bytes, beside it 648 bytes; opset 20; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv ReduceMax Reshape Gemm
+onnx-volume-global-max-opset17.onnx: 3082 bytes, beside it 648 bytes; opset 17; Conv Relu BatchNormalization MaxPool AveragePool AveragePool Conv ReduceMax Reshape Gemm
+  series conv_0: 2 at 1 auto, pads [0] [1], [23]
+  series averagepool_1: 3 at 2 auto, pads [1] [1], [12]
+  series maxpool_2: 2 at 1 written, pads [0] [1], [12]
+  series averagepool_3: 3 at 2 written, pads [0] [1], [6]
+  series maxpool_4: 3 at 2 written, pads [0] [1], [3]
+onnx-borders-series.onnx: 763 bytes; opset 20; Conv AveragePool MaxPool AveragePool MaxPool
+  image conv_0: 2 at 1 auto, pads [0, 0] [1, 1], [14, 12]
+  image averagepool_1: 3 at 2 auto, pads [0, 0] [1, 1], [7, 6]
+  image maxpool_2: 2 at 1 written, pads [0, 0] [1, 1], [7, 6]
+  image averagepool_3: 3 at 2 written, pads [1, 0] [1, 1], [4, 3]
+  image maxpool_4: 3 at 2 written, pads [0, 1] [1, 1], [2, 2]
+onnx-borders-image.onnx: 852 bytes; opset 20; Conv AveragePool MaxPool AveragePool MaxPool
+  volume conv_0: 2 at 1 auto, pads [0, 0, 0] [1, 1, 1], [9, 8, 6]
+  volume averagepool_1: 3 at 2 auto, pads [1, 0, 0] [1, 1, 1], [5, 4, 3]
+  volume maxpool_2: 2 at 1 written, pads [0, 0, 0] [1, 1, 1], [5, 4, 3]
+  volume averagepool_3: 3 at 2 written, pads [1, 0, 1] [1, 1, 1], [3, 2, 2]
+  volume maxpool_4: 3 at 2 written, pads [1, 0, 0] [1, 1, 1], [2, 1, 1]
+onnx-borders-volume.onnx: 993 bytes; opset 20; Conv AveragePool MaxPool AveragePool MaxPool
+onnx-refused.onnx: 13099 bytes, beside it 2016 bytes; opset 20; Conv Conv Conv Conv MaxPool LeakyRelu Reshape Gemm

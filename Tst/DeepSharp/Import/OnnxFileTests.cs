@@ -198,6 +198,9 @@ public class OnnxFileTests
     [Theory]
     [InlineData("onnx-titanic")]
     [InlineData("onnx-convolution")]
+    [InlineData("onnx-series")]
+    [InlineData("onnx-image")]
+    [InlineData("onnx-volume")]
     public void TheDefaultExporter_AndTheTorchScriptOne_PutTheSameNumbersIntoTheSameSlots(string network)
     {
         var loss = new MeanSquaredError();

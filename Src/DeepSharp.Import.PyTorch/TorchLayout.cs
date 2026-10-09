@@ -14,8 +14,8 @@ namespace DeepSharp.Import.PyTorch;
 /// The layout of a number is said by the layer that holds its slot, never guessed from the number's shape: a square
 /// matrix turned round is as square as one that is not. A stack shows its layers and the order they run in; a network
 /// written as code shows its layers too, and keeps to itself only that order, so whether one of its linear layers or
-/// normalisations reads rows made of images is read only as the caller states it. A slot held by a layer of a kind nobody
-/// here knows has no layout it could be read in, and is refused.
+/// normalisations reads rows made of series, images or volumes is read only as the caller states it. A slot held by a layer
+/// of a kind nobody here knows has no layout it could be read in, and is refused.
 /// </remarks>
 internal sealed class TorchLayout
 {
@@ -121,6 +121,10 @@ internal sealed class TorchLayout
         string? untold = null;
         List<string> producers = [];
 
+        // Whether the layer that walks axes nearest before the one being laid walks one axis, with no reshape or linear layer between:
+        // what a flatten is handed in two axes is steps and channels only then.
+        var afterASeries = false;
+
         foreach (var placed in layers)
         {
             var (path, layer) = placed;
@@ -140,9 +144,10 @@ internal sealed class TorchLayout
 
                     producers = [.. slots.Select(named => named.Path)];
                     (flattened, untold) = (null, null);
+                    afterASeries = false;
                     break;
 
-                case Conv2D convolution:
+                case Convolution convolution:
                     foreach (var named in slots)
                     {
                         Lay(ReferenceEquals(named.Slot, convolution.Weight)
@@ -151,6 +156,7 @@ internal sealed class TorchLayout
                     }
 
                     producers.Clear();
+                    afterASeries = convolution.WalksOneAxis;
                     break;
 
                 case Normalisation norm:
@@ -172,11 +178,14 @@ internal sealed class TorchLayout
 
                 case var _ when placed.Flattens:
                     _statable.Add(path);
-                    flattened = handed.TryGetValue(path, out var shape) && shape.Rank is 1 or 3 ? new Flattening(path, shape) : null;
+                    flattened = handed.TryGetValue(path, out var shape) && shape.IsHandableAfter(afterASeries) ? new Flattening(path, shape) : null;
                     untold = flattened is not null ? null
-                        : handed.ContainsKey(path)
-                            ? $"reads the rows the layer at {path} makes of {shape}, which is neither an image nor a row: an image's channels are turned to the end, and a row is read as it is."
+                        : handed.TryGetValue(path, out var unread)
+                            ? unread.Rank == 2
+                                ? $"reads the rows the layer at {path} makes of {unread}, which is no series, since no layer along one axis made it, and no image or volume: the channels of a series, an image or a volume are turned to the end, and a row is read as it is."
+                                : $"reads the rows the layer at {path} makes of {unread}, which is neither a row, a series, an image nor a volume: the channels of a series, an image or a volume are turned to the end, and a row is read as it is."
                             : $"reads the rows the layer at {path} flattens, which PyTorch lays out channel by channel: hand the reader an example the network takes, or state what that layer is handed.";
+                    afterASeries = false;
                     break;
 
                 case Reshape reshape:
@@ -187,23 +196,27 @@ internal sealed class TorchLayout
 
                     producers.Clear();
                     (flattened, untold) = (null, null);
+                    afterASeries = false;
                     break;
 
                 case Network code:
-                    // Rows a flatten before it made of images, or of what nobody said, may reach any layer it holds.
-                    LayCode(path, code, handedImages: untold is not null || flattened is { Handed.Rank: 3 });
+                    // Rows a flatten before it made of series, images or volumes, or of what nobody said, may reach any layer it holds.
+                    LayCode(path, code, handedImages: untold is not null || flattened is { Handed.Rank: > 1 });
                     producers = [.. slots.Select(named => named.Path)];
                     (flattened, untold) = (null, null);
+                    afterASeries = false;
                     break;
 
                 default:
-                    // Any other layer: one holding nothing — an activation, a dropout, one of somebody's own — hands on what it is
-                    // handed as it is handed it; how PyTorch lays out the numbers of one holding any is not told.
+                    // Any other layer: one holding nothing — an activation, a pooling, a dropout of values or of whole channels, one of
+                    // somebody's own — hands on what it is handed as it is handed it, channels last; how PyTorch lays out the numbers
+                    // of one holding any is not told.
                     foreach (var named in slots)
                     {
                         Lay(new UntoldSlot(named.Path, OfAnUnknownKind(layer)));
                     }
 
+                    afterASeries = layer.WalksAxes ? layer.WalksOneAxis : afterASeries;
                     break;
             }
         }
@@ -216,7 +229,8 @@ internal sealed class TorchLayout
     {
         var held = network.HeldLayers().Select(named => named with { Path = PlacedLayer.Joined(path, named.Path) }).ToArray();
         var reshapesIntoImages = held.Any(named => named.Layer is Reshape { Each.Rank: > 1 });
-        var hidesImages = handedImages || held.Any(named => named.Layer is Conv2D or Flatten or Reshape);
+        var hidesImages = handedImages
+            || held.Any(named => named.Layer is Convolution or Pooling or GlobalPooling or SpatialDropout or Flatten or Reshape);
 
         foreach (var named in Own(path, network))
         {
@@ -247,7 +261,7 @@ internal sealed class TorchLayout
                     var said = _stated.TryGetValue(at, out var stated) ? new Flattening(at, stated) : (Flattening?)null;
                     var order = said?.OrderFor(at, reads);
                     var untold = said is null && hidesImages
-                        ? $"is held by a network written as code, whose forward pass keeps to itself whether the layer at {at} reads rows made of images, which PyTorch lays out channel by channel: state what that layer reads in Flattened — the rows, columns and channels of the images, or the length of a row."
+                        ? $"is held by a network written as code, whose forward pass keeps to itself whether the layer at {at} reads rows made of images, which PyTorch lays out channel by channel: state what that layer reads in Flattened — the steps and channels of a series, the rows, columns and channels of an image, the planes, rows, columns and channels of a volume, or the length of a row."
                         : null;
 
                     foreach (var named in own)
@@ -266,7 +280,7 @@ internal sealed class TorchLayout
 
                     break;
 
-                case Conv2D convolution:
+                case Convolution convolution:
                     foreach (var named in own)
                     {
                         Lay(ReferenceEquals(named.Slot, convolution.Weight)
@@ -316,12 +330,12 @@ internal readonly record struct PlacedLayer(string Path, Layer Layer)
 
 /// <summary>What a flatten is handed, per example, and where it stands.</summary>
 /// <param name="Path">The flatten's path.</param>
-/// <param name="Handed">An image — rows, columns and channels — or a row.</param>
+/// <param name="Handed">A series — steps and channels — an image — rows, columns and channels — a volume — planes, rows, columns and channels — or a row.</param>
 internal readonly record struct Flattening(string Path, Shape Handed)
 {
-    /// <summary>The order the numbers read after the flatten are in, for a layer reading so many: an image's, or none for a row.</summary>
+    /// <summary>The order the numbers read after the flatten are in, for a layer reading so many: that of a series, an image or a volume, or none for a row.</summary>
     /// <exception cref="ArgumentException">The flatten is said to be handed another number of values than the layer reads.</exception>
-    public ImageOrder? OrderFor(string reader, int reads)
+    public ChannelOrder? OrderFor(string reader, int reads)
     {
         if (Handed.Count != reads)
         {
@@ -330,6 +344,82 @@ internal readonly record struct Flattening(string Path, Shape Handed)
                 nameof(SafetensorsFile.Flattened));
         }
 
-        return Handed.Rank == 3 ? new ImageOrder(Handed[0], Handed[1], Handed[2]) : null;
+        var channels = Handed[Handed.Rank - 1];
+
+        return Handed.Rank > 1 ? new ChannelOrder(Handed.Count / channels, channels) : null;
+    }
+}
+
+/// <summary>What a flatten, or a layer written as code, can be handed.</summary>
+internal static class HandedShapeExtensions
+{
+    extension(Shape shape)
+    {
+        /// <summary>
+        /// Whether it is a shape this reader reads rows of: a row, or a series, an image or a volume, whose channels come last —
+        /// at least one axis and at most four.
+        /// </summary>
+        public bool IsHandable => shape.Rank is >= 1 and <= 4;
+
+        /// <summary>
+        /// Whether it is a shape a flatten can be handed at the place it stands: one of three or four axes, an image or a volume, or
+        /// a row, anywhere; of two axes — steps and channels — only where a layer along one axis made it, since two axes a reshape
+        /// made are rows laid out as steps by features, which PyTorch flattens as they stand.
+        /// </summary>
+        /// <param name="afterASeries">Whether the layer that walks axes nearest before the flatten walks one axis, with no reshape or linear layer between.</param>
+        public bool IsHandableAfter(bool afterASeries) => shape.Rank is 1 or 3 or 4 || (shape.Rank == 2 && afterASeries);
+    }
+}
+
+/// <summary>Which layers walk axes, and along how many, as far as a reader of PyTorch's state needs to know.</summary>
+internal static class WalkedAxesExtensions
+{
+    extension(Layer layer)
+    {
+        /// <summary>Whether it walks a window along some axes: a convolution, a pooling, a global pooling or a dropout of whole channels.</summary>
+        public bool WalksAxes => layer is Convolution or Pooling or GlobalPooling or SpatialDropout;
+
+        /// <summary>Whether it walks one axis, along a series.</summary>
+        public bool WalksOneAxis => layer is Conv1D or MaxPool1D or AvgPool1D or GlobalMaxPool1D or GlobalAvgPool1D or SpatialDropout1D;
+    }
+
+    extension(IReadOnlyList<PlacedLayer> layers)
+    {
+        /// <summary>
+        /// Whether what the layer at a path is handed was made by a layer along one axis: the layer that walks axes nearest before it
+        /// walks one, with no reshape, flatten or linear layer between. A layer a network written as code holds is handed what the
+        /// code makes of it, which nobody here can see, so it is handed a series where the code holds a layer along one axis.
+        /// </summary>
+        public bool EndsInASeries(string path)
+        {
+            var at = -1;
+
+            for (var place = 0; place < layers.Count && at < 0; place++)
+            {
+                at = layers[place].Path == path ? place : -1;
+            }
+
+            if (at < 0)
+            {
+                return layers.Any(placed => placed.Layer is Network code && code.HeldLayers().Any(held => held.Layer.WalksOneAxis));
+            }
+
+            for (var before = at - 1; before >= 0; before--)
+            {
+                var layer = layers[before].Layer;
+
+                if (layer.WalksAxes)
+                {
+                    return layer.WalksOneAxis;
+                }
+
+                if (layer is Reshape or Flatten or Dense or Network)
+                {
+                    return false;
+                }
+            }
+
+            return false;
+        }
     }
 }

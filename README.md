@@ -30,7 +30,10 @@ correlation is worked out once as numbers — Pearson's and Spearman's — and a
 another's order. A weekday written as a number is refused where it is declared instead of failing when the pipeline
 runs, and a [step of your own](https://github.com/xkqg/DeepSharp/wiki/Writing-a-step-of-your-own) has a page. The
 pipeline file is at version 8: everything written before still reads, and 0.8.0 refuses a file of the eighth by its
-number.
+number. A network can walk more than an image now: convolutions along a series and through a volume — a series' window can be
+causal — max and average poolings, global poolings and the dropouts of whole channels, each matched to PyTorch's own values and
+gradients on every engine and read from Keras, ONNX and PyTorch files. They add one operation to the tensor seam, so an
+engine written outside the library has one more to write; the changelog says which.
 
 **0.8.0 lands what an exchange answers with as a file, and the pipeline reads it like any other.** A source that answers
 differently every time it is asked cannot be read while a model trains: the pipeline would train on other numbers
@@ -261,8 +264,8 @@ var numbers = new TorchSaveFile(network, new BinaryCrossEntropy()).Read(state); 
 writes, `TorchSaveFile`. Each number is turned into the layout its slot keeps, as the layer that holds it says. The
 Titanic network PyTorch trained answers the 135 test passengers within five roundings of a single-precision number of
 PyTorch's chances, from a safetensors file, a `.pt` file or either exporter's graph, and the one Keras trained within
-five of Keras's from its archive, its HDF5 file or its graph; what no network here is built of — pooling, a branch, a
-dilated window — is refused at the layer or the node that says it, every one at once. The pickle torch.save writes is a
+five of Keras's from its archive, its HDF5 file or its graph; what no network here is built of — a branch, a dilated
+window, a stride of its own for each axis, a pooling that rounds up — is refused at the layer or the node that says it, every one at once. The pickle torch.save writes is a
 program, so it is read by an interpreter that carries out only what PyTorch's own weights-only reader carries out, and
 builds nothing a file names but what a state dictionary is made of: any other name is refused where the file names it,
 before anything is looked up, built or run. A model read so is trained further behind a pipeline as any network is —
@@ -379,7 +382,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 
 | | |
 |---|---|
-| `DeepSharp` | The tensors, their shape and the storage their values live on, the seam the arithmetic runs behind, what every engine refuses, the light engine on .NET's own vector maths, and the gradients worked out through it; the layers — dense, activations, dropout, normalisations, convolution, its window padded as TensorFlow's 'same' if you say so — networks written as code or described in Keras's words, losses, optimizers — Sgd, Adam, AdamW, RMSprop and Nadam, derivable by an optimizer of your own — and learning-rate schedules, the training loop with early stopping, gradient clipping, an epoch hook, cancellation and checkpoints, a network written down as the kinds it is made of and the numbers it learned, and the load that puts numbers trained elsewhere into its slots. Brings System.Numerics.Tensors alone. |
+| `DeepSharp` | The tensors, their shape and the storage their values live on, the seam the arithmetic runs behind, what every engine refuses, the light engine on .NET's own vector maths, and the gradients worked out through it; the layers — dense, activations, dropout, normalisations, convolutions along a series, over an image and through a volume, poolings, global poolings and the dropouts of whole channels, their window padded as TensorFlow's 'same' — or, along a series, as Keras's 'causal' — if you say so — networks written as code or described in Keras's words, losses, optimizers — Sgd, Adam, AdamW, RMSprop and Nadam, derivable by an optimizer of your own — and learning-rate schedules, the training loop with early stopping, gradient clipping, an epoch hook, cancellation and checkpoints, a network written down as the kinds it is made of and the numbers it learned, and the load that puts numbers trained elsewhere into its slots. Brings System.Numerics.Tensors alone. |
 | `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales — one line naming the kind and the columns it holds for, landing the features between minus one and one unless the pipeline says otherwise — a profile that names what should not be there, the answer in five kinds, ordered or not, the report of what a trained model is measured by — amounts, classes and shares —, the learner a declaration is written for, the handover — a run for each learner, and every feature declared to land between minus one and one for a learner that needs it — and the column decisions saved on their own and taken over, a source that joins two files, an id that travels with its rows, a correlation worked out once as numbers, and a course to fill in — the steps of a prepared pipeline in the order they belong, each waiting for what only you know — saved as a file and replayed. Knows no tensor, and brings nothing but Microsoft's dependency-injection abstractions. |
 | `DeepSharp.Pipelines.Parquet` | `.ReadParquet(path)`: an Apache Parquet file, which says what each of its columns holds. Brings Parquet.Net 6.1.0 and the compression libraries it reads with. |
 | `DeepSharp.Pipelines.Excel` | `.ReadExcel(path)` and `.ReadExcel(path, sheet)`: a sheet of an `.xlsx`, `.xls` or `.xlsb` workbook, each cell as the sheet types it. Brings ExcelDataReader 3.9.0. |

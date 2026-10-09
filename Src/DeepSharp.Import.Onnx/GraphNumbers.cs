@@ -4,6 +4,7 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using DeepSharp.Networks;
+using DeepSharp.Tensors;
 using Onnx;
 using static Onnx.TensorProto.Types;
 
@@ -316,7 +317,10 @@ internal enum Laying
     /// <summary>A weight matrix a Gemm declares written outputs by inputs, turned round to inputs by outputs.</summary>
     Transposed,
 
-    /// <summary>A convolution's kernel, written channels out by channels in by rows by columns, laid out as the window's places times channels in by channels out.</summary>
+    /// <summary>
+    /// A convolution's kernel, written channels out by channels in by the window's lengths — steps, or rows and columns, or
+    /// planes, rows and columns — laid out as the window's places times channels in by channels out.
+    /// </summary>
     Kernel,
 }
 
@@ -324,10 +328,31 @@ internal enum Laying
 /// <param name="Rows">Its rows.</param>
 /// <param name="Columns">Its columns.</param>
 /// <param name="Channels">Its channels.</param>
+/// <remarks>A series is an image of one row, and a volume an image whose rows are its planes' rows one after another.</remarks>
 internal readonly record struct ImageRow(int Rows, int Columns, int Channels)
 {
+    /// <summary>The image a flatten found in the examples that reach it.</summary>
+    /// <param name="reaching">The shape of what reaches it, the batch first and the channels last: a series, an image or a volume.</param>
+    public ImageRow(Shape reaching)
+        : this(Product(reaching.Axes[1..^2]), reaching[reaching.Rank - 2], reaching[reaching.Rank - 1])
+    {
+    }
+
     /// <summary>How many values the image holds, and so the row it is flattened into.</summary>
     public int Count => Rows * Columns * Channels;
+
+    // The product of lengths: the rows of a volume's planes, one after another, or the one row of a series.
+    private static int Product(ReadOnlySpan<int> lengths)
+    {
+        var total = 1;
+
+        foreach (var length in lengths)
+        {
+            total *= length;
+        }
+
+        return total;
+    }
 }
 
 /// <summary>A value a graph holds as single-precision numbers, and where; or what is wrong with it.</summary>
@@ -378,31 +403,27 @@ internal readonly record struct HeldTensor(string Source, int[] Lengths)
         return this with { Lengths = [columns, rows], Values = turned };
     }
 
-    // A kernel channels out by channels in by rows by columns, as rows by columns by channels in by channels out, the first
-    // three one axis: the window's places times the channels in.
+    // A kernel channels out by channels in by the window's lengths, as the window's lengths by channels in by channels out,
+    // the first of those one axis: the window's places, in the order it reads them, times the channels in.
     private HeldTensor Kernel()
     {
         var outputs = Lengths[0];
         var inputs = Lengths[1];
-        var rows = Lengths[2];
-        var columns = Lengths[3];
+        var places = Lengths[2..].Aggregate(1, (total, length) => total * length);
         var laid = new float[Values!.Length];
 
         for (var output = 0; output < outputs; output++)
         {
             for (var input = 0; input < inputs; input++)
             {
-                for (var row = 0; row < rows; row++)
+                for (var place = 0; place < places; place++)
                 {
-                    for (var column = 0; column < columns; column++)
-                    {
-                        laid[(((((row * columns) + column) * inputs) + input) * outputs) + output] = Values[(((((output * inputs) + input) * rows) + row) * columns) + column];
-                    }
+                    laid[(((place * inputs) + input) * outputs) + output] = Values[(((output * inputs) + input) * places) + place];
                 }
             }
         }
 
-        return this with { Lengths = [rows * columns * inputs, outputs], Values = laid };
+        return this with { Lengths = [places * inputs, outputs], Values = laid };
     }
 
     // The value's first axis, a flattened image's row, from ONNX's order — channel, row, column — to this one's: row,

@@ -108,6 +108,14 @@ public sealed class CopyCountingBackend : ITensorBackend
     public Tensor Positive(Tensor values) => Kept(_arithmetic.Positive(Taken(values)));
 
     /// <inheritdoc />
+    public Tensor FirstLargest(Tensor matrix)
+    {
+        matrix.RequireRowsToPickFrom(nameof(FirstLargest));
+
+        return Kept(_arithmetic.FirstLargest(Taken(matrix)));
+    }
+
+    /// <inheritdoc />
     public Tensor Tanh(Tensor values) => Kept(_arithmetic.Tanh(Taken(values)));
 
     /// <inheritdoc />

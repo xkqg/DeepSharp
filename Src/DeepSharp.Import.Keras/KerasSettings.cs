@@ -59,23 +59,38 @@ internal sealed class KerasSettings
     /// <summary>A setting as the file writes it, a list's items apart; nothing when it says nothing.</summary>
     public string? Written(string key) => Said(key)?.Written();
 
-    /// <summary>A setting Keras writes as a pair — a length down and one across — noted when it is not one.</summary>
-    public Pair Pair(string key)
+    /// <summary>
+    /// A setting Keras writes as one length for each axis a window walks, outermost first — a pair for an image — noted when it
+    /// is not that many lengths.
+    /// </summary>
+    /// <param name="key">The setting.</param>
+    /// <param name="count">How many axes the window walks: one, two or three.</param>
+    /// <returns>The lengths; one of each when the setting cannot be read, which nothing is built from while a fault is noted.</returns>
+    public int[] Axes(string key, int count)
     {
         var lengths = Setting<int[]?>(key);
 
-        if (lengths is [var down, var across])
+        if (lengths is not null && lengths.Length != count)
         {
-            return new Pair(down, across);
+            var wanted = count switch { 1 => "one length", 2 => "a pair", _ => "three lengths" };
+
+            Refuse($"its '{key}' is written as {Written(key)!.Quoted()}, and Keras writes {wanted} there.");
         }
 
-        if (lengths is not null)
-        {
-            Refuse($"its '{key}' is written as {Written(key)!.Quoted()}, and Keras writes a pair there.");
-        }
-
-        return new Pair(1, 1);
+        return lengths is not null && lengths.Length == count ? lengths : [.. Enumerable.Repeat(1, count)];
     }
+
+    /// <summary>
+    /// A setting Keras writes as one length for each axis a window walks, or as one whole number that stands for every axis
+    /// alike — a pooling's size or stride — noted when it is neither.
+    /// </summary>
+    /// <param name="key">The setting.</param>
+    /// <param name="count">How many axes the window walks: one, two or three.</param>
+    /// <returns>The lengths, one for each axis.</returns>
+    public int[] Alike(string key, int count) =>
+        Setting(key, default(JsonElement)) is { ValueKind: JsonValueKind.Number } number && IsWhole(number)
+            ? [.. Enumerable.Repeat(number.GetInt32(), count)]
+            : Axes(key, count);
 
     /// <summary>Notes a fault at the place these settings stand.</summary>
     public void Refuse(string fault) => _faults.Add($"{_place.Quoted()}: {fault}");
@@ -115,11 +130,6 @@ internal sealed class KerasSettings
         return default!;
     }
 }
-
-/// <summary>Two lengths Keras writes for a window: down, along the rows, and across, along the columns.</summary>
-/// <param name="Down">Along the rows.</param>
-/// <param name="Across">Along the columns.</param>
-internal readonly record struct Pair(int Down, int Across);
 
 /// <summary>How a Keras file writes a value, as a fault names it.</summary>
 internal static class WrittenJsonExtensions

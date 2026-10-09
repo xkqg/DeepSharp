@@ -320,6 +320,8 @@ public class NetworkEngineTests
 
         public Tensor Positive(Tensor values) => Counted(_inner.Positive(values));
 
+        public Tensor FirstLargest(Tensor matrix) => Counted(_inner.FirstLargest(matrix));
+
         public Tensor Tanh(Tensor values) => Counted(_inner.Tanh(values));
 
         public Tensor Sigmoid(Tensor values) => Counted(_inner.Sigmoid(values));

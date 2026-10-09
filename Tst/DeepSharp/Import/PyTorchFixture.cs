@@ -7,9 +7,10 @@ namespace DeepSharp.Tests.Import;
 
 /// <summary>
 /// What PyTorch saved and answered, kept beside these tests with the scripts that made it (Fixtures/pytorch.py,
-/// Fixtures/torch-save.py) and what they printed (Fixtures/pytorch.txt, Fixtures/torch-save.txt): the safetensors files and
-/// the files torch.save wrote of the same state, pytorch.json — the rows each network was handed, what it answered, and
-/// what safetensors' own reader made of files written wrongly on purpose — and torch-save.json.
+/// Fixtures/torch-save.py, Fixtures/pytorch-spatial.py) and what they printed (Fixtures/pytorch.txt, Fixtures/torch-save.txt,
+/// Fixtures/pytorch-spatial.txt): the safetensors files and the files torch.save wrote of the same state, pytorch.json — the
+/// rows each network was handed, what it answered, and what safetensors' own reader made of files written wrongly on purpose —
+/// torch-save.json, and pytorch-spatial.json.
 /// </summary>
 internal static class PyTorchFixture
 {
@@ -17,8 +18,16 @@ internal static class PyTorchFixture
 
     private static readonly Lazy<JsonElement> ReadSaved = new(() => JsonDocument.Parse(File.ReadAllText(Path("torch-save.json"))).RootElement);
 
+    private static readonly Lazy<JsonElement> ReadSpatial = new(() => JsonDocument.Parse(File.ReadAllText(Path("pytorch-spatial.json"))).RootElement);
+
     /// <summary>pytorch.json.</summary>
     public static JsonElement Json => Read.Value;
+
+    /// <summary>
+    /// pytorch-spatial.json, which pytorch-spatial.py wrote beside the files PyTorch saved the networks that walk series, images
+    /// and volumes in: the examples each was handed, and what it answered.
+    /// </summary>
+    public static JsonElement Spatial => ReadSpatial.Value;
 
     /// <summary>
     /// torch-save.json, which torch-save.py wrote beside the files torch.save wrote: the numbers of the deep network, and

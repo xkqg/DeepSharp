@@ -19,8 +19,8 @@
 #                              a dropout, a dense layer, a tanh activation layer, a layer normalisation of epsilon 0.001,
 #                              and a softmax over three classes that the categorical cross-entropy, named as an object, owns;
 #                              trained on random images so every number, the running statistics too, has moved.
-#   keras-refused.keras        a network holding what nothing here walks: a stride of its own for each axis, a dilated
-#                              window, channels in groups and a pooling layer.
+#   keras-refused.keras        no longer written here: it held a pooling layer, which is read now, and keras-refused-fixture.py
+#                              writes it alone, with a layer of a kind not read in its place.
 #   keras-fixtures.json        the test rows and the two served passengers as they were handed to Keras, the images, and
 #                              what Keras answered for each: the chances and the shares, as single-precision numbers.
 
@@ -113,24 +113,9 @@ print("images: running mean", " ".join(f"{value:.6f}" for value in values(keras.
       "running var", " ".join(f"{value:.6f}" for value in values(keras.ops.convert_to_numpy(norm.moving_variance))))
 print("images: shares of the first", " ".join(f"{value:.8f}" for value in images_answers["shares"][:3]))
 
-# What nothing here walks, one of each, in one network: the importer names all four at once, each at its layer.
-refused = keras.Sequential(
-    [
-        keras.Input((16, 16, 4)),
-        layers.Conv2D(4, 3, strides=(2, 1), padding="same"),
-        layers.Conv2D(4, 3, dilation_rate=2, padding="same"),
-        layers.Conv2D(4, 3, groups=2, padding="same"),
-        layers.MaxPooling2D(2),
-        layers.Flatten(),
-        layers.Dense(1, activation="sigmoid"),
-    ]
-)
-refused.compile(optimizer="adam", loss="binary_crossentropy")
-refused.save(os.path.join(here, "keras-refused.keras"))
-
 with open(os.path.join(here, "keras-fixtures.json"), "w", encoding="utf-8", newline="\n") as file:
     json.dump({"made": made, "titanic": titanic_answers, "images": images_answers}, file, indent=1)
     file.write("\n")
 
-for name in ("keras-titanic.keras", "keras-titanic.h5", "keras-images.keras", "keras-images.h5", "keras-refused.keras"):
+for name in ("keras-titanic.keras", "keras-titanic.h5", "keras-images.keras", "keras-images.h5"):
     print(f"{name}: {os.path.getsize(os.path.join(here, name))} bytes")

@@ -82,6 +82,7 @@ public abstract class AgreementContract(ITensorBackend engine)
         ["Unfold"] = engine => engine.Unfold(Drawn(Images, 10), Walking with { Stride = 2 }),
         ["Unfold padded as 'same'"] = engine => engine.Unfold(Drawn(Uneven, 12), Same),
         ["Fill"] = engine => engine.Fill(new Shape(3, 4), 0.1f),
+        ["FirstLargest"] = engine => engine.FirstLargest(Drawn(new Shape(8, 10), 11)),
     };
 
     private readonly ITensorBackend _backend = engine;

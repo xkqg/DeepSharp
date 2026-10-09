@@ -37,15 +37,23 @@ public readonly record struct Window(int Height, int Width)
     /// <summary>How the border is had: the one <see cref="Padding"/> states for every side, unless said.</summary>
     public PaddingMode PaddingMode { get; init; }
 
+    /// <summary>
+    /// The rows and columns of nothing to pad with on each of the four sides, stated side by side; nothing, unless said. The
+    /// way a one-dimensional or a three-dimensional window walks an engine that unfolds images: along one axis padded and
+    /// along another not, which a border stated for every side cannot say.
+    /// </summary>
+    /// <remarks>Instead of <see cref="Padding"/> and of every mode but <see cref="PaddingMode.Stated"/>: a window given both is refused.</remarks>
+    internal Borders? Border { get; init; }
+
     /// <summary>How many rows of patches the window makes of an image so many rows tall.</summary>
     /// <param name="height">How many rows the image has.</param>
     /// <returns>The rows of patches, nought or less when the window does not fit.</returns>
-    public int RowsOver(int height) => PlacesAlong(height, Height, Along(height, Height));
+    public int RowsOver(int height) => PlacesAlong(height, Height, Down(height));
 
     /// <summary>How many columns of patches the window makes of an image so many columns wide.</summary>
     /// <param name="width">How many columns the image has.</param>
     /// <returns>The columns of patches, nought or less when the window does not fit.</returns>
-    public int ColumnsOver(int width) => PlacesAlong(width, Width, Along(width, Width));
+    public int ColumnsOver(int width) => PlacesAlong(width, Width, Across(width));
 
     /// <summary>The rows and columns of nothing the window pads an image of so many rows and columns with, on each side.</summary>
     /// <param name="rows">How many rows the image has.</param>
@@ -63,27 +71,39 @@ public readonly record struct Window(int Height, int Width)
     /// </remarks>
     public Borders BordersOver(int rows, int columns)
     {
-        var down = Along(rows, Height);
-        var across = Along(columns, Width);
+        var down = Down(rows);
+        var across = Across(columns);
 
         return new Borders(down.Before, down.After, across.Before, across.After);
     }
 
     /// <inheritdoc />
     public override string ToString() =>
-        PaddingMode == PaddingMode.Same
-            ? $"window {Height}x{Width} (stride {Stride}, padding 'same')"
-            : $"window {Height}x{Width} (stride {Stride}, padding {Padding})";
+        Border is { } sides ? $"window {Height}x{Width} (stride {Stride}, padding {sides.Top} above, {sides.Bottom} below, {sides.Left} before, {sides.Right} after)"
+        : PaddingMode == PaddingMode.Same ? $"window {Height}x{Width} (stride {Stride}, padding 'same')"
+        : PaddingMode == PaddingMode.Causal ? $"window {Height}x{Width} (stride {Stride}, padding 'causal')"
+        : $"window {Height}x{Width} (stride {Stride}, padding {Padding})";
 
     // Where the window can stand along one side: from the first edge of the border to the last place it still fits whole.
     private int PlacesAlong(int length, int size, Sides sides) =>
         Stride < 1 || length + sides.Total < size ? 0 : ((length + sides.Total - size) / Stride) + 1;
 
+    // The border above and below an image so tall, and before and after one so wide.
+    private Sides Down(int length) => Border is { } sides ? new Sides(sides.Top, sides.Bottom) : Along(length, Height);
+
+    private Sides Across(int length) => Border is { } sides ? new Sides(sides.Left, sides.Right) : Along(length, Width);
+
     // The border along one side of an image so long, for a window so large along it: the stated padding on both ends; padded
     // as 'same', TensorFlow's — as many places as the stride fits, and the rows or columns they need beyond the image, never
-    // fewer than none, the odd one after.
+    // fewer than none, the odd one after; padded as 'causal', the window's size less one before and nothing after, so the
+    // last place a window stands at is the last of the image.
     private Sides Along(int length, int size)
     {
+        if (PaddingMode == PaddingMode.Causal)
+        {
+            return new Sides(size - 1, 0);
+        }
+
         if (PaddingMode != PaddingMode.Same)
         {
             return new Sides(Padding, Padding);
@@ -120,6 +140,13 @@ public enum PaddingMode
     /// after and none before, which no border stated for every side gives.
     /// </summary>
     Same,
+
+    /// <summary>
+    /// As Keras's <c>padding='causal'</c>: along each side the window pads its size less one before the image and nothing
+    /// after it, so a place never sees what comes after its own. Along a side of one place there is no border. Made for a
+    /// window one place tall over a series, where it is what a causal convolution is.
+    /// </summary>
+    Causal,
 }
 
 /// <summary>The rows and columns of nothing a window pads an image with, on each of its four sides.</summary>

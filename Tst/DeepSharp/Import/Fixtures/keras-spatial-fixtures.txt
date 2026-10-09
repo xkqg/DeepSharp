@@ -1,0 +1,22 @@
+keras 3.15.1 on torch 2.14.1+cpu, numpy 2.5.3, Python 3.14.7
+keras-spatial-series: [(13, 5), (6, 5), (6, 5), (2, 5), (5,), (2,)]
+keras-spatial-series: Keras on PyTorch and the rule worked out by hand are 6.56e-08 apart
+keras-spatial-image: [(7, 7, 4), (4, 4, 4), (2, 2, 4), (2, 2, 4), (4,), (3,)]
+keras-spatial-image: Keras on PyTorch and the rule worked out by hand are 4.73e-08 apart
+keras-spatial-volume: [(5, 3, 6, 3), (2, 1, 3, 3), (2, 1, 2, 3), (1, 1, 1, 3), (3,), (1,)]
+keras-spatial-volume: Keras on PyTorch and the rule worked out by hand are 3.85e-08 apart
+keras-spatial-series-same: [(8, 4), (4, 4), (4, 4), (1, 4), (4,), (3,)]
+keras-spatial-series-same: Keras on PyTorch and the rule worked out by hand are 3.30e-08 apart
+keras-spatial-image-same: [(4, 4, 3), (2, 2, 3), (3,), (1,)]
+keras-spatial-image-same: Keras on PyTorch and the rule worked out by hand are 2.07e-03 apart (the PyTorch backend does not pool as TensorFlow does)
+keras-spatial-volume-same: [(5, 5, 5, 3), (3, 3, 3, 3), (3, 3, 3, 3), (3,), (2,)]
+keras-spatial-volume-same: Keras on PyTorch and the rule worked out by hand are 3.33e-08 apart
+keras-spatial-image-same.keras: 26477 bytes
+keras-spatial-image.h5: 31448 bytes
+keras-spatial-image.keras: 31001 bytes
+keras-spatial-series-same.keras: 34109 bytes
+keras-spatial-series.h5: 30712 bytes
+keras-spatial-series.keras: 30666 bytes
+keras-spatial-volume-same.keras: 28498 bytes
+keras-spatial-volume.h5: 31448 bytes
+keras-spatial-volume.keras: 31128 bytes

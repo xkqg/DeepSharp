@@ -26,6 +26,12 @@ public sealed class DropoutTests() : DropoutContract(new NativeMemoryBackend());
 
 public sealed class ConvolutionTests() : ConvolutionContract(new NativeMemoryBackend());
 
+public sealed class SpatialConvolutionTests() : SpatialConvolutionContract(new NativeMemoryBackend());
+
+public sealed class PoolingTests() : PoolingContract(new NativeMemoryBackend());
+
+public sealed class SpatialDropoutTests() : SpatialDropoutContract(new NativeMemoryBackend());
+
 public sealed class NormalisationTests() : NormalisationContract(new NativeMemoryBackend());
 
 public sealed class LossTests() : LossContract(new NativeMemoryBackend());

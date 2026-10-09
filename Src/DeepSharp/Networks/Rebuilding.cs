@@ -93,25 +93,29 @@ public sealed class Rebuilding
     }
 
     /// <summary>
-    /// Whether a setting is written as a word a kind takes in place of the number it otherwise is — a window's padding as
-    /// <c>same</c>, say — and, when it is, the setting is read; any other word is refused where it stands, in the words that
-    /// say what the setting is. Written as anything but text, it is not read here, and is left to be read as its number.
+    /// Which of the words a kind takes in place of a number a setting is written as — a window's padding as <c>same</c> or
+    /// <c>causal</c>, say. A word that is none of them is refused where it stands, in the words that say what the setting is;
+    /// written as anything but text, it is not read here, and is left to be read as its number.
     /// </summary>
-    internal bool Says(JsonElement settings, string key, string word, string what)
+    /// <returns>The word the setting says; nothing when it is written as something else.</returns>
+    internal string? SaysOneOf(JsonElement settings, string key, string what, params ReadOnlySpan<string> words)
     {
         if (settings.Member(key) is not { ValueKind: JsonValueKind.String } written)
         {
-            return false;
+            return null;
         }
 
         _readings.Peek().Read.Add(key);
 
-        if (written.GetString() != word)
+        foreach (var word in words)
         {
-            throw Refusal(key, what);
+            if (written.GetString() == word)
+            {
+                return word;
+            }
         }
 
-        return true;
+        throw Refusal(key, what);
     }
 
     /// <summary>Whether a kind was written with a setting that it writes only when it is true: false, where it is left out.</summary>

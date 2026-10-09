@@ -88,4 +88,78 @@ public class WindowTests
         Assert.StartsWith("A window 2x2 (stride 1, padding 'same') works its border out from each image it stands on", wrong.Message, StringComparison.Ordinal);
         images.RequireImagesFor(new Window(5, 5) { PaddingMode = PaddingMode.Same });
     }
+
+    [Fact]
+    public void AWindowPaddedAsCausal_PadsEachSideBySizeLessOneBeforeAndNothingAfter_SoNoPlaceSeesPastItsOwn()
+    {
+        // Keras's padding='causal': output[t] does not depend on input[t+1:]. Along a side of one place nothing is padded.
+        for (var size = 1; size <= 5; size++)
+        {
+            for (var stride = 1; stride <= 3; stride++)
+            {
+                for (var length = 1; length <= 10; length++)
+                {
+                    var window = new Window(1, size) { Stride = stride, PaddingMode = PaddingMode.Causal };
+
+                    Assert.Equal(new Borders(0, 0, size - 1, 0), window.BordersOver(1, length));
+                    Assert.Equal(1, window.RowsOver(1));
+                    Assert.Equal(((length - 1) / stride) + 1, window.ColumnsOver(length));
+                }
+            }
+        }
+    }
+
+    [Fact]
+    public void AWindowPaddedAsCausal_SaysSo_AndIsNotTheOneStatedOrTheOneWorkedOut()
+    {
+        Assert.Equal("window 1x3 (stride 1, padding 'causal')", new Window(1, 3) { PaddingMode = PaddingMode.Causal }.ToString());
+        Assert.NotEqual(new Window(1, 3) { PaddingMode = PaddingMode.Causal }, new Window(1, 3) { PaddingMode = PaddingMode.Same });
+        Assert.Equal(new Borders(2, 0, 2, 0), new Window(3, 3) { PaddingMode = PaddingMode.Causal }.BordersOver(9, 9));
+    }
+
+    [Fact]
+    public void AWindowPaddedAsCausal_ThatIsGivenABorderToo_CannotStand()
+    {
+        var wrong = Assert.Throws<ArgumentException>(() => Tensor.Zeros(new Shape(1, 3, 3, 1)).RequireImagesFor(new Window(2, 2) { Padding = 1, PaddingMode = PaddingMode.Causal }));
+
+        Assert.Equal("window", wrong.ParamName);
+        Assert.StartsWith("A window 2x2 (stride 1, padding 'causal') works its border out from each image it stands on", wrong.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABorderStatedForEachSide_IsTheOnlyOneTheWindowHas_WhateverTheImage()
+    {
+        // How a one-dimensional or a three-dimensional window walks a two-dimensional engine: one axis padded, another not.
+        var window = new Window(1, 3) { Stride = 2, Border = new Borders(0, 0, 2, 2) };
+
+        Assert.Equal(new Borders(0, 0, 2, 2), window.BordersOver(1, 9));
+        Assert.Equal(1, window.RowsOver(1));
+        Assert.Equal(6, window.ColumnsOver(9));
+        Assert.Equal("window 1x3 (stride 2, padding 0 above, 0 below, 2 before, 2 after)", window.ToString());
+        Assert.NotEqual(new Window(1, 3) { Stride = 2, Padding = 2 }, window);
+    }
+
+    [Theory]
+    [InlineData(-1, 0, 0, 0)]
+    [InlineData(0, -1, 0, 0)]
+    [InlineData(0, 0, -1, 0)]
+    [InlineData(0, 0, 0, -1)]
+    public void ABorderBelowNothing_CannotStand(int top, int bottom, int left, int right)
+    {
+        var window = new Window(2, 2) { Border = new Borders(top, bottom, left, right) };
+
+        Assert.Throws<ArgumentException>(() => Tensor.Zeros(new Shape(1, 5, 5, 1)).RequireImagesFor(window));
+    }
+
+    [Fact]
+    public void ABorderStatedForEachSide_ThatIsGivenAPaddingOrAModeToo_CannotStand()
+    {
+        var images = Tensor.Zeros(new Shape(1, 5, 5, 1));
+        var border = new Borders(0, 0, 1, 1);
+
+        Assert.Throws<ArgumentException>(() => images.RequireImagesFor(new Window(2, 2) { Border = border, Padding = 1 }));
+        Assert.Throws<ArgumentException>(() => images.RequireImagesFor(new Window(2, 2) { Border = border, PaddingMode = PaddingMode.Same }));
+        Assert.Throws<ArgumentException>(() => images.RequireImagesFor(new Window(2, 2) { Border = border, PaddingMode = PaddingMode.Causal }));
+        images.RequireImagesFor(new Window(2, 2) { Border = border });
+    }
 }

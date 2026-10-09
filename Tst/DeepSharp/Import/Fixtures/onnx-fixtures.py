@@ -25,10 +25,7 @@
 #   onnx-convolution-torchscript.onnx  the same network, exported by the TorchScript exporter for a batch of six
 #   onnx-kinds.onnx (.data)            Linear(14, 8), LayerNorm(8), Sigmoid, Linear(8, 3), Softmax: a layer
 #                                      normalisation whose scale and shift are drawn, and a softmax a cross-entropy owns
-#   onnx-refused.onnx (.data)          what nothing here walks, one of each: a stride of its own for each axis, a dilated
-#                                      window, channels in groups, a padding of its own for each axis, pooling and a leaky
-#                                      relu
-#   onnx-branch.onnx (.data)           a network whose forward pass adds its input back after a layer: a branch
+#   onnx-branch.onnx (.data)          a network whose forward pass adds its input back after a layer: a branch
 #   onnx-fixtures.json                 the rows and the images as they were handed to PyTorch, and what it answered for
 #                                      each, as single-precision numbers — and each chance as the double PyTorch's sigmoid
 #                                      gave of them
@@ -172,19 +169,8 @@ with torch.no_grad():
 print("kinds: shares of the first", " ".join(f"{value:.8f}" for value in fixture["kinds"]["shares"][:3]))
 exported(kinds, served, "onnx-kinds.onnx", ["passengers", "shares"])
 
-# What nothing here walks, one of each, in one network: the importer names every one at once, each at its node.
-torch.manual_seed(20260933)
-refused = torch.nn.Sequential(
-    torch.nn.Conv2d(4, 4, 3, stride=(2, 1), padding=1),
-    torch.nn.Conv2d(4, 4, 3, dilation=2, padding=2),
-    torch.nn.Conv2d(4, 4, 3, groups=2, padding=1),
-    torch.nn.Conv2d(4, 4, 3, padding=(1, 0)),
-    torch.nn.MaxPool2d(2),
-    torch.nn.LeakyReLU(),
-    torch.nn.Flatten(),
-    torch.nn.Linear(4 * 4 * 3, 1),
-).eval()
-exported(refused, torch.zeros(2, 4, 16, 8), "onnx-refused.onnx", ["images", "logits"])
+# (onnx-refused.onnx, the graph of what nothing here walks, is written by onnx-spatial-fixtures.py with the graphs of the
+# networks along a series and through a volume.)
 
 
 # A layer whose input is added back to what it makes: two paths through the network, which a stack does not have.

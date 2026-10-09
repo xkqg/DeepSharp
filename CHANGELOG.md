@@ -48,6 +48,27 @@ travels with its rows, a correlation worked out once.
   members as accepted differences from 0.8.0 (`CompatibilitySuppressions.xml`), and they go when this release becomes the
   baseline.
 
+- **`ITensorBackend` has one more member, `FirstLargest`.** An engine written outside the library must write it; the light engine,
+  the tests' native-memory engine and the libtorch engine are the three that ship, and each has it. It returns a matrix the shape
+  of its argument with a one at the first largest value of each row and noughts elsewhere, a value that is not a number counting
+  as the largest — the step a max pooling's value and its gradient are made of, flat either side of where it steps like
+  `Positive`. The build records the added member as an accepted difference from 0.8.0 (`CompatibilitySuppressions.xml`), and the
+  entry goes when this release becomes the baseline. Nothing else about the seam changes, and a program that only calls it
+  is untouched.
+
+- **A window has a third way to pad, and a network's file may say it.** `PaddingMode.Causal` pads a window's size less one places
+  before the series and none after it, so a place never sees what follows its own. A convolution's `padding` in a network's file
+  is now a whole number, `same` or `causal`; the refusal of any other word says so. `Conv2D` now derives from `Convolution`,
+  which holds the kernel, the bias and the arithmetic the three convolutions share; `Weight`, `Bias`, `InChannels` and
+  `OutChannels` are the same members, reached through the base.
+
+- **The readers of other frameworks' files refuse and read a little differently.** What no network here is built of is no longer
+  "pooling": a pooling is read, and a refusal names the kinds it does read — the Keras reader's list is longer, and an
+  unknown layer's message prints it. The PyTorch reader read a flatten handed two axes as neither a row nor an image and refused
+  it; it now reads two axes as steps and channels, but only where the layer that walks axes nearest before the flatten walks
+  one axis, so two axes a reshape made — rows laid out as steps by features, which PyTorch flattens as they stand — are still
+  refused. The words of three of its refusals changed to name series and volumes beside images.
+
 - **A metric that is no metric is no longer measured as recall.** A number cast to `Metric` that is none of its members used
   to be measured by the arm that served the class measures; it now throws.
 
@@ -77,6 +98,41 @@ travels with its rows, a correlation worked out once.
 
 - **An optimizer of your own.** Derive from `Optimizer`, register it with a `NetworkCatalog`, and its slots go through a
   checkpoint file and on from it bit for bit. The words a declared `learn.network` is written in stay the shipped ones.
+
+- **Convolutions along a series and through a volume.** `Conv1D` and `Conv3D` stand beside `Conv2D`, each with a window of its own —
+  `Window1D(length)` and `Window3D(depth, height, width)` — that moves one stride on every axis and pads by a number of places on
+  every side, as TensorFlow's 'same' does, or, along a series, as Keras's 'causal' does. A series is laid out step by channel
+  and a volume plane by row by column by channel; the kernel is one matrix for every axis, Keras's flattened, and starts as
+  PyTorch's does. Along a series the engine unfolds an image one row tall; through a volume it unfolds twice, so no engine
+  unfolds in three dimensions. Every value and every gradient of a loss through them was matched to PyTorch 2.14.1 on every
+  engine, in `Sequential` as `Conv1D(filters, window)` and `Conv3D(filters, window)`, and in a network's file as `conv1d` and
+  `conv3d`.
+
+- **Poolings.** `MaxPool1D`, `MaxPool2D` and `MaxPool3D`, and `AvgPool1D`, `AvgPool2D` and `AvgPool3D`, make one value of what a
+  window covers for each channel on its own. The largest is the first of values that tie, and its gradient goes to that value
+  alone, as PyTorch's max pooling sends it; a window over a border sees the values of the example only, so the largest is never
+  a nought the border supplies. An average leaves the border out of its count, as TensorFlow's and ONNX's do, unless
+  `CountsPadding` is set, which is PyTorch's `count_include_pad`. `Sequential` takes a window or a size —
+  `MaxPool2D(2)` walks runs that do not overlap, as Keras's pooling does by default.
+
+- **Global poolings and the dropout of whole channels.** `GlobalMaxPool1D/2D/3D` and `GlobalAvgPool1D/2D/3D` make one value of
+  every channel of an example, a row of channels for a dense layer to take, or — with `KeepsAxes` — the axes kept as axes of
+  one place, as Keras's `keepdims` and ONNX's global pools do. `SpatialDropout1D/2D/3D` leave whole channels out while a network
+  trains, in every place of an example at once, and scale what they keep as dropout does.
+
+- **The three readers read them.** `DeepSharp.Import.Keras` reads `Conv1D` and `Conv3D` beside `Conv2D`, `MaxPooling`,
+  `AveragePooling`, `GlobalMaxPooling` and `GlobalAveragePooling` over one, two and three axes, and `SpatialDropout1D/2D/3D`:
+  a pooling that says no stride strides by its pool size as Keras's does, `keepdims` is `KeepsAxes`, and `Conv1D` may pad as
+  'causal'. `DeepSharp.Import.Onnx` reads `Conv` along one, two and three axes, `MaxPool`, `AveragePool`,
+  `GlobalAveragePool` and `GlobalMaxPool`, and the `ReduceMean` or `ReduceMax` over every place of each channel — with the
+  `Unsqueeze` and `Squeeze` round a series — that PyTorch's default exporter writes an adaptive pooling to one place as;
+  `SAME_LOWER` is read where it gives the border 'same' gives. `DeepSharp.Import.PyTorch` reads the state of `Conv1d`,
+  `Conv2d` and `Conv3d` and the layers around them from safetensors and `.pt` files, turning the rows a flatten makes of a
+  series, an image or a volume from PyTorch's channel-by-channel order; PyTorch's padded `AvgPool` counts its border, so the
+  layer here is `CountsPadding = true`. Every network over a series, images and volumes was held to what the real framework
+  answered, within a hundred-thousandth. Refused by name, at the node or the layer that says it: a window that overhangs the end
+  of an axis (`ceil_mode`), a dilated window, a stride of its own for each axis, channels in groups, a max pooling's
+  `storage_order` and its second output when the graph uses it.
 
 - **A distribution in an order.** `target.distribution` may say `ordered`. The measures `emd`, `kl` and `rps` compare shares
   — each row divided by its own total, so counts are compared as shares — and are refused where the report is written for

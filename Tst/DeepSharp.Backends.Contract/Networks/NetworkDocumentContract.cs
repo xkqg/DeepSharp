@@ -86,6 +86,88 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
     }
 
     [Fact]
+    public void EveryLayerThatWalksASeries_AnImageOrAVolume_IsWrittenAndReadBack_WithItsWindowAndItsSettings()
+    {
+        var draws = new RandomStream(9).Draw("initialise:test", 0, 0);
+        var line = new LayerStack(
+            new Conv1D(2, 3, new Window1D(3) { Stride = 2, Padding = 1 }, draws),
+            new MaxPool1D(new Window1D(2) { Stride = 2 }),
+            new SpatialDropout1D(0.3),
+            new Conv1D(3, 2, new Window1D(2) { PaddingMode = PaddingMode.Causal }, draws),
+            new AvgPool1D(new Window1D(2) { Stride = 1, PaddingMode = PaddingMode.Same }) { CountsPadding = true },
+            new GlobalMaxPool1D());
+        var plane = new LayerStack(
+            new Conv2D(1, 2, new Window(3, 3) { Stride = 1, PaddingMode = PaddingMode.Same }, draws),
+            new MaxPool2D(new Window(2, 2) { Stride = 2, Padding = 1 }),
+            new SpatialDropout2D(0.2),
+            new AvgPool2D(new Window(2, 2) { Stride = 2 }),
+            new GlobalAvgPool2D { KeepsAxes = true });
+        var volume = new LayerStack(
+            new Conv3D(1, 2, new Window3D(2, 2, 2) { Stride = 1, Padding = 1 }, draws),
+            new MaxPool3D(new Window3D(2, 2, 2) { Stride = 2 }),
+            new SpatialDropout3D(0.1),
+            new AvgPool3D(new Window3D(2, 2, 2) { Stride = 1 }),
+            new GlobalMaxPool3D { KeepsAxes = true });
+
+        AssertWrittenAndReadBack(line, Tensor.From(new Shape(2, 9, 2), [.. Enumerable.Range(0, 36).Select(at => MathF.Sin(at))]));
+        AssertWrittenAndReadBack(plane, Tensor.From(new Shape(2, 6, 6, 1), [.. Enumerable.Range(0, 72).Select(at => MathF.Sin(at))]));
+        AssertWrittenAndReadBack(volume, Tensor.From(new Shape(2, 4, 4, 4, 1), [.. Enumerable.Range(0, 128).Select(at => MathF.Sin(at))]));
+
+        var read = NetworkDocument.ReadNetwork(Written(line, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn());
+        var layers = Assert.IsType<LayerStack>(read.Network).Layers;
+
+        Assert.Equal(new Window1D(3) { Stride = 2, Padding = 1 }, Assert.IsType<Conv1D>(layers[0]).Window);
+        Assert.Equal(new Window1D(2) { Stride = 2 }, Assert.IsType<MaxPool1D>(layers[1]).Window);
+        Assert.Equal(0.3, Assert.IsType<SpatialDropout1D>(layers[2]).Rate);
+        Assert.Equal(PaddingMode.Causal, Assert.IsType<Conv1D>(layers[3]).Window.PaddingMode);
+        Assert.True(Assert.IsType<AvgPool1D>(layers[4]).CountsPadding);
+        Assert.False(Assert.IsType<GlobalMaxPool1D>(layers[5]).KeepsAxes);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EveryGlobalPooling_IsWrittenAndReadBack_WithTheAxesItKeepsOrDrops(bool keepsAxes)
+    {
+        var series = Tensor.From(new Shape(2, 5, 3), [.. Enumerable.Range(0, 30).Select(at => MathF.Sin(at))]);
+        var images = Tensor.From(new Shape(2, 4, 4, 3), [.. Enumerable.Range(0, 96).Select(at => MathF.Sin(at))]);
+        var volumes = Tensor.From(new Shape(2, 3, 3, 3, 3), [.. Enumerable.Range(0, 162).Select(at => MathF.Sin(at))]);
+
+        AssertWrittenAndReadBack(new LayerStack(new GlobalMaxPool1D { KeepsAxes = keepsAxes }), series);
+        AssertWrittenAndReadBack(new LayerStack(new GlobalAvgPool1D { KeepsAxes = keepsAxes }), series);
+        AssertWrittenAndReadBack(new LayerStack(new GlobalMaxPool2D { KeepsAxes = keepsAxes }), images);
+        AssertWrittenAndReadBack(new LayerStack(new GlobalAvgPool2D { KeepsAxes = keepsAxes }), images);
+        AssertWrittenAndReadBack(new LayerStack(new GlobalMaxPool3D { KeepsAxes = keepsAxes }), volumes);
+        AssertWrittenAndReadBack(new LayerStack(new GlobalAvgPool3D { KeepsAxes = keepsAxes }), volumes);
+    }
+
+    [Fact]
+    public void ASettingThatHoldsItsDefault_IsLeftOutOfTheFile_SoOnlyWhatIsSaidIsWritten()
+    {
+        var keeping = Written(new LayerStack(new AvgPool2D(new Window(2, 2)) { CountsPadding = true }, new GlobalMaxPool2D { KeepsAxes = true }), new MeanSquaredError());
+        var leaving = Written(new LayerStack(new AvgPool2D(new Window(2, 2)), new GlobalMaxPool2D()), new MeanSquaredError());
+        var padded = Written(new LayerStack(new Conv1D(1, 1, new Window1D(2) { PaddingMode = PaddingMode.Causal }, new RandomStream(9).Draw("initialise:test", 0, 0))), new MeanSquaredError());
+
+        Assert.Contains("\"countsPadding\": true", keeping, StringComparison.Ordinal);
+        Assert.Contains("\"keepsAxes\": true", keeping, StringComparison.Ordinal);
+        Assert.DoesNotContain("countsPadding", leaving, StringComparison.Ordinal);
+        Assert.DoesNotContain("keepsAxes", leaving, StringComparison.Ordinal);
+        Assert.Contains("\"padding\": \"causal\"", padded, StringComparison.Ordinal);
+    }
+
+    // The stack written and read back is the same stack to the last bit, and answers a batch as it did.
+    private void AssertWrittenAndReadBack(LayerStack network, Tensor batch)
+    {
+        var read = Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(Written(network, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn()).Network);
+
+        Assert.Equal(network.Layers.Select(layer => layer.GetType()), read.Layers.Select(layer => layer.GetType()));
+        Assert.Equal(Bits(network), Bits(read));
+        Assert.Equal(
+            network.Forward(batch, Pass.Evaluation(_backend)).Values.ToArray(),
+            read.Forward(batch, Pass.Evaluation(_backend)).Values.ToArray());
+    }
+
+    [Fact]
     public void AConvolutionInANetworksPartOfTheFirstVersion_IsReadWithTheBorderItStates()
     {
         // 0.4.0 wrote every window's border as the number of rows and columns on each side, in the first version's part.
@@ -614,8 +696,9 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         var catalog = NetworkCatalog.BuiltIn();
 
         Assert.Equal(
-            ["adam", "adamw", "batchNorm", "binaryCrossEntropy", "constant", "conv2d", "cosineDecay", "crossEntropy", "dense", "dropout", "earthMoversDistance",
-             "exponentialDecay", "flatten", "layerNorm", "linearWarmup", "meanSquaredError", "nadam", "relu", "reshape", "rmsprop", "sgd", "sigmoid", "stack", "stepDecay", "tanh"],
+            ["adam", "adamw", "avgpool1d", "avgpool2d", "avgpool3d", "batchNorm", "binaryCrossEntropy", "constant", "conv1d", "conv2d", "conv3d", "cosineDecay", "crossEntropy", "dense",
+             "dropout", "earthMoversDistance", "exponentialDecay", "flatten", "globalavgpool1d", "globalavgpool2d", "globalavgpool3d", "globalmaxpool1d", "globalmaxpool2d", "globalmaxpool3d", "layerNorm", "linearWarmup", "maxpool1d", "maxpool2d",
+             "maxpool3d", "meanSquaredError", "nadam", "relu", "reshape", "rmsprop", "sgd", "sigmoid", "spatialdropout1d", "spatialdropout2d", "spatialdropout3d", "stack", "stepDecay", "tanh"],
             catalog.Names.Order(StringComparer.Ordinal));
         Assert.Throws<ArgumentException>(() => catalog.Register<Dense>());
     }

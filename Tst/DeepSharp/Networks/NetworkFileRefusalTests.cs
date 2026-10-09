@@ -548,7 +548,7 @@ public class NetworkFileRefusalTests
     }
 
     [Theory]
-    [InlineData("\"padding\": \"valid\"", "\"padding\"", "'padding' is a whole number, or 'same', here.")]
+    [InlineData("\"padding\": \"valid\"", "\"padding\"", "'padding' is a whole number, 'same' or 'causal', here.")]
     [InlineData("\"padding\": 1, \"dilation\": 2", "\"dilation\"", "'dilation' is not a setting of 'conv2d'.")]
     [InlineData("\"padding\": 1, \"groups\": 2", "\"groups\"", "'groups' is not a setting of 'conv2d'.")]
     [InlineData("\"padding\": 1, \"strides\": [1, 2]", "\"strides\"", "'strides' is not a setting of 'conv2d'.")]
@@ -561,8 +561,27 @@ public class NetworkFileRefusalTests
         Assert.Contains(Place(text, at, message), NetworkRefused(text).Faults);
     }
 
+    [Theory]
+    [InlineData("""{"kind": "conv1d", "inChannels": 2, "outChannels": 2, "length": 3, "stride": 1, "padding": 0, "dilation": 2}""", "\"dilation\"", "'dilation' is not a setting of 'conv1d'.")]
+    [InlineData("""{"kind": "conv1d", "inChannels": 2, "outChannels": 2, "length": 3, "stride": 1, "padding": "valid"}""", "\"padding\"", "'padding' is a whole number, 'same' or 'causal', here.")]
+    [InlineData("""{"kind": "conv3d", "inChannels": 2, "outChannels": 2, "height": 3, "width": 3, "stride": 1, "padding": 0}""", "{\"kind\": \"conv3d\"", "'depth' is missing here: it is a whole number.")]
+    [InlineData("""{"kind": "conv3d", "inChannels": 2, "outChannels": 2, "depth": 3, "height": 3, "width": 3, "stride": 1.5, "padding": 0}""", "\"stride\"", "'stride' is a whole number here.")]
+    [InlineData("""{"kind": "maxpool2d", "height": 2, "width": 2, "stride": 2, "padding": "valid"}""", "\"padding\"", "'padding' is a whole number, 'same' or 'causal', here.")]
+    [InlineData("""{"kind": "maxpool3d", "depth": 2, "height": 2, "width": 2, "stride": 2, "padding": 0, "countsPadding": true}""", "\"countsPadding\"", "'countsPadding' is not a setting of 'maxpool3d'.")]
+    [InlineData("""{"kind": "avgpool1d", "length": 2, "stride": 2, "padding": 0, "countsPadding": "yes"}""", "\"countsPadding\"", "'countsPadding' is true or false here.")]
+    [InlineData("""{"kind": "globalavgpool2d", "keepsAxes": 3}""", "\"keepsAxes\"", "'keepsAxes' is true or false here.")]
+    [InlineData("""{"kind": "globalmaxpool1d", "axes": 1}""", "\"axes\"", "'axes' is not a setting of 'globalmaxpool1d'.")]
+    [InlineData("""{"kind": "spatialdropout2d", "rate": 1.5}""", "{\"kind\": \"spatialdropout2d\"", "A dropout leaves out a share of the values, from nothing to below one.")]
+    [InlineData("""{"kind": "spatialdropout3d"}""", "{\"kind\": \"spatialdropout3d\"}", "'rate' is missing here: it is a number.")]
+    public void ALayerThatWalksAWindowOrDropsChannels_WrittenWrongly_IsRefusedAtTheSettingItCannotRead(string layer, string at, string message)
+    {
+        var text = Stack(layer);
+
+        Assert.Contains(Place(text, at, message), NetworkRefused(text).Faults);
+    }
+
     [Fact]
-    public void APoolingLayer_IsNoKindThisLibraryKnows_AndIsRefusedWhereItStands()
+    public void AKindNamedAsAnotherFrameworkNamesIt_IsNoKindThisLibraryKnows_AndIsRefusedWhereItStands()
     {
         var text = Stack("""{"kind": "maxPooling2d", "height": 2, "width": 2}""");
 

@@ -69,6 +69,20 @@ public static class TensorOperandExtensions
         /// <exception cref="ArgumentException">It is not a matrix.</exception>
         public void RequireMatrix(string operation) => Matrix(matrix, operation, nameof(matrix));
 
+        /// <summary>What <see cref="ITensorBackend.FirstLargest"/> asks of its tensor: a matrix whose rows hold a value at least.</summary>
+        /// <param name="operation">The operation's name, for the refusal's words.</param>
+        /// <exception cref="ArgumentNullException">It is not handed.</exception>
+        /// <exception cref="ArgumentException">It is not a matrix, or its rows hold no value.</exception>
+        public void RequireRowsToPickFrom(string operation)
+        {
+            Matrix(matrix, operation, nameof(matrix));
+
+            if (matrix.Shape[1] < 1)
+            {
+                throw new ArgumentException($"{operation} picks one value of each row, and a {matrix.Shape} matrix has rows of none.", nameof(matrix));
+            }
+        }
+
         /// <summary>What <see cref="ITensorBackend.AddRow"/> asks of its tensors: a matrix, and a row as long as it is wide.</summary>
         /// <param name="row">The row.</param>
         /// <exception cref="ArgumentNullException">Either is not handed.</exception>
@@ -196,13 +210,19 @@ public static class TensorOperandExtensions
         /// <remarks>The one rule for the window, whether a convolution is being built or its window is being walked.</remarks>
         internal void RequireStanding()
         {
-            if (window.Height < 1 || window.Width < 1 || window.Stride < 1 || window.Padding < 0)
+            if (window.Height < 1 || window.Width < 1 || window.Stride < 1 || window.Padding < 0
+                || (window.Border is { } sides && (sides.Top < 0 || sides.Bottom < 0 || sides.Left < 0 || sides.Right < 0)))
             {
                 throw new ArgumentException(
                     $"A {window} cannot stand anywhere: its sides and its stride are at least one, and its border at least nothing.", nameof(window));
             }
 
-            if (window.PaddingMode == PaddingMode.Same && window.Padding != 0)
+            if (window.Border is not null && (window.Padding != 0 || window.PaddingMode != PaddingMode.Stated))
+            {
+                throw new ArgumentException($"A {window} states its border for each side, and cannot be given a padding or a way to work one out besides.", nameof(window));
+            }
+
+            if (window.PaddingMode != PaddingMode.Stated && window.Padding != 0)
             {
                 throw new ArgumentException(
                     string.Create(CultureInfo.InvariantCulture, $"A {window} works its border out from each image it stands on, and cannot be given one of {window.Padding} besides."),

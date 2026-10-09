@@ -46,6 +46,8 @@ internal class NotingBackend(ITensorBackend engine) : ITensorBackend
 
     public Tensor Positive(Tensor values) => Noted(nameof(Positive), engine.Positive(values));
 
+    public Tensor FirstLargest(Tensor matrix) => Noted(nameof(FirstLargest), engine.FirstLargest(matrix));
+
     public Tensor Tanh(Tensor values) => Noted(nameof(Tanh), engine.Tanh(values));
 
     public Tensor Sigmoid(Tensor values) => Noted(nameof(Sigmoid), engine.Sigmoid(values));

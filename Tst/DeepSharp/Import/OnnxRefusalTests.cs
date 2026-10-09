@@ -30,11 +30,57 @@ public class OnnxRefusalTests
 
     private const string Batches = "StatefulPartitionedCall/sequential_1_1/";
 
-    private const string Operators = "an ONNX graph is read here when each of its nodes is a Gemm, MatMul, Add, Conv, BatchNormalization, LayerNormalization, Flatten, Reshape, Relu, Tanh, Sigmoid or Softmax, or an Identity, a Cast, a Transpose or a Constant that hands a value on.";
+    // The networks of Fixtures/onnx-spatial-fixtures.py, exported by the TorchScript exporter, and its borders written by hand.
+    private const string SeriesNet = "onnx-series-torchscript.onnx";
+
+    private const string SeriesDefault = "onnx-series.onnx";
+
+    private const string ImageNet = "onnx-image-torchscript.onnx";
+
+    private const string VolumeNet = "onnx-volume-torchscript.onnx";
+
+    // What the default exporter writes of a pooling of every place into one: a ReduceMean or a ReduceMax, an Unsqueeze and a Squeeze
+    // round it along a series.
+    private const string SeriesReduced = "onnx-series-global-average-default.onnx";
+
+    private const string ImageReduced = "onnx-image-global-average-default.onnx";
+
+    private const string VolumeReduced = "onnx-volume-global-average-default.onnx";
+
+    private const string ImageLargestReduced = "onnx-image-global-max-default.onnx";
+
+    private const string SeriesBorders = "onnx-borders-series.onnx";
+
+    private const string VolumeBorders = "onnx-borders-volume.onnx";
+
+    // The nodes, by name, the TorchScript exporter gave the trunk of each of those networks.
+    private const string FirstConv = "/0/0.0/Conv";
+
+    private const string MaxPooling = "/0/0.3/MaxPool";
+
+    private const string AveragePooling = "/0/0.5/AveragePool";
+
+    private const string LastConv = "/0/0.7/Conv";
+
+    private const string Operators = "an ONNX graph is read here when each of its nodes is a Gemm, MatMul, Add, Conv, MaxPool, AveragePool, GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape, Relu, Tanh, Sigmoid or Softmax, or an Identity, a Cast, a Transpose or a Constant that hands a value on.";
 
     private const string Pads = "and a window here pads every side alike, or as SAME_UPPER, TensorFlow's 'same'.";
 
+    private const string Takes = "and a network here takes rows (a batch of values), series (a batch of channels by steps), images (a batch of channels by rows by columns) or volumes (a batch of channels by planes by rows by columns).";
+
+    private const string NotAWindow = "and a convolution here slides a window along a series, an image or a volume: channels out by channels in by steps, or by rows by columns, or by planes by rows by columns.";
+
+    private const string Overhang = "it lets its window overhang the end of an axis, ceil_mode 1, and a window here stands only where it fits whole.";
+
+    private const string Neighbours = "and a window here covers neighbouring places.";
+
+    private const string Largest = "and a max pooling here gives the largest values alone.";
+
     private const string Stack = "and a network here is a stack: each layer takes the value the layer before it made";
+
+    private const string Unsqueezed = $"node 'node_unsqueeze' (Unsqueeze): 'Unsqueeze' is no operator a network here is built of: {Operators}";
+
+    private const string Squeezed = $"node 'node_squeeze' (Squeeze): 'Squeeze' is no operator a network here is built of: {Operators}";
 
     private const string NoInput = "and a network here takes one, the batch of its examples.";
 
@@ -70,10 +116,10 @@ public class OnnxRefusalTests
         ["an input of doubles"] = new(Titanic, model => model.Graph.Input[0].Type.TensorType.ElemType = 11, "input 'passengers': it takes DOUBLE values, and a network here takes single-precision numbers, FLOAT."),
         ["an input that is no tensor"] = new(Titanic, model => model.Graph.Input[0].Type = new TypeProto { SequenceType = new TypeProto.Types.Sequence() }, "input 'passengers': it takes UNDEFINED values, and a network here takes single-precision numbers, FLOAT."),
         ["an input of no type"] = new(Titanic, model => model.Graph.Input[0].Type = null, "input 'passengers': it takes UNDEFINED values, and a network here takes single-precision numbers, FLOAT."),
-        ["an input of no shape"] = new(Titanic, model => model.Graph.Input[0].Type.TensorType.Shape = null, "input 'passengers': it takes a batch of rank 0, [], and a network here takes rows — a batch of values — or images — a batch of channels by rows by columns."),
+        ["an input of no shape"] = new(Titanic, model => model.Graph.Input[0].Type.TensorType.Shape = null, $"input 'passengers': it takes a batch of rank 0, [], {Takes}"),
         ["a length of nothing"] = new(Titanic, model => model.Graph.Input[0].Type.TensorType.Shape.Dim[1].DimValue = 0, "input 'passengers': its shape, [2, 0], does not state every length of an example, and a network here is built for examples of one shape."),
         ["a length too long"] = new(Titanic, model => model.Graph.Input[0].Type.TensorType.Shape.Dim[1].DimValue = 3000000000, "input 'passengers': its shape, [2, 3000000000], does not state every length of an example, and a network here is built for examples of one shape."),
-        ["an input of rank three"] = new(Titanic, model => model.Graph.Input[0].Type.TensorType.Shape.Dim.Add(new TensorShapeProto.Types.Dimension { DimValue = 1 }), "input 'passengers': it takes a batch of rank 3, [2, 14, 1], and a network here takes rows — a batch of values — or images — a batch of channels by rows by columns."),
+        ["an input of rank six"] = new(Titanic, model => model.Graph.Input[0].Type.TensorType.Shape.Dim.Add(Enumerable.Repeat(new TensorShapeProto.Types.Dimension { DimValue = 1 }, 4)), $"input 'passengers': it takes a batch of rank 6, [2, 14, 1, 1, 1, 1], {Takes}"),
         ["a length named"] = new(Titanic, model => model.Graph.Input[0].Type.TensorType.Shape.Dim[1] = new TensorShapeProto.Types.Dimension { DimParam = "features" }, "input 'passengers': its shape, [2, features], does not state every length of an example, and a network here is built for examples of one shape."),
         ["a length left out"] = new(Titanic, model => model.Graph.Input[0].Type.TensorType.Shape.Dim[1] = new TensorShapeProto.Types.Dimension(), "input 'passengers': its shape, [2, ?], does not state every length of an example, and a network here is built for examples of one shape."),
         ["two outputs"] = new(Titanic, model => model.Graph.Output.Add(new ValueInfoProto { Name = "extra" }), "graph 'main_graph': it gives 2 values, and a network here gives one."),
@@ -174,11 +220,35 @@ public class OnnxRefusalTests
         ["a layer normalisation of images with their channels last"] = new(TensorFlow, model => AfterTheLastTranspose(model, "LayerNormalization", 2), "node 'normalised' (LayerNormalization): it normalises an image, and a layer normalisation here normalises the values of a row."),
 
         // A convolution.
-        ["a kernel along one axis"] = new(Images, model =>
+        ["a kernel for no window"] = new(Images, model =>
+        {
+            model.Initializer("onnx::Conv_29").Dims.Clear();
+            model.Initializer("onnx::Conv_29").Dims.Add([4, 2]);
+        }, $"node '/0/Conv' (Conv): its kernel, 'onnx::Conv_29', is written as 4x2, {NotAWindow}"),
+        ["a kernel for a window of four axes"] = new(Images, model =>
+        {
+            model.Initializer("onnx::Conv_29").Dims.Clear();
+            model.Initializer("onnx::Conv_29").Dims.Add([4, 2, 1, 1, 1, 1]);
+        }, $"node '/0/Conv' (Conv): its kernel, 'onnx::Conv_29', is written as 4x2x1x1x1x1, {NotAWindow}"),
+        ["a kernel along a series with the settings of an image"] = new(Images, model =>
         {
             model.Initializer("onnx::Conv_29").Dims.Clear();
             model.Initializer("onnx::Conv_29").Dims.Add([4, 2, 6]);
-        }, "node '/0/Conv' (Conv): its kernel, 'onnx::Conv_29', is written as 4x2x6, and a convolution here slides a window along an image's rows and columns: channels out by channels in by rows by columns."),
+        }, string.Join(
+            Environment.NewLine,
+            "node '/0/Conv' (Conv): its 'strides' is written as [1, 1], and a convolution along a series writes one there.",
+            "node '/0/Conv' (Conv): its 'dilations' is written as [1, 1], and a convolution along a series writes one there.",
+            $"node '/0/Conv' (Conv): it pads [1, 1, 1, 1] — steps before, then after — {Pads}")),
+        ["a kernel along a series for the images reaching it"] = new(Images, model =>
+        {
+            model.Initializer("onnx::Conv_29").Dims.Clear();
+            model.Initializer("onnx::Conv_29").Dims.Add([4, 2, 6]);
+            model.Node("/0/Conv").SetWholes("strides", 1);
+            model.Node("/0/Conv").SetWholes("dilations", 1);
+            model.Node("/0/Conv").SetWholes("pads", 1, 1);
+        }, "graph 'main_graph': This network cannot be lowered at 8x6x2: word 1, conv1d, takes each example as a series of steps and channels, and each reaching it is 8x6x2. (Parameter 'input')"),
+        ["two strides for a volume"] = new(VolumeNet, model => model.Node(FirstConv).SetWholes("strides", 1, 1), $"node '{FirstConv}' (Conv): its 'strides' is written as [1, 1], and a convolution through a volume writes three there."),
+        ["pads through a volume that are not 'same' for the volume"] = new(VolumeBorders, model => model.Node("averagepool_3").SetWholes("pads", 1, 0, 1, 1, 1, 2), "node 'averagepool_3' (AveragePool): it pads [1, 0, 1, 1, 1, 2] — planes, rows and columns before, then after — where TensorFlow's 'same' pads the 5x4x3 volumes reaching it [1, 0, 1, 1, 1, 1], and a window here pads every side alike, or as that 'same'."),
         ["one stride for two axes"] = new(Images, model => model.Node("/0/Conv").SetWholes("strides", 1), "node '/0/Conv' (Conv): its 'strides' is written as [1], and a convolution over an image writes a pair there."),
         ["a stride too long"] = new(Images, model => model.Node("/0/Conv").SetWholes("strides", 4294967296, 1), "node '/0/Conv' (Conv): its 'strides' is written as [4294967296, 1], which is not what ONNX writes there."),
         ["two pads for four sides"] = new(Images, model => model.Node("/0/Conv").SetWholes("pads", 1, 1), $"node '/0/Conv' (Conv): it pads [1, 1] — rows and columns before, then after — {Pads}"),
@@ -192,6 +262,128 @@ public class OnnxRefusalTests
             model.Initializer("onnx::Conv_29").Dims.Clear();
             model.Initializer("onnx::Conv_29").Dims.Add([4, 2, 11, 2]);
         }, "graph 'main_graph': This network cannot be lowered at 8x6x2: word 1, conv2d, slides a window 11x2 (stride 1, padding 1) over each example, and an example 8x6x2 is smaller than it. (Parameter 'input')"),
+
+        // A convolution along a series, and through a volume.
+        ["a convolution along a series dilated"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("dilations", 2), $"node '{FirstConv}' (Conv): its window is dilated by 2, {Neighbours}"),
+        ["a convolution along a series in groups"] = new(SeriesNet, model => model.Node(FirstConv).SetWhole("group", 3), $"node '{FirstConv}' (Conv): it splits its channels into 3 groups, and a convolution here takes every channel of a place at once."),
+        ["two strides for a series"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("strides", 2, 2), $"node '{FirstConv}' (Conv): its 'strides' is written as [2, 2], and a convolution along a series writes one there."),
+        ["two dilations for a series"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("dilations", 1, 1), $"node '{FirstConv}' (Conv): its 'dilations' is written as [1, 1], and a convolution along a series writes one there."),
+        ["one pad for a series"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("pads", 1), $"node '{FirstConv}' (Conv): it pads [1] — steps before, then after — {Pads}"),
+        ["pads at a stride of two that are no 'same' at all for a series"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("pads", 0, 2), $"node '{FirstConv}' (Conv): it pads [0, 2] — steps before, then after — {Pads}"),
+        ["pads at a stride of two that are not 'same' for the series"] = new(SeriesBorders, model => model.Node("averagepool_3").SetWholes("pads", 1, 2), "node 'averagepool_3' (AveragePool): it pads [1, 2] — steps before, then after — where TensorFlow's 'same' pads the 12 series reaching it [0, 1], and a window here pads every side alike, or as that 'same'."),
+        ["a convolution through a volume striding otherwise on each axis"] = new(VolumeNet, model => model.Node(FirstConv).SetWholes("strides", 2, 1, 1), $"node '{FirstConv}' (Conv): it strides 2 deep, 1 down and 1 across, and a window here walks one stride deep, down and across alike."),
+        ["a convolution through a volume dilated"] = new(VolumeNet, model => model.Node(FirstConv).SetWholes("dilations", 1, 2, 1), $"node '{FirstConv}' (Conv): its window is dilated by 1 deep, 2 down and 1 across, {Neighbours}"),
+        ["a convolution through a volume padded otherwise than alike or as 'same'"] = new(VolumeNet, model => model.Node(FirstConv).SetWholes("pads", 0, 1, 2, 1, 1, 2), $"node '{FirstConv}' (Conv): it pads [0, 1, 2, 1, 1, 2] — planes, rows and columns before, then after — {Pads}"),
+        ["pads through a volume at a stride of one that are not 'same'"] = new(VolumeNet, model => model.Node(LastConv).SetWholes("pads", 0, 0, 0, 1, 0, 0), $"node '{LastConv}' (Conv): it pads [0, 0, 0, 1, 0, 0] — planes, rows and columns before, then after — {Pads}"),
+
+        // Poolings.
+        ["a max pooling that rounds up"] = new(ImageNet, model => model.Node(MaxPooling).SetWhole("ceil_mode", 1), $"node '{MaxPooling}' (MaxPool): {Overhang}"),
+        ["an average pooling that rounds up"] = new(SeriesNet, model => model.Node(AveragePooling).SetWhole("ceil_mode", 1), $"node '{AveragePooling}' (AveragePool): {Overhang}"),
+        ["a max pooling through a volume dilated"] = new(VolumeNet, model => model.Node("/0/0.3/MaxPool").SetWholes("dilations", 2, 2, 2), $"node '/0/0.3/MaxPool' (MaxPool): its window is dilated by 2 deep, 2 down and 2 across, {Neighbours}"),
+        ["an average pooling over an image dilated"] = new(ImageNet, model => model.Node(AveragePooling).SetWholes("dilations", 1, 2), $"node '{AveragePooling}' (AveragePool): its window is dilated by 1 down and 2 across, {Neighbours}"),
+        ["a max pooling striding otherwise down than across"] = new(ImageNet, model => model.Node(MaxPooling).SetWholes("strides", 2, 1), $"node '{MaxPooling}' (MaxPool): it strides 2 down and 1 across, and a window here walks one stride down and across alike."),
+        ["an average pooling through a volume striding otherwise on each axis"] = new(VolumeNet, model => model.Node("/0/0.6/AveragePool").SetWholes("strides", 2, 1, 2), "node '/0/0.6/AveragePool' (AveragePool): it strides 2 deep, 1 down and 2 across, and a window here walks one stride deep, down and across alike."),
+        ["a max pooling that numbers the places of its largest values by columns"] = new(SeriesDefault, model => model.Node("node_max_pool1d").SetWhole("storage_order", 1), $"node 'node_max_pool1d' (MaxPool): it numbers the places of its largest values column by column, storage_order 1, {Largest}"),
+        ["a max pooling whose places of the largest values are used"] = new(SeriesNet, model =>
+        {
+            model.Node("/0/0.3/MaxPool").Output.Add("indices");
+            model.Graph.Output.Add(new ValueInfoProto { Name = "indices" });
+        }, $"node '/0/0.3/MaxPool' (MaxPool): it gives the places of its largest values as a second value, 'indices', which the graph uses, {Largest}{Environment.NewLine}graph 'main_graph': it gives 2 values, and a network here gives one."),
+        ["a pooling with no window"] = new(ImageNet, model => model.Node(MaxPooling).Unset("kernel_shape"), $"node '{MaxPooling}' (MaxPool): its 'kernel_shape' is written as [], and a pooling here slides a window along one, two or three axes."),
+        ["a pooling with a window of four axes"] = new(ImageNet, model => model.Node(MaxPooling).SetWholes("kernel_shape", 2, 2, 2, 2), $"node '{MaxPooling}' (MaxPool): its 'kernel_shape' is written as [2, 2, 2, 2], and a pooling here slides a window along one, two or three axes."),
+        ["two strides for a series pooling"] = new(SeriesNet, model => model.Node("/0/0.3/MaxPool").SetWholes("strides", 2, 2), "node '/0/0.3/MaxPool' (MaxPool): its 'strides' is written as [2, 2], and a pooling along a series writes one there."),
+        ["a pooling padded from the end at a stride of two over an even length"] = new(ImageNet, model => model.Node(MaxPooling).SetText("auto_pad", "SAME_LOWER"), $"node '{MaxPooling}' (MaxPool): it pads as SAME_LOWER, [1, 1, 0, 0] — rows and columns before, then after — where TensorFlow's 'same' pads the 12x10 images reaching it [0, 0, 1, 1], and a window here pads every side alike, or as that 'same'."),
+        ["a pooling padded as no one pads"] = new(ImageNet, model => model.Node(MaxPooling).SetText("auto_pad", "SIDEWAYS"), $"node '{MaxPooling}' (MaxPool): it pads as SIDEWAYS, {Pads}"),
+        ["a pooling through a volume padded from the end at a stride of two over an even length"] = new(VolumeBorders, model => model.Node("averagepool_1").SetText("auto_pad", "SAME_LOWER"), "node 'averagepool_1' (AveragePool): it pads as SAME_LOWER, [1, 1, 1, 1, 0, 0] — planes, rows and columns before, then after — where TensorFlow's 'same' pads the 9x8x6 volumes reaching it [1, 0, 0, 1, 1, 1], and a window here pads every side alike, or as that 'same'."),
+        ["a pooling window that stands nowhere"] = new(ImageNet, model => model.Node(MaxPooling).SetWholes("strides", 0, 0), $"node '{MaxPooling}' (MaxPool): A window 3x3 (stride 0, padding 1) cannot stand anywhere: its sides and its stride are at least one, and its border at least nothing. (Parameter 'window')"),
+        ["a pooling of images with their channels last"] = new(TensorFlow, model => Pooled(model, "MaxPool"), "node 'pooled' (MaxPool): it takes images with their channels after the batch, as ONNX's MaxPool does, and the images reaching it have them last."),
+        ["an average pooling of images with their channels last"] = new(TensorFlow, model => Pooled(model, "AveragePool"), "node 'pooled' (AveragePool): it takes images with their channels after the batch, as ONNX's AveragePool does, and the images reaching it have them last."),
+        ["a global pooling of images with their channels last"] = new(TensorFlow, model => Pooled(model, "GlobalAveragePool"), "node 'pooled' (GlobalAveragePool): it takes images with their channels after the batch, as ONNX's GlobalAveragePool does, and the images reaching it have them last."),
+        ["a global pooling of rows"] = new(Titanic, model => model.Node("/1/Relu").OpType = "GlobalMaxPool", $"node '/1/Relu' (GlobalMaxPool): {TakesImages("GlobalMaxPool")} a row of values."),
+        ["a pooling of rows"] = new(Titanic, model =>
+        {
+            model.Node("/1/Relu").OpType = "MaxPool";
+            model.Node("/1/Relu").SetWholes("kernel_shape", 2);
+        }, $"node '/1/Relu' (MaxPool): {TakesImages("MaxPool")} a row of values."),
+        ["a convolution of rows"] = new(Titanic, model => model.Node("/1/Relu").OpType = "Conv", $"node '/1/Relu' (Conv): {TakesImages("Conv")} a row of values."),
+        ["a pooling of images flattened into rows"] = new(Images, model =>
+        {
+            model.Node("/5/BatchNormalization").OpType = "AveragePool";
+            model.Node("/5/BatchNormalization").SetWholes("kernel_shape", 2);
+        }, $"node '/5/BatchNormalization' (AveragePool): {TakesImages("AveragePool")} an image flattened into a row."),
+
+        // A ReduceMean or a ReduceMax, which is read as the pooling of every place of each channel into one and as nothing else.
+        ["a reduce over the channels"] = new(ImageReduced, model => model.SetAxes("node_mean", 1), $"node 'node_mean' (ReduceMean): {Reduces("[1]", 4, "2, 3")}"),
+        ["a reduce over some of the places only"] = new(ImageLargestReduced, model => model.SetAxes("n0", -1), $"node 'n0' (ReduceMax): {Reduces("[-1]", 4, "2, 3")}"),
+        ["a reduce over the batch and the places"] = new(ImageReduced, model => model.SetAxes("node_mean", 0, 2, 3), $"node 'node_mean' (ReduceMean): {Reduces("[0, 2, 3]", 4, "2, 3")}"),
+        ["a reduce over the rows of a volume only"] = new(VolumeReduced, model => model.SetAxes("node_mean", 3), $"node 'node_mean' (ReduceMean): {Reduces("[3]", 5, "2, 3, 4")}"),
+        ["a reduce over an axis twice"] = new(ImageReduced, model => model.SetAxes("node_mean", 2, 2, 3), $"node 'node_mean' (ReduceMean): {Reduces("[2, 2, 3]", 4, "2, 3")}"),
+        ["a reduce that names no axes"] = new(ImageReduced, model => model.Node("node_mean").Input.RemoveAt(1), "node 'node_mean' (ReduceMean): it reduces over every axis when it names none, the batch and the channels among them, and a global pooling here reduces over the places of each channel alone."),
+        ["a reduce that names no axes and does nothing"] = new(ImageReduced, model =>
+        {
+            model.Node("node_mean").Input.RemoveAt(1);
+            model.Node("node_mean").SetWhole("noop_with_empty_axes", 1);
+        }, "node 'node_mean' (ReduceMean): it reduces over nothing when it names no axes, noop_with_empty_axes 1, and a global pooling here reduces over the places of each channel."),
+        ["a reduce that names its axes twice"] = new(ImageReduced, model => model.Node("node_mean").SetWholes("axes", 2, 3), "node 'node_mean' (ReduceMean): it says its axes as an input, 'val_12', and as an attribute, and ONNX writes them one way or the other."),
+        ["a reduce whose axes are numbers"] = new(ImageReduced, model => model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer("val_12"))] = OnnxFixtures.Floats("val_12", [2], 2, 3), "node 'node_mean' (ReduceMean): its axes, 'val_12', is written as FLOAT, and ONNX writes one as INT64."),
+        ["a reduce whose axis is too long"] = new(ImageReduced, model => model.SetAxes("node_mean", 4294967296, -2), "node 'node_mean' (ReduceMean): its axes, 'val_12', are written as [4294967296, -2], which is not what ONNX writes there."),
+        ["a reduce of rows"] = new(Titanic, model => model.Node("/1/Relu").OpType = "ReduceMean", $"node '/1/Relu' (ReduceMean): {TakesImages("ReduceMean")} a row of values."),
+        ["a reduce of another kind"] = new(ImageReduced, model => model.Node("node_mean").OpType = "ReduceSum", $"node 'node_mean' (ReduceSum): 'ReduceSum' is no operator a network here is built of: {Operators}"),
+
+        // The Unsqueeze and the Squeeze the default exporter writes round the pooling of a series are read as that pooling and as nothing else.
+        ["an unsqueeze of a series that no reduce follows"] = new(SeriesReduced, model =>
+        {
+            var reduce = model.Node("node_mean");
+            model.Graph.Node.Insert(model.Graph.Node.IndexOf(reduce), OnnxFixtures.NodeOf("Relu", "relu", ["unsqueeze"], "relued"));
+            reduce.Input[0] = "relued";
+        }, string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed)),
+        ["an unsqueeze along another axis"] = new(SeriesReduced, model => model.SetAxes("node_unsqueeze", 3), string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed)),
+        ["a squeeze along another axis"] = new(SeriesReduced, model =>
+        {
+            model.Graph.Initializer.Add(OnnxFixtures.Wholes("elsewhere", 3));
+            model.Node("node_squeeze").Input[1] = "elsewhere";
+        }, string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed)),
+        ["a pooling of a series between an unsqueeze and a squeeze that drops its axes"] = new(SeriesReduced, model => model.Node("node_mean").SetWhole("keepdims", 0), string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed)),
+        ["an unsqueezed value the graph gives too"] = new(SeriesReduced, model => model.Graph.Output.Add(new ValueInfoProto { Name = "unsqueeze" }), string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed, "graph 'main_graph': it gives 2 values, and a network here gives one.")),
+        ["a reduce that takes another value than the unsqueeze made"] = new(SeriesReduced, model => model.Node("node_mean").Input[0] = "conv1d_1", string.Join(Environment.NewLine, Unsqueezed, $"node 'node_mean' (ReduceMean): it takes 'conv1d_1', {Stack}, 'unsqueeze'.", Squeezed)),
+        ["a squeeze that takes another value than the reduce made"] = new(SeriesReduced, model => model.Node("node_squeeze").Input[0] = "unsqueeze", string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), $"node 'node_squeeze' (Squeeze): it takes 'unsqueeze', {Stack}, 'mean'.")),
+        ["a pooling of a series with no squeeze after it"] = new(SeriesReduced, model => model.Node("node_squeeze").OpType = "Relu", string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"))),
+        ["a reduced value the graph gives too"] = new(SeriesReduced, model => model.Graph.Output.Add(new ValueInfoProto { Name = "mean" }), string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed, "graph 'main_graph': it gives 2 values, and a network here gives one.")),
+        ["a pooling of a series cut off before its squeeze"] = new(SeriesReduced, model =>
+        {
+            while (model.Graph.Node[^1].Name != "node_mean")
+            {
+                model.Graph.Node.RemoveAt(model.Graph.Node.Count - 1);
+            }
+
+            model.Graph.Output[0].Name = "mean";
+        }, string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"))),
+        ["an unsqueeze and a squeeze round the pooling of an image"] = new(ImageReduced, model =>
+        {
+            var reduce = model.Node("node_mean");
+            var at = model.Graph.Node.IndexOf(reduce);
+            model.Graph.Initializer.Add(OnnxFixtures.Wholes("minus_two", -2));
+            model.Graph.Node.Insert(at, OnnxFixtures.NodeOf("Unsqueeze", "node_unsqueeze", ["conv2d_1", "minus_two"], "lifted"));
+            reduce.Input[0] = "lifted";
+            model.Graph.Node.Insert(at + 2, OnnxFixtures.NodeOf("Squeeze", "node_squeeze", ["mean", "minus_two"], "dropped"));
+            model.Node("node_Reshape_18").Input[0] = "dropped";
+        }, string.Join(Environment.NewLine, Unsqueezed, Squeezed)),
+
+        // A transpose of a series, which is no image.
+        ["a transpose of a series"] = new(SeriesNet, model =>
+        {
+            var turn = OnnxFixtures.NodeOf("Transpose", "turn", ["x"], "turned");
+            turn.SetWholes("perm", 0, 3, 1, 2);
+            model.Graph.Node.Insert(0, turn);
+            model.Node(FirstConv).Input[0] = "turned";
+        }, "node 'turn' (Transpose): it turns its value round by [0, 3, 1, 2], and a Transpose is read here as one that moves an image's channels after the batch, [0, 3, 1, 2], or last, [0, 2, 3, 1]."),
+        ["a transpose of a series to channels last"] = new(SeriesNet, model =>
+        {
+            var turn = OnnxFixtures.NodeOf("Transpose", "turn", ["x"], "turned");
+            turn.SetWholes("perm", 0, 2, 3, 1);
+            model.Graph.Node.Insert(0, turn);
+            model.Node(FirstConv).Input[0] = "turned";
+        }, "node 'turn' (Transpose): it turns its value round by [0, 2, 3, 1], and a Transpose is read here as one that moves an image's channels after the batch, [0, 3, 1, 2], or last, [0, 2, 3, 1]."),
 
         // The normalisations.
         ["a batch normalisation in training"] = new(Images, model => model.Node("/5/BatchNormalization").SetWhole("training_mode", 1), "node '/5/BatchNormalization' (BatchNormalization): it measures each batch as it answers, in training mode, and a batch normalisation here answers from its running statistics."),
@@ -293,7 +485,7 @@ public class OnnxRefusalTests
     public static TheoryData<string> Named => new(Cases.Keys);
 
     [Fact]
-    public void AStrideForEachAxis_ADilatedWindow_ChannelsInGroups_APaddingForEachAxis_PoolingAndALeakyRelu_AreEachRefusedAtTheirNode_AllAtOnce()
+    public void AStrideForEachAxis_ADilatedWindow_ChannelsInGroups_APaddingForEachAxis_APoolingThatRoundsUp_AndALeakyRelu_AreEachRefusedAtTheirNode_AllAtOnce()
     {
         using var graph = OnnxFixtures.Open("onnx-refused.onnx");
         var refused = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(graph));
@@ -304,7 +496,7 @@ public class OnnxRefusalTests
                 "node 'node_conv2d_1' (Conv): its window is dilated by 2 down and 2 across, and a window here covers neighbouring places.",
                 "node 'node_conv2d_2' (Conv): it splits its channels into 2 groups, and a convolution here takes every channel of a place at once.",
                 $"node 'node_conv2d_3' (Conv): it pads [1, 0, 1, 0] — rows and columns before, then after — {Pads}",
-                $"node 'node_max_pool2d' (MaxPool): 'MaxPool' is no operator a network here is built of: {Operators}",
+                $"node 'node_max_pool2d' (MaxPool): {Overhang}",
                 $"node 'node_leaky_relu' (LeakyRelu): 'LeakyRelu' is no operator a network here is built of: {Operators}",
             ],
             refused.Message.Split(Environment.NewLine));
@@ -351,7 +543,7 @@ public class OnnxRefusalTests
     public void WhatAGraphSays_ThatNoNetworkHereIsBuiltOf_IsRefusedWhereItSaysIt(string name)
     {
         var said = Cases[name];
-        var loss = said.Loss?.Invoke() ?? (said.File is Images or TensorFlow ? new MeanSquaredError() : (Loss)new BinaryCrossEntropy());
+        var loss = said.Loss?.Invoke() ?? (said.File is Titanic or Keras ? new BinaryCrossEntropy() : (Loss)new MeanSquaredError());
 
         var refused = Assert.Throws<FormatException>(() => new OnnxFile(loss).Read(OnnxFixtures.Edited(said.File, said.Edit)));
 
@@ -587,6 +779,36 @@ public class OnnxRefusalTests
         model.Graph.Node.Insert(model.Graph.Node.IndexOf(reshape), OnnxFixtures.NodeOf(op, "normalised", [$"{Converted}conv2d_1_2/BiasAdd__11:0", .. names], "normed"));
         reshape.Input[0] = "normed";
     }
+
+    // A pooling of the given operator after the TensorFlow graph's last transpose, which lays its images out with their
+    // channels last, and the convolution after that taking what the pooling made.
+    private static void Pooled(ModelProto model, string op)
+    {
+        var convolution = model.Node($"{Converted}conv2d_1_2/BiasAdd");
+        var last = OnnxFixtures.NodeOf("Transpose", "last", [$"{Converted}re_lu_1/Relu:0"], "lasted");
+        last.SetWholes("perm", 0, 2, 3, 1);
+
+        var pooling = OnnxFixtures.NodeOf(op, "pooled", ["lasted"], "pooled_output");
+
+        if (op != "GlobalAveragePool")
+        {
+            pooling.SetWholes("kernel_shape", 2, 2);
+        }
+
+        var at = model.Graph.Node.IndexOf(convolution);
+        model.Graph.Node.Insert(at, last);
+        model.Graph.Node.Insert(at + 1, pooling);
+        convolution.Input[0] = "pooled_output";
+    }
+
+    // What a ReduceMean or a ReduceMax is refused with for reducing over other axes than every place of each channel.
+    private static string Reduces(string written, int rank, string places) =>
+        $"it reduces over axes {written} of a value of {rank} axes, and a global pooling here reduces over every place of each channel and nothing else, axes [{places}].";
+
+    private static string Reduces(string node, string op, string written, int rank, string places) => $"node '{node}' ({op}): {Reduces(written, rank, places)}";
+
+    // How an operator over a series, an image or a volume is refused for taking anything else.
+    private static string TakesImages(string op) => $"it takes a series, an image or a volume with its channels after the batch, as ONNX's {op} does, and what reaches it is";
 
     // The flatten of the graph over images turned into a reshape into the target given.
     private static NodeProto Reshaped(ModelProto model, TensorProto target)

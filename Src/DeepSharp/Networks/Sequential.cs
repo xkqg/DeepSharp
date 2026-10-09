@@ -16,7 +16,7 @@ namespace DeepSharp.Networks;
 /// the draws a network written as code would take for the same place. Once lowered, nothing downstream knows which door
 /// the network came through: the loop, the file and the charts see one kind of network.
 /// </remarks>
-public sealed class Sequential
+public sealed partial class Sequential
 {
     private const string NoLayers = "This network has no layers yet: write them in before it is lowered.";
 
@@ -166,9 +166,9 @@ public sealed class Sequential
     public Sequential Conv2D(int filters, Window window)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
-        window.RequireStanding();
 
-        return Add(new ConvolutionWord(filters, window));
+        return Add(new ConvolutionWord(
+            "conv2d", "an image of rows, columns and channels", filters, new PlaneWalk(window), (channels, draws) => new Conv2D(channels, filters, window, draws)));
     }
 
     /// <summary>Lays each example out as one row of its values.</summary>
@@ -387,18 +387,6 @@ public sealed class Sequential
         public Shape After(Shape each) => Each;
 
         public Layer Make(Shape each, Draws draws) => new Reshape(Each);
-    }
-
-    private sealed record ConvolutionWord(int Filters, Window Window) : IWord
-    {
-        public string? Refusal(Shape each) =>
-            each.Rank != 3 ? $"conv2d, takes each example as an image of rows, columns and channels, and each reaching it is {each}."
-            : Window.RowsOver(each[0]) < 1 || Window.ColumnsOver(each[1]) < 1 ? $"conv2d, slides a {Window} over each example, and an example {each} is smaller than it."
-            : null;
-
-        public Shape After(Shape each) => new(Window.RowsOver(each[0]), Window.ColumnsOver(each[1]), Filters);
-
-        public Layer Make(Shape each, Draws draws) => new Conv2D(each[2], Filters, Window, draws);
     }
 
     private sealed record FlattenWord : IWord

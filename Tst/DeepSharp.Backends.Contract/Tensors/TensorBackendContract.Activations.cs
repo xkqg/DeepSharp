@@ -36,6 +36,49 @@ public abstract partial class TensorBackendContract
     }
 
     [Fact]
+    public void FirstLargest_IsOneWhereAValueIsTheLargestOfItsRow_AndNoughtElsewhere()
+    {
+        var picked = _backend.FirstLargest(Tensor.From(new Shape(3, 3), [1f, 3f, 2f, -1f, -2f, -3f, 4f, 0f, 9f]));
+
+        Assert.Equal(new Shape(3, 3), picked.Shape);
+        Assert.Equal<float[]>([0f, 1f, 0f, 1f, 0f, 0f, 0f, 0f, 1f], picked.Values.ToArray());
+    }
+
+    [Fact]
+    public void FirstLargest_PicksTheFirstOfValuesThatTie_SoAGradientGoesToOnePlaceAlone()
+    {
+        var picked = _backend.FirstLargest(Tensor.From(new Shape(3, 4), [2f, 2f, 2f, 2f, 1f, 5f, 5f, 0f, -1f, -1f, -3f, -1f]));
+
+        Assert.Equal<float[]>([1f, 0f, 0f, 0f, 0f, 1f, 0f, 0f, 1f, 0f, 0f, 0f], picked.Values.ToArray());
+    }
+
+    [Fact]
+    public void FirstLargest_TakesAValueThatIsNotANumberAsTheLargest_AsPyTorchsArgmaxDoes()
+    {
+        var picked = _backend.FirstLargest(Tensor.From(new Shape(3, 3), [1f, float.NaN, 5f, float.NaN, float.NaN, 7f, float.NegativeInfinity, float.NegativeInfinity, float.NegativeInfinity]));
+
+        Assert.Equal<float[]>([0f, 1f, 0f, 1f, 0f, 0f, 1f, 0f, 0f], picked.Values.ToArray());
+    }
+
+    [Fact]
+    public void FirstLargest_OfARowOfOneValue_IsOne_AndOfNoRows_IsNoRows()
+    {
+        Assert.Equal<float[]>([1f, 1f, 1f], _backend.FirstLargest(Tensor.From(new Shape(3, 1), [-5f, 0f, 9f])).Values.ToArray());
+        Assert.Equal(new Shape(0, 4), _backend.FirstLargest(Tensor.Zeros(new Shape(0, 4))).Shape);
+    }
+
+    [Fact]
+    public void FirstLargest_MultipliedIntoTheValues_AndAddedUpAlongTheRow_IsTheLargestOfEachRow()
+    {
+        var values = Tensor.From(new Shape(2, 4), [3f, -1f, 3f, 2f, -4f, -2f, -9f, -2f]);
+
+        var largest = _backend.MatMul(_backend.Multiply(values, _backend.FirstLargest(values)), _backend.Fill(new Shape(4, 1), 1f));
+
+        Assert.Equal(new Shape(2, 1), largest.Shape);
+        Assert.Equal<float[]>([3f, -2f], largest.Values.ToArray());
+    }
+
+    [Fact]
     public void Tanh_IsPyTorchsTanh()
     {
         AssertClose([-0.9640275835990906, -0.46211716532707214, 0.0, 0.24491865932941437, 0.7615941762924194, 0.9950547814369202], _backend.Tanh(Mixed()));
@@ -121,7 +164,7 @@ public abstract partial class TensorBackendContract
     public void TheElementwiseOperations_LeaveTheirInputAsItWas()
     {
         var values = Mixed();
-        Func<Tensor, Tensor>[] operations = [_backend.Relu, _backend.Positive, _backend.Tanh, _backend.Sigmoid, _backend.Exp, _backend.Softplus, _backend.LogSoftmax];
+        Func<Tensor, Tensor>[] operations = [_backend.Relu, _backend.Positive, _backend.Tanh, _backend.Sigmoid, _backend.Exp, _backend.Softplus, _backend.LogSoftmax, _backend.FirstLargest];
 
         foreach (var result in operations.Select(operation => operation(values)))
         {

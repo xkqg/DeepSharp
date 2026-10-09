@@ -62,13 +62,13 @@ internal abstract class TurnedSlot(string path) : TorchSlot(path)
 }
 
 /// <summary>
-/// A vector — a bias, a normalisation's scale, shift or running statistics — kept alike, but for the features of an image a
-/// flatten made rows of, which PyTorch orders channel by channel.
+/// A vector — a bias, a normalisation's scale, shift or running statistics — kept alike, but for the features of a series, an
+/// image or a volume a flatten made rows of, which PyTorch orders channel by channel.
 /// </summary>
 /// <param name="path">The slot's path.</param>
 /// <param name="length">How many numbers it holds.</param>
-/// <param name="order">The image a flatten made its features of; nothing for features as they come.</param>
-internal sealed class VectorSlot(string path, int length, ImageOrder? order) : TurnedSlot(path)
+/// <param name="order">The series, image or volume a flatten made its features of; nothing for features as they come.</param>
+internal sealed class VectorSlot(string path, int length, ChannelOrder? order) : TurnedSlot(path)
 {
     /// <inheritdoc />
     protected override Shape Kept => new(length);
@@ -83,12 +83,12 @@ internal sealed class VectorSlot(string path, int length, ImageOrder? order) : T
 
 /// <summary>
 /// A linear layer's weights: PyTorch keeps them outputs by inputs, and here they are inputs by outputs — each input, when a
-/// flatten made the inputs of an image, found where PyTorch's channel by channel order puts it.
+/// flatten made the inputs of a series, an image or a volume, found where PyTorch's channel by channel order puts it.
 /// </summary>
 /// <param name="path">The slot's path.</param>
 /// <param name="dense">The layer.</param>
-/// <param name="order">The image a flatten made its inputs of; nothing for inputs as they come.</param>
-internal sealed class LinearSlot(string path, Dense dense, ImageOrder? order) : TurnedSlot(path)
+/// <param name="order">The series, image or volume a flatten made its inputs of; nothing for inputs as they come.</param>
+internal sealed class LinearSlot(string path, Dense dense, ChannelOrder? order) : TurnedSlot(path)
 {
     /// <inheritdoc />
     protected override Shape Kept => new(dense.Outputs, dense.Inputs);
@@ -117,15 +117,16 @@ internal sealed class LinearSlot(string path, Dense dense, ImageOrder? order) : 
 }
 
 /// <summary>
-/// A convolution's kernel: PyTorch keeps it channels out, channels in, rows, columns; here it is the window's rows, columns
-/// and channels in, by the channels out — the same numbers, nothing flipped.
+/// A convolution's kernel, along one, two or three axes: PyTorch keeps it channels out, channels in, then the window's steps,
+/// or rows and columns, or planes, rows and columns; here it is the window's places and then the channels in, by the channels
+/// out — the same numbers, nothing flipped.
 /// </summary>
 /// <param name="path">The slot's path.</param>
 /// <param name="convolution">The layer.</param>
-internal sealed class KernelSlot(string path, Conv2D convolution) : TurnedSlot(path)
+internal sealed class KernelSlot(string path, Convolution convolution) : TurnedSlot(path)
 {
     /// <inheritdoc />
-    protected override Shape Kept => new(convolution.OutChannels, convolution.InChannels, convolution.Window.Height, convolution.Window.Width);
+    protected override Shape Kept => new([convolution.OutChannels, convolution.InChannels, .. convolution.WindowSides()]);
 
     /// <inheritdoc />
     protected override Shape Slot => convolution.Weight.Value.Shape;
@@ -133,24 +134,48 @@ internal sealed class KernelSlot(string path, Conv2D convolution) : TurnedSlot(p
     /// <inheritdoc />
     protected override float[] Turned(float[] kept)
     {
-        var (outputs, inputs, rows, columns) = (convolution.OutChannels, convolution.InChannels, convolution.Window.Height, convolution.Window.Width);
+        // The window's places are one run of numbers in both layouts, in the same order: first axis slowest, last axis fastest.
+        var (outputs, inputs, places) = (convolution.OutChannels, convolution.InChannels, convolution.Weight.Value.Shape[0] / convolution.InChannels);
         var turned = new float[kept.Length];
 
         for (var output = 0; output < outputs; output++)
         {
             for (var input = 0; input < inputs; input++)
             {
-                for (var row = 0; row < rows; row++)
+                for (var place = 0; place < places; place++)
                 {
-                    for (var column = 0; column < columns; column++)
-                    {
-                        turned[(((((row * columns) + column) * inputs) + input) * outputs) + output] = kept[(((((output * inputs) + input) * rows) + row) * columns) + column];
-                    }
+                    turned[(((place * inputs) + input) * outputs) + output] = kept[(((output * inputs) + input) * places) + place];
                 }
             }
         }
 
         return turned;
+    }
+}
+
+/// <summary>What the reader asks of a convolution that the layers themselves do not say.</summary>
+internal static class ConvolutionWindowExtensions
+{
+    extension(Convolution convolution)
+    {
+        /// <summary>The sides of its window in the order PyTorch keeps them: the steps; the rows and columns; the planes, rows and columns.</summary>
+        public int[] WindowSides()
+        {
+            if (convolution is Conv1D series)
+            {
+                return [series.Window.Length];
+            }
+
+            if (convolution is Conv2D image)
+            {
+                return [image.Window.Height, image.Window.Width];
+            }
+
+            // A convolution is along one, two or three axes, and no other kind can be written.
+            var volume = ((Conv3D)convolution).Window;
+
+            return [volume.Depth, volume.Height, volume.Width];
+        }
     }
 }
 
@@ -163,20 +188,15 @@ internal sealed class UntoldSlot(string path, string why) : TorchSlot(path)
     public override Reading Read(StoredTensor tensor) => Refused(tensor, why);
 }
 
-/// <summary>An image a flatten made a row of: here row by row, each place's channels together; in PyTorch channel by channel.</summary>
-/// <param name="Rows">Its rows.</param>
-/// <param name="Columns">Its columns.</param>
+/// <summary>
+/// A series, an image or a volume a flatten made a row of: here place by place, each place's channels together; in PyTorch
+/// channel by channel, each channel's places together in the order the axes run, the first slowest.
+/// </summary>
+/// <param name="Places">How many places each channel has: the steps of a series, the rows times the columns of an image, the planes times the rows times the columns of a volume.</param>
 /// <param name="Channels">Its channels.</param>
-internal readonly record struct ImageOrder(int Rows, int Columns, int Channels)
+internal readonly record struct ChannelOrder(int Places, int Channels)
 {
     /// <summary>Where PyTorch's row keeps the value this row keeps at a place.</summary>
     /// <param name="place">The place in the row here.</param>
-    public int TorchPlace(int place)
-    {
-        var channel = place % Channels;
-        var column = place / Channels % Columns;
-        var row = place / (Channels * Columns);
-
-        return (((channel * Rows) + row) * Columns) + column;
-    }
+    public int TorchPlace(int place) => ((place % Channels) * Places) + (place / Channels);
 }

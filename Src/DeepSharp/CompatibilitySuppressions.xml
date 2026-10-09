@@ -5,6 +5,10 @@
   back from a checkpoint (Recall) are now protected members every optimizer has to write. Both were internal before, so no
   code outside the library could derive from Optimizer and nothing that compiled against 0.8.0 can break; the comparison
   with 0.8.0 cannot tell, and says so, once for each. The 0.8.1 baseline holds both, and these entries go with it.
+
+  0.8.1 also adds one member to the tensor seam, ITensorBackend.FirstLargest, which a max pooling's value and its gradient
+  are made of. An engine written outside the library has one more operation to write, and the comparison says so, once for
+  each target framework: a meant break, named in the changelog's upgrading notes. It goes with the baseline too.
 -->
 <Suppressions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <Suppression>
@@ -31,6 +35,20 @@
   <Suppression>
     <DiagnosticId>CP0005</DiagnosticId>
     <Target>M:DeepSharp.Networks.Optimizer.Recall(DeepSharp.Networks.Parameter,DeepSharp.Networks.SlotMemory)</Target>
+    <Left>lib/net8.0/DeepSharp.dll</Left>
+    <Right>lib/net8.0/DeepSharp.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:DeepSharp.Tensors.ITensorBackend.FirstLargest(DeepSharp.Tensors.Tensor)</Target>
+    <Left>lib/net10.0/DeepSharp.dll</Left>
+    <Right>lib/net10.0/DeepSharp.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:DeepSharp.Tensors.ITensorBackend.FirstLargest(DeepSharp.Tensors.Tensor)</Target>
     <Left>lib/net8.0/DeepSharp.dll</Left>
     <Right>lib/net8.0/DeepSharp.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>

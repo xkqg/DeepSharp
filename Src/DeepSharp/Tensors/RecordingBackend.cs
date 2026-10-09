@@ -78,6 +78,9 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend
     public Tensor Positive(Tensor values) => Kept(new Stepped(values, _inner.Positive(values)));
 
     /// <inheritdoc />
+    public Tensor FirstLargest(Tensor matrix) => Kept(new Stepped(matrix, _inner.FirstLargest(matrix)));
+
+    /// <inheritdoc />
     public Tensor Tanh(Tensor values) => Kept(new TanhOf(values, _inner.Tanh(values)));
 
     /// <inheritdoc />

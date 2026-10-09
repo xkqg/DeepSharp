@@ -14,14 +14,11 @@ namespace DeepSharp.Networks;
 /// Images are laid out with their channels last — image, row, column, channel — as Keras lays them out, so a batch is
 /// the patches of every image one after another and nothing has to be turned round. The kernel is as many rows as the
 /// window holds values — its rows, its columns and the channels in — by as many columns as channels out; PyTorch keeps the
-/// same numbers channels first. It starts as PyTorch's does, within one over the root of the values a window holds. Its
-/// window pads each image by the border it states for every side, or as TensorFlow's 'same' does.
+/// same numbers channels first. Its window pads each image by the border it states for every side, or as TensorFlow's 'same'
+/// does.
 /// </remarks>
-public sealed class Conv2D : Layer, ISaved<Conv2D>
+public sealed class Conv2D : Convolution, ISaved<Conv2D>
 {
-    // How a window padded as 'same' writes its padding: Keras's word for it.
-    private const string SamePadding = "same";
-
     /// <summary>A convolution that starts as PyTorch's does.</summary>
     /// <param name="inChannels">How many channels each place of an image holds.</param>
     /// <param name="outChannels">How many channels the layer makes of each place its window stands.</param>
@@ -30,19 +27,7 @@ public sealed class Conv2D : Layer, ISaved<Conv2D>
     /// <exception cref="ArgumentOutOfRangeException">It reads or makes fewer than one channel.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere: a side or a stride below one, or a border below nothing.</exception>
     public Conv2D(int inChannels, int outChannels, Window window, Draws draws)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(inChannels, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(outChannels, 1);
-        ArgumentNullException.ThrowIfNull(draws);
-        window.RequireStanding();
-
-        var places = window.Height * window.Width;
-        var fans = new Fans(places * inChannels, places * outChannels);
-
-        Window = window;
-        Weight = AddParameter("weight", new KaimingUniform().Draw(new Shape(places * inChannels, outChannels), fans, draws));
-        Bias = AddParameter("bias", new FanInUniform().Draw(new Shape(outChannels), fans, draws));
-    }
+        : base(new PlaneWalk(window), inChannels, outChannels, draws) => Window = window;
 
     /// <summary>A convolution that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values, channels in included, by as many columns as channels out.</param>
@@ -53,57 +38,21 @@ public sealed class Conv2D : Layer, ISaved<Conv2D>
     /// as the kernel is wide, or the window cannot stand anywhere.
     /// </exception>
     public Conv2D(Tensor kernel, Tensor bias, Window window)
-    {
-        ArgumentNullException.ThrowIfNull(kernel);
-        ArgumentNullException.ThrowIfNull(bias);
-        window.RequireStanding();
-
-        var places = window.Height * window.Width;
-
-        if (kernel.Shape.Rank != 2 || kernel.Shape[0] % places != 0 || bias.Shape != new Shape(kernel.Shape[1]))
-        {
-            throw new ArgumentException(
-                $"A convolution through a {window} takes a kernel of the window's {places} places times its channels in by its channels out, "
-                + $"and a bias as long as its channels out; these are {kernel.Shape} and {bias.Shape}.",
-                nameof(kernel));
-        }
-
-        Window = window;
-        Weight = AddParameter("weight", kernel);
-        Bias = AddParameter("bias", bias);
-    }
-
-    /// <summary>The kernel: the window's values, channels in included, by the channels out.</summary>
-    public Parameter Weight { get; }
-
-    /// <summary>The bias: one value for each channel out.</summary>
-    public Parameter Bias { get; }
+        : base(new PlaneWalk(window), kernel, bias) => Window = window;
 
     /// <summary>The patch, and how it walks.</summary>
     public Window Window { get; }
-
-    /// <summary>How many channels each place of an image holds.</summary>
-    public int InChannels => Weight.Value.Shape[0] / (Window.Height * Window.Width);
-
-    /// <summary>How many channels the layer makes.</summary>
-    public int OutChannels => Weight.Value.Shape[1];
 
     /// <inheritdoc />
     public static string Name => "conv2d";
 
     /// <inheritdoc />
-    /// <remarks>Its padding is the number of rows and columns on every side, or the word <c>same</c>.</remarks>
+    /// <remarks>Its padding is the number of rows and columns on every side, or the word <c>same</c> or <c>causal</c>.</remarks>
     public static Conv2D Rebuild(JsonElement settings, Rebuilding rebuilding)
     {
         ArgumentNullException.ThrowIfNull(rebuilding);
 
-        var window = new Window(rebuilding.Whole(settings, "height"), rebuilding.Whole(settings, "width")) { Stride = rebuilding.Whole(settings, "stride") };
-
-        window = rebuilding.Says(settings, "padding", SamePadding, "a whole number, or 'same',")
-            ? window with { PaddingMode = PaddingMode.Same }
-            : window with { Padding = rebuilding.Whole(settings, "padding") };
-
-        return new(rebuilding.Whole(settings, "inChannels"), rebuilding.Whole(settings, "outChannels"), window, rebuilding.Draws);
+        return new(rebuilding.Whole(settings, "inChannels"), rebuilding.Whole(settings, "outChannels"), rebuilding.Window2DIn(settings), rebuilding.Draws);
     }
 
     /// <inheritdoc />
@@ -117,35 +66,7 @@ public sealed class Conv2D : Layer, ISaved<Conv2D>
 
         writer.WriteNumber("inChannels", InChannels);
         writer.WriteNumber("outChannels", OutChannels);
-        writer.WriteNumber("height", Window.Height);
-        writer.WriteNumber("width", Window.Width);
-        writer.WriteNumber("stride", Window.Stride);
-
-        if (Window.PaddingMode == PaddingMode.Same)
-        {
-            writer.WriteString("padding", SamePadding);
-        }
-        else
-        {
-            writer.WriteNumber("padding", Window.Padding);
-        }
-    }
-
-    /// <inheritdoc />
-    /// <exception cref="ArgumentException">The images are not a batch of rows, columns and channels, or hold another number of channels.</exception>
-    protected override Tensor Compute(Tensor input, Pass pass)
-    {
-        if (input.Shape.Rank != 4 || input.Shape[3] != InChannels)
-        {
-            throw new ArgumentException(
-                $"A convolution of {InChannels} channels takes a batch of images, image by row by column by channel, and was handed a {input.Shape} one.",
-                nameof(input));
-        }
-
-        var backend = pass.Backend;
-        var values = backend.AddRow(backend.MatMul(backend.Unfold(input, Window), Weight.Value), Bias.Value);
-
-        return backend.Reshape(values, new Shape(input.Shape[0], Window.RowsOver(input.Shape[1]), Window.ColumnsOver(input.Shape[2]), OutChannels));
+        writer.WriteWindow(Window);
     }
 }
 

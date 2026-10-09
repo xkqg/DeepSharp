@@ -28,6 +28,9 @@ internal sealed class OnnxGraph
     private readonly Loss _loss;
     private readonly string _where;
 
+    // The names of the values something takes: a node's input, or what the graph gives.
+    private readonly HashSet<string> _used;
+
     // Whether the image the graph takes has its channels last, as the Transpose that first takes it declares.
     private bool _channelsLast;
 
@@ -38,6 +41,7 @@ internal sealed class OnnxGraph
         _numbers = numbers;
         _loss = loss;
         _where = $"graph '{graph.Name.Quoted()}'";
+        _used = [.. graph.Node.SelectMany(node => node.Input), .. graph.Output.Select(output => output.Name)];
     }
 
     /// <summary>The network the graph is, every slot holding the number the graph holds for it, and the loss handed in.</summary>
@@ -72,7 +76,7 @@ internal sealed class OnnxGraph
 
             if (layer.Flattens)
             {
-                flattened = new ImageRow(each[1], each[2], each[3]);
+                flattened = new ImageRow(each);
             }
 
             if (layer.RowLength is { } length && length != each.Count)
@@ -80,9 +84,9 @@ internal sealed class OnnxGraph
                 node.Refuse(string.Create(CultureInfo.InvariantCulture, $"it lays each example out as a row of {length} values, and each example reaching it holds {each.Count}."));
             }
 
-            if (layer.Declared is { } sides)
+            if (layer.Declared?.Mismatch(each) is { } fault)
             {
-                Padded(node, sides, ((Conv2D)network.Layers[place]).Window.BordersOver(each[1], each[2]), each);
+                node.Refuse(fault);
             }
 
             foreach (var number in layer.Numbers)
@@ -127,8 +131,8 @@ internal sealed class OnnxGraph
         return faults.Count > 0 ? throw new SlotLoadException(faults) : new SavedNetwork(network, _loss);
     }
 
-    // The one value the graph takes: a batch of rows, or of images, each example of lengths the graph states. Its fault is
-    // noted when there is not one, or it is none of those.
+    // The one value the graph takes: a batch of rows, of series, of images or of volumes, each example of lengths the graph
+    // states. Its fault is noted when there is not one, or it is none of those.
     private Taken Input()
     {
         var data = _graph.Input.Where(value => !_numbers.Holds(value.Name)).ToList();
@@ -137,7 +141,7 @@ internal sealed class OnnxGraph
         {
             _faults.Add(string.Create(CultureInfo.InvariantCulture, $"{_where}: it takes {data.Count} values, and a network here takes one, the batch of its examples."));
 
-            return new Taken(data.FirstOrDefault()?.Name ?? string.Empty, new Reaching(Flow.Rows, null), null);
+            return new Taken(data.FirstOrDefault()?.Name ?? string.Empty, new Reaching(Flow.Rows, null, 0), null);
         }
 
         var input = data[0];
@@ -148,41 +152,39 @@ internal sealed class OnnxGraph
         {
             _faults.Add($"input '{input.Name.Quoted()}': it takes {GraphNumbers.TypeName(type)} values, and a network here takes single-precision numbers, FLOAT.");
 
-            return new Taken(input.Name, new Reaching(Flow.Rows, null), null);
+            return new Taken(input.Name, new Reaching(Flow.Rows, null, 0), null);
         }
 
         var dims = tensor!.Shape?.Dim.ToArray() ?? [];
         var written = string.Join(", ", dims.Select(Written)).Quoted();
 
-        if (dims.Length is not (2 or 4))
+        if (dims.Length is < 2 or > 5)
         {
             _faults.Add(string.Create(
                 CultureInfo.InvariantCulture,
-                $"input '{input.Name.Quoted()}': it takes a batch of rank {dims.Length}, [{written}], and a network here takes rows — a batch of values — or images — a batch of channels by rows by columns."));
+                $"input '{input.Name.Quoted()}': it takes a batch of rank {dims.Length}, [{written}], and a network here takes rows (a batch of values), series (a batch of channels by steps), images (a batch of channels by rows by columns) or volumes (a batch of channels by planes by rows by columns)."));
 
-            return new Taken(input.Name, new Reaching(Flow.Rows, null), null);
+            return new Taken(input.Name, new Reaching(Flow.Rows, null, 0), null);
         }
 
         if (dims.Skip(1).Any(dim => dim.ValueCase != Dimension.ValueOneofCase.DimValue || dim.DimValue is < 1 or > int.MaxValue))
         {
             _faults.Add($"input '{input.Name.Quoted()}': its shape, [{written}], does not state every length of an example, and a network here is built for examples of one shape.");
 
-            return new Taken(input.Name, new Reaching(Flow.Rows, null), null);
+            return new Taken(input.Name, new Reaching(Flow.Rows, null, 0), null);
         }
 
         var lengths = dims.Skip(1).Select(dim => (int)dim.DimValue).ToArray();
         long? batch = dims[0].ValueCase == Dimension.ValueOneofCase.DimValue ? dims[0].DimValue : null;
 
-        return new Taken(input.Name, new Reaching(lengths.Length == 1 ? Flow.Rows : Flow.Images, batch), lengths);
+        return new Taken(input.Name, new Reaching(lengths.Length == 1 ? Flow.Rows : Flow.Images, batch, lengths.Length - 1), lengths);
     }
 
-    // The shape of one example here, from the lengths the graph states after the batch. Images here have their channels
-    // last: an image the graph takes channels first — as ONNX's Conv does — has its channels moved last, and one it takes
-    // channels last, as its first Transpose declares, is taken as it is.
+    // The shape of one example here, from the lengths the graph states after the batch. Series, images and volumes here have
+    // their channels last: one the graph takes channels first — as ONNX's Conv does — has its channels moved last, and an
+    // image it takes channels last, as its first Transpose declares, is taken as it is.
     private Shape ExampleOf(int[] lengths) =>
-        lengths.Length == 1 ? new Shape(lengths[0])
-        : _channelsLast ? new Shape(lengths[0], lengths[1], lengths[2])
-        : new Shape(lengths[1], lengths[2], lengths[0]);
+        lengths.Length == 1 || _channelsLast ? new Shape(lengths) : new Shape([.. lengths[1..], lengths[0]]);
 
     // The graph's nodes in order, each read as the layer it is when it takes the value the one before it made; constants
     // kept, and identities, casts and transposes followed on the way; an Add made the bias of the MatMul before it. The
@@ -202,7 +204,7 @@ internal sealed class OnnxGraph
 
         for (var place = 0; place < _graph.Node.Count; place++)
         {
-            var node = new OnnxNode(_graph.Node[place], place, _faults);
+            var node = new OnnxNode(_graph.Node[place], place, _faults, _used);
 
             if (node.Operator == "Constant")
             {
@@ -227,12 +229,20 @@ internal sealed class OnnxGraph
             }
             else if (node.Operator == "Transpose")
             {
-                reaching = reaching with { Flow = Turned(node, reaching.Flow, undeclared) };
+                reaching = reaching with { Flow = Turned(node, reaching, undeclared) };
                 undeclared = false;
             }
             else if (node.Operator == "Cast")
             {
                 Cast(node);
+            }
+            else if (node.Operator == "Unsqueeze" && reaching is { Flow: Flow.Images, Axes: 1 } && _graph.OpensLiftedPooling(place, _numbers))
+            {
+                reaching = reaching with { Lifted = true };
+            }
+            else if (node.Operator == "Squeeze" && reaching.Lifted)
+            {
+                reaching = reaching with { Lifted = false };
             }
             else if (node.Operator != "Identity")
             {
@@ -264,17 +274,19 @@ internal sealed class OnnxGraph
 
     // What a Transpose hands on: an image with its channels moved last, [0, 2, 3, 1], or moved back after the batch,
     // [0, 3, 1, 2] — which, taking the image the graph takes before anything else does, declares that image's channels
-    // last, as TensorFlow lays images out and as they are here. Any other turn is refused.
-    private Flow Turned(OnnxNode node, Flow flow, bool undeclared)
+    // last, as TensorFlow lays images out and as they are here. Any other turn is refused, and so is any turn of a series
+    // or a volume, which have not the four axes of an image.
+    private Flow Turned(OnnxNode node, Reaching reaching, bool undeclared)
     {
         var turn = node.Wholes("perm", []);
+        var flow = reaching.Flow;
 
-        if (turn is [0, 2, 3, 1] && flow == Flow.Images)
+        if (turn is [0, 2, 3, 1] && flow == Flow.Images && reaching.Axes == 2)
         {
             return Flow.ImagesLast;
         }
 
-        if (turn is [0, 3, 1, 2] && (flow == Flow.ImagesLast || undeclared))
+        if (turn is [0, 3, 1, 2] && (flow == Flow.ImagesLast || (undeclared && reaching.Axes == 2)))
         {
             _channelsLast |= undeclared;
 
@@ -321,17 +333,6 @@ internal sealed class OnnxGraph
         }
 
         built[^1] = matmul with { Layer = matmul.Layer with { Unbiased = null, Numbers = [.. matmul.Layer.Numbers, new LayerNumber("bias", added.Held, Laying.AsWritten)] } };
-    }
-
-    // Pads a convolution writes out, held to TensorFlow's 'same' for the image that reaches it once the network is lowered.
-    private static void Padded(OnnxNode node, Borders sides, Borders same, Shape each)
-    {
-        if (sides != same)
-        {
-            node.Refuse(string.Create(
-                CultureInfo.InvariantCulture,
-                $"it pads [{sides.Top}, {sides.Left}, {sides.Bottom}, {sides.Right}] — rows and columns before, then after — where TensorFlow's 'same' pads the {each[1]}x{each[2]} images reaching it [{same.Top}, {same.Left}, {same.Bottom}, {same.Right}], and a window here pads every side alike, or as that 'same'."));
-        }
     }
 
     // A constant node's value, kept among the graph's values; its fault noted when it holds it as other than a tensor, or

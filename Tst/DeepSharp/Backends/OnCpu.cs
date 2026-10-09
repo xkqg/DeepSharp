@@ -25,6 +25,12 @@ public sealed class DropoutTests() : DropoutContract(new CpuBackend());
 
 public sealed class ConvolutionTests() : ConvolutionContract(new CpuBackend());
 
+public sealed class SpatialConvolutionTests() : SpatialConvolutionContract(new CpuBackend());
+
+public sealed class PoolingTests() : PoolingContract(new CpuBackend());
+
+public sealed class SpatialDropoutTests() : SpatialDropoutContract(new CpuBackend());
+
 public sealed class NormalisationTests() : NormalisationContract(new CpuBackend());
 
 public sealed class LossTests() : LossContract(new CpuBackend());

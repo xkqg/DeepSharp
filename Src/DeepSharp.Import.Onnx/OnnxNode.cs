@@ -20,12 +20,18 @@ internal sealed class OnnxNode
 {
     private readonly NodeProto _node;
     private readonly List<string> _faults;
+    private readonly HashSet<string> _used;
 
-    /// <summary>A node, its place among the graph's nodes, and the faults of the graph it is noted among.</summary>
-    public OnnxNode(NodeProto node, int place, List<string> faults)
+    /// <summary>A node, its place among the graph's nodes, the faults of the graph it is noted among, and the names of the values the graph takes.</summary>
+    /// <param name="node">The node.</param>
+    /// <param name="place">Its place among the graph's nodes.</param>
+    /// <param name="faults">The faults of the graph, where the node's are noted.</param>
+    /// <param name="used">The names of the values something takes: another node, or the graph as what it gives.</param>
+    public OnnxNode(NodeProto node, int place, List<string> faults, HashSet<string> used)
     {
         _node = node;
         _faults = faults;
+        _used = used;
         Operator = node.Domain is "" or "ai.onnx" ? node.OpType : $"{node.Domain}.{node.OpType}";
         Address = node.Name.Length > 0 ? $"node '{node.Name}' ({Operator})" : string.Create(CultureInfo.InvariantCulture, $"node {place} ({Operator})");
     }
@@ -44,6 +50,50 @@ internal sealed class OnnxNode
 
     /// <summary>The name of the value it takes at a place; empty when it takes none there.</summary>
     public string Input(int at) => at < _node.Input.Count ? _node.Input[at] : string.Empty;
+
+    /// <summary>
+    /// The axes it states: as an input the graph holds — an Unsqueeze's and a Squeeze's from ONNX 13, a reduce's from ONNX 18 —
+    /// or as an attribute before; none when it states none; nothing, its fault noted, when they cannot be read.
+    /// </summary>
+    /// <param name="numbers">The values the graph holds.</param>
+    public int[]? Axes(GraphNumbers numbers)
+    {
+        var input = Input(1);
+
+        if (input.Length == 0)
+        {
+            return Wholes("axes", []);
+        }
+
+        if (Says("axes"))
+        {
+            Refuse($"it says its axes as an input, '{input.Quoted()}', and as an attribute, and ONNX writes them one way or the other.");
+
+            return null;
+        }
+
+        var held = numbers.Wholes(input);
+
+        if (held.Values is not { } values)
+        {
+            Refuse($"its axes, '{input.Quoted()}', {held.Fault}");
+
+            return null;
+        }
+
+        if (values.Any(value => value is < int.MinValue or > int.MaxValue))
+        {
+            Refuse($"its axes, '{input.Quoted()}', are written as [{string.Join(", ", values)}], which is not what ONNX writes there.");
+
+            return null;
+        }
+
+        return [.. values.Select(value => (int)value)];
+    }
+
+    /// <summary>The name of the value it gives at a place, when it names one that something takes — another node, or the graph; nothing otherwise.</summary>
+    /// <param name="at">Its place among the values the node gives.</param>
+    public string? Taken(int at) => at < _node.Output.Count && _node.Output[at].Length > 0 && _used.Contains(_node.Output[at]) ? _node.Output[at] : null;
 
     /// <summary>A whole-number attribute; what ONNX gives it when it is left out, or cannot be read.</summary>
     public int Whole(string name, int otherwise) =>

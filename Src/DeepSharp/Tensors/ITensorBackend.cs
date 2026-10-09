@@ -111,6 +111,18 @@ public interface ITensorBackend
     /// <remarks>The step the rectifier's gradient is made of: a gradient passes where the value was above nothing.</remarks>
     Tensor Positive(Tensor values);
 
+    /// <summary>One where a value is the first largest of its row and nought everywhere else: which value of each row a maximum is.</summary>
+    /// <param name="matrix">The matrix, one row for each choice to make.</param>
+    /// <returns>A new matrix of the same shape, with one one in each row.</returns>
+    /// <exception cref="ArgumentException">The tensor is not a matrix, or its rows hold no value to pick.</exception>
+    /// <remarks>
+    /// The step a maximum's gradient is made of, as <see cref="Positive"/> is the rectifier's: the values times this, added up
+    /// along each row, are the row's largest value, and the gradient of that goes to the value picked and to no other. Of values
+    /// that tie the first is picked, and a value that is not a number counts as the largest, the first of them the one picked,
+    /// as libtorch's argmax has it. Like <see cref="Positive"/> it is flat either side of where it steps, so it sends nothing back.
+    /// </remarks>
+    Tensor FirstLargest(Tensor matrix);
+
     /// <summary>The hyperbolic tangent of every value, between minus one and one.</summary>
     /// <param name="values">The values.</param>
     /// <returns>A new tensor of the same shape.</returns>
