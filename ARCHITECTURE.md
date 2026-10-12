@@ -3182,6 +3182,16 @@ A published binding is the opposite case. TorchSharp is a dependency: versioned,
 tested by people who are not us. `DeepSharp.Backends.TorchSharp` is written against its published package and nothing
 else: that is borrowing a library, not borrowing a result.
 
+Python is borrowed for one thing and never for another: **PyTorch, Keras and TensorFlow are what the arithmetic here is
+measured against and what writes the files the readers read, and nothing that ships may hold a script of them or start
+one.** A script under a suite's `Fixtures` folder runs once, by hand, and leaves behind what every build then reads —
+the numbers in a JSON file and the `.pt`, `.safetensors`, `.keras`, `.h5` and `.onnx` files the readers are held to. No
+workflow installs Python, no package references it, and a test holds the repository to that: every Python script stands
+beside the tests it serves or among the tools, nothing under `Src` is one or names one in a value it runs, and no project
+packs one. TorchSharp cannot take that place, for two reasons worth saying out loud: it *is* libtorch, so the engine
+behind the seam would be judged by itself, and it writes none of those files — its assembly holds no ONNX exporter at
+all, and Keras is not a thing it has. What the reference says is the spec; what we ship never asks it.
+
 ## What is deliberately absent
 
 - **A global backend, context or session.** Nothing reaches for a shared instance. The notebook keeps a

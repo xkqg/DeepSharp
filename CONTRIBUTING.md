@@ -100,6 +100,20 @@ fail on a warning: the README's example runs, every C# block of the wiki compile
 notebook's cell runs in Verso's own engine. The wiki is a repository of its own; clone it beside this one, as
 `DeepSharp.wiki`, where those tests and the build machine read it.
 
+## Python measures, and ships nowhere
+
+PyTorch, Keras and TensorFlow are what the arithmetic here is held to, and what writes the files the readers read. A
+script of them lives in the `Fixtures` folder of the suite that reads what it wrote, says at its top which versions it
+was run with and how to run it, and is run by hand: what every build then reads is what it left behind — the numbers in a
+JSON file beside it, and the `.pt`, `.safetensors`, `.keras`, `.h5` and `.onnx` files the readers are held to. The output
+it printed when it last ran is kept beside it as a `.txt`, so a number in the repository can be traced to the run that
+made it.
+
+Nothing that ships may hold such a script or start one: no package references Python, no workflow installs it, and
+`PythonInTheTestsOnlyTests` fails the moment a `.py` appears under `Src`, a shipped file names python in a value it runs,
+or a project packs one. TorchSharp is not a way around that — it is libtorch, so the engine behind the seam would be
+judged by itself, and it writes none of those files.
+
 ## Nothing here asks Binance
 
 `DeepSharp.Pipelines.Binance` fetches from Binance, and the address a build runs on shares one request budget with

@@ -75,6 +75,18 @@ read from the Keras, ONNX and PyTorch files that say it.
   turned from PyTorch's order as a convolution's are, where before only a plain convolution's were. The Keras refusal that names
   every kind it reads is longer by those eight names.
 
+- **Two refusals read a little differently, and one rule about a kernel's shape moved inside the library.** A graph whose
+  `Pad` holds its places as something the graph works out is refused in one sentence rather than two run together. A
+  convolution's kernel shape is a value the family it belongs to states, where it was a member the half-built layer asked
+  for; every constructor of every convolution keeps the arguments it had, and nothing a program of yours calls changes.
+
+- **What the numbers here are measured against is said out loud, and held to.** PyTorch, Keras and TensorFlow are what the
+  arithmetic is matched to and what writes the files the readers read; a script of them stands beside the tests it serves
+  and runs by hand, and what every build reads is what it left behind. Nothing that ships holds such a script or starts
+  one — no package references Python and no build installs it — and a test fails the moment that stops being true.
+  `ARCHITECTURE.md` says why the libtorch engine cannot take that place, and `CONTRIBUTING.md` says where such a script
+  lives.
+
 ## [0.8.1]
 
 Optimizing: the numbers a network is trained with, searched for and measured by. A network's numbers are found by training,
