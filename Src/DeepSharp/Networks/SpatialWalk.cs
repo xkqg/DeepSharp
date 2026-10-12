@@ -115,7 +115,7 @@ internal static class SpatialWalkExtensions
             var shape = new Shape([batch.Shape[0], .. places, batch.Shape[batch.Shape.Rank - 1]]);
             var padded = backend.Reshape(walk.Unfold(backend, batch), shape);
 
-            if (value == 0f)
+            if (value is 0f)
             {
                 return padded;
             }

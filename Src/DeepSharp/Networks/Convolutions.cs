@@ -22,12 +22,15 @@ public abstract class Convolution : Layer
     private readonly ISpatialWalk _walk;
 
     /// <summary>A convolution that starts as PyTorch's does.</summary>
-    private protected Convolution(ISpatialWalk walk, Channels channels, Draws draws)
+    private protected Convolution(Starting starting, Draws draws)
     {
         ArgumentNullException.ThrowIfNull(draws);
 
+        var walk = starting.Walk;
+
         _walk = walk;
-        Channels = RequireChannels(channels, walk);
+        Channels = RequireChannels(starting.Channels!.Value, walk);
+        KernelShape = starting.Kernel!.Value;
 
         var fans = new Fans(walk.Volume * Channels.In / Channels.Groups, walk.Volume * Channels.Out);
 
@@ -37,16 +40,19 @@ public abstract class Convolution : Layer
 
     /// <summary>A convolution that starts at the given kernel and bias.</summary>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the bias is not as long as its channels out.</exception>
-    private protected Convolution(ISpatialWalk walk, Tensor kernel, Tensor bias, Channels? channels)
+    private protected Convolution(Starting starting, Tensor kernel, Tensor bias)
     {
         ArgumentNullException.ThrowIfNull(kernel);
         ArgumentNullException.ThrowIfNull(bias);
 
+        var walk = starting.Walk;
+
         _walk = walk;
 
-        if (channels is { } given)
+        if (starting.Channels is { } given)
         {
             Channels = RequireChannels(given, walk);
+            KernelShape = starting.Kernel!.Value;
 
             if (kernel.Shape != KernelShape || bias.Shape != new Shape(Channels.Out))
             {
@@ -68,6 +74,7 @@ public abstract class Convolution : Layer
             }
 
             Channels = RequireChannels(new Channels { In = kernel.Shape[0] / walk.Volume, Out = kernel.Shape[1] }, walk);
+            KernelShape = kernel.Shape;
         }
 
         Weight = AddParameter("weight", kernel);
@@ -92,8 +99,18 @@ public abstract class Convolution : Layer
     /// <summary>How many groups the channels are split into; one, where every channel in reaches every channel out.</summary>
     public int Groups => Channels.Groups;
 
-    /// <summary>The window's values and the channels in of one group, by the channels out: the shape a kernel here keeps.</summary>
-    private protected virtual Shape KernelShape => new(_walk.Volume * Channels.In / Channels.Groups, Channels.Out);
+    /// <summary>The shape this convolution's kernel keeps, as the family it belongs to lays one out.</summary>
+    private protected Shape KernelShape { get; }
+
+    /// <summary>
+    /// The window's values and the channels in of one group, by the channels out: the shape an ordinary convolution's kernel
+    /// keeps, and what it starts from.
+    /// </summary>
+    /// <param name="walk">How its window walks.</param>
+    /// <param name="channels">The channels it was told of; nothing where they are to be read off the kernel.</param>
+    /// <returns>What a convolution of this family starts from.</returns>
+    private protected static Starting Taking(ISpatialWalk walk, Channels? channels) =>
+        new(walk, channels, channels is { } given ? new Shape(walk.Volume * given.In / given.Groups, given.Out) : null);
 
     /// <summary>How the window walks, for what a convolution of another kind needs of it.</summary>
     private protected ISpatialWalk Walk => _walk;
@@ -239,6 +256,20 @@ public abstract class Convolution : Layer
 
         return channels;
     }
+
+    /// <summary>
+    /// What a convolution starts from: how its window walks, and — where the channels are stated rather than read off a
+    /// kernel — those channels and the shape the kernel must then be.
+    /// </summary>
+    /// <remarks>
+    /// The channels and the shape are stated together or not at all, since the one gives the other, so only
+    /// <see cref="Taking"/> and <see cref="TransposedConvolution.GivingBack"/> make one: a family says how it lays a kernel
+    /// out where every family can see it, rather than through a member a half-built convolution would have to ask for.
+    /// </remarks>
+    /// <param name="Walk">How its window walks.</param>
+    /// <param name="Channels">The channels it was told of; nothing where they are to be read off the kernel.</param>
+    /// <param name="Kernel">The shape its kernel must be; nothing where the kernel says the channels itself.</param>
+    private protected readonly record struct Starting(ISpatialWalk Walk, Channels? Channels, Shape? Kernel);
 }
 
 /// <summary>How many channels a convolution reads and makes, and how many groups they are split into.</summary>
@@ -299,7 +330,7 @@ public sealed class Conv1D : Convolution, ISaved<Conv1D>
     /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
     public Conv1D(Channels channels, Window1D window, Draws draws)
-        : base(new LineWalk(window), channels, draws) => Window = window;
+        : base(Taking(new LineWalk(window), channels), draws) => Window = window;
 
     /// <summary>A convolution that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values, channels in included, by as many columns as channels out.</param>
@@ -310,7 +341,7 @@ public sealed class Conv1D : Convolution, ISaved<Conv1D>
     /// as the kernel is wide, or the window cannot stand anywhere.
     /// </exception>
     public Conv1D(Tensor kernel, Tensor bias, Window1D window)
-        : base(new LineWalk(window), kernel, bias, null) => Window = window;
+        : base(Taking(new LineWalk(window), null), kernel, bias) => Window = window;
 
     /// <summary>A convolution of channels in groups, that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values times the channels in of one group, by as many columns as channels out.</param>
@@ -319,7 +350,7 @@ public sealed class Conv1D : Convolution, ISaved<Conv1D>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window cannot stand anywhere.</exception>
     public Conv1D(Tensor kernel, Tensor bias, Window1D window, Channels channels)
-        : base(new LineWalk(window), kernel, bias, channels) => Window = window;
+        : base(Taking(new LineWalk(window), channels), kernel, bias) => Window = window;
 
     /// <summary>The patch, and how it walks.</summary>
     public Window1D Window { get; }
@@ -389,7 +420,7 @@ public sealed class Conv3D : Convolution, ISaved<Conv3D>
     /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
     public Conv3D(Channels channels, Window3D window, Draws draws)
-        : base(new VolumeWalk(window), channels, draws) => Window = window;
+        : base(Taking(new VolumeWalk(window), channels), draws) => Window = window;
 
     /// <summary>A convolution that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values, channels in included, by as many columns as channels out.</param>
@@ -400,7 +431,7 @@ public sealed class Conv3D : Convolution, ISaved<Conv3D>
     /// as the kernel is wide, or the window cannot stand anywhere.
     /// </exception>
     public Conv3D(Tensor kernel, Tensor bias, Window3D window)
-        : base(new VolumeWalk(window), kernel, bias, null) => Window = window;
+        : base(Taking(new VolumeWalk(window), null), kernel, bias) => Window = window;
 
     /// <summary>A convolution of channels in groups, that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values times the channels in of one group, by as many columns as channels out.</param>
@@ -409,7 +440,7 @@ public sealed class Conv3D : Convolution, ISaved<Conv3D>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window cannot stand anywhere.</exception>
     public Conv3D(Tensor kernel, Tensor bias, Window3D window, Channels channels)
-        : base(new VolumeWalk(window), kernel, bias, channels) => Window = window;
+        : base(Taking(new VolumeWalk(window), channels), kernel, bias) => Window = window;
 
     /// <summary>The block, and how it walks.</summary>
     public Window3D Window { get; }

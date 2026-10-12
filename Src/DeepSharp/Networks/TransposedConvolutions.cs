@@ -30,18 +30,25 @@ public abstract class TransposedConvolution : Convolution
 {
     private readonly int _rank;
 
-    private protected TransposedConvolution(ISpatialWalk walk, Channels channels, Draws draws, int rank)
-        : base(walk, channels, draws) => _rank = rank;
+    private protected TransposedConvolution(Starting starting, Draws draws, int rank)
+        : base(starting, draws) => _rank = rank;
 
-    private protected TransposedConvolution(ISpatialWalk walk, Tensor kernel, Tensor bias, Channels channels)
-        : base(walk, kernel, bias, channels) => _rank = walk.Rank;
+    private protected TransposedConvolution(Starting starting, Tensor kernel, Tensor bias)
+        : base(starting, kernel, bias) => _rank = starting.Walk.Rank;
 
     /// <summary>How many places of nothing are added at the end of each axis, beyond what the window's own walk gives back.</summary>
     /// <remarks>Fewer than the larger of the stride and the dilation of that axis: beyond that the window itself gives the place.</remarks>
     public abstract IReadOnlyList<int> OutputPadding { get; }
 
-    /// <inheritdoc />
-    private protected sealed override Shape KernelShape => new(Channels.In, Walk.Volume * Channels.Out / Channels.Groups);
+    /// <summary>
+    /// A row for every channel in, holding the window's places by the channels out of one group: the shape a transposed
+    /// convolution's kernel keeps, and what it starts from.
+    /// </summary>
+    /// <param name="walk">How its window walks the example it makes.</param>
+    /// <param name="channels">The channels it was told of; a transposed convolution is always told them.</param>
+    /// <returns>What a convolution of this family starts from.</returns>
+    private protected static Starting GivingBack(ISpatialWalk walk, Channels channels) =>
+        new(walk, channels, new Shape(channels.In, walk.Volume * channels.Out / channels.Groups));
 
     /// <inheritdoc />
     private protected sealed override string Named => $"A transposed convolution of {InChannels} channels";
@@ -202,7 +209,7 @@ public sealed class Conv1DTranspose : TransposedConvolution, ISaved<Conv1DTransp
     /// <param name="outputPadding">How many steps of nothing to add at the end of the series; none, unless said.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
     public Conv1DTranspose(Channels channels, Window1D window, Draws draws, int outputPadding = 0)
-        : base(new LineWalk(Folding(window, outputPadding)), channels, draws, 1)
+        : base(GivingBack(new LineWalk(Folding(window, outputPadding)), channels), draws, 1)
     {
         Window = window;
         Grew = outputPadding;
@@ -217,7 +224,7 @@ public sealed class Conv1DTranspose : TransposedConvolution, ISaved<Conv1DTransp
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window works its border out.</exception>
     public Conv1DTranspose(Tensor kernel, Tensor bias, Window1D window, Channels channels)
-        : base(new LineWalk(Folding(window, 0)), kernel, bias, channels)
+        : base(GivingBack(new LineWalk(Folding(window, 0)), channels), kernel, bias)
     {
         Window = window;
         Grows = null;
@@ -316,7 +323,7 @@ public sealed class Conv2DTranspose : TransposedConvolution, ISaved<Conv2DTransp
     /// <param name="outputPadding">How many rows and columns of nothing to add at the end of each axis; none, unless said.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
     public Conv2DTranspose(Channels channels, Window window, Draws draws, Steps outputPadding = default)
-        : base(new PlaneWalk(Folding(window, outputPadding)), channels, draws, 2)
+        : base(GivingBack(new PlaneWalk(Folding(window, outputPadding)), channels), draws, 2)
     {
         Window = window;
         Grew = outputPadding;
@@ -331,7 +338,7 @@ public sealed class Conv2DTranspose : TransposedConvolution, ISaved<Conv2DTransp
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window works its border out.</exception>
     public Conv2DTranspose(Tensor kernel, Tensor bias, Window window, Channels channels)
-        : base(new PlaneWalk(Folding(window, default)), kernel, bias, channels)
+        : base(GivingBack(new PlaneWalk(Folding(window, default)), channels), kernel, bias)
     {
         Window = window;
         Grows = null;
@@ -448,7 +455,7 @@ public sealed class Conv3DTranspose : TransposedConvolution, ISaved<Conv3DTransp
     /// <param name="outputPadding">How many places of nothing to add at the end of each axis; none, unless said.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
     public Conv3DTranspose(Channels channels, Window3D window, Draws draws, Steps3D outputPadding = default)
-        : base(new VolumeWalk(Folding(window, outputPadding)), channels, draws, 3)
+        : base(GivingBack(new VolumeWalk(Folding(window, outputPadding)), channels), draws, 3)
     {
         Window = window;
         Grew = outputPadding;
@@ -463,7 +470,7 @@ public sealed class Conv3DTranspose : TransposedConvolution, ISaved<Conv3DTransp
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window works its border out.</exception>
     public Conv3DTranspose(Tensor kernel, Tensor bias, Window3D window, Channels channels)
-        : base(new VolumeWalk(Folding(window, default)), kernel, bias, channels)
+        : base(GivingBack(new VolumeWalk(Folding(window, default)), channels), kernel, bias)
     {
         Window = window;
         Grows = null;

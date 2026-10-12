@@ -37,7 +37,7 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
     /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
     public Conv2D(Channels channels, Window window, Draws draws)
-        : base(new PlaneWalk(window), channels, draws) => Window = window;
+        : base(Taking(new PlaneWalk(window), channels), draws) => Window = window;
 
     /// <summary>A convolution that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values, channels in included, by as many columns as channels out.</param>
@@ -48,7 +48,7 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
     /// as the kernel is wide, or the window cannot stand anywhere.
     /// </exception>
     public Conv2D(Tensor kernel, Tensor bias, Window window)
-        : base(new PlaneWalk(window), kernel, bias, null) => Window = window;
+        : base(Taking(new PlaneWalk(window), null), kernel, bias) => Window = window;
 
     /// <summary>A convolution of channels in groups, that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values times the channels in of one group, by as many columns as channels out.</param>
@@ -57,7 +57,7 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window cannot stand anywhere.</exception>
     public Conv2D(Tensor kernel, Tensor bias, Window window, Channels channels)
-        : base(new PlaneWalk(window), kernel, bias, channels) => Window = window;
+        : base(Taking(new PlaneWalk(window), channels), kernel, bias) => Window = window;
 
     /// <summary>The patch, and how it walks.</summary>
     public Window Window { get; }

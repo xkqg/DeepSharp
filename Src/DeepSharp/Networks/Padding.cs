@@ -39,7 +39,7 @@ public abstract class Padding : Layer
     /// <summary>Writes the value padded with, when it is not nought: a padding of nothing has nothing to say.</summary>
     private protected void WriteValue(Utf8JsonWriter writer)
     {
-        if (Value != 0f)
+        if (Value is not 0f)
         {
             writer.WriteNumber("value", Value);
         }
