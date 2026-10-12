@@ -16,12 +16,16 @@ namespace DeepSharp.Tensors;
 /// <c>Conv3D</c> leave it, unless said: <c>new Window3D(3, 3, 3) { Stride = 2, Padding = 1 }</c>. Its border is worked out on
 /// each axis alone by the two-dimensional <see cref="Window"/>'s rule — stated, or as TensorFlow's <c>padding='same'</c> — so a
 /// volume is padded where a window stands as it is padded in two dimensions. What a window covers is what
-/// <see cref="Window"/> covers: one stride on every axis, a block of neighbouring places, every channel of a place at once.
+/// <see cref="Window"/> covers: a block of neighbouring places unless it is dilated, every channel of a place at once. A
+/// stride and a dilation are said for each axis, or once for every axis.
 /// </remarks>
 public readonly record struct Window3D(int Depth, int Height, int Width)
 {
     /// <summary>How many places the window moves between one patch and the next, along every axis; one unless said.</summary>
-    public int Stride { get; init; } = 1;
+    public Steps3D Stride { get; init; } = 1;
+
+    /// <summary>How many places apart the cells of a patch are, along every axis; one — neighbouring places — unless said.</summary>
+    public Steps3D Dilation { get; init; } = 1;
 
     /// <summary>How many planes, rows and columns of nothing surround the volume on every side; none unless said.</summary>
     /// <remarks>Read only when <see cref="PaddingMode"/> is <see cref="PaddingMode.Stated"/>.</remarks>
@@ -30,33 +34,61 @@ public readonly record struct Window3D(int Depth, int Height, int Width)
     /// <summary>How the border is had: the one <see cref="Padding"/> states on every side, unless said.</summary>
     public PaddingMode PaddingMode { get; init; }
 
+    /// <summary>Whether the window also stands at a last place whose patch overhangs the end of an axis, as PyTorch's <c>ceil_mode</c> has it.</summary>
+    public bool RoundsUp { get; init; }
+
+    /// <summary>The places of nothing at each end of each axis, stated apart; nothing, unless said.</summary>
+    /// <remarks>Instead of <see cref="Padding"/> and of every mode but <see cref="PaddingMode.Stated"/>: a window given both is refused.</remarks>
+    public Margins3D? Border { get; init; }
+
     /// <summary>How many places the window stands at along a volume so many planes deep.</summary>
     /// <param name="depth">How many planes the volume has.</param>
     /// <returns>The places, nought when the window does not fit.</returns>
-    public int DepthsOver(int depth) => Like(Depth, Height).RowsOver(depth);
+    public int DepthsOver(int depth) => Plane.RowsOver(depth);
 
     /// <summary>How many places the window stands at along a volume so many rows tall.</summary>
     /// <param name="height">How many rows each plane has.</param>
     /// <returns>The places, nought when the window does not fit.</returns>
-    public int RowsOver(int height) => Like(Depth, Height).ColumnsOver(height);
+    public int RowsOver(int height) => Plane.ColumnsOver(height);
 
     /// <summary>How many places the window stands at along a volume so many columns wide.</summary>
     /// <param name="width">How many columns each row has.</param>
     /// <returns>The places, nought when the window does not fit.</returns>
-    public int ColumnsOver(int width) => Like(1, Width).ColumnsOver(width);
+    public int ColumnsOver(int width) => Line.ColumnsOver(width);
 
     /// <inheritdoc />
-    public override string ToString() => $"window {Depth}x{Height}x{Width} (stride {Stride}, padding {PaddingMode.Said(Padding)})";
+    public override string ToString()
+    {
+        var dilated = Dilation == (Steps3D)1 ? string.Empty : $", dilated by {Dilation}";
+        var rounding = RoundsUp ? ", rounding up" : string.Empty;
+        var border = Border is { } sides
+            ? $"{sides.Deep.Before} before and {sides.Deep.After} after the planes, {sides.Down.Before} above, {sides.Down.After} below, {sides.Across.Before} before, {sides.Across.After} after"
+            : PaddingMode.Said(Padding);
+
+        return $"window {Depth}x{Height}x{Width} (stride {Stride}{dilated}{rounding}, padding {border})";
+    }
 
     /// <summary>Refuses a window that cannot stand anywhere, in the words the two-dimensional window refuses with.</summary>
     /// <exception cref="ArgumentException">
-    /// A side or the stride is below one, the border below nothing, or a border is given besides one worked out from the volume.
+    /// A side or the stride is below one, the dilation below one, the border below nothing, or a border is given besides one
+    /// worked out from the volume.
     /// </exception>
     internal void RequireStanding()
     {
-        if (Depth < 1 || Height < 1 || Width < 1 || Stride < 1 || Padding < 0)
+        if (Depth < 1 || Height < 1 || Width < 1 || Stride.Deep < 1 || Stride.Down < 1 || Stride.Across < 1 || Padding < 0
+            || (Border is { } sides && (sides.Deep.Before < 0 || sides.Deep.After < 0 || sides.Down.Before < 0 || sides.Down.After < 0 || sides.Across.Before < 0 || sides.Across.After < 0)))
         {
             throw new ArgumentException($"A {this} cannot stand anywhere: its sides and its stride are at least one, and its border at least nothing.", "window");
+        }
+
+        if (Dilation.Deep < 1 || Dilation.Down < 1 || Dilation.Across < 1)
+        {
+            throw new ArgumentException($"A {this} cannot stand anywhere: its dilation is at least one.", "window");
+        }
+
+        if (Border is not null && (Padding != 0 || PaddingMode != PaddingMode.Stated))
+        {
+            throw new ArgumentException($"A {this} states its border at each end of each axis, and cannot be given a padding or a way to work one out besides.", "window");
         }
 
         if (PaddingMode != PaddingMode.Stated && Padding != 0)
@@ -73,16 +105,43 @@ public readonly record struct Window3D(int Depth, int Height, int Width)
     /// <returns>The two windows; the second is padded along the columns alone.</returns>
     internal WindowWalk3D Over(int width)
     {
-        var along = Like(1, Width).BordersOver(1, width);
+        var along = Line.BordersOver(1, width);
 
         return new WindowWalk3D(
-            Like(Depth, Height),
-            new Window(Depth * Height, Width) { Stride = Stride, Border = new Borders(0, 0, along.Left, along.Right) });
+            Plane,
+            new Window(Depth * Height, Width)
+            {
+                // The first unfolding laid the planes and rows it chose side by side, so the second walks whole lines: one
+                // place down however it strides, and its cells a column's dilation apart and no more.
+                Stride = new Steps(1, Stride.Across),
+                Dilation = new Steps(1, Dilation.Across),
+                RoundsUp = RoundsUp,
+                Border = new Margins(new Sides(0, 0), new Sides(along.Left, along.Right)),
+            });
     }
 
-    // A two-dimensional window of the given sides with this window's stride and way of padding: what works out a border and a
-    // number of places along two axes, or along one when a side is a single place.
-    private Window Like(int rows, int columns) => new(rows, columns) { Stride = Stride, Padding = Padding, PaddingMode = PaddingMode };
+    // The window over the planes and rows: a two-dimensional window whose rows are the volume's planes and whose columns are
+    // each plane's rows, so it carries those two axes' own strides, dilations and border.
+    private Window Plane => new(Depth, Height)
+    {
+        Stride = new Steps(Stride.Deep, Stride.Down),
+        Dilation = new Steps(Dilation.Deep, Dilation.Down),
+        Padding = Padding,
+        PaddingMode = PaddingMode,
+        RoundsUp = RoundsUp,
+        Border = Border is { } sides ? new Margins(sides.Deep, sides.Down) : null,
+    };
+
+    // The window along the columns alone, one row tall: what works out the border and the places of that one axis.
+    private Window Line => new(1, Width)
+    {
+        Stride = new Steps(1, Stride.Across),
+        Dilation = new Steps(1, Dilation.Across),
+        Padding = Padding,
+        PaddingMode = PaddingMode,
+        RoundsUp = RoundsUp,
+        Border = Border is { } sides ? new Margins(new Sides(0, 0), sides.Across) : null,
+    };
 }
 
 /// <summary>How the engine's two-dimensional unfolding walks a volume: the planes and rows first, the columns after them.</summary>

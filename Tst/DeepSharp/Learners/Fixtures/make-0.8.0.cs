@@ -23,6 +23,7 @@ using System.Text.Json.Nodes;
 using DeepSharp.Learners.Networks;
 using DeepSharp.Networks;
 using DeepSharp.Pipelines;
+using DeepSharp.Tensors;
 
 var target = Path.GetFullPath(args.Length > 0 ? args[0] : ".");
 Directory.CreateDirectory(target);
@@ -136,6 +137,29 @@ Write("series.fitted.network.json", fitted.ToJson());
 
 var told2 = fitted.Predict(CsvRowSource.FromText(served));
 
+// ---- two networks with a convolution, fitted by hand behind the same pipeline: one whose window states its border, one
+// whose window has it worked out as TensorFlow's 'same'. The series hands over eighteen features, which are laid out as a
+// three-by-three image of two channels. These two files are what holds the window's settings to the byte: everything a
+// later release adds to a window is written only when it says something, so these must read and be written again unchanged.
+TrainedNetwork Convolving(Window window) =>
+    new Sequential()
+        .Reshape(new Shape(3, 3, 2))
+        .Conv2D(2, window)
+        .Relu()
+        .Flatten()
+        .Dense(5)
+        .Compile(new Adam(0.01), new CrossEntropy())
+        .Fit(prepared, new FitOptions(seed: 20261009) { Epochs = 2, BatchSize = 16 });
+
+var convolved = Convolving(new Window(2, 2) { Padding = 1 });
+var convolvedSame = Convolving(new Window(2, 2) { PaddingMode = PaddingMode.Same });
+
+Write("series.conv.network.json", convolved.ToJson());
+Write("series.conv.same.network.json", convolvedSame.ToJson());
+
+var told4 = convolved.Predict(CsvRowSource.FromText(served));
+var told5 = convolvedSame.Predict(CsvRowSource.FromText(served));
+
 // A checkpoint serves as a trained network too: what it answers is what the network stood at when it was taken.
 var told3 = TrainedNetwork.FromJson(checkpointed, NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks()).Predict(CsvRowSource.FromText(served));
 
@@ -166,6 +190,8 @@ var facts = new JsonObject
     ["seriesAnswers"] = Rows(told.Answers),
     ["fittedAnswers"] = Rows(told2.Answers),
     ["checkpointAnswers"] = Rows(told3.Answers),
+    ["convAnswers"] = Rows(told4.Answers),
+    ["convSameAnswers"] = Rows(told5.Answers),
     ["fittedEpochs"] = fitted.History!.Epochs.Count,
     ["checkpointEpochs"] = 2,
     ["measures"] = new JsonArray([.. trained.Measures!.Parts.Select(part => (JsonNode?)new JsonObject

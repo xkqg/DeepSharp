@@ -53,6 +53,58 @@ public sealed class Rebuilding
     public IReadOnlyList<int> Wholes(JsonElement settings, string key) =>
         [.. Listed(settings, key, "a list of whole numbers").Select(element => element.AsWhole() ?? throw Refusal(key, "a list of whole numbers"))];
 
+    /// <summary>A whole number a kind was written with, or the one it means by not having been written with it.</summary>
+    /// <param name="settings">The object the kind was written as.</param>
+    /// <param name="key">The setting.</param>
+    /// <param name="whenAbsent">What the kind means where the setting is not written.</param>
+    /// <returns>Its value, or <paramref name="whenAbsent"/>.</returns>
+    /// <exception cref="FormatException">The setting is written as something that is not a whole number.</exception>
+    /// <remarks>
+    /// How a setting is added to a kind without asking anything of a file written before it: the file that says nothing of it
+    /// means what it always meant, and a kind writes it only when it says something else.
+    /// </remarks>
+    public int Whole(JsonElement settings, string key, int whenAbsent) =>
+        settings.Member(key) is null ? whenAbsent : Whole(settings, key);
+
+    /// <summary>A list of whole numbers a kind was written with, or what it means by not having been written with them.</summary>
+    /// <param name="settings">The object the kind was written as.</param>
+    /// <param name="key">The setting.</param>
+    /// <param name="whenAbsent">What the kind means where the setting is not written.</param>
+    /// <returns>Its values, or <paramref name="whenAbsent"/>.</returns>
+    /// <exception cref="FormatException">The setting is written as something that is not a list of whole numbers.</exception>
+    public IReadOnlyList<int> Wholes(JsonElement settings, string key, IReadOnlyList<int> whenAbsent) =>
+        settings.Member(key) is null ? whenAbsent : Wholes(settings, key);
+
+    /// <summary>A number a kind was written with, or the one it means by not having been written with it.</summary>
+    /// <param name="settings">The object the kind was written as.</param>
+    /// <param name="key">The setting.</param>
+    /// <param name="whenAbsent">What the kind means where the setting is not written.</param>
+    /// <returns>Its value, or <paramref name="whenAbsent"/>.</returns>
+    /// <exception cref="FormatException">The setting is written as something that is not a finite number.</exception>
+    public double Number(JsonElement settings, string key, double whenAbsent) =>
+        settings.Member(key) is null ? whenAbsent : Number(settings, key);
+
+    /// <summary>A refusal of a setting in the kind's own words, placed at that setting in the file.</summary>
+    /// <param name="key">The setting the kind refuses.</param>
+    /// <param name="message">What is wrong with it, as the kind says it.</param>
+    /// <returns>The refusal, to be thrown.</returns>
+    /// <remarks>
+    /// For what a kind knows about a setting that the readers here cannot: how many numbers a window's stride holds for the
+    /// axes it walks, say. Every fault is still named at the line and column of the setting itself, with the rest.
+    /// </remarks>
+    public FormatException Refuse(string key, string message) => Placed(key, message);
+
+    /// <summary>Whether a setting is written as a list rather than as the one number or word that stands for every axis.</summary>
+    /// <param name="settings">The object the kind was written as.</param>
+    /// <param name="key">The setting.</param>
+    /// <returns>Whether it is a list.</returns>
+    /// <remarks>
+    /// A setting that says one thing for every axis and another for each axis apart is one key of two kinds, as a window's
+    /// padding is a number or a word. Reading which it is asks nothing of the setting, so a kind that does not read it on
+    /// is still named for what it left unread.
+    /// </remarks>
+    public bool Lists(JsonElement settings, string key) => settings.Member(key) is { ValueKind: JsonValueKind.Array };
+
     /// <summary>A list of numbers a kind was written with.</summary>
     /// <param name="settings">The object the kind was written as.</param>
     /// <param name="key">The setting.</param>
@@ -119,8 +171,11 @@ public sealed class Rebuilding
     }
 
     /// <summary>Whether a kind was written with a setting that it writes only when it is true: false, where it is left out.</summary>
+    /// <param name="settings">The object the kind was written as.</param>
+    /// <param name="key">The setting.</param>
+    /// <returns>Whether it says true.</returns>
     /// <exception cref="FormatException">The setting is written as anything but true or false.</exception>
-    internal bool Holds(JsonElement settings, string key)
+    public bool Holds(JsonElement settings, string key)
     {
         if (settings.Member(key) is not { } written)
         {

@@ -29,6 +29,8 @@ public sealed class SpatialConvolutionTests() : SpatialConvolutionContract(new C
 
 public sealed class PoolingTests() : PoolingContract(new CpuBackend());
 
+public sealed class PaddingTests() : PaddingContract(new CpuBackend());
+
 public sealed class SpatialDropoutTests() : SpatialDropoutContract(new CpuBackend());
 
 public sealed class NormalisationTests() : NormalisationContract(new CpuBackend());

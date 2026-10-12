@@ -100,6 +100,21 @@ public class FilesWrittenBy080Tests
         Assert.Equal(file, trained.ToJson());
     }
 
+    [Theory]
+    [InlineData("series.conv.network.json", "convAnswers")]
+    [InlineData("series.conv.same.network.json", "convSameAnswers")]
+    public void ANetworkWithAConvolution_ReadsBack_ServesWhat080Served_AndIsWrittenAsItWasWritten(string name, string answers)
+    {
+        // A window is where this release adds the most: a stride of its own for each axis, a dilation, a border that differs
+        // from side to side, a window that rounds its places up. Every one of them is written only when it says something, so
+        // these two files — a stated border and one worked out as 'same' — are what holds that promise to the byte.
+        var file = Text(name);
+        var trained = TrainedNetwork.FromJson(file, NetworkCatalog.BuiltIn(), Catalog());
+
+        Told(Facts[answers]!, trained.Predict(Served()));
+        Assert.Equal(file, trained.ToJson());
+    }
+
     [Fact]
     public void TheCheckpoint_ReadsBack_ServesAsTheNetworkItWas_AndIsNotGoneOnFromUnderAnotherVersionOfTheEngine()
     {

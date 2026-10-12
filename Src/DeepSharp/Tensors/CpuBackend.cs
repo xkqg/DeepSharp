@@ -394,7 +394,7 @@ public sealed class CpuBackend : INamesItsVersionAndDevice
         private readonly int _width = images[2];
         private readonly int _rows = window.RowsOver(images[1]);
         private readonly int _columns = window.ColumnsOver(images[2]);
-        private readonly Borders _borders = window.BordersOver(images[1], images[2]);
+        private readonly Placing _placing = window.PlacingOver(images[1], images[2]);
 
         /// <summary>How many values each place of an image holds.</summary>
         public int Channels { get; } = images[3];
@@ -420,8 +420,8 @@ public sealed class CpuBackend : INamesItsVersionAndDevice
                         {
                             for (var across = 0; across < window.Width; across++)
                             {
-                                var y = (row * window.Stride) - _borders.Top + down;
-                                var x = (column * window.Stride) - _borders.Left + across;
+                                var y = (row * _placing.Stride.Down) - _placing.Border.Top + (down * _placing.Dilation.Down);
+                                var x = (column * _placing.Stride.Across) - _placing.Border.Left + (across * _placing.Dilation.Across);
 
                                 if (y >= 0 && y < _height && x >= 0 && x < _width)
                                 {

@@ -13,6 +13,12 @@ namespace DeepSharp.Tests.Backends.Contract;
 /// the values Fixtures/spatial-pytorch.py printed, for every engine to be held to. Everything is laid out with the channels
 /// last, as the seam lays it out.
 /// </summary>
+/// <remarks>
+/// A stride and a dilation are read as a list, one number an axis, whether or not the axes agree; a padding is read as the
+/// one number on every side, as the word for a border worked out, or as a flat pair for each axis where each end is stated
+/// apart. What a case does not say it does not have: no dilation is a dilation of one, no groups is one group, and a case
+/// that says nothing of rounding stands only where its window fits whole.
+/// </remarks>
 internal sealed class SpatialReference
 {
     private SpatialReference(JsonElement written)
@@ -28,21 +34,40 @@ internal sealed class SpatialReference
         OutShape = new Shape(Wholes(written, "outShape"));
         GradOutput = Values(written, "gradOutput");
         GradInput = Values(written, "gradInput");
+        Groups = written.TryGetProperty("groups", out var groups) ? groups.GetInt32() : 1;
+        RoundsUp = written.TryGetProperty("roundsUp", out var rounds) && rounds.GetBoolean();
+        Value = written.TryGetProperty("value", out var value) ? (float)value.GetDouble() : 0f;
+
+        if (written.TryGetProperty("outSizes", out var outSizes))
+        {
+            OutSizes = [.. outSizes.EnumerateArray().Select(size => size.GetInt32())];
+        }
+
+        if (written.TryGetProperty("outputPadding", out var outputPadding))
+        {
+            OutputPadding = [.. outputPadding.EnumerateArray().Select(places => places.GetInt32())];
+        }
 
         if (written.TryGetProperty("sizes", out var sizes))
         {
             Sizes = [.. sizes.EnumerateArray().Select(size => size.GetInt32())];
-            Stride = written.GetProperty("stride").GetInt32();
+            Stride = Wholes(written, "stride");
+            Dilation = Wholes(written, "dilation");
+        }
 
-            var padding = written.GetProperty("padding");
-
-            if (padding.ValueKind == JsonValueKind.Number)
+        if (written.TryGetProperty("padding", out var padding))
+        {
+            switch (padding.ValueKind)
             {
-                Padding = padding.GetInt32();
-            }
-            else
-            {
-                PaddingMode = padding.GetString() == "same" ? PaddingMode.Same : PaddingMode.Causal;
+                case JsonValueKind.Number:
+                    Padding = padding.GetInt32();
+                    break;
+                case JsonValueKind.String:
+                    PaddingMode = padding.GetString() == "same" ? PaddingMode.Same : PaddingMode.Causal;
+                    break;
+                default:
+                    Border = [.. padding.EnumerateArray().Select(places => places.GetInt32())];
+                    break;
             }
         }
 
@@ -63,7 +88,10 @@ internal sealed class SpatialReference
 
     public string Name { get; }
 
-    /// <summary>What it is: <c>convolution</c>, <c>max</c>, <c>average</c>, <c>globalAverage</c> or <c>globalMax</c>.</summary>
+    /// <summary>
+    /// What it is: <c>convolution</c>, <c>transposed</c>, <c>max</c>, <c>average</c>, <c>globalAverage</c>, <c>globalMax</c>,
+    /// <c>adaptiveAverage</c>, <c>adaptiveMax</c> or <c>pad</c>.
+    /// </summary>
     public string Kind { get; }
 
     /// <summary>How many axes the window walks: one, two or three.</summary>
@@ -77,15 +105,37 @@ internal sealed class SpatialReference
 
     public int OutChannels { get; }
 
+    /// <summary>How many groups the channels are split into; one, where the case says nothing of it.</summary>
+    public int Groups { get; }
+
     public int[] Sizes { get; } = [];
 
-    public int Stride { get; }
+    /// <summary>How far the window moves along each axis.</summary>
+    public int[] Stride { get; } = [];
+
+    /// <summary>How far apart the window's cells are along each axis.</summary>
+    public int[] Dilation { get; } = [];
+
+    /// <summary>The places of nothing a transposed convolution adds at the end of each axis.</summary>
+    public int[] OutputPadding { get; } = [];
+
+    /// <summary>What a pooling to a size other than one place pools each axis to.</summary>
+    public int[] OutSizes { get; } = [];
 
     public int Padding { get; }
 
     public PaddingMode PaddingMode { get; }
 
+    /// <summary>The places of nothing at each end of each axis, where the case states them apart; nothing otherwise.</summary>
+    public int[] Border { get; } = [];
+
+    /// <summary>Whether the window also stands at a last place whose patch overhangs the end.</summary>
+    public bool RoundsUp { get; }
+
     public bool CountsPadding { get; }
+
+    /// <summary>What a layer that only pads pads with.</summary>
+    public float Value { get; }
 
     public float[] Input { get; }
 
@@ -109,6 +159,11 @@ internal sealed class SpatialReference
     public static TheoryData<string> Named(string kind, params int[] ranks) =>
         [.. All.Where(reference => reference.Kind == kind && (ranks.Length == 0 || ranks.Contains(reference.Rank))).Select(reference => reference.Name)];
 
+    /// <summary>The names of the cases of one kind whose channels are all in one group: what a layer that does not group reads.</summary>
+    public static TheoryData<string> NamedUngrouped(string kind, params int[] ranks) =>
+        [.. All.Where(reference => reference.Kind == kind && reference.Groups == 1 && (ranks.Length == 0 || ranks.Contains(reference.Rank)))
+            .Select(reference => reference.Name)];
+
     /// <summary>The case of a name.</summary>
     public static SpatialReference Of(string name) => All.Single(reference => reference.Name == name);
 
@@ -118,11 +173,37 @@ internal sealed class SpatialReference
     /// <summary>The gradient of the loss at the layer's output: what the case multiplied it by before adding it up.</summary>
     public Tensor Gradient() => Tensor.From(OutShape, GradOutput);
 
-    public Window1D Along() => new(Sizes[0]) { Stride = Stride, Padding = Padding, PaddingMode = PaddingMode };
+    public Window1D Along() => new(Sizes[0])
+    {
+        Stride = Stride[0],
+        Dilation = Dilation[0],
+        RoundsUp = RoundsUp,
+        Padding = Border.Length > 0 ? 0 : Padding,
+        PaddingMode = Border.Length > 0 ? PaddingMode.Stated : PaddingMode,
+        Border = Border.Length > 0 ? new Sides(Border[0], Border[1]) : null,
+    };
 
-    public Window Over() => new(Sizes[0], Sizes[1]) { Stride = Stride, Padding = Padding, PaddingMode = PaddingMode };
+    public Window Over() => new(Sizes[0], Sizes[1])
+    {
+        Stride = new Steps(Stride[0], Stride[1]),
+        Dilation = new Steps(Dilation[0], Dilation[1]),
+        RoundsUp = RoundsUp,
+        Padding = Border.Length > 0 ? 0 : Padding,
+        PaddingMode = Border.Length > 0 ? PaddingMode.Stated : PaddingMode,
+        Border = Border.Length > 0 ? new Margins(new Sides(Border[0], Border[1]), new Sides(Border[2], Border[3])) : null,
+    };
 
-    public Window3D Through() => new(Sizes[0], Sizes[1], Sizes[2]) { Stride = Stride, Padding = Padding, PaddingMode = PaddingMode };
+    public Window3D Through() => new(Sizes[0], Sizes[1], Sizes[2])
+    {
+        Stride = new Steps3D(Stride[0], Stride[1], Stride[2]),
+        Dilation = new Steps3D(Dilation[0], Dilation[1], Dilation[2]),
+        RoundsUp = RoundsUp,
+        Padding = Border.Length > 0 ? 0 : Padding,
+        PaddingMode = Border.Length > 0 ? PaddingMode.Stated : PaddingMode,
+        Border = Border.Length > 0
+            ? new Margins3D(new Sides(Border[0], Border[1]), new Sides(Border[2], Border[3]), new Sides(Border[4], Border[5]))
+            : null,
+    };
 
     /// <summary>The kernel and bias PyTorch had, as the convolution of the case's rank.</summary>
     public Convolution Convolution()
@@ -130,11 +211,13 @@ internal sealed class SpatialReference
         var kernel = Tensor.From(new Shape(Kernel.Length / OutChannels, OutChannels), Kernel);
         var bias = Tensor.From(new Shape(OutChannels), Bias);
 
+        var channels = new Channels { In = Channels, Out = OutChannels, Groups = Groups };
+
         return Rank switch
         {
-            1 => new Conv1D(kernel, bias, Along()),
-            2 => new Conv2D(kernel, bias, Over()),
-            _ => new Conv3D(kernel, bias, Through()),
+            1 => new Conv1D(kernel, bias, Along(), channels),
+            2 => new Conv2D(kernel, bias, Over(), channels),
+            _ => new Conv3D(kernel, bias, Through(), channels),
         };
     }
 
@@ -153,12 +236,72 @@ internal sealed class SpatialReference
         ("globalMax", 1) => new GlobalMaxPool1D(),
         ("globalMax", 2) => new GlobalMaxPool2D(),
         ("globalMax", 3) => new GlobalMaxPool3D(),
+        ("adaptiveAverage", 1) => new AdaptiveAvgPool1D(Pooled()),
+        ("adaptiveAverage", 2) => new AdaptiveAvgPool2D(Pooled()),
+        ("adaptiveAverage", 3) => new AdaptiveAvgPool3D(Pooled()),
+        ("adaptiveMax", 1) => new AdaptiveMaxPool1D(Pooled()),
+        ("adaptiveMax", 2) => new AdaptiveMaxPool2D(Pooled()),
+        ("adaptiveMax", 3) => new AdaptiveMaxPool3D(Pooled()),
         _ => throw new InvalidOperationException($"No layer pools as '{Kind}' along {Rank} axes."),
+    };
+
+    /// <summary>The kernel and bias PyTorch had, as the transposed convolution of the case's rank.</summary>
+    public Convolution Transposed()
+    {
+        var kernel = Tensor.From(new Shape(Channels, Kernel.Length / Channels), Kernel);
+        var bias = Tensor.From(new Shape(OutChannels), Bias);
+        var channels = new Channels { In = Channels, Out = OutChannels, Groups = Groups };
+
+        return Rank switch
+        {
+            1 => new Conv1DTranspose(kernel, bias, Along(), channels),
+            2 => new Conv2DTranspose(kernel, bias, Over(), channels),
+            _ => new Conv3DTranspose(kernel, bias, Through(), channels),
+        };
+    }
+
+    /// <summary>
+    /// The same transposed convolution, built as PyTorch builds one — with the places it adds at the end of each axis — and
+    /// then handed PyTorch's own numbers through the door numbers trained elsewhere go in by.
+    /// </summary>
+    public Convolution TransposedGrown()
+    {
+        var channels = new Channels { In = Channels, Out = OutChannels, Groups = Groups };
+        var draws = new RandomStream(1).Draw("reference", 0, 0);
+
+        Convolution layer = Rank switch
+        {
+            1 => new Conv1DTranspose(channels, Along(), draws, OutputPadding[0]),
+            2 => new Conv2DTranspose(channels, Over(), draws, new Steps(OutputPadding[0], OutputPadding[1])),
+            _ => new Conv3DTranspose(channels, Through(), draws, new Steps3D(OutputPadding[0], OutputPadding[1], OutputPadding[2])),
+        };
+
+        new LayerStack(layer).Load([
+            new SlotEntry("0.weight", Tensor.From(new Shape(Channels, Kernel.Length / Channels), Kernel), "the reference"),
+            new SlotEntry("0.bias", Tensor.From(new Shape(OutChannels), Bias), "the reference"),
+        ]);
+
+        return layer;
+    }
+
+    /// <summary>What a pooling to a size other than one place pools its axes to.</summary>
+    public Shape Pooled() => new(OutSizes);
+
+    /// <summary>The layer that only pads, of the case's rank, with the places and the value the case holds.</summary>
+    public Layer Pads() => Rank switch
+    {
+        1 => new Pad1D(new Sides(Border[0], Border[1]), Value),
+        2 => new Pad2D(new Margins(new Sides(Border[0], Border[1]), new Sides(Border[2], Border[3])), Value),
+        _ => new Pad3D(
+            new Margins3D(new Sides(Border[0], Border[1]), new Sides(Border[2], Border[3]), new Sides(Border[4], Border[5])),
+            Value),
     };
 
     /// <summary>The sum of the layer's output times the gradient the case multiplied it by: the loss PyTorch took the gradient of.</summary>
     public Tensor LossOver(ITensorBackend backend, Tensor output) =>
         backend.Scale(backend.Mean(backend.Multiply(output, Gradient())), backend.Fill(new Shape(), output.Shape.Count));
+
+    public override string ToString() => string.Create(CultureInfo.InvariantCulture, $"{Name}: {Count}x{string.Join('x', Extents)}x{Channels}");
 
     private static List<SpatialReference> Read()
     {
@@ -173,6 +316,4 @@ internal sealed class SpatialReference
 
     private static float[] Values(JsonElement written, string name) =>
         [.. written.GetProperty(name).EnumerateArray().Select(value => (float)value.GetDouble())];
-
-    public override string ToString() => string.Create(CultureInfo.InvariantCulture, $"{Name}: {Count}x{string.Join('x', Extents)}x{Channels}");
 }

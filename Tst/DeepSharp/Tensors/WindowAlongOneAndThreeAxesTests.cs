@@ -69,7 +69,7 @@ public class WindowAlongOneAndThreeAxesTests
         var same = new Window1D(4) { Stride = 2, PaddingMode = PaddingMode.Same }.Over(7);
         var causal = new Window1D(3) { PaddingMode = PaddingMode.Causal }.Over(6);
 
-        Assert.Equal(new Window(1, 3) { Stride = 2, Border = new Borders(0, 0, 2, 2) }, stated);
+        Assert.Equal(new Window(1, 3) { Stride = new Steps(1, 2), Border = new Margins(new Sides(0, 0), new Sides(2, 2)) }, stated);
         Assert.Equal(new Borders(0, 0, 1, 2), same.BordersOver(1, 7));
         Assert.Equal(new Borders(0, 0, 2, 0), causal.BordersOver(1, 6));
         Assert.Equal(1, stated.RowsOver(1));
@@ -84,6 +84,28 @@ public class WindowAlongOneAndThreeAxesTests
         Assert.Equal("window 3 (stride 1, padding 'same')", new Window1D(3) { PaddingMode = PaddingMode.Same }.ToString());
         Assert.Equal("window 3 (stride 1, padding 'causal')", new Window1D(3) { PaddingMode = PaddingMode.Causal }.ToString());
         Assert.NotEqual(new Window1D(3), new Window1D(3) { PaddingMode = PaddingMode.Same });
+    }
+
+    [Fact]
+    public void AWindowAlongOneAxis_SaysItsDilationItsRoundingAndTheBorderItStatesAtEachEnd()
+    {
+        Assert.Equal("window 3 (stride 2, dilated by 2, padding 1)", new Window1D(3) { Stride = 2, Dilation = 2, Padding = 1 }.ToString());
+        Assert.Equal("window 2 (stride 2, rounding up, padding 0)", new Window1D(2) { Stride = 2, RoundsUp = true }.ToString());
+        Assert.Equal("window 2 (stride 1, padding 1 before, 0 after)", new Window1D(2) { Border = new Sides(1, 0) }.ToString());
+    }
+
+    [Fact]
+    public void AWindowAlongOneAxis_OfADilationBelowOne_OrABorderBesidesOneWorkedOut_IsRefusedSayingWhich()
+    {
+        var dilation = Assert.Throws<ArgumentException>(new Window1D(3) { Dilation = 0 }.RequireStanding);
+        var besides = Assert.Throws<ArgumentException>(new Window1D(3) { Border = new Sides(1, 1), PaddingMode = PaddingMode.Same }.RequireStanding);
+        var both = Assert.Throws<ArgumentException>(new Window1D(3) { Border = new Sides(1, 1), Padding = 1 }.RequireStanding);
+
+        Assert.Equal("window", dilation.ParamName);
+        Assert.StartsWith("A window 3 (stride 1, dilated by 0, padding 0) cannot stand anywhere: its dilation is at least one.", dilation.Message, StringComparison.Ordinal);
+        Assert.Contains("states its border at each end, and cannot be given a padding or a way to work one out besides.", besides.Message, StringComparison.Ordinal);
+        Assert.Contains("states its border at each end, and cannot be given a padding or a way to work one out besides.", both.Message, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(new Window1D(3) { Border = new Sides(-1, 0) }.RequireStanding);
     }
 
     [Theory]
@@ -155,7 +177,7 @@ public class WindowAlongOneAndThreeAxesTests
         var walk = window.Over(9);
 
         Assert.Equal(new Window(2, 3) { Stride = 2, Padding = 1 }, walk.Planes);
-        Assert.Equal(new Window(6, 4) { Stride = 2, Border = new Borders(0, 0, 1, 1) }, walk.Lines);
+        Assert.Equal(new Window(6, 4) { Stride = new Steps(1, 2), Border = new Margins(new Sides(0, 0), new Sides(1, 1)) }, walk.Lines);
         Assert.Equal(1, walk.Lines.RowsOver(6));
         Assert.Equal(window.ColumnsOver(9), walk.Lines.ColumnsOver(9));
     }
@@ -179,6 +201,34 @@ public class WindowAlongOneAndThreeAxesTests
         Assert.Equal("window 2x3x4 (stride 1, padding 'same')", new Window3D(2, 3, 4) { PaddingMode = PaddingMode.Same }.ToString());
         Assert.Equal("window 2x3x4 (stride 1, padding 'causal')", new Window3D(2, 3, 4) { PaddingMode = PaddingMode.Causal }.ToString());
         Assert.NotEqual(new Window3D(2, 3, 4), new Window3D(2, 3, 4) { Padding = 1 });
+    }
+
+    [Fact]
+    public void AWindowAlongThreeAxes_SaysItsDilationItsRoundingAndTheBorderItStatesAtEachEndOfEachAxis()
+    {
+        Assert.Equal(
+            "window 2x2x2 (stride 2, dilated by 2 deep, 1 down and 1 across, padding 0)",
+            new Window3D(2, 2, 2) { Stride = 2, Dilation = new Steps3D(2, 1, 1) }.ToString());
+        Assert.Equal("window 2x2x2 (stride 2, rounding up, padding 0)", new Window3D(2, 2, 2) { Stride = 2, RoundsUp = true }.ToString());
+        Assert.Equal(
+            "window 2x2x2 (stride 1, padding 1 before and 0 after the planes, 0 above, 1 below, 1 before, 1 after)",
+            new Window3D(2, 2, 2) { Border = new Margins3D(new Sides(1, 0), new Sides(0, 1), new Sides(1, 1)) }.ToString());
+    }
+
+    [Fact]
+    public void AWindowAlongThreeAxes_OfADilationBelowOne_OrABorderBesidesOneWorkedOut_IsRefusedSayingWhich()
+    {
+        var even = new Sides(1, 1);
+        var dilation = Assert.Throws<ArgumentException>(new Window3D(2, 2, 2) { Dilation = new Steps3D(1, 1, 0) }.RequireStanding);
+        var besides = Assert.Throws<ArgumentException>(
+            new Window3D(2, 2, 2) { Border = new Margins3D(even, even, even), PaddingMode = PaddingMode.Same }.RequireStanding);
+
+        Assert.Equal("window", dilation.ParamName);
+        Assert.Contains("cannot stand anywhere: its dilation is at least one.", dilation.Message, StringComparison.Ordinal);
+        Assert.Contains("states its border at each end of each axis, and cannot be given a padding or a way to work one out besides.", besides.Message, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(new Window3D(2, 2, 2) { Dilation = new Steps3D(0, 1, 1) }.RequireStanding);
+        Assert.Throws<ArgumentException>(new Window3D(2, 2, 2) { Dilation = new Steps3D(1, 0, 1) }.RequireStanding);
+        Assert.Throws<ArgumentException>(new Window3D(2, 2, 2) { Border = new Margins3D(new Sides(-1, 0), even, even) }.RequireStanding);
     }
 
     [Theory]

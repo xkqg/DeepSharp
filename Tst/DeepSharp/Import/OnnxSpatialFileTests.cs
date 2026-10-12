@@ -229,6 +229,50 @@ public class OnnxSpatialFileTests
     }
 
     [Fact]
+    public void APaddingThatNamesTheAxesItPads_PutsThePlacesOnThoseAxes_AndOneThatNamesNoValue_PadsWithNothing()
+    {
+        // ONNX lets a Pad name the axes its places run along, counted from the end where they are below nothing, and leave
+        // the value out for a padding of nothing. PyTorch's exporter writes neither, so both are read from a graph edited to
+        // say them: the places land on the axes named, and nothing else of the graph changes.
+        var named = new OnnxFile(new MeanSquaredError()).Read(OnnxFixtures.Edited("onnx-padded-value.onnx", model =>
+        {
+            model.Graph.Initializer.Add(OnnxFixtures.Wholes("axes", -2, -1));
+            model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(model.Node("node_pad").Input[1]))] =
+                OnnxFixtures.Wholes(model.Node("node_pad").Input[1], 0, 1, 2, 1);
+            model.Node("node_pad").Input.Add("axes");
+        }));
+        var nothing = new OnnxFile(new MeanSquaredError()).Read(
+            OnnxFixtures.Edited("onnx-padded-value.onnx", model => model.Node("node_pad").Input.RemoveAt(2)));
+
+        var onAxes = Assert.IsType<Pad2D>(Assert.IsType<LayerStack>(named.Network).Layers[0]);
+        var ofNothing = Assert.IsType<Pad2D>(Assert.IsType<LayerStack>(nothing.Network).Layers[0]);
+
+        Assert.Equal(new Margins(new Sides(0, 2), new Sides(1, 1)), onAxes.Border);
+        Assert.Equal(-1.5f, onAxes.Value);
+        Assert.Equal(new Margins(new Sides(0, 2), new Sides(1, 1)), ofNothing.Border);
+        Assert.Equal(0f, ofNothing.Value);
+    }
+
+    [Fact]
+    public void PadsAlongASeriesOrThroughAVolume_ThatNoSameGives_AreReadAsTheBorderTheyState()
+    {
+        // Pads whose ends differ by more than the odd place 'same' leaves cannot be any 'same', whatever reaches the node, so
+        // they are what they say: that border, at each end of each axis.
+        var series = new OnnxFile(new MeanSquaredError()).Read(
+            OnnxFixtures.Edited("onnx-borders-series.onnx", model => model.Node("averagepool_3").SetWholes("pads", 0, 2)));
+        var volume = new OnnxFile(new MeanSquaredError()).Read(
+            OnnxFixtures.Edited("onnx-borders-volume.onnx", model => model.Node("averagepool_3").SetWholes("pads", 0, 0, 0, 2, 2, 2)));
+
+        var along = Assert.IsType<AvgPool1D>(Assert.IsType<LayerStack>(series.Network).Layers.Last(layer => layer is AvgPool1D));
+        var through = Assert.IsType<AvgPool3D>(Assert.IsType<LayerStack>(volume.Network).Layers.Last(layer => layer is AvgPool3D));
+
+        Assert.Equal(new Sides(0, 2), along.Window.Border);
+        Assert.Equal(PaddingMode.Stated, along.Window.PaddingMode);
+        Assert.Equal(new Margins3D(new Sides(0, 2), new Sides(0, 2), new Sides(0, 2)), through.Window.Border);
+        Assert.Equal(PaddingMode.Stated, through.Window.PaddingMode);
+    }
+
+    [Fact]
     public void APaddingWrittenAsSameLower_WhereTheLengthLeavesNoOddPlace_IsTheSamePaddingSameUpperIs()
     {
         // The first pooling of the borders written at a stride of two stands on a series of 23 steps: three steps at a stride
@@ -435,4 +479,95 @@ public class OnnxSpatialFileTests
 
     private static int[][] Bits(Network network) =>
         [.. network.Slots().Select(named => named.Slot.Value.Values.ToArray().Select(BitConverter.SingleToInt32Bits).ToArray())];
+
+    /// <summary>
+    /// The settings a graph could say and a network here could not be built of, every one of them now read: a stride of its
+    /// own for each axis, a dilated window, channels in groups, a border stated at each end of each axis, and a pooling that
+    /// rounds the number of places up. Each is held to the WINDOW the layer ends up with, not merely to the node being taken.
+    /// </summary>
+    [Theory]
+    [InlineData("onnx-series-torchscript.onnx", "/0/0.0/Conv", "dilations", 0, "window 3 (stride 2, dilated by 2, padding 1)")]
+    [InlineData("onnx-volume-torchscript.onnx", "/0/0.0/Conv", "dilations", 2, "window 3x3x3 (stride 1, dilated by 1 deep, 2 down and 1 across, padding 1)")]
+    public void AWindowSettingThatUsedToBeRefused_IsReadAsTheWindowSaysIt(string file, string node, string setting, int which, string window)
+    {
+        var edits = new Dictionary<(string, int), long[]> { [("dilations", 0)] = [2], [("dilations", 2)] = [1, 2, 1] };
+
+        var read = new OnnxFile(new MeanSquaredError()).Read(OnnxFixtures.Edited(file, model => model.Node(node).SetWholes(setting, edits[(setting, which)])));
+        var first = Assert.IsType<LayerStack>(read.Network).Layers[0];
+
+        Assert.Equal(window, first switch
+        {
+            Conv1D line => line.Window.ToString(),
+            Conv2D plane => plane.Window.ToString(),
+            _ => ((Conv3D)first).Window.ToString(),
+        });
+    }
+
+    [Fact]
+    public void AConvolutionInGroups_AndAPoolingThatRoundsUp_AreReadAsTheyAreSaid()
+    {
+        // The channels of the first convolution of the series net go into two groups, which halves the kernel it reads, so
+        // the numbers after it are refused for their shape — which is itself the proof that the groups were read.
+        var grouped = Assert.Throws<FormatException>(
+            () => new OnnxFile(new MeanSquaredError()).Read(OnnxFixtures.Edited("onnx-series-torchscript.onnx", model => model.Node("/0/0.0/Conv").SetWhole("group", 2))));
+
+        Assert.Contains("3 channels in and 4 out do not go into 2 groups", grouped.Message, StringComparison.Ordinal);
+
+        // And the rounding is read too, which the places it adds prove: the pooling stands at one place more, so the dense
+        // layer at the end of the net reads five values more than the graph's numbers were written for.
+        var rounded = Assert.Throws<SlotLoadException>(
+            () => new OnnxFile(new MeanSquaredError()).Read(
+                OnnxFixtures.Edited("onnx-series-torchscript.onnx", model => model.Node("/0/0.3/MaxPool").SetWhole("ceil_mode", 1))));
+
+        Assert.Contains("'8.weight' is a 20x3 slot here, and is written as 15x3", rounded.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// A graph holding a convolution that gives the places back, and one holding a layer that only pads: read into the
+    /// network each is, and held to what PyTorch answered through it. A padding of nothing before a convolution is folded
+    /// into that convolution's own border by the exporter, which is read as the border stated at each end of each axis; a
+    /// padding of any other value stays a node of its own.
+    /// </summary>
+    [Theory]
+    [InlineData("onnx-transposed")]
+    [InlineData("onnx-padded")]
+    [InlineData("onnx-padded-value")]
+    [InlineData("onnx-transposed-series")]
+    [InlineData("onnx-transposed-volume")]
+    [InlineData("onnx-padded-series")]
+    [InlineData("onnx-padded-volume")]
+    public void AGraphThatGivesThePlacesBack_OrOnlyPads_AnswersAsPyTorchDoes(string name)
+    {
+        var torch = OnnxFixtures.Transposed.GetProperty(name);
+        var examples = OnnxFixtures.Images(torch.GetProperty("examples"));
+
+        using var graph = OnnxFixtures.Open($"{name}.onnx");
+        var read = new OnnxFile(new MeanSquaredError()).Read(graph);
+
+        Assert.InRange(Farthest(OnnxFixtures.Values(torch.GetProperty("outputs")), read.Network.Predict(examples, read.Loss, Engine)), 0, 1e-5);
+    }
+
+    [Fact]
+    public void TheLayersAGraphOfATransposedConvolutionAndOfAPaddingBecome_AreThoseLayers()
+    {
+        using var transposed = OnnxFixtures.Open("onnx-transposed.onnx");
+        using var padded = OnnxFixtures.Open("onnx-padded.onnx");
+        using var valued = OnnxFixtures.Open("onnx-padded-value.onnx");
+
+        var gave = Assert.IsType<LayerStack>(new OnnxFile(new MeanSquaredError()).Read(transposed).Network).Layers;
+        var pads = Assert.IsType<LayerStack>(new OnnxFile(new MeanSquaredError()).Read(padded).Network).Layers;
+        var held = Assert.IsType<LayerStack>(new OnnxFile(new MeanSquaredError()).Read(valued).Network).Layers;
+
+        Assert.Equal(new Window(3, 3) { Stride = 2, Padding = 1 }, Assert.IsType<Conv2DTranspose>(gave[0]).Window);
+        Assert.Equal(new Window(2, 2), Assert.IsType<Conv2DTranspose>(gave[2]).Window);
+
+        // The exporter folded the places of nothing into the convolution's own border: two rows above, none below, one
+        // column before and two after, which no padding stated for every side can say.
+        Assert.Equal(new Window(3, 3) { Border = new Margins(new Sides(2, 0), new Sides(1, 2)) }, Assert.IsType<Conv2D>(pads[0]).Window);
+
+        var padding = Assert.IsType<Pad2D>(held[0]);
+
+        Assert.Equal(new Margins(new Sides(0, 2), new Sides(1, 1)), padding.Border);
+        Assert.Equal(-1.5f, padding.Value);
+    }
 }

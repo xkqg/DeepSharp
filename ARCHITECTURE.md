@@ -19,6 +19,9 @@ Src/DeepSharp/Networks/           the model side
     Convolutions.cs Pooling.cs GlobalPooling.cs SpatialDropout.cs
                                     convolutions along one and three axes, poolings, global poolings and the dropouts of
                                     whole channels, each written once for all the axes it walks
+    TransposedConvolutions.cs AdaptivePooling.cs Padding.cs
+                                    the convolutions that give back the places an ordinary one takes away, the poolings
+                                    to a size rather than by a window, and the layers that only pad
     SpatialWalk.cs WindowSettings.cs
                                     a window along one, two or three axes as the one thing a convolution and a pooling
                                     walk, and how a window is written to a network's file and read back
@@ -808,9 +811,11 @@ before, but for its number. 0.8.0 refuses a file of the eighth whole, naming the
 the files in the repository that the published 0.8.0 packages wrote are read, written again and served by every release
 after it. The network's file has a number of its own and a rule of its own: a part is written as the oldest version that
 says what it holds. The training part of a checkpoint whose gradients were clipped is the third, which 0.8.0 refuses by
-its number; everything else — a network, a checkpoint of a run that clipped nothing — is still the second, which 0.8.0
-reads. A new kind of loss or optimizer needs no new number: it is a name, and a library that does not know the name
-refuses it by name.
+its number; a layer whose window strides otherwise along one axis than another, is dilated, rounds its places up or states
+its border at each end is the fourth; everything else — a network, a checkpoint of a run that clipped nothing, a window
+that says none of those — is still the second, which 0.8.0 reads. That is per instance and never per kind: the same
+convolution is the second version or the fourth according to the window it is given. A new kind of layer, of loss or of
+optimizer needs no new number either way: it is a name, and a library that does not know the name refuses it by name.
 
 ### The share you never write down
 
@@ -2142,7 +2147,9 @@ precision, ten million tenths came to a mean of 0.1087937.
 The layers, the losses and the convolution are written in the seam's operations as well, so the seam grows by what
 they need and nothing else: rectified and stepped values, tanh, the sigmoid, exp, log, a square root, softplus, a
 division, a row's log-shares, which value of each row is the first largest, a reshape, and an image's windows unfolded into
-rows and folded back. There is no rule for
+rows and folded back. The twelve layers of this release — three transposed convolutions, three that only pad and six that
+pool to a size — asked for none of it: each is those operations in another order, which is the test of whether a seam is the
+right size. There is no rule for
 stretching one shape over another: a row multiplied into every row is the row added to a tensor of noughts and then
 multiplied, and a statistic over rows is a transpose and a sum. Images are channels last, as Keras keeps them, so a
 batch of them needs no permuting between a convolution's unfolding and its matrix product. Softplus is an operation of
@@ -2396,17 +2403,25 @@ PyTorch's — the share a new batch takes — which is the complement of Keras's
 into rows and multiplies them by its kernel. Every layer's forward pass and its gradients were matched against PyTorch
 on the walked rows.
 
-A window pads an image by the border it states, the same rows and columns on every side, or as TensorFlow's and Keras's
-`padding='same'` does: along each axis as many places as the stride fits into the image, the rows or columns those need
+A window pads an image by the border it states — the same rows and columns on every side, or a pair of before and after for
+each axis — or as TensorFlow's and Keras's `padding='same'` does: along each axis as many places as the stride fits into the image, the rows or columns those need
 beyond it split in two, the odd one after. No stated border gives that. Through a window of three at a stride of two
 over 28 by 28, TensorFlow pads none before and one after, and a stated border of one gave the same fourteen by fourteen
 places with values up to 4.56 away; through a window of two, a stated border gives 27 rows or 29, where 'same' keeps 28.
 `Window.BordersOver(rows, columns)` is the one rule for the border on each side, and every engine's unfolding and
 folding starts its first patch where it says, so a window padded as 'same' stands at the same places on every engine; the
-convolution came within 1.2e−7 of TensorFlow's rule on the light engine and 3.1e−7 on the tests' native one. What a
-window covers is one stride, down and across alike, a patch of neighbouring places and every channel of a place at once;
-a stride of its own for each axis, a dilated window and channels split into groups are not built, and a file that says any
-of them is refused at the setting it names.
+convolution came within 1.2e−7 of TensorFlow's rule on the light engine and 3.1e−7 on the tests' native one.
+
+A window says five things, and four of them it says only when it has something to say. Its size, always. A stride, which is
+one number for every axis or a number of its own for each. A dilation, which is how many places apart its cells stand, one
+meaning neighbours. Whether the places at the end that do not fit whole are counted in, which is `RoundsUp`. And a border,
+which is a stated number of places on every side, a pair of before and after for each axis, or TensorFlow's 'same' and
+Keras's 'causal' worked out from the example. `Window.PlacingOver` is the one rule for all of it: it gives the border on each
+side, the stride and the dilation together, and the border rule `Window.BordersOver` reads it rather than working anything
+out of its own. A window whose stride is alike on every axis, whose cells are neighbours and which counts no half place
+prints the words it always printed and is written to a file as it always was, so the arithmetic of this paragraph costs
+nothing where it is not asked for. Every engine's unfolding and folding reads that one rule — `Placing`, never a field of
+its own — so a dilated window at a stride of its own for each axis stands at the same places on all three.
 
 Described in Keras's words, the normalisations take Keras's settings: `BatchNorm(momentum, epsilon)` takes Keras's
 momentum, the share the running statistics keep, and the layer keeps its complement; `LayerNorm(epsilon)` takes Keras's
@@ -2425,8 +2440,8 @@ came within 1.9e−9 of Keras's and its running variance lay up to 8.4e−4 abov
 The engine unfolds an image's windows into rows; that is the one thing a convolution needs of it, and the seam holds it for
 images alone. A convolution along a series is that convolution over an image one row tall. Its window pads along the series
 and never across the row, which a border stated for every side cannot say, so the window along a series works its border
-out by the two-dimensional window's own rule and hands the engine a window that states it side by side. `Window.BordersOver`
-stays the one rule, and no engine knows there was another. Keras's `padding='causal'` is the third way a window can be
+out by the two-dimensional window's own rule and hands the engine a window that states it side by side. `Window.PlacingOver`
+stays the one rule — the border, the stride and the dilation together — and no engine knows there was another. Keras's `padding='causal'` is the third way a window can be
 padded, beside a stated border and TensorFlow's 'same': the window's size less one places before the series and none after
 it, so a place never sees what follows its own; along a side of one place it pads nothing, which is why it is the same word
 for every window.
@@ -2471,9 +2486,51 @@ dropout's. Every value and every gradient of a convolution and a pooling along o
 cannot say what is asked, a stride with 'same', a causal border, a border no stated padding gives, the border was worked
 out as TensorFlow works it out and padded by hand, so the numbers are still PyTorch's arithmetic over that border.
 
-What is not built, and is refused at the setting that says it: a stride of its own for each axis, a dilated window, channels
-in groups, a pooling that rounds the number of places up (`ceil_mode`), a pooling to a size other than one place, a
-transposed convolution, a depthwise or a separable convolution, and a layer that only pads.
+A pooling that rounds the number of places up asks the window one question, and it is not the one a border asks: does any
+cell of any patch fall outside the example? `Window.PadsOver(rows, columns)` answers it, and `Window.CellsWithin` says how
+many cells of each place are inside the example and its border. A pooling hands its subclass both masks — the values the
+border supplies, and a column of per-place counts worked out from the lengths and never from the values — and the count is
+nothing wherever every patch is whole, so a pooling that does not round up is the arithmetic it always was. An average that
+counts its padding divides by that count, which is the divisor PyTorch gives for the same window. The place at the end is
+taken only where it starts inside the example, as `ceil_mode` has it, and no engine changed for any of this: the two light
+engines already yield a cell only when it is inside, and the libtorch engine pads the overhang as trailing border and
+narrows it off again, because libtorch counts only the places that fit whole.
+
+Channels in groups are the convolution's own arithmetic, in three arms, and the kernel is compact in all three: as many rows
+as the window holds values for the channels of one group, by the channels it makes. One group is the product it always was.
+A group for every channel — a depthwise convolution, and the first stage of a separable one — spreads the kernel's columns
+with a one-hot of the channels, multiplies the patches by it and sums each window's rows, which is 22 times faster than the
+block-diagonal product it replaces and exact to 4.8e−7 against it. Between the two, the compact kernel is spread into the
+places its groups stand at by one product that depends on the shapes alone, and masked where a channel in and a channel out
+are not in the same group. The kernel is compact rather than block-diagonal on purpose: a matrix product's right operand has
+no mask in its gradient, so the noughts off the diagonal would receive gradient — up to 65.8 of it in one measured step —
+and a convolution trained that way stops being grouped. One thing to know about a value that is not a number: through the
+middle arm it reaches every channel out, because nought times such a value is not a number, and through the depthwise arm it
+stays in its own channel. Both are pinned by a test, since neither is a choice so much as what the arithmetic does.
+
+A transposed convolution is the folding the convolution's gradient already needed, used forwards: one product of the
+example's channels by the kernel, one fold onto a canvas as large as the window gives back, and the bias. `ISpatialWalk`
+gained one member for it, `Fold`, with three implementations in this assembly — the line's one fold and its reshape, the
+plane's one fold, and the volume's exact mirror of its two unfoldings — and it is the library's own, so no engine written
+outside learns a duty from it. `TransposedConvolution.GivesBack` is the one rule for the size it makes, read both by the
+layer and by the description that holds one. It makes the example a worked-out border would be read from, so it states its
+border at each end and refuses a window asking for 'same' or 'causal'; and `output_padding` is not a tail of nothing added
+after the fact — the fold reaches into those places, so what it does is let that many fewer places be dropped at the end,
+and only what it asks for beyond the border is appended. A description that reads a transposed convolution padded as 'same'
+from a Keras or an ONNX file works the border out from the sizes that framework itself makes, which is the only place that
+knowledge lives.
+
+A layer that only pads is the unfolding of a window one place wide carrying the border, reshaped: the padded example itself,
+with no parameters and the fold for its gradient. A value other than nought is added through the same ones-mask a pooling
+uses, so the example's own values are untouched. A pooling to a size rather than by a window — an adaptive pooling — is one
+axis at a time, and separable across axes for both kinds: place *i* takes the stretch from ⌊*i·L/O*⌋ to ⌈(*i*+1)·*L/O*⌉, so
+the stretches overlap where the size does not divide the length. The average is one matrix product by an *(L, O)* matrix of
+shares; the largest is a gather into an *(L, O·widest)* matrix, the border's own penalty, and the first-largest step the
+poolings already had. Where every axis divides, it lowers to the ordinary pooling with its kernel as its stride, which is
+pinned by a test that watches the engine and sees no gather. Two seam operations suggested themselves here and both were
+refused: a gather, which the matrix product it would feed already is, and a batched matrix product, which would have made
+every engine write a loop the library can write once. **Nothing was added to the public tensor seam for any layer this
+release adds** — every one of them is the unfolding and its fold, a matrix product, a reshape and the first-largest step.
 
 ### A loss says what a network's numbers mean
 
@@ -2658,7 +2715,11 @@ layer between: two axes a reshape made are rows laid out as steps by features, w
 turning them would put the numbers in the wrong places without a word. The poolings, the global poolings and the dropouts
 of whole channels hold no numbers, so they take part in the walk and need no tensor; a state dictionary holds no stride,
 padding mode or `ceil_mode` either, so the network handed to the reader says them, and a dilated window or a stride of its
-own for each axis cannot be seen in it and is not detected, where channels in groups are, as a kernel of another shape.
+own for each axis cannot be seen in it and is not detected, where channels in groups are, as a kernel of another shape. A
+kernel's layout is read from the layer it goes to rather than guessed from its shape: a grouped convolution's rows count the
+values of a window for the channels of one group, and a transposed convolution's are the channels it is handed, each holding
+the window's places by the channels it makes. An adaptive pooling and a layer that only pads hold no numbers at all, so they
+take part in the walk and need no tensor, as the poolings do.
 A network written as code shows its layers but not the order its forward pass runs them in, so its weights and kernels
 are turned as a stack's are, while whether one of its linear layers or normalisations reads rows made of images is read
 only as the caller states it for that layer, wherever such rows could reach it, and refused otherwise. A layer of a kind
@@ -2706,10 +2767,22 @@ a series, one over images and one over volumes answered within a hundred-thousan
 Where a padded average pooling strides, Keras on its torch backend does not follow TensorFlow's rule, so the reference for
 that case is TensorFlow's, worked out by hand, which is the rule here.
 
-What no network here is built of is refused at the layer that says it, every such layer at once: a stride of its own for
-each axis, a dilated window and channels in groups, as a network's own file refuses them; any other kind of layer
-or activation; a layer without a bias, a normalisation over another axis than the last or without its shift or its scale;
-and a model of another kind than a Sequential, working in another precision than single, or saved without its loss. The
+The layers this release reads for the first time are read as the words they are as well: a convolution's `groups`, a stride
+of its own for each axis and a dilated window, which no network here was built of before; `DepthwiseConv1D` and
+`DepthwiseConv2D`, whose kernel Keras keeps as the channels it is handed by the channels it makes of each; `SeparableConv1D`
+and `SeparableConv2D`, which are two layers here and whose one bias Keras adds after both of them, so the first is given a
+bias of noughts; `ZeroPadding1D`, which writes its two ends as the pair itself where the other two write a number or a pair
+for each axis; and the three transposed convolutions, whose kernel Keras keeps the other way round and whose border, where
+it pads as 'same', is worked out from the sizes Keras itself makes — half of what the window gives back beyond the stride
+dropped before the example and the rest after, which is TensorFlow's rule read backwards and which no stated border says. A
+model over images, one along a series and one through a volume, carrying all of them, answered within a hundred-thousandth
+of Keras's own answer.
+
+What no network here is built of is refused at the layer that says it, every such layer at once: any kind of layer or
+activation the reader does not read, and the refusal names every kind it does; a layer without a bias, a normalisation over
+another axis than the last or without its shift or its scale; a transposed convolution that pads as 'same' and also states
+how many places to keep at the end, since Keras reads the first of those and leaves the second; and a model of another kind
+than a Sequential, working in another precision than single, or saved without its loss. The
 numbers are then held to the layers the description builds by `network.Load`, each fault at its dataset's path. The file
 is read with .NET's own zip and JSON readers and with PureHDF, a managed HDF5 reader. Its settings are read by hand rather
 than through the JSON serializer, which a program that trims itself or is compiled ahead of time has no reflection for: a
@@ -2724,7 +2797,8 @@ were measured and are read: PyTorch's `torch.onnx.export`, by its default export
 Keras's own `model.export(format="onnx")`; and tf2onnx, which is how a TensorFlow SavedModel reaches ONNX. The graph is not
 kept: a graph beside the model is what this library leaves out, so the graph is read once, each node written in the words
 of the layer it is — a Gemm, or a MatMul with the Add of its bias after it, a dense layer; a Conv a convolution along one,
-two or three axes; a MaxPool or an AveragePool a pooling; a GlobalAveragePool or a GlobalMaxPool a global pooling, and so is
+two or three axes, in groups where it says so; a ConvTranspose the convolution that gives those places back; a Pad a layer
+that only pads; a MaxPool or an AveragePool a pooling; a GlobalAveragePool or a GlobalMaxPool a global pooling, and so is
 the ReduceMean or ReduceMax over every place of each channel that PyTorch's default exporter writes an adaptive pooling to
 one place as; a BatchNormalization with ONNX's momentum, which is Keras's, and its epsilon; a Flatten, or the Reshape PyTorch's default
 exporter writes a flatten as — and the words lowered as any description is, onto a stack like any other. A Cast into
@@ -2754,10 +2828,18 @@ odd place before the axis where 'same' puts it after, so it is read only where t
 not.
 
 A pooling is read as the pooling its attributes say: an average counts the border it pads with when `count_include_pad` is
-set, which is `CountsPadding`, and leaves it out otherwise, which is ONNX's default and TensorFlow's. What no layer here
-walks is refused at the node that says it: a window that overhangs the end of an axis (`ceil_mode`), a dilated window, a
-stride of its own for each axis, channels in groups, a max pooling's `storage_order`, and the second output of a max
-pooling when the graph uses it. The exporters were measured for what they write for the new layers. PyTorch's default
+set, which is `CountsPadding`, and leaves it out otherwise, which is ONNX's default and TensorFlow's. A window that
+overhangs the end of an axis is `ceil_mode`, a window whose cells stand apart is `dilations`, a stride of its own for each
+axis is the list `strides` already was, and channels in groups is `group`: each is read now, as a window's own setting. What
+no layer here walks is still refused at the node that says it: a max pooling's `storage_order`, and the places it picked as
+a second output when the graph uses them. `ConvTranspose` is read as the convolution that gives the places back, and its
+`output_padding` as the places kept at the end of each axis; a node that says the `output_shape` it makes instead is
+refused naming that door, since a shape is a sum of things the layer already says. `Pad` is read as the layer that only
+pads, in `constant` mode — mirroring or repeating is refused — of the value the graph gives it, and its places may run
+along the axes of an example only: one that pads the batch's own axis or its channels is refused saying so.
+A border stated at each end is tried as 'same' first, because that is what an exporter writing one side at a time means by
+it, and read as a stated border where it is not what 'same' gives. The exporters were measured for what they write for the
+new layers. PyTorch's default
 exporter writes `AdaptiveAvgPool` and `AdaptiveMaxPool` to one place not as `GlobalAveragePool` and `GlobalMaxPool` but
 as a `ReduceMean` or `ReduceMax` over the spatial axes with `keepdims`, their axes an INT64 input counted from the end —
 an attribute for `ReduceMax` at opset 17 — and round a series an `Unsqueeze` and a `Squeeze` of the third axis of four;
@@ -3115,13 +3197,18 @@ else: that is borrowing a library, not borrowing a result.
 - **A schedule that watches the validation loss**, and weight decay, Nesterov momentum and AMSGrad. The first
   would let the rows a model is chosen on shape its weights; it was asked for and is not built, for that reason. Each of
   the others does nothing by default in PyTorch, and nothing asks for one yet; AdamW's decoupled decay is built.
-- **A clamp of each gradient value.** Nothing asks for it, and an exact clamp would be a second new member of the public
-  tensor seam in one release, which every engine written outside it would have to write; the norm is clipped instead.
-- **A window that is dilated, grouped, strided on its own for each axis or rounded up; a transposed, depthwise or separable
-  convolution; a layer that only pads; a pooling to a size other than one place.** A window covers neighbouring places,
-  every channel of a place, one stride on every axis and the places that fit whole, so a source that says otherwise is
-  refused where it says it and not read as something near. Each of them is a layer or a setting of its own, built when a
-  network needs it, with the same proof as the rest: its values and its gradient matched to the framework that has it.
+- **A clamp of each gradient value.** Nothing asks for it, and an exact clamp would be a new member of the public tensor
+  seam, which every engine written outside it would have to write; the norm is clipped instead.
+- **A max pooling's `storage_order`, and the places a max pooling picked as a second output.** A pooling here gives the
+  values it pooled and nothing beside them, and ONNX's node that asks for either is refused where it asks. Everything else
+  this list used to hold — a dilated window, channels in groups, a stride of its own for each axis, a window that rounds the
+  places up, a transposed, depthwise or separable convolution, a layer that only pads, and a pooling to a size — was built
+  rather than carried, each with the proof the rest have: its values and its gradient matched to the framework that has it,
+  on every engine.
+- **A window whose border is worked out for a layer that makes the example.** A transposed convolution makes the places a
+  'same' or a 'causal' border would be read from, so there is nothing to read it from; it states its border at each end and
+  refuses the two words. A reader of another framework's file works that border out from the sizes that framework makes,
+  which is where the knowledge belongs.
 - **A squared cumulative loss, and a score named CRPS.** The first measured behind the cross-entropy it would replace; the
   second, for a histogram, is not a number that is nought for a perfect prediction.
 - **A pruner, and a search written here that learns from its trials.** A loss halfway through a run is not its loss at the

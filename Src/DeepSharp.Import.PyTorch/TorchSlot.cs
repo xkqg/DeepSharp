@@ -126,7 +126,9 @@ internal sealed class LinearSlot(string path, Dense dense, ChannelOrder? order) 
 internal sealed class KernelSlot(string path, Convolution convolution) : TurnedSlot(path)
 {
     /// <inheritdoc />
-    protected override Shape Kept => new([convolution.OutChannels, convolution.InChannels, .. convolution.WindowSides()]);
+    /// <remarks>Channels in a group: PyTorch keeps as many channels in as one group holds, and so does this library.</remarks>
+    protected override Shape Kept =>
+        new([convolution.OutChannels, convolution.InChannels / convolution.Groups, .. convolution.WindowSides()]);
 
     /// <inheritdoc />
     protected override Shape Slot => convolution.Weight.Value.Shape;
@@ -135,7 +137,9 @@ internal sealed class KernelSlot(string path, Convolution convolution) : TurnedS
     protected override float[] Turned(float[] kept)
     {
         // The window's places are one run of numbers in both layouts, in the same order: first axis slowest, last axis fastest.
-        var (outputs, inputs, places) = (convolution.OutChannels, convolution.InChannels, convolution.Weight.Value.Shape[0] / convolution.InChannels);
+        var outputs = convolution.OutChannels;
+        var inputs = convolution.InChannels / convolution.Groups;
+        var places = convolution.Weight.Value.Shape[0] / inputs;
         var turned = new float[kept.Length];
 
         for (var output = 0; output < outputs; output++)
@@ -145,6 +149,45 @@ internal sealed class KernelSlot(string path, Convolution convolution) : TurnedS
                 for (var place = 0; place < places; place++)
                 {
                     turned[(((place * inputs) + input) * outputs) + output] = kept[(((output * inputs) + input) * places) + place];
+                }
+            }
+        }
+
+        return turned;
+    }
+}
+
+/// <summary>
+/// A transposed convolution's kernel: PyTorch keeps it channels in, then the channels out of one group, then the window's
+/// places; here it is a row for every channel in, holding the window's places by the channels out of one group — the same
+/// numbers, nothing flipped.
+/// </summary>
+/// <param name="path">The slot's path.</param>
+/// <param name="convolution">The layer.</param>
+internal sealed class TransposedKernelSlot(string path, TransposedConvolution convolution) : TurnedSlot(path)
+{
+    /// <inheritdoc />
+    protected override Shape Kept =>
+        new([convolution.InChannels, convolution.OutChannels / convolution.Groups, .. convolution.WindowSides()]);
+
+    /// <inheritdoc />
+    protected override Shape Slot => convolution.Weight.Value.Shape;
+
+    /// <inheritdoc />
+    protected override float[] Turned(float[] kept)
+    {
+        var inputs = convolution.InChannels;
+        var outputs = convolution.OutChannels / convolution.Groups;
+        var places = convolution.Weight.Value.Shape[1] / outputs;
+        var turned = new float[kept.Length];
+
+        for (var input = 0; input < inputs; input++)
+        {
+            for (var output = 0; output < outputs; output++)
+            {
+                for (var place = 0; place < places; place++)
+                {
+                    turned[(((input * places) + place) * outputs) + output] = kept[(((input * outputs) + output) * places) + place];
                 }
             }
         }
@@ -169,6 +212,21 @@ internal static class ConvolutionWindowExtensions
             if (convolution is Conv2D image)
             {
                 return [image.Window.Height, image.Window.Width];
+            }
+
+            if (convolution is Conv1DTranspose line)
+            {
+                return [line.Window.Length];
+            }
+
+            if (convolution is Conv2DTranspose plane)
+            {
+                return [plane.Window.Height, plane.Window.Width];
+            }
+
+            if (convolution is Conv3DTranspose block)
+            {
+                return [block.Window.Depth, block.Window.Height, block.Window.Width];
             }
 
             // A convolution is along one, two or three axes, and no other kind can be written.

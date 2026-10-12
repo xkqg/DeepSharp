@@ -18,6 +18,15 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.9.0 is about everything a window can be.** A convolution here covered neighbouring places, one stride on every axis and
+the places that fit whole, and a source that said anything else was refused at the setting that said it. This release builds
+what those refusals named: a stride of its own for each axis, a dilated window, channels in groups, a depthwise and a
+separable convolution, a transposed convolution, a border that differs from side to side, a layer that only pads, a pooling
+that rounds the number of places up, and a pooling to a size other than one place. Each is held to the same proof as the
+rest — its values and its gradient matched to the framework that has it, on every engine — and each is read from the Keras,
+ONNX and PyTorch files that say it. Where a window says more than it used to, it says so only when it does: a window that
+strides alike and is not dilated writes the file it always wrote.
+
 **0.8.1 is about optimizing: the numbers a network is trained with, searched for and measured by.** AdamW, RMSprop and
 Nadam join Sgd and Adam, each held to PyTorch's own numbers; gradients can be clipped by their norm, a rate can warm up,
 and a run can be watched epoch by epoch and stopped. `Study` tries many networks on rows a pipeline prepared, chooses by
@@ -34,16 +43,6 @@ number. A network can walk more than an image now: convolutions along a series a
 causal — max and average poolings, global poolings and the dropouts of whole channels, each matched to PyTorch's own values and
 gradients on every engine and read from Keras, ONNX and PyTorch files. They add one operation to the tensor seam, so an
 engine written outside the library has one more to write; the changelog says which.
-
-**0.8.0 lands what an exchange answers with as a file, and the pipeline reads it like any other.** A source that answers
-differently every time it is asked cannot be read while a model trains: the pipeline would train on other numbers
-tomorrow and still claim to be the same pipeline. `DeepSharp.Pipelines.Binance` fetches the candles of a market on
-Binance over a closed window, once, and keeps them as a file beside a record of what was asked and what came back;
-`await pipeline.ReadBinanceAsync(new BinanceCandles("BTCEUR", "1d", from, to))` lands the window where it is not landed
-yet and adds an ordinary `.ReadCsv` of the landing, so what the pipeline's file names is a file and nothing of Binance.
-The HTTP, the retries and the pacing are that package's alone — a project that only serves a trained model never carries
-them — and it asks as a guest: an address's budget is shared with whatever else runs on it, so it goes slowly, waits
-once the address has used half of what a minute allows, and stops the moment Binance says stop.
 
 Earlier releases are in the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md), which records what each one
 added, and the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what is done and what is left out on purpose.
@@ -264,8 +263,8 @@ var numbers = new TorchSaveFile(network, new BinaryCrossEntropy()).Read(state); 
 writes, `TorchSaveFile`. Each number is turned into the layout its slot keeps, as the layer that holds it says. The
 Titanic network PyTorch trained answers the 135 test passengers within five roundings of a single-precision number of
 PyTorch's chances, from a safetensors file, a `.pt` file or either exporter's graph, and the one Keras trained within
-five of Keras's from its archive, its HDF5 file or its graph; what no network here is built of — a branch, a dilated
-window, a stride of its own for each axis, a pooling that rounds up — is refused at the layer or the node that says it, every one at once. The pickle torch.save writes is a
+five of Keras's from its archive, its HDF5 file or its graph; what no network here is built of — a branch, a layer or an
+operator that is no layer here, a max pooling's second output — is refused at the layer or the node that says it, every one at once. The pickle torch.save writes is a
 program, so it is read by an interpreter that carries out only what PyTorch's own weights-only reader carries out, and
 builds nothing a file names but what a state dictionary is made of: any other name is refused where the file names it,
 before anything is looked up, built or run. A model read so is trained further behind a pipeline as any network is —
@@ -382,7 +381,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 
 | | |
 |---|---|
-| `DeepSharp` | The tensors, their shape and the storage their values live on, the seam the arithmetic runs behind, what every engine refuses, the light engine on .NET's own vector maths, and the gradients worked out through it; the layers — dense, activations, dropout, normalisations, convolutions along a series, over an image and through a volume, poolings, global poolings and the dropouts of whole channels, their window padded as TensorFlow's 'same' — or, along a series, as Keras's 'causal' — if you say so — networks written as code or described in Keras's words, losses, optimizers — Sgd, Adam, AdamW, RMSprop and Nadam, derivable by an optimizer of your own — and learning-rate schedules, the training loop with early stopping, gradient clipping, an epoch hook, cancellation and checkpoints, a network written down as the kinds it is made of and the numbers it learned, and the load that puts numbers trained elsewhere into its slots. Brings System.Numerics.Tensors alone. |
+| `DeepSharp` | The tensors, their shape and the storage their values live on, the seam the arithmetic runs behind, what every engine refuses, the light engine on .NET's own vector maths, and the gradients worked out through it; the layers — dense, activations, dropout, normalisations, convolutions along a series, over an image and through a volume — in groups, depthwise, dilated, strided on their own for each axis, and the transposed ones that give those places back — the layers that only pad, poolings, the poolings to a size, global poolings and the dropouts of whole channels, their window padded as TensorFlow's 'same' — or, along a series, as Keras's 'causal' — if you say so — networks written as code or described in Keras's words, losses, optimizers — Sgd, Adam, AdamW, RMSprop and Nadam, derivable by an optimizer of your own — and learning-rate schedules, the training loop with early stopping, gradient clipping, an epoch hook, cancellation and checkpoints, a network written down as the kinds it is made of and the numbers it learned, and the load that puts numbers trained elsewhere into its slots. Brings System.Numerics.Tensors alone. |
 | `DeepSharp.Pipelines` | The data half: readers and the kind each column's cells propose, features, the split, gaps, scales — one line naming the kind and the columns it holds for, landing the features between minus one and one unless the pipeline says otherwise — a profile that names what should not be there, the answer in five kinds, ordered or not, the report of what a trained model is measured by — amounts, classes and shares —, the learner a declaration is written for, the handover — a run for each learner, and every feature declared to land between minus one and one for a learner that needs it — and the column decisions saved on their own and taken over, a source that joins two files, an id that travels with its rows, a correlation worked out once as numbers, and a course to fill in — the steps of a prepared pipeline in the order they belong, each waiting for what only you know — saved as a file and replayed. Knows no tensor, and brings nothing but Microsoft's dependency-injection abstractions. |
 | `DeepSharp.Pipelines.Parquet` | `.ReadParquet(path)`: an Apache Parquet file, which says what each of its columns holds. Brings Parquet.Net 6.1.0 and the compression libraries it reads with. |
 | `DeepSharp.Pipelines.Excel` | `.ReadExcel(path)` and `.ReadExcel(path, sheet)`: a sheet of an `.xlsx`, `.xls` or `.xlsb` workbook, each cell as the sheet types it. Brings ExcelDataReader 3.9.0. |

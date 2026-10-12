@@ -55,6 +55,37 @@ internal static class PyTorchNetworks
     public static SpatialCase Spatial(string name) => name switch
     {
         "series" => new(() => SeriesInKerasWords(), new Shape(17, 2)),
+        "grouped" => new(
+            () => new Sequential().Conv2D(6, new Window(3, 3) { Padding = 1 }, groups: 2).Relu()
+                .Conv2D(12, new Window(3, 3) { Padding = 1 }, groups: 6)
+                .Flatten().Dense(3)
+                .Lower(new Shape(5, 4, 4), new RandomStream(7)),
+            new Shape(5, 4, 4)),
+        "transposed" => new(
+            () => new Sequential().Conv2DTranspose(4, new Window(3, 3) { Stride = 2, Padding = 1 }).Relu()
+                .Conv2DTranspose(3, new Window(2, 2))
+                .Flatten().Dense(2)
+                .Lower(new Shape(4, 4, 2), new RandomStream(7)),
+            new Shape(4, 4, 2)),
+        "transposed-series" => new(
+            () => new Sequential().Conv1DTranspose(3, new Window1D(3) { Stride = 2 }).Relu()
+                .Conv1DTranspose(2, new Window1D(2) { Padding = 1 })
+                .Flatten().Dense(2)
+                .Lower(new Shape(5, 2), new RandomStream(7)),
+            new Shape(5, 2)),
+        "transposed-volume" => new(
+            () => new Sequential().Conv3DTranspose(3, new Window3D(2, 2, 2) { Stride = new Steps3D(2, 1, 2) })
+                .Flatten().Dense(2)
+                .Lower(new Shape(3, 3, 3, 2), new RandomStream(7)),
+            new Shape(3, 3, 3, 2)),
+        "adaptive" => new(
+            () => new Sequential().Conv1D(4, new Window1D(3) { Padding = 1, Dilation = 2 }).Relu()
+                .AdaptiveMaxPool1D(4)
+                .Conv1D(3, new Window1D(2))
+                .AdaptiveAvgPool1D(2)
+                .Flatten().Dense(2)
+                .Lower(new Shape(11, 2), new RandomStream(7)),
+            new Shape(11, 2)),
         "series-flat" => new(() => SeriesFlatInKerasWords(), new Shape(10, 2)),
         "pooling" => new(
             () => new Sequential().Conv2D(4, new Window(3, 2) { Padding = 1 }).BatchNorm().Relu()

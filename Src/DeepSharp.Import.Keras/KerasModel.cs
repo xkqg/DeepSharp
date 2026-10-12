@@ -96,17 +96,42 @@ internal sealed class KerasModel
             for (var at = 0; at < held.Numbers.Count; at++)
             {
                 var number = held.Numbers[at];
-                var path = at < placed.Layer.Slots.Count
-                    ? string.Create(CultureInfo.InvariantCulture, $"{placed.Place}.{placed.Layer.Slots[at]}")
+
+                // A number beyond the layer's slots goes nowhere, and is named by the layer and the name the file holds it
+                // under; it is handed on in the shape the file writes, since no slot says another.
+                var known = at < placed.Layer.Slots.Count;
+                var slot = known ? placed.Layer.Slots[at] : new KerasSlot(number.Name, 0, []);
+                var path = known
+                    ? string.Create(CultureInfo.InvariantCulture, $"{placed.Place + slot.Away}.{slot.Named}")
                     : $"{held.Layer}.{number.Name}";
 
                 if (number.Values is { } values)
                 {
-                    entries.Add(new SlotEntry(path, Tensor.From(placed.Layer.LaidOut(number.Lengths), values), number.Source));
+                    entries.Add(new SlotEntry(
+                        path,
+                        Tensor.From(placed.Layer.LaidOut(number.Lengths, slot), placed.Layer.Turned(values, number.Lengths, slot)),
+                        number.Source));
                 }
                 else
                 {
                     unread.Add(new SlotLoadFault(number.Source, path, $"'{path.Quoted()}' holds single-precision numbers here, and is written as {number.WrittenAs}."));
+                }
+            }
+        }
+
+        // The slots no number of the file fills: a separable convolution's own bias stands after both its stages, so the
+        // first of them is given one of noughts, of whatever shape the network made it.
+        var shapes = network.Slots().ToDictionary(named => named.Path, named => named.Slot.Value.Shape, StringComparer.Ordinal);
+
+        foreach (var placed in _placed.Values)
+        {
+            foreach (var slot in placed.Layer.Noughts)
+            {
+                var path = string.Create(CultureInfo.InvariantCulture, $"{placed.Place + slot.Away}.{slot.Named}");
+
+                if (shapes.TryGetValue(path, out var shape))
+                {
+                    entries.Add(new SlotEntry(path, Tensor.Zeros(shape), "a bias of noughts"));
                 }
             }
         }
@@ -246,7 +271,9 @@ internal sealed class KerasModel
                 try
                 {
                     words(_description);
-                    count++;
+
+                    // One Keras layer can be more than one layer here: its own words say how many it wrote.
+                    count += layer.Places;
                 }
                 catch (ArgumentException refused)
                 {

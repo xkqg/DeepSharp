@@ -33,7 +33,7 @@ public static class NetworkDocument
     /// 0.8.0 reads; the training part of a clipped run as the third, which 0.8.0 refuses by its number. A part of the first,
     /// which 0.4.0 wrote, is read as it was written and says nothing of them, every window's padding a number.
     /// </remarks>
-    public const int Version = 3;
+    public const int Version = 4;
 
     /// <summary>
     /// The version 0.4.0 wrote, whose training part records neither the batch size nor the early stopping of its run: the one
@@ -43,6 +43,16 @@ public static class NetworkDocument
 
     /// <summary>The version a network's part is written as, and the training part of a run whose gradients were never clipped.</summary>
     internal const int SecondVersion = 2;
+
+    /// <summary>The version the training part of a run whose gradients were clipped is written as, which says the norm they were clipped to.</summary>
+    internal const int ThirdVersion = 3;
+
+    /// <summary>
+    /// The version a network's part is written as once a layer in it says something an older library could not read: a
+    /// window that strides otherwise along one axis than along another, a dilated window, one that rounds its places up, or
+    /// one whose border is stated at each end of each axis.
+    /// </summary>
+    internal const int FourthVersion = 4;
 
     internal const string KindKey = "kind";
     internal const string PackageKey = "package";
@@ -111,9 +121,9 @@ public static class NetworkDocument
 
         var slots = network.Slots().ToArray();
 
-        // The third version says nothing new of a network, so its part is written as the second, which 0.8.0 reads too.
+        // The oldest version that says everything in it: the second, which 0.8.0 reads, unless a layer says more.
         writer.WriteStartObject();
-        writer.WriteNumber(VersionKey, SecondVersion);
+        writer.WriteNumber(VersionKey, VersionOf(network));
         writer.WritePropertyName(LayersKey);
         WriteKind(writer, network);
         WriteSlots(writer, slots, slots.ToDictionary(named => named.Path, named => named.Slot.Value));
@@ -160,7 +170,7 @@ public static class NetworkDocument
         }
 
         writer.WriteStartObject();
-        writer.WriteNumber(VersionKey, state.Pace is not { } recorded ? FirstVersion : recorded.Clip is null ? SecondVersion : Version);
+        writer.WriteNumber(VersionKey, state.Pace is not { } recorded ? FirstVersion : recorded.Clip is null ? SecondVersion : ThirdVersion);
         writer.WriteNumber(SeedKey, state.Seed);
 
         if (state.Pace is { } pace)
@@ -363,6 +373,21 @@ public static class NetworkDocument
 
     /// <summary>Writes a kind as an object: its name, the package it comes from when not this one, and its settings.</summary>
     /// <exception cref="InvalidOperationException">It is of no kind a file can name.</exception>
+    /// <summary>
+    /// The oldest version of a network's part that says everything the network holds: the largest the network itself and
+    /// every layer below it names.
+    /// </summary>
+    /// <remarks>
+    /// A layer says the version it needs per instance, so a network of layers that could all be written before this release
+    /// is written as it was written then, byte for byte, and one holding a single dilated window names the version that
+    /// reads it. The walk is the one every slot's path is made from, so a layer held by a layer is reached.
+    /// </remarks>
+    internal static int VersionOf(Network network) =>
+        network.HeldLayers()
+            .Select(held => held.Layer)
+            .Prepend(network)
+            .Max(layer => layer is ISaved saved ? saved.FileVersion : SecondVersion);
+
     internal static void WriteKind(Utf8JsonWriter writer, object thing)
     {
         if (thing is not ISaved saved)

@@ -124,6 +124,173 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         Assert.False(Assert.IsType<GlobalMaxPool1D>(layers[5]).KeepsAxes);
     }
 
+    [Fact]
+    public void AWindowThatStridesPerAxis_IsDilated_RoundsUp_OrStatesEachSide_IsWrittenAndReadBackWhole()
+    {
+        var draws = new RandomStream(9).Draw("initialise:test", 0, 0);
+        var line = new LayerStack(
+            new Conv1D(2, 3, new Window1D(3) { Stride = 2, Dilation = 2, Padding = 2 }, draws),
+            new MaxPool1D(new Window1D(2) { Stride = 2, RoundsUp = true }),
+            new AvgPool1D(new Window1D(2) { Border = new Sides(1, 0) }));
+        var plane = new LayerStack(
+            new Conv2D(1, 2, new Window(3, 2) { Stride = new Steps(2, 1), Dilation = new Steps(1, 2) }, draws),
+            new MaxPool2D(new Window(2, 2) { Stride = 2, RoundsUp = true }),
+            new AvgPool2D(new Window(2, 2) { Border = new Margins(new Sides(1, 0), new Sides(0, 1)) }));
+        var volume = new LayerStack(
+            new Conv3D(1, 2, new Window3D(2, 2, 2) { Stride = new Steps3D(1, 2, 1), Dilation = new Steps3D(2, 1, 1) }, draws),
+            new MaxPool3D(new Window3D(2, 2, 2) { Stride = 2, RoundsUp = true }),
+            new AvgPool3D(new Window3D(2, 2, 2) { Border = new Margins3D(new Sides(1, 0), new Sides(0, 1), new Sides(1, 1)) }));
+
+        AssertWrittenAndReadBack(line, Tensor.From(new Shape(2, 11, 2), [.. Enumerable.Range(0, 44).Select(at => MathF.Sin(at))]));
+        AssertWrittenAndReadBack(plane, Tensor.From(new Shape(2, 7, 7, 1), [.. Enumerable.Range(0, 98).Select(at => MathF.Sin(at))]));
+        AssertWrittenAndReadBack(volume, Tensor.From(new Shape(2, 5, 5, 5, 1), [.. Enumerable.Range(0, 250).Select(at => MathF.Sin(at))]));
+
+        // The whole record comes back, not a setting at a time: a reader that drops one is loud here.
+        var alongLine = Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(Written(line, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn()).Network).Layers;
+        var overPlane = Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(Written(plane, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn()).Network).Layers;
+        var throughVolume = Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(Written(volume, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn()).Network).Layers;
+
+        Assert.Equal(new Window1D(3) { Stride = 2, Dilation = 2, Padding = 2 }, Assert.IsType<Conv1D>(alongLine[0]).Window);
+        Assert.Equal(new Window1D(2) { Stride = 2, RoundsUp = true }, Assert.IsType<MaxPool1D>(alongLine[1]).Window);
+        Assert.Equal(new Window1D(2) { Border = new Sides(1, 0) }, Assert.IsType<AvgPool1D>(alongLine[2]).Window);
+        Assert.Equal(new Window(3, 2) { Stride = new Steps(2, 1), Dilation = new Steps(1, 2) }, Assert.IsType<Conv2D>(overPlane[0]).Window);
+        Assert.Equal(new Window(2, 2) { Stride = 2, RoundsUp = true }, Assert.IsType<MaxPool2D>(overPlane[1]).Window);
+        Assert.Equal(new Window(2, 2) { Border = new Margins(new Sides(1, 0), new Sides(0, 1)) }, Assert.IsType<AvgPool2D>(overPlane[2]).Window);
+        Assert.Equal(new Window3D(2, 2, 2) { Stride = new Steps3D(1, 2, 1), Dilation = new Steps3D(2, 1, 1) }, Assert.IsType<Conv3D>(throughVolume[0]).Window);
+        Assert.Equal(new Window3D(2, 2, 2) { Stride = 2, RoundsUp = true }, Assert.IsType<MaxPool3D>(throughVolume[1]).Window);
+        Assert.Equal(new Window3D(2, 2, 2) { Border = new Margins3D(new Sides(1, 0), new Sides(0, 1), new Sides(1, 1)) }, Assert.IsType<AvgPool3D>(throughVolume[2]).Window);
+    }
+
+    [Fact]
+    public void EveryLayerOfTheRefusedList_IsWrittenAndReadBack_WithItsChannelsItsPlacesAndItsSizes()
+    {
+        var draws = new RandomStream(9).Draw("initialise:test", 0, 0);
+        var line = new LayerStack(
+            new Conv1DTranspose(new Channels { In = 2, Out = 3 }, new Window1D(3) { Stride = 2, Border = new Sides(1, 0) }, draws, 1),
+            new Pad1D(new Sides(2, 1), 0.5f),
+            new Conv1D(new Channels { In = 3, Out = 6, Groups = 3 }, new Window1D(2) { Stride = 2 }, draws),
+            new AdaptiveAvgPool1D(new Shape(4)),
+            new AdaptiveMaxPool1D(new Shape(2)));
+        var plane = new LayerStack(
+            new Conv2DTranspose(
+                new Channels { In = 1, Out = 2 },
+                new Window(3, 3) { Stride = new Steps(2, 1), Border = new Margins(new Sides(1, 0), default) },
+                draws,
+                new Steps(1, 0)),
+            new Pad2D(new Margins(new Sides(1, 2), new Sides(0, 1))),
+            new Conv2D(new Channels { In = 2, Out = 4, Groups = 2 }, new Window(2, 2) { Stride = 2 }, draws),
+            new AdaptiveMaxPool2D(new Shape(3, 2)),
+            new AdaptiveAvgPool2D(new Shape(1, 1)));
+        var volume = new LayerStack(
+            new Conv3DTranspose(new Channels { In = 1, Out = 2 }, new Window3D(2, 2, 2) { Stride = new Steps3D(2, 1, 2) }, draws),
+            new Pad3D(new Margins3D(new Sides(1, 0), new Sides(0, 1), new Sides(1, 1)), 0.25f),
+            new Conv3D(new Channels { In = 2, Out = 2, Groups = 2 }, new Window3D(2, 2, 2) { Stride = 2 }, draws),
+            new AdaptiveAvgPool3D(new Shape(2, 2, 2)),
+            new AdaptiveMaxPool3D(new Shape(1, 1, 1)));
+
+        AssertWrittenAndReadBack(line, Tensor.From(new Shape(2, 9, 2), [.. Enumerable.Range(0, 36).Select(at => MathF.Sin(at))]));
+        AssertWrittenAndReadBack(plane, Tensor.From(new Shape(2, 6, 6, 1), [.. Enumerable.Range(0, 72).Select(at => MathF.Sin(at))]));
+        AssertWrittenAndReadBack(volume, Tensor.From(new Shape(2, 4, 4, 4, 1), [.. Enumerable.Range(0, 128).Select(at => MathF.Sin(at))]));
+
+        // The settings themselves, not only the numbers: the channels and the groups a kernel cannot say, the places kept
+        // at the end, the border of a padding and the value in it, and the sizes a pooling pools to.
+        var alongLine = Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(Written(line, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn()).Network).Layers;
+        var overPlane = Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(Written(plane, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn()).Network).Layers;
+        var throughVolume = Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(Written(volume, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn()).Network).Layers;
+
+        var transposed = Assert.IsType<Conv1DTranspose>(alongLine[0]);
+
+        Assert.Equal(new Window1D(3) { Stride = 2, Border = new Sides(1, 0) }, transposed.Window);
+        Assert.Equal(new Channels { In = 2, Out = 3 }, transposed.Channels);
+        Assert.Equal([1], transposed.OutputPadding);
+        Assert.Equal(new Sides(2, 1), Assert.IsType<Pad1D>(alongLine[1]).Border);
+        Assert.Equal(0.5f, Assert.IsType<Pad1D>(alongLine[1]).Value);
+        Assert.Equal(new Channels { In = 3, Out = 6, Groups = 3 }, Assert.IsType<Conv1D>(alongLine[2]).Channels);
+        Assert.Equal(new Shape(4), Assert.IsType<AdaptiveAvgPool1D>(alongLine[3]).Sizes);
+        Assert.Equal(new Shape(2), Assert.IsType<AdaptiveMaxPool1D>(alongLine[4]).Sizes);
+        Assert.Equal([1, 0], Assert.IsType<Conv2DTranspose>(overPlane[0]).OutputPadding);
+        Assert.Equal(new Margins(new Sides(1, 2), new Sides(0, 1)), Assert.IsType<Pad2D>(overPlane[1]).Border);
+        Assert.Equal(0f, Assert.IsType<Pad2D>(overPlane[1]).Value);
+        Assert.Equal(new Channels { In = 2, Out = 4, Groups = 2 }, Assert.IsType<Conv2D>(overPlane[2]).Channels);
+        Assert.Equal(new Shape(3, 2), Assert.IsType<AdaptiveMaxPool2D>(overPlane[3]).Sizes);
+        Assert.Equal(
+            new Window3D(2, 2, 2) { Stride = new Steps3D(2, 1, 2) },
+            Assert.IsType<Conv3DTranspose>(throughVolume[0]).Window);
+        Assert.Equal([0, 0, 0], Assert.IsType<Conv3DTranspose>(throughVolume[0]).OutputPadding);
+        Assert.Equal(0.25f, Assert.IsType<Pad3D>(throughVolume[1]).Value);
+        Assert.Equal(new Channels { In = 2, Out = 2, Groups = 2 }, Assert.IsType<Conv3D>(throughVolume[2]).Channels);
+        Assert.Equal(new Shape(2, 2, 2), Assert.IsType<AdaptiveAvgPool3D>(throughVolume[3]).Sizes);
+        Assert.Equal(new Shape(1, 1, 1), Assert.IsType<AdaptiveMaxPool3D>(throughVolume[4]).Sizes);
+    }
+
+    [Fact]
+    public void AKindOfThisRelease_SaysTheVersionItsOwnSettingsAsk_AndNothingItDoesNotHold()
+    {
+        var draws = new RandomStream(9).Draw("initialise:test", 0, 0);
+        var plain = Written(
+            new LayerStack(new Pad2D(new Margins(new Sides(1, 1), new Sides(1, 1))), new Conv2D(1, 1, new Window(2, 2), draws)),
+            new MeanSquaredError());
+        var bordered = Written(
+            new LayerStack(new Conv2DTranspose(new Channels { In = 1, Out = 1 }, new Window(2, 2) { Border = new Margins(new Sides(1, 0), default) }, draws)),
+            new MeanSquaredError());
+
+        // A kind says its version per instance, never per kind: a kind of this release that an older library refuses by its
+        // own name asks for no version of its own, and the window that states a border at each end is what asks for the
+        // fourth. A padding of nothing says no value, a convolution of one group no groups, and a transposed one that keeps
+        // no place at the end says no output padding.
+        Assert.Contains("\"version\": 2", plain, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 4", bordered, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"value\"", plain, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"groups\"", plain, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"outputPadding\"", bordered, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(2, 1, 1, false)]
+    [InlineData(4, 2, 1, false)]
+    [InlineData(4, 1, 2, false)]
+    [InlineData(4, 1, 1, true)]
+    public void TheNetworksPart_NamesTheOldestVersionThatSaysEveryWindowInIt(int version, int across, int dilation, bool roundsUp)
+    {
+        // A part is written as the oldest version that says what it holds, so a network of windows an earlier release could
+        // make is written as that release wrote it, and one holding a single window that says more names the version that
+        // reads it — which is what an older library then says, instead of naming a key it does not know.
+        var window = new Window(3, 3) { Stride = new Steps(1, across), Dilation = dilation, RoundsUp = roundsUp, Padding = 1 };
+        var network = new LayerStack(
+            new Conv2D(1, 2, window, new RandomStream(9).Draw("initialise:test", 0, 0)),
+            new MaxPool2D(new Window(2, 2) { Stride = 2 }),
+            new Flatten());
+
+        Assert.Contains($"\"version\": {version}", Written(network, new MeanSquaredError()), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void APartWrittenAgainstANewerVersion_IsRefusedWholeByItsNumber_AndNotByTheKeyItDoesNotKnow()
+    {
+        // Which is what the version is for: a library that meets a setting it does not know would name the key, and a person
+        // cannot tell a file written by a newer release from a broken one. The number says which it is.
+        var window = new Window(3, 3) { Dilation = 2 };
+        var text = Written(new LayerStack(new Conv2D(1, 2, window, new RandomStream(9).Draw("initialise:test", 0, 0)), new Flatten()), new MeanSquaredError());
+
+        Assert.Contains("\"version\": 4", text, StringComparison.Ordinal);
+        Assert.Contains("\"dilation\": 2", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AWindowThatSaysNothingNew_IsWrittenWithNothingNew()
+    {
+        // Every setting of this release is written only when it says something, so a window that strides alike, is not
+        // dilated, does not round up and states no side of its own writes the keys it always wrote and no more.
+        var plain = Written(
+            new LayerStack(new Conv2D(1, 2, new Window(3, 3) { Stride = 2, Padding = 1 }, new RandomStream(9).Draw("initialise:test", 0, 0)), new Flatten()),
+            new MeanSquaredError());
+
+        Assert.Contains("\"stride\": 2", plain, StringComparison.Ordinal);
+        Assert.Contains("\"padding\": 1", plain, StringComparison.Ordinal);
+        Assert.DoesNotContain("dilation", plain, StringComparison.Ordinal);
+        Assert.DoesNotContain("roundsUp", plain, StringComparison.Ordinal);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -316,7 +483,7 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         });
         var first = text.Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
 
-        Assert.Equal(3, NetworkDocument.Version);
+        Assert.Equal(4, NetworkDocument.Version);
         Assert.Contains("\"version\": 2", text, StringComparison.Ordinal);
         Assert.Null(NetworkDocument.ReadNetwork(first, "network", NetworkCatalog.BuiltIn()).TrainedOn!.Unvaried);
     }
@@ -696,9 +863,11 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         var catalog = NetworkCatalog.BuiltIn();
 
         Assert.Equal(
-            ["adam", "adamw", "avgpool1d", "avgpool2d", "avgpool3d", "batchNorm", "binaryCrossEntropy", "constant", "conv1d", "conv2d", "conv3d", "cosineDecay", "crossEntropy", "dense",
+            ["adam", "adamw", "adaptiveavgpool1d", "adaptiveavgpool2d", "adaptiveavgpool3d", "adaptivemaxpool1d", "adaptivemaxpool2d", "adaptivemaxpool3d",
+             "avgpool1d", "avgpool2d", "avgpool3d", "batchNorm", "binaryCrossEntropy", "constant",
+             "conv1d", "conv1dtranspose", "conv2d", "conv2dtranspose", "conv3d", "conv3dtranspose", "cosineDecay", "crossEntropy", "dense",
              "dropout", "earthMoversDistance", "exponentialDecay", "flatten", "globalavgpool1d", "globalavgpool2d", "globalavgpool3d", "globalmaxpool1d", "globalmaxpool2d", "globalmaxpool3d", "layerNorm", "linearWarmup", "maxpool1d", "maxpool2d",
-             "maxpool3d", "meanSquaredError", "nadam", "relu", "reshape", "rmsprop", "sgd", "sigmoid", "spatialdropout1d", "spatialdropout2d", "spatialdropout3d", "stack", "stepDecay", "tanh"],
+             "maxpool3d", "meanSquaredError", "nadam", "pad1d", "pad2d", "pad3d", "relu", "reshape", "rmsprop", "sgd", "sigmoid", "spatialdropout1d", "spatialdropout2d", "spatialdropout3d", "stack", "stepDecay", "tanh"],
             catalog.Names.Order(StringComparer.Ordinal));
         Assert.Throws<ArgumentException>(() => catalog.Register<Dense>());
     }

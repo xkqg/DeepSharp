@@ -29,6 +29,8 @@ public sealed class SpatialConvolutionTests() : SpatialConvolutionContract(Torch
 
 public sealed class PoolingTests() : PoolingContract(TorchBackend.OnCpu());
 
+public sealed class PaddingTests() : PaddingContract(TorchBackend.OnCpu());
+
 public sealed class SpatialDropoutTests() : SpatialDropoutContract(TorchBackend.OnCpu());
 
 public sealed class NormalisationTests() : NormalisationContract(TorchBackend.OnCpu());

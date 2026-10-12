@@ -28,25 +28,35 @@ public class KerasRefusalTests
 
     private const string VolumeSame = "keras-spatial-volume-same.keras";
 
+    private const string Depthwise = "keras-new-depthwise.keras";
+
+    private const string Separable = "keras-new-separable.keras";
+
+    private const string Transposed = "keras-new-transposed.keras";
+
+    private const string Padded = "keras-new-padded.keras";
+
+    private const string NewSeries = "keras-new-series.keras";
+
+    private const string NewVolume = "keras-new-volume.keras";
+
     private const string Kinds =
-        "a Keras model is read here when each of its layers is a Dense, Conv1D, Conv2D, Conv3D, MaxPooling1D, MaxPooling2D, MaxPooling3D, AveragePooling1D, AveragePooling2D, AveragePooling3D, "
+        "a Keras model is read here when each of its layers is a Dense, Conv1D, Conv2D, Conv3D, Conv1DTranspose, Conv2DTranspose, Conv3DTranspose, DepthwiseConv1D, DepthwiseConv2D, "
+        + "SeparableConv1D, SeparableConv2D, ZeroPadding1D, ZeroPadding2D, ZeroPadding3D, MaxPooling1D, MaxPooling2D, MaxPooling3D, AveragePooling1D, AveragePooling2D, AveragePooling3D, "
         + "GlobalMaxPooling1D, GlobalMaxPooling2D, GlobalMaxPooling3D, GlobalAveragePooling1D, GlobalAveragePooling2D, GlobalAveragePooling3D, BatchNormalization, LayerNormalization, Dropout, "
         + "SpatialDropout1D, SpatialDropout2D, SpatialDropout3D, Flatten, Reshape, Activation or ReLU.";
 
     private const string Activations = "linear, relu, tanh and sigmoid, and softmax as the last of a model a categorical cross-entropy trained.";
 
     [Fact]
-    public void AStrideForEachAxis_ADilatedWindow_ChannelsInGroups_AndALayerOfAKindNotRead_AreEachRefusedAtTheirLayer_AllAtOnce()
+    public void AStrideForEachAxis_ADilatedWindow_AndChannelsInGroups_AreRead_AndTheKindThatIsNoLayer_IsStillRefused()
     {
+        // Every one of these was refused at its layer before this release, and every one of them is now a setting a window
+        // or a convolution here has. What is left in this model is the one layer that is no kind at all.
         var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(KerasFixtures.Open("keras-refused.keras")));
 
         Assert.Equal(
-            [
-                "config.json, layer 'conv2d_2' (Conv2D): it strides 2 down and 1 across, and a window here walks one stride down and across alike.",
-                "config.json, layer 'conv2d_3' (Conv2D): its window is dilated by 2 down and 2 across, and a window here covers neighbouring places.",
-                "config.json, layer 'conv2d_4' (Conv2D): it splits its channels into 2 groups, and a convolution here takes every channel of a place at once.",
-                $"config.json, layer 'up_sampling2d' (UpSampling2D): 'UpSampling2D' is no kind a network here is built of: {Kinds}",
-            ],
+            [$"config.json, layer 'up_sampling2d' (UpSampling2D): 'UpSampling2D' is no kind a network here is built of: {Kinds}"],
             refused.Message.Split(Environment.NewLine));
     }
 
@@ -88,7 +98,6 @@ public class KerasRefusalTests
     [InlineData(Images, new[] { "config.layers.2.config.data_format=\"channels_first\"" }, "config.json, layer 'conv2d' (Conv2D): it lays its images out 'channels_first', and images here are laid out with their channels last.")]
     [InlineData(Images, new[] { "config.layers.2.config.kernel_size=[3]" }, "config.json, layer 'conv2d' (Conv2D): its 'kernel_size' is written as [3], and Keras writes a pair there.")]
     [InlineData(Images, new[] { "config.layers.2.config.kernel_size=-" }, "config.json, layer 'conv2d' (Conv2D): it says no 'kernel_size'.")]
-    [InlineData(Images, new[] { "config.layers.2.config.dilation_rate=[1, 2]" }, "config.json, layer 'conv2d' (Conv2D): its window is dilated by 1 down and 2 across, and a window here covers neighbouring places.")]
     [InlineData(Images, new[] { "config.layers.2.config.use_bias=false" }, "config.json, layer 'conv2d' (Conv2D): it adds no bias, and a dense layer or a convolution here always adds one.")]
     // The normalisations.
     [InlineData(Images, new[] { "config.layers.3.config.axis=1" }, "config.json, layer 'batch_normalization' (BatchNormalization): it normalises over axis 1, and a normalisation here works over the last axis.")]
@@ -124,8 +133,6 @@ public class KerasRefusalTests
 
     [Theory]
     // A convolution along a series.
-    [InlineData(Series, new[] { "config.layers.1.config.dilation_rate=[2]" }, "config.json, layer 'conv1d' (Conv1D): its window is dilated by 2, and a window here covers neighbouring places.")]
-    [InlineData(Series, new[] { "config.layers.1.config.groups=2" }, "config.json, layer 'conv1d' (Conv1D): it splits its channels into 2 groups, and a convolution here takes every channel of a place at once.")]
     [InlineData(Series, new[] { "config.layers.1.config.padding=\"reflect\"" }, "config.json, layer 'conv1d' (Conv1D): it pads as 'reflect', and a window here pads as 'valid', 'same' or 'causal'.")]
     [InlineData(Series, new[] { "config.layers.1.config.data_format=\"channels_first\"" }, "config.json, layer 'conv1d' (Conv1D): it lays its series out 'channels_first', and series here are laid out with their channels last.")]
     [InlineData(Series, new[] { "config.layers.1.config.use_bias=false" }, "config.json, layer 'conv1d' (Conv1D): it adds no bias, and a dense layer or a convolution here always adds one.")]
@@ -134,17 +141,11 @@ public class KerasRefusalTests
     [InlineData(Series, new[] { "config.layers.1.config.kernel_size=-" }, "config.json, layer 'conv1d' (Conv1D): it says no 'kernel_size'.")]
     [InlineData(Series, new[] { "config.layers.1.config.dtype=\"float64\"" }, "config.json, layer 'conv1d' (Conv1D): it works in float64, and a network here works in single precision, float32.")]
     // A convolution through a volume.
-    [InlineData(Volume, new[] { "config.layers.1.config.strides=[2, 1, 1]" }, "config.json, layer 'conv3d' (Conv3D): it strides 2 deep, 1 down and 1 across, and a window here walks one stride deep, down and across alike.")]
-    [InlineData(Volume, new[] { "config.layers.1.config.dilation_rate=[1, 2, 1]" }, "config.json, layer 'conv3d' (Conv3D): its window is dilated by 1 deep, 2 down and 1 across, and a window here covers neighbouring places.")]
-    [InlineData(Volume, new[] { "config.layers.1.config.groups=3" }, "config.json, layer 'conv3d' (Conv3D): it splits its channels into 3 groups, and a convolution here takes every channel of a place at once.")]
     [InlineData(Volume, new[] { "config.layers.1.config.padding=\"causal\"" }, "config.json, layer 'conv3d' (Conv3D): it pads as 'causal', and a window here pads as 'valid' or 'same'.")]
     [InlineData(Volume, new[] { "config.layers.1.config.data_format=\"channels_first\"" }, "config.json, layer 'conv3d' (Conv3D): it lays its volumes out 'channels_first', and volumes here are laid out with their channels last.")]
     [InlineData(Volume, new[] { "config.layers.1.config.kernel_size=[2, 3]" }, "config.json, layer 'conv3d' (Conv3D): its 'kernel_size' is written as [2, 3], and Keras writes three lengths there.")]
     [InlineData(Picture, new[] { "config.layers.1.config.kernel_size=[3]" }, "config.json, layer 'conv2d' (Conv2D): its 'kernel_size' is written as [3], and Keras writes a pair there.")]
     // A pooling.
-    [InlineData(Picture, new[] { "config.layers.2.config.strides=[2, 1]" }, "config.json, layer 'max_pooling2d' (MaxPooling2D): it strides 2 down and 1 across, and a window here walks one stride down and across alike.")]
-    [InlineData(Volume, new[] { "config.layers.2.config.strides=[1, 2, 1]" }, "config.json, layer 'max_pooling3d' (MaxPooling3D): it strides 1 deep, 2 down and 1 across, and a window here walks one stride deep, down and across alike.")]
-    [InlineData(Picture, new[] { "config.layers.2.config.strides=null" }, "config.json, layer 'max_pooling2d' (MaxPooling2D): it strides 3 down and 2 across, and a window here walks one stride down and across alike.")]
     [InlineData(Series, new[] { "config.layers.4.config.padding=\"causal\"" }, "config.json, layer 'average_pooling1d' (AveragePooling1D): it pads as 'causal', and a window here pads as 'valid' or 'same'.")]
     [InlineData(Picture, new[] { "config.layers.3.config.data_format=\"channels_first\"" }, "config.json, layer 'average_pooling2d' (AveragePooling2D): it lays its images out 'channels_first', and images here are laid out with their channels last.")]
     [InlineData(Series, new[] { "config.layers.2.config.data_format=\"channels_first\"" }, "config.json, layer 'max_pooling1d' (MaxPooling1D): it lays its series out 'channels_first', and series here are laid out with their channels last.")]
@@ -170,6 +171,44 @@ public class KerasRefusalTests
         Assert.Equal(refusal, refused.Message);
     }
 
+    [Theory]
+    // A convolution that gives the places back.
+    [InlineData(Transposed, new[] { "config.layers.1.config.padding=\"reflect\"" }, "config.json, layer 'conv2d_transpose' (Conv2DTranspose): it pads as 'reflect', and a window here pads as 'valid' or 'same'.")]
+    [InlineData(Transposed, new[] { "config.layers.1.config.padding=\"same\"", "config.layers.1.config.output_padding=[1, 1]" }, "config.json, layer 'conv2d_transpose' (Conv2DTranspose): it pads as 'same' and states how many places to keep at the end of each axis, and the two say different sizes; Keras reads the first and leaves the second.")]
+    // Keras itself keeps fewer places at the end of an axis than it strides it, so a model that states more was written by
+    // hand, and the layer refuses it as the description is lowered.
+    [InlineData(Transposed, new[] { "config.layers.1.config.output_padding=[2, 2]" }, "config.json: A transposed convolution of 2 channels adds 2 places at the end of an axis it strides 2 and dilates 1, and adds fewer than 2: beyond that the window gives the place itself. (Parameter 'outputPadding')")]
+    [InlineData(Transposed, new[] { "config.layers.1.config.data_format=\"channels_first\"" }, "config.json, layer 'conv2d_transpose' (Conv2DTranspose): it lays its images out 'channels_first', and images here are laid out with their channels last.")]
+    [InlineData(Transposed, new[] { "config.layers.1.config.use_bias=false" }, "config.json, layer 'conv2d_transpose' (Conv2DTranspose): it adds no bias, and a dense layer or a convolution here always adds one.")]
+    [InlineData(Transposed, new[] { "config.layers.1.config.kernel_size=[3]" }, "config.json, layer 'conv2d_transpose' (Conv2DTranspose): its 'kernel_size' is written as [3], and Keras writes a pair there.")]
+    [InlineData(NewSeries, new[] { "config.layers.4.config.padding=\"causal\"" }, "config.json, layer 'conv1d_transpose' (Conv1DTranspose): it pads as 'causal', and a window here pads as 'valid' or 'same'.")]
+    [InlineData(NewVolume, new[] { "config.layers.2.config.output_padding=[1, 1, 1]" }, "config.json, layer 'conv3d_transpose' (Conv3DTranspose): it pads as 'same' and states how many places to keep at the end of each axis, and the two say different sizes; Keras reads the first and leaves the second.")]
+    // A convolution with a group for every channel, and the separable one that begins with it.
+    [InlineData(Depthwise, new[] { "config.layers.1.config.padding=\"causal\"" }, "config.json, layer 'depthwise_conv2d' (DepthwiseConv2D): it pads as 'causal', and a window here pads as 'valid' or 'same'.")]
+    [InlineData(Depthwise, new[] { "config.layers.1.config.data_format=\"channels_first\"" }, "config.json, layer 'depthwise_conv2d' (DepthwiseConv2D): it lays its images out 'channels_first', and images here are laid out with their channels last.")]
+    [InlineData(Depthwise, new[] { "config.layers.1.config.use_bias=false" }, "config.json, layer 'depthwise_conv2d' (DepthwiseConv2D): it adds no bias, and a dense layer or a convolution here always adds one.")]
+    [InlineData(Separable, new[] { "config.layers.1.config.padding=\"causal\"" }, "config.json, layer 'separable_conv2d' (SeparableConv2D): it pads as 'causal', and a window here pads as 'valid' or 'same'.")]
+    [InlineData(NewSeries, new[] { "config.layers.3.config.data_format=\"channels_first\"" }, "config.json, layer 'depthwise_conv1d' (DepthwiseConv1D): it lays its series out 'channels_first', and series here are laid out with their channels last.")]
+    // A layer that only pads.
+    [InlineData(Padded, new[] { "config.layers.1.config.padding=[[1, 2]]" }, "config.json, layer 'zero_padding2d' (ZeroPadding2D): its 'padding' is written as [[1, 2]], and Keras writes one number for every end, one for each axis, or a pair for each axis there.")]
+    [InlineData(Padded, new[] { "config.layers.1.config.padding=\"two\"" }, "config.json, layer 'zero_padding2d' (ZeroPadding2D): its 'padding' is written as \"two\", and Keras writes one number for every end, one for each axis, or a pair for each axis there.")]
+    [InlineData(Padded, new[] { "config.layers.1.config.padding=[[1, 1], [2, 2, 2]]" }, "config.json, layer 'zero_padding2d' (ZeroPadding2D): its 'padding' is written as [[1, 1], [2, 2, 2]], and Keras writes one number for every end, one for each axis, or a pair for each axis there.")]
+    [InlineData(Padded, new[] { "config.layers.1.config.padding=[[1, 1], [2, \"two\"]]" }, "config.json, layer 'zero_padding2d' (ZeroPadding2D): its 'padding' is written as [[1, 1], [2, \"two\"]], and Keras writes one number for every end, one for each axis, or a pair for each axis there.")]
+    [InlineData(Padded, new[] { "config.layers.1.config.padding=-" }, "config.json, layer 'zero_padding2d' (ZeroPadding2D): its 'padding' is written as nothing, and Keras writes one number for every end, one for each axis, or a pair for each axis there.")]
+    [InlineData(Padded, new[] { "config.layers.1.config.padding=[[1, 1], [2, -2]]" }, "config.json, layer 'zero_padding2d' (ZeroPadding2D): it pads [[1, 1], [2, -2]] places, and a padding here adds places and never takes them away.")]
+    [InlineData(Padded, new[] { "config.layers.1.config.padding=2.5" }, "config.json, layer 'zero_padding2d' (ZeroPadding2D): its 'padding' is written as 2.5, and Keras writes one number for every end, one for each axis, or a pair for each axis there.")]
+    [InlineData(Padded, new[] { "config.layers.1.config.data_format=\"channels_first\"" }, "config.json, layer 'zero_padding2d' (ZeroPadding2D): it lays its images out 'channels_first', and images here are laid out with their channels last.")]
+    [InlineData(NewSeries, new[] { "config.layers.1.config.padding=[1, 2, 3]" }, "config.json, layer 'zero_padding1d' (ZeroPadding1D): its 'padding' is written as [1, 2, 3], and Keras writes one number for both ends, or the pair of them there.")]
+    [InlineData(NewSeries, new[] { "config.layers.1.config.padding=[1, -2]" }, "config.json, layer 'zero_padding1d' (ZeroPadding1D): it pads [1, -2] places, and a padding here adds places and never takes them away.")]
+    [InlineData(NewVolume, new[] { "config.layers.1.config.padding=[[1, 0], [0, 1]]" }, "config.json, layer 'zero_padding3d' (ZeroPadding3D): its 'padding' is written as [[1, 0], [0, 1]], and Keras writes one number for every end, one for each axis, or a pair for each axis there.")]
+    [InlineData(NewVolume, new[] { "config.layers.1.config.data_format=\"channels_first\"" }, "config.json, layer 'zero_padding3d' (ZeroPadding3D): it lays its volumes out 'channels_first', and volumes here are laid out with their channels last.")]
+    public void WhatADescriptionOfTheLayersReadForTheFirstTimeSays_ThatNoNetworkHereIsBuiltOf_IsRefusedWhereItSaysIt(string file, string[] edits, string refusal)
+    {
+        var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(KerasFixtures.Edited(file, edits)));
+
+        Assert.Equal(refusal, refused.Message);
+    }
+
     [Fact]
     public void EveryFaultOfALayerThatWalksAVolume_IsNamedAtOnce()
     {
@@ -180,10 +219,10 @@ public class KerasRefusalTests
             "config.layers.2.config.padding=\"causal\"",
             "config.layers.4.config.data_format=\"channels_first\"")));
 
+        // The stride of its own for each axis and the dilation are read now; what is left is the border no window has and
+        // the volumes laid out the other way round.
         Assert.Equal(
             [
-                "config.json, layer 'conv3d' (Conv3D): it strides 2 deep, 1 down and 1 across, and a window here walks one stride deep, down and across alike.",
-                "config.json, layer 'conv3d' (Conv3D): its window is dilated by 1 deep, 2 down and 1 across, and a window here covers neighbouring places.",
                 "config.json, layer 'max_pooling3d' (MaxPooling3D): it pads as 'causal', and a window here pads as 'valid' or 'same'.",
                 "config.json, layer 'global_average_pooling3d' (GlobalAveragePooling3D): it lays its volumes out 'channels_first', and volumes here are laid out with their channels last.",
             ],

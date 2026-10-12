@@ -214,8 +214,8 @@ public abstract class CompositionContract(ITensorBackend engine)
     private static Tensor Convolved(ITensorBackend backend, Tensor images, Tensor kernel, Tensor bias, Window window)
     {
         var patches = backend.Unfold(images, window);
-        var height = ((images.Shape[1] + (2 * window.Padding) - window.Height) / window.Stride) + 1;
-        var width = ((images.Shape[2] + (2 * window.Padding) - window.Width) / window.Stride) + 1;
+        var height = window.RowsOver(images.Shape[1]);
+        var width = window.ColumnsOver(images.Shape[2]);
 
         return backend.Reshape(
             backend.AddRow(backend.MatMul(patches, kernel), bias), new Shape(images.Shape[0], height, width, kernel.Shape[1]));

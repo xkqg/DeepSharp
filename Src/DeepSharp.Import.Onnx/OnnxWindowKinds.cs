@@ -22,26 +22,6 @@ internal readonly record struct Walking(int Axes)
 
     /// <summary>What the window walks, in the plural.</summary>
     public string Things => Axes switch { 1 => "series", 2 => "images", _ => "volumes" };
-
-    /// <summary>The words for the axes of an image and of a volume, in the order ONNX writes them; a series has the one axis and needs none.</summary>
-    private string[] Directions => Axes == 2 ? ["down", "across"] : ["deep", "down", "across"];
-
-    /// <summary>A setting said axis by axis: <c>2 down and 1 across</c>; the one number of a series said alone.</summary>
-    /// <param name="lengths">The setting, one number for each axis.</param>
-    public string Said(int[] lengths) =>
-        Axes == 1
-            ? lengths[0].ToString(CultureInfo.InvariantCulture)
-            : Listed(lengths.Zip(Directions, (length, direction) => string.Create(CultureInfo.InvariantCulture, $"{length} {direction}")));
-
-    /// <summary>The axes said all together: <c>down and across</c>. Of a window along more than one.</summary>
-    public string Alike => Listed(Directions);
-
-    private static string Listed(IEnumerable<string> items)
-    {
-        var all = items.ToArray();
-
-        return $"{string.Join(", ", all[..^1])} and {all[^1]}";
-    }
 }
 
 /// <summary>
@@ -49,24 +29,76 @@ internal readonly record struct Walking(int Axes)
 /// and, written as words of a description, the layer it makes along one, two or three axes.
 /// </summary>
 /// <param name="Sizes">The window's length along each axis.</param>
-/// <param name="Stride">How far it moves between one place and the next, on every axis.</param>
+/// <param name="Stride">How far it moves between one place and the next, along each axis.</param>
+/// <param name="Dilation">How far apart its cells are, along each axis.</param>
 /// <param name="Mode">How its border is had.</param>
-/// <param name="Padding">The places of nothing on every side, read when the border is stated.</param>
-internal sealed record WindowPlan(int[] Sizes, int Stride, PaddingMode Mode, int Padding)
+/// <param name="Padding">The places of nothing on every side, read when the border is stated alike.</param>
+internal sealed record WindowPlan(int[] Sizes, int[] Stride, int[] Dilation, PaddingMode Mode, int Padding)
 {
-    private Window1D Line => new(Sizes[0]) { Stride = Stride, PaddingMode = Mode, Padding = Padding };
+    /// <summary>Whether the window also stands at a last place whose patch overhangs the end: ONNX's <c>ceil_mode</c>.</summary>
+    public bool RoundsUp { get; init; }
 
-    private Window Plane => new(Sizes[0], Sizes[1]) { Stride = Stride, PaddingMode = Mode, Padding = Padding };
+    /// <summary>The places of nothing at each end of each axis, as ONNX writes its pads: before each axis, then after each; nothing where the border is alike or worked out.</summary>
+    public int[]? Pads { get; init; }
 
-    private Window3D Block => new(Sizes[0], Sizes[1], Sizes[2]) { Stride = Stride, PaddingMode = Mode, Padding = Padding };
+    /// <summary>How many groups the channels are split into: ONNX's <c>group</c>.</summary>
+    public int Groups { get; init; } = 1;
+
+    /// <summary>How many places of nothing are kept at the end of each axis: ONNX's <c>output_padding</c>, none where it says none.</summary>
+    public int[] Grown { get; init; } = [];
+
+    /// <summary>How many axes the window walks.</summary>
+    public int Axes => Sizes.Length;
+
+    private Sides Along(int axis) => Pads is { } pads ? new Sides(pads[axis], pads[Axes + axis]) : new Sides(Padding, Padding);
+
+    private Window1D Line => new(Sizes[0])
+    {
+        Stride = Stride[0],
+        Dilation = Dilation[0],
+        RoundsUp = RoundsUp,
+        PaddingMode = Pads is null ? Mode : PaddingMode.Stated,
+        Padding = Pads is null ? Padding : 0,
+        Border = Pads is null ? null : Along(0),
+    };
+
+    private Window Plane => new(Sizes[0], Sizes[1])
+    {
+        Stride = new Steps(Stride[0], Stride[1]),
+        Dilation = new Steps(Dilation[0], Dilation[1]),
+        RoundsUp = RoundsUp,
+        PaddingMode = Pads is null ? Mode : PaddingMode.Stated,
+        Padding = Pads is null ? Padding : 0,
+        Border = Pads is null ? null : new Margins(Along(0), Along(1)),
+    };
+
+    private Window3D Block => new(Sizes[0], Sizes[1], Sizes[2])
+    {
+        Stride = new Steps3D(Stride[0], Stride[1], Stride[2]),
+        Dilation = new Steps3D(Dilation[0], Dilation[1], Dilation[2]),
+        RoundsUp = RoundsUp,
+        PaddingMode = Pads is null ? Mode : PaddingMode.Stated,
+        Padding = Pads is null ? Padding : 0,
+        Border = Pads is null ? null : new Margins3D(Along(0), Along(1), Along(2)),
+    };
 
     /// <summary>A convolution along its axes, making so many channels.</summary>
     /// <param name="filters">How many channels it makes.</param>
     public Action<Sequential> Convolve(int filters) => Sizes.Length switch
     {
-        1 => description => description.Conv1D(filters, Line),
-        2 => description => description.Conv2D(filters, Plane),
-        _ => description => description.Conv3D(filters, Block),
+        1 => description => description.Conv1D(filters, Line, Groups),
+        2 => description => description.Conv2D(filters, Plane, Groups),
+        _ => description => description.Conv3D(filters, Block, Groups),
+    };
+
+    /// <summary>A convolution along its axes that gives the places back, making so many channels.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <remarks>The places kept at the end are read for every axis, so a node that says none of them says a nought for each.</remarks>
+    public Action<Sequential> GiveBack(int filters) => Sizes.Length switch
+    {
+        1 => description => description.Conv1DTranspose(filters, Line, Grown[0]),
+        2 => description => description.Conv2DTranspose(filters, Plane, new Steps(Grown[0], Grown[1])),
+        _ => description => description.Conv3DTranspose(filters, Block, new Steps3D(Grown[0], Grown[1], Grown[2])),
     };
 
     /// <summary>The largest value the window covers.</summary>
@@ -174,19 +206,8 @@ internal abstract class WindowKind : OnnxKind
         var words = new Walking(sizes.Length);
         var strides = Lengths(node, "strides", words, unit);
         var dilations = Lengths(node, "dilations", words, unit);
-        var padded = Padding(node, new WindowPlan(sizes, strides[0], PaddingMode.Stated, 0), words);
 
-        if (strides.Distinct().Count() > 1)
-        {
-            node.Refuse($"it strides {words.Said(strides)}, and a window here walks one stride {words.Alike} alike.");
-        }
-
-        if (dilations.Any(length => length != 1))
-        {
-            node.Refuse($"its window is dilated by {words.Said(dilations)}, and a window here covers neighbouring places.");
-        }
-
-        return new StatedWindow(padded.Plan, padded.Declared);
+        return Padding(node, new WindowPlan(sizes, strides, dilations, PaddingMode.Stated, 0), words);
     }
 
     // A setting ONNX writes for each axis of the window, one each when it is left out.
@@ -205,10 +226,10 @@ internal abstract class WindowKind : OnnxKind
         return ones;
     }
 
-    // The border the node declares: SAME_UPPER's, none for VALID, the one its pads state for every side alike, or TensorFlow's
-    // 'same' written out one side at a time, as tf2onnx writes it. At a stride of one 'same' pads every image alike — half
-    // the window's reach before, the odd place after — so pads written otherwise are refused here; at a longer stride the
-    // border 'same' gives depends on the image, and the pads are held to it once the network is lowered.
+    // The border the node declares: SAME_UPPER's, none for VALID, or the pads it writes out one side at a time, which a
+    // window here states at each end of each axis. SAME_LOWER is the one border that still depends on the images reaching the
+    // node — 'same' with the odd place before the axis instead of after it — so it is held to them once the network is
+    // lowered; a negative pad is a crop, which a window here never does.
     private static StatedWindow Padding(OnnxNode node, WindowPlan plan, Walking words)
     {
         var declared = node.Text("auto_pad", "NOTSET");
@@ -225,9 +246,9 @@ internal abstract class WindowKind : OnnxKind
 
         if (declared == "SAME_LOWER")
         {
-            var lower = new DeclaredPads(plan.Sizes, plan.Stride, []) { Lower = true };
+            var lower = new DeclaredPads(plan.Sizes, plan.Stride[0], []) { Lower = true };
 
-            if (plan.Stride == 1 && !lower.SameOver(plan.Sizes))
+            if (plan.Stride.Distinct().Count() == 1 && plan.Stride[0] == 1 && !lower.SameOver(plan.Sizes))
             {
                 node.Refuse($"it pads as {declared.Quoted()}, {Pads}");
 
@@ -246,24 +267,34 @@ internal abstract class WindowKind : OnnxKind
 
         var pads = node.Wholes("pads", new int[2 * words.Axes]);
 
-        if (pads.Length == 2 * words.Axes)
+        if (pads.Length != 2 * words.Axes)
         {
-            if (pads.Distinct().Count() == 1)
-            {
-                return new StatedWindow(plan with { Padding = pads[0] }, null);
-            }
+            node.Refuse($"it pads [{string.Join(", ", pads)}] — {words.Places} before, then after — and a window {words.Over} states {2 * words.Axes} of them.");
 
-            var written = new DeclaredPads(plan.Sizes, plan.Stride, pads);
-
-            if (plan.Stride == 1 ? written.SameOver(plan.Sizes) : written.Possible)
-            {
-                return new StatedWindow(plan with { Mode = PaddingMode.Same }, written);
-            }
+            return new StatedWindow(plan, null);
         }
 
-        node.Refuse($"it pads [{string.Join(", ", pads)}] — {words.Places} before, then after — {Pads}");
+        if (pads.Any(places => places < 0))
+        {
+            node.Refuse($"it pads [{string.Join(", ", pads)}] places, and a padding here adds places and never takes them away.");
 
-        return new StatedWindow(plan, null);
+            return new StatedWindow(plan, null);
+        }
+
+        if (pads.Distinct().Count() == 1)
+        {
+            return new StatedWindow(plan with { Padding = pads[0] }, null);
+        }
+
+        // Where the pads ARE what TensorFlow's 'same' gives, they are read as that word rather than as the numbers they
+        // came out as: that is what tf2onnx means by writing them out, and a window padded so pads every example it is
+        // handed rather than the one the graph was exported for. Where they are anything else, they are exactly what they
+        // say, at each end of each axis.
+        var written = new DeclaredPads(plan.Sizes, plan.Stride[0], pads);
+
+        return plan.Stride.Distinct().Count() == 1 && (plan.Stride[0] == 1 ? written.SameOver(plan.Sizes) : written.Possible)
+            ? new StatedWindow(plan with { Mode = PaddingMode.Same }, written)
+            : new StatedWindow(plan with { Pads = pads }, null);
     }
 }
 
@@ -298,17 +329,12 @@ internal sealed class ConvKind : WindowKind
         var window = Walk(node, kernel.Lengths[2..], "convolution");
         var groups = node.Whole("group", 1);
 
-        if (groups != 1)
-        {
-            node.Refuse(string.Create(CultureInfo.InvariantCulture, $"it splits its channels into {groups} groups, and a convolution here takes every channel of a place at once."));
-        }
-
         if (node.Input(2).Length == 0)
         {
             node.Refuse(NoBias);
         }
 
-        return new OnnxLayer(window.Plan.Convolve(kernel.Lengths[0]), Flow.Images)
+        return new OnnxLayer((window.Plan with { Groups = groups }).Convolve(kernel.Lengths[0]), Flow.Images)
         {
             Numbers = [new LayerNumber("weight", kernel, Laying.Kernel), new LayerNumber("bias", numbers.Floats(node.Input(2)), Laying.AsWritten)],
             Declared = window.Declared,
@@ -340,14 +366,9 @@ internal abstract class PoolKind : WindowKind
         }
 
         var window = Walk(node, sizes, "pooling");
-        var rounding = node.Whole("ceil_mode", 0);
+        var rounded = window.Plan with { RoundsUp = node.Whole("ceil_mode", 0) != 0 };
 
-        if (rounding != 0)
-        {
-            node.Refuse(string.Create(CultureInfo.InvariantCulture, $"it lets its window overhang the end of an axis, ceil_mode {rounding}, and a window here stands only where it fits whole."));
-        }
-
-        return new OnnxLayer(Pooling(node, window.Plan), Flow.Images) { Declared = window.Declared };
+        return new OnnxLayer(Pooling(node, rounded), Flow.Images) { Declared = window.Declared };
     }
 
     /// <summary>The word of the pooling for the window it states, each setting of it that is the pooling's own refused at the node.</summary>
@@ -434,5 +455,204 @@ internal sealed class GlobalMaxPoolKind : GlobalPoolKind
         1 => description => description.GlobalMaxPool1D(keepsAxes),
         2 => description => description.GlobalMaxPool2D(keepsAxes),
         _ => description => description.GlobalMaxPool3D(keepsAxes),
+    };
+}
+
+/// <summary>
+/// ONNX's <c>ConvTranspose</c>: a convolution that gives back the places an ordinary one takes away, its kernel channels in
+/// by the channels out of one group by the window's lengths, and the places it keeps at the end of each axis written as
+/// <c>output_padding</c>.
+/// </summary>
+internal sealed class ConvTransposeKind : WindowKind
+{
+    /// <inheritdoc />
+    public override string Name => "ConvTranspose";
+
+    /// <inheritdoc />
+    public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
+    {
+        if (!TakesImages(node, reaching))
+        {
+            return new OnnxLayer(null, Flow.Images);
+        }
+
+        var kernel = numbers.Floats(node.Input(1));
+
+        if (kernel.Lengths.Length is < 3 or > 5)
+        {
+            node.Refuse(
+                $"its kernel, '{node.Input(1).Quoted()}', is written as {Written(kernel.Lengths)}, and a transposed convolution here gives the places back along a series, an image or a volume: channels in by the channels out of one group by steps, or by rows by columns, or by planes by rows by columns.");
+
+            return new OnnxLayer(null, Flow.Images);
+        }
+
+        var window = Walk(node, kernel.Lengths[2..], "transposed convolution");
+        var words = new Walking(window.Plan.Axes);
+        var groups = node.Whole("group", 1);
+        var shaped = node.Wholes("output_shape", []);
+
+        if (shaped.Length != 0)
+        {
+            node.Refuse(
+                $"it says the shape it makes, [{string.Join(", ", shaped)}], and a transposed convolution here is told how many places to keep at the end of each axis instead, as 'output_padding' says them.");
+        }
+
+        var grown = node.Wholes("output_padding", new int[window.Plan.Axes]);
+
+        if (grown.Length != window.Plan.Axes)
+        {
+            node.Refuse($"its 'output_padding' is written as [{string.Join(", ", grown)}], and a transposed convolution {words.Over} writes {words.Writes} there.");
+
+            grown = new int[window.Plan.Axes];
+        }
+
+        if (node.Input(2).Length == 0)
+        {
+            node.Refuse(NoBias);
+        }
+
+        return new OnnxLayer((window.Plan with { Groups = groups, Grown = grown }).GiveBack(kernel.Lengths[1] * groups), Flow.Images)
+        {
+            Numbers = [new LayerNumber("weight", kernel, Laying.GivenBack), new LayerNumber("bias", numbers.Floats(node.Input(2)), Laying.AsWritten)],
+            Declared = window.Declared,
+        };
+    }
+}
+
+/// <summary>
+/// ONNX's <c>Pad</c> of a constant: a layer that adds places of one value around each example and does nothing else. The
+/// places are a value of the graph, one before each axis and then one after each, and the axes they run along are every axis
+/// unless the node names them.
+/// </summary>
+internal sealed class PadKind : OnnxKind
+{
+    /// <inheritdoc />
+    public override string Name => "Pad";
+
+    /// <inheritdoc />
+    public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
+    {
+        if (!TakesImages(node, reaching))
+        {
+            return new OnnxLayer(null, Flow.Images);
+        }
+
+        var mode = node.Text("mode", "constant");
+
+        if (mode != "constant")
+        {
+            node.Refuse($"it pads by {mode.Quoted()}, which mirrors or repeats the example, and a padding here pads with one value.");
+
+            return new OnnxLayer(null, Flow.Images);
+        }
+
+        var held = numbers.Wholes(node.Input(1));
+
+        if (held.Values is not { } written)
+        {
+            node.Refuse($"its pads, '{node.Input(1).Quoted()}', {held.Fault} A padding here reads the places it pads from the graph's own numbers, never from what the graph works out.");
+
+            return new OnnxLayer(null, Flow.Images);
+        }
+
+        // Channels first, as ONNX lays a batch out: the batch's axis, the channels', then the axes a window would walk.
+        var axes = reaching.Axes;
+        var named = node.Input(3).Length == 0 ? null : numbers.Wholes(node.Input(3)).Values;
+        var sides = Sided(node, written, named, axes);
+
+        if (sides is null)
+        {
+            return new OnnxLayer(null, Flow.Images);
+        }
+
+        var value = node.Input(2).Length == 0 ? 0f : Valued(node, numbers, node.Input(2));
+
+        return new OnnxLayer(Padding(axes, sides, value), Flow.Images);
+    }
+
+    // The places before and after each axis a window walks, from the pads as the node writes them; nothing where they are not
+    // places a padding here can add.
+    private static int[]? Sided(OnnxNode node, long[] written, long[]? named, int axes)
+    {
+        var all = axes + 2;
+        var pads = new long[2 * all];
+
+        if (named is null)
+        {
+            if (written.Length != 2 * all)
+            {
+                node.Refuse($"it pads [{string.Join(", ", written)}], and a padding of a batch of {axes + 1} axes and its channels writes {2 * all} places: one before each axis, then one after each.");
+
+                return null;
+            }
+
+            written.CopyTo(pads, 0);
+        }
+        else
+        {
+            if (written.Length != 2 * named.Length)
+            {
+                node.Refuse($"it pads [{string.Join(", ", written)}] along {named.Length} axes, and writes one place before each and one after each.");
+
+                return null;
+            }
+
+            for (var at = 0; at < named.Length; at++)
+            {
+                var axis = named[at] < 0 ? named[at] + all : named[at];
+
+                if (axis < 0 || axis >= all)
+                {
+                    node.Refuse($"it pads along axis {named[at]}, and a batch of {axes + 1} axes and its channels has none there.");
+
+                    return null;
+                }
+
+                pads[axis] = written[at];
+                pads[all + axis] = written[named.Length + at];
+            }
+        }
+
+        if (pads.Any(places => places < 0))
+        {
+            node.Refuse($"it pads [{string.Join(", ", pads)}] places, and a padding here adds places and never takes them away.");
+
+            return null;
+        }
+
+        if (pads[0] != 0 || pads[1] != 0 || pads[all] != 0 || pads[all + 1] != 0)
+        {
+            node.Refuse(
+                $"it pads the batch's own axis or its channels, [{string.Join(", ", pads)}], and a padding here adds places around each example and leaves the examples and their channels as they are.");
+
+            return null;
+        }
+
+        return [.. Enumerable.Range(0, axes).SelectMany(axis => new[] { (int)pads[axis + 2], (int)pads[all + axis + 2] })];
+    }
+
+    // The one value the places hold, as the graph writes it; nothing where it is not one value.
+    private static float Valued(OnnxNode node, GraphNumbers numbers, string input)
+    {
+        var held = numbers.Floats(input);
+
+        if (held.Values is { Length: 1 } one)
+        {
+            return one[0];
+        }
+
+        node.Refuse($"the value it pads with, '{input.Quoted()}', is written as {Written(held.Lengths)}, and a padding here pads with one value.");
+
+        return 0f;
+    }
+
+    // The word of the padding for the places it adds along each axis.
+    private static Action<Sequential> Padding(int axes, int[] sides, float value) => axes switch
+    {
+        1 => description => description.Pad1D(new Sides(sides[0], sides[1]), value),
+        2 => description => description.Pad2D(new Margins(new Sides(sides[0], sides[1]), new Sides(sides[2], sides[3])), value),
+        _ => description => description.Pad3D(
+            new Margins3D(new Sides(sides[0], sides[1]), new Sides(sides[2], sides[3]), new Sides(sides[4], sides[5])),
+            value),
     };
 }

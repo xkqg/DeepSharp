@@ -27,7 +27,17 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
     /// <exception cref="ArgumentOutOfRangeException">It reads or makes fewer than one channel.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere: a side or a stride below one, or a border below nothing.</exception>
     public Conv2D(int inChannels, int outChannels, Window window, Draws draws)
-        : base(new PlaneWalk(window), inChannels, outChannels, draws) => Window = window;
+        : this(new Channels { In = inChannels, Out = outChannels }, window, draws)
+    {
+    }
+
+    /// <summary>A convolution of channels in groups, that starts as PyTorch's does.</summary>
+    /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
+    /// <param name="window">The patch, and how it walks.</param>
+    /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
+    /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
+    public Conv2D(Channels channels, Window window, Draws draws)
+        : base(new PlaneWalk(window), channels, draws) => Window = window;
 
     /// <summary>A convolution that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values, channels in included, by as many columns as channels out.</param>
@@ -38,7 +48,16 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
     /// as the kernel is wide, or the window cannot stand anywhere.
     /// </exception>
     public Conv2D(Tensor kernel, Tensor bias, Window window)
-        : base(new PlaneWalk(window), kernel, bias) => Window = window;
+        : base(new PlaneWalk(window), kernel, bias, null) => Window = window;
+
+    /// <summary>A convolution of channels in groups, that starts at the given kernel and bias.</summary>
+    /// <param name="kernel">As many rows as the window holds values times the channels in of one group, by as many columns as channels out.</param>
+    /// <param name="bias">One value for each channel out.</param>
+    /// <param name="window">The patch, and how it walks.</param>
+    /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
+    /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window cannot stand anywhere.</exception>
+    public Conv2D(Tensor kernel, Tensor bias, Window window, Channels channels)
+        : base(new PlaneWalk(window), kernel, bias, channels) => Window = window;
 
     /// <summary>The patch, and how it walks.</summary>
     public Window Window { get; }
@@ -52,13 +71,24 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
     {
         ArgumentNullException.ThrowIfNull(rebuilding);
 
-        return new(rebuilding.Whole(settings, "inChannels"), rebuilding.Whole(settings, "outChannels"), rebuilding.Window2DIn(settings), rebuilding.Draws);
+        return new(
+            new Channels
+            {
+                In = rebuilding.Whole(settings, "inChannels"),
+                Out = rebuilding.Whole(settings, "outChannels"),
+                Groups = rebuilding.Whole(settings, "groups", 1),
+            },
+            rebuilding.Window2DIn(settings),
+            rebuilding.Draws);
     }
 
     /// <inheritdoc />
+    public int FileVersion => Groups == 1 ? Window.FileVersion : NetworkDocument.FourthVersion;
+
+    /// <inheritdoc />
     /// <remarks>
-    /// Its padding is written as the number of rows and columns on every side, as 0.4.0 wrote it, or — for a window padded
-    /// as 'same' — as the word <c>same</c>, as Keras writes it.
+    /// Its padding is written as the number of rows and columns on every side, as 0.4.0 wrote it, as the word <c>same</c>
+    /// for a window padded as Keras writes it, or as a pair of numbers for each axis where it states each end apart.
     /// </remarks>
     public void WriteSettings(Utf8JsonWriter writer)
     {
@@ -66,6 +96,12 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
 
         writer.WriteNumber("inChannels", InChannels);
         writer.WriteNumber("outChannels", OutChannels);
+
+        if (Groups != 1)
+        {
+            writer.WriteNumber("groups", Groups);
+        }
+
         writer.WriteWindow(Window);
     }
 }

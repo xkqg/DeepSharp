@@ -43,7 +43,7 @@ public abstract class Pooling : Layer
 
         // Which cells of a patch are values of the example rather than its border, when a window pads at all.
         var real = _walk.PadsOver(extents) ? _walk.Unfold(backend, backend.Fill(singles.Shape, 1f)) : null;
-        var pooled = Pool(backend, patches, real);
+        var pooled = Pool(backend, patches, new Covered(real, Counted(singles.Shape, extents, patches.Shape[1])));
 
         return backend.ChannelsTogether(pooled, ChannelSplit.Of(input.Shape), places);
     }
@@ -51,9 +51,47 @@ public abstract class Pooling : Layer
     /// <summary>One value of each row of patches: what the window covers there, a row for every place of every channel of every example.</summary>
     /// <param name="backend">The engine the arithmetic runs on.</param>
     /// <param name="patches">A row of the window's values for each place; a border cell is a nought.</param>
-    /// <param name="real">One where a cell of a patch is a value of the example, nought where it is border; nothing where the window pads nowhere.</param>
+    /// <param name="covered">What is known about the cells of those patches besides their values.</param>
     /// <returns>A matrix of one column.</returns>
-    private protected abstract Tensor Pool(ITensorBackend backend, Tensor patches, Tensor? real);
+    private protected abstract Tensor Pool(ITensorBackend backend, Tensor patches, Covered covered);
+
+    // How many cells of each place's patch are inside the example with its border: nothing where that is every cell of every
+    // patch, which it is wherever the window does not overhang the end. It depends on the lengths and not on the values, so it
+    // is a value worked out here rather than an operation on the engine, and no gradient passes through it.
+    private Tensor? Counted(Shape singles, int[] extents, int volume)
+    {
+        var perPlace = Crosswise(_walk.CellsWithin(extents)).ToArray();
+
+        if (perPlace.Length == 0 || perPlace.All(cells => cells == volume))
+        {
+            return null;
+        }
+
+        var examples = singles[0];
+        var counts = new float[examples * perPlace.Length];
+
+        for (var example = 0; example < examples; example++)
+        {
+            for (var place = 0; place < perPlace.Length; place++)
+            {
+                counts[(example * perPlace.Length) + place] = perPlace[place];
+            }
+        }
+
+        return Tensor.From(new Shape(counts.Length, 1), counts);
+    }
+
+    // Every place, in the order the patches stand: the cells of each axis that are inside, multiplied together.
+    private static IEnumerable<int> Crosswise(IReadOnlyList<int[]> within) =>
+        within.Aggregate<int[], IEnumerable<int>>([1], (all, axis) => all.SelectMany(cells => axis.Select(own => cells * own)));
+
+    /// <summary>What a pooling is told about the cells of its patches besides their values.</summary>
+    /// <param name="Real">One where a cell is a value of the example, nought where it is not; nothing where every cell is one.</param>
+    /// <param name="Counted">
+    /// How many cells of each place are inside the example with its border, as a column; nothing where that is every cell of
+    /// every patch.
+    /// </param>
+    private protected readonly record struct Covered(Tensor? Real, Tensor? Counted);
 }
 
 /// <summary>A pooling that makes the largest value a window covers of each channel.</summary>
@@ -64,24 +102,14 @@ public abstract class Pooling : Layer
 /// </remarks>
 public abstract class MaxPooling : Pooling
 {
-    // Far enough below any value a network holds that no border cell is ever the largest, and far enough from the limits of a
-    // single-precision number that adding it to one cannot overflow.
-    private const float Far = 1e30f;
-
     private protected MaxPooling(ISpatialWalk walk)
         : base(walk, "A max pooling")
     {
     }
 
     /// <inheritdoc />
-    private protected sealed override Tensor Pool(ITensorBackend backend, Tensor patches, Tensor? real)
-    {
-        var scores = real is null
-            ? patches
-            : backend.Add(patches, backend.Scale(backend.Subtract(real, backend.Fill(real.Shape, 1f)), backend.Fill(new Shape(), Far)));
-
-        return backend.MatMul(backend.Multiply(patches, backend.FirstLargest(scores)), backend.Fill(new Shape(patches.Shape[1], 1), 1f));
-    }
+    private protected sealed override Tensor Pool(ITensorBackend backend, Tensor patches, Covered covered) =>
+        backend.Largest(patches, covered.Real);
 }
 
 /// <summary>A pooling that makes the average of the values a window covers of each channel.</summary>
@@ -103,14 +131,24 @@ public abstract class AveragePooling : Pooling
     public bool CountsPadding { get; init; }
 
     /// <inheritdoc />
-    private protected sealed override Tensor Pool(ITensorBackend backend, Tensor patches, Tensor? real)
+    /// <remarks>
+    /// The border is left out of the count by dividing by the cells that are values of the example; where it counts, the
+    /// divisor is the window itself — unless the window also stands at a place whose patch overhangs the end, where the
+    /// cells beyond the border do not count either, as PyTorch's <c>count_include_pad</c> does not count them.
+    /// </remarks>
+    private protected sealed override Tensor Pool(ITensorBackend backend, Tensor patches, Covered covered)
     {
         var ones = backend.Fill(new Shape(patches.Shape[1], 1), 1f);
         var sums = backend.MatMul(patches, ones);
 
-        return real is null || CountsPadding
-            ? backend.Scale(sums, backend.Fill(new Shape(), 1f / patches.Shape[1]))
-            : backend.Divide(sums, backend.MatMul(real, ones));
+        if (covered.Real is { } real && !CountsPadding)
+        {
+            return backend.Divide(sums, backend.MatMul(real, ones));
+        }
+
+        return covered.Counted is { } counted
+            ? backend.Divide(sums, counted)
+            : backend.Scale(sums, backend.Fill(new Shape(), 1f / patches.Shape[1]));
     }
 
     /// <summary>Writes whether the border counts, when it does: a pooling that leaves it out has nothing to say.</summary>
@@ -147,6 +185,9 @@ public sealed class MaxPool1D : MaxPooling, ISaved<MaxPool1D>
     }
 
     /// <inheritdoc />
+    public int FileVersion => Window.FileVersion;
+
+    /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -177,6 +218,9 @@ public sealed class MaxPool2D : MaxPooling, ISaved<MaxPool2D>
 
         return new(rebuilding.Window2DIn(settings));
     }
+
+    /// <inheritdoc />
+    public int FileVersion => Window.FileVersion;
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
@@ -211,6 +255,9 @@ public sealed class MaxPool3D : MaxPooling, ISaved<MaxPool3D>
     }
 
     /// <inheritdoc />
+    public int FileVersion => Window.FileVersion;
+
+    /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -241,6 +288,9 @@ public sealed class AvgPool1D : AveragePooling, ISaved<AvgPool1D>
 
         return new(rebuilding.Window1DIn(settings)) { CountsPadding = rebuilding.Holds(settings, "countsPadding") };
     }
+
+    /// <inheritdoc />
+    public int FileVersion => Window.FileVersion;
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
@@ -276,6 +326,9 @@ public sealed class AvgPool2D : AveragePooling, ISaved<AvgPool2D>
     }
 
     /// <inheritdoc />
+    public int FileVersion => Window.FileVersion;
+
+    /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
@@ -307,6 +360,9 @@ public sealed class AvgPool3D : AveragePooling, ISaved<AvgPool3D>
 
         return new(rebuilding.Window3DIn(settings)) { CountsPadding = rebuilding.Holds(settings, "countsPadding") };
     }
+
+    /// <inheritdoc />
+    public int FileVersion => Window.FileVersion;
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)

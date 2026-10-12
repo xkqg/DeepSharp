@@ -3,6 +3,78 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.0]
+
+Everything a window can be. A convolution here covered neighbouring places, one stride on every axis and the places
+that fit whole, and a source that said anything else was refused at the setting that said it. This release builds
+what those refusals named: a stride of its own for each axis, a dilated window, channels in groups, a depthwise and a
+separable convolution, a transposed convolution, a border that differs from side to side, a layer that only pads, a
+pooling that rounds the number of places up, and a pooling to a size other than one place. Each is held to the same
+proof as the rest — its values and its gradient matched to the framework that has it, on every engine — and each is
+read from the Keras, ONNX and PyTorch files that say it.
+
+### Upgrading from 0.8.0
+
+- **The release before this one shipped no package, so its notes are part of this move too.** 0.8.1 was built and is in this
+  changelog, and it was never published: everything under its heading — the pipeline file at version 8, the optimizers and the
+  things that came with them, the one operation added to the tensor seam — is new to anyone coming from 0.8.0, and this release
+  carries all of it. Read that section as well as this one.
+
+- **A window says its stride for each axis, so `Window.Stride` is a pair of numbers where it was one.** `new Window(3, 3) { Stride = 2 }`
+  still means two down and two across, because one number becomes the pair, so a window written as it always was compiles as it
+  did and walks the places it did. Code that reads the stride back as a whole number reads `Stride.Down` and `Stride.Across`
+  instead; an engine written outside the library stops compiling rather than quietly walking the wrong places, which is the
+  signal it is meant to be, and the build records it as an accepted difference from 0.8.0 (`CompatibilitySuppressions.xml`). A
+  volume's window takes a `Steps3D`, and the places at each end of an axis — the library's own until now — are public as
+  `Window.Border`, a `Margins?`.
+
+- **A window can say four things it could not, and says none of them when it does not.** A stride of its own for each axis; cells
+  a number of places apart, which is `Dilation`; the places at the end that do not fit whole counted in rather than left out,
+  which is `RoundsUp`; and a border that differs from side to side, which is `Border` — a `Sides` of before and after for each
+  axis. A window that says none of them prints the words it always printed and is written to a file as it always was: its size,
+  its stride and its padding.
+
+- **A network's file is at version 4, and every part of it still says the oldest version that holds what it holds.** A layer whose
+  window says one of those four things is written as the fourth version, which 0.8.0 refuses by its number rather than by the key
+  it would not know; every other layer, and the network around them, is still the second, which 0.8.0 reads. The repository holds
+  files the published 0.8.0 packages wrote, including two networks of convolutions, and a test reads, writes again and serves every
+  one of them.
+
+- **Nothing is added to the tensor seam.** Every layer this release adds is made of operations an engine already had: the unfolding
+  into patches and the fold back out of them, a matrix product, a gather, the step at the first largest value of a row. An engine
+  written outside the library has nothing new to write for this release — the retyped stride above is the one thing it meets.
+
+- **A convolution holds a `Channels`: how many it reads, how many it makes, and in how many groups.** `InChannels`, `OutChannels`
+  and the constructors that take the two numbers mean what they meant, which is one group. A convolution of groups is written
+  `Conv1D(filters, window, groups)`, `Conv2D(...)` or `Conv3D(...)` in a description, and `DepthwiseConv1D`, `DepthwiseConv2D` and
+  `DepthwiseConv3D` make a group of every channel and so many channels of each. The kernel it holds is as small as its groups —
+  the places of its window times the channels of one group, by the channels it makes — on purpose: a kernel of the full size with
+  noughts off the diagonal receives gradient in those noughts, and a convolution trained that way stops being grouped.
+
+- **Three families of layer are new.** `Conv1DTranspose`, `Conv2DTranspose` and `Conv3DTranspose` give back the places an ordinary
+  convolution takes away, and keep as many places at the end as `outputPadding` asks for. `Pad1D`, `Pad2D` and `Pad3D` add places
+  at each end of each axis — of nothing, or of a value where one is given — and do nothing else. `AdaptiveAvgPool1D` to
+  `AdaptiveAvgPool3D` and `AdaptiveMaxPool1D` to `AdaptiveMaxPool3D` pool to a size rather than by a window, each place taking the
+  stretch of the example that belongs to it, which is what a network does when it has to end in a fixed number of places whatever
+  it was handed. A transposed convolution makes the example a worked-out border would be read from, so it states its border at each
+  end and refuses a window that asks for 'same' or 'causal'.
+
+- **A pooling can round the number of places up, and the average that counts its padding counts only the border.** `RoundsUp` on
+  its window adds the place at the end that does not fit whole, as long as that place starts inside the example. An average pooling
+  that counts its padding divides by the cells inside the image and its border, never by the cells beyond it, which is the divisor
+  PyTorch gives for the same window.
+
+- **The readers of other frameworks' files read what they used to refuse.** From Keras: `Conv1DTranspose`, `Conv2DTranspose` and
+  `Conv3DTranspose`, `DepthwiseConv1D` and `DepthwiseConv2D`, `SeparableConv1D` and `SeparableConv2D`, `ZeroPadding1D`,
+  `ZeroPadding2D` and `ZeroPadding3D`, and a convolution's `groups`; a separable convolution is two layers here, and since Keras
+  adds its one bias after both of them, the first is given a bias of noughts. A transposed convolution padded as 'same' has no
+  border in the file to read — Keras states none — so the border is worked out from the sizes Keras itself makes. From ONNX:
+  `ConvTranspose`, `Pad` and its value, `dilations`, `group`, a stride for each axis, `ceil_mode`, and a border stated at each end,
+  which is tried as 'same' first because that is what an exporter means by it. From PyTorch: grouped and depthwise convolutions,
+  the three transposed convolutions and the adaptive poolings — and the rows a flatten makes of a series any of those made are
+  turned from PyTorch's order as a convolution's are, where before only a plain convolution's were. The Keras refusal that names
+  every kind it reads is longer by those eight names.
+
 ## [0.8.1]
 
 Optimizing: the numbers a network is trained with, searched for and measured by. A network's numbers are found by training,

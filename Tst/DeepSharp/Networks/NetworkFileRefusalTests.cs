@@ -548,25 +548,41 @@ public class NetworkFileRefusalTests
     }
 
     [Theory]
-    [InlineData("\"padding\": \"valid\"", "\"padding\"", "'padding' is a whole number, 'same' or 'causal', here.")]
-    [InlineData("\"padding\": 1, \"dilation\": 2", "\"dilation\"", "'dilation' is not a setting of 'conv2d'.")]
-    [InlineData("\"padding\": 1, \"groups\": 2", "\"groups\"", "'groups' is not a setting of 'conv2d'.")]
+    [InlineData("\"padding\": \"valid\"", "\"padding\"", "'padding' is a whole number, 'same', 'causal' or a pair for each axis, here.")]
+    [InlineData("\"padding\": 1, \"depthMultiplier\": 2", "\"depthMultiplier\"", "'depthMultiplier' is not a setting of 'conv2d'.")]
     [InlineData("\"padding\": 1, \"strides\": [1, 2]", "\"strides\"", "'strides' is not a setting of 'conv2d'.")]
     public void AConvolutionWrittenAsAWindowDoesNotWalk_IsRefusedAtTheSettingItCannotRead(string settings, string at, string message)
     {
-        // A window pads by a border stated for every side or as 'same', and walks one stride down and across, undilated, over
-        // every channel at once: what else another framework's convolution can say has no setting here to be read into.
+        // A window pads by a border stated for every side, stated at each end of each axis, or worked out; it walks a stride
+        // of its own on each axis and may be dilated. What else another framework's convolution can say has no setting here.
         var text = Stack("""{"kind": "conv2d", "inChannels": 2, "outChannels": 2, "height": 3, "width": 3, "stride": 1, """ + settings + "}");
 
         Assert.Contains(Place(text, at, message), NetworkRefused(text).Faults);
     }
 
     [Theory]
-    [InlineData("""{"kind": "conv1d", "inChannels": 2, "outChannels": 2, "length": 3, "stride": 1, "padding": 0, "dilation": 2}""", "\"dilation\"", "'dilation' is not a setting of 'conv1d'.")]
-    [InlineData("""{"kind": "conv1d", "inChannels": 2, "outChannels": 2, "length": 3, "stride": 1, "padding": "valid"}""", "\"padding\"", "'padding' is a whole number, 'same' or 'causal', here.")]
+    [InlineData("\"stride\": [1, 2, 3], \"padding\": 0", "\"stride\"", "A window over an image writes its 'stride' as one number for both axes or as one for each, and 3 are written.")]
+    [InlineData("\"stride\": [2], \"padding\": 0", "\"stride\"", "A window over an image writes its 'stride' as one number for both axes or as one for each, and 1 are written.")]
+    [InlineData("\"stride\": 1, \"dilation\": [1, 2, 3], \"padding\": 0", "\"dilation\"", "A window over an image writes its 'dilation' as one number for both axes or as one for each, and 3 are written.")]
+    [InlineData("\"stride\": 1, \"padding\": [1, 0]", "\"padding\"", "A window of 2 axes that states its padding at each end states 4 numbers, and 2 are written.")]
+    [InlineData("\"stride\": 1, \"padding\": 0, \"dilation\": 0", "{\"kind\": \"conv2d\"", "A window 3x3 (stride 1, dilated by 0, padding 0) cannot stand anywhere: its dilation is at least one.")]
+    [InlineData("\"stride\": 1, \"padding\": 0, \"roundsUp\": 3", "\"roundsUp\"", "'roundsUp' is true or false here.")]
+    public void AWindowWhoseStrideDilationOrPaddingSaysTheWrongNumberOfAxes_IsRefusedAtThatSetting(string settings, string at, string message)
+    {
+        // A setting that says one thing for every axis and another for each axis apart is one key of two kinds, so the number
+        // of axes it names is what is checked, and a dilation below one is no window at all.
+        var text = Stack("""{"kind": "conv2d", "inChannels": 2, "outChannels": 2, "height": 3, "width": 3, """ + settings + "}");
+
+        Assert.Contains(Place(text, at, message), NetworkRefused(text).Faults);
+    }
+
+    [Theory]
+    [InlineData("""{"kind": "conv1d", "inChannels": 2, "outChannels": 2, "length": 3, "stride": 1, "padding": 0, "groups": 3}""", "{\"kind\": \"conv1d\"", "A convolution through a window 3 (stride 1, padding 0) reads one channel at least and makes one at least, in groups that divide both; 2 channels in and 2 out do not go into 3 groups.")]
+    [InlineData("""{"kind": "conv1d", "inChannels": 2, "outChannels": 2, "length": 3, "stride": 1, "padding": 0, "depthMultiplier": 2}""", "\"depthMultiplier\"", "'depthMultiplier' is not a setting of 'conv1d'.")]
+    [InlineData("""{"kind": "conv1d", "inChannels": 2, "outChannels": 2, "length": 3, "stride": 1, "padding": "valid"}""", "\"padding\"", "'padding' is a whole number, 'same', 'causal' or a pair for each axis, here.")]
     [InlineData("""{"kind": "conv3d", "inChannels": 2, "outChannels": 2, "height": 3, "width": 3, "stride": 1, "padding": 0}""", "{\"kind\": \"conv3d\"", "'depth' is missing here: it is a whole number.")]
     [InlineData("""{"kind": "conv3d", "inChannels": 2, "outChannels": 2, "depth": 3, "height": 3, "width": 3, "stride": 1.5, "padding": 0}""", "\"stride\"", "'stride' is a whole number here.")]
-    [InlineData("""{"kind": "maxpool2d", "height": 2, "width": 2, "stride": 2, "padding": "valid"}""", "\"padding\"", "'padding' is a whole number, 'same' or 'causal', here.")]
+    [InlineData("""{"kind": "maxpool2d", "height": 2, "width": 2, "stride": 2, "padding": "valid"}""", "\"padding\"", "'padding' is a whole number, 'same', 'causal' or a pair for each axis, here.")]
     [InlineData("""{"kind": "maxpool3d", "depth": 2, "height": 2, "width": 2, "stride": 2, "padding": 0, "countsPadding": true}""", "\"countsPadding\"", "'countsPadding' is not a setting of 'maxpool3d'.")]
     [InlineData("""{"kind": "avgpool1d", "length": 2, "stride": 2, "padding": 0, "countsPadding": "yes"}""", "\"countsPadding\"", "'countsPadding' is true or false here.")]
     [InlineData("""{"kind": "globalavgpool2d", "keepsAxes": 3}""", "\"keepsAxes\"", "'keepsAxes' is true or false here.")]

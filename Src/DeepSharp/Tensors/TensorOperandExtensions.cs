@@ -210,11 +210,16 @@ public static class TensorOperandExtensions
         /// <remarks>The one rule for the window, whether a convolution is being built or its window is being walked.</remarks>
         internal void RequireStanding()
         {
-            if (window.Height < 1 || window.Width < 1 || window.Stride < 1 || window.Padding < 0
-                || (window.Border is { } sides && (sides.Top < 0 || sides.Bottom < 0 || sides.Left < 0 || sides.Right < 0)))
+            if (window.Height < 1 || window.Width < 1 || window.Stride.Down < 1 || window.Stride.Across < 1 || window.Padding < 0
+                || (window.Border is { } sides && (sides.Down.Before < 0 || sides.Down.After < 0 || sides.Across.Before < 0 || sides.Across.After < 0)))
             {
                 throw new ArgumentException(
                     $"A {window} cannot stand anywhere: its sides and its stride are at least one, and its border at least nothing.", nameof(window));
+            }
+
+            if (window.Dilation.Down < 1 || window.Dilation.Across < 1)
+            {
+                throw new ArgumentException($"A {window} cannot stand anywhere: its dilation is at least one.", nameof(window));
             }
 
             if (window.Border is not null && (window.Padding != 0 || window.PaddingMode != PaddingMode.Stated))

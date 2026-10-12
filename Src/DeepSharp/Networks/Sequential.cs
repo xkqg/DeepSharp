@@ -171,6 +171,26 @@ public sealed partial class Sequential
             "conv2d", "an image of rows, columns and channels", filters, new PlaneWalk(window), (channels, draws) => new Conv2D(channels, filters, window, draws)));
     }
 
+    /// <summary>The same with the channels in groups: each group of channels in reaching its own group of channels out.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <param name="window">The window, and how it walks.</param>
+    /// <param name="groups">How many groups the channels are split into; as many as channels in is a depthwise convolution.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel, or splits them into fewer than one group.</exception>
+    /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
+    public Sequential Conv2D(int filters, Window window, int groups)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(groups, 1);
+
+        return Add(new ConvolutionWord(
+            "conv2d",
+            "an image of rows, columns and channels",
+            filters,
+            new PlaneWalk(window),
+            (channels, draws) => new Conv2D(new Channels { In = channels, Out = filters, Groups = groups }, window, draws)));
+    }
+
     /// <summary>Lays each example out as one row of its values.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
     public Sequential Flatten() => Add(new FlattenWord());

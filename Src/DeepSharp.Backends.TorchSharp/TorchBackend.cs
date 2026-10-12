@@ -322,28 +322,42 @@ public sealed class TorchBackend : INamesItsVersionAndDevice
 
     /// <summary>
     /// A window's walk over a batch of images, channels last, in libtorch's terms: the places it stands, the border it pads
-    /// each side with — as <see cref="Window.BordersOver"/> works it out, the one rule every engine reads — and the patches it
-    /// takes.
+    /// each side with and how far apart its cells are — as <see cref="Window.PlacingOver"/> works them out, the one rule every
+    /// engine reads — and the patches it takes.
     /// </summary>
+    /// <remarks>
+    /// libtorch counts the places a window fits whole, where a window of this library may be asked to stand at one more whose
+    /// patch overhangs the end. The end is therefore given as much more border as that last patch needs, so libtorch's own
+    /// count is this window's count, and the same is narrowed off again after folding: what the patch covers beyond the image
+    /// is border either way.
+    /// </remarks>
     private sealed class WindowWalk
     {
         private readonly Window _window;
-        private readonly Borders _borders;
+        private readonly Placing _placing;
         private readonly long _count;
         private readonly long _height;
         private readonly long _width;
         private readonly long _channels;
         private readonly long _places;
+        private readonly long _beyondDown;
+        private readonly long _beyondAcross;
 
         public WindowWalk(Shape images, Window window)
         {
             _window = window;
-            _borders = window.BordersOver(images[1], images[2]);
+            _placing = window.PlacingOver(images[1], images[2]);
             _count = images[0];
             _height = images[1];
             _width = images[2];
             _channels = images[3];
-            _places = (long)window.RowsOver(images[1]) * window.ColumnsOver(images[2]);
+
+            long rows = window.RowsOver(images[1]);
+            long columns = window.ColumnsOver(images[2]);
+
+            _places = rows * columns;
+            _beyondDown = Beyond(rows, _placing.Stride.Down, Reach(window.Height, _placing.Dilation.Down), _height + _placing.Border.Top + _placing.Border.Bottom);
+            _beyondAcross = Beyond(columns, _placing.Stride.Across, Reach(window.Width, _placing.Dilation.Across), _width + _placing.Border.Left + _placing.Border.Right);
             Patches = new Shape(checked((int)(_count * _places)), window.Height * window.Width * images[3]);
         }
 
@@ -354,8 +368,14 @@ public sealed class TorchBackend : INamesItsVersionAndDevice
         public torch.Tensor Unfolded(torch.Tensor images)
         {
             // Channels first, with the border on every side that has one, as libtorch unfolds.
-            var padded = torch.nn.functional.pad(images.permute(0, 3, 1, 2), (_borders.Left, _borders.Right, _borders.Top, _borders.Bottom));
-            var columns = torch.nn.functional.unfold(padded, (_window.Height, _window.Width), stride: (_window.Stride, _window.Stride));
+            var padded = torch.nn.functional.pad(
+                images.permute(0, 3, 1, 2),
+                (_placing.Border.Left, _placing.Border.Right + _beyondAcross, _placing.Border.Top, _placing.Border.Bottom + _beyondDown));
+            var columns = torch.nn.functional.unfold(
+                padded,
+                (_window.Height, _window.Width),
+                dilation: (_placing.Dilation.Down, _placing.Dilation.Across),
+                stride: (_placing.Stride.Down, _placing.Stride.Across));
 
             // libtorch lays a patch out channel by channel; here a place's channels stand side by side.
             return columns.reshape(_count, _channels, _window.Height, _window.Width, _places)
@@ -372,11 +392,20 @@ public sealed class TorchBackend : INamesItsVersionAndDevice
                 .reshape(_count, _channels * _window.Height * _window.Width, _places);
             var folded = torch.nn.functional.fold(
                 columns,
-                (_height + _borders.Top + _borders.Bottom, _width + _borders.Left + _borders.Right),
+                (_height + _placing.Border.Top + _placing.Border.Bottom + _beyondDown,
+                 _width + _placing.Border.Left + _placing.Border.Right + _beyondAcross),
                 (_window.Height, _window.Width),
-                stride: (_window.Stride, _window.Stride));
+                dilation: (_placing.Dilation.Down, _placing.Dilation.Across),
+                stride: (_placing.Stride.Down, _placing.Stride.Across));
 
-            return folded.narrow(2, _borders.Top, _height).narrow(3, _borders.Left, _width).permute(0, 2, 3, 1).contiguous();
+            return folded.narrow(2, _placing.Border.Top, _height).narrow(3, _placing.Border.Left, _width).permute(0, 2, 3, 1).contiguous();
         }
+
+        // How many places of an axis the window spans, the gaps of a dilated window included.
+        private static long Reach(int size, int dilation) => ((long)dilation * (size - 1)) + 1;
+
+        // How much more border the end of an axis needs for libtorch's own count of whole-fitting places to be this window's.
+        private static long Beyond(long places, int stride, long reach, long padded) =>
+            Math.Max(0, ((places - 1) * stride) + reach - padded);
     }
 }

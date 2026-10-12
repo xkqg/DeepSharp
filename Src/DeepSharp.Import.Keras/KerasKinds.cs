@@ -16,8 +16,19 @@ namespace DeepSharp.Import.Keras;
 /// <param name="Activation">The activation after it, by Keras's name for it: <c>linear</c> for none.</param>
 internal readonly record struct KerasLayer(Action<Sequential>? Words, string Activation)
 {
-    /// <summary>The names of the slots its numbers go into, in the order Keras keeps its numbers.</summary>
-    public IReadOnlyList<string> Slots { get; init; } = [];
+    /// <summary>The slots its numbers go into, in the order Keras keeps its numbers.</summary>
+    public IReadOnlyList<KerasSlot> Slots { get; init; } = [];
+
+    /// <summary>How many layers of a description this one Keras layer writes; one, unless it is more than one layer here.</summary>
+    /// <remarks>Keras's separable convolution is a depthwise convolution and a convolution of a one-by-one window, which are two layers here.</remarks>
+    public int Places { get; init; } = 1;
+
+    /// <summary>The slots no number of the file fills, which are filled with noughts instead.</summary>
+    /// <remarks>
+    /// Keras's separable convolution adds its bias once, after both of its stages, and a convolution here always adds one, so
+    /// the first stage is given a bias of noughts: convolving what has had nothing added to it is convolving it.
+    /// </remarks>
+    public IReadOnlyList<KerasSlot> Noughts { get; init; } = [];
 
     /// <summary>The length of each side of the window it walks, outermost first, for a convolution: none for any other layer.</summary>
     public int[] Sizes { get; init; } = [];
@@ -28,14 +39,93 @@ internal readonly record struct KerasLayer(Action<Sequential>? Words, string Act
     /// by the channels out — the same numbers in the same order — when the lengths it begins with are the window's sides;
     /// any other number as the file writes it.
     /// </summary>
-    public Shape LaidOut(ulong[] lengths)
+    public Shape LaidOut(ulong[] lengths, KerasSlot slot)
     {
         var written = new Shape([.. lengths.Select(length => checked((int)length))]);
+        var sides = slot.Sides.Length > 0 ? slot.Sides : Sizes;
 
-        return Sizes.Length > 0 && written.Rank == Sizes.Length + 2 && written.Axes[..Sizes.Length].SequenceEqual(Sizes)
-            ? new Shape(Sizes.Aggregate(written[Sizes.Length], (rows, side) => checked(rows * side)), written[written.Rank - 1])
-            : written;
+        if (sides.Length == 0 || written.Rank != sides.Length + 2 || !written.Axes[..sides.Length].SequenceEqual(sides))
+        {
+            return written;
+        }
+
+        var places = sides.Aggregate(1, (all, side) => checked(all * side));
+        var channels = written[sides.Length];
+        var made = written[written.Rank - 1];
+
+        return slot.Kept switch
+        {
+            // A depthwise kernel: the window's places by the channels it is handed times the channels it makes of each.
+            KerasKeeping.Apart => new Shape(places, checked(channels * made)),
+
+            // A transposed kernel: a row for every channel in, holding the window's places by the channels out.
+            KerasKeeping.GivenBack => new Shape(made, checked(places * channels)),
+            _ => new Shape(checked(places * channels), made),
+        };
     }
+
+    /// <summary>
+    /// A number as the library keeps it, where Keras keeps the same numbers in another order: a transposed convolution's
+    /// kernel, which Keras writes the window's places by the channels out by the channels in.
+    /// </summary>
+    /// <param name="values">The numbers as the file holds them.</param>
+    /// <param name="lengths">The lengths the file writes them under.</param>
+    /// <param name="slot">The slot they go into.</param>
+    /// <returns>The same numbers, in the order the slot keeps them.</returns>
+    public float[] Turned(float[] values, ulong[] lengths, KerasSlot slot)
+    {
+        var sides = slot.Sides.Length > 0 ? slot.Sides : Sizes;
+
+        if (slot.Kept != KerasKeeping.GivenBack || lengths.Length != sides.Length + 2)
+        {
+            return values;
+        }
+
+        var places = sides.Aggregate(1, (all, side) => checked(all * side));
+        var made = checked((int)lengths[^2]);
+        var channels = checked((int)lengths[^1]);
+        var turned = new float[values.Length];
+
+        for (var place = 0; place < places; place++)
+        {
+            for (var output = 0; output < made; output++)
+            {
+                for (var input = 0; input < channels; input++)
+                {
+                    turned[(input * places * made) + (place * made) + output] = values[(((place * made) + output) * channels) + input];
+                }
+            }
+        }
+
+        return turned;
+    }
+}
+
+/// <summary>How Keras keeps a number that a layer here keeps in another shape, or in another order.</summary>
+internal enum KerasKeeping
+{
+    /// <summary>A convolution's kernel: the window's places by the channels in by the channels out, which is what a layer here keeps.</summary>
+    AsWritten,
+
+    /// <summary>A depthwise kernel: the window's places by the channels it is handed by the channels it makes of each, which are its channels out together.</summary>
+    Apart,
+
+    /// <summary>A transposed kernel: the window's places by the channels out by the channels in, which a layer here keeps the other way about.</summary>
+    GivenBack,
+}
+
+/// <summary>Where one of a Keras layer's numbers goes: the slot's name, how many layers on from this one it stands, and the window its lengths begin with.</summary>
+/// <param name="Named">The slot's name.</param>
+/// <param name="Away">How many layers on from this one the slot stands; none, for this layer's own.</param>
+/// <param name="Sides">The length of each side of the window its lengths begin with; none, to read the layer's own.</param>
+internal readonly record struct KerasSlot(string Named, int Away, int[] Sides)
+{
+    /// <summary>How Keras keeps the number that goes into it; as a layer here keeps it, unless said.</summary>
+    public KerasKeeping Kept { get; init; }
+
+    /// <summary>A slot of the layer's own, whose lengths begin with the layer's own window.</summary>
+    /// <param name="named">The slot's name.</param>
+    public static implicit operator KerasSlot(string named) => new(named, 0, []);
 }
 
 /// <summary>
@@ -48,9 +138,19 @@ internal abstract class KerasKind
     private static readonly KerasKind[] Covered =
     [
         new DenseKind(),
-        new ConvolutionKind("Conv1D", 1, (filters, window) => description => description.Conv1D(filters, window.Line())),
-        new ConvolutionKind("Conv2D", 2, (filters, window) => description => description.Conv2D(filters, window.Plane())),
-        new ConvolutionKind("Conv3D", 3, (filters, window) => description => description.Conv3D(filters, window.Volume())),
+        new ConvolutionKind("Conv1D", 1, (filters, window) => description => description.Conv1D(filters, window.Line(), window.Groups)),
+        new ConvolutionKind("Conv2D", 2, (filters, window) => description => description.Conv2D(filters, window.Plane(), window.Groups)),
+        new ConvolutionKind("Conv3D", 3, (filters, window) => description => description.Conv3D(filters, window.Volume(), window.Groups)),
+        new TransposedConvolutionKind("Conv1DTranspose", 1),
+        new TransposedConvolutionKind("Conv2DTranspose", 2),
+        new TransposedConvolutionKind("Conv3DTranspose", 3),
+        new DepthwiseConvolutionKind("DepthwiseConv1D", 1),
+        new DepthwiseConvolutionKind("DepthwiseConv2D", 2),
+        new SeparableConvolutionKind("SeparableConv1D", 1),
+        new SeparableConvolutionKind("SeparableConv2D", 2),
+        new PaddingKind("ZeroPadding1D", 1),
+        new PaddingKind("ZeroPadding2D", 2),
+        new PaddingKind("ZeroPadding3D", 3),
         new PoolingKind("MaxPooling1D", 1, window => description => description.MaxPool1D(window.Line())),
         new PoolingKind("MaxPooling2D", 2, window => description => description.MaxPool2D(window.Plane())),
         new PoolingKind("MaxPooling3D", 3, window => description => description.MaxPool3D(window.Volume())),

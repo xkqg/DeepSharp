@@ -23,6 +23,9 @@ internal static class KerasFixtures
     /// <summary>What Keras answered, and the rows and images it answered for.</summary>
     public static JsonElement Answers { get; } = JsonDocument.Parse(File.ReadAllText(Path.Join(Folder, "keras-fixtures.json"))).RootElement;
 
+    /// <summary>What Keras answered through the models whose layers this release reads for the first time.</summary>
+    public static JsonElement New { get; } = JsonDocument.Parse(File.ReadAllText(Path.Join(Folder, "keras-new.json"))).RootElement;
+
     /// <summary>
     /// What Keras answered with each network that walks a series, an image or a volume (Fixtures/keras-spatial-fixtures.py made
     /// them), and the examples it answered for: the examples as they were handed to Keras, and the answers to them, flattened.

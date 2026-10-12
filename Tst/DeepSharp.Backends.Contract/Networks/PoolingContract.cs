@@ -21,9 +21,12 @@ public abstract class PoolingContract(ITensorBackend engine)
 
     public static TheoryData<string> Global { get; } = [.. SpatialReference.Named("globalAverage").Concat(SpatialReference.Named("globalMax"))];
 
+    public static TheoryData<string> Adaptive { get; } = [.. SpatialReference.Named("adaptiveAverage").Concat(SpatialReference.Named("adaptiveMax"))];
+
     [Theory]
     [MemberData(nameof(Windowed), MemberType = typeof(PoolingContract))]
     [MemberData(nameof(Global), MemberType = typeof(PoolingContract))]
+    [MemberData(nameof(Adaptive), MemberType = typeof(PoolingContract))]
     public void APooling_IsPyTorchsForTheSameInput(string name)
     {
         var reference = SpatialReference.Of(name);
@@ -37,6 +40,7 @@ public abstract class PoolingContract(ITensorBackend engine)
     [Theory]
     [MemberData(nameof(Windowed), MemberType = typeof(PoolingContract))]
     [MemberData(nameof(Global), MemberType = typeof(PoolingContract))]
+    [MemberData(nameof(Adaptive), MemberType = typeof(PoolingContract))]
     public void TheGradientOfALossThroughAPooling_IsPyTorchs(string name)
     {
         var reference = SpatialReference.Of(name);
@@ -161,6 +165,89 @@ public abstract class PoolingContract(ITensorBackend engine)
         Assert.Throws<ArgumentException>(() => new AvgPool2D(new Window(2, 2) { Padding = -1 }));
         Assert.Throws<ArgumentException>(() => new MaxPool3D(new Window3D(2, 2, 0)));
         Assert.Throws<ArgumentException>(() => new AvgPool3D(new Window3D(2, 2, 2) { Stride = 0 }));
+    }
+
+    [Fact]
+    public void APoolingToASizeThatDividesTheExample_IsAnOrdinaryPooling_AndOneThatDoesNot_IsAMatrixAnAxis()
+    {
+        // Where the size divides, the bins neither overlap nor differ and the pooling is the ordinary one with its kernel as
+        // its stride, which unfolds; where it does not, the bins overlap and a matrix an axis is what picks them out. The two
+        // routes cost very different things, so which one was taken is worth pinning rather than remembering.
+        var divides = new NotingBackend(_backend);
+        var overlaps = new NotingBackend(_backend);
+        var images = Tensor.From(new Shape(1, 8, 8, 2), [.. Enumerable.Range(0, 128).Select(at => MathF.Sin(at * 0.3f))]);
+
+        new AdaptiveAvgPool2D(new Shape(4, 4)).Forward(images, Pass.Evaluation(divides));
+        new AdaptiveAvgPool2D(new Shape(3, 3)).Forward(images, Pass.Evaluation(overlaps));
+
+        Assert.True(divides.Count("Unfold") > 0, "A pooling to a size that divides the example is the ordinary pooling, which unfolds.");
+        Assert.Equal(0, overlaps.Count("Unfold"));
+        Assert.True(overlaps.Count("MatMul") >= 2, "A pooling to a size that does not divide is one matrix product for each axis.");
+
+        // The ordinary pooling it becomes is the one with the window a bin is: the largest of every axis as well as the
+        // average, along a series, over an image and through a volume.
+        var series = Tensor.From(new Shape(1, 8, 2), [.. Enumerable.Range(0, 16).Select(at => MathF.Sin(at * 0.3f))]);
+        var volume = Tensor.From(new Shape(1, 4, 4, 4, 1), [.. Enumerable.Range(0, 64).Select(at => MathF.Sin(at * 0.3f))]);
+
+        Assert.Equal(
+            new MaxPool1D(new Window1D(2) { Stride = 2 }).Forward(series, Pass.Evaluation(_backend)).Values.ToArray(),
+            new AdaptiveMaxPool1D(new Shape(4)).Forward(series, Pass.Evaluation(_backend)).Values.ToArray());
+        Assert.Equal(
+            new MaxPool2D(new Window(2, 2) { Stride = 2 }).Forward(images, Pass.Evaluation(_backend)).Values.ToArray(),
+            new AdaptiveMaxPool2D(new Shape(4, 4)).Forward(images, Pass.Evaluation(_backend)).Values.ToArray());
+        Assert.Equal(
+            new MaxPool3D(new Window3D(2, 2, 2) { Stride = 2 }).Forward(volume, Pass.Evaluation(_backend)).Values.ToArray(),
+            new AdaptiveMaxPool3D(new Shape(2, 2, 2)).Forward(volume, Pass.Evaluation(_backend)).Values.ToArray());
+        Assert.Equal(
+            new AvgPool1D(new Window1D(4) { Stride = 4 }).Forward(series, Pass.Evaluation(_backend)).Values.ToArray(),
+            new AdaptiveAvgPool1D(new Shape(2)).Forward(series, Pass.Evaluation(_backend)).Values.ToArray());
+        Assert.Equal(
+            new AvgPool3D(new Window3D(2, 2, 2) { Stride = 2 }).Forward(volume, Pass.Evaluation(_backend)).Values.ToArray(),
+            new AdaptiveAvgPool3D(new Shape(2, 2, 2)).Forward(volume, Pass.Evaluation(_backend)).Values.ToArray());
+    }
+
+    [Fact]
+    public void AValueThatIsNotANumber_SpreadsOverTheWindowOrTheBinItStandsIn()
+    {
+        // Said once for the whole family rather than found twice: a pooling and a grouping here are a matrix of noughts and
+        // ones, and nought times a value that is not a number is not a number either. So one such value reaches every place
+        // whose window or bin covers it. It is the arithmetic the max pooling already shipped with, and it is stated, not a
+        // defect to be fixed in one layer and left in another.
+        var window = Tensor.From(new Shape(1, 2, 2, 1), [float.NaN, 2f, 3f, 4f]);
+        var bins = Tensor.From(new Shape(1, 4, 1, 1), [float.PositiveInfinity, 2f, 3f, 4f]);
+
+        var largest = new MaxPool2D(new Window(2, 2) { PaddingMode = PaddingMode.Same }).Forward(window, Pass.Evaluation(_backend));
+        var average = new AdaptiveAvgPool2D(new Shape(2, 1)).Forward(bins, Pass.Evaluation(_backend));
+
+        Assert.True(float.IsNaN(largest.Values[0]), "The window that covers it holds no number.");
+        Assert.True(float.IsNaN(average.Values[1]) || float.IsPositiveInfinity(average.Values[0]), "The bin that covers it holds no number.");
+        Assert.False(float.IsNaN(largest.Values[3]), "A window that does not cover it is a number.");
+    }
+
+    [Fact]
+    public void APoolingToASize_RefusesASizeThatIsNotTheRankItPools_OrAPlaceBelowOne()
+    {
+        Assert.Throws<ArgumentException>(() => new AdaptiveAvgPool1D(new Shape(2, 2)));
+        Assert.Throws<ArgumentException>(() => new AdaptiveMaxPool2D(new Shape(3)));
+        Assert.Throws<ArgumentException>(() => new AdaptiveAvgPool2D(new Shape(2, 0)));
+
+        // A size below nothing is no shape at all, and is refused where a shape is made rather than where a pooling reads one.
+        Assert.Throws<ArgumentOutOfRangeException>(() => new AdaptiveMaxPool3D(new Shape(1, 1, -1)));
+        Assert.Throws<ArgumentException>(() => new AdaptiveAvgPool2D(new Shape(2, 2)).Forward(Tensor.Zeros(new Shape(1, 4, 1)), Pass.Evaluation(_backend)));
+    }
+
+    [Fact]
+    public void APoolingToASize_OfAnExampleThatHoldsNoPlaceAlongAnAxis_IsRefused()
+    {
+        // Every place of the size would take a stretch of no places at all, and the largest or the average of nothing is
+        // nothing a pooling can say.
+        var refused = Assert.Throws<ArgumentException>(
+            () => new AdaptiveMaxPool2D(new Shape(2, 2)).Forward(Tensor.Zeros(new Shape(1, 4, 0, 3)), Pass.Evaluation(_backend)));
+
+        Assert.Equal("input", refused.ParamName);
+        Assert.Contains("pools the places of each channel, and a 1x4x0x3 batch holds none.", refused.Message, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(
+            () => new AdaptiveAvgPool1D(new Shape(2)).Forward(Tensor.Zeros(new Shape(1, 0, 3)), Pass.Evaluation(_backend)));
     }
 
     private static void AssertClose(float[] expected, ReadOnlySpan<float> actual)

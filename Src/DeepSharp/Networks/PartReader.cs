@@ -412,7 +412,7 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
 
         string[] at = [.. _here, ClipNormKey];
 
-        if (version < NetworkDocument.Version)
+        if (version < NetworkDocument.ThirdVersion)
         {
             text.Fault(
                 at,

@@ -18,7 +18,8 @@ namespace DeepSharp.Tests.Import;
 /// </summary>
 public class PyTorchSpatialTests
 {
-    private static readonly string[] Names = ["series", "series-flat", "pooling", "pooling-global", "volume", "volume-global"];
+    private static readonly string[] Names =
+        ["series", "series-flat", "pooling", "pooling-global", "volume", "volume-global", "grouped", "transposed", "transposed-series", "transposed-volume", "adaptive"];
 
     public static TheoryData<string> Networks => [.. Names];
 

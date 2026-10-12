@@ -322,6 +322,12 @@ internal enum Laying
     /// planes, rows and columns — laid out as the window's places times channels in by channels out.
     /// </summary>
     Kernel,
+
+    /// <summary>
+    /// A transposed convolution's kernel, written channels in by the channels out of one group by the window's lengths, laid
+    /// out as a row for every channel in holding the window's places by those channels out.
+    /// </summary>
+    GivenBack,
 }
 
 /// <summary>An image's shape as a flatten found it: so many rows, columns and channels.</summary>
@@ -379,6 +385,7 @@ internal readonly record struct HeldTensor(string Source, int[] Lengths)
         {
             Laying.Transposed => Transposed(),
             Laying.Kernel => Kernel(),
+            Laying.GivenBack => GivenBack(),
             _ => this,
         };
 
@@ -424,6 +431,30 @@ internal readonly record struct HeldTensor(string Source, int[] Lengths)
         }
 
         return this with { Lengths = [places * inputs, outputs], Values = laid };
+    }
+
+    // A transposed convolution's kernel, channels in by the channels out of one group by the window's lengths, as a row for
+    // every channel in holding the window's places by those channels out: one product of an example's channels makes the
+    // patches a folding puts back.
+    private HeldTensor GivenBack()
+    {
+        var inputs = Lengths[0];
+        var outputs = Lengths[1];
+        var places = Lengths[2..].Aggregate(1, (total, length) => total * length);
+        var laid = new float[Values!.Length];
+
+        for (var input = 0; input < inputs; input++)
+        {
+            for (var output = 0; output < outputs; output++)
+            {
+                for (var place = 0; place < places; place++)
+                {
+                    laid[(((input * places) + place) * outputs) + output] = Values[(((input * outputs) + output) * places) + place];
+                }
+            }
+        }
+
+        return this with { Lengths = [inputs, places * outputs], Values = laid };
     }
 
     // The value's first axis, a flattened image's row, from ONNX's order — channel, row, column — to this one's: row,

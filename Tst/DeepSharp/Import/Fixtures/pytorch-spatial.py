@@ -134,6 +134,56 @@ networks = {
         ),
         (4, 5, 6, 4, 2),
     ),
+    "grouped": (
+        nn.Sequential(
+            nn.Conv2d(4, 6, 3, padding=1, groups=2),
+            nn.ReLU(),
+            nn.Conv2d(6, 12, 3, padding=1, groups=6),
+            nn.Flatten(),
+            nn.Linear(12 * 5 * 4, 3),
+        ),
+        (6, 5, 4, 4),
+    ),
+    "transposed": (
+        nn.Sequential(
+            nn.ConvTranspose2d(2, 4, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.ConvTranspose2d(4, 3, 2),
+            nn.Flatten(),
+            nn.Linear(3 * 8 * 8, 2),
+        ),
+        (6, 4, 4, 2),
+    ),
+    "transposed-series": (
+        nn.Sequential(
+            nn.ConvTranspose1d(2, 3, 3, stride=2),
+            nn.ReLU(),
+            nn.ConvTranspose1d(3, 2, 2, padding=1),
+            nn.Flatten(),
+            nn.Linear(2 * 10, 2),
+        ),
+        (6, 5, 2),
+    ),
+    "transposed-volume": (
+        nn.Sequential(
+            nn.ConvTranspose3d(2, 3, 2, stride=(2, 1, 2)),
+            nn.Flatten(),
+            nn.Linear(3 * 6 * 4 * 6, 2),
+        ),
+        (6, 3, 3, 3, 2),
+    ),
+    "adaptive": (
+        nn.Sequential(
+            nn.Conv1d(2, 4, 3, padding=1, dilation=2),
+            nn.ReLU(),
+            nn.AdaptiveMaxPool1d(4),
+            nn.Conv1d(4, 3, 2, stride=1),
+            nn.AdaptiveAvgPool1d(2),
+            nn.Flatten(),
+            nn.Linear(6, 2),
+        ),
+        (6, 11, 2),
+    ),
 }
 
 

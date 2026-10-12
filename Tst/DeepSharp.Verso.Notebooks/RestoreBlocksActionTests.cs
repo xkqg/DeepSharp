@@ -147,6 +147,12 @@ public sealed class RestoreBlocksActionTests : IDisposable
 
         await notebook.PressAsync(RunPipelineAction.Id);
 
-        Assert.Contains("891 rows", notebook.Scaffold.Cells[^1].Outputs[^1].Content, StringComparison.Ordinal);
+        var ran = notebook.Scaffold.Cells[^1].Outputs[^1].Content;
+
+        // What the run wrote, whole: a failure here is about what came out instead of the count, so it says all of it.
+        if (!ran.Contains("891 rows", StringComparison.Ordinal))
+        {
+            Assert.Fail($"The pipeline's run wrote: {ran}");
+        }
     }
 }

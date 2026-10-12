@@ -151,7 +151,7 @@ internal sealed class TorchLayout
                     foreach (var named in slots)
                     {
                         Lay(ReferenceEquals(named.Slot, convolution.Weight)
-                            ? new KernelSlot(named.Path, convolution)
+                            ? Kernel(named.Path, convolution)
                             : new VectorSlot(named.Path, convolution.OutChannels, null));
                     }
 
@@ -284,7 +284,7 @@ internal sealed class TorchLayout
                     foreach (var named in own)
                     {
                         Lay(ReferenceEquals(named.Slot, convolution.Weight)
-                            ? new KernelSlot(named.Path, convolution)
+                            ? Kernel(named.Path, convolution)
                             : new VectorSlot(named.Path, convolution.OutChannels, null));
                     }
 
@@ -308,6 +308,12 @@ internal sealed class TorchLayout
     private static string OfAnUnknownKind(Layer layer) => $"is held by a {layer.GetType().Name}, and how PyTorch lays out a layer of that kind is not known here.";
 
     private void Lay(TorchSlot slot) => _slots[slot.Path] = slot;
+
+    // Which kernel a convolution keeps: a transposed one holds its channels in first, as PyTorch does for it.
+    private static TorchSlot Kernel(string path, Convolution convolution) =>
+        convolution is TransposedConvolution transposed
+            ? new TransposedKernelSlot(path, transposed)
+            : new KernelSlot(path, convolution);
 }
 
 /// <summary>A layer of a network, at its path: a stack's layers each at their place, a stack within it read down to its own.</summary>
@@ -376,11 +382,16 @@ internal static class WalkedAxesExtensions
 {
     extension(Layer layer)
     {
-        /// <summary>Whether it walks a window along some axes: a convolution, a pooling, a global pooling or a dropout of whole channels.</summary>
-        public bool WalksAxes => layer is Convolution or Pooling or GlobalPooling or SpatialDropout;
+        /// <summary>
+        /// Whether it walks the axes of a series, an image or a volume: a convolution, one that gives the places back, a
+        /// pooling by a window or to a size, a global pooling, a layer that only pads, or a dropout of whole channels.
+        /// </summary>
+        public bool WalksAxes => layer is Convolution or Pooling or AdaptivePooling or GlobalPooling or Padding or SpatialDropout;
 
         /// <summary>Whether it walks one axis, along a series.</summary>
-        public bool WalksOneAxis => layer is Conv1D or MaxPool1D or AvgPool1D or GlobalMaxPool1D or GlobalAvgPool1D or SpatialDropout1D;
+        public bool WalksOneAxis =>
+            layer is Conv1D or Conv1DTranspose or MaxPool1D or AvgPool1D or AdaptiveMaxPool1D or AdaptiveAvgPool1D
+                or GlobalMaxPool1D or GlobalAvgPool1D or Pad1D or SpatialDropout1D;
     }
 
     extension(IReadOnlyList<PlacedLayer> layers)

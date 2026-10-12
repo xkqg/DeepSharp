@@ -24,6 +24,9 @@ internal static class OnnxFixtures
     /// <summary>What PyTorch answered through the networks along a series, over an image and through a volume, and the examples it answered for.</summary>
     public static JsonElement Spatial { get; } = JsonDocument.Parse(File.ReadAllText(Path.Join(Folder, "onnx-spatial-fixtures.json"))).RootElement;
 
+    /// <summary>What PyTorch answered through the networks whose graphs hold a convolution that gives the places back, and a layer that only pads.</summary>
+    public static JsonElement Transposed { get; } = JsonDocument.Parse(File.ReadAllText(Path.Join(Folder, "onnx-transposed.json"))).RootElement;
+
     /// <summary>What TensorFlow answered through the network tf2onnx converted, and the images it answered for.</summary>
     public static JsonElement TensorFlow { get; } = JsonDocument.Parse(File.ReadAllText(Path.Join(Folder, "tf2onnx-fixtures.json"))).RootElement;
 

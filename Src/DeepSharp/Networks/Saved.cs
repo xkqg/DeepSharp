@@ -22,6 +22,19 @@ public interface ISaved
     /// <summary>Writes the settings it is rebuilt from, as properties of the object it is written as.</summary>
     /// <param name="writer">The writer, inside that object, after its kind.</param>
     void WriteSettings(Utf8JsonWriter writer);
+
+    /// <summary>
+    /// The oldest version of the part it is written into that can say what this one holds: the second, unless it says
+    /// something a library of that version would not understand.
+    /// </summary>
+    /// <remarks>
+    /// A network's part is written as the oldest version that says everything in it, which is the largest of these over the
+    /// layers it holds. A kind says the version per instance rather than per kind, so a convolution whose window is not
+    /// dilated is still written as the second version and read by every library that could read it before — and one that is
+    /// dilated names the version it needs, so an older library says which version wrote the part rather than which key it
+    /// does not know.
+    /// </remarks>
+    int FileVersion => NetworkDocument.SecondVersion;
 }
 
 /// <summary>A kind a network file names and rebuilds, registered under its name.</summary>

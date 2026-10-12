@@ -39,6 +39,17 @@ public abstract class AgreementContract(ITensorBackend engine)
     // A border TensorFlow splits unevenly on both axes: rows one before and two after, columns none before and one after.
     private static readonly Window Same = new(4, 3) { Stride = 2, PaddingMode = PaddingMode.Same };
 
+    // A stride of its own for each axis, a dilated window, one that stands at a place whose patch overhangs the end, and a
+    // border stated at each end of each axis: everything an engine would walk wrongly if it read one of them and missed
+    // another. Each is held to the light engine's own arithmetic over the same places.
+    private static readonly Window Apart = new(3, 2) { Stride = new Steps(2, 1), Padding = 1 };
+
+    private static readonly Window Spread = new(3, 3) { Dilation = new Steps(2, 3) };
+
+    private static readonly Window Rounded = new(3, 3) { Stride = 2, RoundsUp = true };
+
+    private static readonly Window Stated = new(2, 3) { Border = new Margins(new Sides(1, 0), new Sides(0, 2)) };
+
     private static readonly Shape Images = new(2, 6, 6, 3);
 
     private static readonly Shape Uneven = new(2, 7, 8, 3);
@@ -52,6 +63,9 @@ public abstract class AgreementContract(ITensorBackend engine)
         ["Mean"] = (engine, draw) => engine.Mean(draw(new Shape(1000), 4)),
         ["Fold"] = (engine, draw) => engine.Fold(draw(Walking.PatchesOf(Images), 5), Images, Walking),
         ["Fold padded as 'same'"] = (engine, draw) => engine.Fold(draw(Same.PatchesOf(Uneven), 11), Uneven, Same),
+        ["Fold striding per axis"] = (engine, draw) => engine.Fold(draw(Apart.PatchesOf(Uneven), 13), Uneven, Apart),
+        ["Fold dilated"] = (engine, draw) => engine.Fold(draw(Spread.PatchesOf(Uneven), 14), Uneven, Spread),
+        ["Fold rounding up"] = (engine, draw) => engine.Fold(draw(Rounded.PatchesOf(Uneven), 15), Uneven, Rounded),
     };
 
     // Each value-by-value operation, from values drawn once where it is defined.
@@ -81,6 +95,10 @@ public abstract class AgreementContract(ITensorBackend engine)
         ["Reshape"] = engine => engine.Reshape(Drawn(new Shape(5, 7), 9), new Shape(7, 5)),
         ["Unfold"] = engine => engine.Unfold(Drawn(Images, 10), Walking with { Stride = 2 }),
         ["Unfold padded as 'same'"] = engine => engine.Unfold(Drawn(Uneven, 12), Same),
+        ["Unfold striding per axis"] = engine => engine.Unfold(Drawn(Uneven, 13), Apart),
+        ["Unfold dilated"] = engine => engine.Unfold(Drawn(Uneven, 14), Spread),
+        ["Unfold rounding up"] = engine => engine.Unfold(Drawn(Uneven, 15), Rounded),
+        ["Unfold a border stated at each end"] = engine => engine.Unfold(Drawn(Uneven, 16), Stated),
         ["Fill"] = engine => engine.Fill(new Shape(3, 4), 0.1f),
         ["FirstLargest"] = engine => engine.FirstLargest(Drawn(new Shape(8, 10), 11)),
     };

@@ -91,7 +91,7 @@ internal abstract class OnnxKind
     // Every operator read, in the order a refusal names them.
     private static readonly OnnxKind[] Covered =
     [
-        new GemmKind(), new MatMulKind(), new AddKind(), new ConvKind(), new MaxPoolKind(), new AveragePoolKind(), new GlobalAveragePoolKind(), new GlobalMaxPoolKind(),
+        new GemmKind(), new MatMulKind(), new AddKind(), new ConvKind(), new ConvTransposeKind(), new PadKind(), new MaxPoolKind(), new AveragePoolKind(), new GlobalAveragePoolKind(), new GlobalMaxPoolKind(),
         new ReduceKind("ReduceMean", new GlobalAveragePoolKind()), new ReduceKind("ReduceMax", new GlobalMaxPoolKind()), new BatchNormalizationKind(), new LayerNormalizationKind(), new FlattenKind(), new ReshapeKind(),
         new ActivationKind("Relu", description => description.Relu(), null), new ActivationKind("Tanh", description => description.Tanh(), null),
         new ActivationKind("Sigmoid", description => description.Sigmoid(), OutputActivation.Sigmoid), new SoftmaxKind(),

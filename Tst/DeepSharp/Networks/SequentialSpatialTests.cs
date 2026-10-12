@@ -83,6 +83,59 @@ public class SequentialSpatialTests
     }
 
     [Fact]
+    public void EveryWordOfTheRefusedList_LowersToTheLayerItNames_AlongASeries_OverAnImage_AndThroughAVolume()
+    {
+        var line = new Sequential()
+            .Pad1D(new Sides(2, 1))
+            .Conv1DTranspose(4, new Window1D(3) { Stride = 2 }, outputPadding: 1)
+            .DepthwiseConv1D(2, new Window1D(3) { Stride = 2 })
+            .Conv1D(6, new Window1D(2), groups: 2)
+            .AdaptiveMaxPool1D(3)
+            .AdaptiveAvgPool1D(2)
+            .Lower(new Shape(20, 2), new RandomStream(3));
+        var plane = new Sequential()
+            .Pad2D(new Margins(new Sides(1, 0), new Sides(0, 1)))
+            .Conv2DTranspose(4, new Window(3, 3) { Stride = new Steps(2, 1) }, new Steps(1, 0))
+            .DepthwiseConv2D(2, new Window(3, 3) { Stride = 2 })
+            .Conv2D(6, new Window(2, 2), groups: 2)
+            .AdaptiveMaxPool2D(3, 2)
+            .AdaptiveAvgPool2D(1, 1)
+            .Lower(new Shape(8, 8, 1), new RandomStream(3));
+        var volume = new Sequential()
+            .Pad3D(new Margins3D(new Sides(1, 0), new Sides(0, 1), new Sides(1, 1)))
+            .Conv3DTranspose(4, new Window3D(2, 2, 2) { Stride = new Steps3D(2, 1, 2) }, new Steps3D(1, 0, 1))
+            .DepthwiseConv3D(2, new Window3D(2, 2, 2) { Stride = 2 })
+            .Conv3D(4, new Window3D(2, 2, 2), groups: 2)
+            .AdaptiveMaxPool3D(2, 2, 2)
+            .AdaptiveAvgPool3D(1, 1, 1)
+            .Lower(new Shape(6, 6, 6, 1), new RandomStream(3));
+
+        Assert.Equal(
+            [typeof(Pad1D), typeof(Conv1DTranspose), typeof(Conv1D), typeof(Conv1D), typeof(AdaptiveMaxPool1D), typeof(AdaptiveAvgPool1D)],
+            line.Layers.Select(layer => layer.GetType()));
+        Assert.Equal(
+            [typeof(Pad2D), typeof(Conv2DTranspose), typeof(Conv2D), typeof(Conv2D), typeof(AdaptiveMaxPool2D), typeof(AdaptiveAvgPool2D)],
+            plane.Layers.Select(layer => layer.GetType()));
+        Assert.Equal(
+            [typeof(Pad3D), typeof(Conv3DTranspose), typeof(Conv3D), typeof(Conv3D), typeof(AdaptiveMaxPool3D), typeof(AdaptiveAvgPool3D)],
+            volume.Layers.Select(layer => layer.GetType()));
+
+        // A depthwise word makes a group of every channel and so many channels of each; a grouped word says its groups; and
+        // the places kept at the end of an axis are the word's own, not the window's.
+        Assert.Equal(new Channels { In = 4, Out = 8, Groups = 4 }, ((Conv1D)line.Layers[2]).Channels);
+        Assert.Equal(new Channels { In = 8, Out = 6, Groups = 2 }, ((Conv1D)line.Layers[3]).Channels);
+        Assert.Equal([1], ((Conv1DTranspose)line.Layers[1]).OutputPadding);
+        Assert.Equal([1, 0], ((Conv2DTranspose)plane.Layers[1]).OutputPadding);
+        Assert.Equal([1, 0, 1], ((Conv3DTranspose)volume.Layers[1]).OutputPadding);
+        Assert.Equal(new Channels { In = 4, Out = 8, Groups = 4 }, ((Conv3D)volume.Layers[2]).Channels);
+
+        // Each example comes out the size the last word pools it to, whatever it was handed.
+        Assert.Equal(new Shape(5, 2, 6), line.Forward(Tensor.Zeros(new Shape(5, 20, 2)), Pass.Evaluation(Engine)).Shape);
+        Assert.Equal(new Shape(4, 1, 1, 6), plane.Forward(Tensor.Zeros(new Shape(4, 8, 8, 1)), Pass.Evaluation(Engine)).Shape);
+        Assert.Equal(new Shape(3, 1, 1, 1, 4), volume.Forward(Tensor.Zeros(new Shape(3, 6, 6, 6, 1)), Pass.Evaluation(Engine)).Shape);
+    }
+
+    [Fact]
     public void APoolingWrittenWithASize_WalksNonOverlappingRuns_AsKerasPoolsByDefault()
     {
         var line = new Sequential().MaxPool1D(3).AvgPool1D(2).Lower(new Shape(40, 1), new RandomStream(1));
@@ -122,6 +175,24 @@ public class SequentialSpatialTests
         Assert.Contains("globalavgpool1d, takes each example as a series", Refusal(new Sequential().GlobalAvgPool1D(), new Shape(4, 4, 1)), StringComparison.Ordinal);
         Assert.Contains("globalmaxpool2d, takes each example as an image", Refusal(new Sequential().GlobalMaxPool2D(), new Shape(4, 1)), StringComparison.Ordinal);
         Assert.Contains("spatialdropout2d, takes each example as an image", Refusal(new Sequential().SpatialDropout2D(0.5), new Shape(4, 1)), StringComparison.Ordinal);
+
+        // The words of this release, each refused at what it cannot be handed.
+        Assert.Contains(
+            "conv2dtranspose, takes each example as an image of rows, columns and channels, and each reaching it is 16",
+            Refusal(new Sequential().Conv2DTranspose(2, new Window(3, 3)), new Shape(16)),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "conv1d, takes each example as a series of steps and channels, and each reaching it is 4x4x1",
+            Refusal(new Sequential().DepthwiseConv1D(2, new Window1D(3)), new Shape(4, 4, 1)),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "pad3d, takes each example as a volume of planes, rows, columns and channels, and each reaching it is 4x1",
+            Refusal(new Sequential().Pad3D(new Margins3D(new Sides(1, 1), new Sides(1, 1), new Sides(1, 1))), new Shape(4, 1)),
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "adaptiveavgpool2d, takes each example as an image of rows, columns and channels, and each reaching it is 16",
+            Refusal(new Sequential().AdaptiveAvgPool2D(2, 2), new Shape(16)),
+            StringComparison.Ordinal);
     }
 
     [Fact]
@@ -132,6 +203,16 @@ public class SequentialSpatialTests
 
         Assert.Contains("conv1d, slides a window 3 (stride 1, padding 0) over each example, and an example 2x1 is smaller than it", Refusal(new Sequential().Conv1D(2, new Window1D(3)), new Shape(2, 1)), StringComparison.Ordinal);
         Assert.Contains("maxpool3d, slides a window 2x2x2 (stride 2, padding 0) over each example", Refusal(new Sequential().MaxPool3D(2), new Shape(4, 4, 1, 1)), StringComparison.Ordinal);
+        Assert.Contains(
+            "conv2d, slides a window 5x5 (stride 1, padding 0) over each example, and an example 4x4x1 is smaller than it",
+            Refusal(new Sequential().DepthwiseConv2D(2, new Window(5, 5)), new Shape(4, 4, 1)),
+            StringComparison.Ordinal);
+
+        // A transposed convolution gives places back, and a border that takes more than its window gives leaves none.
+        Assert.Contains(
+            "conv1dtranspose, gives back the places its window takes away, and an example 2x1 is left with none of them",
+            Refusal(new Sequential().Conv1DTranspose(2, new Window1D(1) { Border = new Sides(2, 2) }), new Shape(2, 1)),
+            StringComparison.Ordinal);
     }
 
     [Fact]

@@ -428,7 +428,7 @@ public sealed class NativeMemoryBackend : INamesItsVersionAndDevice
         var height = images[1];
         var width = images[2];
         var channels = images[3];
-        var borders = window.BordersOver(height, width);
+        var placing = window.PlacingOver(height, width);
         var patch = 0;
 
         for (var image = 0; image < images[0]; image++)
@@ -441,8 +441,8 @@ public sealed class NativeMemoryBackend : INamesItsVersionAndDevice
                     {
                         for (var across = 0; across < window.Width; across++)
                         {
-                            var y = (row * window.Stride) - borders.Top + down;
-                            var x = (column * window.Stride) - borders.Left + across;
+                            var y = (row * placing.Stride.Down) - placing.Border.Top + (down * placing.Dilation.Down);
+                            var x = (column * placing.Stride.Across) - placing.Border.Left + (across * placing.Dilation.Across);
 
                             if (y >= 0 && y < height && x >= 0 && x < width)
                             {

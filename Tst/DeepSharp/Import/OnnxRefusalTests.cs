@@ -49,6 +49,20 @@ public class OnnxRefusalTests
 
     private const string ImageLargestReduced = "onnx-image-global-max-default.onnx";
 
+    // The graphs of Fixtures/onnx-transposed-fixtures.py: a convolution that gives the places back, and a layer that only pads.
+    private const string Transposed = "onnx-transposed.onnx";
+
+    private const string TransposedSeries = "onnx-transposed-series.onnx";
+
+    private const string Padded = "onnx-padded-value.onnx";
+
+    // What the newer exporter names the node of each, and the value a padding pads with.
+    private const string Gave = "node_convolution";
+
+    private const string PadNode = "node_pad";
+
+    private const string PadsValue = "val_1";
+
     private const string SeriesBorders = "onnx-borders-series.onnx";
 
     private const string VolumeBorders = "onnx-borders-volume.onnx";
@@ -62,7 +76,7 @@ public class OnnxRefusalTests
 
     private const string LastConv = "/0/0.7/Conv";
 
-    private const string Operators = "an ONNX graph is read here when each of its nodes is a Gemm, MatMul, Add, Conv, MaxPool, AveragePool, GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape, Relu, Tanh, Sigmoid or Softmax, or an Identity, a Cast, a Transpose or a Constant that hands a value on.";
+    private const string Operators = "an ONNX graph is read here when each of its nodes is a Gemm, MatMul, Add, Conv, ConvTranspose, Pad, MaxPool, AveragePool, GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape, Relu, Tanh, Sigmoid or Softmax, or an Identity, a Cast, a Transpose or a Constant that hands a value on.";
 
     private const string Pads = "and a window here pads every side alike, or as SAME_UPPER, TensorFlow's 'same'.";
 
@@ -238,7 +252,7 @@ public class OnnxRefusalTests
             Environment.NewLine,
             "node '/0/Conv' (Conv): its 'strides' is written as [1, 1], and a convolution along a series writes one there.",
             "node '/0/Conv' (Conv): its 'dilations' is written as [1, 1], and a convolution along a series writes one there.",
-            $"node '/0/Conv' (Conv): it pads [1, 1, 1, 1] — steps before, then after — {Pads}")),
+            "node '/0/Conv' (Conv): it pads [1, 1, 1, 1] — steps before, then after — and a window along a series states 2 of them.")),
         ["a kernel along a series for the images reaching it"] = new(Images, model =>
         {
             model.Initializer("onnx::Conv_29").Dims.Clear();
@@ -251,10 +265,9 @@ public class OnnxRefusalTests
         ["pads through a volume that are not 'same' for the volume"] = new(VolumeBorders, model => model.Node("averagepool_3").SetWholes("pads", 1, 0, 1, 1, 1, 2), "node 'averagepool_3' (AveragePool): it pads [1, 0, 1, 1, 1, 2] — planes, rows and columns before, then after — where TensorFlow's 'same' pads the 5x4x3 volumes reaching it [1, 0, 1, 1, 1, 1], and a window here pads every side alike, or as that 'same'."),
         ["one stride for two axes"] = new(Images, model => model.Node("/0/Conv").SetWholes("strides", 1), "node '/0/Conv' (Conv): its 'strides' is written as [1], and a convolution over an image writes a pair there."),
         ["a stride too long"] = new(Images, model => model.Node("/0/Conv").SetWholes("strides", 4294967296, 1), "node '/0/Conv' (Conv): its 'strides' is written as [4294967296, 1], which is not what ONNX writes there."),
-        ["two pads for four sides"] = new(Images, model => model.Node("/0/Conv").SetWholes("pads", 1, 1), $"node '/0/Conv' (Conv): it pads [1, 1] — rows and columns before, then after — {Pads}"),
+        ["two pads for four sides"] = new(Images, model => model.Node("/0/Conv").SetWholes("pads", 1, 1), "node '/0/Conv' (Conv): it pads [1, 1] — rows and columns before, then after — and a window over an image states 4 of them."),
         ["the odd pixel before"] = new(Images, model => model.Node("/0/Conv").SetText("auto_pad", "SAME_LOWER"), $"node '/0/Conv' (Conv): it pads as SAME_LOWER, {Pads}"),
         ["pads at a stride of two that are not 'same' for the image"] = new(Images, model => model.Node("/3/Conv").SetWholes("pads", 0, 0, 1, 1), "node '/3/Conv' (Conv): it pads [0, 0, 1, 1] — rows and columns before, then after — where TensorFlow's 'same' pads the 8x7 images reaching it [0, 0, 0, 1], and a window here pads every side alike, or as that 'same'."),
-        ["pads at a stride of two that are no 'same' at all"] = new(Images, model => model.Node("/3/Conv").SetWholes("pads", 0, 0, 2, 0), $"node '/3/Conv' (Conv): it pads [0, 0, 2, 0] — rows and columns before, then after — {Pads}"),
         ["a convolution without its bias"] = new(Images, model => model.Node("/0/Conv").Input.RemoveAt(2), "node '/0/Conv' (Conv): it adds no bias, and a dense layer or a convolution here always adds one."),
         ["a window that stands nowhere"] = new(Images, model => model.Node("/0/Conv").SetWholes("strides", 0, 0), "node '/0/Conv' (Conv): A window 3x2 (stride 0, padding 1) cannot stand anywhere: its sides and its stride are at least one, and its border at least nothing. (Parameter 'window')"),
         ["a window larger than the image"] = new(Images, model =>
@@ -264,25 +277,44 @@ public class OnnxRefusalTests
         }, "graph 'main_graph': This network cannot be lowered at 8x6x2: word 1, conv2d, slides a window 11x2 (stride 1, padding 1) over each example, and an example 8x6x2 is smaller than it. (Parameter 'input')"),
 
         // A convolution along a series, and through a volume.
-        ["a convolution along a series dilated"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("dilations", 2), $"node '{FirstConv}' (Conv): its window is dilated by 2, {Neighbours}"),
-        ["a convolution along a series in groups"] = new(SeriesNet, model => model.Node(FirstConv).SetWhole("group", 3), $"node '{FirstConv}' (Conv): it splits its channels into 3 groups, and a convolution here takes every channel of a place at once."),
         ["two strides for a series"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("strides", 2, 2), $"node '{FirstConv}' (Conv): its 'strides' is written as [2, 2], and a convolution along a series writes one there."),
         ["two dilations for a series"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("dilations", 1, 1), $"node '{FirstConv}' (Conv): its 'dilations' is written as [1, 1], and a convolution along a series writes one there."),
-        ["one pad for a series"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("pads", 1), $"node '{FirstConv}' (Conv): it pads [1] — steps before, then after — {Pads}"),
-        ["pads at a stride of two that are no 'same' at all for a series"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("pads", 0, 2), $"node '{FirstConv}' (Conv): it pads [0, 2] — steps before, then after — {Pads}"),
+        ["one pad for a series"] = new(SeriesNet, model => model.Node(FirstConv).SetWholes("pads", 1), $"node '{FirstConv}' (Conv): it pads [1] — steps before, then after — and a window along a series states 2 of them."),
         ["pads at a stride of two that are not 'same' for the series"] = new(SeriesBorders, model => model.Node("averagepool_3").SetWholes("pads", 1, 2), "node 'averagepool_3' (AveragePool): it pads [1, 2] — steps before, then after — where TensorFlow's 'same' pads the 12 series reaching it [0, 1], and a window here pads every side alike, or as that 'same'."),
-        ["a convolution through a volume striding otherwise on each axis"] = new(VolumeNet, model => model.Node(FirstConv).SetWholes("strides", 2, 1, 1), $"node '{FirstConv}' (Conv): it strides 2 deep, 1 down and 1 across, and a window here walks one stride deep, down and across alike."),
-        ["a convolution through a volume dilated"] = new(VolumeNet, model => model.Node(FirstConv).SetWholes("dilations", 1, 2, 1), $"node '{FirstConv}' (Conv): its window is dilated by 1 deep, 2 down and 1 across, {Neighbours}"),
-        ["a convolution through a volume padded otherwise than alike or as 'same'"] = new(VolumeNet, model => model.Node(FirstConv).SetWholes("pads", 0, 1, 2, 1, 1, 2), $"node '{FirstConv}' (Conv): it pads [0, 1, 2, 1, 1, 2] — planes, rows and columns before, then after — {Pads}"),
-        ["pads through a volume at a stride of one that are not 'same'"] = new(VolumeNet, model => model.Node(LastConv).SetWholes("pads", 0, 0, 0, 1, 0, 0), $"node '{LastConv}' (Conv): it pads [0, 0, 0, 1, 0, 0] — planes, rows and columns before, then after — {Pads}"),
+
+        // A convolution that gives the places back.
+        ["the shape a transposed convolution says it makes"] = new(Transposed, model => model.Node(Gave).SetWholes("output_shape", 8, 8), $"node '{Gave}' (ConvTranspose): it says the shape it makes, [8, 8], and a transposed convolution here is told how many places to keep at the end of each axis instead, as 'output_padding' says them."),
+        ["one place kept at the end of an image's two axes"] = new(Transposed, model => model.Node(Gave).SetWholes("output_padding", 1), $"node '{Gave}' (ConvTranspose): its 'output_padding' is written as [1], and a transposed convolution over an image writes a pair there."),
+        ["a pair of places kept at the end of a series' one axis"] = new(TransposedSeries, model => model.Node(Gave).SetWholes("output_padding", 1, 1), $"node '{Gave}' (ConvTranspose): its 'output_padding' is written as [1, 1], and a transposed convolution along a series writes one there."),
+        ["three places kept at the end, where the window gives them itself"] = new(TransposedSeries, model => model.Node(Gave).SetWholes("output_padding", 3), "graph 'main_graph': A transposed convolution of 2 channels adds 3 places at the end of an axis it strides 2 and dilates 1, and adds fewer than 2: beyond that the window gives the place itself. (Parameter 'outputPadding')"),
+        ["a transposed convolution without its bias"] = new(Transposed, model => model.Node(Gave).Input.RemoveAt(2), $"node '{Gave}' (ConvTranspose): it adds no bias, and a dense layer or a convolution here always adds one."),
+        ["a kernel a transposed convolution gives no places back from"] = new(Transposed, model =>
+        {
+            model.Initializer("0.weight").Dims.Clear();
+            model.Initializer("0.weight").Dims.Add([2, 36]);
+        }, $"node '{Gave}' (ConvTranspose): its kernel, '0.weight', is written as 2x36, and a transposed convolution here gives the places back along a series, an image or a volume: channels in by the channels out of one group by steps, or by rows by columns, or by planes by rows by columns."),
+
+        // A layer that only pads.
+        ["a padding that mirrors the example"] = new(Padded, model => model.Node(PadNode).SetText("mode", "reflect"), $"node '{PadNode}' (Pad): it pads by reflect, which mirrors or repeats the example, and a padding here pads with one value."),
+        ["a padding of other places than a batch and its channels have"] = new(Padded, model => model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(model.Node(PadNode).Input[1]))] = OnnxFixtures.Wholes(model.Node(PadNode).Input[1], 0, 0, 1, 1), $"node '{PadNode}' (Pad): it pads [0, 0, 1, 1], and a padding of a batch of 3 axes and its channels writes 8 places: one before each axis, then one after each."),
+        ["a padding that takes places away"] = new(Padded, model => model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(model.Node(PadNode).Input[1]))] = OnnxFixtures.Wholes(model.Node(PadNode).Input[1], 0, 0, 1, 1, 0, 0, -1, 1), $"node '{PadNode}' (Pad): it pads [0, 0, 1, 1, 0, 0, -1, 1] places, and a padding here adds places and never takes them away."),
+        ["a padding of the batch's own axis"] = new(Padded, model => model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(model.Node(PadNode).Input[1]))] = OnnxFixtures.Wholes(model.Node(PadNode).Input[1], 1, 0, 1, 1, 0, 0, 1, 1), $"node '{PadNode}' (Pad): it pads the batch's own axis or its channels, [1, 0, 1, 1, 0, 0, 1, 1], and a padding here adds places around each example and leaves the examples and their channels as they are."),
+        ["a padding of rows"] = new(Titanic, model => model.Node("/1/Relu").OpType = "Pad", $"node '/1/Relu' (Pad): {TakesImages("Pad")} a row of values."),
+        ["pads a padding would have to work out"] = new(Padded, model => model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(model.Node(PadNode).Input[1]))] = OnnxFixtures.Floats(model.Node(PadNode).Input[1], [8], 0, 0, 1, 1, 0, 0, 1, 1), $"node '{PadNode}' (Pad): its pads, 'val_0', is written as FLOAT, and ONNX writes one as INT64. A padding here reads the places it pads from the graph's own numbers, never from what the graph works out."),
+        ["a padding along fewer axes than it writes places for"] = new(Padded, model =>
+        {
+            model.Graph.Initializer.Add(OnnxFixtures.Wholes("axes", 2, 3));
+            model.Node(PadNode).Input.Add("axes");
+        }, $"node '{PadNode}' (Pad): it pads [0, 0, 0, 1, 0, 0, 2, 1] along 2 axes, and writes one place before each and one after each."),
+        ["a padding along an axis the batch has none of"] = new(Padded, model =>
+        {
+            model.Graph.Initializer.Add(OnnxFixtures.Wholes("axes", 2, 9));
+            model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(model.Node(PadNode).Input[1]))] = OnnxFixtures.Wholes(model.Node(PadNode).Input[1], 1, 1, 1, 1);
+            model.Node(PadNode).Input.Add("axes");
+        }, $"node '{PadNode}' (Pad): it pads along axis 9, and a batch of 3 axes and its channels has none there."),
+        ["a padding of more than one value"] = new(Padded, model => model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(model.Node(PadNode).Input[2]))] = OnnxFixtures.Floats(model.Node(PadNode).Input[2], [2], -1.5f, 0.5f), $"node '{PadNode}' (Pad): the value it pads with, '{PadsValue}', is written as 2, and a padding here pads with one value."),
 
         // Poolings.
-        ["a max pooling that rounds up"] = new(ImageNet, model => model.Node(MaxPooling).SetWhole("ceil_mode", 1), $"node '{MaxPooling}' (MaxPool): {Overhang}"),
-        ["an average pooling that rounds up"] = new(SeriesNet, model => model.Node(AveragePooling).SetWhole("ceil_mode", 1), $"node '{AveragePooling}' (AveragePool): {Overhang}"),
-        ["a max pooling through a volume dilated"] = new(VolumeNet, model => model.Node("/0/0.3/MaxPool").SetWholes("dilations", 2, 2, 2), $"node '/0/0.3/MaxPool' (MaxPool): its window is dilated by 2 deep, 2 down and 2 across, {Neighbours}"),
-        ["an average pooling over an image dilated"] = new(ImageNet, model => model.Node(AveragePooling).SetWholes("dilations", 1, 2), $"node '{AveragePooling}' (AveragePool): its window is dilated by 1 down and 2 across, {Neighbours}"),
-        ["a max pooling striding otherwise down than across"] = new(ImageNet, model => model.Node(MaxPooling).SetWholes("strides", 2, 1), $"node '{MaxPooling}' (MaxPool): it strides 2 down and 1 across, and a window here walks one stride down and across alike."),
-        ["an average pooling through a volume striding otherwise on each axis"] = new(VolumeNet, model => model.Node("/0/0.6/AveragePool").SetWholes("strides", 2, 1, 2), "node '/0/0.6/AveragePool' (AveragePool): it strides 2 deep, 1 down and 2 across, and a window here walks one stride deep, down and across alike."),
         ["a max pooling that numbers the places of its largest values by columns"] = new(SeriesDefault, model => model.Node("node_max_pool1d").SetWhole("storage_order", 1), $"node 'node_max_pool1d' (MaxPool): it numbers the places of its largest values column by column, storage_order 1, {Largest}"),
         ["a max pooling whose places of the largest values are used"] = new(SeriesNet, model =>
         {
@@ -485,20 +517,15 @@ public class OnnxRefusalTests
     public static TheoryData<string> Named => new(Cases.Keys);
 
     [Fact]
-    public void AStrideForEachAxis_ADilatedWindow_ChannelsInGroups_APaddingForEachAxis_APoolingThatRoundsUp_AndALeakyRelu_AreEachRefusedAtTheirNode_AllAtOnce()
+    public void AStrideForEachAxis_ADilatedWindow_ChannelsInGroups_APaddingForEachAxis_AndAPoolingThatRoundsUp_AreRead_AndWhatIsNoLayerIsStillRefused()
     {
+        // Every one of these was refused at its node before this release, and every one of them is now a setting a window or
+        // a convolution here has. What is left in this graph is the one node that is no layer at all.
         using var graph = OnnxFixtures.Open("onnx-refused.onnx");
         var refused = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(graph));
 
         Assert.Equal(
-            [
-                "node 'node_conv2d' (Conv): it strides 2 down and 1 across, and a window here walks one stride down and across alike.",
-                "node 'node_conv2d_1' (Conv): its window is dilated by 2 down and 2 across, and a window here covers neighbouring places.",
-                "node 'node_conv2d_2' (Conv): it splits its channels into 2 groups, and a convolution here takes every channel of a place at once.",
-                $"node 'node_conv2d_3' (Conv): it pads [1, 0, 1, 0] — rows and columns before, then after — {Pads}",
-                $"node 'node_max_pool2d' (MaxPool): {Overhang}",
-                $"node 'node_leaky_relu' (LeakyRelu): 'LeakyRelu' is no operator a network here is built of: {Operators}",
-            ],
+            [$"node 'node_leaky_relu' (LeakyRelu): 'LeakyRelu' is no operator a network here is built of: {Operators}"],
             refused.Message.Split(Environment.NewLine));
     }
 

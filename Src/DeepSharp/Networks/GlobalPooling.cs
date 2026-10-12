@@ -18,8 +18,32 @@ internal readonly record struct ChannelSplit(int Count, int Channels)
 /// <summary>What a pooling does with the channels of an example: takes them apart so each is pooled on its own, and puts them back.</summary>
 internal static class ChannelExtensions
 {
+    // Far enough below any value a network holds that no cell given it is ever the largest, and far enough from the limits of
+    // a single-precision number that adding it to one cannot overflow.
+    private const float Far = 1e30f;
+
     extension(ITensorBackend backend)
     {
+        /// <summary>
+        /// The largest value of each row, as a matrix of one column, with the gradient of it going to the value picked and to
+        /// no other — the first of values that tie, as PyTorch's max pooling sends it.
+        /// </summary>
+        /// <param name="rows">A row for every place pooled, holding what it covers; a cell that is not a value of the example is a nought.</param>
+        /// <param name="real">One where a cell is a value of the example, nought where it is not; nothing where every cell is one.</param>
+        /// <returns>A matrix of one column.</returns>
+        /// <remarks>
+        /// A largest is not a nought that a border or an absent place supplies: those cells are given a penalty far below any
+        /// value a network holds before the first largest is picked, so a window or a bin over an edge of negative values
+        /// picks one of them. The values times the mask of the first largest, added up along the row, are the row's largest.
+        /// </remarks>
+        internal Tensor Largest(Tensor rows, Tensor? real)
+        {
+            var scores = real is null
+                ? rows
+                : backend.Add(rows, backend.Scale(backend.Subtract(real, backend.Fill(real.Shape, 1f)), backend.Fill(new Shape(), Far)));
+
+            return backend.MatMul(backend.Multiply(rows, backend.FirstLargest(scores)), backend.Fill(new Shape(rows.Shape[1], 1), 1f));
+        }
         /// <summary>
         /// Every channel of every example turned into an example of its own, with one channel: <c>(example, places…, channel)</c>
         /// becomes <c>(channel × example, places…, 1)</c>, a channel's examples one after another.
@@ -109,8 +133,7 @@ public abstract class GlobalMaxPooling : GlobalPooling
     }
 
     /// <inheritdoc />
-    private protected sealed override Tensor Pool(ITensorBackend backend, Tensor series) =>
-        backend.MatMul(backend.Multiply(series, backend.FirstLargest(series)), backend.Fill(new Shape(series.Shape[1], 1), 1f));
+    private protected sealed override Tensor Pool(ITensorBackend backend, Tensor series) => backend.Largest(series, real: null);
 }
 
 /// <summary>A pooling that makes the average of every channel of an example.</summary>

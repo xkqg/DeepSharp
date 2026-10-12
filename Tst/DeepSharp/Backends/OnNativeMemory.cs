@@ -30,6 +30,8 @@ public sealed class SpatialConvolutionTests() : SpatialConvolutionContract(new N
 
 public sealed class PoolingTests() : PoolingContract(new NativeMemoryBackend());
 
+public sealed class PaddingTests() : PaddingContract(new NativeMemoryBackend());
+
 public sealed class SpatialDropoutTests() : SpatialDropoutContract(new NativeMemoryBackend());
 
 public sealed class NormalisationTests() : NormalisationContract(new NativeMemoryBackend());
