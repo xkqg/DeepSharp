@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/xkqg/DeepSharp/actions/workflows/ci.yml/badge.svg)](https://github.com/xkqg/DeepSharp/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/DeepSharp)](https://www.nuget.org/packages/DeepSharp)
-[![NuGet Downloads](https://img.shields.io/nuget/dt/DeepSharp)](https://www.nuget.org/packages/DeepSharp)
+[![NuGet Downloads](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fwww.nuget.org%2Fstats%2Freports%2Fpackages%2FDeepSharp%3Fgroupby%3DVersion&query=%24.Total&label=downloads&color=blue)](https://www.nuget.org/stats/packages/DeepSharp?groupby=Version)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/xkqg/DeepSharp/blob/main/LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/xkqg/DeepSharp)](https://github.com/xkqg/DeepSharp)
 
