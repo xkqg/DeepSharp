@@ -466,12 +466,9 @@ public sealed class CompiledNetwork
 
             if (state.Averaged is { } averaged)
             {
-                foreach (var slot in compiled.Network.Slots())
+                foreach (var slot in compiled.Network.Slots().Where(each => each.Slot is Parameter && averaged.ContainsKey(each.Path)))
                 {
-                    if (slot.Slot is Parameter parameter && averaged.TryGetValue(slot.Path, out var average))
-                    {
-                        _averages[parameter] = average;
-                    }
+                    _averages[(Parameter)slot.Slot] = averaged[slot.Path];
                 }
             }
 

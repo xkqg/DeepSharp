@@ -73,9 +73,8 @@ public class OnnxBiasFreeFileTests
         var examples = ExamplesOf(expected.GetProperty("examples"));
         var torch = OnnxFixtures.Values(expected.GetProperty("outputs"));
 
-        foreach (var file in new[] { $"{network}.onnx", $"{network}-torchscript.onnx" })
+        foreach (var saved in new[] { $"{network}.onnx", $"{network}-torchscript.onnx" }.Select(Read))
         {
-            var saved = Read(file);
             var here = saved.Network.Predict(examples, saved.Loss, Engine).Values.ToArray();
 
             Assert.Equal(torch.Length, here.Length);
@@ -86,10 +85,8 @@ public class OnnxBiasFreeFileTests
     [Fact]
     public void TheDefaultExporterWritesAGemmWithoutAThirdInput_TheTorchScriptOneAMatMulWithoutAnAdd_AndBothAreALayerWithoutABias()
     {
-        foreach (var file in new[] { "onnx-free-rows.onnx", "onnx-free-rows-torchscript.onnx" })
+        foreach (var saved in new[] { "onnx-free-rows.onnx", "onnx-free-rows-torchscript.onnx" }.Select(Read))
         {
-            var saved = Read(file);
-
             Assert.Equal([false, false, true], Layers<Dense>(saved).Select(dense => dense.Bias is not null));
             Assert.DoesNotContain(saved.Network.Slots().Select(named => named.Path), path => path == "0.bias");
         }

@@ -242,52 +242,7 @@ public sealed class Orthogonal : Initialiser
         }
 
         int rows = shape[0], columns = shape[1];
-        int length = Math.Max(rows, columns), width = Math.Min(rows, columns);
-        var vectors = new double[width][];
-
-        // The columns of a matrix of normal numbers, as many rows long as the longer side.
-        for (var column = 0; column < width; column++)
-        {
-            vectors[column] = new double[length];
-        }
-
-        for (var row = 0; row < length; row++)
-        {
-            for (var column = 0; column < width; column++)
-            {
-                vectors[column][row] = draws.NextNormal();
-            }
-        }
-
-        for (var column = 0; column < width; column++)
-        {
-            // Twice is enough: one pass leaves what rounding left of the columns before it, and a second takes it out.
-            for (var pass = 0; pass < 2; pass++)
-            {
-                for (var before = 0; before < column; before++)
-                {
-                    var dot = 0d;
-
-                    for (var at = 0; at < length; at++)
-                    {
-                        dot += vectors[column][at] * vectors[before][at];
-                    }
-
-                    for (var at = 0; at < length; at++)
-                    {
-                        vectors[column][at] -= dot * vectors[before][at];
-                    }
-                }
-            }
-
-            var norm = Math.Sqrt(vectors[column].Sum(value => value * value));
-
-            for (var at = 0; at < length; at++)
-            {
-                vectors[column][at] /= norm;
-            }
-        }
-
+        var vectors = Orthonormal(Math.Max(rows, columns), Math.Min(rows, columns), draws);
         var values = new float[rows * columns];
 
         for (var row = 0; row < rows; row++)
@@ -300,6 +255,63 @@ public sealed class Orthogonal : Initialiser
         }
 
         return Tensor.From(shape, values);
+    }
+
+    // Columns of normal numbers, as many rows long as the longer side, drawn a row at a time.
+    private static double[][] Normals(int length, int width, Draws draws)
+    {
+        var vectors = Enumerable.Range(0, width).Select(_ => new double[length]).ToArray();
+
+        for (var row = 0; row < length; row++)
+        {
+            for (var column = 0; column < width; column++)
+            {
+                vectors[column][row] = draws.NextNormal();
+            }
+        }
+
+        return vectors;
+    }
+
+    // Those columns, each taken at right angles to the ones before it and scaled to one.
+    private static double[][] Orthonormal(int length, int width, Draws draws)
+    {
+        var vectors = Normals(length, width, draws);
+
+        for (var column = 0; column < width; column++)
+        {
+            // Twice is enough: one pass leaves what rounding left of the columns before it, and a second takes it out.
+            AtRightAngles(vectors, column);
+            AtRightAngles(vectors, column);
+
+            var norm = Math.Sqrt(vectors[column].Sum(value => value * value));
+
+            for (var at = 0; at < length; at++)
+            {
+                vectors[column][at] /= norm;
+            }
+        }
+
+        return vectors;
+    }
+
+    // One pass of Gram–Schmidt: a column with what it shares with each column before it taken out.
+    private static void AtRightAngles(double[][] vectors, int column)
+    {
+        for (var before = 0; before < column; before++)
+        {
+            var dot = 0d;
+
+            for (var at = 0; at < vectors[column].Length; at++)
+            {
+                dot += vectors[column][at] * vectors[before][at];
+            }
+
+            for (var at = 0; at < vectors[column].Length; at++)
+            {
+                vectors[column][at] -= dot * vectors[before][at];
+            }
+        }
     }
 }
 

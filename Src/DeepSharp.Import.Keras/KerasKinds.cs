@@ -297,12 +297,12 @@ internal abstract class KerasKind
         var config = constraint.Within("config");
         var value = config.Setting("max_value", 2.0);
         var axis = config.Setting("axis", default(JsonElement));
-        var axes = axis.ValueKind switch
+        int[]? axes = axis.ValueKind switch
         {
             JsonValueKind.Undefined => [0],
             JsonValueKind.Number when axis.TryGetInt32(out var one) => [one],
             JsonValueKind.Array when axis.EnumerateArray().All(item => item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out _)) => axis.EnumerateArray().Select(item => item.GetInt32()).ToArray(),
-            _ => (int[]?)null,
+            _ => null,
         };
         var named = axes?.Select(each => each < 0 ? each + rank : each).Order().Distinct().ToArray();
 
@@ -314,7 +314,7 @@ internal abstract class KerasKind
             return null;
         }
 
-        if (!(value > 0) || !double.IsFinite(value))
+        if (value <= 0 || !double.IsFinite(value))
         {
             layer.Refuse($"its {key} bounds the norm to {value}, and a bound is a finite number above nothing.");
 

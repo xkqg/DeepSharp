@@ -55,7 +55,7 @@ internal static class TensorSelectionExtensions
         {
             ArgumentNullException.ThrowIfNull(values);
 
-            if (!(bound > 0) || float.IsInfinity(bound))
+            if (bound <= 0 || !float.IsFinite(bound))
             {
                 throw new ArgumentOutOfRangeException(nameof(bound), bound, "A bound is a finite number above nothing.");
             }

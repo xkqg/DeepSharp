@@ -83,7 +83,7 @@ public class TensorSelectionTests
 
         for (var at = 0; at < expected.Length; at++)
         {
-            if (expected[at] == 0 && values[at] == 0)
+            if (expected[at] is 0f && values[at] is 0f)
             {
                 continue;
             }
