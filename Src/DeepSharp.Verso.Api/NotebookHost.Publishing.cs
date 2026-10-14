@@ -147,13 +147,15 @@ public sealed partial class NotebookHost
 
         if (Interlocked.Exchange(ref _telling, 1) == 0)
         {
+            // Nobody awaits it, so it is watched: a version that cannot be made is not told, and what the run says next, or the
+            // end of its turn, publishes the rest — it is not left to the finalizer, which hands a failure to whatever else runs.
             _ = Task.Run(() => _turns.TakeTurnAsync(() =>
             {
                 Volatile.Write(ref _telling, 0);
 
                 // A closed notebook is published no more: its engine is gone, whatever a stop left behind still says.
                 return Volatile.Read(ref _audience).Closed ? Task.FromResult(Current) : PublishAsync(whole: true);
-            }));
+            })).Observed();
         }
     }
 

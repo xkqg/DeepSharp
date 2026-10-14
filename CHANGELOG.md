@@ -109,6 +109,26 @@ PyTorch files that say it. A part that says none of them is written as it always
   properties panel and the form edit every one of them, and the networks sample's third model leaves out a bias, carries a
   penalty and clips each gradient value.
 
+### Fixed
+
+- **A notebook host no longer fails when a turn adds or takes away cells while it works out what is unsaved.** Verso counts
+  the cells once, at the start of its comparison, and goes by that count to its end, so a cell that came or went in between
+  made it fail, with an index outside its arrays, an empty place in the list or a list changed under its walk. It is rare —
+  measured, it took a turn that adds and takes away a cell as fast as it can to make it fail within three seconds, and two
+  runs in a hundred and fifty of a whole suite six at a time showed it — but when it did, a person met it as a stray error in
+  the output of some cell. The comparison is now read again, up to sixty-four times, before a failure of it is taken for one.
+  The guard that 0.6.0 took away, because it could not fire, had been measured against writers of a cell's outputs only; this
+  is the writer it never met.
+
+- **A version of a notebook that cannot be made fails whoever asked for it.** Whoever had asked for the next version was left
+  waiting for an answer that nothing would give when it could not be made. They are now told what failed, and whoever asks
+  after it is told the version after.
+
+- **A failure that nobody awaits is no longer handed on to another cell.** When a notebook said something outside any turn and
+  the version it published failed, the task that did it was dropped, and the failure was handed on later, by the finalizer, to
+  whatever else was running: in a process that runs C# cells, as an "unhandled exception in background work" in the output of
+  a cell that had nothing to do with it. That task is watched now.
+
 ## [0.9.0]
 
 Everything a window can be. A convolution here covered neighbouring places, one stride on every axis and the places

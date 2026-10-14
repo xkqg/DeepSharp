@@ -48,6 +48,33 @@ public sealed class NextVersionTests
     }
 
     [Fact]
+    public async Task AVersionThatCannotBeMade_FailsWhoeverAskedForIt_RatherThanLeavingThemWaiting()
+    {
+        var next = new NextVersion();
+        var asked = next.AskAsync();
+        var failure = new InvalidOperationException("the version could not be made");
+
+        var told = await Assert.ThrowsAsync<InvalidOperationException>(() => next.TellAsync(() => Task.FromException<NotebookVersion>(failure)));
+        var waiting = await Assert.ThrowsAsync<InvalidOperationException>(() => asked.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken));
+
+        Assert.Same(failure, told);
+        Assert.Same(failure, waiting);
+    }
+
+    [Fact]
+    public async Task AVersionThatCouldNotBeMade_DoesNotStopTheNextFromBeingTold()
+    {
+        var next = new NextVersion();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => next.TellAsync(() => Task.FromException<NotebookVersion>(new InvalidOperationException())));
+
+        var asked = next.AskAsync();
+
+        Assert.Equal(Version(2), await next.TellAsync(() => Task.FromResult(Version(2))));
+        Assert.Equal(Version(2), await asked.WaitAsync(TimeSpan.FromSeconds(10), TestContext.Current.CancellationToken));
+    }
+
+    [Fact]
     public async Task AVersionNobodyAskedFor_IsMadeAllTheSame()
     {
         var next = new NextVersion();

@@ -26,14 +26,28 @@ internal sealed class NextVersion
     /// <summary>Makes the next version, and tells it to everyone who asked before it was begun.</summary>
     /// <param name="make">Makes the version.</param>
     /// <returns>The version.</returns>
+    /// <remarks>
+    /// A version that cannot be made fails whoever asked for it with what failed, rather than leaving them waiting for an
+    /// answer nothing will give; whoever asks after it is told the version after.
+    /// </remarks>
     public async Task<NotebookVersion> TellAsync(Func<Task<NotebookVersion>> make)
     {
         // Taken first, so whoever asks while it is made waits for the one after.
         var asked = Interlocked.Exchange(ref _asked, null);
-        var version = await make();
 
-        asked?.TrySetResult(version);
+        try
+        {
+            var version = await make();
 
-        return version;
+            asked?.TrySetResult(version);
+
+            return version;
+        }
+        catch (Exception failed)
+        {
+            asked?.TrySetException(failed);
+
+            throw;
+        }
     }
 }

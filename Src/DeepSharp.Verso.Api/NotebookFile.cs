@@ -26,6 +26,12 @@ namespace DeepSharp.Verso.Api;
 /// Verso that read them as they came would fail here instead of answering wrongly, which is the way round a person can
 /// act on.
 /// </para>
+/// <para>
+/// It does not read the cells whole. Verso counts them once, at the start of its comparison, and goes by that count to its
+/// end, so a cell that a turn's work adds or takes away meanwhile makes it fail: measured within three seconds against a
+/// writer that adds and takes away a cell as fast as it can, though the writers of outputs above never made it. The
+/// comparison is read again, up to sixty-four times, before a failure of it is taken for one.
+/// </para>
 /// </remarks>
 /// <param name="path">The file, as a full path.</param>
 /// <param name="saved">The notebook that file last held.</param>

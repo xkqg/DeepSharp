@@ -22,6 +22,9 @@ internal static class EngineExtensions
     /// <summary>The language the engine's C# kernel is named by.</summary>
     internal const string CSharp = "csharp";
 
+    // How many times a notebook is read for a comparison before a failure of it is taken for one.
+    private const int ReadsToTry = 64;
+
     extension(string? name)
     {
         /// <summary>Whether two of the engine's names name the same thing, as the engine compares them.</summary>
@@ -397,9 +400,23 @@ internal static class EngineExtensions
         /// <returns>Whether a save would change the file.</returns>
         internal bool DiffersFrom(Scaffold scaffold, string path, ExtensionHost extensions)
         {
-            var diff = NotebookDiffEngine.Compute(saved, scaffold.Notebook, path, extensions.GetCellTypes());
+            // A turn's work may add and take away cells while this reads them. Verso counts the cells at the start of its
+            // comparison and goes by that count to its end, so a cell that comes or goes in between leaves it with an index outside
+            // what it made for them, a place in the list with nothing in it, or a list changed under its walk — and which of them
+            // it is says nothing of the notebook. It is read again; only a notebook that goes on failing is a failure.
+            for (var read = 1; ; read++)
+            {
+                try
+                {
+                    var diff = NotebookDiffEngine.Compute(saved, scaffold.Notebook, path, extensions.GetCellTypes());
 
-            return diff.Summary.Added + diff.Summary.Removed + diff.Summary.Modified + diff.Summary.Moved + diff.MetadataChanges.Count > 0;
+                    return diff.Summary.Added + diff.Summary.Removed + diff.Summary.Modified + diff.Summary.Moved + diff.MetadataChanges.Count > 0;
+                }
+                catch (Exception) when (read < ReadsToTry)
+                {
+                    // Read again.
+                }
+            }
         }
     }
 

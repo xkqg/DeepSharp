@@ -16,7 +16,8 @@ namespace DeepSharp.Tests.Api;
 /// <remarks>
 /// The comparison that says what is unsaved reads a cell's outputs while a run may be writing them, and it reads them
 /// whole rather than as they come, so it answers rather than failing. That is measured here rather than assumed: a version
-/// of Verso that read them as they came would need the answer guarded, and this is where it would be said.
+/// of Verso that read them as they came would need the answer guarded, and this is where it would be said. It does not read
+/// the cells whole: a cell that comes or goes while it counts them fails it, so it reads again, and that is measured here too.
 /// </remarks>
 public sealed class NotebookFileTests : IDisposable
 {
@@ -87,6 +88,63 @@ public sealed class NotebookFileTests : IDisposable
             }
 
             Assert.True(answered > 1000, $"{answered} answered");
+        }
+        finally
+        {
+            await host.CloseAsync();
+        }
+    }
+
+    [Fact]
+    public async Task TheComparison_AnswersWhileARunAddsAndTakesAwayCells()
+    {
+        var path = Path.Join(_folder, "grown.verso");
+        var notebook = new NotebookModel { DefaultKernelId = "csharp" };
+
+        notebook.Cells.Add(new CellModel { Type = "code", Language = "csharp", Source = "1 + 1" });
+
+        await File.WriteAllTextAsync(path, await new VersoSerializer().SerializeAsync(notebook), TestContext.Current.CancellationToken);
+
+        var engine = new ExtensionHost();
+        var host = await NotebookHost.OpenAsync(path, engine, TestContext.Current.CancellationToken);
+
+        try
+        {
+            var file = new NotebookFile(path, await SavedAsync(engine, path), engine, host.Scaffold);
+            var cells = host.Scaffold.Notebook.Cells;
+
+            // What a turn's work does to the notebook while a version of it is made: a cell comes and goes, so the number of
+            // cells the comparison counted at its start is not the number it counts a moment later.
+            var writing = true;
+            var writer = new Thread(() =>
+            {
+                while (Volatile.Read(ref writing))
+                {
+                    cells.Add(new CellModel { Type = "code", Language = "csharp", Source = "2 + 2" });
+                    cells.RemoveAt(cells.Count - 1);
+                }
+            });
+
+            writer.Start();
+
+            var answered = 0;
+            var clock = Stopwatch.StartNew();
+
+            try
+            {
+                while (clock.Elapsed < TimeSpan.FromSeconds(3))
+                {
+                    await file.UnsavedAsync(takeBack: false);
+                    answered++;
+                }
+            }
+            finally
+            {
+                Volatile.Write(ref writing, false);
+                writer.Join();
+            }
+
+            Assert.True(answered > 100, $"{answered} answered");
         }
         finally
         {
