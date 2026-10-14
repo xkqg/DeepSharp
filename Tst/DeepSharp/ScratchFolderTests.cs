@@ -57,11 +57,10 @@ public sealed class ScratchFolderTests
     [Fact]
     public void AFolderAlreadyGone_IsRemovedWithoutAFuss()
     {
-        var folder = new ScratchFolder("deepsharp-scratch-");
+        // The folder is removed once more as the test ends, and that it is gone already must not make that fail.
+        using var folder = new ScratchFolder("deepsharp-scratch-");
 
         Directory.Delete(folder.Path, recursive: true);
-
-        folder.Dispose();
 
         Assert.False(Directory.Exists(folder.Path));
     }
@@ -71,14 +70,13 @@ public sealed class ScratchFolderTests
     {
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to remove a file that is held open; elsewhere the removal succeeds, and there is nothing held to wait for.");
 
-        var folder = new ScratchFolder("deepsharp-scratch-");
+        // Removed as the test ends, once the file is let go.
+        using var folder = new ScratchFolder("deepsharp-scratch-");
 
         using (new FileStream(folder.At("held.tmp"), FileMode.CreateNew, FileAccess.Write, FileShare.None))
         {
             Assert.Throws<IOException>(() => folder.Dispose(patience: TimeSpan.FromMilliseconds(200)));
         }
-
-        folder.Dispose();
     }
 
     // What a scanner does to a file it has just seen: a copy in capitals beside it, held, and given up when it is done. The copy
