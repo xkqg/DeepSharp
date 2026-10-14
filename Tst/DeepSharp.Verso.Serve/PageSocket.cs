@@ -181,6 +181,9 @@ internal sealed class PageSocket : IAsyncDisposable
     /// <summary>Leaves, as a page does: a close frame, and the server's own in answer.</summary>
     /// <returns>When it is closed, and the read of it has ended.</returns>
     /// <remarks>
+    /// Only the close frame is sent here; the server's own in answer is received by the read that is already going, which ends
+    /// on it. <c>CloseAsync</c> would receive it as well, beside that read, and a frame the server was sending at that moment was
+    /// split between the two: the read was left holding the tail of a message and failed to parse it, one run in twenty.
     /// The socket is let go only once the read of it has ended. A read that went on past that would fail on a socket that is
     /// gone, and since nothing waits for it, the engine would tell that failure to whichever run is working when the task
     /// is collected — a run in another test.
@@ -193,7 +196,7 @@ internal sealed class PageSocket : IAsyncDisposable
             {
                 if (_socket.State == WebSocketState.Open)
                 {
-                    await _socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "the page left", CancellationToken.None).WaitAsync(Patience, CancellationToken.None);
+                    await _socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, "the page left", CancellationToken.None).WaitAsync(Patience, CancellationToken.None);
                 }
             }
             catch (Exception done) when (done is WebSocketException or OperationCanceledException or TimeoutException)
@@ -237,10 +240,14 @@ internal sealed class PageSocket : IAsyncDisposable
                 {
                     received = await _socket.ReceiveAsync(buffer, CancellationToken.None);
 
-                    // The server closed its side: the page closes its own, as a browser does.
+                    // The server closed its side: the page closes its own, as a browser does — unless it left first, and this is the
+                    // server's answer to that.
                     if (received.MessageType == WebSocketMessageType.Close)
                     {
-                        await _socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                        if (_socket.State == WebSocketState.CloseReceived)
+                        {
+                            await _socket.CloseOutputAsync(WebSocketCloseStatus.NormalClosure, null, CancellationToken.None);
+                        }
 
                         return;
                     }
