@@ -234,6 +234,12 @@ public sealed class ColumnListTests : IDisposable
         await File.WriteAllTextAsync(ColumnsFile, PipelinePreset.Of(declaration, shown).ToJson(), TestContext.Current.CancellationToken);
         await ChooseAsync(notebook);
 
+        // A write the host was refused is said in the block, with the reason: say it here, rather than leave the file that did
+        // not change as the only sign of it.
+        var refusal = Schema(notebook).Outputs.Select(output => output.Content).FirstOrDefault(content => content.Contains("could not be written beside the notebook", StringComparison.Ordinal));
+
+        Assert.True(refusal is null, refusal);
+
         var marks = List(notebook).Rows().Where(row => row.Mark == "new").Select(row => row.Column);
         var saved = PipelinePreset.FromJson(await File.ReadAllTextAsync(ColumnsFile, TestContext.Current.CancellationToken), NotebookVerbs.Catalog());
 
