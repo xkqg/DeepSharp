@@ -306,12 +306,12 @@ The NuGet package Markdig, its Markdig.dll (github.com/xoofx/markdig), which dra
 Copyright (c) 2018-2019, Alexandre Mutel. BSD 2-Clause License.
 
 
-MatPlotLibNet 1.18.0
+MatPlotLibNet 1.18.1
 The NuGet package MatPlotLibNet, its MatPlotLibNet.dll (github.com/xkqg/MatPlotLibNet): the charts and colour maps.
 Copyright (c) 2026 H.P. Gansevoort (xkqg). MIT License.
 
 
-MatPlotLibNet.DataFrame 1.18.0
+MatPlotLibNet.DataFrame 1.18.1
 The NuGet package MatPlotLibNet.DataFrame, its MatPlotLibNet.DataFrame.dll (github.com/xkqg/MatPlotLibNet).
 Copyright (c) 2026 H.P. Gansevoort (xkqg). MIT License.
 
@@ -386,7 +386,7 @@ The NuGet package Microsoft.DiaSymReader, its Microsoft.DiaSymReader.dll (github
 Copyright (c) .NET Foundation and Contributors. MIT License.
 
 
-Microsoft.Extensions.DependencyInjection.Abstractions 10.0.12
+Microsoft.Extensions.DependencyInjection.Abstractions 10.0.13
 The NuGet package Microsoft.Extensions.DependencyInjection.Abstractions, its
 Microsoft.Extensions.DependencyInjection.Abstractions.dll (github.com/dotnet/dotnet), carried by the build for .NET 8.
 Copyright (c) .NET Foundation and Contributors. MIT License.
@@ -492,7 +492,7 @@ The NuGet package System.IO.Hashing, its System.IO.Hashing.dll (github.com/dotne
 Copyright (c) .NET Foundation and Contributors. MIT License.
 
 
-System.Numerics.Tensors 10.0.12
+System.Numerics.Tensors 10.0.13
 The NuGet package System.Numerics.Tensors, its System.Numerics.Tensors.dll (github.com/dotnet/dotnet).
 Copyright (c) .NET Foundation and Contributors. MIT License.
 

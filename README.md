@@ -45,7 +45,7 @@ gradients on every engine and read from Keras, ONNX and PyTorch files. They add 
 engine written outside the library has one more to write; the changelog says which.
 
 Earlier releases are in the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md), which records what each one
-added, and the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what is done and what is left out on purpose.
+added, and the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what is done, what is still to come, and what is left out on purpose.
 
 ```
 dotnet add package DeepSharp
@@ -373,7 +373,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | [Architecture](https://github.com/xkqg/DeepSharp/wiki/Architecture) | The design decisions, and what was deliberately left out. |
 | [Next to TorchSharp, TensorFlow.NET and ML.NET](https://github.com/xkqg/DeepSharp/wiki#how-this-sits-next-to-torchsharp-tensorflownet-and-mlnet) | What those give you, what they do not, why the choice of engine stays a choice, and where a trainer from ML.NET fits. |
 | [Quality](https://github.com/xkqg/DeepSharp/wiki/Quality) | What has to be true before anything is allowed in. |
-| [Roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) | What is done, in the order each row needed the one above it, and what is left out on purpose. |
+| [Roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) | What is done and what is still to come, in the order each row needs the one above it, and what is left out on purpose. |
 | [Contributing](https://github.com/xkqg/DeepSharp/blob/main/CONTRIBUTING.md) | A failing test first, no warnings, a coverage check that fails rather than reports. |
 | [Security](https://github.com/xkqg/DeepSharp/wiki/Security) | What counts as a vulnerability here, and how to report one. |
 

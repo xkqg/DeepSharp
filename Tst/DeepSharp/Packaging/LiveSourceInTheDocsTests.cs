@@ -165,12 +165,27 @@ public sealed partial class LiveSourceInTheDocsTests
     }
 
     [Fact]
-    public void TheRoadmap_SaysLiveSourcesAreDone_AndHasNoRowLeftThatSaysLater()
+    public void TheRoadmap_SaysLiveSourcesAreDone_AndKeepsEveryRowStillToComeBelowTheRowsThatAreDone()
     {
+        // The roadmap says each row needs the one above it, so what is done stands above what is still to come: a row
+        // marked Later above a row marked Done would say a release was built on something that does not exist yet.
         var roadmap = WikiText("Roadmap.md");
+        var rows = roadmap.Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => line.StartsWith("| **", StringComparison.Ordinal))
+            .ToArray();
 
         Assert.Contains("| **Done** | [[Live sources]] |", roadmap, StringComparison.Ordinal);
-        Assert.DoesNotContain("**Later**", roadmap, StringComparison.Ordinal);
+        Assert.All(rows, row => Assert.True(
+            row.StartsWith("| **Done** |", StringComparison.Ordinal) || row.StartsWith("| **Later** |", StringComparison.Ordinal),
+            $"A row of the roadmap says neither Done nor Later: {row[..Math.Min(row.Length, 80)]}"));
+
+        var lastDone = Array.FindLastIndex(rows, row => row.StartsWith("| **Done** |", StringComparison.Ordinal));
+        var firstLater = Array.FindIndex(rows, row => row.StartsWith("| **Later** |", StringComparison.Ordinal));
+
+        Assert.True(
+            firstLater < 0 || firstLater > lastDone,
+            "A row of the roadmap that is still to come stands above a row that is done, so the order the page claims does not hold.");
     }
 
     [Theory]
