@@ -23,7 +23,7 @@ public sealed class BinanceLandingTests : IDisposable
 
     private static readonly DateTime Jan1 = new(2024, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-    private readonly string _folder = Directory.CreateTempSubdirectory("deepsharp-landing-").FullName;
+    private readonly ScratchFolder _scratch = new("deepsharp-landing-");
 
     private readonly FakeTimeProvider _clock = new(Now);
 
@@ -31,17 +31,19 @@ public sealed class BinanceLandingTests : IDisposable
 
     public BinanceLandingTests() => _venue = new FakeBinanceVenue(_clock);
 
-    public void Dispose() => Directory.Delete(_folder, recursive: true);
+    public void Dispose() => _scratch.Dispose();
 
     private BinanceCandles Asked(DateTime from, DateTime to, FakeBinanceVenue? venue = null) =>
         new BinanceCandles("BTCEUR", "1d", from, to).Through(venue ?? _venue).On(_clock).At(new Uri("https://venue.test"));
 
     private Task<string> LandAsync(BinanceCandles asked) =>
-        _clock.RunAsync(asked.LandAsync(SourceFolder.Of(_folder), TestContext.Current.CancellationToken));
+        _clock.RunAsync(asked.LandAsync(SourceFolder.Of(_scratch.Path), TestContext.Current.CancellationToken));
 
-    private string At(string name) => Path.Join(_folder, name);
+    private string At(string name) => _scratch.At(name);
 
-    private string[] Standing() => [.. Directory.GetFileSystemEntries(_folder).Select(entry => Path.GetFileName(entry)).Order(StringComparer.Ordinal)];
+    // What stands in the folder is what the test expects once a scanner that looked at a file has taken its copy away again.
+    private void AssertStanding(params string[] expected) =>
+        Assert.Equal(expected, _scratch.Standing(expected, within: TimeSpan.FromSeconds(2)));
 
     private LandingManifest ManifestOf(BinanceCandles asked) => LandingManifest.FromJson(File.ReadAllText(At(asked.ManifestName)));
 
@@ -52,7 +54,7 @@ public sealed class BinanceLandingTests : IDisposable
         var landed = await LandAsync(asked);
 
         Assert.Equal("BTCEUR-1d-20240101T000000Z-20240106T000000Z.csv", landed);
-        Assert.Equal([asked.LandingName, asked.ManifestName], Standing());
+        AssertStanding(asked.LandingName, asked.ManifestName);
 
         var bytes = File.ReadAllBytes(At(landed));
         var manifest = ManifestOf(asked);
@@ -130,7 +132,7 @@ public sealed class BinanceLandingTests : IDisposable
         Assert.Equal(asked.LandingName, again);
         Assert.Equal(asks, _venue.Seen.Count);
         Assert.Equal(csv, File.GetLastWriteTimeUtc(At(asked.LandingName)));
-        Assert.Equal([asked.LandingName, asked.ManifestName], Standing());
+        AssertStanding(asked.LandingName, asked.ManifestName);
     }
 
     [Fact]
@@ -182,7 +184,7 @@ public sealed class BinanceLandingTests : IDisposable
         var refused = await Assert.ThrowsAsync<InvalidDataException>(() => LandAsync(Asked(Jan1, Jan1.AddDays(5))));
 
         Assert.Contains("is not there", refused.Message, StringComparison.Ordinal);
-        Assert.Equal([asked.ManifestName], Standing());
+        AssertStanding(asked.ManifestName);
         Assert.Equal(asks, _venue.Seen.Count);
     }
 
@@ -204,7 +206,7 @@ public sealed class BinanceLandingTests : IDisposable
         Assert.True(_venue.Seen.Count > asks, "The venue was not asked again.");
         Assert.Equal(before, File.ReadAllBytes(At(asked.LandingName)));
         Assert.Equal(before.Fingerprint(), ManifestOf(asked).Fingerprint);
-        Assert.Equal([asked.LandingName, asked.ManifestName], Standing());
+        AssertStanding(asked.LandingName, asked.ManifestName);
     }
 
     [Fact]
@@ -223,7 +225,7 @@ public sealed class BinanceLandingTests : IDisposable
 
         Assert.Contains("first stays", refused.Message, StringComparison.Ordinal);
         Assert.Equal(first, File.ReadAllBytes(At(asked.LandingName)));
-        Assert.Equal([asked.LandingName], Standing());
+        AssertStanding(asked.LandingName);
     }
 
     [Fact]
@@ -279,7 +281,7 @@ public sealed class BinanceLandingTests : IDisposable
 
         Assert.True(failure is IOException or UnauthorizedAccessException, $"{failure}");
         Assert.True(File.Exists(At(asked.LandingName)));
-        Assert.Equal([asked.LandingName, asked.ManifestName], Standing());
+        AssertStanding(asked.LandingName, asked.ManifestName);
 
         Directory.Delete(At(asked.ManifestName));
 
@@ -297,7 +299,7 @@ public sealed class BinanceLandingTests : IDisposable
 
         await Assert.ThrowsAsync<BinanceException>(() => LandAsync(asked));
 
-        Assert.Empty(Standing());
+        AssertStanding();
     }
 
     [Fact]
@@ -308,9 +310,9 @@ public sealed class BinanceLandingTests : IDisposable
 
         await stop.CancelAsync();
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _clock.RunAsync(asked.LandAsync(SourceFolder.Of(_folder), stop.Token)));
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _clock.RunAsync(asked.LandAsync(SourceFolder.Of(_scratch.Path), stop.Token)));
 
-        Assert.Empty(Standing());
+        AssertStanding();
         Assert.Empty(_venue.Seen);
     }
 
@@ -334,7 +336,7 @@ public sealed class BinanceLandingTests : IDisposable
         var names = await Task.WhenAll(one, other);
 
         Assert.Equal(names[0], names[1]);
-        Assert.Equal(["BTCEUR-1d-20240101T000000Z-20240131T000000Z.csv", "BTCEUR-1d-20240101T000000Z-20240131T000000Z.manifest.json"], Standing());
+        AssertStanding("BTCEUR-1d-20240101T000000Z-20240131T000000Z.csv", "BTCEUR-1d-20240101T000000Z-20240131T000000Z.manifest.json");
         Assert.Equal(File.ReadAllBytes(At(names[0])).Fingerprint(), LandingManifest.FromJson(File.ReadAllText(At("BTCEUR-1d-20240101T000000Z-20240131T000000Z.manifest.json"))).Fingerprint);
     }
 
@@ -369,7 +371,7 @@ public sealed class BinanceLandingTests : IDisposable
         var landed = File.ReadAllBytes(At($"{name}.csv"));
 
         Assert.Equal(landed.Fingerprint(), LandingManifest.FromJson(File.ReadAllText(At($"{name}.manifest.json"))).Fingerprint);
-        Assert.Equal([$"{name}.csv", $"{name}.manifest.json"], Standing());
+        AssertStanding($"{name}.csv", $"{name}.manifest.json");
     }
 
     [Fact]
@@ -395,7 +397,7 @@ public sealed class BinanceLandingTests : IDisposable
         var asked = Asked(Jan1, Jan1.AddDays(3));
         var landed = await LandAsync(asked);
 
-        var rows = new ReadCsvStep(landed).Open(SourceFolder.Of(_folder));
+        var rows = new ReadCsvStep(landed).Open(SourceFolder.Of(_scratch.Path));
 
         Assert.Equal(CandleCsv.Header.Split(','), rows.ColumnNames);
         Assert.Equal(["2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z", "2024-01-03T00:00:00Z"], rows.Rows.Select(row => row[0]));
@@ -412,7 +414,7 @@ public sealed class BinanceLandingTests : IDisposable
         Assert.IsAssignableFrom<IOException>(failure);
         Assert.True(File.Exists(At(asked.LandingName)));
         Assert.Equal("not a record at all\n", File.ReadAllText(At(asked.ManifestName)));
-        Assert.Equal([asked.LandingName, asked.ManifestName], Standing());
+        AssertStanding(asked.LandingName, asked.ManifestName);
 
         var refused = await Assert.ThrowsAsync<InvalidDataException>(() => LandAsync(Asked(Jan1, Jan1.AddDays(5))));
 
@@ -430,7 +432,7 @@ public sealed class BinanceLandingTests : IDisposable
         Assert.IsAssignableFrom<IOException>(refused.InnerException);
         Assert.Contains("other bytes", refused.Message, StringComparison.Ordinal);
         Assert.Equal("somebody else's landing\n", File.ReadAllText(At(asked.LandingName)));
-        Assert.Equal([asked.LandingName], Standing());
+        AssertStanding(asked.LandingName);
     }
 
     // A venue that, as the walk asks it for its first page, has somebody else put a file where the landing is about to go.
