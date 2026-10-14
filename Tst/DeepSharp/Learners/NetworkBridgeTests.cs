@@ -345,7 +345,8 @@ public class NetworkBridgeTests
     [Fact]
     public void ANetworkBesideAnotherFitOfItsPipeline_IsRefused_WhereItIsReadAndWhereItGoesOn()
     {
-        var path = Path.Join(Directory.CreateTempSubdirectory("deepsharp-bridge-").FullName, "titanic.csv");
+        using var folder = new ScratchFolder("deepsharp-bridge-");
+        var path = folder.At("titanic.csv");
         File.Copy(Repository.Data("titanic.csv"), path);
         var fitted = Passengers(path);
         var compiled = Small();

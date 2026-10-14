@@ -87,14 +87,14 @@ public class LearnerOfAnotherKindTests
     public void AClassNoTrainingRowHeld_IsNamedUnfamiliarByTheTree_AndCountedByTheReport()
     {
         // The list with the passenger on line 18, in the test part, travelling in a fourth class.
-        var folder = Directory.CreateTempSubdirectory("deepsharp-a8-").FullName;
+        using var folder = new ScratchFolder("deepsharp-a8-");
         var lines = File.ReadAllLines(Repository.Data("titanic.csv"));
         var cells = lines[17].Split(',');
         cells[1] = "4";
         lines[17] = string.Join(',', cells);
-        File.WriteAllLines(Path.Join(folder, "titanic.csv"), lines);
+        File.WriteAllLines(folder.At("titanic.csv"), lines);
 
-        var places = WikiTitanic.In(folder).RunFor(Stump.Needs);
+        var places = WikiTitanic.In(folder.Path).RunFor(Stump.Needs);
         var tree = Stump.Fit(places.Batch(Part.Train, Stump.Needs));
         var test = places.Batch(Part.Test, Stump.Needs);
         var fourth = Enumerable.Range(0, places.Table.RowCount).Single(row => places.Table.Identities[row].ReadAt == 16);

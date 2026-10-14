@@ -15,10 +15,10 @@ public class NetworkSampleTests
     [Fact]
     public void TheSample_TrainsMeasuresSavesReadsBackAndServesEachOfTheThreeWalkedNetworks()
     {
-        var charts = Directory.CreateTempSubdirectory("deepsharp-sample-").FullName;
+        using var charts = new ScratchFolder("deepsharp-sample-");
         using var output = new StringWriter();
 
-        NetworkSample.Run(Path.GetDirectoryName(Repository.Data("titanic.csv"))!, output, charts);
+        NetworkSample.Run(Path.GetDirectoryName(Repository.Data("titanic.csv"))!, output, charts.Path);
 
         var said = output.ToString();
 
@@ -31,9 +31,9 @@ public class NetworkSampleTests
         Assert.Contains("chance of surviving", said, StringComparison.Ordinal);
         Assert.Contains("close five days on", said, StringComparison.Ordinal);
         Assert.Contains("bikes that day", said, StringComparison.Ordinal);
-        Assert.Equal(
-            ["apple-loss.svg", "apple-measures.svg", "bikes-loss.svg", "bikes-measures.svg", "titanic-confusion.svg", "titanic-loss.svg", "titanic-measures.svg"],
-            Directory.GetFiles(charts).Select(Path.GetFileName).Order(StringComparer.Ordinal));
-        Assert.All(Directory.GetFiles(charts), chart => Assert.StartsWith("<svg", File.ReadAllText(chart), StringComparison.Ordinal));
+        string[] drawn = ["apple-loss.svg", "apple-measures.svg", "bikes-loss.svg", "bikes-measures.svg", "titanic-confusion.svg", "titanic-loss.svg", "titanic-measures.svg"];
+
+        Assert.Equal(drawn, charts.Standing(drawn, within: TimeSpan.FromSeconds(2)));
+        Assert.All(Directory.GetFiles(charts.Path), chart => Assert.StartsWith("<svg", File.ReadAllText(chart), StringComparison.Ordinal));
     }
 }

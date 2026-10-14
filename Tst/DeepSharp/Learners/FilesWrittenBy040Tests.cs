@@ -20,7 +20,7 @@ namespace DeepSharp.Tests.Learners;
 /// served them and goes on from the checkpoint as 0.4.0 went on, however another writer spaced or escaped them and whatever
 /// version of the pipeline file their pipeline names; beside another fit of that pipeline they are refused, as they were.
 /// </summary>
-public class FilesWrittenBy040Tests
+public class FilesWrittenBy040Tests : IDisposable
 {
     // What 0.4.0 recorded and printed: the one file holds the network of the eighth epoch, the best one; the checkpoint the
     // network of the fourth. The logits come from arithmetic done the same way on every machine; a chance goes through the
@@ -400,16 +400,30 @@ public class FilesWrittenBy040Tests
 
     private static string DataFolder() => WikiTitanic.DataFolder;
 
-    // A folder holding the passenger list grown by its own first forty passengers, under the name the pipeline reads.
-    private static string GrownFolder()
+    // The folders the tests made, taken away with the test that made them.
+    private readonly List<ScratchFolder> _grown = [];
+
+    public void Dispose()
     {
-        var folder = Directory.CreateTempSubdirectory("deepsharp-040-").FullName;
-        var path = Path.Join(folder, "titanic.csv");
+        foreach (var folder in _grown)
+        {
+            folder.Dispose();
+        }
+    }
+
+    // A folder holding the passenger list grown by its own first forty passengers, under the name the pipeline reads.
+    private string GrownFolder()
+    {
+        var folder = new ScratchFolder("deepsharp-040-");
+
+        _grown.Add(folder);
+
+        var path = folder.At("titanic.csv");
 
         File.Copy(Repository.Data("titanic.csv"), path);
         File.AppendAllLines(path, File.ReadLines(Repository.Data("titanic.csv")).Skip(1).Take(40));
 
-        return folder;
+        return folder.Path;
     }
 
     private static InMemoryRowSource Passenger() =>
