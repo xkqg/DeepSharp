@@ -69,6 +69,8 @@ public sealed class ScratchFolderTests
     [Fact]
     public void AFileThatStaysHeld_StopsTheFolderFromBeingRemoved_AndSaysSo()
     {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses to remove a file that is held open; elsewhere the removal succeeds, and there is nothing held to wait for.");
+
         var folder = new ScratchFolder("deepsharp-scratch-");
 
         using (new FileStream(folder.At("held.tmp"), FileMode.CreateNew, FileAccess.Write, FileShare.None))
