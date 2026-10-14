@@ -69,7 +69,7 @@ public class SequentialTests
         Assert.All(glorot.Weight.Value.Values.ToArray(), value => Assert.InRange(value, -bound, bound));
         Assert.Contains(glorot.Weight.Value.Values.ToArray(), value => Math.Abs(value) > 1 / Math.Sqrt(5));
         Assert.All(zeros.Weight.Value.Values.ToArray(), value => Assert.Equal(0f, value));
-        Assert.Equal(plain.Bias.Value.Values.ToArray(), glorot.Bias.Value.Values.ToArray());
+        Assert.Equal(plain.Bias!.Value.Values.ToArray(), glorot.Bias!.Value.Values.ToArray());
         Assert.Equal(LayersOf(plainStack), LayersOf(glorotStack));
         Assert.Throws<ArgumentNullException>(() => new Sequential().Dense(3, null!));
     }

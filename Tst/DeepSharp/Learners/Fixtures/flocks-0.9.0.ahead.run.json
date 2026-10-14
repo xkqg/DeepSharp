@@ -1,0 +1,97 @@
+{
+  "version": 8,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.9.0.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "Seq",
+          "kind": "integer",
+          "optional": false
+        },
+        {
+          "name": "Animals",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Age",
+          "kind": "number",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "step": "order.by",
+      "columns": [
+        "Seq"
+      ]
+    },
+    {
+      "step": "split.byTime",
+      "column": "Seq",
+      "train": 0.7,
+      "validation": 0.15,
+      "test": 0.15,
+      "predict": 0,
+      "gap": 2
+    },
+    {
+      "step": "target.ahead",
+      "column": "Animals",
+      "ahead": 2,
+      "as": "return"
+    },
+    {
+      "step": "drop.columns",
+      "columns": [
+        "Seq"
+      ]
+    },
+    {
+      "step": "normalise",
+      "column": "Age",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    }
+  ],
+  "fitted": [
+    {
+      "step": "split.byTime",
+      "prefix": "2029440463f4ec51525356e57133e7e6e1872f1a59c7db3efda2eaa92bde8280",
+      "learned": {
+        "rows.gap": 6,
+        "rows.predict": 0,
+        "rows.test": 52,
+        "rows.train": 250,
+        "rows.validation": 52,
+        "moments.test": [
+          "306",
+          "357"
+        ],
+        "moments.train": [
+          "0",
+          "249"
+        ],
+        "moments.validation": [
+          "252",
+          "303"
+        ],
+        "digest": "769e6c6b81a2d0a85bb3ad62a52139bcc7368a8666a2bb550aead4d05278a2de"
+      }
+    },
+    {
+      "step": "normalise",
+      "prefix": "1ec5444e0a802601665f09127d84a3553d3b1dd77e5e08d00d5249ad3be56108",
+      "learned": {
+        "centre": 34.5,
+        "spread": 6.5
+      }
+    }
+  ]
+}

@@ -200,7 +200,7 @@ public class KerasSpatialFileTests
 
         // Keras writes (window..., in, out); the slot is the same numbers as (the window's places times in) by out.
         Assert.Equal(kernel.Read<float[]>(), convolution.Weight.Value.Values.ToArray());
-        Assert.Equal(weights.Dataset($"layers/{group}/vars/1").Read<float[]>(), convolution.Bias.Value.Values.ToArray());
+        Assert.Equal(weights.Dataset($"layers/{group}/vars/1").Read<float[]>(), convolution.Bias!.Value.Values.ToArray());
         Assert.Equal((int)kernel.Space.Dimensions[^1], convolution.OutChannels);
         Assert.Equal((int)kernel.Space.Dimensions[^2], convolution.InChannels);
         Assert.Equal(kernel.Space.Dimensions.SkipLast(1).Aggregate(1, (rows, length) => rows * (int)length), convolution.Weight.Value.Shape[0]);
@@ -411,7 +411,7 @@ public class KerasSpatialFileTests
     }
 
     [Fact]
-    public void ASeparableConvolution_IsTwoLayers_TheFirstWithABiasOfNoughts()
+    public void ASeparableConvolution_IsTwoLayers_TheFirstWithNoBias_SinceKerasAddsItsBiasOnceAfterBoth()
     {
         using var file = KerasFixtures.Open("keras-new-separable.keras");
         var layers = Assert.IsType<LayerStack>(new KerasFile().Read(file).Network).Layers;
@@ -422,6 +422,7 @@ public class KerasSpatialFileTests
         Assert.Equal(new Channels { In = 3, Out = 6, Groups = 3 }, depthwise.Channels);
         Assert.Equal(new Window(1, 1), pointwise.Window);
         Assert.Equal(new Channels { In = 6, Out = 5 }, pointwise.Channels);
-        Assert.All(depthwise.Bias.Value.Values.ToArray(), value => Assert.Equal(0f, value));
+        Assert.Null(depthwise.Bias);
+        Assert.Equal(5, pointwise.Bias!.Value.Shape[0]);
     }
 }

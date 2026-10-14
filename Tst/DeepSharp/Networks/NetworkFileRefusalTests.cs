@@ -709,6 +709,8 @@ public class NetworkFileRefusalTests
     [InlineData("\"0.weight\": {\"steps\": 0,", "\"0.weight\": {\"steps\": \"0\",", "\"0.weight\": {\"steps\"",
         "What is remembered of '0.weight' is written as its 'steps' and its 'tensors'.")]
     [InlineData("\"momentum_buffer\": {\"shape\": [1, 1]", "\"velocity\": {\"shape\": [1, 1]", "\"0.weight\": {\"steps\"",
+        "What the checkpoint remembers of 'weight' holds a velocity, which this optimizer does not keep: it keeps momentum_buffer.")]
+    [InlineData("\"tensors\": {\"momentum_buffer\": {\"shape\": [1, 1], \"values\": [0.25]}}", "\"tensors\": {}", "\"0.weight\": {\"steps\"",
         "What the checkpoint remembers of 'weight' has no momentum_buffer of its 1x1 shape, which this optimizer keeps.")]
     [InlineData("\"values\": [0.25]", "\"values\": [0.25, 1]", "\"values\": [0.25, 1]",
         "'0.weight momentum_buffer' holds as many values as its 1x1 shape, 1, and the file holds 2.")]
@@ -855,7 +857,7 @@ public class NetworkFileRefusalTests
         Assert.Equal(
             [
                 Place(broken, "\"training\"", message),
-                Place(broken, $"\"{written}\"", $"The 'training' part has no '{written}'. It holds: version, seed, batchSize, earlyStopping, clipNorm, engine, optimizer, schedule, memory, judgement, history."),
+                Place(broken, $"\"{written}\"", $"The 'training' part has no '{written}'. It holds: version, seed, batchSize, earlyStopping, clipNorm, clipValue, stepEvery, average, engine, optimizer, schedule, memory, averaged, judgement, history."),
             ],
             TrainingRefused(broken).Faults);
     }

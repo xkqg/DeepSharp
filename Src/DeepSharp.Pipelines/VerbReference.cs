@@ -185,11 +185,26 @@ internal static class VerbReference
                                + (parameter.LeftOut is { } left ? $"; left out, {Joined([.. left.Select(part => $"`{part.Kind}`")])}" : string.Empty)),
         ];
 
-        // One name a part may give, with the settings it takes, as a reader of the page needs them.
-        private static string Named(PartKind kind) =>
-            kind.Settings.Count == 0
-                ? $"`{kind.Name}`, which takes nothing"
-                : $"`{kind.Name}`, which takes {Joined([.. kind.Settings.Select(setting => $"`{setting.Key}`")])}";
+        // One name a part may give, with the settings it takes, as a reader of the page needs them: the ones every part says,
+        // and the ones a file may leave out.
+        private static string Named(PartKind kind)
+        {
+            var said = kind.Settings.Where(setting => !kind.LeftOut.ContainsKey(setting.Key)).Select(setting => $"`{setting.Key}`").ToArray();
+            var leftOut = kind.Settings.Where(setting => kind.LeftOut.ContainsKey(setting.Key)).Select(setting => $"`{setting.Key}`").ToArray();
+
+            if (kind.Settings.Count == 0)
+            {
+                return $"`{kind.Name}`, which takes nothing";
+            }
+
+            var takes = said.Length == 0 ? string.Empty : $", which takes {Joined(said)}";
+            var maySay = leftOut.Length == 0 ? string.Empty : $"{(said.Length == 0 ? ", which " : " and ")}may leave out {AllOf(leftOut)}";
+
+            return $"`{kind.Name}`{takes}{maySay}";
+        }
+
+        private static string AllOf(IReadOnlyList<string> words) =>
+            words.Count == 1 ? words[0] : $"{string.Join(", ", words.Take(words.Count - 1))} and {words[^1]}";
 
         private static string Choices(IReadOnlyList<string> words) => Joined([.. words.Select(word => $"`{word}`")]);
 

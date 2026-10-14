@@ -84,21 +84,23 @@ internal sealed record WindowPlan(int[] Sizes, int[] Stride, int[] Dilation, Pad
 
     /// <summary>A convolution along its axes, making so many channels.</summary>
     /// <param name="filters">How many channels it makes.</param>
-    public Action<Sequential> Convolve(int filters) => Sizes.Length switch
+    /// <param name="start">How it starts: without a bias, when its node names none.</param>
+    public Action<Sequential> Convolve(int filters, Beginning start) => Sizes.Length switch
     {
-        1 => description => description.Conv1D(filters, Line, Groups),
-        2 => description => description.Conv2D(filters, Plane, Groups),
-        _ => description => description.Conv3D(filters, Block, Groups),
+        1 => description => description.Conv1D(filters, Line, Groups, start),
+        2 => description => description.Conv2D(filters, Plane, Groups, start),
+        _ => description => description.Conv3D(filters, Block, Groups, start),
     };
 
     /// <summary>A convolution along its axes that gives the places back, making so many channels.</summary>
     /// <param name="filters">How many channels it makes.</param>
+    /// <param name="start">How it starts: without a bias, when its node names none.</param>
     /// <remarks>The places kept at the end are read for every axis, so a node that says none of them says a nought for each.</remarks>
-    public Action<Sequential> GiveBack(int filters) => Sizes.Length switch
+    public Action<Sequential> GiveBack(int filters, Beginning start) => Sizes.Length switch
     {
-        1 => description => description.Conv1DTranspose(filters, Line, Grown[0]),
-        2 => description => description.Conv2DTranspose(filters, Plane, new Steps(Grown[0], Grown[1])),
-        _ => description => description.Conv3DTranspose(filters, Block, new Steps3D(Grown[0], Grown[1], Grown[2])),
+        1 => description => description.Conv1DTranspose(filters, Line, start, Grown[0]),
+        2 => description => description.Conv2DTranspose(filters, Plane, start, new Steps(Grown[0], Grown[1])),
+        _ => description => description.Conv3DTranspose(filters, Block, start, new Steps3D(Grown[0], Grown[1], Grown[2])),
     };
 
     /// <summary>The largest value the window covers.</summary>
@@ -329,14 +331,9 @@ internal sealed class ConvKind : WindowKind
         var window = Walk(node, kernel.Lengths[2..], "convolution");
         var groups = node.Whole("group", 1);
 
-        if (node.Input(2).Length == 0)
+        return new OnnxLayer((window.Plan with { Groups = groups }).Convolve(kernel.Lengths[0], Starting(node)), Flow.Images)
         {
-            node.Refuse(NoBias);
-        }
-
-        return new OnnxLayer((window.Plan with { Groups = groups }).Convolve(kernel.Lengths[0]), Flow.Images)
-        {
-            Numbers = [new LayerNumber("weight", kernel, Laying.Kernel), new LayerNumber("bias", numbers.Floats(node.Input(2)), Laying.AsWritten)],
+            Numbers = WithBias(node, numbers, new LayerNumber("weight", kernel, Laying.Kernel)),
             Declared = window.Declared,
         };
     }
@@ -506,26 +503,25 @@ internal sealed class ConvTransposeKind : WindowKind
             grown = new int[window.Plan.Axes];
         }
 
-        if (node.Input(2).Length == 0)
+        return new OnnxLayer((window.Plan with { Groups = groups, Grown = grown }).GiveBack(kernel.Lengths[1] * groups, Starting(node)), Flow.Images)
         {
-            node.Refuse(NoBias);
-        }
-
-        return new OnnxLayer((window.Plan with { Groups = groups, Grown = grown }).GiveBack(kernel.Lengths[1] * groups), Flow.Images)
-        {
-            Numbers = [new LayerNumber("weight", kernel, Laying.GivenBack), new LayerNumber("bias", numbers.Floats(node.Input(2)), Laying.AsWritten)],
+            Numbers = WithBias(node, numbers, new LayerNumber("weight", kernel, Laying.GivenBack)),
             Declared = window.Declared,
         };
     }
 }
 
 /// <summary>
-/// ONNX's <c>Pad</c> of a constant: a layer that adds places of one value around each example and does nothing else. The
-/// places are a value of the graph, one before each axis and then one after each, and the axes they run along are every axis
-/// unless the node names them.
+/// ONNX's <c>Pad</c>: a layer that adds places around each example and does nothing else, holding one value (constant) or the
+/// example's own values, mirrored back (reflect), repeated from the edge (edge) or gone round (wrap, since operator set 19).
+/// The places are a value of the graph, one before each axis and then one after each, and the axes they run along are every
+/// axis unless the node names them.
 /// </summary>
 internal sealed class PadKind : OnnxKind
 {
+    // The operator set that added the wrap mode.
+    private const int WrapSince = 19;
+
     /// <inheritdoc />
     public override string Name => "Pad";
 
@@ -539,9 +535,16 @@ internal sealed class PadKind : OnnxKind
 
         var mode = node.Text("mode", "constant");
 
-        if (mode != "constant")
+        if (mode is not ("constant" or "reflect" or "edge" or "wrap"))
         {
-            node.Refuse($"it pads by {mode.Quoted()}, which mirrors or repeats the example, and a padding here pads with one value.");
+            node.Refuse($"it pads by {mode.Quoted()}, and a padding here pads with one value (constant) or fills the places from the example: reflect, edge or wrap.");
+
+            return new OnnxLayer(null, Flow.Images);
+        }
+
+        if (mode == "wrap" && numbers.Opset < WrapSince)
+        {
+            node.Refuse($"it pads by 'wrap', which operator set {WrapSince} added, and the graph imports operator set {numbers.Opset}.");
 
             return new OnnxLayer(null, Flow.Images);
         }
@@ -563,6 +566,12 @@ internal sealed class PadKind : OnnxKind
         if (sides is null)
         {
             return new OnnxLayer(null, Flow.Images);
+        }
+
+        // The value is the constant mode's alone: the other modes fill the places from the example and ignore it.
+        if (mode != "constant")
+        {
+            return new OnnxLayer(Padding(axes, sides, mode switch { "reflect" => Filling.Mirror, "edge" => Filling.Repeat, _ => Filling.Wrap }), Flow.Images);
         }
 
         var value = node.Input(2).Length == 0 ? 0f : Valued(node, numbers, node.Input(2));
@@ -645,6 +654,16 @@ internal sealed class PadKind : OnnxKind
 
         return 0f;
     }
+
+    // The word of the padding that fills the places it adds along each axis from the example.
+    private static Action<Sequential> Padding(int axes, int[] sides, Filling filling) => axes switch
+    {
+        1 => description => description.Pad1D(new Sides(sides[0], sides[1]), filling),
+        2 => description => description.Pad2D(new Margins(new Sides(sides[0], sides[1]), new Sides(sides[2], sides[3])), filling),
+        _ => description => description.Pad3D(
+            new Margins3D(new Sides(sides[0], sides[1]), new Sides(sides[2], sides[3]), new Sides(sides[4], sides[5])),
+            filling),
+    };
 
     // The word of the padding for the places it adds along each axis.
     private static Action<Sequential> Padding(int axes, int[] sides, float value) => axes switch

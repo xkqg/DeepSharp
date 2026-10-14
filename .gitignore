@@ -11,6 +11,9 @@ artifacts/
 .vscode/
 .idea/
 
+## Claude Code — a local tool wiring with machine paths, never shipped
+.mcp.json
+
 ## Test + coverage output
 TestResults/
 *.trx

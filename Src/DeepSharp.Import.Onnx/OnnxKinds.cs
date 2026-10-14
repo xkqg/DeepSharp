@@ -68,6 +68,9 @@ internal readonly record struct OnnxLayer(Action<Sequential>? Words, Flow After)
     /// <summary>The bias an Add adds to what the MatMul before it made; nothing for any other layer.</summary>
     public AddedBias? Adds { get; init; }
 
+    /// <summary>The words a MatMul is written as when no Add comes after it: a dense layer that adds no bias; nothing for any other layer.</summary>
+    public Action<Sequential>? Bare { get; init; }
+
     /// <summary>
     /// The border a convolution's or a pooling's pads write out, one side at a time, read as TensorFlow's 'same': held after
     /// lowering to the border 'same' gives the images that reach it. Nothing for a border stated alike on every side, or
@@ -85,9 +88,6 @@ internal readonly record struct AddedBias(string Name, HeldTensor Held);
 /// <remarks>The kinds listed here are every operator read, with Identity and Constant; a node of any other is refused, naming them.</remarks>
 internal abstract class OnnxKind
 {
-    /// <summary>What a dense layer or a convolution without a bias is refused with.</summary>
-    internal const string NoBias = "it adds no bias, and a dense layer or a convolution here always adds one.";
-
     // Every operator read, in the order a refusal names them.
     private static readonly OnnxKind[] Covered =
     [
@@ -153,6 +153,19 @@ internal abstract class OnnxKind
     protected static IReadOnlyList<LayerNumber> Along(OnnxNode node, Reaching reaching, GraphNumbers numbers, string[] slots) =>
         [.. slots.Select((slot, at) => new LayerNumber(slot, numbers.Floats(node.Input(at + 1)), Laying.AsWritten) { AlongFlattenedImage = reaching.Flow == Flow.FlattenedImages })];
 
+    /// <summary>How a layer that takes its bias as its node's third input starts: without one, when the node names none.</summary>
+    /// <param name="node">The node.</param>
+    /// <returns>A beginning without draws, since the graph's numbers take the place of any start.</returns>
+    protected static Beginning Starting(OnnxNode node) => new() { WithoutBias = node.Input(2).Length == 0 };
+
+    /// <summary>The numbers of a layer that has a kernel and takes its bias as its node's third input, when the node names one.</summary>
+    /// <param name="node">The node.</param>
+    /// <param name="numbers">The values the graph holds.</param>
+    /// <param name="kernel">The kernel's number.</param>
+    /// <returns>The kernel's number, and the bias's when there is one.</returns>
+    protected static IReadOnlyList<LayerNumber> WithBias(OnnxNode node, GraphNumbers numbers, LayerNumber kernel) =>
+        node.Input(2).Length == 0 ? [kernel] : [kernel, new LayerNumber("bias", numbers.Floats(node.Input(2)), Laying.AsWritten)];
+
     /// <summary>A shape as a fault names it: <c>16x14</c>, or <c>scalar</c>.</summary>
     internal static string Written(int[] lengths) => lengths.Length == 0 ? "scalar" : string.Join('x', lengths);
 }
@@ -181,11 +194,6 @@ internal sealed class GemmKind : OnnxKind
             node.Refuse(string.Create(CultureInfo.InvariantCulture, $"it scales its product by {alpha} and its bias by {beta}, and a dense layer here scales neither."));
         }
 
-        if (node.Input(2).Length == 0)
-        {
-            node.Refuse(NoBias);
-        }
-
         if (weights.Lengths is not [var first, var second])
         {
             node.Refuse($"its weights, '{node.Input(1).Quoted()}', are written as {Written(weights.Lengths)}, and a dense layer's are a matrix.");
@@ -194,21 +202,23 @@ internal sealed class GemmKind : OnnxKind
         }
 
         var units = transposed ? first : second;
+        var start = Starting(node);
 
-        return new OnnxLayer(description => description.Dense(units), Flow.Rows)
+        return new OnnxLayer(description => description.Dense(units, start), Flow.Rows)
         {
-            Numbers =
-            [
-                new LayerNumber("weight", weights, transposed ? Laying.Transposed : Laying.AsWritten) { AlongFlattenedImage = reaching.Flow == Flow.FlattenedImages },
-                new LayerNumber("bias", numbers.Floats(node.Input(2)), Laying.AsWritten),
-            ],
+            Numbers = WithBias(
+                node,
+                numbers,
+                new LayerNumber("weight", weights, transposed ? Laying.Transposed : Laying.AsWritten) { AlongFlattenedImage = reaching.Flow == Flow.FlattenedImages }),
         };
     }
 }
 
 /// <summary>
 /// ONNX's <c>MatMul</c> of what reaches it by weights the graph holds: a dense layer, its weights written inputs by outputs
-/// as the product declares them, its bias the <c>Add</c> after it — as Keras's own export and tf2onnx write a dense layer.
+/// as the product declares them, its bias the <c>Add</c> after it — as Keras's own export and tf2onnx write a dense layer. A
+/// MatMul no Add comes after is a dense layer without a bias, which is how the TorchScript exporter writes a linear layer
+/// that has none.
 /// </summary>
 internal sealed class MatMulKind : OnnxKind
 {
@@ -238,6 +248,7 @@ internal sealed class MatMulKind : OnnxKind
         {
             Numbers = [new LayerNumber("weight", weights, Laying.AsWritten) { AlongFlattenedImage = reaching.Flow == Flow.FlattenedImages }],
             Unbiased = units,
+            Bare = description => description.Dense(units, new Beginning { WithoutBias = true }),
         };
     }
 }
@@ -318,14 +329,16 @@ internal sealed class LayerNormalizationKind : OnnxKind
             node.Refuse(string.Create(CultureInfo.InvariantCulture, $"it normalises from axis {axis}, and a layer normalisation here normalises over the last axis of a row."));
         }
 
-        if (node.Input(2).Length == 0)
-        {
-            node.Refuse("it leaves out its shift, and a layer normalisation here learns one.");
-        }
-
         var epsilon = node.Number("epsilon", 1e-5);
 
-        return new OnnxLayer(description => description.LayerNorm(epsilon), reaching.Flow) { Numbers = Along(node, reaching, numbers, ["weight", "bias"]) };
+        // The shift is the node's third input, which ONNX lets a node leave out.
+        var shifted = node.Input(2).Length > 0;
+        var keeping = new Affine { WithoutShift = !shifted };
+
+        return new OnnxLayer(description => description.LayerNorm(epsilon, keeping), reaching.Flow)
+        {
+            Numbers = Along(node, reaching, numbers, shifted ? ["weight", "bias"] : ["weight"]),
+        };
     }
 }
 

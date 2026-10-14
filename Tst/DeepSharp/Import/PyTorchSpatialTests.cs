@@ -241,7 +241,7 @@ public class PyTorchSpatialTests
 
         var convolution = (Conv1D)network.Layers[0];
         Assert.Equal([1f, 5f, 3f, 7f, 2f, 6f, 4f, 8f], convolution.Weight.Value.Values.ToArray());
-        Assert.Equal([10f, 20f], convolution.Bias.Value.Values.ToArray());
+        Assert.Equal([10f, 20f], convolution.Bias!.Value.Values.ToArray());
     }
 
     [Fact]
@@ -257,7 +257,7 @@ public class PyTorchSpatialTests
 
         var convolution = (Conv3D)network.Layers[0];
         Assert.Equal([0f, 4f, 1f, 5f, 2f, 6f, 3f, 7f], convolution.Weight.Value.Values.ToArray());
-        Assert.Equal([9f], convolution.Bias.Value.Values.ToArray());
+        Assert.Equal([9f], convolution.Bias!.Value.Values.ToArray());
     }
 
     [Fact]

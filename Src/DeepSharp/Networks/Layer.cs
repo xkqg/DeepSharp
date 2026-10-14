@@ -90,6 +90,29 @@ public abstract class Layer
         }
     }
 
+    /// <summary>Holds every number this layer and the layers it holds learn still: no step moves them, and the loss is not differentiated by them.</summary>
+    /// <remarks>
+    /// Keras's <c>trainable = False</c>. A normalisation all of whose numbers are held answers from its running statistics in a
+    /// training pass too, and measures nothing. It is a rule of each parameter, written beside its numbers in the network's file;
+    /// a layer without parameters has none to hold.
+    /// </remarks>
+    public void Hold()
+    {
+        foreach (var parameter in Parameters())
+        {
+            parameter.Rules = parameter.Rules with { Held = true };
+        }
+    }
+
+    /// <summary>Lets every number this layer and the layers it holds learn again, as they did before they were held.</summary>
+    public void Release()
+    {
+        foreach (var parameter in Parameters())
+        {
+            parameter.Rules = parameter.Rules with { Held = false };
+        }
+    }
+
     /// <summary>What this layer computes of its input: the forward pass, written in the pass's backend.</summary>
     /// <param name="input">What the layer is handed.</param>
     /// <param name="pass">The backend the arithmetic runs on, and whether this pass trains.</param>

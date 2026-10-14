@@ -76,6 +76,14 @@ public sealed class NetworkDeclaration
     private PartDeclaration _stopping;
     private PartDeclaration _schedule = NetworkWords.Schedules[0].Declared();
     private double _clip;
+    private double _clipValue;
+    private int _stepEvery = 1;
+    private double _average;
+    private double? _decay;
+    private double? _dampening;
+    private bool _nesterov;
+    private bool _amsgrad;
+    private bool _centered;
     private string _engine = LearnNetworkStep.LightEngine;
     private int _seed = 20260929;
     private int _epochs = 100;
@@ -89,10 +97,75 @@ public sealed class NetworkDeclaration
         _stopping = NetworkWords.Stopping[0].Declared();
     }
 
-    /// <summary>A layer that answers with this many numbers, each a weighted sum of the ones below it.</summary>
+    /// <summary>A layer that answers with this many numbers, each a weighted sum of the ones below it, plus a bias of its own.</summary>
     /// <param name="units">How many numbers it answers with.</param>
     /// <returns>The declaration.</returns>
-    public NetworkDeclaration Dense(int units) => Layer("dense", new PartSetting("units", PartValue.Of(units)));
+    /// <remarks>The form 0.9.0 had, kept so that a program built against it still finds it; the one below says the rest.</remarks>
+    public NetworkDeclaration Dense(int units) => Dense(units, bias: true);
+
+    /// <summary>A layer that answers with this many numbers, each a weighted sum of the ones below it.</summary>
+    /// <param name="units">How many numbers it answers with.</param>
+    /// <param name="bias">Whether the layer adds a bias of its own to every sum; it does, unless said.</param>
+    /// <param name="weights">How the weights start; as PyTorch starts a linear layer's, unless said.</param>
+    /// <param name="biasStart">How the bias starts, when there is one; as PyTorch starts it, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentException">The layer has no bias and says how its bias starts.</exception>
+    /// <remarks>
+    /// Saying none of the three is the layer this method always declared, written as it always was. Keras starts its dense
+    /// layers at Glorot's weights and a bias of nought; neither vocabulary changes what is left unsaid, so a declaration that
+    /// wants Keras's start says so: <c>weights: InitialiserWord.GlorotUniform, biasStart: InitialiserWord.Zeros</c>.
+    /// </remarks>
+    public NetworkDeclaration Dense(int units, bool bias = true, InitialiserWord? weights = null, InitialiserWord? biasStart = null)
+    {
+        var layer = Kind("dense").Declared().With("units", PartValue.Of(units)).With("bias", PartValue.Of(bias));
+
+        if (weights is { } startWeights)
+        {
+            layer = layer.With("weights", PartValue.Of(startWeights.Word()));
+        }
+
+        if (biasStart is { } startBias)
+        {
+            layer = layer.With("biasStart", PartValue.Of(startBias.Word()));
+        }
+
+        return Layer(layer);
+    }
+
+    /// <summary>Adds a share of the sum of the absolute values of the weights of the layer written last to the loss, as Keras's L1 regularizer does.</summary>
+    /// <param name="penalty">The share: nought or more.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It is below nothing, or not a finite number.</exception>
+    /// <exception cref="InvalidOperationException">No layer is written yet.</exception>
+    /// <exception cref="NotSupportedException">The layer written last has no weights to penalise.</exception>
+    /// <remarks>The reported loss includes it, in training and in validation, and only for numbers that learn.</remarks>
+    public NetworkDeclaration L1(double penalty) => OnTheLastLayer("L1", "l1", new SlotRules { L1 = penalty }.L1);
+
+    /// <summary>Adds a share of the sum of the squares of the weights of the layer written last to the loss, as Keras's L2 regularizer does.</summary>
+    /// <param name="penalty">The share: nought or more.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It is below nothing, or not a finite number.</exception>
+    /// <exception cref="InvalidOperationException">No layer is written yet.</exception>
+    /// <exception cref="NotSupportedException">The layer written last has no weights to penalise.</exception>
+    /// <remarks>
+    /// Keras's L2 has no half in it, and neither has this: a share of the squares themselves, which is not the weight decay an
+    /// optimizer adds to the gradient — that one takes a half of it, so the two are the same number twice over.
+    /// </remarks>
+    public NetworkDeclaration L2(double penalty) => OnTheLastLayer("L2", "l2", new SlotRules { L2 = penalty }.L2);
+
+    /// <summary>Holds the numbers of each unit of the layer written last under a norm after every step, as Keras's MaxNorm does.</summary>
+    /// <param name="bound">The most norm a unit's numbers may have: above nothing.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a finite number above nothing.</exception>
+    /// <exception cref="InvalidOperationException">No layer is written yet.</exception>
+    /// <exception cref="NotSupportedException">The layer written last has no weights to bound.</exception>
+    public NetworkDeclaration MaxNorm(double bound) => OnTheLastLayer("MaxNorm", "maxNorm", new SlotRules { MaxNorm = bound }.MaxNorm!.Value);
+
+    /// <summary>Holds the numbers of the layer written last still, as Keras's trainable = False does: no step moves them.</summary>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="InvalidOperationException">No layer is written yet.</exception>
+    /// <exception cref="NotSupportedException">The layer written last has no numbers to hold.</exception>
+    public NetworkDeclaration Held() => OnTheLastLayer("Held", "learns", false);
 
     /// <summary>A layer that leaves what is below nought at nought.</summary>
     /// <returns>The declaration.</returns>
@@ -115,16 +188,50 @@ public sealed class NetworkDeclaration
     /// <param name="momentum">How much of what was measured before carries on; each library's own, unless said.</param>
     /// <param name="epsilon">The small number added so nothing is divided by nought; each library's own, unless said.</param>
     /// <returns>The declaration.</returns>
-    public NetworkDeclaration BatchNorm(double? momentum = null, double? epsilon = null) => Layer(
-        "batchNorm",
-        new PartSetting("momentum", PartValue.Of(momentum ?? (_words == Vocabularies.Keras ? 0.99 : 0.9))),
-        new PartSetting("epsilon", PartValue.Of(epsilon ?? (_words == Vocabularies.Keras ? 1e-3 : 1e-5))));
+    /// <remarks>The form 0.9.0 had, kept so that a program built against it still finds it; it keeps a scale and a shift.</remarks>
+    public NetworkDeclaration BatchNorm(double? momentum = null, double? epsilon = null) => BatchNorm(momentum, epsilon, scale: true);
+
+    /// <summary>A layer that brings every number to the mean and spread of the rows it was trained on, with the libraries' own momentum and epsilon.</summary>
+    /// <param name="scale">Whether it multiplies what it normalised by a scale of its own.</param>
+    /// <param name="shift">Whether it adds a shift of its own; it does, unless said.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration BatchNorm(bool scale, bool shift = true) => BatchNorm(null, null, scale, shift);
+
+    /// <summary>A layer that brings every number to the mean and spread of the rows it was trained on.</summary>
+    /// <param name="momentum">How much of what was measured before carries on; each library's own, unless said.</param>
+    /// <param name="epsilon">The small number added so nothing is divided by nought; each library's own, unless said.</param>
+    /// <param name="scale">Whether it multiplies what it normalised by a scale of its own; it does, unless said.</param>
+    /// <param name="shift">Whether it adds a shift of its own; it does, unless said.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration BatchNorm(double? momentum, double? epsilon, bool scale, bool shift = true) => Layer(
+        Kind("batchNorm").Declared()
+            .With("momentum", PartValue.Of(momentum ?? (_words == Vocabularies.Keras ? 0.99 : 0.9)))
+            .With("epsilon", PartValue.Of(epsilon ?? (_words == Vocabularies.Keras ? 1e-3 : 1e-5)))
+            .With("scale", PartValue.Of(scale))
+            .With("shift", PartValue.Of(shift)));
 
     /// <summary>A layer that brings every number of one row to that row's own mean and spread.</summary>
     /// <param name="epsilon">The small number added so nothing is divided by nought; each library's own, unless said.</param>
     /// <returns>The declaration.</returns>
-    public NetworkDeclaration LayerNorm(double? epsilon = null) =>
-        Layer("layerNorm", new PartSetting("epsilon", PartValue.Of(epsilon ?? (_words == Vocabularies.Keras ? 1e-3 : 1e-5))));
+    /// <remarks>The form 0.9.0 had, kept so that a program built against it still finds it; it keeps a scale and a shift.</remarks>
+    public NetworkDeclaration LayerNorm(double? epsilon = null) => LayerNorm(epsilon, scale: true);
+
+    /// <summary>A layer that brings every number of one row to that row's own mean and spread, with the libraries' own epsilon.</summary>
+    /// <param name="scale">Whether it multiplies what it normalised by a scale of its own.</param>
+    /// <param name="shift">Whether it adds a shift of its own; it does, unless said.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration LayerNorm(bool scale, bool shift = true) => LayerNorm(null, scale, shift);
+
+    /// <summary>A layer that brings every number of one row to that row's own mean and spread.</summary>
+    /// <param name="epsilon">The small number added so nothing is divided by nought; each library's own, unless said.</param>
+    /// <param name="scale">Whether it multiplies what it normalised by a scale of its own; it does, unless said.</param>
+    /// <param name="shift">Whether it adds a shift of its own; it does, unless said.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration LayerNorm(double? epsilon, bool scale, bool shift = true) => Layer(
+        Kind("layerNorm").Declared()
+            .With("epsilon", PartValue.Of(epsilon ?? (_words == Vocabularies.Keras ? 1e-3 : 1e-5)))
+            .With("scale", PartValue.Of(scale))
+            .With("shift", PartValue.Of(shift)));
 
     /// <summary>Moves the network's numbers against their gradients.</summary>
     /// <param name="rate">How far one step moves them; each library's own, unless said.</param>
@@ -241,6 +348,68 @@ public sealed class NetworkDeclaration
         return this;
     }
 
+    /// <summary>
+    /// Adds a share of every number to its gradient before the step moves it, as PyTorch's <c>weight_decay</c> does for SGD, Adam,
+    /// RMSprop and NAdam. Declared in PyTorch's words only.
+    /// </summary>
+    /// <param name="decay">The share: nought or more.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="NotSupportedException">The network is declared in Keras's words, where the weight decay is decoupled from the gradient.</exception>
+    /// <remarks>Said before or after the optimizer; it is held until the step is made, and refused then by an optimizer that has none (AdamW has its own).</remarks>
+    public NetworkDeclaration WeightDecay(double decay)
+    {
+        RequirePyTorchsOption("WeightDecay", "adds a share of every number to its gradient, which Keras's weight_decay does not: it decays the number itself");
+        _decay = decay;
+
+        return this;
+    }
+
+    /// <summary>Lets the velocity take in less of each new gradient, but not the first: PyTorch's SGD <c>dampening</c>. Declared in PyTorch's words only.</summary>
+    /// <param name="dampening">The share left out: from nothing to one.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="NotSupportedException">The network is declared in Keras's words, where SGD has no dampening.</exception>
+    public NetworkDeclaration Dampening(double dampening)
+    {
+        RequirePyTorchsOption("Dampening", "lets the velocity take in less of each new gradient, which Keras's SGD has no word for");
+        _dampening = dampening;
+
+        return this;
+    }
+
+    /// <summary>Takes the step from the gradient plus the momentum times the velocity, as Nesterov has it: PyTorch's SGD <c>nesterov</c>. Declared in PyTorch's words only.</summary>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="NotSupportedException">The network is declared in Keras's words.</exception>
+    /// <remarks>It needs a momentum above nothing and no dampening, and the step that is made refuses it without.</remarks>
+    public NetworkDeclaration Nesterov()
+    {
+        RequirePyTorchsOption("Nesterov", "takes the step from the gradient plus the momentum times the velocity");
+        _nesterov = true;
+
+        return this;
+    }
+
+    /// <summary>Takes the step over the largest mean of the squares there has been, as AMSGrad has it: PyTorch's <c>amsgrad</c> for Adam and AdamW. Declared in PyTorch's words only.</summary>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="NotSupportedException">The network is declared in Keras's words, whose AMSGrad places its epsilon otherwise.</exception>
+    public NetworkDeclaration AmsGrad()
+    {
+        RequirePyTorchsOption("AmsGrad", "takes the step over the largest mean of the squares there has been, which Keras's Adam works out with its epsilon placed otherwise");
+        _amsgrad = true;
+
+        return this;
+    }
+
+    /// <summary>Takes the root of the mean of the squares less the square of the mean of the gradients: PyTorch's RMSprop <c>centered</c>. Declared in PyTorch's words only.</summary>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="NotSupportedException">The network is declared in Keras's words.</exception>
+    public NetworkDeclaration Centered()
+    {
+        RequirePyTorchsOption("Centered", "takes the root of the mean of the squares less the square of the mean of the gradients");
+        _centered = true;
+
+        return this;
+    }
+
     /// <summary>Judges the answers by the mean of their squared differences: an answer that is an amount.</summary>
     /// <returns>The declaration.</returns>
     public NetworkDeclaration MeanSquaredError() => Judged("meanSquaredError");
@@ -339,6 +508,43 @@ public sealed class NetworkDeclaration
         return this;
     }
 
+    /// <summary>
+    /// Clips every value of a step's gradients to the given bound either side of nothing before they move the network, as
+    /// PyTorch's <c>clip_grad_value_</c> does; before the whole norm is clipped, when it is.
+    /// </summary>
+    /// <param name="bound">The most any value may reach: a number above nothing.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The bound is not a finite number above nothing.</exception>
+    public NetworkDeclaration ClipValue(double bound)
+    {
+        _clipValue = new FitOptions(0) { ClipValue = bound }.ClipValue!.Value;
+
+        return this;
+    }
+
+    /// <summary>Takes a step from the mean of the gradients of so many batches, as accumulating gradients does.</summary>
+    /// <param name="batches">How many batches go into a step: one or more.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It is below one.</exception>
+    /// <remarks>A window never goes across the end of an epoch: the last batches of one are stepped as a window of however many are left.</remarks>
+    public NetworkDeclaration StepEvery(int batches)
+    {
+        _stepEvery = new FitOptions(0) { StepEvery = batches }.StepEvery;
+
+        return this;
+    }
+
+    /// <summary>Keeps an exponential moving average of the weights, written over them when the run ends.</summary>
+    /// <param name="share">The share of itself the average keeps at every step: above nothing and below one.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a share above nothing and below one.</exception>
+    public NetworkDeclaration Average(double share)
+    {
+        _average = new FitOptions(0) { Average = share }.Average!.Value;
+
+        return this;
+    }
+
     /// <summary>Runs on the engine that goes by this name.</summary>
     /// <param name="engine">The engine's name, as the application gives it — and with it, the device it works on.</param>
     /// <returns>The declaration.</returns>
@@ -350,10 +556,13 @@ public sealed class NetworkDeclaration
     }
 
     // The step this declaration stands as, held to every rule a step written by hand is held to.
-    internal LearnNetworkStep Step() => new(_layers, _optimizer, _loss)
+    internal LearnNetworkStep Step() => new(_layers, WithOptions(_optimizer), _loss)
     {
         Schedule = _schedule,
         Clip = _clip,
+        ClipValue = _clipValue,
+        StepEvery = _stepEvery,
+        Average = _average,
         Stopping = _stopping,
         Engine = _engine,
         Seed = _seed,
@@ -361,12 +570,42 @@ public sealed class NetworkDeclaration
         Batch = _batch,
     };
 
-    private NetworkDeclaration Layer(string kind, params PartSetting[] settings)
+    private NetworkDeclaration Layer(string kind, params PartSetting[] settings) => Layer(new PartDeclaration(kind, settings));
+
+    // A rule for the layer written last, said as a setting its word takes: refused by name by a word that takes none.
+    private NetworkDeclaration OnTheLastLayer(string door, string key, double value) => OnTheLastLayer(door, key, PartValue.Of(value));
+
+    private NetworkDeclaration OnTheLastLayer(string door, string key, bool value) => OnTheLastLayer(door, key, PartValue.Of(value));
+
+    private NetworkDeclaration OnTheLastLayer(string door, string key, PartValue value)
     {
-        _layers.Add(new PartDeclaration(kind, settings));
+        if (_layers.Count == 0)
+        {
+            throw new InvalidOperationException($"{door} is said of the layer written last, and none is written yet.");
+        }
+
+        var last = _layers[^1];
+
+        if (Kind(last.Kind).Setting(key) is null)
+        {
+            throw new NotSupportedException($"A '{last.Kind}' takes no '{key}', so {door} cannot be said of it: say it of a layer that learns numbers.");
+        }
+
+        _layers[^1] = last.With(key, value);
 
         return this;
     }
+
+    private NetworkDeclaration Layer(PartDeclaration layer)
+    {
+        _layers.Add(layer);
+
+        return this;
+    }
+
+    // The kind of layer a name stands for, so that a layer is declared from what its kind starts with rather than from keys
+    // written out again here.
+    private static PartKind Kind(string name) => NetworkWords.Layers.Single(kind => kind.Name == name);
 
     private NetworkDeclaration Judged(string kind)
     {
@@ -380,6 +619,49 @@ public sealed class NetworkDeclaration
         _schedule = new PartDeclaration(kind, settings);
 
         return this;
+    }
+
+    // The optimizer with the options said beside it, each held until now: an option the optimizer's word does not take is refused
+    // by name, here, where the optimizer is known.
+    private PartDeclaration WithOptions(PartDeclaration optimizer)
+    {
+        optimizer = Optioned(optimizer, "WeightDecay", "weightDecay", _decay is { } decay ? PartValue.Of(decay) : null);
+        optimizer = Optioned(optimizer, "Dampening", "dampening", _dampening is { } dampening ? PartValue.Of(dampening) : null);
+        optimizer = Optioned(optimizer, "Nesterov", "nesterov", _nesterov ? PartValue.Of(true) : null);
+        optimizer = Optioned(optimizer, "AmsGrad", "amsgrad", _amsgrad ? PartValue.Of(true) : null);
+
+        return Optioned(optimizer, "Centered", "centered", _centered ? PartValue.Of(true) : null);
+    }
+
+    private static PartDeclaration Optioned(PartDeclaration optimizer, string door, string key, PartValue? said)
+    {
+        if (said is not { } value)
+        {
+            return optimizer;
+        }
+
+        if (optimizer.Kind is null || NetworkWords.Optimizers.Single(kind => kind.Name == optimizer.Kind).Setting(key) is null)
+        {
+            throw new NotSupportedException($"{door} is not something {(optimizer.Kind is null ? "no optimizer" : $"the '{optimizer.Kind}' optimizer")} takes: name an optimizer that does.");
+        }
+
+        // AdamW's weight decay is its own, decoupled from the gradient, and said as AdamW's own number.
+        if (optimizer.Kind == "adamw" && key == "weightDecay")
+        {
+            throw new NotSupportedException("WeightDecay adds a share of every number to its gradient, which AdamW does not: its weight decay is its own, said as AdamW(weightDecay: …).");
+        }
+
+        return optimizer.With(key, value);
+    }
+
+    // An option of PyTorch's optimizers that Keras's words cannot say, refused in them rather than written as something else.
+    private void RequirePyTorchsOption(string door, string meaning)
+    {
+        if (_words == Vocabularies.Keras)
+        {
+            throw new NotSupportedException(
+                $"{door} {meaning}, and this library runs it as PyTorch's optimizers do, so a network declared in Keras's words cannot say it: declare it in PyTorch's, .WithTorch(network => network.{door}(…)).");
+        }
     }
 
     // An optimizer whose Keras namesake runs other arithmetic is declared in PyTorch's words only, and refused in Keras's

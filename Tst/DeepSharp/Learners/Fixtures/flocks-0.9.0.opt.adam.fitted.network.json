@@ -1,0 +1,623 @@
+{
+  "version": 1,
+  "network": {
+    "version": 2,
+    "layers": {
+      "kind": "stack",
+      "layers": [
+        {
+          "kind": "dense",
+          "inputs": 18,
+          "outputs": 8
+        },
+        {
+          "kind": "relu"
+        },
+        {
+          "kind": "dense",
+          "inputs": 8,
+          "outputs": 5
+        }
+      ]
+    },
+    "parameters": {
+      "0.weight": {
+        "shape": [
+          18,
+          8
+        ],
+        "values": [
+          -0.021162927,
+          0.1979271,
+          -0.103668906,
+          0.5704379,
+          0.030466989,
+          -0.3356258,
+          0.07318895,
+          -0.024249423,
+          -0.11637717,
+          0.15685156,
+          -0.18293181,
+          -0.0037915404,
+          -0.16372867,
+          0.33629557,
+          -0.046698257,
+          -0.10194364,
+          0.03779623,
+          -0.4448446,
+          0.1441275,
+          -0.33136424,
+          -0.06520923,
+          0.12293194,
+          0.10643952,
+          -0.104934745,
+          -0.056261744,
+          -0.049261507,
+          -0.06793739,
+          -0.007849826,
+          -0.14387654,
+          0.047485314,
+          -0.06793564,
+          0.14593405,
+          0.06348976,
+          0.10294116,
+          0.10749714,
+          -0.111784235,
+          -0.16427962,
+          0.044649553,
+          -0.13708837,
+          -0.2640593,
+          -0.20651984,
+          0.3423168,
+          -0.2719062,
+          0.104321346,
+          0.03341706,
+          0.36886796,
+          -0.24544136,
+          -0.26167923,
+          -0.0068050604,
+          -0.05056281,
+          0.08893222,
+          0.07860296,
+          -0.17644477,
+          0.09679952,
+          -0.22368991,
+          0.027520435,
+          -0.04644215,
+          -0.040904973,
+          -0.13253313,
+          0.17074303,
+          0.1582697,
+          0.20794639,
+          0.010366166,
+          -0.20190035,
+          -0.27034733,
+          -0.059946723,
+          -0.07284196,
+          0.19563945,
+          0.1858716,
+          0.31064954,
+          -0.22810382,
+          0.041292153,
+          -0.2762548,
+          -0.006314112,
+          -0.02598705,
+          0.12860101,
+          0.029400429,
+          0.14681354,
+          -0.107516184,
+          -0.08641749,
+          -0.2876694,
+          -0.07606156,
+          0.1293451,
+          0.045446638,
+          -0.11732373,
+          0.10151838,
+          -0.12146784,
+          0.08021624,
+          -0.23076333,
+          -0.22201172,
+          0.16577521,
+          0.17526697,
+          -0.13398077,
+          0.0057283062,
+          0.04980766,
+          0.06087601,
+          0.21004058,
+          0.12733817,
+          0.2348467,
+          -0.2226586,
+          -0.18499091,
+          0.1298552,
+          0.03950743,
+          -0.14935496,
+          0.123038255,
+          -0.07059705,
+          0.17383173,
+          0.046095062,
+          0.0067027956,
+          0.013492803,
+          -0.06155243,
+          -0.05905999,
+          -0.13323738,
+          -0.056708112,
+          0.07824486,
+          0.18373913,
+          -0.16804972,
+          0.15398006,
+          -0.084533796,
+          -0.13273758,
+          -0.10765135,
+          0.04194137,
+          0.16567336,
+          0.1669267,
+          -0.12126763,
+          0.17322738,
+          0.17711836,
+          0.13889815,
+          -0.056016132,
+          -0.008596572,
+          0.032849874,
+          -0.13070366,
+          0.113504864,
+          -0.13481654,
+          -0.068664715,
+          0.06543072,
+          0.05634867,
+          -0.103787646,
+          -0.024913676,
+          -0.21796244,
+          0.02106162,
+          -0.15183313,
+          0.07167338,
+          -0.18632494
+        ]
+      },
+      "0.bias": {
+        "shape": [
+          8
+        ],
+        "values": [
+          -0.21480556,
+          0.16298443,
+          -0.3251585,
+          0.0009180006,
+          -0.28356248,
+          0.022021256,
+          -0.092959315,
+          -0.3008356
+        ]
+      },
+      "2.weight": {
+        "shape": [
+          8,
+          5
+        ],
+        "values": [
+          -0.051467143,
+          -0.059470158,
+          0.2943114,
+          0.15660575,
+          -0.030183045,
+          -0.20502055,
+          -0.28903747,
+          0.40238097,
+          0.27155805,
+          0.044429604,
+          0.058806527,
+          0.2308514,
+          -0.12229254,
+          -0.02947103,
+          0.14321668,
+          -0.32311645,
+          -0.11885054,
+          -0.055353463,
+          0.5277976,
+          0.58915585,
+          -0.020592103,
+          -0.15097225,
+          0.084932946,
+          -0.2421258,
+          -0.16633727,
+          0.14441702,
+          0.18964952,
+          0.038479857,
+          -0.20714267,
+          -0.24009301,
+          -0.16884941,
+          0.28438333,
+          -0.04742505,
+          0.15301704,
+          -0.47004792,
+          -0.13014536,
+          0.17405851,
+          -0.23254709,
+          0.047432035,
+          -0.0009544816
+        ]
+      },
+      "2.bias": {
+        "shape": [
+          5
+        ],
+        "values": [
+          0.0032926253,
+          0.06545193,
+          -0.18527314,
+          -0.20476103,
+          -0.26841074
+        ]
+      }
+    },
+    "state": {},
+    "loss": {
+      "kind": "crossEntropy"
+    },
+    "trainedOn": {
+      "features": [
+        "Age",
+        "Temp",
+        "animalsPerDay",
+        "Date_quarter",
+        "Date_monthofyear_sin",
+        "Date_monthofyear_cos",
+        "Temp_was_missing",
+        "Farm_A",
+        "Farm_B",
+        "Farm_C",
+        "Farm_D",
+        "Farm_other",
+        "Farm_was_missing",
+        "Date_month_1",
+        "Date_month_2",
+        "Date_month_3",
+        "Date_month_other",
+        "Date_month_was_missing"
+      ],
+      "answers": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "output": "target.distribution",
+      "trainedBehind": "a1df5cd83d27ad4a83834941697a21e85d4ad3f4a2e1d85d2b242eb84492ed9a",
+      "seed": 20261012,
+      "epoch": 3,
+      "unvaried": {
+        "Date_quarter": 0,
+        "Farm_other": 0,
+        "Farm_was_missing": 0,
+        "Date_month_other": 0,
+        "Date_month_was_missing": 0
+      }
+    }
+  },
+  "pipeline": {
+  "version": 8,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.9.0.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "Date",
+          "kind": "timestamp",
+          "optional": false
+        },
+        {
+          "name": "Seq",
+          "kind": "integer",
+          "optional": false
+        },
+        {
+          "name": "Farm",
+          "kind": "category",
+          "optional": false
+        },
+        {
+          "name": "Animals",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Age",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "b1",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "b2",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "b3",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "b4",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "b5",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Temp",
+          "kind": "number",
+          "optional": true
+        }
+      ]
+    },
+    {
+      "step": "order.by",
+      "columns": [
+        "Date",
+        "Seq"
+      ]
+    },
+    {
+      "step": "feature.add",
+      "column": "animalsPerDay",
+      "left": "Animals",
+      "arithmetic": "dividedby",
+      "right": "Age"
+    },
+    {
+      "step": "feature.timeParts",
+      "column": "Date",
+      "asCategories": true,
+      "parts": [
+        "month"
+      ]
+    },
+    {
+      "step": "feature.timeParts",
+      "column": "Date",
+      "asCategories": false,
+      "parts": [
+        "quarter"
+      ]
+    },
+    {
+      "step": "feature.cyclical",
+      "column": "Date",
+      "period": "monthofyear",
+      "form": "signed"
+    },
+    {
+      "step": "evidence.profile",
+      "columns": [
+        "Farm",
+        "Animals",
+        "Age"
+      ]
+    },
+    {
+      "step": "evidence.correlation",
+      "columns": [
+        "Animals",
+        "Age"
+      ],
+      "shown": "numbers"
+    },
+    {
+      "step": "split.byTime",
+      "column": "Date",
+      "train": 0.7,
+      "validation": 0.15,
+      "test": 0.15,
+      "predict": 0,
+      "gap": 1
+    },
+    {
+      "step": "target.distribution",
+      "columns": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ],
+      "scaleBy": "Animals"
+    },
+    {
+      "step": "normalise.row",
+      "norm": "l1",
+      "columns": [
+        "b1",
+        "b2",
+        "b3",
+        "b4",
+        "b5"
+      ]
+    },
+    {
+      "step": "drop.columns",
+      "columns": [
+        "Date",
+        "Seq",
+        "Animals"
+      ]
+    },
+    {
+      "step": "fill.missing",
+      "column": "Temp",
+      "with": "median"
+    },
+    {
+      "step": "encode.categories",
+      "as": "onehot",
+      "unseen": "reserve"
+    },
+    {
+      "step": "normalise",
+      "column": "Age",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "normalise",
+      "column": "animalsPerDay",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "normalise",
+      "column": "Date_quarter",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "normalise",
+      "column": "Temp",
+      "scale": "maxabs",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "evidence.report",
+      "metrics": [
+        "rmse",
+        "mae",
+        "r2"
+      ],
+      "parts": [
+        "validation",
+        "test"
+      ],
+      "shown": [
+        "numbers"
+      ]
+    },
+    {
+      "step": "learn.network",
+      "layers": [
+        {
+          "kind": "dense",
+          "units": 8
+        },
+        {
+          "kind": "relu"
+        },
+        {
+          "kind": "dense",
+          "units": 5
+        }
+      ],
+      "optimizer": {
+        "kind": "adam",
+        "rate": 0.01,
+        "firstMoment": 0.9,
+        "secondMoment": 0.999,
+        "epsilon": 1E-08
+      },
+      "loss": {
+        "kind": "crossEntropy"
+      },
+      "stopping": {
+        "kind": "never"
+      },
+      "engine": "light",
+      "seed": 20261012,
+      "epochs": 3,
+      "batch": 16
+    }
+  ],
+  "fitted": [
+    {
+      "step": "split.byTime",
+      "prefix": "f26c61e53cab68aa02b344d6eef65ebfb038a6a4252c860c630a83a1a8a46d33",
+      "learned": {
+        "rows.gap": 9,
+        "rows.predict": 0,
+        "rows.test": 51,
+        "rows.train": 249,
+        "rows.validation": 51,
+        "moments.test": [
+          "2024-04-12T00:00:00.0000000Z",
+          "2024-04-28T00:00:00.0000000Z"
+        ],
+        "moments.train": [
+          "2024-01-01T00:00:00.0000000Z",
+          "2024-03-23T00:00:00.0000000Z"
+        ],
+        "moments.validation": [
+          "2024-03-25T00:00:00.0000000Z",
+          "2024-04-10T00:00:00.0000000Z"
+        ],
+        "digest": "769e6c6b81a2d0a85bb3ad62a52139bcc7368a8666a2bb550aead4d05278a2de"
+      }
+    },
+    {
+      "step": "fill.missing",
+      "prefix": "3c588657fb36c0ee46bcf47f8963ae30c9dd45b4cb4dadde005df9ae66710e9b",
+      "learned": {
+        "gaps": 15,
+        "value": 16.3
+      }
+    },
+    {
+      "step": "encode.categories",
+      "prefix": "4acb9c1e24f61267d900855376afb3208e5d30cf9a8e85c3dc5d9bae09a7bb25",
+      "learned": {
+        "Date_month": [
+          "1",
+          "2",
+          "3"
+        ],
+        "Farm": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ]
+      }
+    },
+    {
+      "step": "normalise",
+      "prefix": "7ba9a90acb10a14a413fd0b0eab54e0ee12e083178de0e8f39f92d9f9bb36a59",
+      "learned": {
+        "centre": 34.5,
+        "spread": 6.5
+      }
+    },
+    {
+      "step": "normalise",
+      "prefix": "44d756aaf772d5ea868bda581c3237db49e1a6b0c97b929c727558a8a2724ab0",
+      "learned": {
+        "centre": 615.9216027874564,
+        "spread": 127.50696864111498
+      }
+    },
+    {
+      "step": "normalise",
+      "prefix": "60f6b0c16f3ba3d58b342655d4e2dfc1546801cf1c02c93d0041ad002d792b55",
+      "learned": {
+        "centre": 1,
+        "spread": 1
+      }
+    },
+    {
+      "step": "normalise",
+      "prefix": "72f3d2b18f790b187dbcd73276ceb5d0d80a5a5b2b6fed91af897fabbda7a5e4",
+      "learned": {
+        "centre": 0,
+        "spread": 20.9
+      }
+    }
+  ]
+}
+}

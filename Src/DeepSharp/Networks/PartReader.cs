@@ -18,6 +18,9 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
 {
     private readonly string[] _here = [property];
 
+    // What the file says of the learning of each parameter beside its numbers, by path: only what it says.
+    private readonly Dictionary<string, SlotRules> _rules = new(StringComparer.Ordinal);
+
     /// <summary>
     /// Whether a list of a file is a tensor's values this reader reads — a slot's, under its part's parameters or running
     /// statistics, what the optimizer remembers of a parameter, or a slot of the best epoch's — whose numbers are read from
@@ -27,6 +30,7 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
     public static bool ReadsApart(string[] path) =>
         path is [_, ParametersKey or StateKey, _, ValuesKey]
             or [_, MemoryKey, _, TensorsKey, _, ValuesKey]
+            or [_, AveragedKey, _, ValuesKey]
             or [_, JudgementKey, BestSlotsKey, ParametersKey or StateKey, _, ValuesKey];
 
     /// <summary>The kind written under a key of the part, rebuilt; nothing, with its fault noted, when it cannot be.</summary>
@@ -69,6 +73,11 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
         if (!text.Faulty)
         {
             load.Apply();
+
+            foreach (var (path, rules) in _rules)
+            {
+                ((Parameter)load.Slots[path]).Rules = rules;
+            }
         }
     }
 
@@ -114,8 +123,104 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
 
         var stopping = EarlyStoppingOf(earlyStopping);
         var clip = ClipOf(clipNorm);
+        var clipValue = RunOption<double>(ClipValueKey, "the bound each value of the run's gradients was clipped to", "a number above nothing", value => value.AsNumber() is { } bound && bound > 0 ? bound : null);
+        var stepEvery = RunOption<int>(StepEveryKey, "how many batches went into each step", "a whole number from two", value => value.AsWhole() is { } whole && whole >= 2 ? whole : null);
+        var average = RunOption<double>(AverageKey, "the share an average of the run's weights kept of itself", "a number above nothing and below one", value => value.AsNumber() is { } share && share > 0 && share < 1 ? share : null);
 
-        return rows is { } size ? new Pace(size, stopping) { Clip = clip } : null;
+        return rows is { } size
+            ? new Pace(size, stopping) { Clip = clip, ClipValue = clipValue, StepEvery = stepEvery ?? 1, Average = average }
+            : null;
+    }
+
+    // What a run did beside the pace the earlier versions could say: written from the fifth version on, where it is anything but
+    // the default, and refused in an earlier one, which cannot say it, and where it is written as anything but what it is.
+    private TNumber? RunOption<TNumber>(string key, string says, string shape, Func<JsonElement, TNumber?> read)
+        where TNumber : struct
+    {
+        if (part.Member(key) is not { } written)
+        {
+            return null;
+        }
+
+        string[] at = [.. _here, key];
+
+        if (version < FifthVersion)
+        {
+            text.Fault(at, $"{Capitalised(says)}, under '{key}', is written from the fifth version of a training part on, and this one is of the {Ordinal(version)}.");
+
+            return null;
+        }
+
+        if (read(written) is { } value)
+        {
+            return value;
+        }
+
+        text.Fault(at, $"{Capitalised(says)} is written under '{key}', as {shape}.");
+
+        return null;
+    }
+
+    private static string Capitalised(string words) => char.ToUpperInvariant(words[0]) + words[1..];
+
+    private static string Ordinal(int version) => version switch { FirstVersion => "first", SecondVersion => "second", ThirdVersion => "third", _ => "fourth" };
+
+    /// <summary>
+    /// What the run averaged of its weights, by path: written exactly where the pace says it kept an average, and each of the
+    /// parameter's own shape; nothing where it kept none.
+    /// </summary>
+    /// <param name="slots">The network's slots, by path.</param>
+    /// <param name="pace">The pace the part records.</param>
+    public Dictionary<string, Tensor>? AveragedOf(Dictionary<string, Slot> slots, Pace? pace)
+    {
+        var written = part.Member(AveragedKey);
+        var keeps = pace?.Average is not null;
+
+        if (written is null && !keeps)
+        {
+            return null;
+        }
+
+        string[] under = [.. _here, AveragedKey];
+
+        if (!keeps)
+        {
+            text.Fault(under, $"What is written under '{AveragedKey}' is the average of the weights of a run that says how, under '{AverageKey}', and this one says none.");
+
+            return null;
+        }
+
+        if (written is not { ValueKind: JsonValueKind.Object } tensors)
+        {
+            text.Fault(under, $"What the run averaged of its weights is written by path, as an object under '{AveragedKey}'.");
+
+            return null;
+        }
+
+        var averaged = new Dictionary<string, Tensor>(StringComparer.Ordinal);
+
+        foreach (var entry in tensors.EnumerateObject())
+        {
+            string[] at = [.. under, entry.Name];
+
+            if (!slots.TryGetValue(entry.Name, out var slot) || slot is not Parameter)
+            {
+                text.Fault(at, $"'{entry.Name.Quoted()}' is no parameter of this network.");
+            }
+            else if (TensorOf(entry.Value, at, new Expectation(slot.Value.Shape, $"{entry.Name} average")) is { } value)
+            {
+                averaged[entry.Name] = value;
+            }
+        }
+
+        var missing = slots.Where(each => each.Value is Parameter && !tensors.TryGetProperty(each.Key, out _)).Select(each => each.Key).ToArray();
+
+        if (missing.Length > 0)
+        {
+            text.Fault(under, $"The average of every parameter is written, and these are not: {string.Join(", ", missing.Select(path => $"'{path.Quoted()}'"))}.");
+        }
+
+        return averaged;
     }
 
     /// <summary>
@@ -471,9 +576,14 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
                 {
                     text.Fault(place, $"'{entry.Name}' is {(learns ? "a running statistic" : "a parameter")}, and is written under '{(learns ? StateKey : ParametersKey)}'.");
                 }
-                else if (load.Handed(entry.Name, source) is { } handed && TensorOf(entry.Value, place, handed.Value.Shape, entry.Name) is { } value)
+                else if (load.Handed(entry.Name, source) is { } handed && TensorOf(entry.Value, place, new Expectation(handed.Value.Shape, entry.Name, learns ? RuleKeys : null)) is { } value)
                 {
                     load.Keep(new SlotEntry(entry.Name, value, source));
+
+                    if (learns && RulesOf(entry.Value, place) is { } rules)
+                    {
+                        _rules[entry.Name] = rules;
+                    }
                 }
             }
         }
@@ -510,7 +620,7 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
 
         foreach (var tensor in tensors.EnumerateObject())
         {
-            if (TensorOf(tensor.Value, [.. at, tensor.Name], shape, $"{path} {tensor.Name.Quoted()}") is { } value)
+            if (TensorOf(tensor.Value, [.. at, tensor.Name], new Expectation(shape, $"{path} {tensor.Name.Quoted()}")) is { } value)
             {
                 kept[tensor.Name] = value;
             }
@@ -523,10 +633,16 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
         return readable ? kept : null;
     }
 
+    // What a written tensor must be: the shape the slot holds, what its faults call it, and the keys beside its numbers that are
+    // another part's to read.
+    private readonly record struct Expectation(Shape Shape, string Saying, string[]? Also = null);
+
     // A tensor written as its shape and its values, which must be the shape the slot holds — in the words the load refuses
     // another shape with — and as many finite numbers as it has, read from the text where they stand.
-    private Tensor? TensorOf(JsonElement written, string[] at, Shape expected, string saying)
+    private Tensor? TensorOf(JsonElement written, string[] at, Expectation wanted)
     {
+        var (expected, saying, also) = (wanted.Shape, wanted.Saying, wanted.Also);
+
         if (written.Member(ShapeKey) is not { ValueKind: JsonValueKind.Array } shape || written.Member(ValuesKey) is not { ValueKind: JsonValueKind.Array })
         {
             text.Fault(at, $"'{saying}' is written as its '{ShapeKey}' and its '{ValuesKey}'.");
@@ -534,7 +650,7 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
             return null;
         }
 
-        Only(written, at, ShapeKey, ValuesKey);
+        Only(written, at, [ShapeKey, ValuesKey, .. also ?? []]);
 
         if (expected.Unlike([.. shape.EnumerateArray().Select(length => length.AsWhole())], saying) is { } unlike)
         {
@@ -557,6 +673,55 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
 
         // Read where they stand, into the one array the tensor keeps: a network's file holds millions of them.
         return text.FloatsOf(listed, count, $"'{saying}' holds finite numbers, and this is not one.") is { } numbers ? Tensor.Wrap(expected, numbers) : null;
+    }
+
+    // The keys beside a parameter's numbers that say what the learning does to them.
+    private static readonly string[] RuleKeys = [LearnsKey, L1Key, L2Key, MaxNormKey];
+
+    // What a parameter's entry says beside its numbers of what the learning does to them: held still, a penalty, a bound. Nothing
+    // where it says none of it; and each is refused in a part of an earlier version than the fifth, which cannot say it, and
+    // where it is written as anything but what it is.
+    private SlotRules? RulesOf(JsonElement written, string[] at)
+    {
+        var rules = new SlotRules();
+        var says = false;
+
+        foreach (var key in RuleKeys.Where(key => written.Member(key) is not null))
+        {
+            says = true;
+
+            if (version < FifthVersion)
+            {
+                text.Fault([.. at, key], $"What the learning does to a parameter's numbers, under '{key}', is written from the fifth version of a network's part on, and this one is of the {Ordinal(version)}.");
+
+                continue;
+            }
+
+            var value = written.Member(key)!.Value;
+
+            switch (key)
+            {
+                case LearnsKey when value.AsTruth() is false:
+                    rules = rules with { Held = true };
+                    break;
+                case L1Key when value.AsNumber() is { } l1 && l1 > 0 && double.IsFinite(l1):
+                    rules = rules with { L1 = l1 };
+                    break;
+                case L2Key when value.AsNumber() is { } l2 && l2 > 0 && double.IsFinite(l2):
+                    rules = rules with { L2 = l2 };
+                    break;
+                case MaxNormKey when value.AsNumber() is { } bound && bound > 0 && double.IsFinite(bound):
+                    rules = rules with { MaxNorm = bound };
+                    break;
+                default:
+                    text.Fault([.. at, key], key == LearnsKey
+                        ? $"'{LearnsKey}' is written only to say that the numbers do not learn, as false."
+                        : $"'{key}' is written as a number above nothing.");
+                    break;
+            }
+        }
+
+        return says ? rules : null;
     }
 
     // An object holds only the keys it is written with: any other is refused where it stands, rather than read as nothing.

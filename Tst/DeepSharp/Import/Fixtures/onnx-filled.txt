@@ -1,0 +1,4 @@
+torch 2.14.1+cpu, onnx 1.23.2, onnxscript 0.7.2, numpy 2.5.3, Python 3.14.7
+onnx-filled-series: 8543 bytes; opset 20; Pad[reflect] Conv Pad[edge] Conv Reshape Gemm
+onnx-filled-image: 9535 bytes; opset 20; Pad[reflect] Conv Pad[edge] Pad[wrap] Conv Reshape Gemm
+onnx-filled-volume: 8028 bytes; opset 20; Pad[wrap] Conv Pad[reflect] Pad[edge] Reshape Gemm

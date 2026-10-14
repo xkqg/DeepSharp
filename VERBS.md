@@ -381,10 +381,13 @@ Names the network this pipeline is declared for: its layers, what moves them, wh
 
 | key | holds | an example |
 |---|---|---|
-| `layers` | a list of parts, each a name and its settings: `dense`, which takes `units`, `relu`, which takes nothing, `tanh`, which takes nothing, `sigmoid`, which takes nothing, `dropout`, which takes `rate`, `batchNorm`, which takes `momentum` or `epsilon` or `layerNorm`, which takes `epsilon` | `[{"kind":"dense","units":16},{"kind":"relu"}]` |
-| `optimizer` | a part, written as a name and its settings: `sgd`, which takes `rate` or `momentum`, `adam`, which takes `rate`, `firstMoment`, `secondMoment` or `epsilon`, `adamw`, which takes `rate`, `firstMoment`, `secondMoment`, `epsilon` or `weightDecay`, `rmsprop`, which takes `rate`, `alpha`, `epsilon` or `momentum` or `nadam`, which takes `rate`, `firstMoment`, `secondMoment`, `epsilon` or `momentumDecay` | `{"kind":"adam","rate":0.001,"firstMoment":0.9,"secondMoment":0.999,"epsilon":1E-08}` |
+| `layers` | a list of parts, each a name and its settings: `dense`, which takes `units` and may leave out `bias`, `weights`, `biasStart`, `l1`, `l2`, `maxNorm` and `learns`, `relu`, which takes nothing, `tanh`, which takes nothing, `sigmoid`, which takes nothing, `dropout`, which takes `rate`, `batchNorm`, which takes `momentum` or `epsilon` and may leave out `scale`, `shift` and `learns` or `layerNorm`, which takes `epsilon` and may leave out `scale`, `shift` and `learns` | `[{"kind":"dense","units":16},{"kind":"relu"}]` |
+| `optimizer` | a part, written as a name and its settings: `sgd`, which takes `rate` or `momentum` and may leave out `weightDecay`, `dampening` and `nesterov`, `adam`, which takes `rate`, `firstMoment`, `secondMoment` or `epsilon` and may leave out `weightDecay` and `amsgrad`, `adamw`, which takes `rate`, `firstMoment`, `secondMoment`, `epsilon` or `weightDecay` and may leave out `amsgrad`, `rmsprop`, which takes `rate`, `alpha`, `epsilon` or `momentum` and may leave out `weightDecay` and `centered` or `nadam`, which takes `rate`, `firstMoment`, `secondMoment`, `epsilon` or `momentumDecay` and may leave out `weightDecay` | `{"kind":"adam","rate":0.001,"firstMoment":0.9,"secondMoment":0.999,"epsilon":1E-08}` |
 | `schedule` | a part, written as a name and its settings: `constant`, which takes nothing, `stepDecay`, which takes `every` or `factor`, `exponentialDecay`, which takes `factor`, `cosineDecay`, which takes `epochs` or `minimum` or `linearWarmup`, which takes `epochs` or `start`; left out, `constant` | left out |
 | `clip` | a number, 0 or more; left out, 0 | left out |
+| `clipValue` | a number, 0 or more; left out, 0 | left out |
+| `stepEvery` | a whole number, at least 1; left out, 1 | left out |
+| `average` | a number, 0 or more; left out, 0 | left out |
 | `loss` | a part, written as a name and its settings: `meanSquaredError`, which takes nothing, `crossEntropy`, which takes nothing, `binaryCrossEntropy`, which takes nothing or `earthMoversDistance`, which takes nothing | `{"kind":"meanSquaredError"}` |
 | `stopping` | a part, written as a name and its settings: `never`, which takes nothing or `patience`, which takes `patience`, `least` or `best` | `{"kind":"never"}` |
 | `engine` | words | `"light"` |
@@ -396,6 +399,9 @@ Names the network this pipeline is declared for: its layers, what moves them, wh
 - **`optimizer`**: What moves the network's numbers at every step.
 - **`schedule`**: How the rate changes from epoch to epoch; left out, the optimizer's own rate every epoch.
 - **`clip`**: The most norm a step's gradients may have together before they move the network; left out, or nought, they are not clipped.
+- **`clipValue`**: The most any value of a step's gradients may reach, either side of nothing, before they move the network; left out, or nought, they are not clipped by value.
+- **`stepEvery`**: How many batches' gradients are averaged into one step; left out, a step every batch.
+- **`average`**: The share an average of the network's weights keeps of itself at every step, above nothing and below one, written over the weights when the run ends; left out, or nought, none is kept.
 - **`loss`**: What the network's answers are judged by while it trains.
 - **`stopping`**: When the run stops: at its last pass, or once the validation loss stops falling.
 - **`engine`**: The name of the engine the run's arithmetic happens on; which engine it stands for — and which device it works on — is the application's to say.

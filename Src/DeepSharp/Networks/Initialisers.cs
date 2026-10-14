@@ -41,6 +41,34 @@ public abstract class Initialiser
     /// <returns>The tensor to start at.</returns>
     protected abstract Tensor Drawn(Shape shape, Fans fans, Draws draws);
 
+    /// <summary>A tensor of values, each made by the same draw.</summary>
+    /// <param name="shape">The shape.</param>
+    /// <param name="draw">What makes one value.</param>
+    /// <returns>The tensor.</returns>
+    private protected static Tensor Filled(Shape shape, Func<double> draw)
+    {
+        var values = new float[shape.Count];
+
+        for (var at = 0; at < values.Length; at++)
+        {
+            values[at] = (float)draw();
+        }
+
+        return Tensor.From(shape, values);
+    }
+
+    /// <summary>A spread: a finite number above nothing.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is not.</exception>
+    private protected static double RequireDeviation(double deviation) =>
+        double.IsFinite(deviation) && deviation > 0
+            ? deviation
+            : throw new ArgumentOutOfRangeException(nameof(deviation), deviation, "A spread is a finite number above nothing.");
+
+    /// <summary>A mean, or a value: a finite number.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is not.</exception>
+    private protected static double RequireMean(double mean) =>
+        double.IsFinite(mean) ? mean : throw new ArgumentOutOfRangeException(nameof(mean), mean, "A mean is a finite number.");
+
     /// <summary>A tensor of values spread evenly between minus a bound and the bound.</summary>
     /// <param name="shape">The shape.</param>
     /// <param name="bound">How far either side of nothing the values reach.</param>
@@ -110,4 +138,189 @@ public sealed class Zeros : Initialiser
 {
     /// <inheritdoc />
     protected override Tensor Drawn(Shape shape, Fans fans, Draws draws) => Tensor.Zeros(shape);
+}
+
+/// <summary>Numbers from a normal distribution: Keras's <c>RandomNormal</c>, a mean of nought and a spread of a twentieth unless said.</summary>
+/// <remarks>
+/// Drawn through <see cref="Draws.NextNormal"/>, so a layer started this way is started again from the same seed to within the
+/// last bit of the machine's logarithm and cosine.
+/// </remarks>
+public sealed class Normal : Initialiser
+{
+    /// <summary>A normal start of the given mean and spread.</summary>
+    /// <param name="deviation">The spread: a number above nothing; a twentieth, unless said, as Keras leaves it.</param>
+    /// <param name="mean">The mean; nought, unless said.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The spread is not a finite number above nothing, or the mean is not a finite number.</exception>
+    public Normal(double deviation = 0.05, double mean = 0)
+    {
+        Deviation = RequireDeviation(deviation);
+        Mean = RequireMean(mean);
+    }
+
+    /// <summary>The spread.</summary>
+    public double Deviation { get; }
+
+    /// <summary>The mean.</summary>
+    public double Mean { get; }
+
+    /// <inheritdoc />
+    protected override Tensor Drawn(Shape shape, Fans fans, Draws draws) => Filled(shape, () => Mean + (Deviation * draws.NextNormal()));
+}
+
+/// <summary>
+/// Numbers from a normal distribution cut two spreads either side of its mean: Keras's <c>TruncatedNormal</c>, a mean of nought
+/// and a spread of a twentieth unless said.
+/// </summary>
+/// <remarks>
+/// A number beyond two spreads from the mean is drawn again, as Keras draws it, so the cut is relative to the spread given —
+/// not the absolute bounds PyTorch's <c>trunc_normal_</c> takes. The spread of what is left is 0.8796 of the spread given.
+/// </remarks>
+public sealed class TruncatedNormal : Initialiser
+{
+    /// <summary>A truncated normal start of the given mean and spread.</summary>
+    /// <param name="deviation">The spread before the cut: a number above nothing; a twentieth, unless said.</param>
+    /// <param name="mean">The mean; nought, unless said.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The spread is not a finite number above nothing, or the mean is not a finite number.</exception>
+    public TruncatedNormal(double deviation = 0.05, double mean = 0)
+    {
+        Deviation = RequireDeviation(deviation);
+        Mean = RequireMean(mean);
+    }
+
+    /// <summary>The spread before the cut.</summary>
+    public double Deviation { get; }
+
+    /// <summary>The mean.</summary>
+    public double Mean { get; }
+
+    /// <inheritdoc />
+    protected override Tensor Drawn(Shape shape, Fans fans, Draws draws) => Filled(shape, () =>
+    {
+        double standard;
+
+        do
+        {
+            standard = draws.NextNormal();
+        }
+        while (Math.Abs(standard) > 2);
+
+        return Mean + (Deviation * standard);
+    });
+}
+
+/// <summary>
+/// A matrix whose shorter side is orthonormal, times a gain: Keras's <c>Orthogonal</c>. The columns are orthonormal where the
+/// matrix has more rows than columns, the rows where it has more columns.
+/// </summary>
+/// <remarks>
+/// The matrix is the one a QR factorisation of normal numbers gives with the signs of its diagonal put right — here worked out
+/// by Gram–Schmidt over the columns, twice, in double precision — so that it is the same matrix whichever way it is worked out
+/// and its columns stay orthogonal to within a millionth. Only a slot of two axes has one.
+/// </remarks>
+public sealed class Orthogonal : Initialiser
+{
+    /// <summary>An orthogonal start scaled by a gain.</summary>
+    /// <param name="gain">What the matrix is multiplied by: a number above nothing; one, unless said.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The gain is not a finite number above nothing.</exception>
+    public Orthogonal(double gain = 1)
+    {
+        Gain = double.IsFinite(gain) && gain > 0
+            ? gain
+            : throw new ArgumentOutOfRangeException(nameof(gain), gain, "A gain is a finite number above nothing.");
+    }
+
+    /// <summary>What the matrix is multiplied by.</summary>
+    public double Gain { get; }
+
+    /// <inheritdoc />
+    /// <exception cref="ArgumentException">The slot has not two axes.</exception>
+    protected override Tensor Drawn(Shape shape, Fans fans, Draws draws)
+    {
+        if (shape.Rank != 2)
+        {
+            throw new ArgumentException($"An orthogonal start is a matrix, and a slot of {shape} is not one.", nameof(shape));
+        }
+
+        int rows = shape[0], columns = shape[1];
+        int length = Math.Max(rows, columns), width = Math.Min(rows, columns);
+        var vectors = new double[width][];
+
+        // The columns of a matrix of normal numbers, as many rows long as the longer side.
+        for (var column = 0; column < width; column++)
+        {
+            vectors[column] = new double[length];
+        }
+
+        for (var row = 0; row < length; row++)
+        {
+            for (var column = 0; column < width; column++)
+            {
+                vectors[column][row] = draws.NextNormal();
+            }
+        }
+
+        for (var column = 0; column < width; column++)
+        {
+            // Twice is enough: one pass leaves what rounding left of the columns before it, and a second takes it out.
+            for (var pass = 0; pass < 2; pass++)
+            {
+                for (var before = 0; before < column; before++)
+                {
+                    var dot = 0d;
+
+                    for (var at = 0; at < length; at++)
+                    {
+                        dot += vectors[column][at] * vectors[before][at];
+                    }
+
+                    for (var at = 0; at < length; at++)
+                    {
+                        vectors[column][at] -= dot * vectors[before][at];
+                    }
+                }
+            }
+
+            var norm = Math.Sqrt(vectors[column].Sum(value => value * value));
+
+            for (var at = 0; at < length; at++)
+            {
+                vectors[column][at] /= norm;
+            }
+        }
+
+        var values = new float[rows * columns];
+
+        for (var row = 0; row < rows; row++)
+        {
+            for (var column = 0; column < columns; column++)
+            {
+                // More rows than columns: the matrix as it is. More columns than rows: its transpose.
+                values[(row * columns) + column] = (float)(Gain * (rows >= columns ? vectors[column][row] : vectors[row][column]));
+            }
+        }
+
+        return Tensor.From(shape, values);
+    }
+}
+
+/// <summary>One, everywhere.</summary>
+public sealed class Ones : Initialiser
+{
+    /// <inheritdoc />
+    protected override Tensor Drawn(Shape shape, Fans fans, Draws draws) => Filled(shape, () => 1d);
+}
+
+/// <summary>The same number, everywhere: Keras's <c>Constant</c>.</summary>
+public sealed class Constant : Initialiser
+{
+    /// <summary>A start at the given number.</summary>
+    /// <param name="value">The number.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a finite number.</exception>
+    public Constant(double value) => Value = RequireMean(value);
+
+    /// <summary>The number.</summary>
+    public double Value { get; }
+
+    /// <inheritdoc />
+    protected override Tensor Drawn(Shape shape, Fans fans, Draws draws) => Filled(shape, () => Value);
 }

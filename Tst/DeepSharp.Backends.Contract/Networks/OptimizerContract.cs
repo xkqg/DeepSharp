@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Text.Json;
 using DeepSharp.Networks;
 using DeepSharp.Tensors;
 using DeepSharp.Tests.Networks;
@@ -17,6 +18,13 @@ public abstract class OptimizerContract(ITensorBackend engine)
 {
     private readonly ITensorBackend _backend = engine;
 
+    // What PyTorch's optimizers do with the options beyond their defaults, on the walked rows: Fixtures/optimizers-options-pytorch.py.
+    private static readonly JsonElement Options = JsonDocument
+        .Parse(File.ReadAllText(Path.Join(Repository.Root, "Tst", "DeepSharp.Backends.Contract", "Networks", "Fixtures", "optimizers-options-pytorch.json")))
+        .RootElement.GetProperty("walks");
+
+    public static TheoryData<string> OptionWalks { get; } = [.. Options.EnumerateArray().Select(each => each.GetProperty("name").GetString()!)];
+
     [Fact]
     public void Adam_OverThreeStepsOnTitanicsPassengers_MovesEveryParameterAsPyTorchsAdamDoes()
     {
@@ -29,8 +37,8 @@ public abstract class OptimizerContract(ITensorBackend engine)
 
         Assert.Equal(0.6452890634536743, first, AgreementContract.Bound(WalkedRows.SurvivedLossTermsSize()));
         AssertClose([-0.30000001192092896, 0.20999999344348907, 0.009999997913837433, -0.20000000298023224], output.Weight.Value);
-        AssertClose([0.21000000834465027], output.Bias.Value);
-        AssertClose([0.10000000149011612, -0.09000000357627869, 0.05000000074505806, 0.0], hidden.Bias.Value);
+        AssertClose([0.21000000834465027], output.Bias!.Value);
+        AssertClose([0.10000000149011612, -0.09000000357627869, 0.05000000074505806, 0.0], hidden.Bias!.Value);
         Assert.Equal(-0.25f, hidden.Weight.Value.Values[0]);
 
         var second = Stepped(network, adam, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived());
@@ -60,7 +68,7 @@ public abstract class OptimizerContract(ITensorBackend engine)
         Stepped(network, sgd, new MeanSquaredError(), WalkedRows.Days(), WalkedRows.Returns());
 
         AssertClose([-0.19669635593891144, -0.0012824939331039786, 0.19956445693969727], output.Weight.Value);
-        AssertClose([-0.003436941420659423], output.Bias.Value);
+        AssertClose([-0.003436941420659423], output.Bias!.Value);
 
         var second = Stepped(network, sgd, new MeanSquaredError(), WalkedRows.Days(), WalkedRows.Returns());
 
@@ -89,8 +97,8 @@ public abstract class OptimizerContract(ITensorBackend engine)
 
         Assert.Equal(0.6452890634536743, first, AgreementContract.Bound(WalkedRows.SurvivedLossTermsSize()));
         AssertClose([-0.2997000217437744, 0.20979999005794525, 0.009999997913837433, -0.19979999959468842], output.Weight.Value);
-        AssertClose([0.20980000495910645], output.Bias.Value);
-        AssertClose([0.09989999979734421, -0.08990000188350677, 0.049949999898672104, 0.0], hidden.Bias.Value);
+        AssertClose([0.20980000495910645], output.Bias!.Value);
+        AssertClose([0.09989999979734421, -0.08990000188350677, 0.049949999898672104, 0.0], hidden.Bias!.Value);
         AssertClose([-0.24975000321865082, -0.10989999771118164, 0.049949999898672104, 0.19979999959468842], Slice(hidden.Weight.Value, 0));
 
         Assert.Equal(0.6404612064361572, Stepped(network, adamW, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived()), 1e-6);
@@ -118,7 +126,7 @@ public abstract class OptimizerContract(ITensorBackend engine)
 
         Assert.Equal(0.6452890634536743, first, AgreementContract.Bound(WalkedRows.SurvivedLossTermsSize()));
         AssertClose([-0.30000001192092896, 0.2099999338388443, 0.00999999325722456, -0.20000000298023224], output.Weight.Value);
-        AssertClose([0.20999999344348907], output.Bias.Value);
+        AssertClose([0.20999999344348907], output.Bias!.Value);
 
         Assert.Equal(0.6404138207435608, Stepped(network, rmsProp, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived()), 1e-6);
         AssertClose([-0.30000001192092896, 0.21829022467136383, 0.01705736666917801, -0.20000000298023224], output.Weight.Value);
@@ -127,7 +135,7 @@ public abstract class OptimizerContract(ITensorBackend engine)
         Assert.Equal(0.635928213596344, Stepped(network, rmsProp, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived()), 1e-6);
         AssertClose([-0.30000001192092896, 0.22579747438430786, 0.023344002664089203, -0.20000000298023224], output.Weight.Value);
         AssertClose([0.22270770370960236], output.Bias.Value);
-        AssertClose([0.10000000149011612, -0.07363978028297424, 0.0686170905828476, 0.0], hidden.Bias.Value);
+        AssertClose([0.10000000149011612, -0.07363978028297424, 0.0686170905828476, 0.0], hidden.Bias!.Value);
         AssertClose([0.10000000149011612, 0.22363977134227753, -0.16861708462238312, 0.0], Slice(hidden.Weight.Value, 4));
         AssertClose([0.0, 0.17318235337734222, -0.231388658285141, -0.10000000149011612], Slice(hidden.Weight.Value, 28));
     }
@@ -147,12 +155,12 @@ public abstract class OptimizerContract(ITensorBackend engine)
 
         Assert.Equal(0.6404138207435608, Stepped(network, rmsProp, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived()), 1e-6);
         AssertClose([-0.30000001192092896, 0.22729015350341797, 0.02605736255645752, -0.20000000298023224], output.Weight.Value);
-        AssertClose([0.22601503133773804], output.Bias.Value);
+        AssertClose([0.22601503133773804], output.Bias!.Value);
 
         Assert.Equal(0.6302587389945984, Stepped(network, rmsProp, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived()), 1e-6);
         AssertClose([-0.30000001192092896, 0.25123223662376404, 0.04674419015645981, -0.20000000298023224], output.Weight.Value);
         AssertClose([0.24600830674171448], output.Bias.Value);
-        AssertClose([0.10000000149011612, -0.051209475845098495, 0.07831361889839172, 0.0], hidden.Bias.Value);
+        AssertClose([0.10000000149011612, -0.051209475845098495, 0.07831361889839172, 0.0], hidden.Bias!.Value);
         AssertClose([-0.25, -0.14844974875450134, 0.021686876192688942, 0.20000000298023224], Slice(hidden.Weight.Value, 0));
         AssertClose([0.0, 0.18850119411945343, -0.2216913402080536, -0.10000000149011612], Slice(hidden.Weight.Value, 28));
     }
@@ -169,7 +177,7 @@ public abstract class OptimizerContract(ITensorBackend engine)
 
         Assert.Equal(0.6452890634536743, first, AgreementContract.Bound(WalkedRows.SurvivedLossTermsSize()));
         AssertClose([-0.30000001192092896, 0.2105645090341568, 0.010564515367150307, -0.20000000298023224], output.Weight.Value);
-        AssertClose([0.210564523935318], output.Bias.Value);
+        AssertClose([0.210564523935318], output.Bias!.Value);
 
         Assert.Equal(0.64013671875, Stepped(network, nadam, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived()), 1e-6);
         AssertClose([-0.30000001192092896, 0.2196127325296402, 0.01836865209043026, -0.20000000298023224], output.Weight.Value);
@@ -178,7 +186,7 @@ public abstract class OptimizerContract(ITensorBackend engine)
         Assert.Equal(0.6349390745162964, Stepped(network, nadam, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived()), 1e-6);
         AssertClose([-0.30000001192092896, 0.22891035676002502, 0.02621779777109623, -0.20000000298023224], output.Weight.Value);
         AssertClose([0.2255161851644516], output.Bias.Value);
-        AssertClose([0.10000000149011612, -0.0707540288567543, 0.07057595998048782, 0.0], hidden.Bias.Value);
+        AssertClose([0.10000000149011612, -0.0707540288567543, 0.07057595998048782, 0.0], hidden.Bias!.Value);
         AssertClose([-0.25, -0.12895378470420837, 0.029424497857689857, 0.20000000298023224], Slice(hidden.Weight.Value, 0));
         AssertClose([0.0, 0.17604176700115204, -0.22942867875099182, -0.10000000149011612], Slice(hidden.Weight.Value, 28));
     }
@@ -259,6 +267,99 @@ public abstract class OptimizerContract(ITensorBackend engine)
 
         Assert.Equal(adam, adamW);
     }
+
+    [Theory]
+    [MemberData(nameof(OptionWalks), MemberType = typeof(OptimizerContract))]
+    public void AnOptionOfAnOptimizer_MovesEveryParameterStepForStep_AsPyTorchsOptimizerDoes(string name)
+    {
+        var walk = Options.EnumerateArray().Single(each => each.GetProperty("name").GetString() == name);
+        var hidden = new Dense(WalkedRows.HiddenWeights(), WalkedRows.HiddenBias());
+        var output = new Dense(WalkedRows.OutputWeights(), WalkedRows.OutputBias());
+        var network = new LayerStack(hidden, new Relu(), output);
+        var optimizer = OptimizerOf(walk);
+        var losses = walk.GetProperty("losses").EnumerateArray().Select(loss => loss.GetDouble()).ToArray();
+
+        for (var step = 0; step < losses.Length; step++)
+        {
+            var loss = Stepped(network, optimizer, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived());
+
+            Assert.Equal(losses[step], loss, step == 0 ? AgreementContract.Bound(WalkedRows.SurvivedLossTermsSize()) : 1e-6);
+        }
+
+        var parameters = walk.GetProperty("parameters");
+
+        AssertClose(Doubles(parameters, "hidden.weight"), hidden.Weight.Value);
+        AssertClose(Doubles(parameters, "hidden.bias"), hidden.Bias!.Value);
+        AssertClose(Doubles(parameters, "output.weight"), output.Weight.Value);
+        AssertClose(Doubles(parameters, "output.bias"), output.Bias!.Value);
+    }
+
+    [Fact]
+    public void TheNewOptions_AreOffUnlessSaid_AndAnOptimizerWithoutThemStepsAsItDid_BitForBit()
+    {
+        Assert.Equal(0, new Sgd().WeightDecay);
+        Assert.Equal(0, new Sgd().Dampening);
+        Assert.False(new Sgd().Nesterov);
+        Assert.Equal(0, new Adam().WeightDecay);
+        Assert.False(new Adam().AmsGrad);
+        Assert.False(new AdamW().AmsGrad);
+        Assert.Equal(0, new RmsProp().WeightDecay);
+        Assert.False(new RmsProp().Centered);
+        Assert.Equal(0, new Nadam().WeightDecay);
+        Assert.Equal(Walked(new Adam(0.01)), Walked(new Adam(0.01) { WeightDecay = 0, AmsGrad = false }));
+        Assert.Equal(Walked(new Sgd(0.1) { Momentum = 0.9 }), Walked(new Sgd(0.1) { Momentum = 0.9, Dampening = 0, Nesterov = false, WeightDecay = 0 }));
+        Assert.Equal(Walked(new RmsProp(0.001)), Walked(new RmsProp(0.001) { WeightDecay = 0, Centered = false }));
+    }
+
+    [Theory]
+    [InlineData(0, 0.0)]
+    [InlineData(0.9, 0.1)]
+    public void NesterovsMomentum_NeedsAMomentumAndNoDampening_AsPyTorchHasIt(double momentum, double dampening)
+    {
+        var network = new LayerStack(new Dense(1, 1, new RandomStream(1).Draw("initialise:test", 0, 0)));
+        var sgd = new Sgd(0.1) { Momentum = momentum, Dampening = dampening, Nesterov = true };
+
+        Assert.Contains("Nesterov", Assert.Throws<ArgumentException>(() => network.Compile(sgd, new MeanSquaredError())).Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(1.5)]
+    [InlineData(double.NaN)]
+    public void ADampeningOutsideNothingToOne_IsRefused(double wrong) =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Sgd { Dampening = wrong });
+
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void ADecayBelowNothingOrNoFiniteNumber_IsRefused_OnEveryOptimizerThatAddsItToTheGradient(double wrong)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Sgd { WeightDecay = wrong });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Adam { WeightDecay = wrong });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RmsProp { WeightDecay = wrong });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Nadam { WeightDecay = wrong });
+    }
+
+    private static Optimizer OptimizerOf(JsonElement walk)
+    {
+        var rate = walk.GetProperty("rate").GetDouble();
+        var settings = walk.GetProperty("settings");
+        var number = (string key) => settings.TryGetProperty(key, out var written) ? written.GetDouble() : 0.0;
+        var yes = (string key) => settings.TryGetProperty(key, out var written) && written.GetBoolean();
+        var betas = settings.TryGetProperty("betas", out var pair) ? new Betas(pair[0].GetDouble(), pair[1].GetDouble()) : new Betas(0.9, 0.999);
+
+        return walk.GetProperty("optimizer").GetString() switch
+        {
+            "sgd" => new Sgd(rate) { Momentum = number("momentum"), WeightDecay = number("weightDecay"), Dampening = number("dampening"), Nesterov = yes("nesterov") },
+            "adam" => new Adam(rate) { Betas = betas, WeightDecay = number("weightDecay"), AmsGrad = yes("amsgrad") },
+            "adamw" => new AdamW(rate) { Betas = betas, WeightDecay = number("weightDecay"), AmsGrad = yes("amsgrad") },
+            "rmsprop" => new RmsProp(rate) { Momentum = number("momentum"), WeightDecay = number("weightDecay"), Centered = yes("centered") },
+            _ => new Nadam(rate) { WeightDecay = number("weightDecay") },
+        };
+    }
+
+    private static double[] Doubles(JsonElement written, string key) => [.. written.GetProperty(key).EnumerateArray().Select(value => value.GetDouble())];
 
     // One training step: the batch forward through a recording backend, the loss, its gradients, and the optimizer's step.
     private double Stepped(Network network, Optimizer optimizer, Loss loss, Tensor rows, Tensor answers)

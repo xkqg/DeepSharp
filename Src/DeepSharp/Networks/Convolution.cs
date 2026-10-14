@@ -37,7 +37,18 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
     /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
     public Conv2D(Channels channels, Window window, Draws draws)
-        : base(Taking(new PlaneWalk(window), channels), draws) => Window = window;
+        : this(channels, window, new Beginning(draws))
+    {
+    }
+
+    /// <summary>A convolution of channels in groups, that starts as it is told to.</summary>
+    /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
+    /// <param name="window">The patch, and how it walks.</param>
+    /// <param name="beginning">The draws its start is taken from, and how its kernel and its bias start — or that it has no bias.</param>
+    /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere, or the beginning wants no bias and says how it starts.</exception>
+    /// <exception cref="ArgumentNullException">The beginning holds no draws.</exception>
+    public Conv2D(Channels channels, Window window, Beginning beginning)
+        : base(Taking(new PlaneWalk(window), channels), beginning) => Window = window;
 
     /// <summary>A convolution that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values, channels in included, by as many columns as channels out.</param>
@@ -47,7 +58,7 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
     /// The kernel is not a matrix whose rows are the window's places times a whole number of channels, the bias is not as long
     /// as the kernel is wide, or the window cannot stand anywhere.
     /// </exception>
-    public Conv2D(Tensor kernel, Tensor bias, Window window)
+    public Conv2D(Tensor kernel, Tensor? bias, Window window)
         : base(Taking(new PlaneWalk(window), null), kernel, bias) => Window = window;
 
     /// <summary>A convolution of channels in groups, that starts at the given kernel and bias.</summary>
@@ -56,7 +67,7 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
     /// <param name="window">The patch, and how it walks.</param>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window cannot stand anywhere.</exception>
-    public Conv2D(Tensor kernel, Tensor bias, Window window, Channels channels)
+    public Conv2D(Tensor kernel, Tensor? bias, Window window, Channels channels)
         : base(Taking(new PlaneWalk(window), channels), kernel, bias) => Window = window;
 
     /// <summary>The patch, and how it walks.</summary>
@@ -72,18 +83,13 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
         ArgumentNullException.ThrowIfNull(rebuilding);
 
         return new(
-            new Channels
-            {
-                In = rebuilding.Whole(settings, "inChannels"),
-                Out = rebuilding.Whole(settings, "outChannels"),
-                Groups = rebuilding.Whole(settings, "groups", 1),
-            },
+            ChannelsIn(settings, rebuilding),
             rebuilding.Window2DIn(settings),
-            rebuilding.Draws);
+            BeginningIn(settings, rebuilding));
     }
 
     /// <inheritdoc />
-    public int FileVersion => Groups == 1 ? Window.FileVersion : NetworkDocument.FourthVersion;
+    public int FileVersion => SavedAs(Groups == 1 ? Window.FileVersion : NetworkDocument.FourthVersion);
 
     /// <inheritdoc />
     /// <remarks>
@@ -94,14 +100,7 @@ public sealed class Conv2D : Convolution, ISaved<Conv2D>
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        writer.WriteNumber("inChannels", InChannels);
-        writer.WriteNumber("outChannels", OutChannels);
-
-        if (Groups != 1)
-        {
-            writer.WriteNumber("groups", Groups);
-        }
-
+        WriteChannels(writer);
         writer.WriteWindow(Window);
     }
 }

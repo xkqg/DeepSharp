@@ -92,6 +92,11 @@ internal sealed class KerasSettings
             ? [.. Enumerable.Repeat(number.GetInt32(), count)]
             : Axes(key, count);
 
+    /// <summary>The settings written under a key as an object of their own, noted at the place these stand; none where the key says nothing.</summary>
+    /// <param name="key">The setting.</param>
+    /// <returns>The settings under it.</returns>
+    public KerasSettings Within(string key) => new(Said(key) ?? None, _place, _faults);
+
     /// <summary>Notes a fault at the place these settings stand.</summary>
     public void Refuse(string fault) => _faults.Add($"{_place.Quoted()}: {fault}");
 

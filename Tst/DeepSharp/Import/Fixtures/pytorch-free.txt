@@ -1,0 +1,13 @@
+torch 2.14.1+cpu, safetensors 0.8.0, numpy 2.5.3, Python 3.14.7
+rows: [6, 2] outputs 0.00992551 0.18915382 0.01903816 0.21222953 -0.00938547 0.15539297 0.00729529 0.18374318 0.02195437 0.24163908 0.01991257 0.21315087 ...
+free-rows.safetensors: {"__metadata__": {"format": "pt"}, "0.weight": {"dtype": "F32", "shape": [4, 5], "data_offsets": [0, 80]}, "2.weight": {"dtype": "F32", "shape": [3, 4], "data_offsets": [80, 128]}, "3.weight": {"dtype": "F32", "shape": [3], "data_offsets": [128, 140]}, "5.bias": {"dtype": "F32", "shape": [2], "data_offsets": [140, 148]}, "5.weight": {"dtype": "F32", "shape": [2, 3], "data_offsets": [148, 172]}}
+free-rows.pt: torch.load(weights_only=True) reads ['0.weight', '2.weight', '3.weight', '5.weight', '5.bias']; the same bits as saved: True
+images: [6, 2] outputs -0.40091428 1.54588282 -1.19220042 0.18008587 -1.10425770 1.57470334 0.41219079 0.54411244 -1.76835299 0.55558157 -0.92660111 0.41365200 ...
+free-images.safetensors: {"__metadata__": {"format": "pt"}, "0.weight": {"dtype": "F32", "shape": [4, 2, 3, 3], "data_offsets": [0, 288]}, "2.weight": {"dtype": "F32", "shape": [4, 3, 2, 2], "data_offsets": [288, 480]}, "4.bias": {"dtype": "F32", "shape": [2], "data_offsets": [480, 488]}, "4.weight": {"dtype": "F32", "shape": [2, 75], "data_offsets": [488, 1088]}}
+free-images.pt: torch.load(weights_only=True) reads ['0.weight', '2.weight', '4.weight', '4.bias']; the same bits as saved: True
+series: [6, 2] outputs -0.13984583 0.09973118 -0.43395609 0.25055388 -0.18065181 0.20690820 -0.08618283 0.20919225 -0.32300913 0.22130316 -0.20090307 -0.15848158 ...
+free-series.safetensors: {"__metadata__": {"format": "pt"}, "0.weight": {"dtype": "F32", "shape": [4, 2, 3], "data_offsets": [0, 96]}, "2.weight": {"dtype": "F32", "shape": [4, 3, 2], "data_offsets": [96, 192]}, "4.bias": {"dtype": "F32", "shape": [2], "data_offsets": [192, 200]}, "4.weight": {"dtype": "F32", "shape": [2, 24], "data_offsets": [200, 392]}}
+free-series.pt: torch.load(weights_only=True) reads ['0.weight', '2.weight', '4.weight', '4.bias']; the same bits as saved: True
+volume: [6, 2] outputs -0.62555695 1.27132678 0.51170284 0.07215485 0.52649277 0.73275256 0.17884481 0.94262373 -0.46051729 0.95701814 -0.48102915 0.86243463 ...
+free-volume.safetensors: {"__metadata__": {"format": "pt"}, "0.weight": {"dtype": "F32", "shape": [3, 2, 2, 2, 2], "data_offsets": [0, 192]}, "2.weight": {"dtype": "F32", "shape": [3, 2, 2, 2, 2], "data_offsets": [192, 384]}, "4.bias": {"dtype": "F32", "shape": [2], "data_offsets": [384, 392]}, "4.weight": {"dtype": "F32", "shape": [2, 128], "data_offsets": [392, 1416]}}
+free-volume.pt: torch.load(weights_only=True) reads ['0.weight', '2.weight', '4.weight', '4.bias']; the same bits as saved: True

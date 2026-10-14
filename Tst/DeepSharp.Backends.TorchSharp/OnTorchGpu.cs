@@ -21,6 +21,10 @@ public sealed class CompositionTests() : CompositionContract(Card.First());
 
 public sealed class DenseTests() : DenseContract(Card.First());
 
+public sealed class BeginningTests() : BeginningContract(Card.First());
+public sealed class RunOptionsTests() : RunOptionsContract(Card.First());
+public sealed class RulesTests() : RulesContract(Card.First());
+
 public sealed class DropoutTests() : DropoutContract(Card.First());
 
 public sealed class ConvolutionTests() : ConvolutionContract(Card.First());

@@ -1,0 +1,9 @@
+torch 2.14.1+cpu, onnx 1.23.2, onnxscript 0.7.2, numpy 2.5.3, Python 3.14.7
+onnx-free-rows: 7703 bytes; opset 20; Gemm(2) Relu(1) Gemm(2) LayerNormalization(2) Tanh(1) Gemm(3)
+onnx-free-rows-torchscript: 973 bytes; opset 20; MatMul(2) Relu(1) MatMul(2) Constant LayerNormalization(3) Tanh(1) Gemm(3)
+onnx-free-images: 7097 bytes; opset 20; Conv(2) Relu(1) ConvTranspose(2) Reshape(2) Gemm(3)
+onnx-free-images-torchscript: 1838 bytes; opset 20; Conv(2) Relu(1) ConvTranspose(2) Flatten(1) Gemm(3)
+onnx-free-series: 7089 bytes; opset 20; Conv(2) Relu(1) ConvTranspose(2) Reshape(2) Gemm(3)
+onnx-free-series-torchscript: 1110 bytes; opset 20; Conv(2) Relu(1) ConvTranspose(2) Flatten(1) Gemm(3)
+onnx-free-volume: 7288 bytes; opset 20; Conv(2) Relu(1) ConvTranspose(2) Reshape(2) Gemm(3)
+onnx-free-volume-torchscript: 2195 bytes; opset 20; Conv(2) Relu(1) ConvTranspose(2) Flatten(1) Gemm(3)

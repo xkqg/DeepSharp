@@ -66,7 +66,7 @@ public abstract class DenseContract(ITensorBackend engine)
         var dense = new Dense(14, 16, new RandomStream(42).Draw("initialise:0", 0, 0));
 
         Assert.Equal(new Shape(14, 16), dense.Weight.Value.Shape);
-        Assert.Equal(new Shape(16), dense.Bias.Value.Shape);
+        Assert.Equal(new Shape(16), dense.Bias!.Value.Shape);
         Assert.All(dense.Weight.Value.Values.ToArray(), value => Assert.InRange(value, -0.267261f, 0.267261f));
         Assert.All(dense.Bias.Value.Values.ToArray(), value => Assert.InRange(value, -0.267261f, 0.267261f));
         Assert.Contains(dense.Bias.Value.Values.ToArray(), value => value != 0);
@@ -87,7 +87,7 @@ public abstract class DenseContract(ITensorBackend engine)
         var again = new Dense(14, 16, new RandomStream(42).Draw("initialise:0", 0, 0));
 
         Assert.Equal(first.Weight.Value.Values.ToArray(), again.Weight.Value.Values.ToArray());
-        Assert.Equal(first.Bias.Value.Values.ToArray(), again.Bias.Value.Values.ToArray());
+        Assert.Equal(first.Bias!.Value.Values.ToArray(), again.Bias!.Value.Values.ToArray());
     }
 
     [Fact]

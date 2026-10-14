@@ -100,7 +100,6 @@ public class PlaceOnACircleTests
         var catalog = StepCatalog.BuiltIn();
 
         Assert.Equal(1, catalog.Describe("feature.cyclical").Since);
-        Assert.Equal(PipelineDeclaration.Version, catalog.Describe("feature.cycle").Since);
         Assert.Equal(8, catalog.Describe("feature.cycle").Since);
     }
 

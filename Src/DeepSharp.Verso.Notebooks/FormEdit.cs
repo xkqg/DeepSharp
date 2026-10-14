@@ -297,7 +297,8 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
 
         var kind = parameter.Kinds.FirstOrDefault(each => each.Name == holding["kind"]?.GetValue<string>());
 
-        if (kind?.Setting(setting) is null || holding[setting] is not JsonValue held)
+        // A setting the part leaves out is drawn at what leaving it out means, and a change to it writes it in as that kind of value.
+        if (kind?.Setting(setting) is null || (holding[setting] ?? kind.Declared().AsJson()[setting]) is not JsonValue held)
         {
             return false;
         }

@@ -8,8 +8,9 @@ written down here is not a decision, it is a habit.
 ```
 Src/DeepSharp/Tensors/            the engine side: Shape, Tensor and the TensorStorage its values live on, Window,
                                   Window1D and Window3D and the border each pads with, ITensorBackend and what it refuses
-                                  (TensorOperandExtensions), the version and the device an engine names
-                                  (INamesItsVersionAndDevice), CpuBackend, and the RecordingBackend gradients are worked
+                                  (TensorOperandExtensions), the larger, the smaller and a value held between two bounds,
+                                  made of the seam's own operations (TensorSelectionExtensions), the version and the
+                                  device an engine names (INamesItsVersionAndDevice), CpuBackend, and the RecordingBackend gradients are worked
                                   out through
 Src/DeepSharp/Networks/           the model side
     Layer.cs Slots.cs Pass.cs Network.cs
@@ -22,11 +23,16 @@ Src/DeepSharp/Networks/           the model side
     TransposedConvolutions.cs AdaptivePooling.cs Padding.cs
                                     the convolutions that give back the places an ordinary one takes away, the poolings
                                     to a size rather than by a window, and the layers that only pad
-    SpatialWalk.cs WindowSettings.cs
+    SpatialWalk.cs WindowSettings.cs FillingExtensions.cs
                                     a window along one, two or three axes as the one thing a convolution and a pooling
-                                    walk, and how a window is written to a network's file and read back
-    Initialisers.cs RandomStream.cs Philox.cs Draws.cs
-                                    what a layer starts at, and the one source every draw is counted from
+                                    walk, how a window is written to a network's file and read back, and which place of
+                                    the example fills each place a padding adds
+    Beginning.cs Initialisers.cs RandomStream.cs Philox.cs Draws.cs
+                                    how a layer begins and whether it has a bias, what its numbers start at, and the one
+                                    source every draw is counted from
+    SlotRules.cs SequentialRules.cs
+                                    the penalty, the bound and the hold a parameter can carry, and the words that put
+                                    them on a layer
     Losses.cs Optimizers.cs LearningRateSchedules.cs
                                     what is brought down, what moves the parameters, how the rate changes
     Sequential.cs SequentialSpatial.cs
@@ -816,6 +822,22 @@ its border at each end is the fourth; everything else — a network, a checkpoin
 that says none of those — is still the second, which 0.8.0 reads. That is per instance and never per kind: the same
 convolution is the second version or the fourth according to the window it is given. A new kind of layer, of loss or of
 optimizer needs no new number either way: it is a name, and a library that does not know the name refuses it by name.
+
+The ninth version is the same rule applied to a different thing: a setting may be left out of a part. A declared network
+is a list of named parts and every setting a name takes was written, so a file that left one out was refused. The settings
+this release adds each have a meaning for being left out, which is what the layer or the run did before the setting
+existed — a dense layer with its bias, a normalisation with its scale and its shift, an optimizer with no weight decay, a
+run that clips no value — and a setting with such a meaning is optional in the file, is filled in with it when the file is
+read, and is not written when it holds it. A pipeline that says none of them writes what it wrote before, but for its
+number, and 0.9.0 refuses a file of the ninth whole, naming the version. The network's file is the same rule one rung up.
+A part that says something the fourth version could not — a layer without a bias, a scale or a shift; a padding that fills
+its places from the example; a number that carries a penalty or a bound, or is held still; an optimizer with a weight
+decay, dampening, Nesterov's momentum, AMSGrad or the centred form; a run that clips each value, steps once every several
+batches or keeps an average — is the fifth, which 0.9.0 refuses by its number. Everything else is written as it was, so a
+file 0.9.0 wrote is read, written again and served as it was, and the repository holds files the published 0.9.0 packages
+wrote for a test to hold every release after it to that. It is per instance, as the fourth was: the same dense layer is the
+second version or the fifth by what it was told, and the training part is as high as the highest of what its run, its
+optimizer and its schedule say.
 
 ### The share you never write down
 
@@ -2395,7 +2417,7 @@ statistics included.
 ### The layers start and work as PyTorch's do
 
 A dense layer's and a convolution's weights start uniform by their fan-in with a slope of √5 and their biases uniform
-within one over the square root of it — PyTorch's pair, whole; Glorot's and zeros can be named. A dense layer keeps its
+within one over the square root of it — PyTorch's pair, whole; any other start is named by a `Beginning`, below. A dense layer keeps its
 weights as inputs by outputs, the other way round from PyTorch, so its product needs no transpose. Dropout scales what
 it keeps, so an evaluation pass lets everything through unchanged, and it refuses to leave out every value, where
 PyTorch hands back zeros. Batch and layer normalisation work over the last axis, and batch normalisation's momentum is
@@ -2434,6 +2456,50 @@ What still works as PyTorch's is how a batch normalisation trains: its running v
 counted over one row fewer, where Keras counts it over every row. After one training batch of 96 places its running mean
 came within 1.9e−9 of Keras's and its running variance lay up to 8.4e−4 above it — that count's difference, to within
 1.9e−8.
+
+### A layer begins with one value, and a layer may have no bias
+
+A layer's start grew four questions at once — how the weights start, how the bias starts, whether there is a bias at all,
+and which draws it all comes from — and they travel as one value, `Beginning`, which takes the seat `Draws` had in every
+constructor. That is not a taste: every layer's constructor that takes draws was already at the four parameters a method is
+allowed, and the transposed convolutions are at four with `Draws` in that seat and would have been at six with the settings
+beside it. `new Beginning(draws)` means what the draws alone always meant — the weights evenly within one over the root of the
+inputs they are read against, then the bias within the same — and saying more changes only what is said. The weights are
+drawn first and the bias second whatever starts them, so a layer that changes how its bias starts starts its weights where
+they started, and a layer without a bias draws nothing for it. The constructors that take draws stay beside the new ones, so
+no layer written for 0.9.0 stops compiling and packing against it needs no accepted difference; what changed is that the bias
+of a dense layer and of a convolution is a `Parameter?`, which the changelog names. The settings are split by whose they are
+rather than bundled in one record of five: how a layer starts is the layer's, and a penalty, a bound and a hold are the
+parameter's, below. Two names were tried and failed on the compiler — a type called `Bias` collides with the member of the
+same name inside the layers, and `Start` with the warm-up schedule's — which is why the type says what it is of.
+
+There are nine ways to start. PyTorch's `KaimingUniform` and `FanInUniform` are what a layer starts at unless it says
+otherwise; Keras's are `GlorotUniform` and `Zeros`; there are also `Ones`, a `Constant`, a `Normal` draw around nought with a
+deviation of five hundredths, a `TruncatedNormal` one that is redrawn beyond two deviations as Keras redraws it, and an
+`Orthogonal` matrix, worked out from normal draws by Gram–Schmidt twice in double. A start that needs no number of its own is
+a word a declared network can say; a constant, or a deviation of one's own, is code. Neither vocabulary's habit is imposed
+on the other. A dense layer in Keras's words starts as PyTorch's does, as it did, because a changed default would change the
+numbers of every network written before, and a test holds the numbers a layer starts at to what 0.9.0 gave; Keras's own
+start, Glorot's weights and a bias of noughts, is asked for with a `Beginning` in code, or in a declaration with `weights`
+and `biasStart`. A start never reaches a file: a file holds the numbers a layer learned, not how it began, and a layer read
+from one is begun with the draws it is handed and then given the file's numbers. What a file does say is that there is no
+bias, since the slot is then not there to be given numbers: `"bias": false`, and only then.
+
+A normalisation may keep no scale or no shift for the same reason, `Affine` with its `WithoutScale` and `WithoutShift` —
+Keras's `scale` and `center` false, and both left out is PyTorch's `affine=False`. A slot that is not there has no path, so
+no slot is renamed: the path that is a slot's identity in a file's key, in a checkpoint's slots and in a checkpoint's memory
+stays what it was for every layer that has it, and a file with a slot a layer does not have, or without one it has, is
+refused by name as it always was. A declared dense layer takes `bias`, `weights` and `biasStart`, a declared normalisation
+`scale` and `shift`, each optional with its meaning for being left out; `bias` false beside a `biasStart` is refused where
+the step is made, since a layer cannot start a bias it has not got.
+
+The readers retire the refusals that named this. Keras's `use_bias`, `center` and `scale` are read; a separable convolution's
+first stage never has a bias, since Keras adds its one after both stages — it was given a bias of noughts before, and a
+network read so now has one slot fewer; ONNX's `Gemm` that names no `C`, a `MatMul` no `Add` comes after, and a `Conv`,
+`ConvTranspose` and `LayerNormalization` without a bias are read; and the PyTorch reader needed no change at all, because the
+slots a layer lists decide the layout of its numbers and a layer without a bias lists none, which files made with PyTorch for
+rows, images, series and a volume, as safetensors and as `.pt`, hold it to. A model of each kind, made by the framework itself,
+answers as that framework does, to the roundings the other readers are held to.
 
 ### A series, a volume and a pooling stand on the unfolding an image has
 
@@ -2532,6 +2598,27 @@ refused: a gather, which the matrix product it would feed already is, and a batc
 every engine write a loop the library can write once. **Nothing was added to the public tensor seam for any layer this
 release adds** — every one of them is the unfolding and its fold, a matrix product, a reshape and the first-largest step.
 
+### A padding can take its places from the example
+
+A padding added places of nothing or of one value, and a signal is often padded with itself. `Filling` says how a layer that
+only pads fills what it adds: with a constant, which is what it always did; by mirroring the example without repeating its
+edge, PyTorch's `reflect`; by repeating the edge, `replicate`; or by going round, `circular`. It is written to a file as the
+key `border` only when it is not the constant, so a padding that fills as it always did is written as it was. The three are one
+rule at one site. `ISpatialWalk.FilledFrom` takes each axis in turn and asks the filling which place of the example fills each
+place of the padded axis, as a matrix of ones and noughts, and multiplies by it — a product and two turns, which every engine
+already has — so the seam grew by nothing and every value is the example's own, copied; the gradient is the matrix turned
+round, so a place copied twice receives the sum of what its copies did. A mirror needs a padding of at most the length less
+one and a wrap of at most the length, as PyTorch has it, and a padding beyond that is refused by name when the layer is shown
+an example; repeating has no limit. A value beside a filling other than the constant is refused, because a value is the
+constant's. Values and gradients of the three, over a series, an image and a volume, were matched to PyTorch's own on the light
+engine, the native one and libtorch.
+
+ONNX's `Pad` is read as these: `reflect` is a mirror, `edge` a repeat and `wrap` a wrap — wrap from opset 19, where ONNX has
+it — the value input is ignored by every mode but the constant, as ONNX has it, and a mode ONNX does not have is refused
+naming the four it does. PyTorch's default exporter writes them; the TorchScript one works its pads out from the example's
+shapes and writes none to read. Keras has no layer that pads from the example, and a PyTorch file holds numbers alone, so the
+two other readers had nothing to read.
+
 ### A loss says what a network's numbers mean
 
 A network gives numbers, and its loss says how they are read: mean squared error as they are, cross-entropy as shares
@@ -2558,9 +2645,19 @@ described with the answers it judges, under "A distribution can be in an order".
 
 `Sgd`, with momentum, `Adam`, `AdamW`, `RmsProp` and `Nadam` follow PyTorch's formulas in PyTorch's order, matched step by
 step against torch 2.14.1 on every engine. AdamW decays the numbers apart from the gradient, as PyTorch's does: a number is
-shrunk by the rate times the decay before Adam's step, which is not the L2 decay that adds the decay to the gradient — that
-one, Nesterov momentum for Sgd and AMSGrad are not built: each does nothing by default in PyTorch, and nothing asks for
-one. Adam, AdamW and Nadam work their running means out in one routine, so the arithmetic is written once and Adam's
+shrunk by the rate times the decay before Adam's step, which is not the L2 decay that adds the decay to the gradient. That one is built too, as a setting of Sgd, Adam, RmsProp and
+Nadam: a `weightDecay` is added to the gradient once, in `Optimizer.Step`, before the optimizer moves the number — PyTorch's
+`grad.add(param, alpha=weight_decay)`, the same in all four — so no optimizer writes it again, and AdamW keeps its own. Sgd
+takes dampening and Nesterov's momentum, Adam and AdamW take AMSGrad, and RmsProp takes its centred form; each does nothing
+unless asked, as in PyTorch, and each was matched to torch step by step on every engine, over twelve walks. AMSGrad remembers
+the largest of the running squares, `max_exp_avg_sq`, and the centred form the running mean of the gradient, `grad_avg`, under
+the names PyTorch gives them, so a checkpoint carries them too. Options that do not go together — Nesterov's momentum without
+a momentum, or beside dampening — are refused by name where the optimizer is made, and that is one place for every way in:
+`Compile`, a file read back and a declared step each call the same `Validate`. A checkpoint now refuses a tensor an optimizer
+does not keep as it already refused one it lacks, so a file of one optimizer cannot be gone on from under another that happens
+to be shaped like it. The options are PyTorch's, and a network declared in Keras's words is refused them by name rather than
+given something else: Keras's `weight_decay` shrinks the number itself, its SGD has no dampening and its AMSGrad places its
+epsilon otherwise. Adam, AdamW and Nadam work their running means out in one routine, so the arithmetic is written once and Adam's
 bytes did not move. An optimizer keeps what it remembers of each parameter by the parameter itself, and writes it by path
 under PyTorch's names — `momentum_buffer`; `exp_avg`, `exp_avg_sq`, `square_avg` and the steps — so a checkpoint carries
 it. Nadam's momentum product is a function of the step count alone, so it is not stored: it is worked out again from the
@@ -2576,6 +2673,48 @@ with a `NetworkCatalog` by name as a loss is, and a file that names one a catalo
 words a declared `learn.network` is written in are the shipped ones, though: an optimizer or a loss of one's own is the
 code path — a network compiled and fitted by hand — and not a word in a pipeline's file, because a vocabulary a file names
 must be one every reader has.
+
+### A parameter carries the rules of its numbers
+
+A penalty, a bound and a hold were three things a model could not say about a layer's numbers, and they have one owner: the
+parameter whose numbers they are about. `SlotRules` is the value a parameter carries — an `L1`, an `L2`, a `MaxNorm` and
+whether it is `Held` — and a layer has a door to put the same rules on everything it keeps. They are neither a setting of the
+layer nor of the run, so a normalisation can penalise its scale and not its shift, and a dense layer its weights and not its
+bias, which is what Keras's `kernel_regularizer` and `bias_regularizer` say, and a file and a checkpoint carry them beside the
+numbers they are about.
+
+A penalty and the optimizer's weight decay look like two ways to say one thing and are two things. The penalty is Keras's
+regularizer: `L1` times the sum of the absolute values plus `L2` times the sum of the squares, with no half, added to the loss
+the run reports — in training and in validation alike, over the parameters that learn — so its gradient is what moves the
+numbers, and the loss a run reports includes it. The weight decay is PyTorch's: a share of each number added to its gradient
+inside the optimizer's step, which the loss never sees. They agree where the arithmetic does, plain Sgd under a decay of twice
+the L2, and they stay two doors because each keeps its library's vocabulary honest: Keras's words say the penalty, and refuse
+the decay by name, since Keras's own `weight_decay` shrinks the number itself and would be the same word for another run;
+PyTorch's words say the decay. The sign of nothing is nothing, as it is for Keras, so a number at nought is pushed neither way
+by an L1. Both were matched, step by step on every engine, to the same arithmetic worked out in PyTorch.
+
+A bound is Keras's `MaxNorm`, for each unit: after every step the numbers of each unit — a dense layer's column of weights, a
+convolution's filter, a vector as a whole — are scaled by `min(n, m) / (1e-7 + n)` when their norm `n` is over the bound `m`,
+so those under it are left a hair under one, as Keras leaves them. It is applied after the step and before anything else
+sees the numbers, from the seam's own sum, square root and division, so no engine learned it. A transposed convolution's
+kernel is laid out by the channels it takes and not by each unit it makes, so a bound by unit is not defined on it, and the
+bound is refused there by name, by a fit and by the Keras reader alike, rather than applied by another rule.
+
+A hold is a parameter that does not learn. It is not a filter on the loop but a property of the parameter, and the loop's
+array is made of the parameters that learn: a held parameter has no gradient worked out for it, takes no step, and an
+optimizer remembers nothing of it, so a checkpoint's memory lists none. A normalisation all of whose numbers are held measures
+nothing of its batches and reads its running statistics in a training pass, which is Keras's `training and trainable` and what
+a frozen layer is for. The held layers are part of what a checkpoint was taken under: a run that goes on under another set is
+refused by name, as it is under another seed, and letting a held layer learn again is a new fit, whose optimizer memory for
+it starts empty, as in PyTorch. A file writes `learns: false`, `l1`, `l2` and `maxNorm` beside a slot's shape and values, each
+only when it says something, which makes the network's part the fifth and writes every other part as it was. Nothing is
+renamed: a held number is the number at the same path.
+
+Rules reach a layer by three doors that say one thing. In code, `Parameter.Rules` and the layer's `Hold()`; in a description,
+the words `Ruled(weights, bias)` and `Held()`, which act on the layer before them; in a declaration, the settings `l1`, `l2`,
+`maxNorm` and `learns` of a dense layer and `learns` of a normalisation, with the chain's `L1`, `L2`, `MaxNorm` and `Held`
+acting on the layer before them in both vocabularies, since a penalty and a bound are Keras's and a hold is both libraries'.
+The Keras reader reads Keras's into the same value; a PyTorch file and an ONNX graph say none, so they have none to read.
 
 ### The loop is Keras's fit, and so is its judgement
 
@@ -2593,8 +2732,29 @@ Gradients can be clipped by their norm together, PyTorch's `clip_grad_norm_`: th
 gradients, each tensor counted once, and when the most norm over that norm plus a millionth is below one every gradient is
 scaled by it. Otherwise the gradients pass untouched, to the last bit, so a clip they never reach changes no run. It is
 worked out on the run's engine through the engine's own arithmetic, between the gradients and the optimizer's step.
-Clipping each value on its own is not built: nothing asks for it, and an exact clamp would be one more operation on the
-public tensor seam for every engine written outside it to write.
+Each value can be clipped on its own as well, PyTorch's `clip_grad_value_`, and that is done first, so the norm is taken of
+what the values were brought to. A value is brought to the bound by the larger and the smaller of two tensors, worked out from
+the seam's own `Positive`, a mask of what is above nothing, times one or nought, which is exact for any finite value: no
+member was added to the tensor seam, and an engine written outside the library has nothing new to write. 3444 pairs of values
+against four bounds came out as PyTorch's `maximum`, `minimum` and `clamp` do, to the bit, on the light engine and the native
+one, and libtorch composes the same operations. A gradient that holds a value that is not a finite number is refused by name
+rather than clipped, since clipping it would hide the failure. A norm taken tensor by tensor is not built: nothing in this
+library's words or in any library it is held to says it.
+
+A step does not have to follow every batch. `StepEvery` takes one once every several batches, from the mean of the gradients
+of the batches in the window — clipped, when the run clips — as PyTorch's gradient accumulation and Keras's
+`gradient_accumulation_steps` do, with one difference named: a window never goes across the end of an epoch. The last batches
+of an epoch are stepped as a window of however many are left, so no accumulator lives between epochs, a checkpoint holds none,
+and a run resumed at an epoch's end is the run it would have been. The network is still trained on a batch at a time, so a
+normalisation counts each batch on its own, and a run cancelled in the middle of a window leaves that window unstepped.
+
+`Average` keeps an exponential moving average of the weights, PyTorch's `AveragedModel` with `get_ema_multi_avg_fn` and
+Keras's `ema_momentum`: after every step the average of a parameter is its last times the share plus the parameter times what
+is left of it, the first being the parameter itself and not a blend with nothing. Every epoch is still judged by the weights as
+they are, and when the run has finished the network holds the averages in place of the weights, running statistics aside. That
+is why it cannot be asked for beside restoring the best epoch's weights: two rules would each say what the run ends holding,
+and a run that says both is refused. The averages are the run's own, so a checkpoint writes them beside the optimizer's
+memory, by path, and a run goes on from one with them to the bit.
 
 A run can be watched and stopped. `OnEpoch` is handed each epoch as it ends — once judged and its checkpoint kept, before
 the next begins — in order, on the thread that trains, and waited for. `Cancellation` is read before every batch and before
@@ -2605,8 +2765,9 @@ finished. The network holds what the last batch that finished left it and the op
 fitting it again goes on from there; a checkpoint taken before is as it was taken. A callback that throws abandons the run
 the same way, and its exception reaches the caller as it was thrown.
 
-A checkpoint holds what the run needs to go on — every slot, what the optimizer remembers, how far early stopping had
-got and the epochs so far — and records what the run went under: the seed, the batch size, the early stopping, the clip and the
+A checkpoint holds what the run needs to go on — every slot, what the optimizer remembers, the average where the run keeps
+one, how far early stopping had got and the epochs so far — and records what the run went under: the seed, the batch size,
+the early stopping, the clip of the norm and of each value, the window of batches, the average, the layers that were held and the
 engine. The seed decides every draw; the batch size decides which rows each step takes, and a dropout's draws are
 counted by the step, so it moves them as surely as the seed does; the early stopping decides where the run ends and
 which weights it ends holding; the engine decides how every step's totals are rounded, and two engines that add up in
@@ -2619,8 +2780,8 @@ holding the hundredth epoch's weights rather than the best's. On another engine 
 from its file on libtorch or on the tests' native engine, after its first, fifth, tenth or twentieth epoch alike, it
 kept the same epoch and ended with weights up to 3.0e−7 from those of the run it was taken of, which the light engine
 goes on to the bit — another run, under the same seed, with nothing to tell the two apart. So a run handed another seed,
-another batch size, other early stopping, another clip or another engine than its checkpoint records is refused, naming each
-difference, before anything is put back, as is a checkpoint of a network of other slots or other shapes. The engine is
+another batch size, other early stopping, another clip, another window of batches, another average or another engine than its checkpoint records is refused, naming each
+difference, before anything is put back, as is a checkpoint of a network of other slots or other shapes, and a resume under another set of held layers. The engine is
 recorded as it names itself: one that implements `INamesItsVersionAndDevice` with the version of what works its
 arithmetic out and the device it works it out on, since another version or another device rounds otherwise too — the
 light engine with DeepSharp's own version and the processor, the libtorch engine with the libtorch it runs on, as
@@ -2651,6 +2812,14 @@ of them and is read as not saying, and a checkpoint read from one is written aga
 with values nobody recorded, while a part of the second that is missing the batch size or the early stopping is refused
 at its place. A part that names no engine says nothing of it, and its checkpoint goes on on any. Every object in the
 file holds only its own keys, so a misspelt one is refused rather than read as nothing.
+
+What a part says only when it has something to say follows the rule of the versions. A layer without a bias writes
+`"bias": false`, a normalisation without a scale or a shift `"scale": false` or `"shift": false`, and a padding that fills
+from the example `"border"`; a number that carries a penalty, a bound or a hold writes `l1`, `l2`, `maxNorm` and
+`learns: false` beside its shape and its values, each only when it says something. An optimizer writes `weightDecay`,
+`dampening`, `nesterov`, `amsgrad` and `centered` only when they are not what leaving them out means, and the training part
+writes `clipValue`, `stepEvery`, `average` and `averaged`, the averages themselves, tensors by path, read apart from the text
+as every other tensor is. Each of those makes its part the fifth, and a part that writes none is the part 0.9.0 wrote.
 
 Placing every fault at its line and column costs nothing until there is a fault. The reader walks the text once for
 where each key, each object and each list stands; a number standing in a list is counted, not kept, since a network's
@@ -2770,17 +2939,29 @@ that case is TensorFlow's, worked out by hand, which is the rule here.
 The layers this release reads for the first time are read as the words they are as well: a convolution's `groups`, a stride
 of its own for each axis and a dilated window, which no network here was built of before; `DepthwiseConv1D` and
 `DepthwiseConv2D`, whose kernel Keras keeps as the channels it is handed by the channels it makes of each; `SeparableConv1D`
-and `SeparableConv2D`, which are two layers here and whose one bias Keras adds after both of them, so the first is given a
-bias of noughts; `ZeroPadding1D`, which writes its two ends as the pair itself where the other two write a number or a pair
+and `SeparableConv2D`, which are two layers here and whose one bias Keras adds after both of them, so the first has none and the second carries it; `ZeroPadding1D`, which writes its two ends as the pair itself where the other two write a number or a pair
 for each axis; and the three transposed convolutions, whose kernel Keras keeps the other way round and whose border, where
 it pads as 'same', is worked out from the sizes Keras itself makes — half of what the window gives back beyond the stride
 dropped before the example and the rest after, which is TensorFlow's rule read backwards and which no stated border says. A
 model over images, one along a series and one through a volume, carrying all of them, answered within a hundred-thousandth
 of Keras's own answer.
 
+A layer Keras made without a bias — `use_bias` false — or a normalisation without its scale or its shift — `scale` or `center`
+false — is read as the layer without it. The file holds no numbers for what is not there, and the description and the numbers
+are held to each other, so a description that says a bias the file has no numbers for, or the other way round, is refused at
+the number. A layer's `trainable` switch, its regularizers and its constraints are read as the rules of its numbers, under 'A
+parameter carries the rules of its numbers': L1, L2 and L1L2 as a penalty, with Keras's own default where the class names no
+number, and MaxNorm as a bound — but only over the axes a unit's numbers lie along: a dense kernel's first axis, a
+convolution's kernel over everything but its channels out, a depthwise kernel over the window's axes, a bias's only axis. A
+bound over any other axis is not the bound the layer applies, and a different bound is not read as the same one. Everything
+else is refused by name, at the layer that says it: any other regularizer or constraint, a MaxNorm over other axes, a bound on
+a transposed convolution's kernel, and an activity regularizer, which penalises what a layer makes and not its numbers.
+Keras's initialisers are not read, because a model that was read starts from its own numbers.
+
 What no network here is built of is refused at the layer that says it, every such layer at once: any kind of layer or
-activation the reader does not read, and the refusal names every kind it does; a layer without a bias, a normalisation over
-another axis than the last or without its shift or its scale; a transposed convolution that pads as 'same' and also states
+activation the reader does not read, and the refusal names every kind it does; a normalisation over another axis than the last; an activity regularizer; a regularizer other than L1, L2 and L1L2, a
+constraint other than MaxNorm, a MaxNorm over other axes than a unit's numbers lie along, and any bound on a transposed
+convolution's kernel; a transposed convolution that pads as 'same' and also states
 how many places to keep at the end, since Keras reads the first of those and leaves the second; and a model of another kind
 than a Sequential, working in another precision than single, or saved without its loss. The
 numbers are then held to the layers the description builds by `network.Load`, each fault at its dataset's path. The file
@@ -2796,7 +2977,8 @@ through — a graph is a forward pass and names none — and builds the network 
 were measured and are read: PyTorch's `torch.onnx.export`, by its default exporter and by the TorchScript one before it;
 Keras's own `model.export(format="onnx")`; and tf2onnx, which is how a TensorFlow SavedModel reaches ONNX. The graph is not
 kept: a graph beside the model is what this library leaves out, so the graph is read once, each node written in the words
-of the layer it is — a Gemm, or a MatMul with the Add of its bias after it, a dense layer; a Conv a convolution along one,
+of the layer it is — a Gemm, or a MatMul with the Add of its bias after it, a dense layer — one without a bias when the Gemm names no `C`, or no Add
+comes after the MatMul, as the TorchScript exporter writes a linear layer that has none; a Conv a convolution along one,
 two or three axes, in groups where it says so; a ConvTranspose the convolution that gives those places back; a Pad a layer
 that only pads; a MaxPool or an AveragePool a pooling; a GlobalAveragePool or a GlobalMaxPool a global pooling, and so is
 the ReduceMean or ReduceMax over every place of each channel that PyTorch's default exporter writes an adaptive pooling to
@@ -2806,6 +2988,9 @@ single-precision numbers, which Keras's export puts round nearly every node, is 
 chain: each node takes the value the one before it made. A node that takes another — a network adding its input back after
 a layer is the plainest case — is a branch no stack has, and is refused at that node, as is every node of an operator no
 layer here is: a leaky relu, and the rest.
+
+A `Conv`, a `ConvTranspose` and a `LayerNormalization` that name no bias are read as the layer without one, which is how
+PyTorch exports a layer made without it.
 
 Layouts are declared, never inferred. A weight matrix is turned round because its Gemm says it is written outputs by
 inputs, as PyTorch writes one, and is read as it stands when the Gemm says otherwise, or when a MatMul multiplies by it, as
@@ -2835,7 +3020,8 @@ no layer here walks is still refused at the node that says it: a max pooling's `
 a second output when the graph uses them. `ConvTranspose` is read as the convolution that gives the places back, and its
 `output_padding` as the places kept at the end of each axis; a node that says the `output_shape` it makes instead is
 refused naming that door, since a shape is a sum of things the layer already says. `Pad` is read as the layer that only
-pads, in `constant` mode — mirroring or repeating is refused — of the value the graph gives it, and its places may run
+pads, in `constant` mode with the value the graph gives it, or in `reflect`, `edge` or `wrap` mode as a padding that mirrors,
+repeats or goes round — wrap from opset 19 — any other mode being refused naming the four ONNX has, and its places may run
 along the axes of an example only: one that pads the batch's own axis or its channels is refused saying so.
 A border stated at each end is tried as 'same' first, because that is what an exporter writing one side at a time means by
 it, and read as a stated border where it is not what 'same' gives. The exporters were measured for what they write for the
@@ -3086,7 +3272,8 @@ language and nothing is translated between them. The parts are carried by one ki
 which takes the names it accepts as data from the step that uses it — the pipeline validates a model it cannot
 understand, and the vocabulary stays in the package that owns it.
 
-Every setting a name takes is written down, and a file that leaves one out is refused where it is read. A declaration
+Every setting a name takes is written down, and a file that leaves one out is refused where it is read — but for a setting
+whose being left out has a meaning of its own, below. A declaration
 is replayed from what it says; a number filled in behind the writer's back would make two runs of one file differ as
 soon as a default moved. That is also why the file names no vocabulary: TensorFlow's words and PyTorch's lower onto
 one model, and where a caller leaves a number unsaid each door writes the number its own library leaves there. Keras's
@@ -3094,9 +3281,15 @@ Adam and PyTorch's differ in their epsilon, so the two doors write different fil
 because they are different runs. A `vocabulary` key would say which library was used to type the model, and nothing
 would read it.
 
-Two keys are optional, and a pipeline that says neither writes what it wrote before: `schedule`, a part from the schedule
-words, and `clip`, a number. Left out they mean a constant rate and no clipping, which is what a run did when the file had
-no such key, and a number that means none — nought for the clip — is not written.
+The exception is a setting that was added to a name after files of it were written. Its being left out means what the name
+always meant — a dense layer with its bias, an optimizer with no decay — and that meaning is frozen in the setting, never a
+default that can move: a file that leaves it out is read as that, a file that holds it at that meaning is written without it,
+and the file a pipeline wrote before is the file it writes now.
+
+Five keys of the step are optional, and a pipeline that says none writes what it wrote before: `schedule`, a part from the
+schedule words; `clip`, a number; and `clipValue`, `stepEvery` and `average`, the options of a run beyond the clip of the norm.
+Left out they mean a constant rate, no clipping, a step after every batch and no average, which is what a run did when the
+file had no such key, and a number that means none — nought for a clip, one for the window — is not written.
 
 **The engine is a name, and the application says what it stands for.** A declaration that carried an engine object
 could not be a file; one that carried a package name would tie a model to a machine. So the step names an engine —
@@ -3204,11 +3397,16 @@ all, and Keras is not a thing it has. What the reference says is the spec; what 
   first unusual model.
 - **A random source the process shares.** Every draw is counted from a seed that is handed in, which is why a network
   described in Keras's words is built once the run's seed is known.
-- **A schedule that watches the validation loss**, and weight decay, Nesterov momentum and AMSGrad. The first
-  would let the rows a model is chosen on shape its weights; it was asked for and is not built, for that reason. Each of
-  the others does nothing by default in PyTorch, and nothing asks for one yet; AdamW's decoupled decay is built.
-- **A clamp of each gradient value.** Nothing asks for it, and an exact clamp would be a new member of the public tensor
-  seam, which every engine written outside it would have to write; the norm is clipped instead.
+- **A schedule that watches the validation loss.** It would let the rows a model is chosen on shape its weights; it was asked
+  for and is not built, for that reason.
+- **A constraint or a regularizer of every kind Keras has, and a gradient clipped tensor by tensor.** A penalty here is L1, L2
+  or both on a layer's numbers, and a bound is a largest norm for each unit; the norm of the gradients is clipped together,
+  as PyTorch's `clip_grad_norm_` does, and each value on its own. The rest — an orthogonal regularizer, a unit norm, a
+  non-negative constraint, a penalty on what a layer makes, a bound on a transposed convolution's kernel — is refused by name
+  where a Keras file says it, rather than read as something it is not.
+- **A start in a file.** A file holds the numbers a layer learned and never how it began; a start is how a layer is begun here,
+  in code or in a declaration, and a layer read from a file is begun with the draws it is handed and then given the file's
+  numbers.
 - **A max pooling's `storage_order`, and the places a max pooling picked as a second output.** A pooling here gives the
   values it pooled and nothing beside them, and ONNX's node that asks for either is refused where it asks. Everything else
   this list used to hold — a dilated window, channels in groups, a stride of its own for each axis, a window that rounds the

@@ -126,11 +126,13 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// declaration did when it began to name the learner it is written for, as settling a gap above the split did when
     /// it became a verb of its own, as naming a trainer from ML.NET did, and as a source that joins two files, an answer
     /// of free numbers and a column that names the row did — so that library names the newer version instead of the word
-    /// it does not know.
+    /// it does not know. The ninth is that rule applied to the words a declared network is written in: a layer, an
+    /// optimizer, a schedule or the run can gain a setting a file may leave out, and a file that names one is refused by its
+    /// number by a library that has not heard of it.
     /// A property rather than a constant, so a package compiled against this version reads the number the running
     /// library has.
     /// </remarks>
-    public static int Version => 8;
+    public static int Version => 9;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;

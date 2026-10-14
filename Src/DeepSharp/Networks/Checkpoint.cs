@@ -8,9 +8,10 @@ namespace DeepSharp.Networks;
 
 /// <summary>
 /// What a run needs to go on from the end of an epoch as if it had never stopped: what every slot of the network held, what
-/// the optimizer remembers of every parameter, how far early stopping had got and the history so far — and what the run
-/// went under, which a run going on from it is handed again or refused: the seed, the batch size, the early stopping, the
-/// norm its gradients were clipped to and the engine.
+/// the optimizer remembers of every parameter, how far early stopping had got, the average of the weights when the run keeps
+/// one, and the history so far — and what the run went under, which a run going on from it is handed again or refused: the
+/// seed, the batch size, the early stopping, the norm its gradients were clipped to and the bound their values were, how many
+/// batches went into a step, the share its average kept of itself, and the engine.
 /// </summary>
 /// <remarks>
 /// Every part is kept by the path of the slot it belongs to, never by the objects of the network it was taken from, so a
@@ -58,6 +59,12 @@ internal sealed record Resumable(long Seed, IReadOnlyList<Epoch> History, IReadO
 
     /// <summary>The engine the run was on; nothing when the checkpoint does not say, as one read from a file 0.4.0 wrote does not.</summary>
     public Engine? Engine { get; init; }
+
+    /// <summary>The paths of the parameters that were held still, in order; nothing when the checkpoint does not say, as one read from an earlier file does not.</summary>
+    public IReadOnlyList<string>? Held { get; init; }
+
+    /// <summary>The average of the weights the run kept, by the path of the parameter each belongs to; nothing when it kept none.</summary>
+    public IReadOnlyDictionary<string, Tensor>? Averaged { get; init; }
 
     /// <summary>
     /// Why a run handed these options cannot go on from here as the run the checkpoint was taken of would have: each value it
@@ -134,10 +141,29 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
     /// <summary>The clip its gradients went under; nothing when they were never clipped.</summary>
     public GradientClip? Clip { get; init; }
 
+    /// <summary>The bound each value of its gradients was clipped to; nothing when they never were.</summary>
+    public double? ClipValue { get; init; }
+
+    /// <summary>How many batches went into each step; one, when a step was taken every batch.</summary>
+    public int StepEvery { get; init; } = 1;
+
+    /// <summary>The share an average of its weights kept of itself; nothing when it kept none.</summary>
+    public double? Average { get; init; }
+
+    /// <summary>Whether it says anything an earlier version of a training part could not: a clipped value, a window of batches, an average.</summary>
+    public bool SaysMore => ClipValue is not null || StepEvery != 1 || Average is not null;
+
     /// <summary>How a run handed these options goes through its epochs.</summary>
     /// <param name="options">What the run is handed.</param>
-    /// <returns>Its batch size, its early stopping and its clip.</returns>
-    public static Pace Of(FitOptions options) => new(options.BatchSize, options.EarlyStopping) { Clip = options.GradientClip };
+    /// <returns>Its batch size, its early stopping, its clips, its window of batches and its average.</returns>
+    public static Pace Of(FitOptions options) =>
+        new(options.BatchSize, options.EarlyStopping)
+        {
+            Clip = options.GradientClip,
+            ClipValue = options.ClipValue,
+            StepEvery = options.StepEvery,
+            Average = options.Average,
+        };
 
     /// <summary>
     /// Each way a run handed these options would go through its epochs otherwise than the run this was taken of, in the words
@@ -165,7 +191,59 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
         {
             yield return clip;
         }
+
+        if (ClipValueUnlike(options.ClipValue) is { } value)
+        {
+            yield return value;
+        }
+
+        if (StepEvery != options.StepEvery)
+        {
+            yield return string.Create(
+                CultureInfo.InvariantCulture,
+                $"The checkpoint was taken of a run that took a step {Every(StepEvery)}, and going on taking one {Every(options.StepEvery)} would take other rows into every step.");
+        }
+
+        if (AverageUnlike(options.Average) is { } average)
+        {
+            yield return average;
+        }
     }
+
+    // How often a step is taken, as a refusal says it.
+    private static string Every(int batches) => batches == 1 ? "every batch" : string.Create(CultureInfo.InvariantCulture, $"once every {batches} batches");
+
+    // How the bound a run is handed clips each gradient value differently from the one this was taken under.
+    private string? ClipValueUnlike(double? handed) => (ClipValue, handed) switch
+    {
+        (null, null) => null,
+        (null, { } other) => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The checkpoint was taken of a run whose gradients were never clipped value by value, and going on clipping them value by value to {other} would move every step otherwise."),
+        ({ } taken, null) => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The checkpoint was taken of a run whose gradients were clipped value by value to {taken}, and going on without clipping them that way would move every step otherwise."),
+        ({ } taken, { } other) when taken.CompareTo(other) != 0 => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The checkpoint was taken of a run whose gradients were clipped value by value to {taken}, and going on clipping them value by value to {other} would move every step otherwise."),
+        _ => null,
+    };
+
+    // How the average of the weights a run is handed differs from the one this was taken under.
+    private string? AverageUnlike(double? handed) => (Average, handed) switch
+    {
+        (null, null) => null,
+        (null, { } other) => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The checkpoint was taken of a run that kept no average of its weights, and going on keeping one at {other} would end it holding other weights."),
+        ({ } taken, null) => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The checkpoint was taken of a run that kept an average of its weights at {taken}, and going on without one would end it holding other weights."),
+        ({ } taken, { } other) when taken.CompareTo(other) != 0 => string.Create(
+            CultureInfo.InvariantCulture,
+            $"The checkpoint was taken of a run that kept an average of its weights at {taken}, and going on keeping one at {other} would end it holding other weights."),
+        _ => null,
+    };
 
     // How the clip a run is handed differs from the one this was taken under, by the norm each says; nothing when it does not.
     private string? ClipUnlike(GradientClip? handed) => (Clip, handed) switch

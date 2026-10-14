@@ -307,7 +307,7 @@ public class StepParameterContractTests
 
         // The value leaving a number out means is never written, so it is no other value a file could keep.
         public IEnumerable<Dictionary<string, JsonNode?>> Visit(NumberParameter parameter) =>
-            [.. new[] { parameter.Example * 2, parameter.Example + 1, parameter.Example / 2 }.Where(value => value != parameter.LeftOut).SelectMany(value => One(parameter.Key, value))];
+            [.. new[] { parameter.Example * 2, parameter.Example + 1, parameter.Example / 2, parameter.Example + 0.5 }.Where(value => value != parameter.LeftOut).SelectMany(value => One(parameter.Key, value))];
 
         public IEnumerable<Dictionary<string, JsonNode?>> Visit(WholeNumberParameter parameter) =>
             [.. new[] { parameter.Example + 1, parameter.Example + 2 }.SelectMany(value => One(parameter.Key, value))];
@@ -352,32 +352,73 @@ public class StepParameterContractTests
             .. One(parameter.Key, new JsonArray(new JsonObject { ["name"] = "other", ["kind"] = "category", ["optional"] = false, ["was"] = "integer" })),
         ];
 
-        // Every name a part may give, each with the settings that name takes at a value other than the one it starts at — but
+        // Every name a part may give, each with the settings that name takes at a value other than the one it starts at, all together
+        // and then each alone — a setting that goes only beside others the part leaves out is refused beside the rest — but not
         // the part leaving the key out means, which is never written.
         public IEnumerable<Dictionary<string, JsonNode?>> Visit(PartsParameter parameter) =>
         [
-            .. parameter.Kinds.Select(kind => Other(parameter, kind)).Where(other => parameter.LeftOut is null || !parameter.Read(Parsed(other)).SequenceEqual(parameter.LeftOut)),
+            .. parameter.Kinds.SelectMany(kind => Others(parameter, kind)).Where(other => parameter.LeftOut is null || !parameter.Read(Parsed(other)).SequenceEqual(parameter.LeftOut)),
         ];
 
         private static JsonElement Parsed(Dictionary<string, JsonNode?> values) =>
             JsonDocument.Parse(new JsonObject([.. values.Select(each => KeyValuePair.Create(each.Key, each.Value?.DeepClone()))]).ToJsonString()).RootElement;
 
-        private static Dictionary<string, JsonNode?> Other(PartsParameter parameter, PartKind kind)
+        private static IEnumerable<Dictionary<string, JsonNode?>> Others(PartsParameter parameter, PartKind kind)
+        {
+            var settings = kind.Declared().Settings;
+
+            // Every setting at another value; and then, for a part with several, each setting at another value beside the rest as the
+            // part starts them.
+            yield return Other(parameter, kind, settings.Select(setting => setting.Key));
+
+            if (settings.Count > 1)
+            {
+                foreach (var setting in settings)
+                {
+                    yield return Other(parameter, kind, [setting.Key]);
+                }
+            }
+        }
+
+        private static Dictionary<string, JsonNode?> Other(PartsParameter parameter, PartKind kind, IEnumerable<string> changed)
         {
             var part = new JsonObject { ["kind"] = kind.Name };
+            var keys = changed.ToHashSet(StringComparer.Ordinal);
 
             foreach (var setting in kind.Declared().Settings)
             {
-                part[setting.Key] = setting.Value.Holds switch
+                // A setting a file may leave out is left out where it is not changed, as a file that never had it is.
+                if (!keys.Contains(setting.Key) && kind.Setting(setting.Key)!.RequiredKeys.Count == 0)
                 {
-                    PartValues.Number => JsonValue.Create(setting.Value.Number + 1),
-                    PartValues.YesOrNo => JsonValue.Create(!setting.Value.YesOrNo),
-                    _ => JsonValue.Create(setting.Value.Text + " again"),
-                };
+                    continue;
+                }
+
+                part[setting.Key] = !keys.Contains(setting.Key)
+                    ? WrittenAs(setting.Value)
+                    : setting.Value.Holds switch
+                    {
+                        PartValues.Number => JsonValue.Create(setting.Value.Number + 1),
+                        PartValues.YesOrNo => JsonValue.Create(!setting.Value.YesOrNo),
+                        _ => JsonValue.Create(Another(kind.Setting(setting.Key)!, setting.Value.Text)),
+                    };
             }
 
             return new() { [parameter.Key] = parameter.Single ? part : new JsonArray(part) };
         }
+
+        // A setting at the value its part starts it with.
+        private static JsonNode? WrittenAs(PartValue value) => value.Holds switch
+        {
+            PartValues.Number => JsonValue.Create(value.Number),
+            PartValues.YesOrNo => JsonValue.Create(value.YesOrNo),
+            _ => JsonValue.Create(value.Text),
+        };
+
+        // A setting that is one of some words is another of them; any other words are those words, said again.
+        private static string Another(StepParameter parameter, string text) =>
+            parameter.GetType().GetProperty("Choices")?.GetValue(parameter) is IReadOnlyList<string> choices
+                ? choices.First(choice => choice != text)
+                : text + " again";
     }
 
     [Fact]

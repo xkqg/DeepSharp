@@ -98,6 +98,27 @@ public readonly record struct PartDeclaration(string Kind, IReadOnlyList<PartSet
     /// <returns>Whether it holds one.</returns>
     public bool Holds(string key) => (Settings ?? []).Any(setting => setting.Key == key);
 
+    /// <summary>This part with one setting holding another value.</summary>
+    /// <param name="key">The setting's key.</param>
+    /// <param name="value">What it holds now.</param>
+    /// <returns>The part, the setting in the place it stood in, or after the others where this part held none under that key.</returns>
+    public PartDeclaration With(string key, PartValue value)
+    {
+        var settings = (Settings ?? []).ToList();
+        var at = settings.FindIndex(setting => setting.Key == key);
+
+        if (at < 0)
+        {
+            settings.Add(new PartSetting(key, value));
+        }
+        else
+        {
+            settings[at] = new PartSetting(key, value);
+        }
+
+        return new PartDeclaration(Kind, settings);
+    }
+
     /// <inheritdoc />
     public bool Equals(PartDeclaration other) =>
         Kind == other.Kind && (Settings ?? []).SequenceEqual(other.Settings ?? []);
@@ -153,7 +174,17 @@ public sealed class PartKind
         Name = name;
         Purpose = purpose;
         Settings = [.. settings];
-        Starts = [.. settings.Select(setting => new PartSetting(setting.Key, PartsParameter.Holds(name, setting)))];
+
+        // Every setting holds one value, read once here so that a kind that holds several is refused where the name is given
+        // its settings. A setting a file may leave out says what leaving it out means, and a new part starts at that: the part
+        // a file means by leaving it out is the part written with it there.
+        var holds = settings.Select(setting => PartsParameter.Holds(name, setting)).ToArray();
+
+        LeftOut = settings
+            .Select(setting => PartsParameter.LeftOutOf(setting) is { } meant ? new PartSetting(setting.Key, meant) : (PartSetting?)null)
+            .OfType<PartSetting>()
+            .ToDictionary(setting => setting.Key, setting => setting.Value, StringComparer.Ordinal);
+        Starts = [.. settings.Select((setting, at) => new PartSetting(setting.Key, LeftOut.TryGetValue(setting.Key, out var meant) ? meant : holds[at]))];
     }
 
     /// <summary>The name, as it is written under 'kind'.</summary>
@@ -169,8 +200,24 @@ public sealed class PartKind
     /// <returns>The part.</returns>
     public PartDeclaration Declared() => new(Name, Starts);
 
+    /// <summary>A part of this name holding every setting its name takes, the ones it leaves out at what leaving them out means.</summary>
+    /// <param name="part">The part, as written by hand or read.</param>
+    /// <returns>
+    /// The part, its settings in the order the name takes them. A setting the part leaves out that a file may not leave out is
+    /// not filled in: such a part is refused where it is held to its name.
+    /// </returns>
+    public PartDeclaration Completed(PartDeclaration part) =>
+        new(Name, [.. Settings.Select(setting => (setting, held: part.Holds(setting.Key)))
+            .Where(each => each.held || LeftOut.ContainsKey(each.setting.Key))
+            .Select(each => each.held
+                ? (part.Settings ?? []).First(held => held.Key == each.setting.Key)
+                : new PartSetting(each.setting.Key, LeftOut[each.setting.Key]))]);
+
     // Every setting at the value a new part of this name starts with: read once, where the name was given its settings.
     private IReadOnlyList<PartSetting> Starts { get; }
+
+    /// <summary>What leaving a setting out means, for each setting a file may leave out.</summary>
+    internal IReadOnlyDictionary<string, PartValue> LeftOut { get; }
 
     /// <summary>The setting written under a key, or nothing when this name takes none.</summary>
     /// <param name="key">The key.</param>
@@ -184,9 +231,12 @@ public sealed class PartKind
 /// </summary>
 /// <remarks>
 /// The step that brings the parameter says which names there are and what each takes (<see cref="PartKind"/>), so the
-/// pipeline holds a declared model to names it never has to know. Every setting a name takes is written: a file that
-/// leaves one out is refused where it is read, rather than filled in behind the writer's back, because a pipeline is
-/// replayed from what it says and a number nobody wrote down would make two runs of one declaration differ. One part is
+/// pipeline holds a declared model to names it never has to know. Every setting a name takes is written, but for one that
+/// says what leaving it out means — a number, a whole number, a yes or no or a word with a <c>LeftOut</c> of its own: a file
+/// that leaves any other out is refused where it is read, rather than filled in behind the writer's back, because a pipeline
+/// is replayed from what it says and a number nobody wrote down would make two runs of one declaration differ. What leaving
+/// a setting out means is part of the name, fixed when the setting is added, so a file written before the setting existed
+/// means what it always meant, and a part with the setting at that value is the same part, written without it. One part is
 /// written as itself (<see cref="Single"/>); several are written as a list, in the order they are read.
 /// </remarks>
 public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration>>
@@ -292,9 +342,10 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
     }
 
     /// <inheritdoc />
+    /// <returns>The parts, each holding every setting its name takes in the order the name takes them, the ones left out at what leaving them out means.</returns>
     /// <exception cref="ArgumentException">
     /// There are no parts, or more than one where one is written; a part gives a name this parameter was never given, or
-    /// holds a setting that name does not take, or leaves out one it does.
+    /// holds a setting that name does not take, or leaves out one it does that a file may not leave out.
     /// </exception>
     public override IReadOnlyList<PartDeclaration> Require(IReadOnlyList<PartDeclaration> value)
     {
@@ -310,22 +361,26 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
             throw new ArgumentException($"'{Key}' is one part, and these are {value.Count}.", Key);
         }
 
+        var held = new List<PartDeclaration>(value.Count);
+
         foreach (var part in value)
         {
             var kind = Named(part.Kind, fault => new ArgumentException(fault, Key));
 
-            foreach (var setting in part.Settings.Where(setting => kind.Setting(setting.Key) is null))
+            foreach (var setting in (part.Settings ?? []).Where(setting => kind.Setting(setting.Key) is null))
             {
                 throw new ArgumentException($"A '{kind.Name}' takes no '{setting.Key}': it takes {Takes(kind)}.", Key);
             }
 
-            foreach (var setting in kind.Settings.Where(setting => !part.Holds(setting.Key)))
+            foreach (var setting in kind.Settings.Where(setting => !part.Holds(setting.Key) && !kind.LeftOut.ContainsKey(setting.Key)))
             {
                 throw new ArgumentException($"This '{kind.Name}' leaves out '{setting.Key}': a part is written with everything its name takes.", Key);
             }
+
+            held.Add(kind.Completed(part));
         }
 
-        return value;
+        return held;
     }
 
     /// <inheritdoc />
@@ -342,6 +397,20 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
 
     private static string Takes(PartKind kind) =>
         kind.Settings.Count == 0 ? "nothing" : string.Join(", ", kind.Settings.Select(setting => $"'{setting.Key}'"));
+
+    // What leaving a setting out means, read through the one reader every part is read through: nothing for a setting a file
+    // may not leave out.
+    internal static PartValue? LeftOutOf(StepParameter setting)
+    {
+        if (setting.RequiredKeys.Count > 0)
+        {
+            return null;
+        }
+
+        using var empty = JsonDocument.Parse("{}");
+
+        return setting.Accept(new Held(empty.RootElement));
+    }
 
     // The value a setting of this name starts at, read from the parameter's own example through the one reader every part
     // is read through: a kind that holds several values is refused here, where the name was given its settings.
@@ -396,6 +465,11 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
     // What one setting holds, read through the kind of value its own parameter holds.
     private PartSetting Setting(JsonElement part, PartKind kind, StepParameter setting)
     {
+        if (!part.TryGetProperty(setting.Key, out _) && kind.LeftOut.TryGetValue(setting.Key, out var meant))
+        {
+            return new PartSetting(setting.Key, meant);
+        }
+
         if (!part.TryGetProperty(setting.Key, out _))
         {
             throw new FormatException(
@@ -419,9 +493,18 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
         writer.WriteStartObject();
         writer.WriteString(KindKey, kind.Name);
 
+        // A part written by hand may leave out what a file may leave out: it is written as the part it means.
+        part = kind.Completed(part);
+
         foreach (var setting in kind.Settings)
         {
             var value = part.Settings.First(held => held.Key == setting.Key).Value;
+
+            // What leaving a setting out means is not written: a part with the setting there is the part without it.
+            if (kind.LeftOut.TryGetValue(setting.Key, out var meant) && meant == value)
+            {
+                continue;
+            }
 
             switch (value.Holds)
             {
@@ -445,14 +528,14 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
     // What a setting holds, read by the kind of value its parameter holds: a number, a word, or yes or no.
     private sealed class Held(JsonElement part) : IStepParameterVisitor<PartValue>
     {
-        // A setting of a part holds one value — a number, a word, or yes or no — and is always written, so that a part
-        // compares, and is written and read back, as itself. A kind that holds several, or that a file may leave out, is
+        // A setting of a part holds one value — a number, a word, or yes or no — so that a part compares, and is written and
+        // read back, as itself. A kind that holds several, or that a file may leave out without saying what that means, is
         // refused where the name was given its settings, which is where whoever wrote the step can see it.
         private static NotSupportedException Several(StepParameter parameter) =>
             new($"A setting holds one value, and '{parameter.Key}' holds several: a part takes words, numbers, and whether something is so.");
 
         private static NotSupportedException Absent(StepParameter parameter) =>
-            new($"A setting is always written, and '{parameter.Key}' may be left out: a part is written with everything its name takes.");
+            new($"A setting is always written unless it says what leaving it out means, and '{parameter.Key}' may be left out and says not: a part is written with everything its name takes.");
 
         public PartValue Visit(TextParameter parameter) => PartValue.Of(parameter.Read(part));
 
@@ -473,7 +556,7 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
         public PartValue Visit(ShareParameter parameter) => throw Absent(parameter);
 
         public PartValue Visit<TEnum>(OneOfParameter<TEnum> parameter)
-            where TEnum : struct, Enum => PartValue.Of(parameter.Read(part).ToString()!);
+            where TEnum : struct, Enum => PartValue.Of(parameter.Read(part).Word());
 
         public PartValue Visit<TEnum>(SeveralOfParameter<TEnum> parameter)
             where TEnum : struct, Enum => throw Several(parameter);

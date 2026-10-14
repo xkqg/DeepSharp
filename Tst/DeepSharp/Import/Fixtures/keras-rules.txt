@@ -1,0 +1,7 @@
+keras 3.15.1, backend torch
+keras-rules-dense: ['Dense', 'BatchNormalization', 'Dense', 'Dense', 'Flatten', 'Dense'] -> [8, 2]
+  trainable: [True, False, True, False, True, True]
+  weights: [('kernel', (5, 6)), ('bias', (6,)), ('gamma', (6,)), ('beta', (6,)), ('moving_mean', (6,)), ('moving_variance', (6,)), ('kernel', (6, 4)), ('bias', (4,)), ('kernel', (4, 3)), ('bias', (3,)), ('kernel', (3, 2)), ('bias', (2,))]
+keras-rules-images: ['Conv2D', 'DepthwiseConv2D', 'SeparableConv2D', 'Flatten', 'Dense'] -> [6, 2]
+  trainable: [True, True, True, True, True]
+  weights: [('kernel', (3, 3, 2, 4)), ('bias', (4,)), ('kernel', (2, 2, 4, 1)), ('bias', (4,)), ('depthwise_kernel', (1, 1, 4, 1)), ('pointwise_kernel', (1, 1, 4, 3)), ('bias', (3,)), ('kernel', (27, 2)), ('bias', (2,))]

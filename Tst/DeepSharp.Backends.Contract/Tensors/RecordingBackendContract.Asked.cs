@@ -18,7 +18,7 @@ public abstract partial class RecordingBackendContract
     {
         var (images, convolution) = Convolution();
 
-        var alone = WayBack(pass => SquaredOf(convolution, images, pass), convolution.Weight.Value, convolution.Bias.Value);
+        var alone = WayBack(pass => SquaredOf(convolution, images, pass), convolution.Weight.Value, convolution.Bias!.Value);
         var withImages = WayBack(pass => SquaredOf(convolution, images, pass), images, convolution.Weight.Value, convolution.Bias.Value);
 
         Assert.Equal(0, alone.Count(nameof(ITensorBackend.Fold)));
@@ -32,7 +32,7 @@ public abstract partial class RecordingBackendContract
     {
         var (rows, dense, answers) = Passengers();
 
-        var alone = WayBack(pass => CrossEntropyOf(dense, rows, answers, pass), dense.Weight.Value, dense.Bias.Value);
+        var alone = WayBack(pass => CrossEntropyOf(dense, rows, answers, pass), dense.Weight.Value, dense.Bias!.Value);
         var withRows = WayBack(pass => CrossEntropyOf(dense, rows, answers, pass), rows, dense.Weight.Value, dense.Bias.Value);
 
         Assert.Equal(1, alone.Count(nameof(ITensorBackend.MatMul)));
@@ -45,9 +45,9 @@ public abstract partial class RecordingBackendContract
         var (images, convolution) = Convolution();
         var (rows, dense, answers) = Passengers();
 
-        var convolved = WayBack(pass => SquaredOf(convolution, images, pass), convolution.Weight.Value, convolution.Bias.Value);
+        var convolved = WayBack(pass => SquaredOf(convolution, images, pass), convolution.Weight.Value, convolution.Bias!.Value);
         var everyConvolved = WayBack(pass => SquaredOf(convolution, images, pass), images, convolution.Weight.Value, convolution.Bias.Value);
-        var weighed = WayBack(pass => CrossEntropyOf(dense, rows, answers, pass), dense.Weight.Value, dense.Bias.Value);
+        var weighed = WayBack(pass => CrossEntropyOf(dense, rows, answers, pass), dense.Weight.Value, dense.Bias!.Value);
         var everyWeighed = WayBack(pass => CrossEntropyOf(dense, rows, answers, pass), rows, dense.Weight.Value, dense.Bias.Value, answers);
 
         Assert.Equal(everyConvolved.Gradients[1..], convolved.Gradients);

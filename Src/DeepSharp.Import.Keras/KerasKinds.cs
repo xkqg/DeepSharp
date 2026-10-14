@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
 using System.Text.Json;
 using DeepSharp.Tensors;
 
@@ -22,13 +23,6 @@ internal readonly record struct KerasLayer(Action<Sequential>? Words, string Act
     /// <summary>How many layers of a description this one Keras layer writes; one, unless it is more than one layer here.</summary>
     /// <remarks>Keras's separable convolution is a depthwise convolution and a convolution of a one-by-one window, which are two layers here.</remarks>
     public int Places { get; init; } = 1;
-
-    /// <summary>The slots no number of the file fills, which are filled with noughts instead.</summary>
-    /// <remarks>
-    /// Keras's separable convolution adds its bias once, after both of its stages, and a convolution here always adds one, so
-    /// the first stage is given a bias of noughts: convolving what has had nothing added to it is convolving it.
-    /// </remarks>
-    public IReadOnlyList<KerasSlot> Noughts { get; init; } = [];
 
     /// <summary>The length of each side of the window it walks, outermost first, for a convolution: none for any other layer.</summary>
     public int[] Sizes { get; init; } = [];
@@ -138,9 +132,9 @@ internal abstract class KerasKind
     private static readonly KerasKind[] Covered =
     [
         new DenseKind(),
-        new ConvolutionKind("Conv1D", 1, (filters, window) => description => description.Conv1D(filters, window.Line(), window.Groups)),
-        new ConvolutionKind("Conv2D", 2, (filters, window) => description => description.Conv2D(filters, window.Plane(), window.Groups)),
-        new ConvolutionKind("Conv3D", 3, (filters, window) => description => description.Conv3D(filters, window.Volume(), window.Groups)),
+        new ConvolutionKind("Conv1D", 1, (filters, window, start) => description => description.Conv1D(filters, window.Line(), window.Groups, start)),
+        new ConvolutionKind("Conv2D", 2, (filters, window, start) => description => description.Conv2D(filters, window.Plane(), window.Groups, start)),
+        new ConvolutionKind("Conv3D", 3, (filters, window, start) => description => description.Conv3D(filters, window.Volume(), window.Groups, start)),
         new TransposedConvolutionKind("Conv1DTranspose", 1),
         new TransposedConvolutionKind("Conv2DTranspose", 2),
         new TransposedConvolutionKind("Conv3DTranspose", 3),
@@ -198,14 +192,153 @@ internal abstract class KerasKind
     /// <summary>The activation a layer carries, by Keras's name for it: <c>linear</c>, unless it says another.</summary>
     protected static string ActivationOf(KerasSettings layer) => layer.Setting("activation", "linear");
 
-    /// <summary>Notes a fault when a dense layer or a convolution adds no bias, as one here always does.</summary>
-    protected static void RequireBias(KerasSettings layer)
+    /// <summary>
+    /// The rules a Keras layer puts on its numbers, as a description says them: the penalty and the bound of its weights and of its
+    /// bias, and whether it is held still.
+    /// </summary>
+    /// <param name="Weights">The rules for its kernel — or its scale.</param>
+    /// <param name="Bias">The rules for its bias — or its shift.</param>
+    /// <param name="Held">Whether the layer does not train.</param>
+    internal readonly record struct Rules(SlotRules Weights, SlotRules Bias, bool Held)
     {
-        if (!layer.Setting("use_bias", true))
+        /// <summary>The description with the rules put on the layer its last word makes.</summary>
+        /// <param name="description">The description.</param>
+        /// <returns>The same description.</returns>
+        public Sequential Put(Sequential description)
         {
-            layer.Refuse("it adds no bias, and a dense layer or a convolution here always adds one.");
+            if (Weights != default || Bias != default)
+            {
+                description.Ruled(Weights, Bias);
+            }
+
+            return Held ? description.Held() : description;
         }
     }
+
+    /// <summary>Whether a layer is held still, as Keras's <c>trainable = False</c> holds it; a layer that penalises its outputs is refused.</summary>
+    /// <param name="layer">The layer's settings.</param>
+    /// <returns>Whether it does not train.</returns>
+    protected static bool Held(KerasSettings layer)
+    {
+        if (layer.Says("activity_regularizer"))
+        {
+            layer.Refuse($"it penalises what it makes, activity_regularizer {layer.Written("activity_regularizer")!.Quoted()}, and a penalty here is on a layer's numbers, never on what it makes.");
+        }
+
+        return !layer.Setting("trainable", true);
+    }
+
+    /// <summary>The penalty and the bound a layer puts on its number of a kind, read in Keras's words.</summary>
+    /// <param name="layer">The layer's settings.</param>
+    /// <param name="prefix">What Keras calls the number in the settings: <c>kernel</c>, <c>bias</c>, <c>depthwise</c>, <c>gamma</c>.</param>
+    /// <param name="rank">How many axes the number has in Keras's layout.</param>
+    /// <param name="bounded">
+    /// The axes a bound over each unit's numbers is over, in Keras's layout; nothing for a number a bound cannot be held on, which
+    /// refuses the bound.
+    /// </param>
+    /// <returns>Its rules.</returns>
+    protected static SlotRules Governing(KerasSettings layer, string prefix, int rank, int[]? bounded)
+    {
+        var rules = new SlotRules();
+        var regularizer = $"{prefix}_regularizer";
+        var constraint = $"{prefix}_constraint";
+
+        if (layer.Says(regularizer))
+        {
+            var penalty = layer.Within(regularizer);
+            var kind = penalty.Setting("class_name", string.Empty);
+            var numbers = penalty.Within("config");
+            var (l1, l2) = kind switch
+            {
+                "L1" => (numbers.Setting("l1", 0.01), 0.0),
+                "L2" => (0.0, numbers.Setting("l2", 0.01)),
+                "L1L2" => (numbers.Setting("l1", 0.0), numbers.Setting("l2", 0.0)),
+                _ => (double.NaN, double.NaN),
+            };
+
+            if (double.IsNaN(l1))
+            {
+                layer.Refuse($"its {regularizer} is a {kind.Quoted()}, and the penalties a layer's numbers are put under here are L1, L2 and L1L2.");
+            }
+            else if (l1 < 0 || l2 < 0 || !double.IsFinite(l1) || !double.IsFinite(l2))
+            {
+                layer.Refuse($"its {regularizer} is a penalty of {l1} and {l2}, and a penalty is a finite number of at least nothing.");
+            }
+            else
+            {
+                rules = rules with { L1 = l1, L2 = l2 };
+            }
+        }
+
+        return layer.Says(constraint) && Bound(layer, constraint, rank, bounded) is { } bound ? rules with { MaxNorm = bound } : rules;
+    }
+
+    // The bound of a MaxNorm constraint, over the axes a unit's numbers lie along; any other constraint, or another axis, is refused
+    // and bounds nothing.
+    private static double? Bound(KerasSettings layer, string key, int rank, int[]? bounded)
+    {
+        var constraint = layer.Within(key);
+        var kind = constraint.Setting("class_name", string.Empty);
+
+        if (kind != "MaxNorm")
+        {
+            layer.Refuse($"its {key} is a {kind.Quoted()}, and the only constraint a layer's numbers are put under here is MaxNorm.");
+
+            return null;
+        }
+
+        if (bounded is null)
+        {
+            layer.Refuse($"its {key} bounds the norm of its numbers, and the kernel of a transposed convolution is laid out by the channels it takes, not by each unit it makes, so a bound by unit cannot be held on it.");
+
+            return null;
+        }
+
+        var config = constraint.Within("config");
+        var value = config.Setting("max_value", 2.0);
+        var axis = config.Setting("axis", default(JsonElement));
+        var axes = axis.ValueKind switch
+        {
+            JsonValueKind.Undefined => [0],
+            JsonValueKind.Number when axis.TryGetInt32(out var one) => [one],
+            JsonValueKind.Array when axis.EnumerateArray().All(item => item.ValueKind == JsonValueKind.Number && item.TryGetInt32(out _)) => axis.EnumerateArray().Select(item => item.GetInt32()).ToArray(),
+            _ => (int[]?)null,
+        };
+        var named = axes?.Select(each => each < 0 ? each + rank : each).Order().Distinct().ToArray();
+
+        if (named is null || !named.SequenceEqual(bounded.Order()))
+        {
+            layer.Refuse(
+                $"its {key} bounds the norm over axis {(axes is null ? axis.Written() : axis.ValueKind == JsonValueKind.Undefined ? "0" : axis.Written())}, and a bound here is over each unit's numbers: over axis {(bounded.Length == 1 ? bounded[0].ToString(CultureInfo.InvariantCulture) : $"[{string.Join(", ", bounded)}]")} of the {rank} axes of this number.");
+
+            return null;
+        }
+
+        if (!(value > 0) || !double.IsFinite(value))
+        {
+            layer.Refuse($"its {key} bounds the norm to {value}, and a bound is a finite number above nothing.");
+
+            return null;
+        }
+
+        return value;
+    }
+
+    /// <summary>Whether a dense layer or a convolution adds a bias: Keras's <c>use_bias</c>, true unless it says otherwise.</summary>
+    /// <param name="layer">The layer's settings.</param>
+    /// <returns>Whether it adds one.</returns>
+    protected static bool KeepsBias(KerasSettings layer) => layer.Setting("use_bias", true);
+
+    /// <summary>How a layer starts, by whether it adds a bias.</summary>
+    /// <param name="bias">Whether it adds one.</param>
+    /// <returns>A beginning without draws, since the file's numbers take the place of any start.</returns>
+    protected static Beginning Starting(bool bias) => new() { WithoutBias = !bias };
+
+    /// <summary>The slots of a layer that has a kernel and may add a bias: the kernel, and the bias when there is one.</summary>
+    /// <param name="kernel">The kernel's slot.</param>
+    /// <param name="bias">Whether the layer adds a bias.</param>
+    /// <returns>The slots, in the order Keras keeps its numbers.</returns>
+    protected static KerasSlot[] WithBias(KerasSlot kernel, bool bias) => bias ? [kernel, "bias"] : [kernel];
 
     /// <summary>Notes a fault when a layer lays its images out other than with their channels last, as images here are.</summary>
     protected static void RequireChannelsLast(KerasSettings layer) => RequireChannelsLast(layer, "images");
@@ -227,17 +360,37 @@ internal abstract class KerasKind
     /// <param name="axes">How many axes: one, two or three.</param>
     protected static string ThingsWalkedAlong(int axes) => axes switch { 1 => "series", 2 => "images", _ => "volumes" };
 
-    /// <summary>Notes a fault when a normalisation works over another axis than the last, or learns no shift or no scale.</summary>
-    protected static void RequireLastAxisShiftAndScale(KerasSettings layer)
+    /// <summary>Notes a fault when a normalisation works over another axis than the last.</summary>
+    protected static void RequireLastAxis(KerasSettings layer)
     {
         if (layer.Written("axis") is { } axis and not ("-1" or "[-1]"))
         {
             layer.Refuse($"it normalises over axis {axis.Quoted()}, and a normalisation here works over the last axis.");
         }
+    }
 
-        if (!layer.Setting("center", true) || !layer.Setting("scale", true))
+    /// <summary>What a normalisation keeps: Keras's <c>scale</c> and <c>center</c>, both true unless it says otherwise.</summary>
+    /// <param name="layer">The layer's settings.</param>
+    /// <returns>Whether it multiplies by a scale of its own and adds a shift of its own.</returns>
+    protected static Affine Keeping(KerasSettings layer) => new()
+    {
+        WithoutScale = !layer.Setting("scale", true),
+        WithoutShift = !layer.Setting("center", true),
+    };
+
+    /// <summary>The slots of a normalisation's scale and shift, in the order Keras keeps them, of those it keeps.</summary>
+    /// <param name="keeping">What it keeps.</param>
+    /// <returns>The scale's slot and the shift's, of the ones it keeps.</returns>
+    protected static IEnumerable<KerasSlot> Kept(Affine keeping)
+    {
+        if (!keeping.WithoutScale)
         {
-            layer.Refuse("it leaves out its shift or its scale, and a normalisation here learns both.");
+            yield return "weight";
+        }
+
+        if (!keeping.WithoutShift)
+        {
+            yield return "bias";
         }
     }
 }
@@ -252,9 +405,11 @@ internal sealed class DenseKind : KerasKind
     public override KerasLayer Read(KerasSettings layer)
     {
         var units = layer.Setting<int>("units");
-        RequireBias(layer);
+        var bias = KeepsBias(layer);
+        var start = Starting(bias);
+        var rules = new Rules(Governing(layer, "kernel", 2, [0]), bias ? Governing(layer, "bias", 1, [0]) : default, Held(layer));
 
-        return new KerasLayer(description => description.Dense(units), ActivationOf(layer)) { Slots = ["weight", "bias"] };
+        return new KerasLayer(description => rules.Put(description.Dense(units, start)), ActivationOf(layer)) { Slots = WithBias("weight", bias) };
     }
 }
 
@@ -270,12 +425,18 @@ internal sealed class BatchNormalizationKind : KerasKind
     /// <inheritdoc />
     public override KerasLayer Read(KerasSettings layer)
     {
-        RequireLastAxisShiftAndScale(layer);
+        RequireLastAxis(layer);
 
         var momentum = layer.Setting<double>("momentum");
         var epsilon = layer.Setting<double>("epsilon");
+        var keeping = Keeping(layer);
+        var rules = new Rules(Governing(layer, "gamma", 1, [0]), Governing(layer, "beta", 1, [0]), Held(layer));
 
-        return new KerasLayer(description => description.BatchNorm(momentum, epsilon), "linear") { Slots = ["weight", "bias", "running_mean", "running_var"] };
+        // Keras keeps the scale, then the shift, then the running statistics: the ones it leaves out are not in the file.
+        return new KerasLayer(description => rules.Put(description.BatchNorm(momentum, epsilon, keeping)), "linear")
+        {
+            Slots = [.. Kept(keeping), "running_mean", "running_var"],
+        };
     }
 }
 
@@ -288,7 +449,7 @@ internal sealed class LayerNormalizationKind : KerasKind
     /// <inheritdoc />
     public override KerasLayer Read(KerasSettings layer)
     {
-        RequireLastAxisShiftAndScale(layer);
+        RequireLastAxis(layer);
 
         if (layer.Setting("rms_scaling", false))
         {
@@ -297,7 +458,10 @@ internal sealed class LayerNormalizationKind : KerasKind
 
         var epsilon = layer.Setting<double>("epsilon");
 
-        return new KerasLayer(description => description.LayerNorm(epsilon), "linear") { Slots = ["weight", "bias"] };
+        var keeping = Keeping(layer);
+        var rules = new Rules(Governing(layer, "gamma", 1, [0]), Governing(layer, "beta", 1, [0]), Held(layer));
+
+        return new KerasLayer(description => rules.Put(description.LayerNorm(epsilon, keeping)), "linear") { Slots = [.. Kept(keeping)] };
     }
 }
 

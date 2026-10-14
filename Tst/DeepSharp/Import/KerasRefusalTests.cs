@@ -84,7 +84,6 @@ public class KerasRefusalTests
     // A layer's activation, bias, settings and precision.
     [InlineData(Titanic, new[] { "config.layers.1.config.activation=\"softmax\"" }, $"config.json, layer 'dense' (Dense): its activation, softmax, is none of those read here: {Activations}")]
     [InlineData(Titanic, new[] { "config.layers.1.config.activation=\"gelu\"" }, $"config.json, layer 'dense' (Dense): its activation, gelu, is none of those read here: {Activations}")]
-    [InlineData(Titanic, new[] { "config.layers.1.config.use_bias=false" }, "config.json, layer 'dense' (Dense): it adds no bias, and a dense layer or a convolution here always adds one.")]
     [InlineData(Titanic, new[] { "config.layers.1.config.units=-" }, "config.json, layer 'dense' (Dense): it says no 'units'.")]
     [InlineData(Titanic, new[] { "config.layers.1.config.units=\"16\"" }, "config.json, layer 'dense' (Dense): its 'units' is written as \"16\", which is not what Keras writes there.")]
     [InlineData(Titanic, new[] { "config.layers.1.config=-" }, "config.json, layer '' (Dense): it says no 'units'.")]
@@ -98,13 +97,9 @@ public class KerasRefusalTests
     [InlineData(Images, new[] { "config.layers.2.config.data_format=\"channels_first\"" }, "config.json, layer 'conv2d' (Conv2D): it lays its images out 'channels_first', and images here are laid out with their channels last.")]
     [InlineData(Images, new[] { "config.layers.2.config.kernel_size=[3]" }, "config.json, layer 'conv2d' (Conv2D): its 'kernel_size' is written as [3], and Keras writes a pair there.")]
     [InlineData(Images, new[] { "config.layers.2.config.kernel_size=-" }, "config.json, layer 'conv2d' (Conv2D): it says no 'kernel_size'.")]
-    [InlineData(Images, new[] { "config.layers.2.config.use_bias=false" }, "config.json, layer 'conv2d' (Conv2D): it adds no bias, and a dense layer or a convolution here always adds one.")]
     // The normalisations.
     [InlineData(Images, new[] { "config.layers.3.config.axis=1" }, "config.json, layer 'batch_normalization' (BatchNormalization): it normalises over axis 1, and a normalisation here works over the last axis.")]
-    [InlineData(Images, new[] { "config.layers.3.config.center=false" }, "config.json, layer 'batch_normalization' (BatchNormalization): it leaves out its shift or its scale, and a normalisation here learns both.")]
-    [InlineData(Images, new[] { "config.layers.3.config.scale=false" }, "config.json, layer 'batch_normalization' (BatchNormalization): it leaves out its shift or its scale, and a normalisation here learns both.")]
     [InlineData(Images, new[] { "config.layers.10.config.axis=[1]" }, "config.json, layer 'layer_normalization' (LayerNormalization): it normalises over axis [1], and a normalisation here works over the last axis.")]
-    [InlineData(Images, new[] { "config.layers.10.config.center=false" }, "config.json, layer 'layer_normalization' (LayerNormalization): it leaves out its shift or its scale, and a normalisation here learns both.")]
     [InlineData(Images, new[] { "config.layers.10.config.rms_scaling=true" }, "config.json, layer 'layer_normalization' (LayerNormalization): it scales by the root mean square alone, which no normalisation here does.")]
     // A dropout, a flatten, a relu and a reshape.
     [InlineData(Images, new[] { "config.layers.7.config.noise_shape=[null, 1]" }, "config.json, layer 'dropout' (Dropout): it leaves values out by a noise shape, [null, 1], and a dropout here leaves out each value on its own.")]
@@ -135,7 +130,6 @@ public class KerasRefusalTests
     // A convolution along a series.
     [InlineData(Series, new[] { "config.layers.1.config.padding=\"reflect\"" }, "config.json, layer 'conv1d' (Conv1D): it pads as 'reflect', and a window here pads as 'valid', 'same' or 'causal'.")]
     [InlineData(Series, new[] { "config.layers.1.config.data_format=\"channels_first\"" }, "config.json, layer 'conv1d' (Conv1D): it lays its series out 'channels_first', and series here are laid out with their channels last.")]
-    [InlineData(Series, new[] { "config.layers.1.config.use_bias=false" }, "config.json, layer 'conv1d' (Conv1D): it adds no bias, and a dense layer or a convolution here always adds one.")]
     [InlineData(Series, new[] { "config.layers.1.config.kernel_size=[3, 3]" }, "config.json, layer 'conv1d' (Conv1D): its 'kernel_size' is written as [3, 3], and Keras writes one length there.")]
     [InlineData(Series, new[] { "config.layers.1.config.strides=[1, 2]" }, "config.json, layer 'conv1d' (Conv1D): its 'strides' is written as [1, 2], and Keras writes one length there.")]
     [InlineData(Series, new[] { "config.layers.1.config.kernel_size=-" }, "config.json, layer 'conv1d' (Conv1D): it says no 'kernel_size'.")]
@@ -179,14 +173,12 @@ public class KerasRefusalTests
     // hand, and the layer refuses it as the description is lowered.
     [InlineData(Transposed, new[] { "config.layers.1.config.output_padding=[2, 2]" }, "config.json: A transposed convolution of 2 channels adds 2 places at the end of an axis it strides 2 and dilates 1, and adds fewer than 2: beyond that the window gives the place itself. (Parameter 'outputPadding')")]
     [InlineData(Transposed, new[] { "config.layers.1.config.data_format=\"channels_first\"" }, "config.json, layer 'conv2d_transpose' (Conv2DTranspose): it lays its images out 'channels_first', and images here are laid out with their channels last.")]
-    [InlineData(Transposed, new[] { "config.layers.1.config.use_bias=false" }, "config.json, layer 'conv2d_transpose' (Conv2DTranspose): it adds no bias, and a dense layer or a convolution here always adds one.")]
     [InlineData(Transposed, new[] { "config.layers.1.config.kernel_size=[3]" }, "config.json, layer 'conv2d_transpose' (Conv2DTranspose): its 'kernel_size' is written as [3], and Keras writes a pair there.")]
     [InlineData(NewSeries, new[] { "config.layers.4.config.padding=\"causal\"" }, "config.json, layer 'conv1d_transpose' (Conv1DTranspose): it pads as 'causal', and a window here pads as 'valid' or 'same'.")]
     [InlineData(NewVolume, new[] { "config.layers.2.config.output_padding=[1, 1, 1]" }, "config.json, layer 'conv3d_transpose' (Conv3DTranspose): it pads as 'same' and states how many places to keep at the end of each axis, and the two say different sizes; Keras reads the first and leaves the second.")]
     // A convolution with a group for every channel, and the separable one that begins with it.
     [InlineData(Depthwise, new[] { "config.layers.1.config.padding=\"causal\"" }, "config.json, layer 'depthwise_conv2d' (DepthwiseConv2D): it pads as 'causal', and a window here pads as 'valid' or 'same'.")]
     [InlineData(Depthwise, new[] { "config.layers.1.config.data_format=\"channels_first\"" }, "config.json, layer 'depthwise_conv2d' (DepthwiseConv2D): it lays its images out 'channels_first', and images here are laid out with their channels last.")]
-    [InlineData(Depthwise, new[] { "config.layers.1.config.use_bias=false" }, "config.json, layer 'depthwise_conv2d' (DepthwiseConv2D): it adds no bias, and a dense layer or a convolution here always adds one.")]
     [InlineData(Separable, new[] { "config.layers.1.config.padding=\"causal\"" }, "config.json, layer 'separable_conv2d' (SeparableConv2D): it pads as 'causal', and a window here pads as 'valid' or 'same'.")]
     [InlineData(NewSeries, new[] { "config.layers.3.config.data_format=\"channels_first\"" }, "config.json, layer 'depthwise_conv1d' (DepthwiseConv1D): it lays its series out 'channels_first', and series here are laid out with their channels last.")]
     // A layer that only pads.
@@ -259,12 +251,12 @@ public class KerasRefusalTests
     public void EveryFaultOfADescription_IsNamedAtOnce()
     {
         var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(KerasFixtures.Edited(
-            Images, "config.layers.2.config.padding=\"causal\"", "config.layers.3.config.center=false", "config.layers.9.config.activation=\"elu\"")));
+            Images, "config.layers.2.config.padding=\"causal\"", "config.layers.3.config.axis=1", "config.layers.9.config.activation=\"elu\"")));
 
         Assert.Equal(
             [
                 "config.json, layer 'conv2d' (Conv2D): it pads as 'causal', and a window here pads as 'valid' or 'same'.",
-                "config.json, layer 'batch_normalization' (BatchNormalization): it leaves out its shift or its scale, and a normalisation here learns both.",
+                "config.json, layer 'batch_normalization' (BatchNormalization): it normalises over axis 1, and a normalisation here works over the last axis.",
                 $"config.json, layer 'activation' (Activation): its activation, elu, is none of those read here: {Activations}",
             ],
             refused.Message.Split(Environment.NewLine));

@@ -19,22 +19,34 @@ public abstract class Normalisation : Layer
 {
     private readonly double _epsilon = 1e-5;
 
-    private protected Normalisation(int features)
+    private protected Normalisation(int features, Affine affine)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(features, 1);
 
-        Weight = AddParameter("weight", Filled(features, 1f));
-        Bias = AddParameter("bias", Filled(features, 0f));
+        Features = features;
+        Affine = affine;
+        Weight = affine.WithoutScale ? null : AddParameter("weight", Filled(features, 1f));
+        Bias = affine.WithoutShift ? null : AddParameter("bias", Filled(features, 0f));
     }
 
-    /// <summary>What each normalised feature is scaled by; one, to start with.</summary>
-    public Parameter Weight { get; }
+    /// <summary>What each normalised feature is scaled by; one, to start with; nothing for a normalisation built without a scale.</summary>
+    public Parameter? Weight { get; }
 
-    /// <summary>What each scaled feature is shifted by; nothing, to start with.</summary>
-    public Parameter Bias { get; }
+    /// <summary>What each scaled feature is shifted by; nothing, to start with; nothing for a normalisation built without a shift.</summary>
+    public Parameter? Bias { get; }
+
+    /// <summary>Whether the normalisation scales and shifts what it normalised, by numbers it learns.</summary>
+    public Affine Affine { get; }
 
     /// <summary>How many features, or channels, the last axis holds.</summary>
-    public int Features => Weight.Value.Shape[0];
+    public int Features { get; }
+
+    /// <summary>
+    /// Whether every number the normalisation learns is held still, so that it answers from its running statistics in a training
+    /// pass too, and measures nothing: Keras's <c>training and trainable</c>. A normalisation that keeps no scale and no shift has
+    /// no number to hold, and is never frozen.
+    /// </summary>
+    private protected bool Frozen => Parameters().Any() && Parameters().All(parameter => !parameter.Learns);
 
     /// <summary>What is added to each variance before its root is taken, so nothing is divided by nothing; a hundred-thousandth, unless said.</summary>
     /// <exception cref="ArgumentOutOfRangeException">It is not a number above nothing.</exception>
@@ -59,9 +71,35 @@ public abstract class Normalisation : Layer
         var rows = backend.Reshape(input, new Shape(input.Shape.Count / Features, Features));
         var normalised = Normalise(rows, pass);
 
-        return backend.Reshape(
-            backend.AddRow(backend.Multiply(normalised, backend.RowsOf(Weight.Value, rows.Shape[0])), Bias.Value), input.Shape);
+        var scaled = Weight is null ? normalised : backend.Multiply(normalised, backend.RowsOf(Weight.Value, rows.Shape[0]));
+
+        return backend.Reshape(Bias is null ? scaled : backend.AddRow(scaled, Bias.Value), input.Shape);
     }
+
+    /// <summary>The version of a network's part that can say this normalisation: the fifth where it has no scale or no shift, the second otherwise.</summary>
+    private protected int SavedAs() => Affine.IsWhole ? NetworkDocument.SecondVersion : NetworkDocument.FifthVersion;
+
+    /// <summary>Writes that the normalisation has no scale, or no shift, where it has none; nothing where it has both.</summary>
+    /// <param name="writer">The writer, inside the object the normalisation is written as.</param>
+    private protected void WriteAffine(Utf8JsonWriter writer)
+    {
+        if (Affine.WithoutScale)
+        {
+            writer.WriteBoolean("scale", false);
+        }
+
+        if (Affine.WithoutShift)
+        {
+            writer.WriteBoolean("shift", false);
+        }
+    }
+
+    /// <summary>The scale and the shift a normalisation was written with: both, unless the file says it has none.</summary>
+    /// <param name="settings">The object the normalisation was written as.</param>
+    /// <param name="rebuilding">The file's reader.</param>
+    /// <returns>What it keeps.</returns>
+    private protected static Affine AffineIn(JsonElement settings, Rebuilding rebuilding) =>
+        new() { WithoutScale = !rebuilding.Yes(settings, "scale"), WithoutShift = !rebuilding.Yes(settings, "shift") };
 
     /// <summary>The rows brought to a mean of nothing and a spread of one, over whatever this normalisation measures them.</summary>
     /// <param name="rows">A row for every place, a column for every feature.</param>
@@ -103,7 +141,16 @@ public sealed class BatchNorm : Normalisation, ISaved<BatchNorm>
     /// <param name="features">How many features, or channels, the last axis holds.</param>
     /// <exception cref="ArgumentOutOfRangeException">It holds fewer than one.</exception>
     public BatchNorm(int features)
-        : base(features)
+        : this(features, default)
+    {
+    }
+
+    /// <summary>A batch normalisation of so many features, with the scale and the shift it is told to keep.</summary>
+    /// <param name="features">How many features, or channels, the last axis holds.</param>
+    /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It holds fewer than one.</exception>
+    public BatchNorm(int features, Affine affine)
+        : base(features, affine)
     {
         RunningMean = AddRunningStatistic("running_mean", Filled(features, 0f));
         RunningVariance = AddRunningStatistic("running_var", Filled(features, 1f));
@@ -138,12 +185,15 @@ public sealed class BatchNorm : Normalisation, ISaved<BatchNorm>
     {
         ArgumentNullException.ThrowIfNull(rebuilding);
 
-        return new(rebuilding.Whole(settings, "features"))
+        return new(rebuilding.Whole(settings, "features"), AffineIn(settings, rebuilding))
         {
             Momentum = rebuilding.Number(settings, "momentum"),
             Epsilon = rebuilding.Number(settings, "epsilon"),
         };
     }
+
+    /// <inheritdoc />
+    public int FileVersion => SavedAs();
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
@@ -153,6 +203,7 @@ public sealed class BatchNorm : Normalisation, ISaved<BatchNorm>
         writer.WriteNumber("features", Features);
         writer.WriteNumber("momentum", Momentum);
         writer.WriteNumber("epsilon", Epsilon);
+        WriteAffine(writer);
     }
 
     /// <inheritdoc />
@@ -164,7 +215,7 @@ public sealed class BatchNorm : Normalisation, ISaved<BatchNorm>
         Tensor mean;
         Tensor variance;
 
-        if (pass.Mode == PassMode.Training)
+        if (pass.Mode == PassMode.Training && !Frozen)
         {
             if (count < 2)
             {
@@ -207,7 +258,16 @@ public sealed class LayerNorm : Normalisation, ISaved<LayerNorm>
     /// <param name="features">How many features the last axis holds.</param>
     /// <exception cref="ArgumentOutOfRangeException">It holds fewer than one.</exception>
     public LayerNorm(int features)
-        : base(features)
+        : this(features, default)
+    {
+    }
+
+    /// <summary>A layer normalisation of so many features, with the scale and the shift it is told to keep.</summary>
+    /// <param name="features">How many features the last axis holds.</param>
+    /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It holds fewer than one.</exception>
+    public LayerNorm(int features, Affine affine)
+        : base(features, affine)
     {
     }
 
@@ -219,8 +279,11 @@ public sealed class LayerNorm : Normalisation, ISaved<LayerNorm>
     {
         ArgumentNullException.ThrowIfNull(rebuilding);
 
-        return new(rebuilding.Whole(settings, "features")) { Epsilon = rebuilding.Number(settings, "epsilon") };
+        return new(rebuilding.Whole(settings, "features"), AffineIn(settings, rebuilding)) { Epsilon = rebuilding.Number(settings, "epsilon") };
     }
+
+    /// <inheritdoc />
+    public int FileVersion => SavedAs();
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
@@ -229,6 +292,7 @@ public sealed class LayerNorm : Normalisation, ISaved<LayerNorm>
 
         writer.WriteNumber("features", Features);
         writer.WriteNumber("epsilon", Epsilon);
+        WriteAffine(writer);
     }
 
     /// <inheritdoc />
@@ -243,4 +307,26 @@ public sealed class LayerNorm : Normalisation, ISaved<LayerNorm>
 
         return backend.Divide(centred, backend.ColumnsOf(Spread(backend, variance), Features));
     }
+}
+
+/// <summary>
+/// Whether a normalisation scales and shifts what it normalised by numbers it learns: Keras's <c>scale</c> and <c>center</c>,
+/// PyTorch's <c>affine</c>.
+/// </summary>
+/// <remarks>
+/// Both are kept unless it is said otherwise, so a normalisation that says nothing is the one that always was, and what is said
+/// is what is left out: <c>new Affine { WithoutShift = true }</c>. A scale left out is a scale of one and a shift left out a
+/// shift of nothing, which is where both begin, so a normalisation without them makes the numbers one that has them makes
+/// before it has learned anything.
+/// </remarks>
+public readonly record struct Affine
+{
+    /// <summary>Whether the normalisation has no scale; it has one, unless said.</summary>
+    public bool WithoutScale { get; init; }
+
+    /// <summary>Whether the normalisation has no shift; it has one, unless said.</summary>
+    public bool WithoutShift { get; init; }
+
+    /// <summary>Whether both are kept, as a normalisation that says nothing keeps them.</summary>
+    internal bool IsWhole => !WithoutScale && !WithoutShift;
 }

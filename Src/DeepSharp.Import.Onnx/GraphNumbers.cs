@@ -22,6 +22,9 @@ internal sealed class GraphNumbers(string? folder)
 {
     private readonly Dictionary<string, Kept> _kept = new(StringComparer.Ordinal);
 
+    /// <summary>The version of the operator set the model imports: which operators and which modes of them its graph may use.</summary>
+    public int Opset { get; init; }
+
     /// <summary>Whether the graph holds a value of the name, rather than working it out.</summary>
     public bool Holds(string name) => _kept.ContainsKey(name);
 

@@ -154,7 +154,7 @@ public class SplitLockedTestTests
     }
 
     [Fact]
-    public void ADeclarationWithATestSeed_IsWrittenAsVersionEight()
+    public void ADeclarationWithATestSeed_IsWrittenAsTheNewestVersion()
     {
         // A key an older reader would refuse by name belongs to the version that refuses the file whole.
         var text = Pdd.Create()
@@ -165,6 +165,5 @@ public class SplitLockedTestTests
             .Declaration.ToJson();
 
         Assert.Equal(PipelineDeclaration.Version, JsonDocument.Parse(text).RootElement.GetProperty("version").GetInt32());
-        Assert.Equal(8, PipelineDeclaration.Version);
     }
 }

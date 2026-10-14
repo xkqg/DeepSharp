@@ -60,8 +60,8 @@ public class ImportTests
         Assert.Same(network, saved.Network);
         Assert.IsType<BinaryCrossEntropy>(saved.Loss);
         Assert.Null(saved.TrainedOn);
-        Assert.Equal([1.5f, 0.5f], norm.Weight.Value.Values.ToArray());
-        Assert.Equal([0.125f, -0.125f], norm.Bias.Value.Values.ToArray());
+        Assert.Equal([1.5f, 0.5f], norm.Weight!.Value.Values.ToArray());
+        Assert.Equal([0.125f, -0.125f], norm.Bias!.Value.Values.ToArray());
         Assert.Equal([0.5f, -1f], norm.RunningMean.Value.Values.ToArray());
         Assert.Equal([4f, 0.25f], norm.RunningVariance.Value.Values.ToArray());
     }

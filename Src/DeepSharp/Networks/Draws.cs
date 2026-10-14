@@ -41,6 +41,23 @@ public sealed class Draws
     public double NextDouble() => (NextWord() >> 11) * DoubleScale;
 
     /// <summary>
+    /// A number from the standard normal distribution — a mean of nought and a spread of one — by the Box–Muller transform of
+    /// the next two values at or above 0 and below 1: the second is the angle, and the first, turned from the half-open
+    /// interval it is drawn from to the one that excludes nought, is the radius.
+    /// </summary>
+    /// <remarks>
+    /// The numbers drawn are the same on every machine up to the last bit of the logarithm and the cosine the machine
+    /// works out, which .NET leaves to the platform: a layer started from them is a layer of the right distribution that
+    /// the same seed starts again to within that, never to be pinned to the digit.
+    /// </remarks>
+    public double NextNormal()
+    {
+        var radius = Math.Sqrt(-2 * Math.Log(1 - NextDouble()));
+
+        return radius * Math.Cos(2 * Math.PI * NextDouble());
+    }
+
+    /// <summary>
     /// A whole number at or above 0 and below <paramref name="below"/>, every one of them exactly as likely
     /// as the others. Found by Lemire's method, over the top 32 bits of the next word: those bits, multiplied
     /// by the bound, place the result in range directly, and only the narrow band of outcomes that would

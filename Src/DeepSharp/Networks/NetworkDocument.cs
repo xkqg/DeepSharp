@@ -28,12 +28,19 @@ public static class NetworkDocument
     /// version rather than the key it does not know. In the second, the network's part says which features held one value on
     /// every training row, and a convolution whose window is padded as 'same' says so with the word; a checkpoint's training
     /// part says the batch size, the early stopping and the engine its run went under. In the third, a checkpoint's training
-    /// part says the norm its run's gradients were clipped to. A part is written as the oldest version that says what it
-    /// holds: a network's part, and the training part of a run whose gradients were never clipped, as the second, which
-    /// 0.8.0 reads; the training part of a clipped run as the third, which 0.8.0 refuses by its number. A part of the first,
-    /// which 0.4.0 wrote, is read as it was written and says nothing of them, every window's padding a number.
+    /// part says the norm its run's gradients were clipped to. In the fourth, a network's part says a window that strides
+    /// otherwise along one axis than another, is dilated, rounds its places up or states its border at each end. In the
+    /// fifth, a part says something 0.10.0 adds: a layer without a bias, a layer held still,
+    /// a say in how a layer starts, a penalty or a bound on a layer's numbers, a border that mirrors, repeats or wraps, and,
+    /// in the training part, an optimizer's or a schedule's further settings and the options of a run that steps once every
+    /// so many batches, clips each value or keeps an average of the weights. A part is written as the oldest version that says
+    /// what it holds: a network's part, and the training part of a run whose gradients were never clipped, as the second, which
+    /// 0.8.0 reads; the training part of a clipped run as the third, which 0.8.0 refuses by its number; and a part whose
+    /// layers, optimizer or schedule say more than the fourth could, as the fifth, which 0.9.0 refuses by its number rather
+    /// than by a key it does not know. A part of the first, which 0.4.0 wrote, is read as it was written and says nothing of
+    /// them, every window's padding a number.
     /// </remarks>
-    public const int Version = 4;
+    public const int Version = 5;
 
     /// <summary>
     /// The version 0.4.0 wrote, whose training part records neither the batch size nor the early stopping of its run: the one
@@ -53,6 +60,13 @@ public static class NetworkDocument
     /// one whose border is stated at each end of each axis.
     /// </summary>
     internal const int FourthVersion = 4;
+
+    /// <summary>
+    /// The version a part is written as once a layer, an optimizer, a schedule or a run in it says something a library that reads
+    /// up to the fourth could not: the first version that cannot be read by 0.9.0, which says which version wrote the part
+    /// rather than which key it does not know.
+    /// </summary>
+    internal const int FifthVersion = 5;
 
     internal const string KindKey = "kind";
     internal const string PackageKey = "package";
@@ -93,6 +107,14 @@ public static class NetworkDocument
     internal const string MinDeltaKey = "minDelta";
     internal const string RestoreBestKey = "restoreBest";
     internal const string ClipNormKey = "clipNorm";
+    internal const string ClipValueKey = "clipValue";
+    internal const string StepEveryKey = "stepEvery";
+    internal const string AverageKey = "average";
+    internal const string AveragedKey = "averaged";
+    internal const string LearnsKey = "learns";
+    internal const string L1Key = "l1";
+    internal const string L2Key = "l2";
+    internal const string MaxNormKey = "maxNorm";
     internal const string EngineKey = "engine";
     internal const string NameKey = "name";
     internal const string DeviceKey = "device";
@@ -100,7 +122,7 @@ public static class NetworkDocument
     private static readonly string[] NetworkKeys = [VersionKey, LayersKey, ParametersKey, StateKey, LossKey, TrainedOnKey];
 
     private static readonly string[] TrainingKeys =
-        [VersionKey, SeedKey, BatchSizeKey, EarlyStoppingKey, ClipNormKey, EngineKey, OptimizerKey, ScheduleKey, MemoryKey, JudgementKey, HistoryKey];
+        [VersionKey, SeedKey, BatchSizeKey, EarlyStoppingKey, ClipNormKey, ClipValueKey, StepEveryKey, AverageKey, EngineKey, OptimizerKey, ScheduleKey, MemoryKey, AveragedKey, JudgementKey, HistoryKey];
     private static readonly Assembly OwnAssembly = typeof(NetworkDocument).Assembly;
 
     /// <summary>Writes a network and its loss as one object, and what it was trained on when that is said.</summary>
@@ -126,7 +148,7 @@ public static class NetworkDocument
         writer.WriteNumber(VersionKey, VersionOf(network));
         writer.WritePropertyName(LayersKey);
         WriteKind(writer, network);
-        WriteSlots(writer, slots, slots.ToDictionary(named => named.Path, named => named.Slot.Value));
+        WriteSlots(writer, slots, slots.ToDictionary(named => named.Path, named => named.Slot.Value), rules: true);
         writer.WritePropertyName(LossKey);
         WriteKind(writer, loss);
 
@@ -170,7 +192,7 @@ public static class NetworkDocument
         }
 
         writer.WriteStartObject();
-        writer.WriteNumber(VersionKey, state.Pace is not { } recorded ? FirstVersion : recorded.Clip is null ? SecondVersion : ThirdVersion);
+        writer.WriteNumber(VersionKey, TrainingVersionOf(compiled, state.Pace));
         writer.WriteNumber(SeedKey, state.Seed);
 
         if (state.Pace is { } pace)
@@ -205,6 +227,19 @@ public static class NetworkDocument
         }
 
         writer.WriteEndObject();
+
+        // What the run averaged, by the path of each parameter: written only where the pace says it kept an average.
+        if (state.Averaged is { } averaged)
+        {
+            writer.WriteStartObject(AveragedKey);
+
+            foreach (var (path, tensor) in averaged)
+            {
+                WriteTensor(writer, path, tensor, $"{path} average");
+            }
+
+            writer.WriteEndObject();
+        }
 
         if (state.Judgement is { } judgement)
         {
@@ -349,6 +384,7 @@ public static class NetworkDocument
         var pace = reader.PaceOf();
         var engine = reader.EngineOf();
         var memory = reader.MemoryOf(slots);
+        var averaged = reader.AveragedOf(slots, pace);
         var history = reader.HistoryOf();
         var judgement = reader.JudgementOf(network.Network, history?.Count);
 
@@ -363,9 +399,11 @@ public static class NetworkDocument
         var compiled = new CompiledNetwork(network.Network, optimizer!, network.Loss, schedule);
         var resumable = new Resumable(seed, history!, slots.ToDictionary(named => named.Key, named => named.Value.Value), memory)
         {
+            Held = [.. slots.Where(each => each.Value is Parameter { Learns: false }).Select(each => each.Key).Order(StringComparer.Ordinal)],
             Judgement = judgement,
             Pace = pace,
             Engine = engine,
+            Averaged = averaged,
         };
 
         return new ResumedRun(compiled, new Checkpoint(resumable));
@@ -383,10 +421,29 @@ public static class NetworkDocument
     /// reads it. The walk is the one every slot's path is made from, so a layer held by a layer is reached.
     /// </remarks>
     internal static int VersionOf(Network network) =>
-        network.HeldLayers()
-            .Select(held => held.Layer)
-            .Prepend(network)
-            .Max(layer => layer is ISaved saved ? saved.FileVersion : SecondVersion);
+        Math.Max(
+            network.HeldLayers()
+                .Select(held => held.Layer)
+                .Prepend(network)
+                .Max(layer => layer is ISaved saved ? saved.FileVersion : SecondVersion),
+            network.Parameters().Any(parameter => !parameter.Rules.IsDefault) ? FifthVersion : 0);
+
+    /// <summary>
+    /// The oldest version of a training part that says everything the run holds: what it records of the pace the run went at —
+    /// nothing, for a checkpoint 0.4.0 wrote, the second, or the third once it clipped — or the version its optimizer or its
+    /// schedule names for itself, whichever is the larger.
+    /// </summary>
+    /// <remarks>
+    /// An optimizer or a schedule that says nothing an older library could not read names the second, which raises nothing: a
+    /// run whose pace is unrecorded stays the first, and a run that clipped stays the third, as they were written before.
+    /// </remarks>
+    internal static int TrainingVersionOf(CompiledNetwork compiled, Pace? pace) =>
+        Math.Max(
+            pace is not { } recorded ? FirstVersion : recorded.SaysMore ? FifthVersion : recorded.Clip is null ? SecondVersion : ThirdVersion,
+            Math.Max(NeededBy(compiled.Optimizer), NeededBy(compiled.Schedule)));
+
+    // The version a kind needs of the part it is written into when it says more than the second could; nothing otherwise.
+    private static int NeededBy(object thing) => thing is ISaved { FileVersion: > SecondVersion } saved ? saved.FileVersion : 0;
 
     internal static void WriteKind(Utf8JsonWriter writer, object thing)
     {
@@ -410,7 +467,7 @@ public static class NetworkDocument
 
     // Every slot, the parameters under one key and the running statistics under the other, each by its path, holding the
     // value given for it.
-    private static void WriteSlots(Utf8JsonWriter writer, NamedSlot[] slots, IReadOnlyDictionary<string, Tensor> values)
+    private static void WriteSlots(Utf8JsonWriter writer, NamedSlot[] slots, IReadOnlyDictionary<string, Tensor> values, bool rules = false)
     {
         foreach (var learns in (bool[])[true, false])
         {
@@ -418,14 +475,22 @@ public static class NetworkDocument
 
             foreach (var named in slots.Where(named => named.Slot is Parameter == learns))
             {
-                WriteTensor(writer, named.Path, values[named.Path], named.Path);
+                WriteTensorStart(writer, named.Path, values[named.Path], named.Path);
+
+                if (rules && named.Slot is Parameter parameter)
+                {
+                    WriteRules(writer, parameter.Rules);
+                }
+
+                writer.WriteEndObject();
             }
 
             writer.WriteEndObject();
         }
     }
 
-    private static void WriteTensor(Utf8JsonWriter writer, string key, Tensor tensor, string saying)
+    // A tensor written as its shape and its values, and left open for whatever else stands beside them.
+    private static void WriteTensorStart(Utf8JsonWriter writer, string key, Tensor tensor, string saying)
     {
         foreach (var value in tensor.Values)
         {
@@ -453,7 +518,42 @@ public static class NetworkDocument
         }
 
         writer.WriteEndArray();
+    }
+
+    private static void WriteTensor(Utf8JsonWriter writer, string key, Tensor tensor, string saying)
+    {
+        WriteTensorStart(writer, key, tensor, saying);
         writer.WriteEndObject();
+    }
+
+    // What the learning does to a parameter's numbers, written only where it says something: a file without it means a
+    // parameter that learns as it always did.
+    private static void WriteRules(Utf8JsonWriter writer, SlotRules rules)
+    {
+        if (rules.IsDefault)
+        {
+            return;
+        }
+
+        if (rules.Held)
+        {
+            writer.WriteBoolean(LearnsKey, false);
+        }
+
+        if (rules.L1 > 0)
+        {
+            writer.WriteNumber(L1Key, rules.L1);
+        }
+
+        if (rules.L2 > 0)
+        {
+            writer.WriteNumber(L2Key, rules.L2);
+        }
+
+        if (rules.MaxNorm is { } bound)
+        {
+            writer.WriteNumber(MaxNormKey, bound);
+        }
     }
 
     private static void WriteTrainedOn(Utf8JsonWriter writer, TrainedOn trainedOn)
@@ -546,6 +646,21 @@ public static class NetworkDocument
         if (pace.Clip is { } clip)
         {
             writer.WriteNumber(ClipNormKey, clip.MaxNorm);
+        }
+
+        if (pace.ClipValue is { } bound)
+        {
+            writer.WriteNumber(ClipValueKey, bound);
+        }
+
+        if (pace.StepEvery != 1)
+        {
+            writer.WriteNumber(StepEveryKey, pace.StepEvery);
+        }
+
+        if (pace.Average is { } share)
+        {
+            writer.WriteNumber(AverageKey, share);
         }
     }
 

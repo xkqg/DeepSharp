@@ -192,6 +192,32 @@ public sealed class Rebuilding
         };
     }
 
+    /// <summary>Whether a kind was written with a setting that it writes only when it is false: true, where it is left out.</summary>
+    /// <param name="settings">The object the kind was written as.</param>
+    /// <param name="key">The setting.</param>
+    /// <returns>Whether it says true.</returns>
+    /// <exception cref="FormatException">The setting is written as anything but true or false.</exception>
+    /// <remarks>
+    /// The other way a setting is added to a kind without asking anything of a file written before it: a layer writes that it
+    /// has no bias, or no scale, and says nothing where it has one, so the file that says nothing means what it always meant.
+    /// </remarks>
+    public bool Yes(JsonElement settings, string key)
+    {
+        if (settings.Member(key) is not { } written)
+        {
+            return true;
+        }
+
+        _readings.Peek().Read.Add(key);
+
+        return written.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            _ => throw Refusal(key, "true or false"),
+        };
+    }
+
     /// <summary>Rebuilds the kind written at a place of the file, noting every fault at its place; nothing when it cannot be.</summary>
     internal object? Rebuild(JsonElement element, IReadOnlyList<string> path, NetworkCatalog.Role role)
     {

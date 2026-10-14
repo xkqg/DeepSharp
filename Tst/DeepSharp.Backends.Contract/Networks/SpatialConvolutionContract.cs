@@ -37,7 +37,7 @@ public abstract class SpatialConvolutionContract(ITensorBackend engine)
         var images = reference.Images();
 
         var output = layer.Forward(images, Pass.Evaluation(recording));
-        var gradients = recording.GradientsOf(reference.LossOver(recording, output), [images, layer.Weight.Value, layer.Bias.Value]);
+        var gradients = recording.GradientsOf(reference.LossOver(recording, output), [images, layer.Weight.Value, layer.Bias!.Value]);
 
         Assert.Equal(reference.OutShape, output.Shape);
         AssertClose(reference.Output, output.Values);
@@ -74,7 +74,7 @@ public abstract class SpatialConvolutionContract(ITensorBackend engine)
         var series = Tensor.From(new Shape(1, 4, 2), [.. Enumerable.Range(0, 8).Select(at => MathF.Sin(at * 0.4f))]);
 
         // The other constructor is for numbers a caller already holds: the same layer, started at them.
-        var held = new Conv1DTranspose(drawn.Weight.Value, drawn.Bias.Value, window, channels);
+        var held = new Conv1DTranspose(drawn.Weight.Value, drawn.Bias!.Value, window, channels);
 
         Assert.Equal(new Shape(2, 9), drawn.Weight.Value.Shape);
         Assert.Equal([0], held.OutputPadding);
@@ -116,7 +116,7 @@ public abstract class SpatialConvolutionContract(ITensorBackend engine)
         var images = reference.Images();
 
         var loss = reference.LossOver(recording, layer.Forward(images, Pass.Evaluation(recording)));
-        var gradients = recording.GradientsOf(loss, [images, layer.Weight.Value, layer.Bias.Value]);
+        var gradients = recording.GradientsOf(loss, [images, layer.Weight.Value, layer.Bias!.Value]);
 
         AssertClose(reference.GradInput, gradients[images].Values);
         AssertClose(reference.GradKernel, gradients[layer.Weight.Value].Values);
@@ -145,7 +145,7 @@ public abstract class SpatialConvolutionContract(ITensorBackend engine)
         var images = reference.Images();
 
         var loss = reference.LossOver(recording, convolution.Forward(images, Pass.Evaluation(recording)));
-        var gradients = recording.GradientsOf(loss, [images, convolution.Weight.Value, convolution.Bias.Value]);
+        var gradients = recording.GradientsOf(loss, [images, convolution.Weight.Value, convolution.Bias!.Value]);
 
         AssertClose(reference.GradInput, gradients[images].Values);
         AssertClose(reference.GradKernel, gradients[convolution.Weight.Value].Values);
@@ -176,10 +176,10 @@ public abstract class SpatialConvolutionContract(ITensorBackend engine)
         var volume = new Conv3D(2, 4, new Window3D(2, 3, 3), new RandomStream(42).Draw("initialise:0", 0, 0));
 
         Assert.Equal(new Shape(9, 8), line.Weight.Value.Shape);
-        Assert.Equal(new Shape(8), line.Bias.Value.Shape);
+        Assert.Equal(new Shape(8), line.Bias!.Value.Shape);
         Assert.All(line.Weight.Value.Values.ToArray(), value => Assert.InRange(value, -1f / 3f, 1f / 3f));
         Assert.Equal(new Shape(36, 4), volume.Weight.Value.Shape);
-        Assert.Equal(new Shape(4), volume.Bias.Value.Shape);
+        Assert.Equal(new Shape(4), volume.Bias!.Value.Shape);
         Assert.All(volume.Weight.Value.Values.ToArray(), value => Assert.InRange(value, -1f / 6f, 1f / 6f));
         Assert.All(volume.Bias.Value.Values.ToArray(), value => Assert.InRange(value, -1f / 6f, 1f / 6f));
         Assert.Equal(["weight", "bias"], volume.Slots().Select(slot => slot.Path));

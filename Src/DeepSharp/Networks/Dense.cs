@@ -7,12 +7,14 @@ using DeepSharp.Tensors;
 namespace DeepSharp.Networks;
 
 /// <summary>
-/// A linear layer: every output is a weighted sum of every input, plus a bias of its own.
+/// A linear layer: every output is a weighted sum of every input, plus a bias of its own — or without one, where it is said to
+/// have none.
 /// </summary>
 /// <remarks>
 /// The weights are laid out as many rows as there are inputs by as many columns as there are outputs, so a batch of rows
 /// times the weights is the batch's outputs; PyTorch keeps the same numbers turned round. The slots are named as PyTorch
-/// names them, <c>weight</c> and <c>bias</c>.
+/// names them, <c>weight</c> and <c>bias</c>. A layer without a bias keeps the <c>weight</c> alone, Keras's
+/// <c>use_bias=False</c> and PyTorch's <c>bias=False</c>, and writes into its file that it has none.
 /// </remarks>
 public sealed class Dense : Layer, ISaved<Dense>
 {
@@ -23,42 +25,53 @@ public sealed class Dense : Layer, ISaved<Dense>
     /// <param name="weights">How the weights start, when not as PyTorch starts them.</param>
     /// <exception cref="ArgumentOutOfRangeException">It reads or makes fewer than one value.</exception>
     public Dense(int inputs, int outputs, Draws draws, Initialiser? weights = null)
+        : this(inputs, outputs, new Beginning(draws ?? throw new ArgumentNullException(nameof(draws))) { Weights = weights })
+    {
+    }
+
+    /// <summary>A linear layer that starts as it is told to: as PyTorch's does, unless the beginning says otherwise.</summary>
+    /// <param name="inputs">How many values each row it reads holds.</param>
+    /// <param name="outputs">How many values it makes of each row.</param>
+    /// <param name="beginning">The draws its start is taken from, and how its weights and its bias start — or that it has no bias.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It reads or makes fewer than one value.</exception>
+    /// <exception cref="ArgumentNullException">The beginning holds no draws.</exception>
+    /// <exception cref="ArgumentException">The beginning wants no bias and says how its bias starts.</exception>
+    public Dense(int inputs, int outputs, Beginning beginning)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(inputs, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(outputs, 1);
-        ArgumentNullException.ThrowIfNull(draws);
 
+        var begun = beginning.Required();
         var fans = new Fans(inputs, outputs);
 
-        Weight = AddParameter("weight", (weights ?? new KaimingUniform()).Draw(new Shape(inputs, outputs), fans, draws));
-        Bias = AddParameter("bias", new FanInUniform().Draw(new Shape(outputs), fans, draws));
+        Weight = AddParameter("weight", begun.WeightsOf(new Shape(inputs, outputs), fans));
+        Bias = begun.BiasOf(new Shape(outputs), fans) is { } bias ? AddParameter("bias", bias) : null;
     }
 
     /// <summary>A linear layer that starts at the given numbers.</summary>
     /// <param name="weights">As many rows as there are inputs, by as many columns as there are outputs.</param>
-    /// <param name="bias">One value for each output.</param>
+    /// <param name="bias">One value for each output; nothing for a layer without a bias.</param>
     /// <exception cref="ArgumentException">The weights are not a matrix, or the bias is not a row as long as they are wide.</exception>
-    public Dense(Tensor weights, Tensor bias)
+    public Dense(Tensor weights, Tensor? bias)
     {
         ArgumentNullException.ThrowIfNull(weights);
-        ArgumentNullException.ThrowIfNull(bias);
 
-        if (weights.Shape.Rank != 2 || bias.Shape != new Shape(weights.Shape[1]))
+        if (weights.Shape.Rank != 2 || (bias is not null && bias.Shape != new Shape(weights.Shape[1])))
         {
             throw new ArgumentException(
-                $"A linear layer's weights are a matrix and its bias a row as long as the matrix is wide, and these are {weights.Shape} and {bias.Shape}.",
+                $"A linear layer's weights are a matrix and its bias a row as long as the matrix is wide, and these are {weights.Shape} and {bias?.Shape.ToString() ?? "no bias"}.",
                 nameof(bias));
         }
 
         Weight = AddParameter("weight", weights);
-        Bias = AddParameter("bias", bias);
+        Bias = bias is null ? null : AddParameter("bias", bias);
     }
 
     /// <summary>The weights: inputs by outputs.</summary>
     public Parameter Weight { get; }
 
-    /// <summary>The bias: one value for each output.</summary>
-    public Parameter Bias { get; }
+    /// <summary>The bias: one value for each output; nothing for a layer built without one.</summary>
+    public Parameter? Bias { get; }
 
     /// <summary>How many values each row it reads holds.</summary>
     public int Inputs => Weight.Value.Shape[0];
@@ -74,8 +87,14 @@ public sealed class Dense : Layer, ISaved<Dense>
     {
         ArgumentNullException.ThrowIfNull(rebuilding);
 
-        return new(rebuilding.Whole(settings, "inputs"), rebuilding.Whole(settings, "outputs"), rebuilding.Draws);
+        return new(
+            rebuilding.Whole(settings, "inputs"),
+            rebuilding.Whole(settings, "outputs"),
+            new Beginning(rebuilding.Draws) { WithoutBias = !rebuilding.Yes(settings, "bias") });
     }
+
+    /// <inheritdoc />
+    public int FileVersion => Bias is null ? NetworkDocument.FifthVersion : NetworkDocument.SecondVersion;
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
@@ -84,8 +103,18 @@ public sealed class Dense : Layer, ISaved<Dense>
 
         writer.WriteNumber("inputs", Inputs);
         writer.WriteNumber("outputs", Outputs);
+
+        if (Bias is null)
+        {
+            writer.WriteBoolean("bias", false);
+        }
     }
 
     /// <inheritdoc />
-    protected override Tensor Compute(Tensor input, Pass pass) => pass.Backend.AddRow(pass.Backend.MatMul(input, Weight.Value), Bias.Value);
+    protected override Tensor Compute(Tensor input, Pass pass)
+    {
+        var product = pass.Backend.MatMul(input, Weight.Value);
+
+        return Bias is null ? product : pass.Backend.AddRow(product, Bias.Value);
+    }
 }

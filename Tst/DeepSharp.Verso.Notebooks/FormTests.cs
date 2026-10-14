@@ -1170,6 +1170,88 @@ public sealed class FormTests : IDisposable
         Assert.False(schedule.Accept(new FormEdit("schedule/0", FieldValue.Of("plateau"), FormScope.Unknown, step)));
     }
 
+    [Fact]
+    public async Task ASettingOfALayerAFileMayLeaveOut_ShowsWhatLeavingItOutMeans_IsWrittenOnceSaid_AndLeftOutAgainWhenItMeansThatAgain()
+    {
+        // A dense layer's bias and the way its numbers start: a block written before either was known says neither, and is
+        // drawn as a layer with a bias that starts as it always started; said, each is written; put back, each is left out
+        // of the text again. A bias that is not there is told how to start only by being refused.
+        await using var notebook = await NotebookAsync();
+        var cell = notebook.AddBlock(NotebookVerbs.Catalog().ReadStep(NotebookVerbs.Catalog().Describe("learn.network").Template).AsBlockText());
+        var section = await SectionAsync(notebook, cell);
+
+        Assert.DoesNotContain("bias", cell.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("weights", cell.Source, StringComparison.Ordinal);
+        Assert.Equal(true, Field(section, "layers/0/bias").CurrentValue);
+        Assert.Equal("kaiminguniform", Field(section, "layers/0/weights").CurrentValue);
+        Assert.Equal("faninuniform", Field(section, "layers/0/biasStart").CurrentValue);
+        Assert.Contains(Field(section, "layers/0/weights").Options!, option => option.Value == "glorotuniform");
+
+        await ChangeAsync(notebook, cell, "layers/0/weights", "glorotuniform");
+        await ChangeAsync(notebook, cell, "layers/0/bias", "false");
+
+        var said = Assert.IsType<LearnNetworkStep>(Step(cell));
+
+        Assert.Equal("glorotuniform", said.Layers[0].Text("weights"));
+        Assert.False(said.Layers[0].YesOrNo("bias"));
+        Assert.Contains("\"bias\": false", cell.Source, StringComparison.Ordinal);
+        Assert.Contains("\"weights\": \"glorotuniform\"", cell.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("biasStart", cell.Source, StringComparison.Ordinal);
+
+        var before = cell.Source;
+
+        await ChangeAsync(notebook, cell, "layers/0/biasStart", "zeros");
+
+        Assert.Equal(before, cell.Source);
+        Assert.Contains("biasStart", (await SectionAsync(notebook, cell)).Description, StringComparison.Ordinal);
+
+        await ChangeAsync(notebook, cell, "layers/0/bias", "true");
+        await ChangeAsync(notebook, cell, "layers/0/weights", "kaiminguniform");
+
+        Assert.DoesNotContain("bias", cell.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("weights", cell.Source, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task AnOptionOfAnOptimizer_ShowsWhatLeavingItOutMeans_IsWrittenOnceSaid_AndRefusedWhereItDoesNotGoWithTheRest()
+    {
+        // Nesterov's momentum and a weight decay added to the gradient: a block written before either was known says neither,
+        // and is drawn as an optimizer without them; Nesterov's needs a momentum, and is refused without, leaving the text as it was.
+        await using var notebook = await NotebookAsync();
+        var cell = notebook.AddBlock(NotebookVerbs.Catalog().ReadStep(NotebookVerbs.Catalog().Describe("learn.network").Template).AsBlockText());
+
+        await ChangeAsync(notebook, cell, "optimizer/0", "sgd");
+
+        var section = await SectionAsync(notebook, cell);
+
+        Assert.DoesNotContain("nesterov", cell.Source, StringComparison.Ordinal);
+        Assert.Equal(false, Field(section, "optimizer/0/nesterov").CurrentValue);
+        Assert.Equal("0", Field(section, "optimizer/0/weightDecay").CurrentValue);
+
+        var before = cell.Source;
+
+        await ChangeAsync(notebook, cell, "optimizer/0/nesterov", "true");
+
+        Assert.Equal(before, cell.Source);
+        Assert.Contains("Nesterov", (await SectionAsync(notebook, cell)).Description, StringComparison.Ordinal);
+
+        await ChangeAsync(notebook, cell, "optimizer/0/momentum", "0.9");
+        await ChangeAsync(notebook, cell, "optimizer/0/nesterov", "true");
+        await ChangeAsync(notebook, cell, "optimizer/0/weightDecay", "0.001");
+
+        var said = Assert.IsType<LearnNetworkStep>(Step(cell)).Optimizer;
+
+        Assert.True(said.YesOrNo("nesterov"));
+        Assert.Equal(0.001, said.Number("weightDecay"));
+        Assert.Contains("\"nesterov\": true", cell.Source, StringComparison.Ordinal);
+
+        await ChangeAsync(notebook, cell, "optimizer/0/nesterov", "false");
+        await ChangeAsync(notebook, cell, "optimizer/0/weightDecay", "0");
+
+        Assert.DoesNotContain("nesterov", cell.Source, StringComparison.Ordinal);
+        Assert.DoesNotContain("weightDecay", cell.Source, StringComparison.Ordinal);
+    }
+
     // Whether some kind of the step claims a field, as the form asks before it writes a change.
     private static bool Claims(IPipelineStep step, string field, string value = "1") =>
         NotebookVerbs.Catalog().Describe(step.Verb).Parameters.Any(parameter =>

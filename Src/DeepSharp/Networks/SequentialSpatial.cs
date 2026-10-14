@@ -14,13 +14,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
-    public Sequential Conv1D(int filters, Window1D window)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
-
-        return Add(new ConvolutionWord(
-            "conv1d", "a series of steps and channels", filters, new LineWalk(window), (channels, draws) => new Conv1D(channels, filters, window, draws)));
-    }
+    public Sequential Conv1D(int filters, Window1D window) => Conv1D(filters, window, 1, new Beginning());
 
     /// <summary>The same with the channels in groups: each group of channels in reaching its own group of channels out.</summary>
     /// <param name="filters">How many channels it makes.</param>
@@ -29,17 +23,37 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel, or splits them into fewer than one group.</exception>
     /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
-    public Sequential Conv1D(int filters, Window1D window, int groups)
+    public Sequential Conv1D(int filters, Window1D window, int groups) => Conv1D(filters, window, groups, new Beginning());
+
+    /// <summary>The same with a say in how the layer starts, or that it has no bias: Keras's <c>use_bias=False</c>.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <param name="window">The window, and how it walks.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts.</exception>
+    public Sequential Conv1D(int filters, Window1D window, Beginning beginning) => Conv1D(filters, window, 1, beginning);
+
+    /// <summary>The same with the channels in groups and a say in how the layer starts, or that it has no bias.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <param name="window">The window, and how it walks.</param>
+    /// <param name="groups">How many groups the channels are split into; as many as channels in is a depthwise convolution.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel, or splits them into fewer than one group.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts.</exception>
+    public Sequential Conv1D(int filters, Window1D window, int groups, Beginning beginning)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(groups, 1);
+        RequireUnseeded(beginning);
 
         return Add(new ConvolutionWord(
             "conv1d",
             "a series of steps and channels",
             filters,
             new LineWalk(window),
-            (channels, draws) => new Conv1D(new Channels { In = channels, Out = filters, Groups = groups }, window, draws)));
+            (channels, draws) => new Conv1D(new Channels { In = channels, Out = filters, Groups = groups }, window, beginning with { Draws = draws })));
     }
 
     /// <summary>A convolution through a volume: a block slid through each, making so many channels at every place it stands.</summary>
@@ -48,13 +62,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
-    public Sequential Conv3D(int filters, Window3D window)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
-
-        return Add(new ConvolutionWord(
-            "conv3d", "a volume of planes, rows, columns and channels", filters, new VolumeWalk(window), (channels, draws) => new Conv3D(channels, filters, window, draws)));
-    }
+    public Sequential Conv3D(int filters, Window3D window) => Conv3D(filters, window, 1, new Beginning());
 
     /// <summary>The same with the channels in groups: each group of channels in reaching its own group of channels out.</summary>
     /// <param name="filters">How many channels it makes.</param>
@@ -63,17 +71,37 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel, or splits them into fewer than one group.</exception>
     /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
-    public Sequential Conv3D(int filters, Window3D window, int groups)
+    public Sequential Conv3D(int filters, Window3D window, int groups) => Conv3D(filters, window, groups, new Beginning());
+
+    /// <summary>The same with a say in how the layer starts, or that it has no bias: Keras's <c>use_bias=False</c>.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <param name="window">The window, and how it walks.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts.</exception>
+    public Sequential Conv3D(int filters, Window3D window, Beginning beginning) => Conv3D(filters, window, 1, beginning);
+
+    /// <summary>The same with the channels in groups and a say in how the layer starts, or that it has no bias.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <param name="window">The window, and how it walks.</param>
+    /// <param name="groups">How many groups the channels are split into; as many as channels in is a depthwise convolution.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel, or splits them into fewer than one group.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts.</exception>
+    public Sequential Conv3D(int filters, Window3D window, int groups, Beginning beginning)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(groups, 1);
+        RequireUnseeded(beginning);
 
         return Add(new ConvolutionWord(
             "conv3d",
             "a volume of planes, rows, columns and channels",
             filters,
             new VolumeWalk(window),
-            (channels, draws) => new Conv3D(new Channels { In = channels, Out = filters, Groups = groups }, window, draws)));
+            (channels, draws) => new Conv3D(new Channels { In = channels, Out = filters, Groups = groups }, window, beginning with { Draws = draws })));
     }
 
     /// <summary>The largest value a window covers along a series, for each channel.</summary>
@@ -220,16 +248,26 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel of each.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
-    public Sequential DepthwiseConv1D(int multiplier, Window1D window)
+    public Sequential DepthwiseConv1D(int multiplier, Window1D window) => DepthwiseConv1D(multiplier, window, new Beginning());
+
+    /// <summary>The same with a say in how the layer starts, or that it has no bias: Keras's <c>use_bias=False</c>.</summary>
+    /// <param name="multiplier">How many channels it makes of each channel it is handed.</param>
+    /// <param name="window">The window, and how it walks.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel of each.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts.</exception>
+    public Sequential DepthwiseConv1D(int multiplier, Window1D window, Beginning beginning)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(multiplier, 1);
+        RequireUnseeded(beginning);
 
         return Add(new DepthwiseWord(
             "conv1d",
             "a series of steps and channels",
             multiplier,
             new LineWalk(window),
-            (channels, draws) => new Conv1D(new Channels { In = channels, Out = channels * multiplier, Groups = channels }, window, draws)));
+            (channels, draws) => new Conv1D(new Channels { In = channels, Out = channels * multiplier, Groups = channels }, window, beginning with { Draws = draws })));
     }
 
     /// <summary>A convolution with a group for every channel of an image: each channel convolved by a kernel of its own.</summary>
@@ -238,16 +276,26 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel of each.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
-    public Sequential DepthwiseConv2D(int multiplier, Window window)
+    public Sequential DepthwiseConv2D(int multiplier, Window window) => DepthwiseConv2D(multiplier, window, new Beginning());
+
+    /// <summary>The same with a say in how the layer starts, or that it has no bias: Keras's <c>use_bias=False</c>.</summary>
+    /// <param name="multiplier">How many channels it makes of each channel it is handed.</param>
+    /// <param name="window">The window, and how it walks.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel of each.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts.</exception>
+    public Sequential DepthwiseConv2D(int multiplier, Window window, Beginning beginning)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(multiplier, 1);
+        RequireUnseeded(beginning);
 
         return Add(new DepthwiseWord(
             "conv2d",
             "an image of rows, columns and channels",
             multiplier,
             new PlaneWalk(window),
-            (channels, draws) => new Conv2D(new Channels { In = channels, Out = channels * multiplier, Groups = channels }, window, draws)));
+            (channels, draws) => new Conv2D(new Channels { In = channels, Out = channels * multiplier, Groups = channels }, window, beginning with { Draws = draws })));
     }
 
     /// <summary>A convolution with a group for every channel of a volume: each channel convolved by a kernel of its own.</summary>
@@ -256,16 +304,26 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel of each.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
-    public Sequential DepthwiseConv3D(int multiplier, Window3D window)
+    public Sequential DepthwiseConv3D(int multiplier, Window3D window) => DepthwiseConv3D(multiplier, window, new Beginning());
+
+    /// <summary>The same with a say in how the layer starts, or that it has no bias: Keras's <c>use_bias=False</c>.</summary>
+    /// <param name="multiplier">How many channels it makes of each channel it is handed.</param>
+    /// <param name="window">The block, and how it walks.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel of each.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts.</exception>
+    public Sequential DepthwiseConv3D(int multiplier, Window3D window, Beginning beginning)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(multiplier, 1);
+        RequireUnseeded(beginning);
 
         return Add(new DepthwiseWord(
             "conv3d",
             "a volume of planes, rows, columns and channels",
             multiplier,
             new VolumeWalk(window),
-            (channels, draws) => new Conv3D(new Channels { In = channels, Out = channels * multiplier, Groups = channels }, window, draws)));
+            (channels, draws) => new Conv3D(new Channels { In = channels, Out = channels * multiplier, Groups = channels }, window, beginning with { Draws = draws })));
     }
 
     /// <summary>A convolution along a series that gives back the steps an ordinary one takes away.</summary>
@@ -275,9 +333,20 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
-    public Sequential Conv1DTranspose(int filters, Window1D window, int outputPadding = 0)
+    public Sequential Conv1DTranspose(int filters, Window1D window, int outputPadding = 0) => Conv1DTranspose(filters, window, new Beginning(), outputPadding);
+
+    /// <summary>A convolution along a series that gives back the steps an ordinary one takes away.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <param name="window">The window, and how it walks the series it makes; its border is stated, never worked out.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <param name="outputPadding">How many steps of nothing to keep at the end of the series; none, unless said.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts; or The window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
+    public Sequential Conv1DTranspose(int filters, Window1D window, Beginning beginning, int outputPadding = 0)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
+        RequireUnseeded(beginning);
 
         var stated = window.Border ?? new Sides(window.Padding, window.Padding);
         var settled = TransposedConvolution.Settling(stated, outputPadding);
@@ -291,7 +360,7 @@ public sealed partial class Sequential
                 TransposedConvolution.GivesBack(each[0], window.Stride, (window.Dilation * (window.Length - 1)) + 1, settled.Dropped) + settled.Added,
                 filters,
             ],
-            (channels, draws) => new Conv1DTranspose(new Channels { In = channels, Out = filters }, window, draws, outputPadding)));
+            (channels, draws) => new Conv1DTranspose(new Channels { In = channels, Out = filters }, window, beginning with { Draws = draws }, outputPadding)));
     }
 
     /// <summary>A convolution over an image that gives back the rows and columns an ordinary one takes away.</summary>
@@ -301,9 +370,20 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
-    public Sequential Conv2DTranspose(int filters, Window window, Steps outputPadding = default)
+    public Sequential Conv2DTranspose(int filters, Window window, Steps outputPadding = default) => Conv2DTranspose(filters, window, new Beginning(), outputPadding);
+
+    /// <summary>A convolution over an image that gives back the rows and columns an ordinary one takes away.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <param name="window">The window, and how it walks the image it makes; its border is stated, never worked out.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <param name="outputPadding">How many rows and columns of nothing to keep at the end of each axis; none, unless said.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts; or The window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
+    public Sequential Conv2DTranspose(int filters, Window window, Beginning beginning, Steps outputPadding = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
+        RequireUnseeded(beginning);
 
         var even = new Sides(window.Padding, window.Padding);
         var down = TransposedConvolution.Settling(window.Border is { } sides ? sides.Down : even, outputPadding.Down);
@@ -319,7 +399,7 @@ public sealed partial class Sequential
                 TransposedConvolution.GivesBack(each[1], window.Stride.Across, (window.Dilation.Across * (window.Width - 1)) + 1, across.Dropped) + across.Added,
                 filters,
             ],
-            (channels, draws) => new Conv2DTranspose(new Channels { In = channels, Out = filters }, window, draws, outputPadding)));
+            (channels, draws) => new Conv2DTranspose(new Channels { In = channels, Out = filters }, window, beginning with { Draws = draws }, outputPadding)));
     }
 
     /// <summary>A convolution through a volume that gives back the places an ordinary one takes away.</summary>
@@ -329,9 +409,20 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
-    public Sequential Conv3DTranspose(int filters, Window3D window, Steps3D outputPadding = default)
+    public Sequential Conv3DTranspose(int filters, Window3D window, Steps3D outputPadding = default) => Conv3DTranspose(filters, window, new Beginning(), outputPadding);
+
+    /// <summary>A convolution through a volume that gives back the places an ordinary one takes away.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <param name="window">The block, and how it walks the volume it makes; its border is stated, never worked out.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <param name="outputPadding">How many places of nothing to keep at the end of each axis; none, unless said.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts; or The window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
+    public Sequential Conv3DTranspose(int filters, Window3D window, Beginning beginning, Steps3D outputPadding = default)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
+        RequireUnseeded(beginning);
 
         var even = new Sides(window.Padding, window.Padding);
         var stated = window.Border ?? new Margins3D(even, even, even);
@@ -350,7 +441,7 @@ public sealed partial class Sequential
                 TransposedConvolution.GivesBack(each[2], window.Stride.Across, (window.Dilation.Across * (window.Width - 1)) + 1, across.Dropped) + across.Added,
                 filters,
             ],
-            (channels, draws) => new Conv3DTranspose(new Channels { In = channels, Out = filters }, window, draws, outputPadding)));
+            (channels, draws) => new Conv3DTranspose(new Channels { In = channels, Out = filters }, window, beginning with { Draws = draws }, outputPadding)));
     }
 
     /// <summary>Adds steps of nothing at each end of every series, and nothing else.</summary>
@@ -361,6 +452,14 @@ public sealed partial class Sequential
     public Sequential Pad1D(Sides border, float value = 0f) =>
         Add(new PaddingWord("pad1d", "a series of steps and channels", 1, [border], () => new Pad1D(border, value)));
 
+    /// <summary>Adds steps at each end of every series, filled from the series itself, and nothing else.</summary>
+    /// <param name="border">The steps before the series and after it.</param>
+    /// <param name="filling">What fills them: the series mirrored back, its edge repeated, or the series gone round.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentException">A number of steps is below nothing.</exception>
+    public Sequential Pad1D(Sides border, Filling filling) =>
+        Add(new PaddingWord("pad1d", "a series of steps and channels", 1, [border], () => new Pad1D(border, filling)));
+
     /// <summary>Adds rows and columns of nothing around every image, and nothing else.</summary>
     /// <param name="border">The rows above each image and below it, and the columns before it and after it.</param>
     /// <param name="value">What those rows and columns hold; nothing, unless said.</param>
@@ -368,6 +467,14 @@ public sealed partial class Sequential
     /// <exception cref="ArgumentException">A number of rows or columns is below nothing.</exception>
     public Sequential Pad2D(Margins border, float value = 0f) =>
         Add(new PaddingWord("pad2d", "an image of rows, columns and channels", 2, [border.Down, border.Across], () => new Pad2D(border, value)));
+
+    /// <summary>Adds rows and columns around every image, filled from the image itself, and nothing else.</summary>
+    /// <param name="border">The rows above each image and below it, and the columns before it and after it.</param>
+    /// <param name="filling">What fills them: the image mirrored back, its edge repeated, or the image gone round.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentException">A number of rows or columns is below nothing.</exception>
+    public Sequential Pad2D(Margins border, Filling filling) =>
+        Add(new PaddingWord("pad2d", "an image of rows, columns and channels", 2, [border.Down, border.Across], () => new Pad2D(border, filling)));
 
     /// <summary>Adds planes, rows and columns of nothing around every volume, and nothing else.</summary>
     /// <param name="border">The places at each end of each axis.</param>
@@ -381,6 +488,19 @@ public sealed partial class Sequential
             3,
             [border.Deep, border.Down, border.Across],
             () => new Pad3D(border, value)));
+
+    /// <summary>Adds planes, rows and columns around every volume, filled from the volume itself, and nothing else.</summary>
+    /// <param name="border">The places at each end of each axis.</param>
+    /// <param name="filling">What fills them: the volume mirrored back, its edge repeated, or the volume gone round.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentException">A number of places is below nothing.</exception>
+    public Sequential Pad3D(Margins3D border, Filling filling) =>
+        Add(new PaddingWord(
+            "pad3d",
+            "a volume of planes, rows, columns and channels",
+            3,
+            [border.Deep, border.Down, border.Across],
+            () => new Pad3D(border, filling)));
 
     /// <summary>Pools every series to so many places, each the average of the places it is made of.</summary>
     /// <param name="places">How many places each series is pooled to.</param>

@@ -1,6 +1,8 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Networks;
+
 namespace DeepSharp.Tensors;
 
 /// <summary>
@@ -389,6 +391,48 @@ public sealed class Gradients
     private readonly Dictionary<Tensor, Tensor> _of;
 
     internal Gradients(Dictionary<Tensor, Tensor> of) => _of = of;
+
+    /// <summary>These gradients and others of the same tensors, added up tensor by tensor.</summary>
+    /// <param name="other">The others: one for each tensor these hold.</param>
+    /// <param name="backend">The engine that adds.</param>
+    /// <returns>The sums.</returns>
+    internal Gradients Added(Gradients other, ITensorBackend backend) =>
+        new(_of.ToDictionary(each => each.Key, each => backend.Add(each.Value, other[each.Key])));
+
+    /// <summary>These gradients, each divided by a count: the mean of that many added up.</summary>
+    /// <param name="count">How many were added up.</param>
+    /// <param name="backend">The engine that scales.</param>
+    /// <returns>The means; these as they stand, for a count of one.</returns>
+    internal Gradients Averaged(int count, ITensorBackend backend) =>
+        count == 1
+            ? this
+            : new(_of.ToDictionary(each => each.Key, each => backend.Scale(each.Value, backend.Fill(new Shape(), (float)(1.0 / count)))));
+
+    /// <summary>These gradients with every value held between minus a bound and the bound: PyTorch's <c>clip_grad_value_</c>.</summary>
+    /// <param name="parameters">The parameters the gradients are of, whose names a refusal uses.</param>
+    /// <param name="bound">How far either side of nothing a value may reach.</param>
+    /// <param name="backend">The engine that clips.</param>
+    /// <returns>The clipped gradients.</returns>
+    /// <exception cref="InvalidOperationException">A gradient holds a value that is not a finite number, which a bound says nothing of.</exception>
+    internal Gradients Clamped(IReadOnlyList<Parameter> parameters, double bound, ITensorBackend backend)
+    {
+        var clipped = new Dictionary<Tensor, Tensor>(ReferenceEqualityComparer.Instance);
+
+        foreach (var parameter in parameters)
+        {
+            var gradient = this[parameter.Value];
+
+            if (!gradient.Values.ToArray().All(float.IsFinite))
+            {
+                throw new InvalidOperationException(
+                    $"The gradient of '{parameter.Name}' holds a value that is not a finite number, and clipping each value to a bound says nothing of one: the rows, the rate or the network's start have driven it past what a float holds.");
+            }
+
+            clipped[parameter.Value] = backend.Clamped(gradient, (float)bound);
+        }
+
+        return new Gradients(clipped);
+    }
 
     /// <summary>The gradient of one of the tensors asked for.</summary>
     /// <param name="parameter">The tensor, as it was handed to the pass.</param>

@@ -56,6 +56,84 @@ public sealed class Parameter : Slot
         : base(name, initial)
     {
     }
+
+    /// <summary>What the learning does to its numbers beside stepping them; nothing, unless said.</summary>
+    /// <remarks>
+    /// A penalty the loss adds, a bound the numbers are held under after every step, and whether they are held still. A network's
+    /// file keeps them beside the numbers, and a run that goes on from a checkpoint is refused when they have changed.
+    /// </remarks>
+    public SlotRules Rules { get; set; }
+
+    /// <summary>Whether a step moves it: it does, unless its rules hold it still.</summary>
+    public bool Learns => Rules.Learns;
+
+    /// <summary>The penalty the loss adds for its numbers, worked out on a backend; nothing when its rules say none.</summary>
+    /// <param name="backend">The backend the arithmetic runs on: a recording one, when the penalty is to be differentiated.</param>
+    /// <returns>The penalty, a single value.</returns>
+    /// <remarks>
+    /// Keras's regularizers: the absolute values summed times <see cref="SlotRules.L1"/> and the squares summed times
+    /// <see cref="SlotRules.L2"/>. The sign of nothing is nothing, as it is for Keras, so a number at nothing is pushed neither way
+    /// by the first; the sums are worked out through the backend's own mean, counted back up.
+    /// </remarks>
+    internal Tensor? PenaltyOver(ITensorBackend backend)
+    {
+        if (!Rules.Penalises)
+        {
+            return null;
+        }
+
+        var count = Value.Shape.Count;
+        Tensor? total = null;
+
+        if (Rules.L1 > 0)
+        {
+            var negative = backend.Subtract(backend.Fill(Value.Shape, 0f), Value);
+            var sign = backend.Subtract(backend.Positive(Value), backend.Positive(negative));
+            var sum = backend.Scale(backend.Mean(backend.Multiply(Value, sign)), backend.Fill(new Shape(), count));
+
+            total = backend.Scale(sum, backend.Fill(new Shape(), (float)Rules.L1));
+        }
+
+        if (Rules.L2 > 0)
+        {
+            var sum = backend.Scale(backend.Mean(backend.Multiply(Value, Value)), backend.Fill(new Shape(), count));
+            var squares = backend.Scale(sum, backend.Fill(new Shape(), (float)Rules.L2));
+
+            total = total is null ? squares : backend.Add(total, squares);
+        }
+
+        return total;
+    }
+
+    /// <summary>The numbers a step moved this parameter to, held under the bound its rules say: Keras's <c>MaxNorm</c>.</summary>
+    /// <param name="moved">The tensor the step made.</param>
+    /// <param name="backend">The backend the arithmetic runs on, which records nothing.</param>
+    /// <returns>
+    /// The tensor with every unit's numbers — a matrix's column, a vector as a whole — scaled by <c>min(n, m) / (1e-7 + n)</c>, with
+    /// <c>n</c> their norm and <c>m</c> the bound; those under the bound by a hair under one.
+    /// </returns>
+    internal Tensor Bounded(Tensor moved, ITensorBackend backend)
+    {
+        if (Rules.MaxNorm is not { } bound)
+        {
+            return moved;
+        }
+
+        var squares = backend.Multiply(moved, moved);
+
+        if (moved.Shape.Rank == 2)
+        {
+            var norms = backend.Sqrt(backend.SumRows(squares));
+            var ratio = backend.Divide(backend.Smaller(norms, backend.Fill(norms.Shape, (float)bound)), backend.Add(norms, backend.Fill(norms.Shape, 1e-7f)));
+
+            // The row of ratios laid under every row of the matrix: a column of ones times the row, which multiplies by one exactly.
+            return backend.Multiply(moved, backend.MatMul(backend.Fill(new Shape(moved.Shape[0], 1), 1f), backend.Reshape(ratio, new Shape(1, moved.Shape[1]))));
+        }
+
+        var norm = backend.Sqrt(backend.Scale(backend.Mean(squares), backend.Fill(new Shape(), moved.Shape.Count)));
+
+        return backend.Scale(moved, backend.Divide(backend.Smaller(norm, backend.Fill(new Shape(), (float)bound)), backend.Add(norm, backend.Fill(new Shape(), 1e-7f))));
+    }
 }
 
 /// <summary>

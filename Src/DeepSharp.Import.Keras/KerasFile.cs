@@ -31,19 +31,26 @@ namespace DeepSharp.Import.Keras;
 /// model trained on its logits is read as it stands.
 /// </para>
 /// <para>
-/// What is read: a Sequential model working in single precision, of Dense layers; Conv1D, Conv2D and Conv3D convolutions;
-/// MaxPooling and AveragePooling layers and GlobalMaxPooling and GlobalAveragePooling layers along one, two and three axes,
-/// the global ones keeping their axes when Keras's <c>keepdims</c> says; BatchNormalization, LayerNormalization, Dropout
-/// and SpatialDropout1D, SpatialDropout2D and SpatialDropout3D layers; and Flatten, Reshape, Activation and ReLU layers; and
-/// the linear, relu, tanh and sigmoid activations. A pooling's stride is its window's size when it says none. What is
-/// refused, at the layer that says it and every such layer at once: any other kind of layer or activation; a convolution
-/// or a pooling striding otherwise along one axis than along another, a convolution dilated or with its channels in
-/// groups; a window padded otherwise than 'valid' or 'same' — and 'causal' for a convolution along a series; any layer of
-/// series, images or volumes with its channels first; a layer without a bias; a normalisation over another axis than the
-/// last, or without its shift or its scale, or a layer normalisation by the root mean square alone; a dropout by a noise
-/// shape; a reshape that leaves a length to be worked out; a relu with a cap, a slope or a threshold; a model of another
-/// kind than a Sequential, of another precision, of an input whose lengths are not all stated, or saved without its loss;
-/// and a loss that smooths its labels or adds a batch's losses up rather than taking their mean.
+/// What is read: a Sequential model working in single precision, of Dense layers; Conv1D, Conv2D and Conv3D convolutions,
+/// their transposed, depthwise and separable forms, and ZeroPadding layers; MaxPooling and AveragePooling layers and
+/// GlobalMaxPooling and GlobalAveragePooling layers along one, two and three axes, the global ones keeping their axes when
+/// Keras's <c>keepdims</c> says; BatchNormalization, LayerNormalization, Dropout and SpatialDropout1D, SpatialDropout2D and
+/// SpatialDropout3D layers; and Flatten, Reshape, Activation and ReLU layers; and the linear, relu, tanh and sigmoid
+/// activations. A dense layer or a convolution without a bias (<c>use_bias</c> false) is read as a layer without one, and a
+/// normalisation without its scale or its shift (<c>scale</c> or <c>center</c> false) as one that keeps neither; a layer's
+/// L1, L2 and L1L2 regularizers, its MaxNorm constraints — over the axes a unit's numbers lie along — and its <c>trainable</c>
+/// switch as the rules of its numbers (a penalty the loss adds, a bound after every step, a layer held still), while any other
+/// regularizer or constraint, a MaxNorm over other axes, a bound on a transposed convolution's kernel and a penalty on what a
+/// layer makes are refused by name; a separable
+/// convolution's depthwise stage has no bias, since Keras adds its bias once, after both stages. A pooling's stride is its
+/// window's size when it says none. What is refused, at the layer that says it and every such layer at once: any other kind
+/// of layer or activation; a window padded otherwise than 'valid' or 'same' — and 'causal' for a convolution along a
+/// series; any layer of series, images or volumes with its channels first; a normalisation over another axis than the last,
+/// or a layer normalisation by the root mean square alone; a dropout by a noise shape; a reshape that leaves a length to be
+/// worked out; a relu with a cap, a slope or a threshold; a model of another kind than a Sequential, of another precision,
+/// of an input whose lengths are not all stated, or saved without its loss; and a loss that smooths its labels or adds a
+/// batch's losses up rather than taking their mean. A description that says a layer keeps less than the file's numbers
+/// hold is refused at the number the network has no slot for, and one that says it keeps more at the slot left empty.
 /// </para>
 /// </remarks>
 public sealed class KerasFile : IImporter

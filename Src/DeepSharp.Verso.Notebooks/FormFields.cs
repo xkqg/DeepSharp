@@ -187,7 +187,7 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
         {
             var part = declared[place];
             var kind = parameter.Kinds.First(each => each.Name == part.Kind);
-            var inside = parameter.Single ? written : written[place];
+            var inside = Filled(parameter.Single ? written : written[place], part);
 
             fields.Add(new Field(
                 parameter.Place(place),
@@ -211,6 +211,25 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
         }
 
         return fields;
+    }
+
+    // A part as the step wrote it, with the settings it left out at what leaving them out means: a file may leave a setting out,
+    // and the form draws it all the same, without writing it.
+    private static JsonElement Filled(JsonElement written, PartDeclaration part)
+    {
+        var filled = System.Text.Json.Nodes.JsonNode.Parse(written.GetRawText())!.AsObject();
+
+        foreach (var setting in part.Settings.Where(setting => !filled.ContainsKey(setting.Key)))
+        {
+            filled[setting.Key] = setting.Value.Holds switch
+            {
+                PartValues.Number => System.Text.Json.Nodes.JsonValue.Create(setting.Value.Number),
+                PartValues.YesOrNo => System.Text.Json.Nodes.JsonValue.Create(setting.Value.YesOrNo),
+                _ => System.Text.Json.Nodes.JsonValue.Create(setting.Value.Text),
+            };
+        }
+
+        return Shown(filled);
     }
 
     // What the step would hold had it written what it leaves out, to draw the fields of.

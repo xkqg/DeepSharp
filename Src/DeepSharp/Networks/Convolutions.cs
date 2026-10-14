@@ -21,11 +21,10 @@ public abstract class Convolution : Layer
 {
     private readonly ISpatialWalk _walk;
 
-    /// <summary>A convolution that starts as PyTorch's does.</summary>
-    private protected Convolution(Starting starting, Draws draws)
+    /// <summary>A convolution that starts as PyTorch's does, unless the beginning says otherwise.</summary>
+    private protected Convolution(Starting starting, Beginning beginning)
     {
-        ArgumentNullException.ThrowIfNull(draws);
-
+        var begun = beginning.Required();
         var walk = starting.Walk;
 
         _walk = walk;
@@ -34,16 +33,15 @@ public abstract class Convolution : Layer
 
         var fans = new Fans(walk.Volume * Channels.In / Channels.Groups, walk.Volume * Channels.Out);
 
-        Weight = AddParameter("weight", new KaimingUniform().Draw(KernelShape, fans, draws));
-        Bias = AddParameter("bias", new FanInUniform().Draw(new Shape(Channels.Out), fans, draws));
+        Weight = AddParameter("weight", begun.WeightsOf(KernelShape, fans));
+        Bias = begun.BiasOf(new Shape(Channels.Out), fans) is { } bias ? AddParameter("bias", bias) : null;
     }
 
-    /// <summary>A convolution that starts at the given kernel and bias.</summary>
+    /// <summary>A convolution that starts at the given kernel and bias; with no bias where none is given.</summary>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the bias is not as long as its channels out.</exception>
-    private protected Convolution(Starting starting, Tensor kernel, Tensor bias)
+    private protected Convolution(Starting starting, Tensor kernel, Tensor? bias)
     {
         ArgumentNullException.ThrowIfNull(kernel);
-        ArgumentNullException.ThrowIfNull(bias);
 
         var walk = starting.Walk;
 
@@ -54,22 +52,22 @@ public abstract class Convolution : Layer
             Channels = RequireChannels(given, walk);
             KernelShape = starting.Kernel!.Value;
 
-            if (kernel.Shape != KernelShape || bias.Shape != new Shape(Channels.Out))
+            if (kernel.Shape != KernelShape || (bias is not null && bias.Shape != new Shape(Channels.Out)))
             {
                 throw new ArgumentException(
                     $"A convolution through a {walk.Describe()} of {Channels} takes a {KernelShape} kernel and a bias as long as "
-                    + $"its channels out; these are {kernel.Shape} and {bias.Shape}.",
+                    + $"its channels out; these are {kernel.Shape} and {bias?.Shape.ToString() ?? "no bias"}.",
                     nameof(kernel));
             }
         }
         else
         {
             // A kernel handed on its own says the channels it holds, every one of them in the same group.
-            if (kernel.Shape.Rank != 2 || kernel.Shape[0] < 1 || kernel.Shape[0] % walk.Volume != 0 || bias.Shape != new Shape(kernel.Shape[1]))
+            if (kernel.Shape.Rank != 2 || kernel.Shape[0] < 1 || kernel.Shape[0] % walk.Volume != 0 || (bias is not null && bias.Shape != new Shape(kernel.Shape[1])))
             {
                 throw new ArgumentException(
                     $"A convolution through a {walk.Describe()} takes a kernel of the window's {walk.Volume} places times its channels in by its channels out, "
-                    + $"and a bias as long as its channels out; these are {kernel.Shape} and {bias.Shape}.",
+                    + $"and a bias as long as its channels out; these are {kernel.Shape} and {bias?.Shape.ToString() ?? "no bias"}.",
                     nameof(kernel));
             }
 
@@ -78,14 +76,14 @@ public abstract class Convolution : Layer
         }
 
         Weight = AddParameter("weight", kernel);
-        Bias = AddParameter("bias", bias);
+        Bias = bias is null ? null : AddParameter("bias", bias);
     }
 
     /// <summary>The kernel: the window's values and the channels in of one group, by the channels out.</summary>
     public Parameter Weight { get; }
 
-    /// <summary>The bias: one value for each channel out.</summary>
-    public Parameter Bias { get; }
+    /// <summary>The bias: one value for each channel out; nothing for a convolution built without one.</summary>
+    public Parameter? Bias { get; }
 
     /// <summary>How many channels each place of an example holds, how many the layer makes, and how many groups they are split into.</summary>
     public Channels Channels { get; }
@@ -162,7 +160,7 @@ public abstract class Convolution : Layer
             _ => backend.MatMul(_walk.Unfold(backend, input), Spread(backend)),
         };
 
-        return backend.Reshape(backend.AddRow(values, Bias.Value), shape);
+        return backend.Reshape(Bias is null ? values : backend.AddRow(values, Bias.Value), shape);
     }
 
     // Each channel convolved by a kernel of its own, and nothing added to the seam for it: the patches turned so that a place
@@ -237,6 +235,50 @@ public abstract class Convolution : Layer
             backend.MatMul(Tensor.From(new Shape(rows, held), placing), Weight.Value),
             Tensor.From(new Shape(rows, Channels.Out), mask));
     }
+
+    /// <summary>The channels a convolution was written with: the channels in and out, and the groups where it says them.</summary>
+    /// <param name="settings">The object the convolution was written as.</param>
+    /// <param name="rebuilding">The file's reader.</param>
+    /// <returns>The channels.</returns>
+    private protected static Channels ChannelsIn(JsonElement settings, Rebuilding rebuilding) => new()
+    {
+        In = rebuilding.Whole(settings, "inChannels"),
+        Out = rebuilding.Whole(settings, "outChannels"),
+        Groups = rebuilding.Whole(settings, "groups", 1),
+    };
+
+    /// <summary>How a convolution being rebuilt begins: with the draws it is handed, and without a bias where the file says it has none.</summary>
+    /// <param name="settings">The object the convolution was written as.</param>
+    /// <param name="rebuilding">The file's reader.</param>
+    /// <returns>The beginning.</returns>
+    private protected static Beginning BeginningIn(JsonElement settings, Rebuilding rebuilding) =>
+        new(rebuilding.Draws) { WithoutBias = !rebuilding.Yes(settings, "bias") };
+
+    /// <summary>Writes the channels of this convolution as a file holds them, and that it has no bias where it has none.</summary>
+    /// <param name="writer">The writer, inside the object the convolution is written as.</param>
+    /// <remarks>The groups are written only when there are some, and the bias only when it is not there, so a convolution that says neither is written as it always was.</remarks>
+    private protected void WriteChannels(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber("inChannels", InChannels);
+        writer.WriteNumber("outChannels", OutChannels);
+
+        if (Groups != 1)
+        {
+            writer.WriteNumber("groups", Groups);
+        }
+
+        if (Bias is null)
+        {
+            writer.WriteBoolean("bias", false);
+        }
+    }
+
+    /// <summary>The version of a network's part that can say this convolution: the fifth where it has no bias, otherwise what its window and groups need.</summary>
+    /// <param name="withoutIt">The version the convolution needs for its window and its groups.</param>
+    /// <returns>The version.</returns>
+    private protected int SavedAs(int withoutIt) => Bias is null ? NetworkDocument.FifthVersion : withoutIt;
 
     // Channels a convolution can hold: one at least of each, in groups that divide both and no more than the channels in.
     private static Channels RequireChannels(Channels channels, ISpatialWalk walk)
@@ -330,7 +372,18 @@ public sealed class Conv1D : Convolution, ISaved<Conv1D>
     /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
     public Conv1D(Channels channels, Window1D window, Draws draws)
-        : base(Taking(new LineWalk(window), channels), draws) => Window = window;
+        : this(channels, window, new Beginning(draws))
+    {
+    }
+
+    /// <summary>A convolution of channels in groups, that starts as it is told to.</summary>
+    /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
+    /// <param name="window">The patch, and how it walks.</param>
+    /// <param name="beginning">The draws its start is taken from, and how its kernel and its bias start — or that it has no bias.</param>
+    /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere, or the beginning wants no bias and says how it starts.</exception>
+    /// <exception cref="ArgumentNullException">The beginning holds no draws.</exception>
+    public Conv1D(Channels channels, Window1D window, Beginning beginning)
+        : base(Taking(new LineWalk(window), channels), beginning) => Window = window;
 
     /// <summary>A convolution that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values, channels in included, by as many columns as channels out.</param>
@@ -340,7 +393,7 @@ public sealed class Conv1D : Convolution, ISaved<Conv1D>
     /// The kernel is not a matrix whose rows are the window's length times a whole number of channels, the bias is not as long
     /// as the kernel is wide, or the window cannot stand anywhere.
     /// </exception>
-    public Conv1D(Tensor kernel, Tensor bias, Window1D window)
+    public Conv1D(Tensor kernel, Tensor? bias, Window1D window)
         : base(Taking(new LineWalk(window), null), kernel, bias) => Window = window;
 
     /// <summary>A convolution of channels in groups, that starts at the given kernel and bias.</summary>
@@ -349,7 +402,7 @@ public sealed class Conv1D : Convolution, ISaved<Conv1D>
     /// <param name="window">The patch, and how it walks.</param>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window cannot stand anywhere.</exception>
-    public Conv1D(Tensor kernel, Tensor bias, Window1D window, Channels channels)
+    public Conv1D(Tensor kernel, Tensor? bias, Window1D window, Channels channels)
         : base(Taking(new LineWalk(window), channels), kernel, bias) => Window = window;
 
     /// <summary>The patch, and how it walks.</summary>
@@ -365,31 +418,20 @@ public sealed class Conv1D : Convolution, ISaved<Conv1D>
         ArgumentNullException.ThrowIfNull(rebuilding);
 
         return new(
-            new Channels
-            {
-                In = rebuilding.Whole(settings, "inChannels"),
-                Out = rebuilding.Whole(settings, "outChannels"),
-                Groups = rebuilding.Whole(settings, "groups", 1),
-            },
+            ChannelsIn(settings, rebuilding),
             rebuilding.Window1DIn(settings),
-            rebuilding.Draws);
+            BeginningIn(settings, rebuilding));
     }
 
     /// <inheritdoc />
-    public int FileVersion => Groups == 1 ? Window.FileVersion : NetworkDocument.FourthVersion;
+    public int FileVersion => SavedAs(Groups == 1 ? Window.FileVersion : NetworkDocument.FourthVersion);
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        writer.WriteNumber("inChannels", InChannels);
-        writer.WriteNumber("outChannels", OutChannels);
-
-        if (Groups != 1)
-        {
-            writer.WriteNumber("groups", Groups);
-        }
+        WriteChannels(writer);
 
         writer.WriteWindow(Window);
     }
@@ -420,7 +462,18 @@ public sealed class Conv3D : Convolution, ISaved<Conv3D>
     /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
     public Conv3D(Channels channels, Window3D window, Draws draws)
-        : base(Taking(new VolumeWalk(window), channels), draws) => Window = window;
+        : this(channels, window, new Beginning(draws))
+    {
+    }
+
+    /// <summary>A convolution of channels in groups, that starts as it is told to.</summary>
+    /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
+    /// <param name="window">The patch, and how it walks.</param>
+    /// <param name="beginning">The draws its start is taken from, and how its kernel and its bias start — or that it has no bias.</param>
+    /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere, or the beginning wants no bias and says how it starts.</exception>
+    /// <exception cref="ArgumentNullException">The beginning holds no draws.</exception>
+    public Conv3D(Channels channels, Window3D window, Beginning beginning)
+        : base(Taking(new VolumeWalk(window), channels), beginning) => Window = window;
 
     /// <summary>A convolution that starts at the given kernel and bias.</summary>
     /// <param name="kernel">As many rows as the window holds values, channels in included, by as many columns as channels out.</param>
@@ -430,7 +483,7 @@ public sealed class Conv3D : Convolution, ISaved<Conv3D>
     /// The kernel is not a matrix whose rows are the window's places times a whole number of channels, the bias is not as long
     /// as the kernel is wide, or the window cannot stand anywhere.
     /// </exception>
-    public Conv3D(Tensor kernel, Tensor bias, Window3D window)
+    public Conv3D(Tensor kernel, Tensor? bias, Window3D window)
         : base(Taking(new VolumeWalk(window), null), kernel, bias) => Window = window;
 
     /// <summary>A convolution of channels in groups, that starts at the given kernel and bias.</summary>
@@ -439,7 +492,7 @@ public sealed class Conv3D : Convolution, ISaved<Conv3D>
     /// <param name="window">The patch, and how it walks.</param>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window cannot stand anywhere.</exception>
-    public Conv3D(Tensor kernel, Tensor bias, Window3D window, Channels channels)
+    public Conv3D(Tensor kernel, Tensor? bias, Window3D window, Channels channels)
         : base(Taking(new VolumeWalk(window), channels), kernel, bias) => Window = window;
 
     /// <summary>The block, and how it walks.</summary>
@@ -455,31 +508,20 @@ public sealed class Conv3D : Convolution, ISaved<Conv3D>
         ArgumentNullException.ThrowIfNull(rebuilding);
 
         return new(
-            new Channels
-            {
-                In = rebuilding.Whole(settings, "inChannels"),
-                Out = rebuilding.Whole(settings, "outChannels"),
-                Groups = rebuilding.Whole(settings, "groups", 1),
-            },
+            ChannelsIn(settings, rebuilding),
             rebuilding.Window3DIn(settings),
-            rebuilding.Draws);
+            BeginningIn(settings, rebuilding));
     }
 
     /// <inheritdoc />
-    public int FileVersion => Groups == 1 ? Window.FileVersion : NetworkDocument.FourthVersion;
+    public int FileVersion => SavedAs(Groups == 1 ? Window.FileVersion : NetworkDocument.FourthVersion);
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        writer.WriteNumber("inChannels", InChannels);
-        writer.WriteNumber("outChannels", OutChannels);
-
-        if (Groups != 1)
-        {
-            writer.WriteNumber("groups", Groups);
-        }
+        WriteChannels(writer);
 
         writer.WriteWindow(Window);
     }

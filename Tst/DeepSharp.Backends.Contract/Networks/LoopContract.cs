@@ -560,8 +560,8 @@ public abstract class LoopContract(ITensorBackend engine)
             });
 
         AssertClose([-0.30000001192092896, 0.20028923451900482, 0.0026806776877492666, -0.20000000298023224], output.Weight.Value);
-        AssertClose([0.20405973494052887], output.Bias.Value);
-        AssertClose([0.10000000149011612, -0.09954631328582764, 0.05000000074505806, 0.0], hidden.Bias.Value);
+        AssertClose([0.20405973494052887], output.Bias!.Value);
+        AssertClose([0.10000000149011612, -0.09954631328582764, 0.05000000074505806, 0.0], hidden.Bias!.Value);
         AssertClose([0.10000000149011612, 0.24954630434513092, -0.15000000596046448, 0.0], Tensor.From(new Shape(4), hidden.Weight.Value.Values[4..8]));
         AssertClose([0.0, 0.15045370161533356, -0.25, -0.10000000149011612], Tensor.From(new Shape(4), hidden.Weight.Value.Values[28..32]));
     }
@@ -581,7 +581,7 @@ public abstract class LoopContract(ITensorBackend engine)
             });
 
         AssertClose([-0.30000001192092896, 0.20141485333442688, 0.01311309915035963, -0.20000000298023224], output.Weight.Value);
-        AssertClose([0.2198590189218521], output.Bias.Value);
+        AssertClose([0.2198590189218521], output.Bias!.Value);
 
         var clipped = Rich();
         var plain = Rich();

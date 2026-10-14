@@ -29,10 +29,11 @@ public interface ISaved
     /// </summary>
     /// <remarks>
     /// A network's part is written as the oldest version that says everything in it, which is the largest of these over the
-    /// layers it holds. A kind says the version per instance rather than per kind, so a convolution whose window is not
+    /// layers it holds; a checkpoint's training part, the largest of these over its optimizer and its schedule, and what it
+    /// records of the run. A kind says the version per instance rather than per kind, so a convolution whose window is not
     /// dilated is still written as the second version and read by every library that could read it before — and one that is
     /// dilated names the version it needs, so an older library says which version wrote the part rather than which key it
-    /// does not know.
+    /// does not know. An optimizer or a schedule written outside this library says it the same way.
     /// </remarks>
     int FileVersion => NetworkDocument.SecondVersion;
 }

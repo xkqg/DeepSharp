@@ -119,23 +119,6 @@ internal sealed class KerasModel
             }
         }
 
-        // The slots no number of the file fills: a separable convolution's own bias stands after both its stages, so the
-        // first of them is given one of noughts, of whatever shape the network made it.
-        var shapes = network.Slots().ToDictionary(named => named.Path, named => named.Slot.Value.Shape, StringComparer.Ordinal);
-
-        foreach (var placed in _placed.Values)
-        {
-            foreach (var slot in placed.Layer.Noughts)
-            {
-                var path = string.Create(CultureInfo.InvariantCulture, $"{placed.Place + slot.Away}.{slot.Named}");
-
-                if (shapes.TryGetValue(path, out var shape))
-                {
-                    entries.Add(new SlotEntry(path, Tensor.Zeros(shape), "a bias of noughts"));
-                }
-            }
-        }
-
         var faults = new List<SlotLoadFault>(unread);
 
         try

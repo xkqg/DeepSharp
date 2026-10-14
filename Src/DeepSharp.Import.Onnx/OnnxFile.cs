@@ -15,7 +15,7 @@ namespace DeepSharp.Import.Onnx;
 /// <remarks>
 /// <para>
 /// The graph is read once and lowered onto a <see cref="LayerStack"/>, never kept beside it: each node is written in the
-/// words it is — a Gemm, or a MatMul with the Add of its bias after it, a dense layer; a Conv a convolution along a series,
+/// words it is — a Gemm, or a MatMul with the Add of its bias after it or alone, a dense layer, with a bias when the node names one; a Conv a convolution along a series,
 /// over an image or through a volume; a MaxPool or an AveragePool a pooling along as many axes; a GlobalAveragePool or a
 /// GlobalMaxPool, or a ReduceMean or ReduceMax over those places alone, a pooling of every place of each channel into one;
 /// a BatchNormalization a batch normalisation with ONNX's momentum, which is Keras's, and its epsilon — and the words are lowered as any description is. The graph's numbers go
@@ -67,14 +67,13 @@ namespace DeepSharp.Import.Onnx;
 /// Concat it works a flatten's target out with for batches of any length; a ReduceMean or ReduceMax over any other axes than
 /// every place of each channel — the channels, the batch, some of the places only — or over none named, which would be every
 /// axis, the channels among them; a Gemm that scales or takes its input turned round; a MatMul by anything but weights the
-/// graph holds, or without the Add of its bias; an Add after anything but a MatMul, or of a bias of another width; a Cast
+/// graph holds; an Add after anything but a MatMul, or of a bias of another width; a Cast
 /// into another type; a Transpose other than one moving an image's channels after the batch or last; a convolution or a
 /// pooling of anything but a series, an image or a volume with its channels after the batch, striding otherwise on one axis
 /// than on another, dilated, rounding the places its window stands at up (ceil_mode), or padded otherwise than alike on
 /// every side or as TensorFlow's 'same'; a convolution with its channels in groups; a max pooling that gives the places of
-/// its largest values besides, or numbers them by columns; a layer without a bias; a batch normalisation measuring each
-/// batch as it answers, or of an image with its channels last; a layer normalisation of an image, from another axis or
-/// without its shift; a reshape that does not flatten each example into a row; a softmax anywhere but last before a
+/// its largest values besides, or numbers them by columns; a batch normalisation measuring each
+/// batch as it answers, or of an image with its channels last; a layer normalisation of an image, or from another axis; a reshape that does not flatten each example into a row; a softmax anywhere but last before a
 /// cross-entropy; and a graph taking other than single-precision numbers, or giving an image flattened channel by channel,
 /// whose values would come out in another order.
 /// </para>
@@ -116,7 +115,9 @@ public sealed class OnnxFile : IImporter
 
         var graph = model.Graph ?? throw new FormatException("This ONNX model holds no graph, and a network is read here from the graph a model holds.");
 
-        return new OnnxGraph(graph, new GraphNumbers(FolderOf(file)), _loss).Loaded();
+        var opset = model.OpsetImport.FirstOrDefault(each => each.Domain is "" or "ai.onnx")?.Version ?? 0;
+
+        return new OnnxGraph(graph, new GraphNumbers(FolderOf(file)) { Opset = (int)opset }, _loss).Loaded();
     }
 
     // The folder a graph read from its own file stands in, where its exporter keeps the numbers it keeps beside it; nothing

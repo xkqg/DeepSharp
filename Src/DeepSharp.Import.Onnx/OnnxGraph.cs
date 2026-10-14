@@ -386,12 +386,10 @@ internal sealed class OnnxGraph
                 continue;
             }
 
-            // A MatMul no Add after it made a dense layer with adds no bias.
-            if (layer.Unbiased is not null)
+            // A MatMul no Add comes after is a dense layer that adds no bias.
+            if (layer.Unbiased is not null && layer.Bare is { } bare)
             {
-                node.Refuse(OnnxKind.NoBias);
-
-                continue;
+                layer = layer with { Words = bare, Unbiased = null };
             }
 
             // A layer written as no word here is a softmax, which only a cross-entropy that applies it takes over.

@@ -17,6 +17,9 @@ public sealed class FitOptions
 {
     private readonly int _epochs = 1;
     private readonly int _batchSize = 32;
+    private readonly double? _clipValue;
+    private readonly int _stepEvery = 1;
+    private readonly double? _average;
 
     /// <summary>Options for a run worked out from the given seed.</summary>
     /// <param name="seed">The number every random draw of the run is worked out from.</param>
@@ -50,6 +53,61 @@ public sealed class FitOptions
     /// none where it had one, is refused.
     /// </remarks>
     public GradientClip? GradientClip { get; init; }
+
+    /// <summary>
+    /// How far either side of nothing a gradient's value may reach before the optimizer takes it; no clipping by value, unless
+    /// said. PyTorch's <c>clip_grad_value_</c>, Keras's <c>clipvalue</c>.
+    /// </summary>
+    /// <remarks>
+    /// Each value beyond the bound is brought to it, before the whole norm is clipped, when it is. It is part of what a run
+    /// is: a checkpoint records it, and a run going on from the checkpoint under another, or under none where it had one, is
+    /// refused. A gradient that holds a value that is not a finite number is refused by name rather than clipped.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a finite number above nothing.</exception>
+    public double? ClipValue
+    {
+        get => _clipValue;
+        init => _clipValue = value is null || (double.IsFinite(value.Value) && value.Value > 0)
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "The bound a gradient's values are clipped to is a finite number above nothing.");
+    }
+
+    /// <summary>
+    /// How many batches' gradients are added up and averaged into one step; a step every batch, unless said. Keras's
+    /// <c>gradient_accumulation_steps</c>, Lightning's <c>accumulate_grad_batches</c>.
+    /// </summary>
+    /// <remarks>
+    /// The step is taken from the mean of the gradients of the batches in its window — clipped, when the run clips — and a window
+    /// never goes across the end of an epoch: the last batches of an epoch are stepped as a window of however many are left. The
+    /// network is trained on a batch at a time all the same, so a normalisation counts each batch on its own. A run cancelled
+    /// in the middle of a window leaves the window unstepped. It is part of what a run is: a checkpoint records it.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">It is below one.</exception>
+    public int StepEvery
+    {
+        get => _stepEvery;
+        init => _stepEvery = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "A step is taken from at least one batch.");
+    }
+
+    /// <summary>
+    /// The share of an exponential moving average of the weights each step keeps, from nothing to below one; no average,
+    /// unless said. Keras's <c>ema_momentum</c>, PyTorch's <c>get_ema_multi_avg_fn</c> decay.
+    /// </summary>
+    /// <remarks>
+    /// After every step the average of each parameter is its last times this share plus the parameter times what is left of it —
+    /// the first being the parameter itself — and when the run has finished, the network holds the averages in place of the
+    /// weights, running statistics aside. Every epoch is judged by the weights as they are. The average is part of a checkpoint,
+    /// so a run goes on from one with it; it cannot be asked for beside restoring the best epoch's weights, which also says what
+    /// the run ends holding.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a share above nothing and below one.</exception>
+    public double? Average
+    {
+        get => _average;
+        init => _average = value is null || (value.Value > 0 && value.Value < 1)
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "The share an average of the weights keeps of itself is above nothing and below one.");
+    }
 
     /// <summary>
     /// Where the arithmetic runs — the training passes, the looks at the validation rows and the report's measures; the light
@@ -150,8 +208,8 @@ public sealed class EarlyStopping
 /// whole norm plus a millionth is below one, every gradient is scaled by it, so their whole norm comes to just under the most.
 /// Otherwise the gradients pass untouched, to the last bit, so a clip the gradients never reach leaves a run as it is without
 /// one. The norm is worked out on the run's engine through its own arithmetic — each gradient's squares averaged and counted
-/// back up — and added up beside it, so it runs on any engine. Only the norm is clipped: clipping each value on its own needs
-/// an exact clamp that an engine is not asked for.
+/// back up — and added up beside it, so it runs on any engine. Clipping each value on its own is <see cref="FitOptions.ClipValue"/>,
+/// worked out from the engine's own comparisons, so an engine is not asked for a clamp of its own.
 /// </remarks>
 public sealed class GradientClip
 {

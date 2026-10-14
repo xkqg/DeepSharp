@@ -90,7 +90,9 @@ public class LifetimeTests
         // managed heap barely grows, so only the bytes the storages tell the collector about make it look.
         // What is asserted is the mechanism, not how fast the finalizer thread keeps up on a busy machine: the bytes told to
         // the collector make it collect though nothing managed asked for it, and once what those collections found is
-        // finalized, few of the dropped tensors are left — without the bytes told, no collection runs and all 500 are.
+        // finalized, fewer than half of the dropped tensors are left — without the bytes told, no collection runs and all 500 are.
+        // How many are left is when the last collection came, which the collector decides: over forty runs on each runtime it was
+        // between 1 and 153, so a bound of a hundred failed one run in ten and half of them is the line between the two.
         var engine = TorchBackend.OnCpu();
 
         Collected();
@@ -105,7 +107,7 @@ public class LifetimeTests
         var left = torch.Tensor.TotalCount - before;
 
         Assert.True(collected > 0, $"Five hundred tensors of four megabytes were made and dropped, {most} of them alive at once, and the collector never ran.");
-        Assert.True(left < 100, $"{left} of 500 dropped tensors were still alive once what the collector found was finalized.");
+        Assert.True(left < 250, $"{left} of 500 dropped tensors were still alive once what the collector found was finalized.");
     }
 
     [Fact]

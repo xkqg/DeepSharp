@@ -63,7 +63,7 @@ public sealed partial class Sequential
     /// <param name="units">How many values it makes of each example.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one value.</exception>
-    public Sequential Dense(int units) => Add(new DenseWord(units, null));
+    public Sequential Dense(int units) => Dense(units, new Beginning());
 
     /// <summary>A fully connected layer whose weights start as the given initialiser draws them.</summary>
     /// <param name="units">How many values it makes of each example.</param>
@@ -79,7 +79,25 @@ public sealed partial class Sequential
     {
         ArgumentNullException.ThrowIfNull(weights);
 
-        return Add(new DenseWord(units, weights));
+        return Dense(units, new Beginning { Weights = weights });
+    }
+
+    /// <summary>A fully connected layer that starts as it is told to, or has no bias: Keras's <c>use_bias=False</c>.</summary>
+    /// <param name="units">How many values it makes of each example.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one value.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts.</exception>
+    /// <remarks>
+    /// A beginning here is built without draws, as <c>new Beginning { WithoutBias = true }</c>: the draws a described network's
+    /// layers start from are the run's, counted from its seed at the place of each layer, so the description says only how.
+    /// A layer written as code is handed a beginning that names draws and no more.
+    /// </remarks>
+    public Sequential Dense(int units, Beginning beginning)
+    {
+        RequireUnseeded(beginning);
+
+        return Add(new DenseWord(units, beginning));
     }
 
     /// <summary>Keeps each value above nothing, and nothing otherwise.</summary>
@@ -108,7 +126,12 @@ public sealed partial class Sequential
     /// <summary>Normalises each feature — the last axis of an example — over the batch.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <remarks>As PyTorch leaves it: a momentum of a tenth, in PyTorch's meaning, and an epsilon of a hundred-thousandth.</remarks>
-    public Sequential BatchNorm() => Add(new NormalisationWord(features => new BatchNorm(features)));
+    public Sequential BatchNorm() => BatchNorm(default(Affine));
+
+    /// <summary>Normalises each feature — the last axis of an example — over the batch, keeping the scale and the shift it is told to.</summary>
+    /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one — Keras's <c>scale</c> and <c>center</c>.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    public Sequential BatchNorm(Affine affine) => Add(new NormalisationWord(features => new BatchNorm(features, affine)));
 
     /// <summary>Normalises each feature — the last axis of an example — over the batch, with Keras's momentum and epsilon.</summary>
     /// <param name="momentum">
@@ -122,7 +145,15 @@ public sealed partial class Sequential
     /// A batch normalisation Keras trained answers here as it answered there, from its scale, its shift and its running
     /// statistics. Trained here, its running variance takes each batch's variance as PyTorch counts it, over one row fewer.
     /// </remarks>
-    public Sequential BatchNorm(double momentum, double epsilon)
+    public Sequential BatchNorm(double momentum, double epsilon) => BatchNorm(momentum, epsilon, default);
+
+    /// <summary>Normalises each feature over the batch, with Keras's momentum and epsilon, keeping the scale and the shift it is told to.</summary>
+    /// <param name="momentum">Keras's momentum: the share of the running statistics each training batch leaves as they were, between nothing and one.</param>
+    /// <param name="epsilon">What is added to each variance before its root is taken, above nothing — 0.001 in Keras.</param>
+    /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The momentum is not a share, or the epsilon not a finite number above nothing.</exception>
+    public Sequential BatchNorm(double momentum, double epsilon, Affine affine)
     {
         if (!global::DeepSharp.Networks.BatchNorm.IsShare(momentum))
         {
@@ -132,23 +163,35 @@ public sealed partial class Sequential
 
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Add(new NormalisationWord(features => new BatchNorm(features) { Momentum = 1 - momentum, Epsilon = epsilon }));
+        return Add(new NormalisationWord(features => new BatchNorm(features, affine) { Momentum = 1 - momentum, Epsilon = epsilon }));
     }
 
     /// <summary>Normalises each example over its features — the last axis.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <remarks>As PyTorch leaves it: an epsilon of a hundred-thousandth.</remarks>
-    public Sequential LayerNorm() => Add(new NormalisationWord(features => new LayerNorm(features)));
+    public Sequential LayerNorm() => LayerNorm(default(Affine));
+
+    /// <summary>Normalises each example over its features — the last axis — keeping the scale and the shift it is told to.</summary>
+    /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one — Keras's <c>scale</c> and <c>center</c>.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    public Sequential LayerNorm(Affine affine) => Add(new NormalisationWord(features => new LayerNorm(features, affine)));
 
     /// <summary>Normalises each example over its features — the last axis — with Keras's epsilon.</summary>
     /// <param name="epsilon">What is added to each variance before its root is taken, above nothing — 0.001 in Keras.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The epsilon is not a finite number above nothing.</exception>
-    public Sequential LayerNorm(double epsilon)
+    public Sequential LayerNorm(double epsilon) => LayerNorm(epsilon, default);
+
+    /// <summary>Normalises each example over its features with Keras's epsilon, keeping the scale and the shift it is told to.</summary>
+    /// <param name="epsilon">What is added to each variance before its root is taken, above nothing — 0.001 in Keras.</param>
+    /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The epsilon is not a finite number above nothing.</exception>
+    public Sequential LayerNorm(double epsilon, Affine affine)
     {
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Add(new NormalisationWord(features => new LayerNorm(features) { Epsilon = epsilon }));
+        return Add(new NormalisationWord(features => new LayerNorm(features, affine) { Epsilon = epsilon }));
     }
 
     /// <summary>Lays each example out in another shape holding as many values: a row of pixels as an image, say.</summary>
@@ -163,13 +206,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
-    public Sequential Conv2D(int filters, Window window)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
-
-        return Add(new ConvolutionWord(
-            "conv2d", "an image of rows, columns and channels", filters, new PlaneWalk(window), (channels, draws) => new Conv2D(channels, filters, window, draws)));
-    }
+    public Sequential Conv2D(int filters, Window window) => Conv2D(filters, window, 1, new Beginning());
 
     /// <summary>The same with the channels in groups: each group of channels in reaching its own group of channels out.</summary>
     /// <param name="filters">How many channels it makes.</param>
@@ -178,17 +215,37 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel, or splits them into fewer than one group.</exception>
     /// <exception cref="ArgumentException">The channels do not go into the groups, or the window cannot stand anywhere.</exception>
-    public Sequential Conv2D(int filters, Window window, int groups)
+    public Sequential Conv2D(int filters, Window window, int groups) => Conv2D(filters, window, groups, new Beginning());
+
+    /// <summary>The same with a say in how the layer starts, or that it has no bias: Keras's <c>use_bias=False</c>.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <param name="window">The window, and how it walks.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts.</exception>
+    public Sequential Conv2D(int filters, Window window, Beginning beginning) => Conv2D(filters, window, 1, beginning);
+
+    /// <summary>The same with the channels in groups and a say in how the layer starts, or that it has no bias.</summary>
+    /// <param name="filters">How many channels it makes.</param>
+    /// <param name="window">The window, and how it walks.</param>
+    /// <param name="groups">How many groups the channels are split into; as many as channels in is a depthwise convolution.</param>
+    /// <param name="beginning">How its kernel and its bias start — or that it has no bias; the draws are the run's, at the layer's place, and are not said here.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one channel, or splits them into fewer than one group.</exception>
+    /// <exception cref="ArgumentException">The beginning names draws, which a described network takes from its run, or wants no bias and says how it starts.</exception>
+    public Sequential Conv2D(int filters, Window window, int groups, Beginning beginning)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(filters, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(groups, 1);
+        RequireUnseeded(beginning);
 
         return Add(new ConvolutionWord(
             "conv2d",
             "an image of rows, columns and channels",
             filters,
             new PlaneWalk(window),
-            (channels, draws) => new Conv2D(new Channels { In = channels, Out = filters, Groups = groups }, window, draws)));
+            (channels, draws) => new Conv2D(new Channels { In = channels, Out = filters, Groups = groups }, window, beginning with { Draws = draws })));
     }
 
     /// <summary>Lays each example out as one row of its values.</summary>
@@ -304,6 +361,23 @@ public sealed partial class Sequential
         }
     }
 
+    // How a described network's layers start is told without the draws: they are the run's, at the place of each layer. A
+    // beginning that names draws, or that wants no bias and says how to start one, is refused where it is handed in.
+    private static void RequireUnseeded(Beginning beginning)
+    {
+        if (beginning.Draws is not null)
+        {
+            throw new ArgumentException(
+                "A described network starts every layer from the draws of its run, at the place the layer stands: say how its layers start, and build the beginning without draws.",
+                nameof(beginning));
+        }
+
+        if (beginning.WithoutBias && beginning.Bias is not null)
+        {
+            throw new ArgumentException("A layer without a bias has none to start: either it has no bias or it says how the bias starts.", nameof(beginning));
+        }
+    }
+
     private Sequential Add(IWord word)
     {
         _words.Add(word);
@@ -359,23 +433,23 @@ public sealed partial class Sequential
 
     private sealed record DenseWord : IWord
     {
-        public DenseWord(int units, Initialiser? weights)
+        public DenseWord(int units, Beginning beginning)
         {
             ArgumentOutOfRangeException.ThrowIfLessThan(units, 1);
             Units = units;
-            Weights = weights;
+            Begins = beginning;
         }
 
         public int Units { get; }
 
-        // How the weights start; PyTorch's start when nothing is said.
-        public Initialiser? Weights { get; }
+        // How the layer starts, without the draws: PyTorch's start when nothing is said.
+        public Beginning Begins { get; }
 
         public string? Refusal(Shape each) => each.Rank == 1 ? null : $"dense, takes each example as a row of numbers, and each reaching it is {each}: flatten it first.";
 
         public Shape After(Shape each) => new(Units);
 
-        public Layer Make(Shape each, Draws draws) => new Dense(each[0], Units, draws, Weights);
+        public Layer Make(Shape each, Draws draws) => new Dense(each[0], Units, Begins with { Draws = draws });
     }
 
     private sealed record DropoutWord(double Rate) : IWord

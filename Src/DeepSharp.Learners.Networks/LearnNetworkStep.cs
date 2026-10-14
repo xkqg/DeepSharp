@@ -51,6 +51,27 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         LeftOut = 0,
     };
 
+    private static readonly NumberParameter ClipValueKey = new(
+        "clipValue", "The most any value of a step's gradients may reach, either side of nothing, before they move the network; left out, or nought, they are not clipped by value.", 0)
+    {
+        AtLeast = 0,
+        LeftOut = 0,
+    };
+
+    private static readonly WholeNumberParameter StepEveryKey = new(
+        "stepEvery", "How many batches' gradients are averaged into one step; left out, a step every batch.", 1)
+    {
+        AtLeast = 1,
+        LeftOut = 1,
+    };
+
+    private static readonly NumberParameter AverageKey = new(
+        "average", "The share an average of the network's weights keeps of itself at every step, above nothing and below one, written over the weights when the run ends; left out, or nought, none is kept.", 0)
+    {
+        AtLeast = 0,
+        LeftOut = 0,
+    };
+
     private static readonly PartsParameter LossKey = new(
         "loss", "What the network's answers are judged by while it trains.", [NetworkWords.Losses[0].Declared()], NetworkWords.Losses)
     {
@@ -83,7 +104,9 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
     public LearnNetworkStep(IReadOnlyList<PartDeclaration> layers, PartDeclaration optimizer, PartDeclaration loss)
     {
         Layers = LayersKey.Require(layers);
+        Layers.RequireCoherent();
         Optimizer = OptimizerKey.Require([optimizer])[0];
+        Optimizer.Moved();
         Loss = LossKey.Require([loss])[0];
     }
 
@@ -110,6 +133,29 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
     {
         get;
         init => field = ClipKey.Require(value);
+    }
+
+    /// <summary>The most any value of a step's gradients may reach, either side of nothing; nought, unless said, for none.</summary>
+    /// <remarks>A file written before the key was known says nothing of it, and is read as a run whose gradient values are not clipped, as it ran.</remarks>
+    public double ClipValue
+    {
+        get;
+        init => field = ClipValueKey.Require(value);
+    }
+
+    /// <summary>How many batches' gradients are averaged into one step; one, unless said, for a step every batch.</summary>
+    public int StepEvery
+    {
+        get;
+        init => field = StepEveryKey.Require(value);
+    } = 1;
+
+    /// <summary>The share an average of the weights keeps of itself at every step; nought, unless said, for none kept.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is below nothing, or one or more.</exception>
+    public double Average
+    {
+        get;
+        init => field = value < 1 ? AverageKey.Require(value) : throw new ArgumentOutOfRangeException(nameof(value), value, "The share an average of the weights keeps of itself is below one.");
     }
 
     /// <summary>When the run stops; at its last pass, unless said.</summary>
@@ -163,6 +209,9 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         .With(OptimizerKey, step => One(step.Optimizer))
         .With(ScheduleKey, step => One(step.Schedule))
         .With(ClipKey, step => step.Clip)
+        .With(ClipValueKey, step => step.ClipValue)
+        .With(StepEveryKey, step => step.StepEvery)
+        .With(AverageKey, step => step.Average)
         .With(LossKey, step => One(step.Loss))
         .With(StoppingKey, step => One(step.Stopping))
         .With(EngineKey, step => step.Engine)
@@ -187,6 +236,9 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         {
             Schedule = ScheduleKey.Read(element)[0],
             Clip = ClipKey.Read(element),
+            ClipValue = ClipValueKey.Read(element),
+            StepEvery = StepEveryKey.Read(element),
+            Average = AverageKey.Read(element),
             Stopping = StoppingKey.Read(element)[0],
             Engine = EngineKey.Read(element),
             Seed = SeedKey.Read(element),
@@ -206,6 +258,9 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         && Loss == other.Loss
         && Schedule == other.Schedule
         && Clip.Equals(other.Clip)
+        && ClipValue.Equals(other.ClipValue)
+        && StepEvery == other.StepEvery
+        && Average.Equals(other.Average)
         && Stopping == other.Stopping
         && Engine == other.Engine
         && Seed == other.Seed
@@ -226,6 +281,9 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         hash.Add(Loss);
         hash.Add(Schedule);
         hash.Add(Clip);
+        hash.Add(ClipValue);
+        hash.Add(StepEvery);
+        hash.Add(Average);
         hash.Add(Stopping);
         hash.Add(Engine);
         hash.Add(Seed);

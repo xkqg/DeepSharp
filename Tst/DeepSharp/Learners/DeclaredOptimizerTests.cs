@@ -61,7 +61,9 @@ public class DeclaredOptimizerTests
     {
         // One key per setting: every number the network's file writes the optimizer with is declared under the same key,
         // except the two betas, which a declaration writes as Adam's are declared, each under a key of its own.
-        var declared = Word(kind).Settings.Select(setting => setting.Key).ToHashSet(StringComparer.Ordinal);
+        // The options an optimizer has beyond its defaults are declared too, each left out meaning off, and a file writes them only when
+        // they are on: so the keys written when none is, are the declared ones that cannot be left out.
+        var declared = Word(kind).Settings.Where(setting => setting.RequiredKeys.Count > 0).Select(setting => setting.Key).ToHashSet(StringComparer.Ordinal);
         var written = WrittenKeys((ISaved)Word(kind).Declared().Moved());
 
         Assert.Equal(
@@ -124,6 +126,153 @@ public class DeclaredOptimizerTests
             "adamw" => new AdamW(0.01) { WeightDecay = 0.1 },
             "rmsprop" => new RmsProp(0.001) { Momentum = 0.9 },
             _ => new Nadam(0.01),
+        };
+        var written = new Sequential().Dense(4).Relu().Dense(1)
+            .Compile(optimizer, new BinaryCrossEntropy())
+            .Fit(Passengers().Build().RunFor(Needs.OneScale), new FitOptions(20260929) { Epochs = 3 });
+
+        Assert.Equal(written.History!.Epochs.Select(epoch => epoch.Loss), declared.History!.Epochs.Select(epoch => epoch.Loss));
+        Assert.Equal(
+            written.Network.Parameters().Select(parameter => parameter.Value.Values.ToArray()),
+            declared.Network.Parameters().Select(parameter => parameter.Value.Values.ToArray()));
+    }
+
+    [Fact]
+    public void TheOptionsAnOptimizerHasBeyondItsDefaults_AreDeclaredBySettingsItsWordTakes_EachLeftOutMeaningOff()
+    {
+        Assert.Equal(["rate", "momentum", "weightDecay", "dampening", "nesterov"], Word("sgd").Settings.Select(setting => setting.Key));
+        Assert.Equal(["rate", "firstMoment", "secondMoment", "epsilon", "weightDecay", "amsgrad"], Word("adam").Settings.Select(setting => setting.Key));
+        Assert.Equal(["rate", "firstMoment", "secondMoment", "epsilon", "weightDecay", "amsgrad"], Word("adamw").Settings.Select(setting => setting.Key));
+        Assert.Equal(["rate", "alpha", "epsilon", "momentum", "weightDecay", "centered"], Word("rmsprop").Settings.Select(setting => setting.Key));
+        Assert.Equal(["rate", "firstMoment", "secondMoment", "epsilon", "momentumDecay", "weightDecay"], Word("nadam").Settings.Select(setting => setting.Key));
+
+        // AdamW's weight decay is its own, decoupled and always written; every other decay is added to the gradient and left out
+        // meaning none.
+        Assert.Contains("weightDecay", Word("adamw").Settings.Where(setting => setting.RequiredKeys.Count > 0).Select(setting => setting.Key));
+        Assert.DoesNotContain("weightDecay", Word("adam").Settings.Where(setting => setting.RequiredKeys.Count > 0).Select(setting => setting.Key));
+
+        var sgd = Assert.IsType<Sgd>(Word("sgd").Declared().Moved());
+        var adam = Assert.IsType<Adam>(Word("adam").Declared().Moved());
+        var rmsProp = Assert.IsType<RmsProp>(Word("rmsprop").Declared().Moved());
+
+        Assert.Equal([0, 0], [sgd.WeightDecay, sgd.Dampening]);
+        Assert.False(sgd.Nesterov);
+        Assert.Equal(0, adam.WeightDecay);
+        Assert.False(adam.AmsGrad);
+        Assert.False(rmsProp.Centered);
+    }
+
+    [Fact]
+    public void ASettingOnAnOptimizersWord_BecomesTheOptionOfTheOptimizerTheWordNames()
+    {
+        var sgd = Assert.IsType<Sgd>(Word("sgd").Declared().With("momentum", PartValue.Of(0.9)).With("weightDecay", PartValue.Of(0.01)).With("dampening", PartValue.Of(0.25)).Moved());
+        var nesterov = Assert.IsType<Sgd>(Word("sgd").Declared().With("momentum", PartValue.Of(0.9)).With("nesterov", PartValue.Of(true)).Moved());
+        var adam = Assert.IsType<Adam>(Word("adam").Declared().With("weightDecay", PartValue.Of(0.1)).With("amsgrad", PartValue.Of(true)).Moved());
+        var adamW = Assert.IsType<AdamW>(Word("adamw").Declared().With("amsgrad", PartValue.Of(true)).Moved());
+        var rmsProp = Assert.IsType<RmsProp>(Word("rmsprop").Declared().With("weightDecay", PartValue.Of(0.1)).With("centered", PartValue.Of(true)).Moved());
+        var nadam = Assert.IsType<Nadam>(Word("nadam").Declared().With("weightDecay", PartValue.Of(0.1)).Moved());
+
+        Assert.Equal([0.9, 0.01, 0.25], [sgd.Momentum, sgd.WeightDecay, sgd.Dampening]);
+        Assert.True(nesterov.Nesterov);
+        Assert.Equal(0.1, adam.WeightDecay);
+        Assert.True(adam.AmsGrad);
+        Assert.True(adamW.AmsGrad);
+        Assert.Equal(0.01, adamW.WeightDecay);
+        Assert.True(rmsProp.Centered);
+        Assert.Equal(0.1, rmsProp.WeightDecay);
+        Assert.Equal(0.1, nadam.WeightDecay);
+    }
+
+    [Fact]
+    public void TheDoors_CanSayTheOptions_InAnyOrder_AndWriteThemOnlyWhenSaid()
+    {
+        var plain = Learner(network => network.Sgd(0.1, momentum: 0.9));
+        var nesterov = Learner(network => network.Nesterov().Sgd(0.1, momentum: 0.9));
+        var decayed = Learner(network => network.Sgd(0.1, momentum: 0.9).WeightDecay(0.01).Dampening(0.25));
+        var amsGrad = Learner(network => network.AmsGrad().Adam(0.01).WeightDecay(0.1));
+        var amsGradW = Learner(network => network.AdamW(0.01).AmsGrad());
+        var centred = Learner(network => network.RmsProp(0.001).Centered().WeightDecay(0.1));
+        var nadam = Learner(network => network.Nadam().WeightDecay(0.1));
+
+        Assert.False(plain.Optimizer.YesOrNo("nesterov"));
+        Assert.Equal(0, plain.Optimizer.Number("weightDecay"));
+        Assert.True(nesterov.Optimizer.YesOrNo("nesterov"));
+        Assert.Equal([0.01, 0.25], Numbers(decayed.Optimizer, "weightDecay", "dampening"));
+        Assert.True(amsGrad.Optimizer.YesOrNo("amsgrad"));
+        Assert.Equal(0.1, amsGrad.Optimizer.Number("weightDecay"));
+        Assert.True(amsGradW.Optimizer.YesOrNo("amsgrad"));
+        Assert.Equal(0.01, amsGradW.Optimizer.Number("weightDecay"));
+        Assert.True(centred.Optimizer.YesOrNo("centered"));
+        Assert.Equal(0.1, centred.Optimizer.Number("weightDecay"));
+        Assert.Equal(0.1, nadam.Optimizer.Number("weightDecay"));
+
+        var text = Passengers().WithTorch(network => network.Dense(1).Sgd(0.1, momentum: 0.9).MeanSquaredError().Run(1)).Build().Declaration.ToJson();
+
+        Assert.DoesNotContain("nesterov", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("dampening", text, StringComparison.Ordinal);
+        Assert.Contains("\"nesterov\": true", Passengers().WithTorch(network => network.Dense(1).Sgd(0.1, momentum: 0.9).Nesterov().MeanSquaredError().Run(1)).Build().Declaration.ToJson(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnOptionTheOptimizerNamedDoesNotHave_IsRefusedByName()
+    {
+        Assert.Contains("Nesterov", Assert.Throws<NotSupportedException>(() => Learner(network => network.Adam().Nesterov())).Message, StringComparison.Ordinal);
+        Assert.Contains("Dampening", Assert.Throws<NotSupportedException>(() => Learner(network => network.Adam().Dampening(0.1))).Message, StringComparison.Ordinal);
+        Assert.Contains("AmsGrad", Assert.Throws<NotSupportedException>(() => Learner(network => network.Sgd().AmsGrad())).Message, StringComparison.Ordinal);
+        Assert.Contains("Centered", Assert.Throws<NotSupportedException>(() => Learner(network => network.Adam().Centered())).Message, StringComparison.Ordinal);
+        Assert.Contains("WeightDecay", Assert.Throws<NotSupportedException>(() => Learner(network => network.AdamW().WeightDecay(0.1))).Message, StringComparison.Ordinal);
+        Assert.Contains("AdamW(", Assert.Throws<NotSupportedException>(() => Learner(network => network.AdamW().WeightDecay(0.1))).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void InKerassWords_EveryOptionIsRefused_NamingThePyTorchDoor()
+    {
+        foreach (var option in new Func<NetworkDeclaration, NetworkDeclaration>[]
+        {
+            network => network.Sgd(momentum: 0.9).WeightDecay(0.1),
+            network => network.Sgd(momentum: 0.9).Dampening(0.1),
+            network => network.Sgd(momentum: 0.9).Nesterov(),
+            network => network.Adam().AmsGrad(),
+            network => network.Adam().Centered(),
+        })
+        {
+            Assert.Contains("WithTorch", Assert.Throws<NotSupportedException>(() => Passengers().WithTensorflow(network => option(network.Dense(1)))).Message, StringComparison.Ordinal);
+        }
+    }
+
+    [Fact]
+    public void ANesterovStepWithoutAMomentum_IsRefusedWhereTheStepIsMade_ByName()
+    {
+        var refused = Assert.ThrowsAny<ArgumentException>(() => Learner(network => network.Sgd(0.1).Nesterov()));
+
+        Assert.Contains("Nesterov", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData("sgd")]
+    [InlineData("adam")]
+    [InlineData("adamw")]
+    [InlineData("rmsprop")]
+    public void ANetworkDeclaredWithOptions_IsTheNetworkTheSameWordsWrittenAsCodeGive_NumberForNumber(string kind)
+    {
+        var declared = Passengers()
+            .WithTorch(network => (kind switch
+            {
+                "sgd" => network.Dense(4).Relu().Dense(1).Sgd(0.1, momentum: 0.9).Nesterov().WeightDecay(0.001),
+                "adam" => network.Dense(4).Relu().Dense(1).Adam(0.01).AmsGrad().WeightDecay(0.01),
+                "adamw" => network.Dense(4).Relu().Dense(1).AdamW(0.01, weightDecay: 0.1).AmsGrad(),
+                _ => network.Dense(4).Relu().Dense(1).RmsProp(0.001, momentum: 0.9).Centered().WeightDecay(0.01),
+            })
+            .BinaryCrossEntropy()
+            .Run(seed: 20260929, epochs: 3))
+            .Build()
+            .Train();
+        Optimizer optimizer = kind switch
+        {
+            "sgd" => new Sgd(0.1) { Momentum = 0.9, Nesterov = true, WeightDecay = 0.001 },
+            "adam" => new Adam(0.01) { AmsGrad = true, WeightDecay = 0.01 },
+            "adamw" => new AdamW(0.01) { WeightDecay = 0.1, AmsGrad = true },
+            _ => new RmsProp(0.001) { Momentum = 0.9, Centered = true, WeightDecay = 0.01 },
         };
         var written = new Sequential().Dense(4).Relu().Dense(1)
             .Compile(optimizer, new BinaryCrossEntropy())

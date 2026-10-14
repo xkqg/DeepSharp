@@ -224,6 +224,34 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
     }
 
     [Fact]
+    public void APaddingFilledFromTheExample_SaysSoInTheFile_AtTheFifthVersion_AndAConstantOneStaysAsItWas()
+    {
+        var draws = new RandomStream(9).Draw("initialise:test", 0, 0);
+        var constant = Written(new LayerStack(new Pad1D(new Sides(2, 1), 0.5f), new Conv1D(1, 1, new Window1D(2), draws)), new MeanSquaredError());
+        var mirrored = Written(new LayerStack(new Pad1D(new Sides(2, 1), Filling.Mirror), new Conv1D(1, 1, new Window1D(2), draws)), new MeanSquaredError());
+
+        Assert.Contains("\"version\": 2", constant, StringComparison.Ordinal);
+        Assert.DoesNotContain("\"border\"", constant, StringComparison.Ordinal);
+        Assert.Contains("\"version\": 5", mirrored, StringComparison.Ordinal);
+        Assert.Contains("\"border\": \"mirror\"", mirrored, StringComparison.Ordinal);
+
+        foreach (var filling in new[] { Filling.Mirror, Filling.Repeat, Filling.Wrap })
+        {
+            var line = new LayerStack(new Pad1D(new Sides(2, 1), filling));
+            var plane = new LayerStack(new Pad2D(new Margins(new Sides(1, 2), new Sides(0, 1)), filling));
+            var volume = new LayerStack(new Pad3D(new Margins3D(new Sides(1, 0), new Sides(0, 1), new Sides(1, 1)), filling));
+
+            Assert.Equal(filling, Assert.IsType<Pad1D>(Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(Written(line, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn()).Network).Layers[0]).Filling);
+            Assert.Equal(filling, Assert.IsType<Pad2D>(Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(Written(plane, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn()).Network).Layers[0]).Filling);
+            Assert.Equal(filling, Assert.IsType<Pad3D>(Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(Written(volume, new MeanSquaredError()), "network", NetworkCatalog.BuiltIn()).Network).Layers[0]).Filling);
+        }
+
+        AssertWrittenAndReadBack(
+            new LayerStack(new Pad2D(new Margins(new Sides(1, 2), new Sides(0, 1)), Filling.Wrap), new Conv2D(1, 1, new Window(2, 2), draws)),
+            Tensor.From(new Shape(2, 4, 5, 1), [.. Enumerable.Range(0, 40).Select(at => MathF.Sin(at))]));
+    }
+
+    [Fact]
     public void AKindOfThisRelease_SaysTheVersionItsOwnSettingsAsk_AndNothingItDoesNotHold()
     {
         var draws = new RandomStream(9).Draw("initialise:test", 0, 0);
@@ -483,7 +511,7 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         });
         var first = text.Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
 
-        Assert.Equal(4, NetworkDocument.Version);
+        Assert.Equal(5, NetworkDocument.Version);
         Assert.Contains("\"version\": 2", text, StringComparison.Ordinal);
         Assert.Null(NetworkDocument.ReadNetwork(first, "network", NetworkCatalog.BuiltIn()).TrainedOn!.Unvaried);
     }

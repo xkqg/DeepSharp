@@ -171,8 +171,6 @@ public class OnnxRefusalTests
         ["its input turned round"] = new(Titanic, model => model.Node("/0/Gemm").SetWhole("transA", 1), "node '/0/Gemm' (Gemm): it takes its input turned round, transA, and a dense layer here takes each example as a row."),
         ["its product scaled"] = new(Titanic, model => model.Node("/0/Gemm").SetNumber("alpha", 0.5f), "node '/0/Gemm' (Gemm): it scales its product by 0.5 and its bias by 1, and a dense layer here scales neither."),
         ["its bias scaled"] = new(Titanic, model => model.Node("/0/Gemm").SetNumber("beta", 2), "node '/0/Gemm' (Gemm): it scales its product by 1 and its bias by 2, and a dense layer here scales neither."),
-        ["no bias"] = new(Titanic, model => model.Node("/0/Gemm").Input.RemoveAt(2), "node '/0/Gemm' (Gemm): it adds no bias, and a dense layer or a convolution here always adds one."),
-        ["a bias left empty"] = new(Titanic, model => model.Node("/0/Gemm").Input[2] = string.Empty, "node '/0/Gemm' (Gemm): it adds no bias, and a dense layer or a convolution here always adds one."),
         ["weights left empty"] = new(Titanic, model => model.Node("/0/Gemm").Input[1] = string.Empty, "node '/0/Gemm' (Gemm): its weights, '', are written as scalar, and a dense layer's are a matrix."),
         ["weights that are no matrix"] = new(Titanic, model =>
         {
@@ -195,11 +193,6 @@ public class OnnxRefusalTests
             model.Initializer("onnx::MatMul_24").Dims.Clear();
             model.Initializer("onnx::MatMul_24").Dims.Add(224);
         }, "node '/MatMul' (MatMul): its weights, 'onnx::MatMul_24', are written as 224, and a dense layer's are a matrix."),
-        ["a matmul without its add"] = new(Keras, model =>
-        {
-            model.Node("/Cast_4").Input[0] = "/Cast_3_output_0";
-            model.Graph.Node.Remove(model.Node("/Add"));
-        }, "node '/MatMul' (MatMul): it adds no bias, and a dense layer or a convolution here always adds one."),
         ["a bias of another width"] = new(Keras, model =>
         {
             var bias = model.Initializer("onnx::Add_25");
@@ -211,7 +204,7 @@ public class OnnxRefusalTests
             model.Graph.Node.Insert(model.Graph.Node.IndexOf(model.Node("/Cast_6")), OnnxFixtures.NodeOf("Add", "extra", ["/Relu_output_0", "onnx::Add_25"], "shifted"));
             model.Node("/Cast_6").Input[0] = "shifted";
         }, "node 'extra' (Add): it adds 'onnx::Add_25' to what the node before it made, and an Add is read here as the bias of the MatMul before it."),
-        ["an add of two values"] = new(Keras, model => model.Node("/Add").Input[1] = "keras_tensor", $"node '/Add' (Add): it takes '/Cast_3_output_0' and 'keras_tensor', 2 values the graph works out, {Stack}, '/Cast_3_output_0'.{Environment.NewLine}node '/MatMul' (MatMul): it adds no bias, and a dense layer or a convolution here always adds one."),
+        ["an add of two values"] = new(Keras, model => model.Node("/Add").Input[1] = "keras_tensor", $"node '/Add' (Add): it takes '/Cast_3_output_0' and 'keras_tensor', 2 values the graph works out, {Stack}, '/Cast_3_output_0'."),
 
         // A transpose, which is read only as moving an image's channels after the batch or last.
         ["a transpose of rows"] = new(Keras, model =>
@@ -268,7 +261,6 @@ public class OnnxRefusalTests
         ["two pads for four sides"] = new(Images, model => model.Node("/0/Conv").SetWholes("pads", 1, 1), "node '/0/Conv' (Conv): it pads [1, 1] — rows and columns before, then after — and a window over an image states 4 of them."),
         ["the odd pixel before"] = new(Images, model => model.Node("/0/Conv").SetText("auto_pad", "SAME_LOWER"), $"node '/0/Conv' (Conv): it pads as SAME_LOWER, {Pads}"),
         ["pads at a stride of two that are not 'same' for the image"] = new(Images, model => model.Node("/3/Conv").SetWholes("pads", 0, 0, 1, 1), "node '/3/Conv' (Conv): it pads [0, 0, 1, 1] — rows and columns before, then after — where TensorFlow's 'same' pads the 8x7 images reaching it [0, 0, 0, 1], and a window here pads every side alike, or as that 'same'."),
-        ["a convolution without its bias"] = new(Images, model => model.Node("/0/Conv").Input.RemoveAt(2), "node '/0/Conv' (Conv): it adds no bias, and a dense layer or a convolution here always adds one."),
         ["a window that stands nowhere"] = new(Images, model => model.Node("/0/Conv").SetWholes("strides", 0, 0), "node '/0/Conv' (Conv): A window 3x2 (stride 0, padding 1) cannot stand anywhere: its sides and its stride are at least one, and its border at least nothing. (Parameter 'window')"),
         ["a window larger than the image"] = new(Images, model =>
         {
@@ -287,7 +279,6 @@ public class OnnxRefusalTests
         ["one place kept at the end of an image's two axes"] = new(Transposed, model => model.Node(Gave).SetWholes("output_padding", 1), $"node '{Gave}' (ConvTranspose): its 'output_padding' is written as [1], and a transposed convolution over an image writes a pair there."),
         ["a pair of places kept at the end of a series' one axis"] = new(TransposedSeries, model => model.Node(Gave).SetWholes("output_padding", 1, 1), $"node '{Gave}' (ConvTranspose): its 'output_padding' is written as [1, 1], and a transposed convolution along a series writes one there."),
         ["three places kept at the end, where the window gives them itself"] = new(TransposedSeries, model => model.Node(Gave).SetWholes("output_padding", 3), "graph 'main_graph': A transposed convolution of 2 channels adds 3 places at the end of an axis it strides 2 and dilates 1, and adds fewer than 2: beyond that the window gives the place itself. (Parameter 'outputPadding')"),
-        ["a transposed convolution without its bias"] = new(Transposed, model => model.Node(Gave).Input.RemoveAt(2), $"node '{Gave}' (ConvTranspose): it adds no bias, and a dense layer or a convolution here always adds one."),
         ["a kernel a transposed convolution gives no places back from"] = new(Transposed, model =>
         {
             model.Initializer("0.weight").Dims.Clear();
@@ -295,7 +286,7 @@ public class OnnxRefusalTests
         }, $"node '{Gave}' (ConvTranspose): its kernel, '0.weight', is written as 2x36, and a transposed convolution here gives the places back along a series, an image or a volume: channels in by the channels out of one group by steps, or by rows by columns, or by planes by rows by columns."),
 
         // A layer that only pads.
-        ["a padding that mirrors the example"] = new(Padded, model => model.Node(PadNode).SetText("mode", "reflect"), $"node '{PadNode}' (Pad): it pads by reflect, which mirrors or repeats the example, and a padding here pads with one value."),
+        ["a padding by a mode ONNX does not have"] = new(Padded, model => model.Node(PadNode).SetText("mode", "cubic"), $"node '{PadNode}' (Pad): it pads by cubic, and a padding here pads with one value (constant) or fills the places from the example: reflect, edge or wrap."),
         ["a padding of other places than a batch and its channels have"] = new(Padded, model => model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(model.Node(PadNode).Input[1]))] = OnnxFixtures.Wholes(model.Node(PadNode).Input[1], 0, 0, 1, 1), $"node '{PadNode}' (Pad): it pads [0, 0, 1, 1], and a padding of a batch of 3 axes and its channels writes 8 places: one before each axis, then one after each."),
         ["a padding that takes places away"] = new(Padded, model => model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(model.Node(PadNode).Input[1]))] = OnnxFixtures.Wholes(model.Node(PadNode).Input[1], 0, 0, 1, 1, 0, 0, -1, 1), $"node '{PadNode}' (Pad): it pads [0, 0, 1, 1, 0, 0, -1, 1] places, and a padding here adds places and never takes them away."),
         ["a padding of the batch's own axis"] = new(Padded, model => model.Graph.Initializer[model.Graph.Initializer.IndexOf(model.Initializer(model.Node(PadNode).Input[1]))] = OnnxFixtures.Wholes(model.Node(PadNode).Input[1], 1, 0, 1, 1, 0, 0, 1, 1), $"node '{PadNode}' (Pad): it pads the batch's own axis or its channels, [1, 0, 1, 1, 0, 0, 1, 1], and a padding here adds places around each example and leaves the examples and their channels as they are."),
@@ -430,7 +421,6 @@ public class OnnxRefusalTests
             node.Input.Add(["scale", "shift"]);
         }, "node '/2/Relu' (LayerNormalization): it normalises an image, and a layer normalisation here normalises the values of a row."),
         ["a layer normalisation from another axis"] = new(Titanic, model => Normalised(model, 3).SetWhole("axis", 0), "node '/1/Relu' (LayerNormalization): it normalises from axis 0, and a layer normalisation here normalises over the last axis of a row."),
-        ["a layer normalisation without its shift"] = new(Titanic, model => Normalised(model, 2), "node '/1/Relu' (LayerNormalization): it leaves out its shift, and a layer normalisation here learns one."),
         ["an epsilon of nothing"] = new(Titanic, model => Normalised(model, 3).SetNumber("epsilon", 0), "node '/1/Relu' (LayerNormalization): What is added to a variance is a number above nothing. (Parameter 'epsilon') Actual value was 0."),
 
         // A flatten, and a reshape.

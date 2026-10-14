@@ -105,7 +105,9 @@ public static class NetworkSample
         Drawn(trained, Path.Join(charts, "apple"));
     }
 
-    // A day's bikes hour by hour: the shares of the day a network answers, brought back as bikes by the day's total.
+    // A day's bikes hour by hour: the shares of the day a network answers, brought back as bikes by the day's total. Its one layer
+    // has no bias, a penalty on its weights and a clip of each gradient value, which a network of this size can do without and a
+    // larger one reaches for.
     private static void Bikes(string data, TextWriter output, string charts)
     {
         var path = Path.Join(data, "bikes.csv");
@@ -134,9 +136,11 @@ public static class NetworkSample
             .Build()
             .Run();
 
-        var trained = new Sequential().Dense(24)
+        // One layer, and the shares of the day it answers are the features' alone: it has no bias to start from, a small penalty on
+        // its weights keeps it from leaning on one feature, and no gradient value goes beyond one.
+        var trained = new Sequential().Dense(24, new Beginning { WithoutBias = true }).Ruled(new SlotRules { L2 = 0.0001 })
             .Compile(new Adam(0.01), new CrossEntropy())
-            .Fit(prepared, new FitOptions(seed: 20260929) { Epochs = 100, EarlyStopping = new EarlyStopping { Patience = 10, RestoreBest = true } });
+            .Fit(prepared, new FitOptions(seed: 20260929) { Epochs = 100, ClipValue = 1, EarlyStopping = new EarlyStopping { Patience = 10, RestoreBest = true } });
 
         var lines = File.ReadAllLines(path);
         var predictions = Told(output, "Bike Sharing", trained, CsvRowSource.FromText($"{lines[0]}\n{lines[^1]}\n"));

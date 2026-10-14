@@ -1,0 +1,13 @@
+keras 3.15.1, backend torch
+keras-free-dense: ['Dense', 'BatchNormalization', 'Dense', 'LayerNormalization', 'Dense', 'BatchNormalization', 'BatchNormalization', 'Flatten', 'Dense'] -> [8, 2]
+  weights: [('kernel', (5, 6)), ('gamma', (6,)), ('moving_mean', (6,)), ('moving_variance', (6,)), ('kernel', (6, 4)), ('beta', (4,)), ('kernel', (4, 3)), ('beta', (3,)), ('moving_mean', (3,)), ('moving_variance', (3,)), ('moving_mean', (3,)), ('moving_variance', (3,)), ('kernel', (3, 2)), ('bias', (2,))]
+  outputs: -0.00907503 0.29215461 0.08551529 -0.35987592 0.25872463 -0.16940878 ...
+keras-free-images: ['Conv2D', 'Conv2DTranspose', 'DepthwiseConv2D', 'SeparableConv2D', 'SeparableConv2D', 'Flatten', 'Dense'] -> [6, 2]
+  weights: [('kernel', (3, 3, 2, 4)), ('kernel', (2, 2, 3, 4)), ('kernel', (2, 2, 3, 1)), ('depthwise_kernel', (2, 2, 3, 1)), ('pointwise_kernel', (1, 1, 3, 4)), ('depthwise_kernel', (1, 1, 4, 1)), ('pointwise_kernel', (1, 1, 4, 3)), ('bias', (3,)), ('kernel', (75, 2)), ('bias', (2,))]
+  outputs: 0.09849013 -0.19773573 0.27989560 -0.09241788 0.47393319 -0.37100995 ...
+keras-free-series: ['Conv1D', 'SeparableConv1D', 'SeparableConv1D', 'Conv1DTranspose', 'Flatten', 'Dense'] -> [6, 2]
+  weights: [('kernel', (3, 2, 4)), ('depthwise_kernel', (3, 4, 1)), ('pointwise_kernel', (1, 4, 3)), ('bias', (3,)), ('depthwise_kernel', (2, 3, 1)), ('pointwise_kernel', (1, 3, 2)), ('kernel', (3, 2, 2)), ('kernel', (42, 2)), ('bias', (2,))]
+  outputs: 0.24782379 -0.11331120 -0.06214293 0.27341726 -0.43097880 -0.47741023 ...
+keras-free-volume: ['Conv3D', 'Conv3DTranspose', 'Flatten', 'Dense'] -> [6, 2]
+  weights: [('kernel', (2, 2, 2, 2, 3)), ('kernel', (2, 2, 2, 2, 3)), ('kernel', (128, 2)), ('bias', (2,))]
+  outputs: -0.32978582 -1.14881921 -0.77151316 -0.19897835 -1.55055249 1.39566433 ...

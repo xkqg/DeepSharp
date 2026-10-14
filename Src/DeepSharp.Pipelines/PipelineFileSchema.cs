@@ -422,21 +422,31 @@ internal static class PipelineFileSchema
             ];
         }
 
-        // One name a part may give: its own word under 'kind', every setting it takes, and nothing else.
+        // One name a part may give: its own word under 'kind', every setting it takes, and nothing else — and all of them
+        // written, but for the settings that say what leaving them out means.
         private JsonObject OfTheName(PartKind kind)
         {
             var settings = new JsonObject { ["kind"] = AWord([kind.Name]) };
+            var required = new List<string> { "kind" };
 
-            foreach (var property in kind.Settings.SelectMany(setting => setting.Accept(this)))
+            foreach (var setting in kind.Settings)
             {
-                settings[property.Key] = property.Schema;
+                foreach (var property in setting.Accept(this))
+                {
+                    settings[property.Key] = property.Schema;
+
+                    if (!kind.LeftOut.ContainsKey(setting.Key))
+                    {
+                        required.Add(property.Key);
+                    }
+                }
             }
 
             return new JsonObject
             {
                 ["description"] = kind.Purpose,
                 ["properties"] = settings,
-                ["required"] = new JsonArray([.. settings.Select(property => (JsonNode)property.Key)]),
+                ["required"] = new JsonArray([.. required.Select(key => (JsonNode)key)]),
                 ["additionalProperties"] = false,
             };
         }

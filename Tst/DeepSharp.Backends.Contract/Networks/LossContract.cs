@@ -31,8 +31,8 @@ public abstract class LossContract(ITensorBackend engine)
         Assert.Equal(new Shape(), loss.Shape);
         Assert.Equal(0.6452890634536743, loss.Values[0], AgreementContract.Bound(WalkedRows.SurvivedLossTermsSize()));
         AssertClose([0, -0.014148475602269173, -0.13113100826740265, 0], gradients[output.Weight.Value]);
-        AssertClose([-0.19859017431735992], gradients[output.Bias.Value]);
-        AssertClose([0, -0.022193128243088722, 0, 0], gradients[hidden.Bias.Value]);
+        AssertClose([-0.19859017431735992], gradients[output.Bias!.Value]);
+        AssertClose([0, -0.022193128243088722, 0, 0], gradients[hidden.Bias!.Value]);
     }
 
     [Fact]
@@ -65,7 +65,7 @@ public abstract class LossContract(ITensorBackend engine)
 
         var logits = layer.Forward(days, Pass.Training(recording, new RandomStream(1), 0, 0));
         var value = loss.Of(logits, shares, recording);
-        var gradients = recording.GradientsOf(value, [layer.Bias.Value]);
+        var gradients = recording.GradientsOf(value, [layer.Bias!.Value]);
         var predictions = loss.Predictions(logits, _backend);
 
         Assert.Equal(3.2375428676605225, value.Values[0], 1e-6);
@@ -229,8 +229,8 @@ public abstract class LossContract(ITensorBackend engine)
 
         Assert.Equal(0.004323537927120924, loss.Values[0], 1e-8);
         AssertClose([-0.033036526292562485, 0.01282493956387043, 0.0043555255979299545], gradients[output.Weight.Value]);
-        AssertClose([0.03436941280961037], gradients[output.Bias.Value]);
-        AssertClose([-0.004057067446410656, 0, 0.006824049167335033], gradients[hidden.Bias.Value]);
+        AssertClose([0.03436941280961037], gradients[output.Bias!.Value]);
+        AssertClose([-0.004057067446410656, 0, 0.006824049167335033], gradients[hidden.Bias!.Value]);
     }
 
     [Fact]

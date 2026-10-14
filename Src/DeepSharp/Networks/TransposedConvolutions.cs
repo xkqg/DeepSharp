@@ -30,10 +30,10 @@ public abstract class TransposedConvolution : Convolution
 {
     private readonly int _rank;
 
-    private protected TransposedConvolution(Starting starting, Draws draws, int rank)
-        : base(starting, draws) => _rank = rank;
+    private protected TransposedConvolution(Starting starting, Beginning beginning, int rank)
+        : base(starting, beginning) => _rank = rank;
 
-    private protected TransposedConvolution(Starting starting, Tensor kernel, Tensor bias)
+    private protected TransposedConvolution(Starting starting, Tensor kernel, Tensor? bias)
         : base(starting, kernel, bias) => _rank = starting.Walk.Rank;
 
     /// <summary>How many places of nothing are added at the end of each axis, beyond what the window's own walk gives back.</summary>
@@ -70,9 +70,11 @@ public abstract class TransposedConvolution : Convolution
         var made = Walk.Fold(backend, patches, canvas);
         var grown = Grows is { } growth ? growth.Padded(backend, made, 0f) : made;
 
-        return backend.Reshape(
-            backend.AddRow(backend.Reshape(grown, new Shape(grown.Shape.Count / Channels.Out, Channels.Out)), Bias.Value),
-            grown.Shape);
+        return Bias is null
+            ? grown
+            : backend.Reshape(
+                backend.AddRow(backend.Reshape(grown, new Shape(grown.Shape.Count / Channels.Out, Channels.Out)), Bias.Value),
+                grown.Shape);
     }
 
     /// <summary>How many places a window gives back along one axis, of an example so many places long.</summary>
@@ -205,16 +207,28 @@ public sealed class Conv1DTranspose : TransposedConvolution, ISaved<Conv1DTransp
     /// <summary>A transposed convolution that starts as PyTorch's does.</summary>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <param name="window">The patch, and how it walks the series it makes.</param>
-    /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
+    /// <param name="beginning">The draws its start is taken from, and how its kernel and its bias start — or that it has no bias.</param>
     /// <param name="outputPadding">How many steps of nothing to add at the end of the series; none, unless said.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
-    public Conv1DTranspose(Channels channels, Window1D window, Draws draws, int outputPadding = 0)
-        : base(GivingBack(new LineWalk(Folding(window, outputPadding)), channels), draws, 1)
+    /// <exception cref="ArgumentNullException">The beginning holds no draws.</exception>
+    public Conv1DTranspose(Channels channels, Window1D window, Beginning beginning, int outputPadding = 0)
+        : base(GivingBack(new LineWalk(Folding(window, outputPadding)), channels), beginning, 1)
     {
         Window = window;
         Grew = outputPadding;
         Grows = Growth(Settling(Stated, outputPadding).Added);
         RequireGrowth(window.PaddingMode != PaddingMode.Stated);
+    }
+
+    /// <summary>A transposed convolution that starts as PyTorch's does.</summary>
+    /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
+    /// <param name="window">The patch, and how it walks.</param>
+    /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
+    /// <param name="outputPadding">How many places of nothing to add at the end of each axis; none, unless said.</param>
+    /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
+    public Conv1DTranspose(Channels channels, Window1D window, Draws draws, int outputPadding = 0)
+        : this(channels, window, new Beginning(draws), outputPadding)
+    {
     }
 
     /// <summary>A transposed convolution that starts at the given kernel and bias.</summary>
@@ -223,7 +237,7 @@ public sealed class Conv1DTranspose : TransposedConvolution, ISaved<Conv1DTransp
     /// <param name="window">The patch, and how it walks the series it makes.</param>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window works its border out.</exception>
-    public Conv1DTranspose(Tensor kernel, Tensor bias, Window1D window, Channels channels)
+    public Conv1DTranspose(Tensor kernel, Tensor? bias, Window1D window, Channels channels)
         : base(GivingBack(new LineWalk(Folding(window, 0)), channels), kernel, bias)
     {
         Window = window;
@@ -251,32 +265,21 @@ public sealed class Conv1DTranspose : TransposedConvolution, ISaved<Conv1DTransp
         ArgumentNullException.ThrowIfNull(rebuilding);
 
         return new(
-            new Channels
-            {
-                In = rebuilding.Whole(settings, "inChannels"),
-                Out = rebuilding.Whole(settings, "outChannels"),
-                Groups = rebuilding.Whole(settings, "groups", 1),
-            },
+            ChannelsIn(settings, rebuilding),
             rebuilding.Window1DIn(settings),
-            rebuilding.Draws,
+            BeginningIn(settings, rebuilding),
             rebuilding.Whole(settings, "outputPadding", 0));
     }
 
     /// <inheritdoc />
-    public int FileVersion => Window.FileVersion;
+    public int FileVersion => SavedAs(Window.FileVersion);
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        writer.WriteNumber("inChannels", InChannels);
-        writer.WriteNumber("outChannels", OutChannels);
-
-        if (Groups != 1)
-        {
-            writer.WriteNumber("groups", Groups);
-        }
+        WriteChannels(writer);
 
         if (Grew != 0)
         {
@@ -319,16 +322,28 @@ public sealed class Conv2DTranspose : TransposedConvolution, ISaved<Conv2DTransp
     /// <summary>A transposed convolution that starts as PyTorch's does.</summary>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <param name="window">The patch, and how it walks the image it makes.</param>
-    /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
+    /// <param name="beginning">The draws its start is taken from, and how its kernel and its bias start — or that it has no bias.</param>
     /// <param name="outputPadding">How many rows and columns of nothing to add at the end of each axis; none, unless said.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
-    public Conv2DTranspose(Channels channels, Window window, Draws draws, Steps outputPadding = default)
-        : base(GivingBack(new PlaneWalk(Folding(window, outputPadding)), channels), draws, 2)
+    /// <exception cref="ArgumentNullException">The beginning holds no draws.</exception>
+    public Conv2DTranspose(Channels channels, Window window, Beginning beginning, Steps outputPadding = default)
+        : base(GivingBack(new PlaneWalk(Folding(window, outputPadding)), channels), beginning, 2)
     {
         Window = window;
         Grew = outputPadding;
         Grows = Growth();
         RequireGrowth(window.PaddingMode != PaddingMode.Stated);
+    }
+
+    /// <summary>A transposed convolution that starts as PyTorch's does.</summary>
+    /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
+    /// <param name="window">The patch, and how it walks.</param>
+    /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
+    /// <param name="outputPadding">How many places of nothing to add at the end of each axis; none, unless said.</param>
+    /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
+    public Conv2DTranspose(Channels channels, Window window, Draws draws, Steps outputPadding = default)
+        : this(channels, window, new Beginning(draws), outputPadding)
+    {
     }
 
     /// <summary>A transposed convolution that starts at the given kernel and bias.</summary>
@@ -337,7 +352,7 @@ public sealed class Conv2DTranspose : TransposedConvolution, ISaved<Conv2DTransp
     /// <param name="window">The patch, and how it walks the image it makes.</param>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window works its border out.</exception>
-    public Conv2DTranspose(Tensor kernel, Tensor bias, Window window, Channels channels)
+    public Conv2DTranspose(Tensor kernel, Tensor? bias, Window window, Channels channels)
         : base(GivingBack(new PlaneWalk(Folding(window, default)), channels), kernel, bias)
     {
         Window = window;
@@ -367,32 +382,21 @@ public sealed class Conv2DTranspose : TransposedConvolution, ISaved<Conv2DTransp
         var grown = rebuilding.Wholes(settings, "outputPadding", [0, 0]);
 
         return new(
-            new Channels
-            {
-                In = rebuilding.Whole(settings, "inChannels"),
-                Out = rebuilding.Whole(settings, "outChannels"),
-                Groups = rebuilding.Whole(settings, "groups", 1),
-            },
+            ChannelsIn(settings, rebuilding),
             rebuilding.Window2DIn(settings),
-            rebuilding.Draws,
+            BeginningIn(settings, rebuilding),
             new Steps(grown[0], grown[1]));
     }
 
     /// <inheritdoc />
-    public int FileVersion => Window.FileVersion;
+    public int FileVersion => SavedAs(Window.FileVersion);
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        writer.WriteNumber("inChannels", InChannels);
-        writer.WriteNumber("outChannels", OutChannels);
-
-        if (Groups != 1)
-        {
-            writer.WriteNumber("groups", Groups);
-        }
+        WriteChannels(writer);
 
         if (Grew != default)
         {
@@ -451,16 +455,28 @@ public sealed class Conv3DTranspose : TransposedConvolution, ISaved<Conv3DTransp
     /// <summary>A transposed convolution that starts as PyTorch's does.</summary>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <param name="window">The block, and how it walks the volume it makes.</param>
-    /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
+    /// <param name="beginning">The draws its start is taken from, and how its kernel and its bias start — or that it has no bias.</param>
     /// <param name="outputPadding">How many places of nothing to add at the end of each axis; none, unless said.</param>
     /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
-    public Conv3DTranspose(Channels channels, Window3D window, Draws draws, Steps3D outputPadding = default)
-        : base(GivingBack(new VolumeWalk(Folding(window, outputPadding)), channels), draws, 3)
+    /// <exception cref="ArgumentNullException">The beginning holds no draws.</exception>
+    public Conv3DTranspose(Channels channels, Window3D window, Beginning beginning, Steps3D outputPadding = default)
+        : base(GivingBack(new VolumeWalk(Folding(window, outputPadding)), channels), beginning, 3)
     {
         Window = window;
         Grew = outputPadding;
         Grows = Growth();
         RequireGrowth(window.PaddingMode != PaddingMode.Stated);
+    }
+
+    /// <summary>A transposed convolution that starts as PyTorch's does.</summary>
+    /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
+    /// <param name="window">The patch, and how it walks.</param>
+    /// <param name="draws">The draws its start is taken from: the kernel first, then the bias.</param>
+    /// <param name="outputPadding">How many places of nothing to add at the end of each axis; none, unless said.</param>
+    /// <exception cref="ArgumentException">The channels do not go into the groups, the window cannot stand anywhere or works its border out, or the output padding reaches as far as the window does.</exception>
+    public Conv3DTranspose(Channels channels, Window3D window, Draws draws, Steps3D outputPadding = default)
+        : this(channels, window, new Beginning(draws), outputPadding)
+    {
     }
 
     /// <summary>A transposed convolution that starts at the given kernel and bias.</summary>
@@ -469,7 +485,7 @@ public sealed class Conv3DTranspose : TransposedConvolution, ISaved<Conv3DTransp
     /// <param name="window">The block, and how it walks the volume it makes.</param>
     /// <param name="channels">How many channels it reads and makes, and how many groups they are split into.</param>
     /// <exception cref="ArgumentException">The kernel is not the shape the window and the channels ask for, or the window works its border out.</exception>
-    public Conv3DTranspose(Tensor kernel, Tensor bias, Window3D window, Channels channels)
+    public Conv3DTranspose(Tensor kernel, Tensor? bias, Window3D window, Channels channels)
         : base(GivingBack(new VolumeWalk(Folding(window, default)), channels), kernel, bias)
     {
         Window = window;
@@ -499,32 +515,21 @@ public sealed class Conv3DTranspose : TransposedConvolution, ISaved<Conv3DTransp
         var grown = rebuilding.Wholes(settings, "outputPadding", [0, 0, 0]);
 
         return new(
-            new Channels
-            {
-                In = rebuilding.Whole(settings, "inChannels"),
-                Out = rebuilding.Whole(settings, "outChannels"),
-                Groups = rebuilding.Whole(settings, "groups", 1),
-            },
+            ChannelsIn(settings, rebuilding),
             rebuilding.Window3DIn(settings),
-            rebuilding.Draws,
+            BeginningIn(settings, rebuilding),
             new Steps3D(grown[0], grown[1], grown[2]));
     }
 
     /// <inheritdoc />
-    public int FileVersion => Window.FileVersion;
+    public int FileVersion => SavedAs(Window.FileVersion);
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        writer.WriteNumber("inChannels", InChannels);
-        writer.WriteNumber("outChannels", OutChannels);
-
-        if (Groups != 1)
-        {
-            writer.WriteNumber("groups", Groups);
-        }
+        WriteChannels(writer);
 
         if (Grew != default)
         {

@@ -160,6 +160,91 @@ public class DeclaredTrainingControlsTests
     }
 
     [Fact]
+    public void TheOptionsOfARun_AreWrittenUnderTheirKeys_AfterTheClip_ReadBackTheSame_AndLeftOutMeanWhatTheyAlwaysMeant()
+    {
+        var plain = Learner(network => network);
+        var declaration = Passengers()
+            .WithTorch(network => network.Dense(1).Adam(0.01).BinaryCrossEntropy().Run(1).ClipGradients(0.5).ClipValue(0.02).StepEvery(2).Average(0.9))
+            .Build().Declaration;
+        var learner = JsonNode.Parse(declaration.ToJson())!["declaration"]!.AsArray().Single(each => (string)each!["step"]! == "learn.network")!.AsObject();
+        var again = PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn().WithNetworks());
+        var step = Assert.IsType<LearnNetworkStep>(again.Learner);
+
+        Assert.Equal(0, plain.ClipValue);
+        Assert.Equal(1, plain.StepEvery);
+        Assert.Equal(0, plain.Average);
+        Assert.Equal(["step", "layers", "optimizer", "clip", "clipValue", "stepEvery", "average", "loss", "stopping", "engine", "seed", "epochs", "batch"], learner.Select(key => key.Key));
+        Assert.Equal([0.02, 2, 0.9], [(double)learner["clipValue"]!, (double)learner["stepEvery"]!, (double)learner["average"]!]);
+        Assert.Equal(declaration, again);
+        Assert.Equal(declaration.ToJson(), again.ToJson());
+        Assert.Equal([0.02, 2, 0.9], [step.ClipValue, step.StepEvery, step.Average]);
+    }
+
+    [Fact]
+    public void BothVocabularies_DeclareTheOptionsOfARun()
+    {
+        var keras = Assert.IsType<LearnNetworkStep>(Passengers()
+            .WithTensorflow(network => network.Dense(1).Adam().BinaryCrossEntropy().Run(1).ClipValue(0.5).StepEvery(4).Average(0.99))
+            .Build().Declaration.Learner);
+
+        Assert.Equal([0.5, 4, 0.99], [keras.ClipValue, keras.StepEvery, keras.Average]);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(double.NaN)]
+    public void AClipOfValuesToNothingOrBelowIt_AWindowOfNoBatches_AndAnAverageThatIsNoShare_AreRefusedAtTheDoor_AndByAStepWrittenByHand(double wrong)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Learner(network => network.ClipValue(wrong)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Learner(network => network.StepEvery((int)wrong)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Learner(network => network.Average(wrong)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Learner(network => network.Average(1)));
+
+        var step = Learner(network => network);
+
+        Assert.Equal(0, (step with { ClipValue = 0 }).ClipValue);
+        Assert.Throws<ArgumentOutOfRangeException>(() => step with { ClipValue = -1 });
+        Assert.Throws<ArgumentOutOfRangeException>(() => step with { StepEvery = 0 });
+        Assert.Throws<ArgumentOutOfRangeException>(() => step with { Average = 1 });
+        Assert.Throws<ArgumentOutOfRangeException>(() => step with { Average = -0.5 });
+        Assert.NotEqual(step, step with { ClipValue = 0.5 });
+        Assert.NotEqual(step, step with { StepEvery = 2 });
+        Assert.NotEqual(step, step with { Average = 0.5 });
+        Assert.NotEqual(step.GetHashCode(), (step with { StepEvery = 2 }).GetHashCode());
+    }
+
+    [Fact]
+    public void TrainingADeclaredRun_ClippingValuesStepping1InTwoAndKeepingAnAverage_IsTheSameWordsWrittenAsCodeNumberForNumber()
+    {
+        var declared = Passengers()
+            .WithTorch(network => network
+                .Dense(4).Relu().Dense(1)
+                .Adam(0.01)
+                .BinaryCrossEntropy()
+                .Run(seed: 20260929, epochs: 3)
+                .ClipValue(0.05)
+                .StepEvery(2)
+                .Average(0.9))
+            .Build()
+            .Train();
+        var written = new Sequential().Dense(4).Relu().Dense(1)
+            .Compile(new Adam(0.01), new BinaryCrossEntropy())
+            .Fit(Passengers().Build().RunFor(Needs.OneScale), new FitOptions(20260929) { Epochs = 3, ClipValue = 0.05, StepEvery = 2, Average = 0.9 });
+        var without = new Sequential().Dense(4).Relu().Dense(1)
+            .Compile(new Adam(0.01), new BinaryCrossEntropy())
+            .Fit(Passengers().Build().RunFor(Needs.OneScale), new FitOptions(20260929) { Epochs = 3 });
+
+        Assert.Equal(written.History!.Epochs, declared.History!.Epochs);
+        Assert.Equal(
+            written.Network.Parameters().Select(parameter => parameter.Value.Values.ToArray()),
+            declared.Network.Parameters().Select(parameter => parameter.Value.Values.ToArray()));
+        Assert.NotEqual(
+            without.Network.Parameters().Select(parameter => parameter.Value.Values.ToArray()),
+            declared.Network.Parameters().Select(parameter => parameter.Value.Values.ToArray()));
+    }
+
+    [Fact]
     public void TheTrainDoorWithACallbackAndAToken_HandsOverEveryEpochInOrder_AndTrainsTheNetworkTheDoorWithoutTrains()
     {
         var pipeline = Passengers().WithTorch(network => network.Dense(4).Relu().Dense(1).Adam(0.01).BinaryCrossEntropy().Run(seed: 20260929, epochs: 3)).Build();

@@ -65,7 +65,7 @@ public class NormalisationTests
 
         var output = norm.Forward(batch, Pass.Training(pass, new RandomStream(1), 0, 0));
         var loss = pass.Scale(pass.Mean(pass.Multiply(output, Weighing())), pass.Fill(new Shape(), 12f));
-        var gradients = pass.GradientsOf(loss, [batch, norm.Weight.Value, norm.Bias.Value]);
+        var gradients = pass.GradientsOf(loss, [batch, norm.Weight!.Value, norm.Bias!.Value]);
 
         AssertClose(
             [0.3047329783439636, -0.04024922475218773, -0.21635639667510986, 0.07844621688127518, 0.008944387547671795, -0.030911793932318687,
@@ -111,7 +111,7 @@ public class NormalisationTests
         var evaluated = norm.Forward(batch, Pass.Evaluation(_backend));
         var output = norm.Forward(batch, Pass.Training(pass, new RandomStream(1), 0, 0));
         var loss = pass.Scale(pass.Mean(pass.Multiply(output, Weighing())), pass.Fill(new Shape(), 12f));
-        var gradients = pass.GradientsOf(loss, [batch, norm.Weight.Value, norm.Bias.Value]);
+        var gradients = pass.GradientsOf(loss, [batch, norm.Weight!.Value, norm.Bias!.Value]);
 
         var expected = new[]
         {

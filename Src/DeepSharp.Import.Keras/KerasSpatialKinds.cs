@@ -47,8 +47,8 @@ internal readonly record struct Footprint(int[] Sides, int[] Stride, int[] Dilat
 /// </summary>
 /// <param name="name">The class name Keras writes the kind under.</param>
 /// <param name="axes">How many axes the window walks: one, two or three.</param>
-/// <param name="words">The words that make the convolution, from the channels it makes and the window it walks.</param>
-internal sealed class ConvolutionKind(string name, int axes, Func<int, Footprint, Action<Sequential>> words) : KerasKind
+/// <param name="words">The words that make the convolution, from the channels it makes, the window it walks and whether it adds a bias.</param>
+internal sealed class ConvolutionKind(string name, int axes, Func<int, Footprint, Beginning, Action<Sequential>> words) : KerasKind
 {
     /// <inheritdoc />
     public override string Name => name;
@@ -69,13 +69,21 @@ internal sealed class ConvolutionKind(string name, int axes, Func<int, Footprint
         }
 
         RequireChannelsLast(layer, ThingsWalkedAlong(axes));
-        RequireBias(layer);
 
         var mode = padding switch { "same" => PaddingMode.Same, "causal" => PaddingMode.Causal, _ => PaddingMode.Stated };
+        var bias = KeepsBias(layer);
+        var rules = new Rules(Governing(layer, "kernel", axes + 2, [.. Enumerable.Range(0, axes + 1)]), bias ? Governing(layer, "bias", 1, [0]) : default, Held(layer));
+        var made = words(filters, new Footprint(sides, strides, dilation, mode) { Groups = groups }, Starting(bias));
 
-        return new KerasLayer(words(filters, new Footprint(sides, strides, dilation, mode) { Groups = groups }), ActivationOf(layer))
+        return new KerasLayer(
+            description =>
+            {
+                made(description);
+                rules.Put(description);
+            },
+            ActivationOf(layer))
         {
-            Slots = ["weight", "bias"],
+            Slots = WithBias("weight", bias),
             Sizes = sides,
         };
     }
@@ -120,19 +128,28 @@ internal sealed class TransposedConvolutionKind(string name, int axes) : KerasKi
         }
 
         RequireChannelsLast(layer, ThingsWalkedAlong(axes));
-        RequireBias(layer);
 
         var footprint = new Footprint(sides, strides, dilation, padding == "same" ? PaddingMode.Same : PaddingMode.Stated);
 
-        return new KerasLayer(Words(filters, footprint, grown), ActivationOf(layer))
+        var bias = KeepsBias(layer);
+        var rules = new Rules(Governing(layer, "kernel", axes + 2, null), bias ? Governing(layer, "bias", 1, [0]) : default, Held(layer));
+        var made = Words(filters, footprint, grown, Starting(bias));
+
+        return new KerasLayer(
+            description =>
+            {
+                made(description);
+                rules.Put(description);
+            },
+            ActivationOf(layer))
         {
-            Slots = [new("weight", 0, sides) { Kept = KerasKeeping.GivenBack }, "bias"],
+            Slots = WithBias(new("weight", 0, sides) { Kept = KerasKeeping.GivenBack }, bias),
             Sizes = sides,
         };
     }
 
     // The words that make it, with the border worked out from the sizes the layer itself makes.
-    private Action<Sequential> Words(int filters, Footprint footprint, int[]? grown)
+    private Action<Sequential> Words(int filters, Footprint footprint, int[]? grown, Beginning start)
     {
         var (sides, strides, dilation, _) = footprint;
         var pads = Dropped(footprint);
@@ -143,6 +160,7 @@ internal sealed class TransposedConvolutionKind(string name, int axes) : KerasKi
             1 => description => description.Conv1DTranspose(
                 filters,
                 new Window1D(sides[0]) { Stride = strides[0], Dilation = dilation[0], Border = new Sides(pads[0], pads[1]) },
+                start,
                 step[0]),
             2 => description => description.Conv2DTranspose(
                 filters,
@@ -152,6 +170,7 @@ internal sealed class TransposedConvolutionKind(string name, int axes) : KerasKi
                     Dilation = new Steps(dilation[0], dilation[1]),
                     Border = new Margins(new Sides(pads[0], pads[1]), new Sides(pads[2], pads[3])),
                 },
+                start,
                 new Steps(step[0], step[1])),
             _ => description => description.Conv3DTranspose(
                 filters,
@@ -161,6 +180,7 @@ internal sealed class TransposedConvolutionKind(string name, int axes) : KerasKi
                     Dilation = new Steps3D(dilation[0], dilation[1], dilation[2]),
                     Border = new Margins3D(new Sides(pads[0], pads[1]), new Sides(pads[2], pads[3]), new Sides(pads[4], pads[5])),
                 },
+                start,
                 new Steps3D(step[0], step[1], step[2])),
         };
     }
@@ -206,10 +226,19 @@ internal sealed class DepthwiseConvolutionKind(string name, int axes) : KerasKin
     public override KerasLayer Read(KerasSettings layer)
     {
         var footprint = Walked(layer, axes, out var multiplier);
+        var bias = KeepsBias(layer);
+        var rules = new Rules(Governing(layer, "depthwise", axes + 2, [.. Enumerable.Range(0, axes)]), bias ? Governing(layer, "bias", 1, [0]) : default, Held(layer));
+        var made = Words(footprint, multiplier, axes, Starting(bias));
 
-        return new KerasLayer(Words(footprint, multiplier, axes), ActivationOf(layer))
+        return new KerasLayer(
+            description =>
+            {
+                made(description);
+                rules.Put(description);
+            },
+            ActivationOf(layer))
         {
-            Slots = [new("weight", 0, footprint.Sides) { Kept = KerasKeeping.Apart }, "bias"],
+            Slots = WithBias(new("weight", 0, footprint.Sides) { Kept = KerasKeeping.Apart }, bias),
             Sizes = footprint.Sides,
         };
     }
@@ -230,21 +259,20 @@ internal sealed class DepthwiseConvolutionKind(string name, int axes) : KerasKin
         }
 
         RequireChannelsLast(layer, ThingsWalkedAlong(axes));
-        RequireBias(layer);
 
         return new Footprint(sides, strides, dilation, padding == "same" ? PaddingMode.Same : PaddingMode.Stated);
     }
 
     // A convolution with a group for every channel it is handed: what a depthwise convolution is.
-    internal static Action<Sequential> Words(Footprint footprint, int multiplier, int axes) =>
+    internal static Action<Sequential> Words(Footprint footprint, int multiplier, int axes, Beginning start) =>
         axes == 1
-            ? description => description.DepthwiseConv1D(multiplier, footprint.Line())
-            : description => description.DepthwiseConv2D(multiplier, footprint.Plane());
+            ? description => description.DepthwiseConv1D(multiplier, footprint.Line(), start)
+            : description => description.DepthwiseConv2D(multiplier, footprint.Plane(), start);
 }
 
 /// <summary>
 /// Keras's <c>SeparableConv1D</c> and <c>SeparableConv2D</c>: a depthwise convolution and then a convolution of a window of
-/// one place, which are two layers here. Keras adds its bias once, after both, so the first is given one of noughts.
+/// one place, which are two layers here. Keras adds its bias once, after both, so the first has none and the second has the layer's.
 /// </summary>
 /// <param name="name">The class name Keras writes the kind under.</param>
 /// <param name="axes">How many axes the window walks: one or two.</param>
@@ -263,32 +291,35 @@ internal sealed class SeparableConvolutionKind(string name, int axes) : KerasKin
         Array.Fill(ones, 1);
 
         var pointwise = new Footprint(ones, ones, ones, PaddingMode.Stated);
+        var bias = KeepsBias(layer);
+        var start = Starting(bias);
+        var held = Held(layer);
+        var depthwiseRules = new Rules(Governing(layer, "depthwise", axes + 2, [.. Enumerable.Range(0, axes)]), default, held);
+        var pointwiseRules = new Rules(Governing(layer, "pointwise", axes + 2, [.. Enumerable.Range(0, axes + 1)]), bias ? Governing(layer, "bias", 1, [0]) : default, held);
 
         return new KerasLayer(
             description =>
             {
-                DepthwiseConvolutionKind.Words(footprint, multiplier, axes)(description);
+                DepthwiseConvolutionKind.Words(footprint, multiplier, axes, Starting(false))(description);
+                depthwiseRules.Put(description);
 
                 if (axes == 1)
                 {
-                    description.Conv1D(filters, pointwise.Line());
+                    description.Conv1D(filters, pointwise.Line(), start);
                 }
                 else
                 {
-                    description.Conv2D(filters, pointwise.Plane());
+                    description.Conv2D(filters, pointwise.Plane(), start);
                 }
+
+                pointwiseRules.Put(description);
             },
             ActivationOf(layer))
         {
             // Keras writes the depthwise kernel, the pointwise kernel and the one bias, in that order; here they are the
-            // first layer's kernel, the second's, and the second's bias, and the first's bias is noughts.
-            Slots =
-            [
-                new("weight", 0, footprint.Sides) { Kept = KerasKeeping.Apart },
-                new("weight", 1, ones),
-                new("bias", 1, []),
-            ],
-            Noughts = [new("bias", 0, [])],
+            // first layer's kernel, the second's, and the second's bias. The first layer has no bias, since Keras adds none
+            // before the second stage.
+            Slots = [new("weight", 0, footprint.Sides) { Kept = KerasKeeping.Apart }, new("weight", 1, ones), .. bias ? [new KerasSlot("bias", 1, [])] : Array.Empty<KerasSlot>()],
             Places = 2,
         };
     }

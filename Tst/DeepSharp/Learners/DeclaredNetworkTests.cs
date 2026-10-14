@@ -17,7 +17,7 @@ namespace DeepSharp.Tests.Learners;
 /// </summary>
 public class DeclaredNetworkTests
 {
-    private static FittingBuilder Passengers() => Pdd.Create()
+    internal static FittingBuilder Passengers() => Pdd.Create()
         .ReadCsv(Repository.Data("titanic.csv"))
         .Declare(schema => schema.Integer("survived", "sibsp", "parch").Category("sex").Optional("age", ColumnKind.Number).Number("fare"))
         .SplitStratified("survived", 0.70, 0.15)

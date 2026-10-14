@@ -127,6 +127,40 @@ internal static class SpatialWalkExtensions
                 backend.Scale(backend.Subtract(backend.Fill(shape, 1f), real), backend.Fill(new Shape(), value)));
         }
 
+        /// <summary>
+        /// Each example with the places its border states added around it, each holding the example's own value it mirrors,
+        /// repeats or wraps to, and nothing else done to it.
+        /// </summary>
+        /// <param name="backend">The engine that multiplies.</param>
+        /// <param name="batch">The batch: an example by its axes by its channel.</param>
+        /// <param name="plan">How the places are filled: what fills them, and the places before and after each axis.</param>
+        /// <returns>The batch, every axis as long as the border makes it.</returns>
+        /// <exception cref="ArgumentException">A mirror adds as many places as the axis holds, or a wrap more.</exception>
+        /// <remarks>
+        /// Along each axis in turn the example is multiplied by a matrix of ones and noughts that has a row for every place of
+        /// the padded axis and a one in the column of the place it is taken from, so a place is the example's own value, and
+        /// the gradient of a loss goes back by the matrix turned round. The example is laid out as the matrix needs it by
+        /// two turns of the engine's own matrix transpose, which every engine has.
+        /// </remarks>
+        internal Tensor FilledFrom(ITensorBackend backend, Tensor batch, FillPlan plan)
+        {
+            var (filling, sides) = (plan.Filling, plan.Sides);
+            var padded = batch;
+            var extents = walk.ExtentsOf(batch.Shape);
+
+            for (var axis = 0; axis < extents.Length; axis++)
+            {
+                var (before, after) = (sides[2 * axis], sides[(2 * axis) + 1]);
+
+                if (before + after > 0)
+                {
+                    padded = backend.Picked(padded, axis + 1, filling.Picking(extents[axis], before, after));
+                }
+            }
+
+            return padded;
+        }
+
         /// <summary>Refuses a batch that is not a batch of series, images or volumes the window walks, or whose examples the window does not fit.</summary>
         /// <param name="batch">The shape of the batch.</param>
         /// <param name="channels">How many channels it must hold, when the layer reads a given number.</param>

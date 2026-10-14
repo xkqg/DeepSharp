@@ -1,0 +1,84 @@
+{
+  "layers": {
+    "dense": [
+      "units"
+    ],
+    "relu": [],
+    "tanh": [],
+    "sigmoid": [],
+    "dropout": [
+      "rate"
+    ],
+    "batchNorm": [
+      "epsilon",
+      "momentum"
+    ],
+    "layerNorm": [
+      "epsilon"
+    ]
+  },
+  "optimizers": {
+    "sgd": [
+      "momentum",
+      "rate"
+    ],
+    "adam": [
+      "epsilon",
+      "firstMoment",
+      "rate",
+      "secondMoment"
+    ],
+    "adamw": [
+      "epsilon",
+      "firstMoment",
+      "rate",
+      "secondMoment",
+      "weightDecay"
+    ],
+    "rmsprop": [
+      "alpha",
+      "epsilon",
+      "momentum",
+      "rate"
+    ],
+    "nadam": [
+      "epsilon",
+      "firstMoment",
+      "momentumDecay",
+      "rate",
+      "secondMoment"
+    ]
+  },
+  "losses": {
+    "meanSquaredError": [],
+    "crossEntropy": [],
+    "binaryCrossEntropy": [],
+    "earthMoversDistance": []
+  },
+  "schedules": {
+    "constant": [],
+    "stepDecay": [
+      "every",
+      "factor"
+    ],
+    "exponentialDecay": [
+      "factor"
+    ],
+    "cosineDecay": [
+      "epochs",
+      "minimum"
+    ],
+    "linearWarmup": [
+      "epochs",
+      "start"
+    ]
+  },
+  "stopping": {
+    "never": [],
+    "patience": [
+      "best",
+      "least",
+      "patience"
+    ]
+  }
+}

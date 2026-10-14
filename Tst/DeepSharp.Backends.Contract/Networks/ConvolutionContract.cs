@@ -107,7 +107,7 @@ public abstract class ConvolutionContract(ITensorBackend engine)
         var convolution = new Conv2D(3, 8, new Window(3, 3), new RandomStream(42).Draw("initialise:0", 0, 0));
 
         Assert.Equal(new Shape(27, 8), convolution.Weight.Value.Shape);
-        Assert.Equal(new Shape(8), convolution.Bias.Value.Shape);
+        Assert.Equal(new Shape(8), convolution.Bias!.Value.Shape);
         Assert.All(convolution.Weight.Value.Values.ToArray(), value => Assert.InRange(value, -0.19245f, 0.19245f));
         Assert.All(convolution.Bias.Value.Values.ToArray(), value => Assert.InRange(value, -0.19245f, 0.19245f));
         Assert.Equal(["weight", "bias"], convolution.Slots().Select(slot => slot.Path));

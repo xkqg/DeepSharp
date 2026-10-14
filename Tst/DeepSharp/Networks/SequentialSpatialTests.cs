@@ -83,6 +83,21 @@ public class SequentialSpatialTests
     }
 
     [Fact]
+    public void ThePaddingWords_CanFillThePlacesTheyAddFromTheExample_AndLowerOntoPaddingsThatSayHow()
+    {
+        var line = new Sequential().Pad1D(new Sides(2, 1), Filling.Mirror).Lower(new Shape(5, 2), new RandomStream(3));
+        var plane = new Sequential().Pad2D(new Margins(new Sides(1, 0), new Sides(0, 1)), Filling.Repeat).Lower(new Shape(4, 4, 1), new RandomStream(3));
+        var volume = new Sequential().Pad3D(new Margins3D(new Sides(1, 0), new Sides(0, 1), new Sides(1, 1)), Filling.Wrap).Lower(new Shape(3, 3, 3, 1), new RandomStream(3));
+
+        Assert.Equal(Filling.Mirror, Assert.IsType<Pad1D>(line.Layers[0]).Filling);
+        Assert.Equal(Filling.Repeat, Assert.IsType<Pad2D>(plane.Layers[0]).Filling);
+        Assert.Equal(Filling.Wrap, Assert.IsType<Pad3D>(volume.Layers[0]).Filling);
+        Assert.Equal(new Shape(2, 8, 2), line.Forward(Tensor.Zeros(new Shape(2, 5, 2)), Pass.Evaluation(Engine)).Shape);
+        Assert.Equal(new Shape(2, 5, 5, 1), plane.Forward(Tensor.Zeros(new Shape(2, 4, 4, 1)), Pass.Evaluation(Engine)).Shape);
+        Assert.Equal(new Shape(2, 4, 4, 5, 1), volume.Forward(Tensor.Zeros(new Shape(2, 3, 3, 3, 1)), Pass.Evaluation(Engine)).Shape);
+    }
+
+    [Fact]
     public void EveryWordOfTheRefusedList_LowersToTheLayerItNames_AlongASeries_OverAnImage_AndThroughAVolume()
     {
         var line = new Sequential()

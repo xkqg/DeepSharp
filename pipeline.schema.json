@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 8
+      "maximum": 9
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -1792,6 +1792,74 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 2147483647
+                  },
+                  "bias": {
+                    "description": "Whether the layer adds a bias of its own to every sum; it does, unless it says it does not.",
+                    "type": "boolean"
+                  },
+                  "weights": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "kaiminguniform",
+                          "glorotuniform",
+                          "faninuniform",
+                          "zeros",
+                          "ones",
+                          "normal",
+                          "truncatednormal",
+                          "orthogonal"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Kk][Aa][Ii][Mm][Ii][Nn][Gg][Uu][Nn][Ii][Ff][Oo][Rr][Mm]|[Gg][Ll][Oo][Rr][Oo][Tt][Uu][Nn][Ii][Ff][Oo][Rr][Mm]|[Ff][Aa][Nn][Ii][Nn][Uu][Nn][Ii][Ff][Oo][Rr][Mm]|[Zz][Ee][Rr][Oo][Ss]|[Oo][Nn][Ee][Ss]|[Nn][Oo][Rr][Mm][Aa][Ll]|[Tt][Rr][Uu][Nn][Cc][Aa][Tt][Ee][Dd][Nn][Oo][Rr][Mm][Aa][Ll]|[Oo][Rr][Tt][Hh][Oo][Gg][Oo][Nn][Aa][Ll])$"
+                      }
+                    ],
+                    "description": "How the weights of the layer start; as PyTorch starts a linear layer's, unless said."
+                  },
+                  "biasStart": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "kaiminguniform",
+                          "glorotuniform",
+                          "faninuniform",
+                          "zeros",
+                          "ones",
+                          "normal",
+                          "truncatednormal",
+                          "orthogonal"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Kk][Aa][Ii][Mm][Ii][Nn][Gg][Uu][Nn][Ii][Ff][Oo][Rr][Mm]|[Gg][Ll][Oo][Rr][Oo][Tt][Uu][Nn][Ii][Ff][Oo][Rr][Mm]|[Ff][Aa][Nn][Ii][Nn][Uu][Nn][Ii][Ff][Oo][Rr][Mm]|[Zz][Ee][Rr][Oo][Ss]|[Oo][Nn][Ee][Ss]|[Nn][Oo][Rr][Mm][Aa][Ll]|[Tt][Rr][Uu][Nn][Cc][Aa][Tt][Ee][Dd][Nn][Oo][Rr][Mm][Aa][Ll]|[Oo][Rr][Tt][Hh][Oo][Gg][Oo][Nn][Aa][Ll])$"
+                      }
+                    ],
+                    "description": "How the bias of the layer starts, when it has one; as PyTorch starts it, unless said."
+                  },
+                  "l1": {
+                    "description": "How much of the sum of the absolute values of the layer's weights the loss adds, as Keras's L1 regularizer does; none, unless said.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  },
+                  "l2": {
+                    "description": "How much of the sum of the squares of the layer's weights the loss adds, as Keras's L2 regularizer does; none, unless said.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  },
+                  "maxNorm": {
+                    "description": "The most norm each unit's weights may have after a step, as Keras's MaxNorm holds them to; nought, or left out, for no bound.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  },
+                  "learns": {
+                    "description": "Whether the layer's numbers learn, or are held still as Keras's trainable = False holds them; they learn, unless said.",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -1922,6 +1990,18 @@
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "maximum": 1.7976931348623157E+308
+                  },
+                  "scale": {
+                    "description": "Whether it multiplies what it normalised by a scale of its own; it does, unless it says it does not.",
+                    "type": "boolean"
+                  },
+                  "shift": {
+                    "description": "Whether it adds a shift of its own to what it normalised; it does, unless it says it does not.",
+                    "type": "boolean"
+                  },
+                  "learns": {
+                    "description": "Whether the layer's numbers learn, or are held still as Keras's trainable = False holds them; they learn, unless said.",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -1952,6 +2032,18 @@
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "maximum": 1.7976931348623157E+308
+                  },
+                  "scale": {
+                    "description": "Whether it multiplies what it normalised by a scale of its own; it does, unless it says it does not.",
+                    "type": "boolean"
+                  },
+                  "shift": {
+                    "description": "Whether it adds a shift of its own to what it normalised; it does, unless it says it does not.",
+                    "type": "boolean"
+                  },
+                  "learns": {
+                    "description": "Whether the layer's numbers learn, or are held still as Keras's trainable = False holds them; they learn, unless said.",
+                    "type": "boolean"
                   }
                 },
                 "required": [
@@ -1994,6 +2086,22 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1.7976931348623157E+308
+                },
+                "weightDecay": {
+                  "description": "How much of every number is added to its gradient before the step, as a share of the number itself; none, unless said.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "dampening": {
+                  "description": "How little of each new gradient the velocity takes in, from nothing to one; none, unless said.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "nesterov": {
+                  "description": "Whether the step is taken from the gradient plus the momentum times the velocity, as Nesterov has it; it is not, unless said.",
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -2042,6 +2150,16 @@
                   "type": "number",
                   "exclusiveMinimum": 0,
                   "maximum": 1.7976931348623157E+308
+                },
+                "weightDecay": {
+                  "description": "How much of every number is added to its gradient before the step, as a share of the number itself; none, unless said.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "amsgrad": {
+                  "description": "Whether the step is taken over the largest mean of the squares there has been, as AMSGrad has it; it is not, unless said.",
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -2098,6 +2216,10 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1.7976931348623157E+308
+                },
+                "amsgrad": {
+                  "description": "Whether the step is taken over the largest mean of the squares there has been, as AMSGrad has it; it is not, unless said.",
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -2149,6 +2271,16 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1.7976931348623157E+308
+                },
+                "weightDecay": {
+                  "description": "How much of every number is added to its gradient before the step, as a share of the number itself; none, unless said.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "centered": {
+                  "description": "Whether the root is taken of the mean of the squares less the square of the mean of the gradients; it is not, unless said.",
+                  "type": "boolean"
                 }
               },
               "required": [
@@ -2202,6 +2334,12 @@
                 },
                 "momentumDecay": {
                   "description": "How fast the momentum warms up over the steps.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "weightDecay": {
+                  "description": "How much of every number is added to its gradient before the step, as a share of the number itself; none, unless said.",
                   "type": "number",
                   "minimum": 0,
                   "maximum": 1.7976931348623157E+308
@@ -2387,6 +2525,24 @@
         },
         "clip": {
           "description": "The most norm a step's gradients may have together before they move the network; left out, or nought, they are not clipped.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.7976931348623157E+308
+        },
+        "clipValue": {
+          "description": "The most any value of a step's gradients may reach, either side of nothing, before they move the network; left out, or nought, they are not clipped by value.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.7976931348623157E+308
+        },
+        "stepEvery": {
+          "description": "How many batches' gradients are averaged into one step; left out, a step every batch.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "average": {
+          "description": "The share an average of the network's weights keeps of itself at every step, above nothing and below one, written over the weights when the run ends; left out, or nought, none is kept.",
           "type": "number",
           "minimum": 0,
           "maximum": 1.7976931348623157E+308
