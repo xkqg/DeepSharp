@@ -19,9 +19,10 @@ public sealed partial class HostContractTests : IDisposable
 {
     private readonly string _folder = Directory.CreateTempSubdirectory("deepsharp-host-").FullName;
 
-    // Where the package is laid out as Verso installs it: beside the suite, each run laying it out over the last. A package
-    // loaded into a context of its own keeps its files locked until the process ends, so no test can remove it after itself.
-    private static readonly string Installs = Path.Join(AppContext.BaseDirectory, "installed");
+    // Where the package is laid out as Verso installs it: beside the suite, in a folder of this process's own. A package
+    // loaded into a context of its own keeps its files locked until the process ends, so no test can remove it after itself,
+    // and another process of the suite must not lay it out over what this one holds.
+    private static readonly string Installs = VersoInstall.Installs;
 
     private static readonly string[] Titanic =
     [

@@ -1,6 +1,8 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 
@@ -15,6 +17,72 @@ internal static class VersoInstall
 {
     // The runtime this suite's build is for, named as Verso names the folder it installs a package into for that runtime.
     private static readonly string Runtime = new DirectoryInfo(Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory)).Name;
+
+    /// <summary>The folder a process lays its installs out in, beside the suite, named for the process.</summary>
+    /// <param name="processId">The process.</param>
+    /// <returns>The folder.</returns>
+    public static string InstallsOf(int processId) => Path.Join(Everyone, processId.ToString(CultureInfo.InvariantCulture));
+
+    /// <summary>The folder this process lays its installs out in, with what the processes that have ended left taken away.</summary>
+    /// <remarks>
+    /// A package loaded into a context of its own keeps its files locked until its process ends, so no test can remove what it
+    /// laid out, and two processes of this suite cannot lay one out in the same folder: the second would copy over the files the
+    /// first holds. Each has a folder named for it, and the next process takes away the folders of those that have ended.
+    /// </remarks>
+    public static string Installs { get; } = Prepared();
+
+    private static string Everyone => Path.Join(AppContext.BaseDirectory, "installed");
+
+    private static string Prepared()
+    {
+        ClearAfterTheDead(Everyone);
+
+        return Directory.CreateDirectory(InstallsOf(Environment.ProcessId)).FullName;
+    }
+
+    /// <summary>
+    /// Takes away what the processes that have ended left in a folder of installs, and what an earlier layout left in it, which
+    /// no process has a name for.
+    /// </summary>
+    /// <param name="root">The folder that holds a folder of installs for each process.</param>
+    public static void ClearAfterTheDead(string root)
+    {
+        if (!Directory.Exists(root))
+        {
+            return;
+        }
+
+        foreach (var folder in Directory.GetDirectories(root))
+        {
+            if (int.TryParse(Path.GetFileName(folder), NumberStyles.None, CultureInfo.InvariantCulture, out var id) && Runs(id))
+            {
+                continue;
+            }
+
+            try
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+            catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+            {
+                // A process of an earlier layout may still hold what it loaded; it is taken away by the run after it.
+            }
+        }
+    }
+
+    private static bool Runs(int processId)
+    {
+        try
+        {
+            using var process = Process.GetProcessById(processId);
+
+            return !process.HasExited;
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+    }
 
     /// <summary>The list of what Verso's installer lays out for the package on this suite's runtime.</summary>
     public static string List => Path.Join(Repository.Root, "tools", "verso", $"installed.{Runtime}.txt");
