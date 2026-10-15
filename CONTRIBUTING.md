@@ -124,6 +124,16 @@ never naming the landing — a page that lands is compiled and never run. The ve
 payload of Binance's goes into the repository, since the data comes under terms of its own. Seeing Binance's real answer
 for a change is one request made by hand, to `/api/v3/time` or for a page of at most ten candles, and never a loop.
 
+## One machine, a few suites at a time
+
+Run side by side, suites measure the machine and not the code. One run of the browser suite
+(`DeepSharp.Verso.Serve.Tests`) holds about 4,700 of Windows' 16,384 ephemeral ports at its peak — 2,000 of them from one
+test that opens that many sockets on purpose, because the race it hunts is too rare to meet one page at a time — and a
+port stays taken for two minutes after its socket is closed. Four runs at once were clean twelve times in a row, five
+reached three quarters of the ports and stayed clean, and at six or more the machine runs out: the failures read *lacked
+sufficient buffer space*, `ERR_INSUFFICIENT_RESOURCES` and *Target crashed*, and have nothing to do with the code. Keep a
+soak of that suite to four, and read a red of it under more as the machine first.
+
 ## Commits
 
 The subject line says what changed, in plain English, in the present tense: *the shape refuses an axis that
