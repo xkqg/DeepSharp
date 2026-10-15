@@ -81,30 +81,34 @@ public sealed class SettleTests : IDisposable
         Assert.DoesNotContain("\"sex\"", SchemaBlock(notebook).Source, StringComparison.Ordinal);
     }
 
+    private static NotebookSession Session(Notebook notebook) =>
+        notebook.Host.GetCellTypes().OfType<StepCellType>().Single().Session;
+
     [Fact]
     public async Task APickOrAView_ChangesNothing_AndDoesNotWait_WhileAChangeDoes()
     {
         await using var notebook = await NotebookAsync();
+        var session = Session(notebook);
 
-        // The first view reads the source once; the ones clocked after it draw what was read.
+        // The first view reads the source once; the ones after it draw what was read.
         await notebook.GestureAsync(SchemaBlock(notebook), StepRenderer.Show);
         await notebook.GestureAsync(SchemaBlock(notebook), StepRenderer.Columns);
+        await notebook.GestureAsync(SchemaBlock(notebook), StepRenderer.Show);
+        await notebook.GestureAsync(SchemaBlock(notebook), StepRenderer.Columns);
+        await notebook.GestureAsync(SchemaBlock(notebook), List(notebook).SelectOf(StepRenderer.ListType)!.Value.Action, "target.distribution");
+        await notebook.GestureAsync(SchemaBlock(notebook), List(notebook).SelectOf(StepRenderer.ListRange)!.Value.Action, "range");
+        await notebook.GestureAsync(SchemaBlock(notebook), List(notebook).SelectOf(StepRenderer.ListRangeKind, "include")!.Value.Action, "integer");
 
-        Assert.All(
-            [
-                await ClockedAsync(notebook, StepRenderer.Show),
-                await ClockedAsync(notebook, StepRenderer.Columns),
-                await ClockedAsync(notebook, List(notebook).SelectOf(StepRenderer.ListType)!.Value.Action, "target.distribution"),
-                await ClockedAsync(notebook, List(notebook).SelectOf(StepRenderer.ListRange)!.Value.Action, "range"),
-                await ClockedAsync(notebook, List(notebook).SelectOf(StepRenderer.ListRangeKind, "include")!.Value.Action, "integer"),
-            ],
-            took => Assert.True(took < NotebookSession.SettleTime, $"a pick or a view took {took.TotalMilliseconds} ms"));
+        // Counted, not clocked: how long a gesture takes is the machine's to say, and a stall of 305 ms on a machine under
+        // load failed this test once in 150 whole runs although no pick or view had waited; whether the host waited is not.
+        Assert.Equal(0, session.GesturesWaited);
 
         // A change waits past what VS Code holds. The wait ends by the system's timer, which may end it a moment before the
         // stopwatch reaches the settle time: under a load of other timers, 97 of 1,920 waits of 300 ms were measured short,
         // by up to 0.84 ms.
         var change = await ClockedAsync(notebook, List(notebook).Row("pclass").Kind.Action, "category");
 
+        Assert.Equal(1, session.GesturesWaited);
         Assert.True(change > HeldByVSCode, $"a change to the blocks did not wait: it took {change.TotalMilliseconds} ms");
     }
 

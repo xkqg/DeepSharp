@@ -235,7 +235,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         // changes nothing, and does not wait.
         if (ControlAction.Read(context.InteractionType) is { Gesture: not (ListType or ListRange or ListRangeKind) })
         {
-            await Task.Delay(NotebookSession.SettleTime);
+            await gesture.Session.SettleAsync();
         }
 
         var assembled = NotebookPipeline.Of(gesture.Notebook.Cells);

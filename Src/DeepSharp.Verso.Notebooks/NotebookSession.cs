@@ -83,6 +83,17 @@ internal sealed class NotebookSession
     /// </summary>
     public static TimeSpan SettleTime { get; } = TimeSpan.FromMilliseconds(300);
 
+    /// <summary>
+    /// Waits out <see cref="SettleTime"/>, counted, for a gesture that can change the blocks, before it reads them.
+    /// </summary>
+    /// <returns>A task that ends once the time has passed.</returns>
+    public Task SettleAsync()
+    {
+        Change(state => state with { GesturesWaited = state.GesturesWaited + 1 });
+
+        return Task.Delay(SettleTime);
+    }
+
     /// <summary>The pipeline the blocks made at the last gesture, when there was one.</summary>
     public NotebookPipeline? Assembled => Now.Assembled;
 
@@ -100,6 +111,12 @@ internal sealed class NotebookSession
     /// report's measures — once at most for one block's show, whichever of them asks.
     /// </summary>
     public int WholeRuns => Now.WholeRuns;
+
+    /// <summary>
+    /// How many gestures waited out <see cref="SettleTime"/> before reading the blocks: a change does, a view or a pick
+    /// never does. Counted, since how long a gesture took says what the machine was doing as much as what the host did.
+    /// </summary>
+    public int GesturesWaited => Now.GesturesWaited;
 
     /// <summary>The blocks that show data, each with the key of the steps its rows were worked out from.</summary>
     public IReadOnlyDictionary<Guid, string> Shown => Now.Shown.ToDictionary(each => each.Key, each => each.Value.Key);
@@ -812,6 +829,9 @@ internal sealed class NotebookSession
 
         /// <summary>How many times the whole pipeline was run over the source's rows.</summary>
         public int WholeRuns { get; init; }
+
+        /// <summary>How many gestures waited out the settle time before reading the blocks.</summary>
+        public int GesturesWaited { get; init; }
 
         /// <summary>How many runs were stopped.</summary>
         public int Stops { get; init; }
