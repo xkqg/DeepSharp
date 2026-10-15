@@ -382,7 +382,11 @@ since it brings HTTP, retries and a rate limiter that a project serving a traine
 - **One fingerprint.** The SHA-256 of a file's bytes, in lower-case hexadecimal, is one method of the core, used by the
   notebook's cache of what it read, by the landing and by whoever asks. A second way of saying that two files are the same is
   how two parts of a library come to disagree about whether a file changed. The core also writes a file whole — under a
-  name of its own, to the disk, then moved into place — and the notebook's files and the landing use that one too.
+  name of its own, to the disk, then moved into place — and the notebook's files and the landing use that one too. A move
+  the system refuses for a moment (a scanner, an indexer or a synchronisation client looking at the file: "access denied"
+  or a sharing violation, with no process that can be named holding it) is made again for up to three seconds; one it
+  refuses for good — a folder where the file goes, a read-only file, a file that is already there, a missing folder — is
+  not waited for.
 - **The venue's dialect lives in one internal class, and the budget is a guest's.** Binance's end of a range is
   inclusive, so a window is asked for up to a millisecond before it ends and a candle that opens at its end is refused.
   Binance counts what an address spends by the minute, whoever spends it, and the owner of a machine may have other

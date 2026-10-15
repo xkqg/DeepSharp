@@ -174,6 +174,184 @@ public sealed class FileBytesWriteTests : IDisposable
         Assert.Equal(["one.txt"], Standing());
     }
 
+    // A move as the system makes it for a while: refused so many times, as it refuses one it will allow a moment later, and then made.
+    private sealed class Refusing(int times, Exception refusal, Action? meanwhile = null)
+    {
+        public int Tries { get; private set; }
+
+        public void Move(Placing placing)
+        {
+            Tries++;
+            meanwhile?.Invoke();
+
+            if (Tries <= times)
+            {
+                throw refusal;
+            }
+
+            placing.Done();
+        }
+    }
+
+    // A name of its own with bytes in it, as a write leaves it just before the move.
+    private string Written(string bytes)
+    {
+        var own = At($".own.{Guid.NewGuid():N}.tmp");
+
+        File.WriteAllBytes(own, Text(bytes));
+
+        return own;
+    }
+
+    private static readonly TimeSpan Plenty = TimeSpan.FromSeconds(30);
+
+    [Fact]
+    public void AMoveRefusedAsAccessDenied_IsMadeAgain_UntilItGoesThrough()
+    {
+        var refusing = new Refusing(2, new UnauthorizedAccessException("Access to the path is denied."));
+
+        WholeFile.MoveInto(new Placing(Written("new\n"), At("one.txt"), Replaces: true), Plenty, refusing.Move);
+
+        Assert.Equal(3, refusing.Tries);
+        Assert.Equal(Text("new\n"), File.ReadAllBytes(At("one.txt")));
+        Assert.Equal(["one.txt"], Standing());
+    }
+
+    [Theory]
+    [InlineData(0x80070020)]
+    [InlineData(0x80070021)]
+    public void AMoveRefusedAsASharingOrLockViolation_IsMadeAgain(uint code)
+    {
+        var refusing = new Refusing(1, new IOException("being used by another process", unchecked((int)code)));
+
+        WholeFile.MoveInto(new Placing(Written("new\n"), At("one.txt"), Replaces: true), Plenty, refusing.Move);
+
+        Assert.Equal(2, refusing.Tries);
+        Assert.Equal(Text("new\n"), File.ReadAllBytes(At("one.txt")));
+    }
+
+    [Theory]
+    [InlineData(0x80070050)]
+    [InlineData(0x80070003)]
+    [InlineData(0x80004005)]
+    public void AMoveRefusedForAnotherReason_IsNotMadeAgain(uint code)
+    {
+        var refusing = new Refusing(5, new IOException("another reason", unchecked((int)code)));
+
+        Assert.Throws<IOException>(() => WholeFile.MoveInto(new Placing(Written("new\n"), At("one.txt"), Replaces: false), Plenty, refusing.Move));
+        Assert.Equal(1, refusing.Tries);
+    }
+
+    [Fact]
+    public void AMoveRefusedWhereAFolderStands_IsNotMadeAgain()
+    {
+        Directory.CreateDirectory(At("taken"));
+
+        var refusing = new Refusing(5, new UnauthorizedAccessException("Access to the path is denied."));
+
+        Assert.Throws<UnauthorizedAccessException>(() => WholeFile.MoveInto(new Placing(Written("new\n"), At("taken"), Replaces: true), Plenty, refusing.Move));
+        Assert.Equal(1, refusing.Tries);
+    }
+
+    [Fact]
+    public void AMoveRefusedWhereAReadOnlyFileStands_IsNotMadeAgain()
+    {
+        File.WriteAllText(At("one.txt"), "old\n");
+        File.SetAttributes(At("one.txt"), FileAttributes.ReadOnly);
+
+        try
+        {
+            var refusing = new Refusing(5, new UnauthorizedAccessException("Access to the path is denied."));
+
+            Assert.Throws<UnauthorizedAccessException>(() => WholeFile.MoveInto(new Placing(Written("new\n"), At("one.txt"), Replaces: true), Plenty, refusing.Move));
+            Assert.Equal(1, refusing.Tries);
+        }
+        finally
+        {
+            File.SetAttributes(At("one.txt"), FileAttributes.Normal);
+        }
+    }
+
+    [Fact]
+    public void AMoveRefusedForGood_IsTheAnswerOnceThePatienceIsSpent_AsTheSameRefusal()
+    {
+        var refusal = new UnauthorizedAccessException("Access to the path is denied.");
+        var refusing = new Refusing(int.MaxValue, refusal);
+
+        var thrown = Assert.Throws<UnauthorizedAccessException>(() => WholeFile.MoveInto(new Placing(Written("new\n"), At("one.txt"), Replaces: true), TimeSpan.FromMilliseconds(300), refusing.Move));
+
+        Assert.Same(refusal, thrown);
+        Assert.True(refusing.Tries > 1, $"it was made {refusing.Tries} time");
+    }
+
+    [Fact]
+    public async Task AnAsyncMoveRefusedAsAccessDenied_IsMadeAgain_UntilItGoesThrough()
+    {
+        var refusing = new Refusing(2, new UnauthorizedAccessException("Access to the path is denied."));
+
+        await WholeFile.MoveIntoAsync(new Placing(Written("new\n"), At("one.txt"), Replaces: true), Plenty, refusing.Move, TestContext.Current.CancellationToken);
+
+        Assert.Equal(3, refusing.Tries);
+        Assert.Equal(Text("new\n"), File.ReadAllBytes(At("one.txt")));
+    }
+
+    [Fact]
+    public async Task AnAsyncMoveRefusedForGood_IsTheAnswerOnceThePatienceIsSpent()
+    {
+        var refusing = new Refusing(int.MaxValue, new UnauthorizedAccessException("Access to the path is denied."));
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(
+            () => WholeFile.MoveIntoAsync(new Placing(Written("new\n"), At("one.txt"), Replaces: true), TimeSpan.FromMilliseconds(300), refusing.Move, TestContext.Current.CancellationToken));
+        Assert.True(refusing.Tries > 1, $"it was made {refusing.Tries} time");
+    }
+
+    [Fact]
+    public async Task AnAsyncMove_WaitingBetweenTries_EndsWhenItIsCancelled()
+    {
+        using var cancelled = new CancellationTokenSource();
+        var refusing = new Refusing(int.MaxValue, new UnauthorizedAccessException("Access to the path is denied."), meanwhile: cancelled.Cancel);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(
+            () => WholeFile.MoveIntoAsync(new Placing(Written("new\n"), At("one.txt"), Replaces: true), Plenty, refusing.Move, cancelled.Token));
+        Assert.Equal(1, refusing.Tries);
+    }
+
+    // Windows refuses a file to be replaced while another handle to it does not share deletion; whatever holds it for a moment
+    // lets go, and the write goes through. Where a file does not need that, the refusal is not there to be had.
+    [Fact]
+    public async Task WritingWhole_WhereSomethingHoldsTheFileForAMoment_WaitsForItAndWrites()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses a file to be replaced while it is open without sharing deletion.");
+        File.WriteAllText(At("one.txt"), "old\n");
+
+        var holding = new FileStream(At("one.txt"), FileMode.Open, FileAccess.Read, FileShare.Read);
+        var writing = Task.Run(() => Text("new\n").WriteWhole(At("one.txt")), TestContext.Current.CancellationToken);
+
+        await Task.Delay(150, TestContext.Current.CancellationToken);
+        await holding.DisposeAsync();
+        await writing.WaitAsync(Plenty, TestContext.Current.CancellationToken);
+
+        Assert.Equal(Text("new\n"), File.ReadAllBytes(At("one.txt")));
+        Assert.Equal(["one.txt"], Standing());
+    }
+
+    [Fact]
+    public async Task WritingWholeAsync_WhereSomethingHoldsTheFileForAMoment_WaitsForItAndWrites()
+    {
+        Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses a file to be replaced while it is open without sharing deletion.");
+        File.WriteAllText(At("one.txt"), "old\n");
+
+        var holding = new FileStream(At("one.txt"), FileMode.Open, FileAccess.Read, FileShare.Read);
+        var writing = Text("new\n").WriteWholeAsync(At("one.txt"), TestContext.Current.CancellationToken);
+
+        await Task.Delay(150, TestContext.Current.CancellationToken);
+        await holding.DisposeAsync();
+        await writing.WaitAsync(Plenty, TestContext.Current.CancellationToken);
+
+        Assert.Equal(Text("new\n"), File.ReadAllBytes(At("one.txt")));
+        Assert.Equal(["one.txt"], Standing());
+    }
+
     [Fact]
     public void NoBytes_AreWrittenWhole()
     {

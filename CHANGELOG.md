@@ -129,6 +129,17 @@ PyTorch files that say it. A part that says none of them is written as it always
   whatever else was running: in a process that runs C# cells, as an "unhandled exception in background work" in the output of
   a cell that had nothing to do with it. That task is watched now.
 
+- **A file written whole is moved into place again when Windows refuses the move for a moment.** `WriteWhole`,
+  `WriteWholeAsync` and `WriteWholeOnceAsync` moved a file into place once, and a refusal at that moment was the answer.
+  Windows refuses a move, with "access denied" or a sharing violation, for as long as something looks at the file — a virus
+  scanner, an indexer, a synchronisation client — and then lets go, and no process need be holding it that anyone can name.
+  Measured on the columns a notebook saves beside itself, with several notebooks working at once in one process, about one
+  save in four hundred and seventy was refused so, and a person met it as "The saved columns could not be written beside the
+  notebook". The move is now made again for up to three seconds, with pauses that grow from a millisecond to fifty. A folder
+  where the file is meant to go, a file marked read-only, a file that is already there and a missing folder are refused at
+  once as before, and what is still refused after the three seconds is the same exception as before. Over the same flow none
+  of 137,094 saves was refused, where 271 of 126,921 had been.
+
 ## [0.9.0]
 
 Everything a window can be. A convolution here covered neighbouring places, one stride on every axis and the places

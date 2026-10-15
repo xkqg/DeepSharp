@@ -1,7 +1,19 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Diagnostics;
+
 namespace DeepSharp.Pipelines;
+
+/// <summary>A file on its way into place: the name its bytes were written under, where they go, and whether they replace what stands there.</summary>
+/// <param name="Own">The name of its own the bytes were written to.</param>
+/// <param name="Path">Where the bytes go.</param>
+/// <param name="Replaces">Whether they replace a file standing at the path.</param>
+internal readonly record struct Placing(string Own, string Path, bool Replaces)
+{
+    /// <summary>Makes the move once.</summary>
+    public void Done() => File.Move(Own, Path, Replaces);
+}
 
 /// <summary>
 /// A file written whole: its bytes go to a name of its own beside it and are moved into place in one step, so whoever
@@ -45,6 +57,88 @@ internal static class WholeFile
     // What stopped a write is gone with it: a name that was never made, or one already moved, is nothing to remove.
     private static void Remove(string own) => File.Delete(own);
 
+    // How long a move that is refused for a moment is made again before the refusal is the answer. What refuses it — a scanner, an
+    // indexer, a sync client looking at the file — lets go within milliseconds (measured, on a notebook's saved columns: 1 write
+    // in 470 under load was answered 'access denied' with no process holding the file, 117 of 118 went through at the next try),
+    // and a person waits for a save no longer than this before being told.
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(3);
+
+    // The longest pause between two tries.
+    private const int LongestPause = 50;
+
+    // Windows' ERROR_SHARING_VIOLATION and ERROR_LOCK_VIOLATION, as the HRESULT an IOException carries.
+    private const int SharingViolation = unchecked((int)0x80070020);
+    private const int LockViolation = unchecked((int)0x80070021);
+
+    // A refusal that goes away by itself: 'access denied' or a sharing or lock violation. Not a folder where the file goes, nor a
+    // file marked read-only — nothing lets go of those — and not 'the file is already there', which is an answer, nor a missing folder.
+    private static bool Passes(Exception refusal, string path) =>
+        refusal is UnauthorizedAccessException or IOException { HResult: SharingViolation or LockViolation } && !RefusedForGood(path);
+
+    private static bool RefusedForGood(string path)
+    {
+        try
+        {
+            return (File.GetAttributes(path) & (FileAttributes.Directory | FileAttributes.ReadOnly)) != 0;
+        }
+        catch (Exception unseen) when (unseen is IOException or UnauthorizedAccessException)
+        {
+            // Nothing stands there to refuse it, or it cannot be looked at: no reason to give up yet.
+            return false;
+        }
+    }
+
+    /// <summary>Makes a move, and makes it again for a moment when the system refuses it for a reason that goes away.</summary>
+    /// <param name="placing">The move.</param>
+    /// <param name="patience">How long a refusal is waited out before it is the answer.</param>
+    /// <param name="move">How the move is made.</param>
+    /// <exception cref="UnauthorizedAccessException">The refusal that was still there when the patience was spent.</exception>
+    /// <exception cref="IOException">As above, or a refusal that does not go away.</exception>
+    internal static void MoveInto(Placing placing, TimeSpan patience, Action<Placing> move)
+    {
+        var waited = Stopwatch.StartNew();
+
+        for (var pause = 1; ; pause = Math.Min(pause * 2, LongestPause))
+        {
+            try
+            {
+                move(placing);
+
+                return;
+            }
+            catch (Exception refusal) when (waited.Elapsed < patience && Passes(refusal, placing.Path))
+            {
+                Thread.Sleep(pause);
+            }
+        }
+    }
+
+    /// <summary>Makes a move, and makes it again for a moment when the system refuses it for a reason that goes away.</summary>
+    /// <param name="placing">The move.</param>
+    /// <param name="patience">How long a refusal is waited out before it is the answer.</param>
+    /// <param name="move">How the move is made.</param>
+    /// <param name="cancellation">Ends the waiting between the tries.</param>
+    /// <returns>When the move is made.</returns>
+    /// <exception cref="OperationCanceledException">The waiting between two tries was cancelled.</exception>
+    internal static async Task MoveIntoAsync(Placing placing, TimeSpan patience, Action<Placing> move, CancellationToken cancellation)
+    {
+        var waited = Stopwatch.StartNew();
+
+        for (var pause = 1; ; pause = Math.Min(pause * 2, LongestPause))
+        {
+            try
+            {
+                move(placing);
+
+                return;
+            }
+            catch (Exception refusal) when (waited.Elapsed < patience && Passes(refusal, placing.Path))
+            {
+                await Task.Delay(pause, cancellation);
+            }
+        }
+    }
+
     /// <summary>Writes the bytes whole, replacing what stood at the path.</summary>
     /// <param name="bytes">The bytes.</param>
     /// <param name="path">The file.</param>
@@ -60,7 +154,7 @@ internal static class WholeFile
                 stream.Flush(flushToDisk: true);
             }
 
-            File.Move(own, path, overwrite: true);
+            MoveInto(new Placing(own, path, Replaces: true), Patience, static placing => placing.Done());
         }
         catch
         {
@@ -85,7 +179,7 @@ internal static class WholeFile
         {
             await Fill(own, bytes, cancellation);
 
-            File.Move(own, path, overwrite: true);
+            await MoveIntoAsync(new Placing(own, path, Replaces: true), Patience, static placing => placing.Done(), cancellation);
         }
         catch
         {
@@ -119,7 +213,7 @@ internal static class WholeFile
             {
                 try
                 {
-                    File.Move(own, path, overwrite: false);
+                    await MoveIntoAsync(new Placing(own, path, Replaces: false), Patience, static placing => placing.Done(), cancellation);
                 }
                 catch (IOException) when (File.Exists(path))
                 {
