@@ -1047,6 +1047,7 @@ public sealed class FormTests : IDisposable
     public async Task AChangeToABlockAGestureRewroteWhileTheChangeWaited_IsNotMade_AsAHostFindingNoSuchBlockWouldNotMakeIt()
     {
         await using var notebook = await NotebookAsync(Titanic);
+        var clock = notebook.HoldTheSettleWait();
         var declare = notebook.Scaffold.Cells[1];
 
         await notebook.GestureAsync(declare, StepRenderer.Columns);
@@ -1054,15 +1055,18 @@ public sealed class FormTests : IDisposable
         var tick = declare.Outputs.Single(output => output.Content.Contains("<tr data-column=", StringComparison.Ordinal)).Content.Row("sex").Included.Action;
 
         // The form's change arrives while the tick waits for what the editor still holds, so it queues behind the tick:
-        // the panel hands it straight to the form, as VS Code's does, past any order a host keeps.
+        // the panel hands it straight to the form, as VS Code's does, past any order a host keeps. It is sent once the tick
+        // waits, which is when the tick holds the notebook; a time that passed first would only be a guess at that.
         var ticking = notebook.GestureAsync(declare, tick, "true");
 
-        await Task.Delay(NotebookSession.SettleTime / 6, TestContext.Current.CancellationToken);
+        await notebook.UntilAGestureWaitsAsync();
 
         var change = ChangeAsync(notebook, declare, "remainder", "keep");
 
-        await ticking;
-        await change;
+        clock.Advance(NotebookSession.SettleTime);
+
+        await ticking.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
+        await change.WaitAsync(TimeSpan.FromSeconds(30), TestContext.Current.CancellationToken);
 
         var standing = notebook.Scaffold.Cells[1];
 

@@ -84,14 +84,27 @@ internal sealed class NotebookSession
     public static TimeSpan SettleTime { get; } = TimeSpan.FromMilliseconds(300);
 
     /// <summary>
-    /// Waits out <see cref="SettleTime"/>, counted, for a gesture that can change the blocks, before it reads them.
+    /// The clock the settle wait is made on: the system's, unless a test holds another so that the wait ends when the
+    /// test says, not when a machine under load gets round to it.
+    /// </summary>
+    public TimeProvider Time { get; set; } = TimeProvider.System;
+
+    /// <summary>
+    /// Waits out <see cref="SettleTime"/> on <see cref="Time"/>, counted, for a gesture that can change the blocks,
+    /// before it reads them.
     /// </summary>
     /// <returns>A task that ends once the time has passed.</returns>
+    /// <remarks>
+    /// The wait is on the clock before it is counted, so a count of one means the wait is there to be ended: a gesture is
+    /// held in its turn from the moment it is counted.
+    /// </remarks>
     public Task SettleAsync()
     {
+        var waiting = Task.Delay(SettleTime, Time);
+
         Change(state => state with { GesturesWaited = state.GesturesWaited + 1 });
 
-        return Task.Delay(SettleTime);
+        return waiting;
     }
 
     /// <summary>The pipeline the blocks made at the last gesture, when there was one.</summary>

@@ -18,6 +18,9 @@
 
   <ItemGroup>
     <PackageReference Include="xunit.v3" Version="4.*" />
+    <!-- As in the library's suite: a wait that is part of what a test is about ends when the test moves a clock on, not when
+         a machine under load gets round to it. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.*" />
     <!-- Verso's own engine, here only: the package is tested inside a real notebook — its cell type, kernel and
          interactions loaded into Verso's extension host and run by Verso's scaffold — rather than against a
          description of one. The package itself compiles against the abstractions alone. -->

@@ -1,9 +1,11 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Diagnostics;
 using System.Text.Json;
 using DeepSharp.Verso.Api;
 using DeepSharp.Verso.Notebooks;
+using Microsoft.Extensions.Time.Testing;
 using Verso;
 using Verso.Abstractions;
 using Verso.Extensions;
@@ -31,6 +33,9 @@ internal sealed class Notebook : IAsyncDisposable
     // The folder made for a notebook the test named no file for; nothing else writes there.
     private readonly string? _made;
 
+    // The clock the test holds the settle wait on, when it holds one.
+    private FakeTimeProvider? _held;
+
     private Notebook(OpenNotebooks notebooks, NotebookHost opened, string? made)
     {
         _notebooks = notebooks;
@@ -48,8 +53,43 @@ internal sealed class Notebook : IAsyncDisposable
     /// <summary>The notebook itself.</summary>
     public Scaffold Scaffold => Opened.Scaffold;
 
+    /// <summary>The notebook's session, which keeps what only holds between the calls on it.</summary>
+    public NotebookSession Session => Host.GetCellTypes().OfType<StepCellType>().Single().Session;
+
     /// <summary>Every cell whose output was pushed to the front end while it ran, in the order they were pushed.</summary>
     public List<Guid> Pushed { get; } = [];
+
+    /// <summary>
+    /// Puts the wait of a gesture that can change the blocks on a clock the test holds: the wait ends when the test moves
+    /// the clock on by the settle time, and not before.
+    /// </summary>
+    /// <returns>The clock.</returns>
+    public FakeTimeProvider HoldTheSettleWait()
+    {
+        var clock = new FakeTimeProvider();
+
+        Session.Time = clock;
+        _held = clock;
+
+        return clock;
+    }
+
+    /// <summary>
+    /// Waits until a gesture waits on the notebook's clock. From then on it holds the notebook, so whatever is asked of the
+    /// notebook after it queues behind it, however long anything took to get there.
+    /// </summary>
+    /// <param name="gestures">How many gestures have waited by then.</param>
+    /// <returns>A task that ends once they have.</returns>
+    public async Task UntilAGestureWaitsAsync(int gestures = 1)
+    {
+        var patience = Stopwatch.StartNew();
+
+        while (Session.GesturesWaited < gestures)
+        {
+            Assert.True(patience.Elapsed < TimeSpan.FromSeconds(30), $"no gesture waited: {Session.GesturesWaited} of {gestures}");
+            await Task.Delay(1, TestContext.Current.CancellationToken);
+        }
+    }
 
     /// <summary>Opens an empty notebook.</summary>
     /// <param name="filePath">Where the notebook is saved; nothing for one that never was.</param>
@@ -165,7 +205,18 @@ internal sealed class Notebook : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        await _notebooks.DisposeAsync();
+        var closing = _notebooks.DisposeAsync().AsTask();
+
+        // A gesture still waiting on a clock the test held would keep the notebook from closing, and a test that failed with
+        // one waiting would hang instead of failing: the clock is moved on until the notebook is closed. No assertion
+        // waits on the real time given here.
+        while (_held is { } clock && !closing.IsCompleted)
+        {
+            clock.Advance(NotebookSession.SettleTime);
+            await Task.WhenAny(closing, Task.Delay(10));
+        }
+
+        await closing;
 
         if (_made is not null)
         {
