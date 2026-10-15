@@ -324,7 +324,7 @@ public sealed class FileBytesWriteTests : IDisposable
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses a file to be replaced while it is open without sharing deletion.");
         File.WriteAllText(At("one.txt"), "old\n");
 
-        var holding = new FileStream(At("one.txt"), FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var holding = new FileStream(At("one.txt"), FileMode.Open, FileAccess.Read, FileShare.Read);
         var writing = Task.Run(() => Text("new\n").WriteWhole(At("one.txt")), TestContext.Current.CancellationToken);
 
         await Task.Delay(150, TestContext.Current.CancellationToken);
@@ -341,7 +341,7 @@ public sealed class FileBytesWriteTests : IDisposable
         Assert.SkipUnless(OperatingSystem.IsWindows(), "Only Windows refuses a file to be replaced while it is open without sharing deletion.");
         File.WriteAllText(At("one.txt"), "old\n");
 
-        var holding = new FileStream(At("one.txt"), FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using var holding = new FileStream(At("one.txt"), FileMode.Open, FileAccess.Read, FileShare.Read);
         var writing = Text("new\n").WriteWholeAsync(At("one.txt"), TestContext.Current.CancellationToken);
 
         await Task.Delay(150, TestContext.Current.CancellationToken);
