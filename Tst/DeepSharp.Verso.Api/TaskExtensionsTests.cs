@@ -24,6 +24,9 @@ public sealed class TaskExtensionsTests
         }
     }
 
+    // A full collection, asked for through the call that reports what is left after one: what finds the task dropped above.
+    private static void LetTheCollectorRun() => _ = GC.GetTotalMemory(forceFullCollection: true);
+
     // How many times the finalizer handed this failure on, whatever else is running in the process.
     private static int Handed(Exception failure, bool watched)
     {
@@ -43,9 +46,9 @@ public sealed class TaskExtensionsTests
         {
             Drop(failure, watched);
 
-            GC.Collect();
+            LetTheCollectorRun();
             GC.WaitForPendingFinalizers();
-            GC.Collect();
+            LetTheCollectorRun();
 
             return Volatile.Read(ref handed);
         }
