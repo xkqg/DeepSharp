@@ -264,10 +264,9 @@ public sealed partial class VerbTests : IDisposable
         var printedByA = string.Concat(ran[0].Outputs.Select(output => output.Content));
         var printedByB = string.Concat(ran[1].Outputs.Select(output => output.Content));
 
-        Assert.Equal(20, printedByA.Count(letter => letter == 'A'));
-        Assert.DoesNotContain("B", printedByA, StringComparison.Ordinal);
-        Assert.Equal(20, printedByB.Count(letter => letter == 'B'));
-        Assert.DoesNotContain("A", printedByB, StringComparison.Ordinal);
+        // Exactly what each cell printed and nothing else, so a run that reads anything more says what it read.
+        Assert.Equal(new string('A', 20), printedByA);
+        Assert.Equal(new string('B', 20), printedByB);
     }
 
     [Fact]
@@ -284,10 +283,9 @@ public sealed partial class VerbTests : IDisposable
         var printedByA = string.Concat(ran[0].Outputs.Select(output => output.Content));
         var printedByB = string.Concat(ran[1].Outputs.Select(output => output.Content));
 
-        Assert.Equal(20, printedByA.Count(letter => letter == 'A'));
-        Assert.DoesNotContain("B", printedByA, StringComparison.Ordinal);
-        Assert.Equal(20, printedByB.Count(letter => letter == 'B'));
-        Assert.DoesNotContain("A", printedByB, StringComparison.Ordinal);
+        // Exactly what each cell printed and nothing else, so a run that reads anything more says what it read.
+        Assert.Equal(new string('A', 20), printedByA);
+        Assert.Equal(new string('B', 20), printedByB);
     }
 
     [Fact]

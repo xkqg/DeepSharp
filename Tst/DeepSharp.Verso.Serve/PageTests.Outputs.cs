@@ -24,10 +24,11 @@ public sealed partial class PageTests
         return page;
     }
 
-    // A widget's document has run its own script once its frame is sized: the page sizes the frame when the document,
-    // loaded, says how tall it came to, and until then it stands as high as the page first made it.
+    // A widget's document has run its own script once it has said how tall it came to, which it says when it is loaded: the
+    // page marks the frame sized then. Its height is no sign of it, since a frame whose document says nothing within six
+    // seconds is given a height all the same.
     private static Task WidgetLoadedAsync(Microsoft.Playwright.IPage page) =>
-        Expect(Cell(page, 0).Locator(".outputs iframe.widget")).Not.ToHaveCSSAsync("height", "28px", new() { Timeout = 30_000 });
+        Expect(Cell(page, 0).Locator(".outputs iframe.widget")).ToHaveJSPropertyAsync("sized", true, new() { Timeout = 30_000 });
 
     [Fact]
     public async Task AFailure_IsDrawnWithItsName_AndWhereItHappened_WhenTheKernelKnowsIt()

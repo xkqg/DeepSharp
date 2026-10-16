@@ -10,6 +10,7 @@ namespace DeepSharp.Tests.Api;
 /// A task nobody awaits that fails is handed by the finalizer, long after, to whatever is running then — in a process that
 /// runs C# cells, the output of a cell that had nothing to do with it. Watching it keeps that from happening.
 /// </summary>
+[Collection(FaultsLeftToTheFinalizer.Name)]
 public sealed class TaskExtensionsTests
 {
     // Made and dropped in a method of its own, so nothing here still holds the task when the collector looks.
@@ -69,5 +70,18 @@ public sealed class TaskExtensionsTests
     public void ATaskThatIsWatched_ThatFails_IsNotLeftToTheFinalizer()
     {
         Assert.Equal(0, Handed(new InvalidOperationException("this was watched"), watched: true));
+    }
+
+    [Fact]
+    public void TheFailureTheControlLeavesToTheFinalizer_IsHandedOnWhileNoOtherTestRunsACell()
+    {
+        // Verso's engine hands a failure nobody watched to the notebook running a cell when it surfaces, as that cell's output:
+        // left to the finalizer beside a test that runs one, the control's failure printed into that test's cell.
+        var collection = typeof(TaskExtensionsTests).GetCustomAttributes(typeof(CollectionAttribute), inherit: false).Cast<CollectionAttribute>().SingleOrDefault();
+        var definition = typeof(TaskExtensionsTests).Assembly.GetTypes()
+            .SelectMany(type => type.GetCustomAttributes(typeof(CollectionDefinitionAttribute), inherit: false).Cast<CollectionDefinitionAttribute>())
+            .SingleOrDefault(each => each.Name == collection?.Name);
+
+        Assert.True(definition?.DisableParallelization, "The tests that leave a failure to the finalizer run beside the others.");
     }
 }
