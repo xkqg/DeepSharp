@@ -101,10 +101,19 @@ public sealed class CompiledNetwork
                 "Early stopping and keeping only the best checkpoints judge each epoch by its validation rows, and there are none.", nameof(validation));
         }
 
-        if (options.Average is not null && options.EarlyStopping is { RestoreBest: true })
+        if (options.JudgedByAverage && options.Average is null)
         {
             throw new ArgumentException(
-                "An average of the weights and restoring the best epoch's weights both say what the run ends holding, and are not asked for together.", nameof(options));
+                $"Epochs are judged by the average of the weights only where the run keeps one: give it an {nameof(FitOptions.Average)}, or judge them by the weights as they are.",
+                nameof(options));
+        }
+
+        if (options.Average is not null && !options.JudgedByAverage && options.EarlyStopping is { RestoreBest: true })
+        {
+            throw new ArgumentException(
+                "An average of the weights and restoring the best epoch's weights both say what the run ends holding, and are not asked for together "
+                + $"while each epoch is judged by the weights as they are: set {nameof(FitOptions.JudgedByAverage)}, and the best epoch is the best average.",
+                nameof(options));
         }
 
         RequireAnswers(train);
@@ -159,7 +168,7 @@ public sealed class CompiledNetwork
 
                 if (improved && options.EarlyStopping is { RestoreBest: true })
                 {
-                    judgement = judgement with { BestSlots = loop.Slots() };
+                    judgement = judgement with { BestSlots = options.JudgedByAverage ? loop.AveragedSlots() : loop.Slots() };
                 }
             }
 
@@ -171,12 +180,16 @@ public sealed class CompiledNetwork
             options.OnEpoch?.Invoke(epochs[^1]);
         }
 
+        // The best epoch, where the run restores it, is what it ends holding — the best average, when epochs were judged by the
+        // average — and the averages take the weights' place otherwise.
         if (options.EarlyStopping is { RestoreBest: true } && judgement?.BestSlots is { } best)
         {
             loop.Restore(best);
         }
-
-        loop.ApplyAverages();
+        else
+        {
+            loop.ApplyAverages();
+        }
 
         return new History(options.Seed, epochs, judgement?.BestEpoch, judgement is { Stops: true } ? Stopping.NoLongerImproving : Stopping.AllEpochsRan);
     }
@@ -373,8 +386,42 @@ public sealed class CompiledNetwork
             }
         }
 
-        // The loss on rows the network is judged by: evaluation passes a batch at a time, each weighted by the rows it held.
+        // The loss on rows the network is judged by: evaluation passes a batch at a time, each weighted by the rows it held — by
+        // the averages in the weights' place, while the run judges by them, and the weights put back after.
         internal double Evaluate(TrainingData rows, int epoch)
+        {
+            if (!options.JudgedByAverage || _averages.Count == 0)
+            {
+                return Judged(rows, epoch);
+            }
+
+            var weights = _averages.Keys.ToDictionary(parameter => parameter, parameter => parameter.Value);
+
+            foreach (var (parameter, average) in _averages)
+            {
+                parameter.Replace(average);
+            }
+
+            try
+            {
+                return Judged(rows, epoch);
+            }
+            finally
+            {
+                foreach (var (parameter, value) in weights)
+                {
+                    parameter.Replace(value);
+                }
+            }
+        }
+
+        // Every slot the network holds, by path, with each parameter's average in its place: running statistics as they are.
+        internal IReadOnlyDictionary<string, Tensor> AveragedSlots() =>
+            compiled.Network.Slots().ToDictionary(
+                named => named.Path,
+                named => named.Slot is Parameter parameter && _averages.TryGetValue(parameter, out var average) ? average : named.Slot.Value);
+
+        private double Judged(TrainingData rows, int epoch)
         {
             options.Cancellation.ThrowIfCancellationRequested();
 

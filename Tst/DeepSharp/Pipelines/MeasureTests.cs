@@ -629,5 +629,7 @@ public class MeasureTests
         public string Visit(CorrelationInput correlation) => "correlation";
 
         public string Visit(Measures measures) => "measures";
+
+        public string Visit(PartLikeness likeness) => "likeness";
     }
 }

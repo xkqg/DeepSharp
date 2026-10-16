@@ -224,6 +224,30 @@ public sealed class CpuBackend : INamesItsVersionAndDevice
     });
 
     /// <inheritdoc />
+    /// <remarks>Worked out in double precision, value by value, and rounded once.</remarks>
+    public Tensor Sin(Tensor values) => Elementwise(values, (source, destination) =>
+    {
+        for (var at = 0; at < source.Length; at++)
+        {
+            destination[at] = (float)Math.Sin(source[at]);
+        }
+    });
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// .NET has no error function, so it is worked out here in double precision and rounded once: by its power series near
+    /// nothing, where the series converges in a few dozen terms, and from two and a half outwards as one less the complementary
+    /// function, by its continued fraction, which is where the series would lose its digits to the cancelling of large terms.
+    /// </remarks>
+    public Tensor Erf(Tensor values) => Elementwise(values, (source, destination) =>
+    {
+        for (var at = 0; at < source.Length; at++)
+        {
+            destination[at] = (float)ErrorFunction(source[at]);
+        }
+    });
+
+    /// <inheritdoc />
     public Tensor FirstLargest(Tensor matrix)
     {
         matrix.RequireRowsToPickFrom(nameof(FirstLargest));
@@ -347,6 +371,61 @@ public sealed class CpuBackend : INamesItsVersionAndDevice
     // is one and the number is lost — .NET's own LogP1 is written that way — so below a ten-thousandth the first three
     // terms of its series stand in, which are exact to the last digit a double carries.
     private static double LogOfOnePlus(double x) => x < 1e-4 ? x * (1 - (x * (0.5 - (x / 3)))) : Math.Log(1 + x);
+
+    // The error function, odd: its power series below two and a half — 2/√π · Σ (−1)ⁿ x²ⁿ⁺¹ / (n! (2n+1)), stopped once a term
+    // no longer moves the sum — and one less the complementary function above it, whose continued fraction
+    // e^(−x²)/√π · 1/(x + ½/(x + 1/(x + 3⁄2/(x + …)))) is worked out by Lentz's method. A value that is no number stays none.
+    private static double ErrorFunction(double value)
+    {
+        var size = Math.Abs(value);
+        var erf = size < 2.5 ? Series(size) : 1 - Complement(size);
+
+        return value < 0 ? -erf : erf;
+
+        static double Series(double x)
+        {
+            double sum = x, term = x;
+
+            for (var n = 1; n < 100; n++)
+            {
+                term *= -(x * x) / n;
+                var added = term / ((2 * n) + 1);
+
+                sum += added;
+
+                if (Math.Abs(added) <= Math.Abs(sum) * 1e-17)
+                {
+                    break;
+                }
+            }
+
+            return 2 / Math.Sqrt(Math.PI) * sum;
+        }
+
+        static double Complement(double x)
+        {
+            const double Tiny = 1e-300;
+            double fraction = x, c = x, d = 0;
+
+            for (var n = 1; n < 500; n++)
+            {
+                var a = n / 2.0;
+
+                d = 1 / Math.Max(x + (a * d), Tiny);
+                c = Math.Max(x + (a / c), Tiny);
+                var delta = c * d;
+
+                fraction *= delta;
+
+                if (Math.Abs(delta - 1) <= 1e-16)
+                {
+                    break;
+                }
+            }
+
+            return Math.Exp(-(x * x)) / (Math.Sqrt(Math.PI) * fraction);
+        }
+    }
 
     /// <summary>The value-by-value operations of one tensor share the buffer they write into.</summary>
     private static Tensor Elementwise(Tensor values, UnaryOperation operation)

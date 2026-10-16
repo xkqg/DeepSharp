@@ -42,7 +42,7 @@ public sealed record EncodeStep : IFittedStep, IPipelineStep<EncodeStep>, IDescr
     private const double NoPlace = -1;
 
     // What the column kept for a category the training rows never held is named after, beside the column's own name.
-    private const string Reserved = "other";
+    internal const string Reserved = "other";
 
     private static readonly ColumnParameter ColumnKey = new(
         "column", "The column of words to write down as numbers.", "column", ColumnKinds.Any);
@@ -433,6 +433,9 @@ public sealed record EncodeCategoriesStep : IFittedStep, IPipelineStep<EncodeCat
 /// <remarks>What an encoder handing its categories over as places needs of the encoder it stands for.</remarks>
 internal interface IEncodesCategories : IFittedStep
 {
+    /// <summary>How the categories are written down: one column for each, or one column of their places.</summary>
+    As How { get; }
+
     /// <summary>What happens to a category the training rows never held.</summary>
     Unseen Unseen { get; }
 

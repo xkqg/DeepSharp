@@ -27,6 +27,7 @@ Src/DeepSharp/Networks/           the model side
                                     a window along one, two or three axes as the one thing a convolution and a pooling
                                     walk, how a window is written to a network's file and read back, and which place of
                                     the example fills each place a padding adds
+    Periodic.cs Embedding.cs        the periodic embedding of a number, and a category's vector over the block its encoder wrote
     Beginning.cs Initialisers.cs RandomStream.cs Philox.cs Draws.cs
                                     how a layer begins and whether it has a bias, what its numbers start at, and the one
                                     source every draw is counted from
@@ -35,9 +36,9 @@ Src/DeepSharp/Networks/           the model side
                                     them on a layer
     Losses.cs Optimizers.cs LearningRateSchedules.cs
                                     what is brought down, what moves the parameters, how the rate changes
-    Sequential.cs SequentialSpatial.cs
+    Sequential.cs SequentialSpatial.cs SequentialVocabulary.cs
                                     a network in Keras's words, lowered onto a stack; the words that walk a series, an
-                                    image or a volume
+                                    image or a volume; the activations, normalisations and embeddings added since
     CompiledNetwork.cs FitOptions.cs TrainingData.cs History.cs Checkpoint.cs
                                     the training loop, early stopping, checkpoints, and what a run did
     NetworkDocument.cs NetworkCatalog.cs Rebuilding.cs PartReader.cs NetworkText.cs TrainedOn.cs
@@ -69,11 +70,14 @@ Src/DeepSharp.Pipelines/          the data side
                                     what is worked out from a single row
     FillStrategy.cs FillNaN.cs Scaling.cs Encoding.cs Outliers.cs DropColumns.cs DropWarmUp.cs
                                     what learns, and what takes rows or columns away
+    Piecewise.cs History.cs         a number written as how far it fills a few bins; a key's history over its earlier
+                                    training rows
     Settling.cs Marking.cs          settling a gap with a value no row decided, above the split; and the one column
                                     that says where the gaps were, named and written in one place
-    Evidence.cs Report.cs Measures.cs PredictionsDocument.cs
-                                    the profile and the correlation a run is declared to produce, the report of what a
-                                    trained model is held to, how it measured, and the predictions it measured as text
+    Evidence.cs Likeness.cs Report.cs Measures.cs PredictionsDocument.cs
+                                    the profile and the correlation a run is declared to produce, how alike the parts of
+                                    its split are, the report of what a trained model is held to, how it measured, and
+                                    the predictions it measured as text
     RowSource.cs SourceFolder.cs Binding.cs Table.cs RowIdentity.cs TrainingValues.cs
                                     rows, where a path is read from, typed columns, who a row is, what a fit sees
     FileBytesExtensions.cs          a file's bytes, once in hand, read as a file is read as text
@@ -122,6 +126,7 @@ Tst/DeepSharp.Backends.TestParts/  engines those tests hand a network, written o
                                   storage that counts its copies, one on memory allocated outside .NET
 Tst/DeepSharp.Backends.Contract/  what every engine is held to, written once against what the library publishes
 Tst/DeepSharp.Backends.TorchSharp/  the libtorch engine's tests: every engine contract, on the processor and a card
+Tst/DeepSharp.Learners.MLNet/     the ML.NET learner's tests, which carry ML.NET and the native side it comes with
 Tst/DeepSharp.Verso.Notebooks/    the notebook's tests, run in the host an application of your own uses
 Tst/DeepSharp.Verso.Api/          the host's tests, run on Verso's own engine the way an application runs it
 Tst/DeepSharp.Verso.Serve/        the server's tests, run against the server started for real
@@ -451,10 +456,16 @@ grid of numbers or drawn. Naming them before the numbers exist is the point: eve
 same evidence, two runs are comparable without anyone remembering what was shown last time, and the report
 cannot quietly shrink to whatever happened to look good.
 
-Three kinds are built. Two are about the data before anything learns from it: a profile of the columns, which
+Four kinds are built. Two are about the data before anything learns from it: a profile of the columns, which
 says for every problem it finds how it is answered, and the rows a correlation is drawn from. Each is
 measured on the rows the split trains on — the split below it as much as one above — because a profile over
-every row lets the rows a model will be measured on shape what it is shown. The third is the report: which
+every row lets the rows a model will be measured on shape what it is shown. The third compares the parts with one
+another, and so reads every part: how alike training, validation and test are, column by column — the two-sample
+Kolmogorov–Smirnov distance of a column of numbers, ties taken whole as scipy takes them, and the total variation of a
+column of words — each beside the rows it was worked out from and flagged above a bound the person sets, which has no
+default because how far apart is too far depends on the rows. It reads the features alone, never the answer, and it warns
+and never refuses: a validation part unlike the training rows is a poorer guide to stop on, and a test part unlike them
+explains a measurement that disappoints, but neither is a fault of the declaration. The fourth is the report: which
 measures a trained model is held to, on which parts, and how they are shown. What they produce is output: it is
 kept with the run — in `PreparedData.Evidence`, or in the measures a trained model's predictions were given — and
 never written into the pipeline's file, since the file is what is replayed and a replay learns nothing.
@@ -463,8 +474,8 @@ A report, `evidence.report`, is declared before any number exists, and the run a
 nothing for an output that only names its answer. There is one at most, below the output whose answers it measures;
 a pipeline that names no answer, or never divides its rows, has nothing to measure and is refused where the report is
 written. It measures the rows a model learns from, is chosen on and is tested on, and no others. A measure that counts
-classes — accuracy, precision, recall, the confusion matrix — is refused where it is written against an output whose
-answers are amounts, a distribution's shares or a return; against one whose answers can be classes, a row whose answer
+classes — accuracy, precision, recall, the confusion matrix, F1, the area under the curve and the Brier score — is refused
+where it is written against an output whose answers are amounts, a distribution's shares or a return; against one whose answers can be classes, a row whose answer
 is neither nought nor one is refused when it is measured, naming the row as it was read. The measures that compare
 shares — `emd`, `kl` and `rps` — are refused the other way round: against any output that is not a distribution, and
 `emd` and `rps`, which follow an order, against one that does not say its bands are in one. `PreparedData.Measure` takes
@@ -473,7 +484,12 @@ answers both come back through the way back, because in normalised units every e
 excellent — each beside the same measure of predicting, for every row, the average of the training rows' answers, and
 the measures of amounts and of classes by scikit-learn's definition, checked against it to a millionth of a millionth, and
 the three that compare shares by scipy's and Weigel's, checked against scipy and xskillscore (see "A distribution can be
-in an order"). Predictions are measured only when
+in an order"). Where scikit-learn would give a number that says nothing, the measure is refused instead, naming the row or
+the part: the error as a share of an answer of nought, which scikit-learn divides by the smallest number above nought and so
+makes as large as a number gets; the area under the curve of a part that holds one class; and the Brier score of labels of
+which a row holds any number, which scikit-learn has none of. The expected calibration error is not built: binned, it
+misjudges most the models that are best calibrated, and the Brier score — a proper scoring rule that bins nothing — is the
+number, with the reliability curve beside it as the picture, its bins of as many rows each. Predictions are measured only when
 they are for the part's rows in the order the part hands them over, which the rows' keys are how to tell: answered in
 any other order, 346 of 349 price rows and 510 of 512 days of bikes were measured against another row's answer, and
 nothing in the numbers said so.
@@ -938,6 +954,31 @@ A weekday written as a number, and a season, are refused where they are declared
 used to be accepted, written to a file and read back, and failed only when the pipeline ran, parsing the word 'sunday' as
 a number — there is no number a weekday has, because zero is Sunday in one calendar and Monday in another. The refusal
 names `Cyclical` and categories, which are the right doors.
+
+### A number can be written as how far it fills a few bins
+
+`encode.piecewise` is Gorishniy, Rubachev and Babenko's piecewise linear encoding: it learns the edges of so many bins from
+the quantiles of the training rows, edges that fall together counted once, and writes each value as a column per bin — one
+where the value lies beyond the bin, nought before it, and the share of the bin in between. The quantiles are the same rule
+every other learned quantile here follows, so one column's edges are what the profile would say they are. The ends are left
+as the paper leaves them: a value beyond the training rows' last edge fills the last bin past one unless the step says it is
+held there or refused, which is the same `outOfRange` every scale takes. A column that holds one value has no edges to place
+and is refused. Edges taken from the answer — the paper's target-aware form — are not built: they read the answer to place a
+feature's edges, a second rule for the same edges, which the rows a model is measured on would have to replay without the
+answers that placed them.
+
+### A key's history is what its earlier training rows held
+
+A flock is weighed again and again, and what it weighed before says something about what it weighs now. `history` writes
+beside every row the mean of a column over the training rows of the row's key that come strictly before it on the order its
+ordering columns give — a moment and then a round number, say, since a date alone may not say which came first — pulled
+towards the mean of every training row by as many rows' weight as `shrink` says, which has no default, since how far a key
+with few rows is trusted depends on the data. What it keeps is the training rows themselves, by key and by order, so a row of
+validation, of test or one served later is answered from them alone and changes nothing: a single new flock served on its own
+gets the history its key had, which a window over the rows handed in with it could not give, since one flock handed alone has
+no rows before it. A row whose ordering columns have a gap has no place in the order and is refused, naming it. A later
+training row reaches the history of the rows before it only through the mean of every training row, which it is part of, and
+the overlap of flocks whose weighings interleave is the data's to say: nothing here asks when an answer became known.
 
 ### Normalising is a family, and two of its choices are declared
 
@@ -1742,23 +1783,20 @@ rows, the answer and its numbers stay what they were while the fit does not — 
 through a way back its predictions were not made behind. So a hand-back from before a block was edited is refused at the
 report, saying to run the cell that trains again; the answers' names and the rows' keys are checked beside it.
 
-A notebook of blocks is saved as a `.verso` file, the one format of Verso's that keeps a block a block. Saving one
-in any other is refused: Jupyter and Markdown keep a cell's text and lose what kind of cell it is — Jupyter brings a
-block back as a raw cell, Markdown as text that fences the block's text in — and `.dib` is read by Verso and never
-written. The guard takes every format but Verso's own, so one it does not know is refused a block rather than trusted
+A notebook of blocks is saved as a `.verso` file, the one format of Verso's that keeps a block a block wherever it is
+opened. Saving one in any other is refused: Markdown keeps a cell's text and loses what kind of cell it is, bringing a
+block back as text that fences the block's text in; Jupyter keeps the kind only for Verso, in a mark of Verso's own, and
+every other program that opens the file shows each block as a raw cell; and `.dib` is read by Verso and never written. The guard takes every format but Verso's own, so one it does not know is refused a block rather than trusted
 with one, and a test writes a block through every format the engine has and reads it back, so a Verso whose other
 formats learn to keep a cell's kind is noticed. Opening a file of another format whose cells turn out to be steps is
 refused too, in each form that test finds a block coming back as, and as a code cell, which is how a Jupyter file
 another program wrote holds one; the same test holds the guard to refusing whatever each format made of the block.
-Both refusals are the host's to ask for: Verso's VS Code host and DeepSharp's own server ask every extension before
-they write a file and after they read one. Three ways around them are written down rather than trusted. `verso
-convert` writes Jupyter without asking any extension, next to the `.verso` file by default. The browser editor `verso
-serve` starts asks no extension when it opens a file or saves one, so neither refusal holds there: the Jupyter file
-`verso convert` wrote opens in it with every block as a raw cell, and saving it writes a `.verso` file of that name —
-over the notebook it came from, whose blocks were measured gone. And a package installed from Verso's Extensions panel
-is loaded only after a file of another format has been opened, so the refusal on the way in holds only for an install
-at the top of Verso's extensions folder. Tests pin the order Verso opens things in and read the browser editor's own
-code for what it asks when it opens and saves, so a Verso that changes either is noticed.
+Both refusals are the host's to ask for, and every host of Verso's asks: its VS Code host, its browser editor, its
+command line's converter, runner and prompt, and DeepSharp's own server ask every extension before they write a file and
+after they read one. One way around them is written down rather than trusted: a package installed from Verso's Extensions
+panel is loaded only after a file of another format has been opened, so the refusal on the way in holds only for an install
+at the top of Verso's extensions folder. Tests pin the order Verso opens things in and the steps it takes when it opens and
+saves, so a Verso that changes either is noticed.
 
 Where the guard is not asked, the way back is DeepSharp's own and asks nothing of Verso. A toolbar button, **Make
 blocks of the steps**, is drawn wherever the notebook runs, since every editor of Verso's draws an extension's buttons
@@ -1766,12 +1804,12 @@ and hands each the notebook's cells as they stand; it is on wherever a cell hold
 it puts a block in each such step's place — a raw cell or a code cell whose whole text reads as a step becomes that
 block, and a cell of text is cut at each fence that holds a step, the text between them staying text. It writes the
 change as any change to the blocks is written, in the notebook's turn, and takes back what the blocks no longer make;
-it runs nothing. Measured in the browser editor: a Jupyter copy `verso convert` made, opened there, made blocks again
-and saved, left a `.verso` file holding every block of the notebook it came from, where the same save without the
-button left none. The guard and the button read a cell by one rule, kept in one place, so what one takes for a step a
-format forgot the other does too. Verso has been asked, in its own tracker, to let its browser editor run the guards
-its other host runs ([#113](https://github.com/DataficationSDK/Verso/issues/113)) and to say so before a save writes
-over a file of the same name ([#114](https://github.com/DataficationSDK/Verso/issues/114)); the button stays either way,
+it runs nothing. Measured in the browser editor of a Verso that still asked no extension: a Jupyter copy `verso convert`
+made, opened there, made blocks again and saved, left a `.verso` file holding every block of the notebook it came from,
+where the same save without the button left none. The guard and the button read a cell by one rule, kept in one place, so what one takes for a step a
+format forgot the other does too. Verso was asked, in its own tracker, to let its browser editor run the guards its
+other host runs ([#113](https://github.com/DataficationSDK/Verso/issues/113)) and to say so before a save writes over a file
+of the same name ([#114](https://github.com/DataficationSDK/Verso/issues/114)), and it does both now; the button stays,
 since a file can reach the notebook as text from anywhere.
 
 The same package runs wherever Verso does, and it is the same code in each: Verso's VS Code extension, the
@@ -2172,10 +2210,12 @@ precision, ten million tenths came to a mean of 0.1087937.
 
 The layers, the losses and the convolution are written in the seam's operations as well, so the seam grows by what
 they need and nothing else: rectified and stepped values, tanh, the sigmoid, exp, log, a square root, softplus, a
-division, a row's log-shares, which value of each row is the first largest, a reshape, and an image's windows unfolded into
-rows and folded back. The twelve layers of this release — three transposed convolutions, three that only pad and six that
-pool to a size — asked for none of it: each is those operations in another order, which is the test of whether a seam is the
-right size. There is no rule for
+division, a row's log-shares, which value of each row is the first largest, a sine, the error function, a reshape, and an
+image's windows unfolded into rows and folded back. The twelve layers that pool to a size, pad and give a convolution's places
+back asked for none of it: each is those operations in another order, which is the test of whether a seam is the right size.
+The sine and the error function came with the words of a later release, each because a word needed a curve nothing else
+composes — the periodic embedding's turn and the exact GELU — and the score of activations, normalisations, embeddings and
+losses that came with them asked for nothing more. There is no rule for
 stretching one shape over another: a row multiplied into every row is the row added to a tensor of noughts and then
 multiplied, and a statistic over rows is a transpose and a sum. Images are channels last, as Keras keeps them, so a
 batch of them needs no permuting between a convolution's unfolding and its matrix product. Softplus is an operation of
@@ -2461,6 +2501,45 @@ counted over one row fewer, where Keras counts it over every row. After one trai
 came within 1.9e−9 of Keras's and its running variance lay up to 8.4e−4 above it — that count's difference, to within
 1.9e−8.
 
+### The words a model is written in are made of the seam's operations
+
+Every activation, normalisation and embedding is written in operations the seam has, so an engine written elsewhere runs
+them by running what it already runs, and the gradient of each comes back through the operations it was written in. Two
+operations were added for them, the sine and the error function: a periodic embedding turns a number round by the sine, a
+cosine being the sine a quarter turn on, and the exact GELU — PyTorch's and Keras's unless told to approximate — is the error
+function, which nothing else the seam had composes. Neither is a layer's own arithmetic in an engine.
+
+Where a curve bends at nought, the side its slope takes there is PyTorch's, because a slope rounded to the other side passes
+every test but the one at nought, and a rectified value is nought more often than any other. The leaky and parametric
+rectifiers, the exponential unit and the self-normalising one are each the value times a step that is one above nought and
+something else at or below it; the step sends nothing back, so the slope at nought is the slope below it, as PyTorch's is.
+An exponential unit takes the exponential of the value less its rectified self, which is never above nought, so no large
+value overflows it. Softmax is a layer too, over the last axis; a loss that applies it itself lifts or refuses a last one as a
+binary cross-entropy does a last sigmoid, by one rule, `Loss.Applies`.
+
+A normalisation over groups of channels measures each example over every place it holds, so the one place the normalisations
+learn where their rows came from is handed the shape of the batch as well as its rows. Which group a value belongs to is a
+matrix of noughts and ones worked out from the shapes: a row of an example's values times it, over the values a group holds,
+is each group's mean, and that times the matrix turned round lays every mean back over its values. An instance normalisation
+is a group for every channel, kept as a kind of its own so a file says which it is; the root-mean-square normalisation scales
+and never shifts. None of them is a word of a declared network, whose rows a pipeline hands over flat: a row has one place,
+and a group of a row's channels measured over one place is what a layer normalisation already does to a few of them.
+
+The periodic embedding of a number — Gorishniy, Rubachev and Babenko's — turns each feature into its cosines and sines at
+frequencies it learns, then through a linear layer of each feature's own. Each feature's layer reaches only that feature's
+waves, by products of values laid out along every row rather than by one matrix whose blocks off the diagonal are noughts,
+which would cost as many times the arithmetic as there are features. A category becomes a vector the same way it reaches a
+network already: an encoder writes it down as a block of columns of which exactly one holds a one, and the block times a
+matrix of vectors is the row a framework's embedding looks up by the category's place — the same numbers, by a product the
+seam had. The block is named by the encoder's own rule, `PreparedData.CategoryBlock`, never by the start of a column's name
+another column could share; an embedding declared in a pipeline names the column, and the places of its block are found where
+the pipeline hands its rows over. Embeddings stand before any other layer, since only there are the columns the encoder's.
+
+A loss that says more than it used to raises the network's part the way a layer that says more does: the part is written as
+the oldest version that says what the network, its layers and its loss hold, so a cross-entropy that softens its labels is the
+sixth and one that does not is written as it always was. A new kind of layer or loss is written as the second version, and an
+older library refuses it by its name.
+
 ### A layer begins with one value, and a layer may have no bias
 
 A layer's start grew four questions at once — how the weights start, how the bias starts, whether there is a bias at all,
@@ -2481,7 +2560,10 @@ There are nine ways to start. PyTorch's `KaimingUniform` and `FanInUniform` are 
 otherwise; Keras's are `GlorotUniform` and `Zeros`; there are also `Ones`, a `Constant`, a `Normal` draw around nought with a
 deviation of five hundredths, a `TruncatedNormal` one that is redrawn beyond two deviations as Keras redraws it, and an
 `Orthogonal` matrix, worked out from normal draws by Gram–Schmidt twice in double. A start that needs no number of its own is
-a word a declared network can say; a constant, or a deviation of one's own, is code. Neither vocabulary's habit is imposed
+a word a declared network can say; a constant, or a deviation of one's own, is code. The one exception is the periodic
+embedding of a number, whose frequencies start from a normal curve whose spread is the setting the embedding turns on: its
+authors searched it for every dataset, so it is a word with that number in it — `sigma`, required, with no default — rather
+than code, since a declared network that could not say it could not say the embedding at all. Neither vocabulary's habit is imposed
 on the other. A dense layer in Keras's words starts as PyTorch's does, as it did, because a changed default would change the
 numbers of every network written before, and a test holds the numbers a layer starts at to what 0.9.0 gave; Keras's own
 start, Glorot's weights and a bias of noughts, is asked for with a `Beginning` in code, or in a declaration with `weights`
@@ -2645,6 +2727,18 @@ trained on it.
 A loss can follow an order too: `earthMoversDistance` judges shares of a whole along the order of their columns, and is
 described with the answers it judges, under "A distribution can be in an order".
 
+The losses a model is written in beside these are held to PyTorch's values and gradients as the rest are: the mean of the
+size of each error, the Huber loss that is squared near nought and grows in a straight line beyond its delta — PyTorch's
+SmoothL1 is that over its beta, so it is no word of its own — the pinball loss of a quantile, the focal loss that weighs down a
+label the network is already sure of, the hinge at a margin of one, and the negative log-likelihood of a count, on the
+logarithm of its rate or on the rate. Each says what its outputs go through on their way out: the focal loss a sigmoid, a
+count loss on logarithms an exponential, which gives the rate, and the hinge the side of nought it falls, which gives a class
+and never a chance. The focal loss takes labels of nought or one, as torchvision's does, because the power it weighs a label by
+is worked out from the logarithm of the chance it is given, which for such a label is minus a softplus and never infinite: a
+network certain of its answer sends back no number that is not one. A cross-entropy may soften its labels, spreading a share
+evenly over its classes as PyTorch does, and a binary one moving each towards a half as Keras does; softened, the loss raises
+the network's part to the sixth version, and unsoftened it is written as it always was.
+
 ### Optimizers and schedules as PyTorch writes them
 
 `Sgd`, with momentum, `Adam`, `AdamW`, `RmsProp` and `Nadam` follow PyTorch's formulas in PyTorch's order, matched step by
@@ -2754,11 +2848,18 @@ normalisation counts each batch on its own, and a run cancelled in the middle of
 
 `Average` keeps an exponential moving average of the weights, PyTorch's `AveragedModel` with `get_ema_multi_avg_fn` and
 Keras's `ema_momentum`: after every step the average of a parameter is its last times the share plus the parameter times what
-is left of it, the first being the parameter itself and not a blend with nothing. Every epoch is still judged by the weights as
-they are, and when the run has finished the network holds the averages in place of the weights, running statistics aside. That
-is why it cannot be asked for beside restoring the best epoch's weights: two rules would each say what the run ends holding,
-and a run that says both is refused. The averages are the run's own, so a checkpoint writes them beside the optimizer's
-memory, by path, and a run goes on from one with them to the bit.
+is left of it, the first being the parameter itself and not a blend with nothing. Unless said otherwise every epoch is judged
+by the weights as they are, and when the run has finished the network holds the averages in place of the weights, running
+statistics aside. Then it cannot be asked for beside restoring the best epoch's weights: two rules would each say what the run
+ends holding, and a run that says both is refused. `JudgedByAverage` makes them one rule, as timm and Keras's
+`SwapEMAWeights` judge a model: every epoch is judged with the averages swapped in and back out, so the best epoch is the best
+average, early stopping restores that, and a run that finishes without stopping early holds the last average. It is a setting
+and not the way averaging always works, because a run written before it was judged by the weights, and moving that would move
+every such run's numbers. The running statistics are averaged by nothing: the references disagree about whether an average of
+weights should carry them, and a normalisation answers from the statistics the training rows left. The averages are the run's
+own, so a checkpoint writes them beside the optimizer's memory, by path, and a run goes on from one with them to the bit; a
+checkpoint records which way its epochs were judged — the sixth version of its training part — and a run that would go on judged
+the other way is refused, since its best epoch would mean something else.
 
 A run can be watched and stopped. `OnEpoch` is handed each epoch as it ends — once judged and its checkpoint kept, before
 the next begins — in order, on the thread that trains, and waited for. `Cancellation` is read before every batch and before
@@ -2892,7 +2993,11 @@ own for each axis cannot be seen in it and is not detected, where channels in gr
 kernel's layout is read from the layer it goes to rather than guessed from its shape: a grouped convolution's rows count the
 values of a window for the channels of one group, and a transposed convolution's are the channels it is handed, each holding
 the window's places by the channels it makes. An adaptive pooling and a layer that only pads hold no numbers at all, so they
-take part in the walk and need no tensor, as the poolings do.
+take part in the walk and need no tensor, as the poolings do. A parametric rectifier keeps its shares as PyTorch does, one or
+one for each channel — and, after a flatten, one for each feature in the order the flatten makes — and an embedding keeps its
+vectors a row for each category, as PyTorch's does, so they go in as they are: the row the category's one picks is the row
+PyTorch looks up by its place. The periodic embedding is no layer of PyTorch's, so how a file of anybody's lays out its numbers
+is not known here, and they are refused as a layer of an unknown kind's are.
 A network written as code shows its layers but not the order its forward pass runs them in, so its weights and kernels
 are turned as a stack's are, while whether one of its linear layers or normalisations reads rows made of images is read
 only as the caller states it for that layer, wherever such rows could reach it, and refused otherwise. A layer of a kind
@@ -2962,6 +3067,19 @@ else is refused by name, at the layer that says it: any other regularizer or con
 a transposed convolution's kernel, and an activity regularizer, which penalises what a layer makes and not its numbers.
 Keras's initialisers are not read, because a model that was read starts from its own numbers.
 
+The words this library gained since are read too. An activation a layer carries may be gelu, silu or swish, mish, leaky_relu
+at Keras's two tenths, elu or selu, and softmax wherever it stands. LeakyReLU, PReLU, ELU and Softmax are layers; a PReLU's
+shares go in as Keras writes them, a length of one for every axis they are shared over, which makes one share for each feature
+of a row or each channel of an image. GroupNormalization is read with its groups — of a group for every channel, an instance
+normalisation, which a model not yet built writes as -1 and a built one as the count of its channels — and RMSNormalization as
+the root-mean-square normalisation. A LayerNormalization that scales by `rms_scaling` stays refused: Keras works that scale out
+from the variance of the values, not from the root of the mean of their squares, and says so as it deprecates it. An Embedding
+is read as the first layer over one category's place per example: the network here is handed that category's ones and noughts
+in its place, which its vectors are multiplied by, so the model's input becomes as wide as there are categories. The loss may
+be the mean absolute error, the Huber loss, the Poisson loss on rates, the hinge or the binary focal cross-entropy, and a
+cross-entropy's `label_smoothing` is read as its smoothing; a focal loss that softens its labels is refused, since the focal
+loss here is of labels of nought or one.
+
 What no network here is built of is refused at the layer that says it, every such layer at once: any kind of layer or
 activation the reader does not read, and the refusal names every kind it does; a normalisation over another axis than the last; an activity regularizer; a regularizer other than L1, L2 and L1L2, a
 constraint other than MaxNorm, a MaxNorm over other axes than a unit's numbers lie along, and any bound on a transposed
@@ -2991,10 +3109,26 @@ exporter writes a flatten as — and the words lowered as any description is, on
 single-precision numbers, which Keras's export puts round nearly every node, is nothing here. What reads as a stack is a
 chain: each node takes the value the one before it made. A node that takes another — a network adding its input back after
 a layer is the plainest case — is a branch no stack has, and is refused at that node, as is every node of an operator no
-layer here is: a leaky relu, and the rest.
+layer here is.
 
 A `Conv`, a `ConvTranspose` and a `LayerNormalization` that name no bias are read as the layer without one, which is how
 PyTorch exports a layer made without it.
+
+The words ONNX gained late are read as their own operators where the graph's set has them — `Gelu` from set 20, `Mish`,
+`LeakyRelu`, `PRelu`, `Elu`, `Selu`, `InstanceNormalization`, `GroupNormalization` from set 21, whose scale and shift are
+each channel's as here (the sets before scale each group, and are refused), and `RMSNormalization` from set 23 — and a
+`Softmax` between layers is a layer, left to a cross-entropy only when it is the last. An exporter asked for an older set spells
+a word in several operators, and those spellings are read as the one layer each spells: PyTorch's two exporters were asked for
+each word at each set, and what they wrote — the GELU as a Div by the root of two, an Erf, an Add of one and two Muls, in one
+order or the other; its tangent's approximation as its chain of Muls, Pow, Add and Tanh; the SiLU as a Sigmoid and a Mul; the
+mish as a Softplus, a Tanh and a Mul; a group normalisation as a Reshape into groups, an InstanceNormalization of ones and
+noughts, a Reshape back and the channels' scale and shift; and a root-mean-square normalisation as a Pow, a ReduceMean, an
+Add, a Sqrt, a Reciprocal and two Muls — is matched node by node, every number in it held to the word's own and every value
+it makes taken by nothing outside it. A chain that is not one of these, or holds another number, is no word: its nodes are read
+one at a time, and refused where they are no layer, as they always were. A graph of each spelling, as an exporter wrote it, is
+held to what PyTorch answered through it. An embedding is a `Gather` over a batch of whole numbers, and a network here takes
+single-precision numbers, so a graph that holds one is refused at its input; its vectors go in through the readers of the
+frameworks' own files.
 
 Layouts are declared, never inferred. A weight matrix is turned round because its Gemm says it is written outputs by
 inputs, as PyTorch writes one, and is read as it stands when the Gemm says otherwise, or when a MatMul multiplies by it, as
@@ -3321,10 +3455,20 @@ which a pipeline keeps in its file and `pipeline.Train()` trains again. The spac
 procedure that finds a declaration and not a part of one. The sampler is a seam, `ISampler`, handed the trials that
 finished before it; the one that ships, `RandomSampler`, draws every number from its seed, the dimension's name and the
 trial's place alone, so trial five is the same candidate whether a study has ten trials or a hundred, and a dimension added
-later moves no other. Random search is the baseline a cleverer search has to beat, and in simulation a tree of Parzen
-estimators loses to it at thirty trials; one written elsewhere plugs in behind the seam, and no code of anybody else's is
-carried here. There is no pruner: a loss halfway through a run is not the loss it ends at, and a seam with nothing to prune
-by is a seam shaped around one implementation.
+later moves no other. A dimension can be drawn only when another is chosen — a momentum only for the optimizer that has one —
+and a dimension not drawn under the choices drawn has no setting at all, which is what a sampler of anyone's is told. Random
+search is the baseline a cleverer search has to beat, and whether a tree of Parzen estimators beats it depends on how many
+trials there are: with few it has little to learn from and often does not, with a hundred it usually does. One written
+elsewhere plugs in behind the seam, and no code of anybody else's is carried here.
+
+A trial that is plainly not going anywhere can be stopped. `Pruner` is handed the progress of each deal as it ends — the
+scores so far and the trials before — and the one that ships, `MedianPruner`, is Optuna's: a trial whose score so far is worse
+than the median of the trials before at the same deal is stopped, once so many trials have finished and so many deals have
+been heard. Its unit is the deal, the score a trial is chosen by, never a loss halfway through an epoch, which is not the loss
+the run ends at. A pruned trial says so, keeps what it heard, and is never the best. A pruner is refused beside a score of the
+caller's own, which can mean anything a median of it would not. A study can also go on from the trials it ran before, handed
+back to it: their numbering, their candidates and the space are held to this study's, and the best of them is trained again on
+every deal and refused by name if its scores differ, so a resumed study's winner is a network it trained itself.
 
 Three decisions are in its shape. Trials run one after another and share nothing they change: a network is declared afresh
 for every trial and the engines are filled before the study starts, because one optimizer shared by trials running side by
@@ -3423,8 +3567,17 @@ all, and Keras is not a thing it has. What the reference says is the spec; what 
   which is where the knowledge belongs.
 - **A squared cumulative loss, and a score named CRPS.** The first measured behind the cross-entropy it would replace; the
   second, for a histogram, is not a number that is nought for a perfect prediction.
-- **A pruner, and a search written here that learns from its trials.** A loss halfway through a run is not its loss at the
-  end, and the sampler is a seam so that a cleverer one can be written elsewhere.
+- **An expected calibration error.** Binned, it misjudges most the models that are best calibrated; the Brier score bins
+  nothing, and the reliability curve is the picture.
+- **Bins whose edges are placed by the answer, and a history over the rows handed in.** The first reads the answer to place a
+  feature's edges, a second rule the measured rows would replay without their answers; the second would give a flock served
+  alone no history at all.
+- **A second word for a loss that is another's over a number.** PyTorch's SmoothL1 is the Huber loss over its beta, and Keras's
+  `rms_scaling` is a scale worked out from the variance: the first is said as `huber`, the second is refused and
+  `RMSNormalization` read.
+- **A search written here that learns from its trials.** The sampler is a seam so that a cleverer one — a tree of Parzen
+  estimators — can be written elsewhere. A pruner by a loss halfway through an epoch is not built either: that loss is not the
+  loss the run ends at, and the pruner that is built judges by the deals a trial is chosen by.
 - **A join that guesses.** No case is folded and no number is read in a key, a key the right file holds twice is refused,
   a left row with no partner is refused or left out and never assumed, and a file that holds a row for each band is
   pivoted before it is joined and not by the join.

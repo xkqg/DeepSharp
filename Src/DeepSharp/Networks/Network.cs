@@ -25,7 +25,8 @@ public abstract class Network : Layer
     /// <returns>The compiled network, which alone is fitted and predicts.</returns>
     /// <exception cref="ArgumentException">
     /// The network is a stack whose last layer is the activation the loss applies to its outputs itself — a
-    /// <see cref="Sigmoid"/> before a <see cref="BinaryCrossEntropy"/> — which would send every prediction through it twice.
+    /// <see cref="Sigmoid"/> before a <see cref="BinaryCrossEntropy"/>, or a <see cref="Softmax"/> before a <see cref="CrossEntropy"/> —
+    /// which would send every prediction through it twice.
     /// </exception>
     /// <remarks>
     /// Keras's <c>compile</c>, in its order: the optimizer first, then the loss. A stack says what its last layer is — a stack
@@ -42,9 +43,12 @@ public abstract class Network : Layer
 
         if (loss.Applies(last))
         {
+            var applied = last.GetType().Name;
+            var named = applied.ToLowerInvariant();
+
             throw new ArgumentException(
-                $"{loss.GetType().Name} applies the sigmoid to the network's outputs itself, and this network's last layer, '{last.Path}', is a Sigmoid: "
-                + "every prediction would go through the sigmoid twice. Leave that layer out; the predictions still come out through the loss's sigmoid.",
+                $"{loss.GetType().Name} applies the {named} to the network's outputs itself, and this network's last layer, '{last.Path}', is a {applied}: "
+                + $"every prediction would go through the {named} twice. Leave that layer out; the predictions still come out through the loss's {named}.",
                 nameof(loss));
         }
 

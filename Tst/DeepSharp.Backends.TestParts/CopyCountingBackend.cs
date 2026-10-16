@@ -134,6 +134,12 @@ public sealed class CopyCountingBackend : ITensorBackend
     public Tensor Softplus(Tensor values) => Kept(_arithmetic.Softplus(Taken(values)));
 
     /// <inheritdoc />
+    public Tensor Sin(Tensor values) => Kept(_arithmetic.Sin(Taken(values)));
+
+    /// <inheritdoc />
+    public Tensor Erf(Tensor values) => Kept(_arithmetic.Erf(Taken(values)));
+
+    /// <inheritdoc />
     public Tensor Divide(Tensor left, Tensor right)
     {
         left.RequireSameShape(right, nameof(Divide));

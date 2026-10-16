@@ -123,6 +123,46 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
         return CellOutput.Html(measures.Report().ToHtml());
     }
 
+    /// <inheritdoc />
+    /// <remarks>A row a column, a cell for each two parts: the distance, flagged where it is above the bound, and the rows it was worked out from.</remarks>
+    public CellOutput Visit(PartLikeness likeness)
+    {
+        ArgumentNullException.ThrowIfNull(likeness);
+
+        var html = new StringBuilder(Style).Append("<div class=\"deepsharp-evidence\"><div class=\"deepsharp-summary\">How alike the parts are, ")
+            .Append("flagged above ").Append(Number(likeness.WarnAbove)).Append(": the Kolmogorov–Smirnov distance for numbers, the total variation for words.</div>");
+
+        if (likeness.Columns.Count == 0 || likeness.Columns[0].Pairs.Count == 0)
+        {
+            return CellOutput.Html(html.Append("<div>The rows are not divided into parts here, so there is nothing to compare.</div></div>").ToString());
+        }
+
+        html.Append("<table><thead><tr><th>column</th>");
+
+        foreach (var pair in likeness.Columns[0].Pairs)
+        {
+            html.Append("<th>").Append(Encoded($"{pair.First} – {pair.Second}".ToLowerInvariant())).Append("</th>");
+        }
+
+        html.Append("</tr></thead><tbody>");
+
+        foreach (var column in likeness.Columns)
+        {
+            html.Append("<tr><td>").Append(Encoded(column.Column)).Append("</td>");
+
+            foreach (var pair in column.Pairs)
+            {
+                html.Append("<td class=\"deepsharp-number\">").Append(pair.Above ? "<strong>" : string.Empty).Append(Number(pair.Apart))
+                    .Append(pair.Above ? "</strong>" : string.Empty).Append(" (").Append(Invariant(pair.FirstRows)).Append(", ")
+                    .Append(Invariant(pair.SecondRows)).Append(")</td>");
+            }
+
+            html.Append("</tr>");
+        }
+
+        return CellOutput.Html(html.Append("</tbody></table></div>").ToString());
+    }
+
     private static StringBuilder Numbers(StringBuilder html, CorrelationCoefficients coefficients)
     {
         html.Append("<table><thead><tr><th></th>");

@@ -1,0 +1,11 @@
+keras 3.15.1, backend torch
+keras-vocabulary-rows: ['Dense', 'Dense', 'Dense', 'Dense', 'LeakyReLU', 'PReLU', 'ELU', 'Dense', 'Activation', 'GroupNormalization', 'RMSNormalization', 'Dense'] -> [8, 4]
+  weights: [('kernel', (5, 6)), ('bias', (6,)), ('kernel', (6, 6)), ('bias', (6,)), ('kernel', (6, 6)), ('bias', (6,)), ('kernel', (6, 6)), ('bias', (6,)), ('alpha', (6,)), ('kernel', (6, 6)), ('bias', (6,)), ('gamma', (6,)), ('beta', (6,)), ('scale', (6,)), ('kernel', (6, 4)), ('bias', (4,))]
+  outputs: 0.35560638 0.21105444 0.22527911 0.20806001 0.48054853 0.12594691 ...
+keras-vocabulary-images: ['Conv2D', 'GroupNormalization', 'PReLU', 'GroupNormalization', 'Softmax', 'Flatten', 'Dense'] -> [6, 2]
+  weights: [('kernel', (3, 3, 2, 4)), ('bias', (4,)), ('gamma', (4,)), ('beta', (4,)), ('alpha', (1, 1, 4)), ('gamma', (4,)), ('beta', (4,)), ('kernel', (64, 2)), ('bias', (2,))]
+  outputs: -0.15768893 -0.09544941 0.34818441 -0.64865172 0.00952504 -0.44268423 ...
+keras-vocabulary-embedding: ['Embedding', 'Flatten', 'Dense'] -> [6, 2]
+  weights: [('embeddings', (5, 3)), ('kernel', (3, 2)), ('bias', (2,))]
+  outputs: 0.21653041 0.00343148 0.06522141 -0.08303871 -0.13537413 -0.14273134 ...
+keras-vocabulary-rms-scaling: ['Dense', 'LayerNormalization', 'Dense']

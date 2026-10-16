@@ -24,15 +24,15 @@
     <!-- Verso's own engine, here only: the package is tested inside a real notebook — its cell type, kernel and
          interactions loaded into Verso's extension host and run by Verso's scaffold — rather than against a
          description of one. The package itself compiles against the abstractions alone. -->
-    <PackageReference Include="Verso" Version="1.2.2" />
+    <PackageReference Include="Verso" Version="1.2.3" />
     <!-- Verso's browser editor, which `verso serve` starts, is in the command-line tool's package and nowhere else: it is
          downloaded, never referenced, and its assembly laid beside the suite, so a test reads what the editor calls when
          it opens and saves a file. -->
-    <PackageDownload Include="Verso.Cli" Version="[1.2.2]" />
+    <PackageDownload Include="Verso.Cli" Version="[1.2.3]" />
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="$(NuGetPackageRoot)verso.cli/1.2.2/tools/net8.0/any/Verso.Blazor.dll" Link="verso-editor/Verso.Blazor.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+    <None Include="$(NuGetPackageRoot)verso.cli/1.2.3/tools/net8.0/any/Verso.Blazor.dll" Link="verso-editor/Verso.Blazor.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" />
   </ItemGroup>
 
   <ItemGroup>

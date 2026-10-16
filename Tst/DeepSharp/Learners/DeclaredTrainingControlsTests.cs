@@ -245,6 +245,60 @@ public class DeclaredTrainingControlsTests
     }
 
     [Fact]
+    public void EpochsJudgedByTheAverage_AreWrittenAfterTheAverage_OnlyWhenSaid_AndReadBackTheSame()
+    {
+        var plain = Learner(network => network.Average(0.9));
+        var declaration = Passengers()
+            .WithTorch(network => network.Dense(1).Adam(0.01).BinaryCrossEntropy().Run(1).Average(0.9).JudgedByAverage())
+            .Build().Declaration;
+        var learner = JsonNode.Parse(declaration.ToJson())!["declaration"]!.AsArray().Single(each => (string)each!["step"]! == "learn.network")!.AsObject();
+        var again = PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn().WithNetworks());
+
+        Assert.False(plain.JudgedByAverage);
+        Assert.DoesNotContain("judgedByAverage", Passengers().WithTorch(network => network.Dense(1).Adam(0.01).BinaryCrossEntropy().Run(1).Average(0.9)).Build().Declaration.ToJson(), StringComparison.Ordinal);
+        Assert.Equal(["step", "layers", "optimizer", "average", "judgedByAverage", "loss", "stopping", "engine", "seed", "epochs", "batch"], learner.Select(key => key.Key));
+        Assert.True((bool)learner["judgedByAverage"]!);
+        Assert.Equal(declaration, again);
+        Assert.True(Assert.IsType<LearnNetworkStep>(again.Learner).JudgedByAverage);
+        Assert.NotEqual(plain, plain with { JudgedByAverage = true });
+    }
+
+    [Fact]
+    public void EpochsJudgedByTheAverage_WithoutAnAverage_AreRefusedWhereTheStepIsMade()
+    {
+        var refused = Assert.Throws<ArgumentException>(() => Learner(network => network.JudgedByAverage()));
+
+        Assert.Contains("average", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TrainingADeclaredRunJudgedByItsAverage_RestoringTheBest_IsTheSameWordsWrittenAsCodeNumberForNumber()
+    {
+        var declared = Passengers()
+            .WithTorch(network => network
+                .Dense(4).Relu().Dense(1)
+                .Adam(0.01)
+                .BinaryCrossEntropy()
+                .Run(seed: 20260929, epochs: 4)
+                .Average(0.8)
+                .JudgedByAverage()
+                .StoppingAfter(2))
+            .Build()
+            .Train();
+        var written = new Sequential().Dense(4).Relu().Dense(1)
+            .Compile(new Adam(0.01), new BinaryCrossEntropy())
+            .Fit(Passengers().Build().RunFor(Needs.OneScale), new FitOptions(20260929)
+            {
+                Epochs = 4, Average = 0.8, JudgedByAverage = true, EarlyStopping = new EarlyStopping { Patience = 2, RestoreBest = true },
+            });
+
+        Assert.Equal(written.History!.Epochs, declared.History!.Epochs);
+        Assert.Equal(
+            written.Network.Parameters().Select(parameter => parameter.Value.Values.ToArray()),
+            declared.Network.Parameters().Select(parameter => parameter.Value.Values.ToArray()));
+    }
+
+    [Fact]
     public void TheTrainDoorWithACallbackAndAToken_HandsOverEveryEpochInOrder_AndTrainsTheNetworkTheDoorWithoutTrains()
     {
         var pipeline = Passengers().WithTorch(network => network.Dense(4).Relu().Dense(1).Adam(0.01).BinaryCrossEntropy().Run(seed: 20260929, epochs: 3)).Build();

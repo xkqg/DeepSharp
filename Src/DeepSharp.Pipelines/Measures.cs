@@ -214,12 +214,58 @@ internal sealed class Answered(IReadOnlyList<double[]> actual, IReadOnlyList<dou
         Metric.Rmse => Averaged(RootMeanSquared),
         Metric.Mae => Averaged(MeanAbsolute),
         Metric.R2 => Averaged(Explained),
-        Metric.Accuracy or Metric.Precision or Metric.Recall => Classes(ones).Of(metric),
+        Metric.Accuracy or Metric.Precision or Metric.Recall or Metric.F1 => Classes(ones).Of(metric),
         Metric.Emd => RowByRow(InTheOrder ?? Width, Moved),
         Metric.Kl => RowByRow(Width, Divergence),
         Metric.Rps => RowByRow(InTheOrder ?? Width, Ranked),
+        Metric.Mape => Averaged(AbsolutePercentage),
+        Metric.Auc => Averaged(AreaUnderTheCurve),
+        Metric.Brier => ones == 1 && Width > 1
+            ? Rows().Average(row => Enumerable.Range(0, Width).Sum(column => Squared(Predicted[row][column] - Actual[row][column])))
+            : Averaged(column => Rows().Average(row => Squared(Predicted[row][column] - Actual[row][column]))),
         _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "A measure that is a number is one of the measures, and the confusion matrix is none."),
     };
+
+    /// <summary>Whether every answer of a column is the same class in these rows, which leaves no area under a curve.</summary>
+    /// <param name="column">The answer.</param>
+    /// <returns><see langword="true"/> when no row holds it, or every row does.</returns>
+    public bool OneClassIn(int column) => Actual.All(row => row[column] > 0.5) || Actual.All(row => row[column] <= 0.5);
+
+    // The size of each error over the size of its answer, averaged: scikit-learn's mean absolute percentage error, of answers
+    // none of which is nought.
+    private double AbsolutePercentage(int column) => Rows().Average(row => Math.Abs(Actual[row][column] - Predicted[row][column]) / Math.Abs(Actual[row][column]));
+
+    // The chance a row that holds the class is given a higher chance than one that does not, ties counting half: the sum of the
+    // ranks of the rows that hold it, less what they would sum to below every other, over the pairs — Mann and Whitney's count,
+    // which is the area scikit-learn's curve encloses, ties given the average of their ranks.
+    private double AreaUnderTheCurve(int column)
+    {
+        var order = Rows().OrderBy(row => Predicted[row][column]).ToArray();
+        var ranks = new double[order.Length];
+
+        for (var start = 0; start < order.Length;)
+        {
+            var end = start;
+
+            while (end + 1 < order.Length && Predicted[order[end + 1]][column] == Predicted[order[start]][column])
+            {
+                end++;
+            }
+
+            for (var at = start; at <= end; at++)
+            {
+                ranks[order[at]] = ((start + end) / 2.0) + 1;
+            }
+
+            start = end + 1;
+        }
+
+        var held = Rows().Where(row => Actual[row][column] > 0.5).ToArray();
+        double ones = held.Length;
+        double noughts = Actual.Count - held.Length;
+
+        return (held.Sum(row => ranks[row]) - (ones * (ones + 1) / 2)) / (ones * noughts);
+    }
 
     /// <summary>The classes the rows hold and the classes the predictions name.</summary>
     /// <param name="ones">How many answers a row holds as one; nought for any number.</param>
@@ -329,7 +375,8 @@ internal sealed class Classed(bool[][] held, bool[][] predicted)
         Metric.Accuracy => Rows().Count(row => Held[row].AsSpan().SequenceEqual(Predicted[row])) / (double)Held.Length,
         Metric.Precision => Averaged(column => Share(Both(column), Predicted.Count(row => row[column]))),
         Metric.Recall => Averaged(column => Share(Both(column), Held.Count(row => row[column]))),
-        _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "A measure that counts classes is accuracy, precision or recall."),
+        Metric.F1 => Averaged(column => Share(2 * Both(column), Held.Count(row => row[column]) + Predicted.Count(row => row[column]))),
+        _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "A measure that counts classes is accuracy, precision, recall or f1."),
     };
 
     /// <summary>The confusion matrices of these classes, beside those of another prediction of the same rows.</summary>
@@ -532,6 +579,9 @@ internal sealed class Measurement
         }
 
         var ones = _output.Ones;
+
+        ThrowIfUnmeasurable(part, model, readAt, ones);
+
         Measured[] values =
         [
             .. _report.Metrics
@@ -547,6 +597,39 @@ internal sealed class Measurement
         {
             UnfamiliarRows = given.Unfamiliar?.Count(names => names.Count > 0),
         };
+    }
+
+    // What the measures of 0.11.0 cannot be taken of: an answer of nought, which has no share to be an error of; a class every
+    // row of the part holds alike, which leaves no curve to sweep; and chances of labels a row holds any number of, which
+    // scikit-learn gives no Brier score.
+    private void ThrowIfUnmeasurable(Part part, Answered model, int[] readAt, int ones)
+    {
+        if (_report.Metrics.Contains(Metric.Mape))
+        {
+            for (var row = 0; row < model.Actual.Count; row++)
+            {
+                if (Array.IndexOf(model.Actual[row], 0.0) is var column and >= 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Row {readAt[row] + 1}: '{_output.Answers[column]}' is nought, and mape measures each error as a share of its answer, which nought has none of: "
+                        + "scikit-learn divides by the smallest number above nought instead, which makes this row's error as large as a number gets. Measure it with mae or rmse.");
+                }
+            }
+        }
+
+        if (_report.Metrics.Contains(Metric.Auc) && Enumerable.Range(0, _output.Answers.Count).FirstOrDefault(model.OneClassIn, -1) is var alike and >= 0)
+        {
+            throw new InvalidOperationException(
+                $"In '{Word(part)}', every row holds '{_output.Answers[alike]}' as {(model.Actual[0][alike] > 0.5 ? "one" : "nought")}, and auc compares the chances given to rows "
+                + "that hold a class with those given to rows that do not: with one class there is no curve to sweep, as scikit-learn says. Measure the part with more rows, or by f1.");
+        }
+
+        if (_report.Metrics.Contains(Metric.Brier) && _output.Answers.Count > 1 && ones != 1)
+        {
+            throw new InvalidOperationException(
+                $"brier measures the chance of one answer, or the chances across labels of which a row holds one, and '{_output.Verb}' says a row holds any number of "
+                + $"{string.Join(", ", _output.Answers.Select(answer => $"'{answer}'"))}: scikit-learn gives such chances no Brier score. Measure each label by auc.");
+        }
     }
 
     // The part's rows in the order the part hands them over, known by their keys: anything else is measured against other rows.

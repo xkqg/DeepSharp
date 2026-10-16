@@ -27,5 +27,8 @@ internal static class LaidOverExtensions
 
         /// <summary>One value, with no axes: what a tensor is scaled by.</summary>
         internal Tensor Scalar(double value) => backend.Fill(new Shape(), (float)value);
+
+        /// <summary>The size of every number: the rectified number and the rectified opposite, whose slope at nought is nought, as PyTorch's is.</summary>
+        internal Tensor SizeOf(Tensor values) => backend.Add(backend.Relu(values), backend.Relu(backend.Scale(values, backend.Scalar(-1))));
     }
 }

@@ -16,8 +16,8 @@
     <!-- ML.NET and the one trainer family whose model repeats from a seed, each pinned exactly: a restore that moved the
          version would change the model a declaration promises to replay. LightGBM is deliberately absent — its native
          side is x64 only and wants an OpenMP runtime the package does not bring. -->
-    <PackageReference Include="Microsoft.ML" Version="5.0.0" />
-    <PackageReference Include="Microsoft.ML.FastTree" Version="5.0.0" />
+    <PackageReference Include="Microsoft.ML" Version="5.0.1" />
+    <PackageReference Include="Microsoft.ML.FastTree" Version="5.0.1" />
   </ItemGroup>
 
   <ItemGroup>

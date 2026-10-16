@@ -334,6 +334,10 @@ public class NetworkEngineTests
 
         public Tensor Softplus(Tensor values) => Counted(_inner.Softplus(values));
 
+        public Tensor Sin(Tensor values) => Counted(_inner.Sin(values));
+
+        public Tensor Erf(Tensor values) => Counted(_inner.Erf(values));
+
         public Tensor Divide(Tensor left, Tensor right) => Counted(_inner.Divide(left, right));
 
         public Tensor LogSoftmax(Tensor matrix) => Counted(_inner.LogSoftmax(matrix));

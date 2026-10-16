@@ -595,6 +595,31 @@ public sealed class PreparedData
     /// <returns>The number of rows.</returns>
     public int CountIn(Part part) => Parts.Count(each => each == part);
 
+    /// <summary>
+    /// The columns a column of words was written down as, one for each category: what a layer that reads a category from its
+    /// columns reads.
+    /// </summary>
+    /// <param name="column">The column of words, as it was named before it was written down.</param>
+    /// <returns>
+    /// The names of its columns, in order: each category the training rows held, in the order the encoder learned them; the
+    /// column kept for a category they never held, where the encoder keeps one; and the column that marks a gap. A row holds a
+    /// one in exactly one of them.
+    /// </returns>
+    /// <exception cref="ArgumentException">The column has no name.</exception>
+    /// <exception cref="InvalidOperationException">No step this run took wrote the column down one column per category.</exception>
+    /// <remarks>
+    /// The encoder's own naming is the contract, so a layer reads the block by the rule that wrote it rather than by the start of
+    /// a name another column could share.
+    /// </remarks>
+    public IReadOnlyList<string> CategoryBlock(string column)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(column);
+
+        return Course.CategoryBlock(column, Fitted)
+            ?? throw new InvalidOperationException(
+                $"No step of this pipeline writes '{column}' down one column per category, so it has no block of categories to read: encode it with as: oneHot.");
+    }
+
     /// <summary>Refuses a pipeline that holds no rows, as one read from its file holds none: it has no part to hand over and nothing to measure.</summary>
     /// <exception cref="InvalidOperationException">The pipeline holds no rows.</exception>
     /// <remarks>The one refusal for it, wherever a part's rows are asked for — handed to a learner, or measured by the report.</remarks>

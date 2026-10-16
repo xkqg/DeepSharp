@@ -8,36 +8,35 @@ using System.Reflection.PortableExecutable;
 namespace DeepSharp.Tests.Notebooks;
 
 /// <summary>
-/// Verso's browser editor, the one `verso serve` starts, asks no extension anything when it opens a file or saves one: it
-/// reads a file with the format's own reader and writes it with the format's own writer, where Verso's VS Code host and
-/// DeepSharp's own server ask every extension first. So the guard that keeps a notebook of blocks in .verso never runs
-/// there — a Jupyter copy of one opens as text, and saving it writes a .verso over the one beside it. That is written down
-/// as a limit; this reads the editor's own code and pins it, so a Verso whose editor starts asking is noticed.
+/// Verso's browser editor, the one `verso serve` starts, asks every extension that takes a format when it opens a file
+/// and when it saves one, as Verso's VS Code host and DeepSharp's own server do, so the guard that keeps a notebook of
+/// blocks out of a format that loses them runs there too. Until Verso 1.2.3 it asked nothing either way, and a notebook of
+/// blocks could be saved there in any format; this reads the editor's own code and pins what it does now, so a Verso
+/// whose editor stops asking is noticed.
 /// </summary>
 public sealed class VersoEditorContractTests
 {
     private static readonly string Editor = Path.Join(AppContext.BaseDirectory, "verso-editor", "Verso.Blazor.dll");
 
     [Fact]
-    public void VersosBrowserEditor_AsksNoExtensionWhenItOpensOrSavesAFile_ThoughItAsksWhenItComparesWithTheFileSaved()
+    public void VersosBrowserEditor_AsksEveryExtensionWhenItOpensOrSavesAFile_AndWhenItComparesWithTheFileSaved()
     {
         using var file = File.OpenRead(Editor);
         using var editor = new PEReader(file);
         var metadata = editor.GetMetadataReader();
 
-        // The one place the editor does ask, reading the file a notebook is compared with: the scan finds a call when
-        // there is one to find.
-        Assert.Contains("PostDeserializeAsync", Called(editor, metadata, "<DeserializeBaselineAsync>"));
-
-        // Opening reads the file with the format's reader and asks nothing after it; saving writes with the format's
-        // writer and asks nothing before it.
+        // Opening reads the file with the format's reader and then hands what it read to every post-processor that takes
+        // the format; saving hands the notebook to them first and then writes it; and the file a notebook is compared with
+        // is read the way it is opened.
         var opening = Called(editor, metadata, "<OpenAsync>");
         var saving = Called(editor, metadata, "<PrepareSerializedContentAsync>");
+        var comparing = Called(editor, metadata, "<DeserializeBaselineAsync>");
 
         Assert.Contains("DeserializeAsync", opening);
-        Assert.DoesNotContain("PostDeserializeAsync", opening);
+        Assert.Contains("AfterDeserializeAsync", opening);
         Assert.Contains("SerializeAsync", saving);
-        Assert.DoesNotContain("PreSerializeAsync", saving);
+        Assert.Contains("BeforeSerializeAsync", saving);
+        Assert.Contains("AfterDeserializeAsync", comparing);
     }
 
     // The names of every method the steps of an async method of the editor's notebook service call: the compiler writes
@@ -67,6 +66,13 @@ public sealed class VersoEditorContractTests
 
     private static string? Named(MetadataReader metadata, int token)
     {
+        // Only a method's own row or a reference to one names a method; any other four bytes after the opcode are no token
+        // of a call, and asking the reader to make a handle of them throws.
+        if ((token >> 24) is not (0x06 or 0x0A))
+        {
+            return null;
+        }
+
         var handle = MetadataTokens.EntityHandle(token);
 
         return handle.Kind switch

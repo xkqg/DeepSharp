@@ -142,7 +142,7 @@ public abstract class RunOptionsContract(ITensorBackend engine)
         Assert.Throws<ArgumentOutOfRangeException>(() => new FitOptions(1) { Average = wrong });
 
     [Fact]
-    public void AnAverageAndTheBestEpochsWeights_BothSayWhatTheRunEndsHolding_AndAreRefusedTogether()
+    public void AnAverageAndTheBestEpochsWeights_BothSayWhatTheRunEndsHolding_AndAreRefusedTogether_WhileEpochsAreJudgedByTheWeights()
     {
         var network = Walked().Network.Compile(new Sgd(0.1), new BinaryCrossEntropy());
 
@@ -151,12 +151,87 @@ public abstract class RunOptionsContract(ITensorBackend engine)
 
         Assert.Contains("average", refused.Message, StringComparison.Ordinal);
         Assert.Contains("best", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(nameof(FitOptions.JudgedByAverage), refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EpochsJudgedByTheAverage_WithoutAnAverage_AreRefused()
+    {
+        var network = Walked().Network.Compile(new Sgd(0.1), new BinaryCrossEntropy());
+
+        var refused = Assert.Throws<ArgumentException>(() => network.Fit(
+            Rows(), Rows(), new FitOptions(seed: 1) { Backend = _backend, JudgedByAverage = true }));
+
+        Assert.Contains(nameof(FitOptions.Average), refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnEpochJudgedByTheAverage_IsJudgedByTheAveragedWeights_AndTheRunTrainsOnTheWeightsAsTheyStand()
+    {
+        // The last epoch is judged by the averages the run then ends holding, so its loss is the loss of the network it ends
+        // as; and judging reads the validation rows and changes nothing, so the weights the run trains are the ones the run
+        // that judges by them trains, to the bit.
+        var judged = Walked();
+        var raw = Walked();
+        var compiled = judged.Network.Compile(new Sgd(0.1), new BinaryCrossEntropy());
+        var history = compiled.Fit(Rows(), Rows(), new FitOptions(seed: 1) { Backend = _backend, Epochs = 3, BatchSize = 4, Average = 0.9, JudgedByAverage = true });
+        var plain = raw.Network.Compile(new Sgd(0.1), new BinaryCrossEntropy())
+            .Fit(Rows(), Rows(), new FitOptions(seed: 1) { Backend = _backend, Epochs = 3, BatchSize = 4, Average = 0.9 });
+        var rows = Rows();
+        var heldAtTheEnd = new BinaryCrossEntropy().Of(judged.Network.Forward(rows.Features, Pass.Evaluation(_backend)), rows.Answers, _backend).Values[0];
+
+        Assert.Equal(heldAtTheEnd, history.Epochs[^1].ValidationLoss!.Value, 6);
+        Assert.NotEqual(plain.Epochs.Select(epoch => epoch.ValidationLoss), history.Epochs.Select(epoch => epoch.ValidationLoss));
+        Assert.Equal(plain.Epochs.Select(epoch => epoch.Loss), history.Epochs.Select(epoch => epoch.Loss));
+        Assert.Equal(Bits(raw.Network), Bits(judged.Network));
+    }
+
+    [Fact]
+    public void RestoringTheBestEpoch_WhenEpochsAreJudgedByTheAverage_EndsHoldingThatEpochsAverage()
+    {
+        // The run that stops at the best epoch it was judged by ends holding what a run of exactly that many epochs ends
+        // holding: the averages at that epoch's end.
+        var restored = Walked();
+        var history = restored.Network.Compile(new Sgd(0.5), new BinaryCrossEntropy()).Fit(Rows(), Rows(), new FitOptions(seed: 1)
+        {
+            Backend = _backend, Epochs = 8, BatchSize = 2, Average = 0.7, JudgedByAverage = true,
+            EarlyStopping = new EarlyStopping { Patience = 100, RestoreBest = true },
+        });
+        var best = history.BestEpoch!.Value;
+        var shorter = Walked();
+
+        shorter.Network.Compile(new Sgd(0.5), new BinaryCrossEntropy())
+            .Fit(Rows(), Rows(), new FitOptions(seed: 1) { Backend = _backend, Epochs = best + 1, BatchSize = 2, Average = 0.7, JudgedByAverage = true });
+
+        Assert.Equal(Bits(shorter.Network), Bits(restored.Network));
+    }
+
+    [Fact]
+    public void ARunJudgedByTheAverageThatStopsAndGoesOn_RestoringItsBest_IsTheRunThatNeverStopped_BitForBit()
+    {
+        var straight = Walked();
+        var stopped = Walked();
+        var resumed = Walked();
+        var kept = new List<Checkpoint>();
+
+        straight.Network.Compile(new Adam(0.05), new BinaryCrossEntropy()).Fit(Rows(), Rows(), Options(6));
+        stopped.Network.Compile(new Adam(0.05), new BinaryCrossEntropy()).Fit(Rows(), Rows(), Options(3, new Checkpoints(kept.Add)));
+        resumed.Network.Compile(new Adam(0.05), new BinaryCrossEntropy()).Fit(Rows(), Rows(), Options(6, from: kept[^1]));
+
+        Assert.Equal(Bits(straight.Network), Bits(resumed.Network));
+
+        FitOptions Options(int epochs, Checkpoints? checkpoints = null, Checkpoint? from = null) => new(seed: 5)
+        {
+            Backend = _backend, Epochs = epochs, BatchSize = 1, Average = 0.8, JudgedByAverage = true,
+            EarlyStopping = new EarlyStopping { Patience = 100, RestoreBest = true }, Checkpoints = checkpoints, ResumeFrom = from,
+        };
     }
 
     [Theory]
     [InlineData("clipValue", "whose gradients were clipped value by value to 0.02, and going on without clipping them that way would move every step otherwise.")]
     [InlineData("stepEvery", "that took a step once every 3 batches, and going on taking one every batch would take other rows into every step.")]
     [InlineData("average", "that kept an average of its weights at 0.9, and going on without one would end it holding other weights.")]
+    [InlineData("judgedByAverage", "whose epochs were judged by the average of its weights, and going on judging them by the weights as they stand would stop it and keep its best otherwise.")]
     public void AResumeUnderOtherOptionsOfTheRun_IsRefused_NamingWhatDiffers(string option, string says)
     {
         var kept = new List<Checkpoint>();
@@ -167,7 +242,8 @@ public abstract class RunOptionsContract(ITensorBackend engine)
             BatchSize = 1,
             ClipValue = option == "clipValue" ? 0.02 : null,
             StepEvery = option == "stepEvery" ? 3 : 1,
-            Average = option == "average" ? 0.9 : null,
+            Average = option is "average" or "judgedByAverage" ? 0.9 : null,
+            JudgedByAverage = option == "judgedByAverage",
             Checkpoints = new Checkpoints(kept.Add),
         };
 
@@ -175,9 +251,30 @@ public abstract class RunOptionsContract(ITensorBackend engine)
 
         var refused = Assert.Throws<ArgumentException>(
             () => Walked().Network.Compile(new Sgd(0.1), new BinaryCrossEntropy())
-                .Fit(Rows(), validation: null, new FitOptions(seed: 3) { Backend = _backend, Epochs = 4, BatchSize = 1, ResumeFrom = kept[0] }));
+                .Fit(Rows(), validation: null, new FitOptions(seed: 3)
+                {
+                    Backend = _backend, Epochs = 4, BatchSize = 1, Average = option == "judgedByAverage" ? 0.9 : null, ResumeFrom = kept[0],
+                }));
 
         Assert.Contains(says, refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AResumeJudgingByTheAverage_OfARunJudgedByItsWeights_IsRefused_NamingWhatDiffers()
+    {
+        var kept = new List<Checkpoint>();
+
+        Walked().Network.Compile(new Sgd(0.1), new BinaryCrossEntropy())
+            .Fit(Rows(), validation: null, new FitOptions(seed: 3) { Backend = _backend, Epochs = 2, BatchSize = 1, Average = 0.9, Checkpoints = new Checkpoints(kept.Add) });
+
+        var refused = Assert.Throws<ArgumentException>(
+            () => Walked().Network.Compile(new Sgd(0.1), new BinaryCrossEntropy())
+                .Fit(Rows(), validation: null, new FitOptions(seed: 3) { Backend = _backend, Epochs = 4, BatchSize = 1, Average = 0.9, JudgedByAverage = true, ResumeFrom = kept[0] }));
+
+        Assert.Contains(
+            "whose epochs were judged by the weights as they stand, and going on judging them by the average of its weights would stop it and keep its best otherwise.",
+            refused.Message,
+            StringComparison.Ordinal);
     }
 
     private (Dense Hidden, Dense Output, LayerStack Network) Walked()

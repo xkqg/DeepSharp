@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 9
+      "maximum": 10
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -42,7 +42,9 @@
             "drop.warmup",
             "encode",
             "encode.categories",
+            "encode.piecewise",
             "evidence.correlation",
+            "evidence.likeness",
             "evidence.profile",
             "evidence.report",
             "feature.add",
@@ -52,6 +54,7 @@
             "feature.timeParts",
             "fill.missing",
             "fill.nan",
+            "history",
             "learn.ml",
             "learn.network",
             "maths",
@@ -177,6 +180,21 @@
           "if": {
             "properties": {
               "step": {
+                "const": "encode.piecewise"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/encode.piecewise"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
                 "const": "evidence.correlation"
               }
             },
@@ -186,6 +204,21 @@
           },
           "then": {
             "$ref": "#/$defs/evidence.correlation"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "evidence.likeness"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/evidence.likeness"
           }
         },
         {
@@ -321,6 +354,21 @@
           },
           "then": {
             "$ref": "#/$defs/fill.nan"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "history"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/history"
           }
         },
         {
@@ -1100,6 +1148,49 @@
       ],
       "additionalProperties": false
     },
+    "encode.piecewise": {
+      "description": "Writes a column of numbers down as how far each value fills a few bins, their edges the training rows' quantiles.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "encode.piecewise"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column of numbers to write down as bins."
+        },
+        "bins": {
+          "description": "How many bins the training rows' quantiles divide the values into, at least two; fewer where edges fall together.",
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 2147483647
+        },
+        "outOfRange": {
+          "anyOf": [
+            {
+              "enum": [
+                "pass",
+                "clip",
+                "refuse"
+              ]
+            },
+            {
+              "type": "string",
+              "pattern": "^(?:[Pp][Aa][Ss][Ss]|[Cc][Ll][Ii][Pp]|[Rr][Ee][Ff][Uu][Ss][Ee])$"
+            }
+          ],
+          "description": "What happens to a value beyond the edges the training rows set: let through the end bins, held at them, or refused."
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "bins",
+        "outOfRange"
+      ],
+      "additionalProperties": false
+    },
     "evidence.correlation": {
       "description": "Sets out the rows a correlation between columns is drawn from, on the rows the split trains on, and how many it kept.",
       "type": "object",
@@ -1155,6 +1246,35 @@
       ],
       "additionalProperties": false
     },
+    "evidence.likeness": {
+      "description": "Sets out how alike the parts a split made are, column by column, and flags the ones further apart than a bound.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "evidence.likeness"
+        },
+        "warnAbove": {
+          "description": "The distance above which two parts are flagged as unlike: a share above nought, at most one.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.7976931348623157E+308
+        },
+        "columns": {
+          "description": "The columns to compare across the parts; left out, every column where it stands but the answer.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        }
+      },
+      "required": [
+        "step",
+        "warnAbove"
+      ],
+      "additionalProperties": false
+    },
     "evidence.profile": {
       "description": "Profiles the columns where it stands, on the rows the split trains on, and names what is wrong or should not be there, with how each is answered.",
       "type": "object",
@@ -1191,7 +1311,7 @@
           "const": "evidence.report"
         },
         "metrics": {
-          "description": "The measures, in the order they are shown: rmse, mae and r2 for amounts; accuracy, precision, recall and the confusion matrix for classes; kl for shares of a whole; emd and rps for shares in an order.",
+          "description": "The measures, in the order they are shown: rmse, mae, r2 and mape for amounts; accuracy, precision, recall, the confusion matrix, f1, auc and brier for classes; kl for shares of a whole; emd and rps for shares in an order.",
           "type": "array",
           "minItems": 1,
           "items": {
@@ -1207,12 +1327,16 @@
                   "confusionmatrix",
                   "emd",
                   "kl",
-                  "rps"
+                  "rps",
+                  "f1",
+                  "auc",
+                  "mape",
+                  "brier"
                 ]
               },
               {
                 "type": "string",
-                "pattern": "^(?:[Rr][Mm][Ss][Ee]|[Mm][Aa][Ee]|[Rr]2|[Aa][Cc][Cc][Uu][Rr][Aa][Cc][Yy]|[Pp][Rr][Ee][Cc][Ii][Ss][Ii][Oo][Nn]|[Rr][Ee][Cc][Aa][Ll][Ll]|[Cc][Oo][Nn][Ff][Uu][Ss][Ii][Oo][Nn][Mm][Aa][Tt][Rr][Ii][Xx]|[Ee][Mm][Dd]|[Kk][Ll]|[Rr][Pp][Ss])$"
+                "pattern": "^(?:[Rr][Mm][Ss][Ee]|[Mm][Aa][Ee]|[Rr]2|[Aa][Cc][Cc][Uu][Rr][Aa][Cc][Yy]|[Pp][Rr][Ee][Cc][Ii][Ss][Ii][Oo][Nn]|[Rr][Ee][Cc][Aa][Ll][Ll]|[Cc][Oo][Nn][Ff][Uu][Ss][Ii][Oo][Nn][Mm][Aa][Tt][Rr][Ii][Xx]|[Ee][Mm][Dd]|[Kk][Ll]|[Rr][Pp][Ss]|[Ff]1|[Aa][Uu][Cc]|[Mm][Aa][Pp][Ee]|[Bb][Rr][Ii][Ee][Rr])$"
               }
             ]
           }
@@ -1638,6 +1762,54 @@
       ],
       "additionalProperties": false
     },
+    "history": {
+      "description": "Writes beside each row the mean of a column over the earlier training rows of its key, pulled towards the training rows' mean.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "history"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column whose value says which rows are of one kind: a farm, a type."
+        },
+        "value": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column of numbers whose mean over the earlier rows of the same kind is read."
+        },
+        "orderBy": {
+          "description": "The columns that say which rows came before a row: the first decides, each next one decides between rows the ones before call equal.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        },
+        "shrink": {
+          "description": "How many rows' worth of weight the mean of every training row has beside a key's own rows, above nothing: the larger, the more a key with few rows is pulled towards it.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.7976931348623157E+308
+        },
+        "into": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The name of the column it makes; left out, the value's name, 'history' and the key's name."
+        }
+      },
+      "required": [
+        "step",
+        "key",
+        "value",
+        "orderBy",
+        "shrink"
+      ],
+      "additionalProperties": false
+    },
     "learn.ml": {
       "description": "Names the trainer from ML.NET this pipeline is declared for: which trainer, the settings it takes and the seed it repeats from.",
       "type": "object",
@@ -2049,6 +2221,326 @@
                 "required": [
                   "kind",
                   "epsilon"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Weighs every number by the share of a normal curve below it: smooth where relu bends.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "gelu"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Gg][Ee][Ll][Uu])$"
+                      }
+                    ]
+                  },
+                  "approximate": {
+                    "description": "Whether it is the hyperbolic tangent's approximation of the curve rather than the exact one, which PyTorch and Keras use unless told.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "approximate"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Weighs every number by its own sigmoid; also called swish.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "silu"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ss][Ii][Ll][Uu])$"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Weighs every number by the hyperbolic tangent of its softplus.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "mish"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Mm][Ii][Ss][Hh])$"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Leaves what is above nought, and lets a share of what is below it through.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "leakyRelu"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ll][Ee][Aa][Kk][Yy][Rr][Ee][Ll][Uu])$"
+                      }
+                    ]
+                  },
+                  "negativeSlope": {
+                    "description": "The share of a number below nought let through: a hundredth in PyTorch, three tenths in Keras's layer.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  }
+                },
+                "required": [
+                  "kind",
+                  "negativeSlope"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Leaves what is above nought, and lets a share of what is below it through that it learns.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "prelu"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Pp][Rr][Ee][Ll][Uu])$"
+                      }
+                    ]
+                  },
+                  "eachFeature": {
+                    "description": "Whether every number of a row learns a share of its own, rather than one share for them all, as PyTorch starts it.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "eachFeature"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Leaves what is above nought, and bends what is below it towards minus alpha.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "elu"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ee][Ll][Uu])$"
+                      }
+                    ]
+                  },
+                  "alpha": {
+                    "description": "What the numbers below nought bend towards, below nought.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  }
+                },
+                "required": [
+                  "kind",
+                  "alpha"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Bends as elu does, at the alpha and the scale that keep a network's numbers normalised.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "selu"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ss][Ee][Ll][Uu])$"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Turns the numbers of a row into shares of one whole.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "softmax"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ss][Oo][Ff][Tt][Mm][Aa][Xx])$"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Divides every number of one row by the root of the mean of the row's squares, and scales it.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "rmsNorm"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Rr][Mm][Ss][Nn][Oo][Rr][Mm])$"
+                      }
+                    ]
+                  },
+                  "epsilon": {
+                    "description": "The small number added to the mean of the squares so nothing is divided by nought; PyTorch's is the step a single-precision number takes above one.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  },
+                  "scale": {
+                    "description": "Whether it multiplies what it normalised by a scale of its own; it does, unless it says it does not.",
+                    "type": "boolean"
+                  },
+                  "learns": {
+                    "description": "Whether the layer's numbers learn, or are held still as Keras's trainable = False holds them; they learn, unless said.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "epsilon"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Turns every number of the row into its cosines and sines at frequencies it learns, through a linear layer: a relu after it makes it PLR.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "periodic"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Pp][Ee][Rr][Ii][Oo][Dd][Ii][Cc])$"
+                      }
+                    ]
+                  },
+                  "frequencies": {
+                    "description": "How many frequencies each number is turned round at.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "sigma": {
+                    "description": "The spread of the normal curve the frequencies start from: the setting the embedding is most sensitive to, searched for every dataset by its authors, and with no default.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  },
+                  "width": {
+                    "description": "How many numbers each number of the row comes out as.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "lite": {
+                    "description": "Whether one linear layer is shared by every number of the row, rather than one of each number's own.",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "frequencies",
+                  "sigma",
+                  "width",
+                  "lite"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "embedding"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ee][Mm][Bb][Ee][Dd][Dd][Ii][Nn][Gg])$"
+                      }
+                    ]
+                  },
+                  "column": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The column of words whose categories the layer turns into vectors, as it was named before the pipeline wrote it down one column per category."
+                  },
+                  "width": {
+                    "description": "How many numbers each category's vector holds.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "kind",
+                  "column",
+                  "width"
                 ],
                 "additionalProperties": false
               }
@@ -2547,6 +3039,10 @@
           "minimum": 0,
           "maximum": 1.7976931348623157E+308
         },
+        "judgedByAverage": {
+          "description": "Whether every epoch is judged by the average of the weights rather than by the weights as they are, so early stopping watches, and restores, the weights the run ends holding; left out, by the weights as they are.",
+          "type": "boolean"
+        },
         "loss": {
           "type": "object",
           "oneOf": [
@@ -2587,6 +3083,12 @@
                       "pattern": "^(?:[Cc][Rr][Oo][Ss][Ss][Ee][Nn][Tt][Rr][Oo][Pp][Yy])$"
                     }
                   ]
+                },
+                "smoothing": {
+                  "description": "How much of the answers is spread evenly before they are compared, so no label is taken as quite certain; none, unless said.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
                 }
               },
               "required": [
@@ -2609,6 +3111,12 @@
                       "pattern": "^(?:[Bb][Ii][Nn][Aa][Rr][Yy][Cc][Rr][Oo][Ss][Ss][Ee][Nn][Tt][Rr][Oo][Pp][Yy])$"
                     }
                   ]
+                },
+                "smoothing": {
+                  "description": "How much of the answers is spread evenly before they are compared, so no label is taken as quite certain; none, unless said.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
                 }
               },
               "required": [
@@ -2635,6 +3143,178 @@
               },
               "required": [
                 "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The mean of the size of the differences: an answer that is an amount, some far off.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "meanAbsoluteError"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Mm][Ee][Aa][Nn][Aa][Bb][Ss][Oo][Ll][Uu][Tt][Ee][Ee][Rr][Rr][Oo][Rr])$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "Half the square of the difference near the answer, its size further off: an amount with outliers.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "huber"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Hh][Uu][Bb][Ee][Rr])$"
+                    }
+                  ]
+                },
+                "delta": {
+                  "description": "How far from the answer the loss stops being squared and grows in a straight line.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "delta"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The pinball loss: the value the answer stays below a share of the time, rather than its mean.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "quantile"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Qq][Uu][Aa][Nn][Tt][Ii][Ll][Ee])$"
+                    }
+                  ]
+                },
+                "quantile": {
+                  "description": "The share of the time the answer is to stay below the value the model gives: above nought and below one.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "quantile"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "A binary cross-entropy that weighs down the labels the network is already sure of: a rare class, read through a sigmoid.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "focal"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Ff][Oo][Cc][Aa][Ll])$"
+                    }
+                  ]
+                },
+                "gamma": {
+                  "description": "How hard a label the network is already sure of is weighed down.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "alpha": {
+                  "description": "What a one is weighed by, and a nought by one less it — or minus one for no weight, as torchvision writes it.",
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "gamma",
+                "alpha"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "How far each answer falls short of a margin of one on its side of nought: a label, read by the side it falls.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "hinge"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Hh][Ii][Nn][Gg][Ee])$"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The loss of a count: an answer that is how many times something happened, read through an exponential when it is a logarithm.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "poisson"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Pp][Oo][Ii][Ss][Ss][Oo][Nn])$"
+                    }
+                  ]
+                },
+                "logInput": {
+                  "description": "Whether the network answers with the logarithm of each count's rate, as PyTorch takes it, rather than the rate itself, as Keras does.",
+                  "type": "boolean"
+                },
+                "epsilon": {
+                  "description": "The small number added to a rate before its logarithm is taken: a hundred-millionth in PyTorch, a ten-millionth in Keras.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "logInput",
+                "epsilon"
               ],
               "additionalProperties": false
             }
@@ -3655,10 +4335,13 @@
                       "drop.gaps",
                       "drop.warmup",
                       "encode.categories",
+                      "encode.piecewise",
                       "evidence.correlation",
+                      "evidence.likeness",
                       "evidence.profile",
                       "evidence.report",
                       "feature.cycle",
+                      "history",
                       "learn.ml",
                       "learn.network",
                       "order.by",
@@ -3698,8 +4381,11 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "encode.piecewise",
+                      "evidence.likeness",
                       "evidence.report",
                       "feature.cycle",
+                      "history",
                       "learn.ml",
                       "learn.network",
                       "read.join",
@@ -3732,7 +4418,10 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "encode.piecewise",
+                      "evidence.likeness",
                       "feature.cycle",
+                      "history",
                       "learn.ml",
                       "learn.network",
                       "read.join",
@@ -3765,7 +4454,10 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "encode.piecewise",
+                      "evidence.likeness",
                       "feature.cycle",
+                      "history",
                       "learn.ml",
                       "read.join",
                       "scale.given",
@@ -3797,7 +4489,10 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "encode.piecewise",
+                      "evidence.likeness",
                       "feature.cycle",
+                      "history",
                       "learn.ml",
                       "read.join",
                       "scale.given",
@@ -3828,9 +4523,40 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "encode.piecewise",
+                      "evidence.likeness",
                       "feature.cycle",
+                      "history",
                       "read.join",
                       "target.numbers"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 10
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "declaration": {
+            "items": {
+              "properties": {
+                "step": {
+                  "not": {
+                    "enum": [
+                      "encode.piecewise",
+                      "evidence.likeness",
+                      "history"
                     ]
                   }
                 }

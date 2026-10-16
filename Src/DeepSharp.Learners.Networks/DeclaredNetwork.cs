@@ -178,12 +178,16 @@ public static class TrainExtensions
 
             return Trained(prepared, step, new RunControls(engines, null, cancellation));
         }
+
+        // The door a search trains a candidate through: the step, and what the search adds to the run without changing a number
+        // of it — the engines, a hook that hears each epoch, and a token that stops it.
+        internal TrainedNetwork Train(LearnNetworkStep step, RunControls controls) => Trained(prepared, step, controls);
     }
 
     // The one place a declared network is lowered onto the loop and trained: every door above ends here.
     private static TrainedNetwork Trained(PreparedData prepared, LearnNetworkStep step, RunControls controls) =>
         step.Layers
-            .Described()
+            .Described(prepared)
             .Compile(step.Optimizer.Moved(), JudgedFor(step.Loss, prepared.Declaration.Output), step.Schedule.Scheduled())
             .Fit(prepared, new FitOptions(step.Seed)
             {
@@ -194,6 +198,7 @@ public static class TrainExtensions
                 ClipValue = step.ClipValue > 0 ? step.ClipValue : null,
                 StepEvery = step.StepEvery,
                 Average = step.Average > 0 ? step.Average : null,
+                JudgedByAverage = step.JudgedByAverage,
                 Backend = (controls.Engines ?? new Engines()).Named(step.Engine),
                 Cancellation = controls.Cancellation,
                 OnEpoch = controls.OnEpoch,
@@ -201,7 +206,7 @@ public static class TrainExtensions
 
     // What a call may add to a declared run without changing any number of it: the engines its name stands for, a hook that
     // hears each epoch, and a token that stops it.
-    private readonly record struct RunControls(Engines? Engines, Action<Epoch>? OnEpoch, CancellationToken Cancellation);
+    internal readonly record struct RunControls(Engines? Engines, Action<Epoch>? OnEpoch, CancellationToken Cancellation);
 
     // The loss a declared part names, for the output it judges: a distance along an order leaves what is left of a
     // distribution's whole outside that order, when the distribution makes one.

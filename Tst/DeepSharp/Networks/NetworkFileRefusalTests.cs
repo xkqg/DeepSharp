@@ -857,7 +857,7 @@ public class NetworkFileRefusalTests
         Assert.Equal(
             [
                 Place(broken, "\"training\"", message),
-                Place(broken, $"\"{written}\"", $"The 'training' part has no '{written}'. It holds: version, seed, batchSize, earlyStopping, clipNorm, clipValue, stepEvery, average, engine, optimizer, schedule, memory, averaged, judgement, history."),
+                Place(broken, $"\"{written}\"", $"The 'training' part has no '{written}'. It holds: version, seed, batchSize, earlyStopping, clipNorm, clipValue, stepEvery, average, judgedByAverage, engine, optimizer, schedule, memory, averaged, judgement, history."),
             ],
             TrainingRefused(broken).Faults);
     }

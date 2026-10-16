@@ -136,6 +136,29 @@ public abstract partial class TensorBackendContract
     }
 
     [Fact]
+    public void Sin_IsTheSine_AndASineShiftedByAQuarterTurn_IsTheCosine()
+    {
+        // The seam's one periodic operation: a cosine is the sine a quarter of a turn on, so an engine writes one curve, not two.
+        var turns = Tensor.From(new Shape(7), [0f, 0.5f, -1f, 2f, 3.1415927f, 10f, -40f]);
+        var sine = _backend.Sin(turns);
+        var cosine = _backend.Sin(_backend.Add(turns, _backend.Fill(turns.Shape, (float)(Math.PI / 2))));
+
+        AssertClose([.. turns.Values.ToArray().Select(value => Math.Sin(value))], sine);
+        AssertClose([.. turns.Values.ToArray().Select(value => Math.Cos(value))], cosine);
+    }
+
+    [Fact]
+    public void Erf_IsTheErrorFunction_AtEveryScale()
+    {
+        // scipy.special.erf of each value: odd, nought at nought, one beyond four to a float's width.
+        var erf = _backend.Erf(Tensor.From(new Shape(9), [0f, 0.1f, 0.5f, 1f, -1f, 2f, 3f, 4f, -6f]));
+
+        AssertClose(
+            [0, 0.1124629160182849, 0.5204998778130465, 0.8427007929497149, -0.8427007929497149, 0.9953222650189527, 0.9999779095030014, 0.9999999845827421, -1],
+            erf);
+    }
+
+    [Fact]
     public void LogSoftmax_IsEachRowMinusTheLogOfTheSumOfItsExponentials()
     {
         var logs = _backend.LogSoftmax(Mixed());
@@ -164,7 +187,7 @@ public abstract partial class TensorBackendContract
     public void TheElementwiseOperations_LeaveTheirInputAsItWas()
     {
         var values = Mixed();
-        Func<Tensor, Tensor>[] operations = [_backend.Relu, _backend.Positive, _backend.Tanh, _backend.Sigmoid, _backend.Exp, _backend.Softplus, _backend.LogSoftmax, _backend.FirstLargest];
+        Func<Tensor, Tensor>[] operations = [_backend.Relu, _backend.Positive, _backend.Tanh, _backend.Sigmoid, _backend.Exp, _backend.Softplus, _backend.Sin, _backend.Erf, _backend.LogSoftmax, _backend.FirstLargest];
 
         foreach (var result in operations.Select(operation => operation(values)))
         {

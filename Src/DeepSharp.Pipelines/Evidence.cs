@@ -70,6 +70,11 @@ public interface IEvidenceVisitor<out TResult>
     /// <param name="measures">The measures.</param>
     /// <returns>What the visitor builds for them.</returns>
     TResult Visit(Measures measures);
+
+    /// <summary>How alike the parts a split made are, column by column.</summary>
+    /// <param name="likeness">The distances, each beside the bound above which it is flagged.</param>
+    /// <returns>What the visitor builds for it.</returns>
+    TResult Visit(PartLikeness likeness);
 }
 
 /// <summary>One column, as a profile measures it on the measured rows.</summary>

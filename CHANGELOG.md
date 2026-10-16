@@ -3,6 +3,189 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0]
+
+The third letter of the flock team, and the words a model is written in. The team that weighs flocks asked for a number
+written down as how far it fills a few bins, for the periodic embedding of a number, for a report of how alike the parts of a
+split are, for a search over networks that can stop a hopeless trial, choose a setting only when another is chosen and go on
+from trials it ran before, and for a running statistic of each key that a single new flock is served with as the training rows
+were. Each is here, fitted on the training rows alone where it learns anything, and replayed unchanged. Beside them stand the
+words a model is written in that the frameworks have and this library did not: the smooth activations a transformer is made of,
+the leaky, parametric and self-normalising ones, softmax as a layer, the normalisations over groups of channels, over one
+example's channels and by the root mean square, a category as a small vector, the losses of absolute errors, of outliers, of
+quantiles, of a rare class, of margins, of counts and of softened labels, and the measures F1, the area under the curve, the
+error as a share of the answer and the Brier score with its reliability curve. Each word's numbers are held to the framework
+that has it, forward and backward on every engine, and each is read from the Keras, ONNX and PyTorch files that say it — ONNX's
+in the operators its newer sets have and in the several operators PyTorch's exporters spell it in for older ones.
+
+### Upgrading from 0.10.0
+
+- **The pipeline file is at version 10.** Everything written before still reads and means what it meant; 0.10.0 refuses a file of
+  the tenth whole, naming the version. The new steps (`encode.piecewise`, `history`, `evidence.likeness`), the new words of a
+  declared network and the new measures of a report are what a file of the tenth can say that an older one could not.
+
+- **The tensor seam has two more operations, `Sin` and `Erf`.** An engine written outside the library implements both before it
+  builds against this release, as it implemented `FirstLargest` for 0.9.0: the sine is what the periodic embedding turns a number
+  round with — a cosine is the sine a quarter turn on — and the error function is what the exact GELU is written in, which no
+  operation the seam had composes. The light engine works the error function out itself, since .NET has none; the libtorch engine
+  asks libtorch. The packages that hold an engine move to 0.11.0 together with the core.
+
+- **`IEvidenceVisitor<TResult>` has a fourth member, `Visit(PartLikeness)`.** A visitor written outside the library adds it. The
+  likeness of the parts is the fourth kind of evidence, beside a profile, a correlation and a model's measures.
+
+- **A run can judge its epochs by the average of its weights.** `FitOptions.JudgedByAverage`, `judgedByAverage` on
+  `learn.network` and `.JudgedByAverage()` on a chain judge each epoch by the average `Average` keeps rather than by the weights as
+  they stand, so early stopping that restores the best epoch restores the best average: the two questions 0.10.0 refused to
+  answer at once become one. Without it a run is judged as before, and the refusal of `Average` beside `RestoreBest` stays, with
+  its reason, since the best weights and the average are then two answers. A checkpoint of a run judged so is written as the sixth
+  version of its training part, which 0.10.0 refuses by its number, and a run is held to the judging its checkpoint was taken
+  under: going on under the other is refused, naming both. Running statistics are averaged by nothing: the references disagree
+  about whether an average of weights should carry them, and a normalisation answers from the statistics its training rows left.
+
+- **A search can stop a trial that is not going anywhere, choose a setting only when another is chosen, and go on from trials it
+  ran before.** `Study.Pruner` is handed the `Progress` of each deal as it ends — the deal, the scores so far and the trials
+  before — and stops the trial when it says so; `MedianPruner(startup, warmUp)` is Optuna's rule, stopping a trial whose score so
+  far is worse than the median of the trials before at the same deal, after so many trials and so many deals. A trial stopped so
+  says `Pruned`, is never the best, and keeps what it heard in `Heard`. A dimension's `OnlyWhen` names the choice of another
+  dimension it is drawn under, so a rate of momentum is drawn only for the optimizer that has one; the space refuses a dimension
+  that names one declared after it. `Study.Run(pipelineFor, earlier)` goes on from the trials handed to it — their numbering, their
+  candidates and the space they were drawn from held to this study's, each refused by name otherwise — and retrains the best of
+  them on every deal, refusing a result whose scores differ from those it was handed. A pruner is refused beside a `Score` of the
+  caller's own, since a pruner judges the scores the study takes and a score of one's own can mean anything. The tree-structured
+  Parzen estimator is not written here: a sampler written outside the library goes behind `ISampler`, whose contract now says that
+  a dimension not drawn under the choices drawn has no setting at all.
+
+- **A number can be written down as how far it fills a few bins.** `encode.piecewise` (`.PiecewiseLinear(column, bins)`) learns
+  the edges of so many bins from the quantiles of the training rows, edges that fall together counted once, and writes each value
+  as a column per bin: one where the value lies beyond the bin, nought before it, and the share of the bin in between —
+  Gorishniy et al.'s piecewise linear encoding. A value beyond the training rows' ends is let through, held at them or refused, as
+  the step says, and a column that never changes is refused. Edges taken from the answer — their target-aware form — are not
+  built: they read the answer to place a feature's edges, which is a second rule for the same edges and one that the rows a model
+  is measured on would have to replay without their answers.
+
+- **A running statistic of each key is written beside every row.** `history` (`.History(key, value, shrink, orderBy…)`) writes
+  the mean of a column over the training rows of the row's key that come strictly before it on the order the ordering columns
+  give — a moment, then a whole number, say — pulled towards the mean of every training row by as many rows' weight as `shrink`
+  says; a key the training rows never held has that mean. A served row is answered from the training rows alone, so a single new
+  flock gets the history its key had, which a window over the rows handed in with it could not give: one flock handed alone has no
+  rows before it, which was the team's very complaint. A row whose ordering columns have a gap is refused, naming the row.
+
+- **The parts of a split can be compared.** `evidence.likeness` (`.Likeness(warnAbove, columns…)`) sets out, column by column,
+  how far apart training, validation and test are — the two-sample Kolmogorov–Smirnov distance for numbers, ties taken whole as
+  scipy takes them, and the total variation for words — beside the rows each was worked out from, and flags every distance above
+  a bound that has no default. It reads the features of every part, never the answer, warns and never refuses; the notebook draws
+  it as a table.
+
+- **A layer, a loss and an output say more words.** The activations `Gelu` (exact, or the hyperbolic tangent's approximation),
+  `Silu`, `Mish`, `LeakyRelu`, `PRelu` (one share, or one for each channel, starting at a quarter), `Elu`, `Selu` and `Softmax`
+  as a layer; the normalisations `GroupNorm`, `InstanceNorm` and `RmsNorm`; the periodic embedding `Periodic`; and `Embedding`.
+  Each is a kind a network's file names, and each is held to PyTorch's numbers — forward, the gradient of the example and of every
+  number it learns, and the slope at nought too — on every engine. The losses
+  `MeanAbsoluteError`, `Huber`, `Quantile`, `Focal`, `Hinge` and `Poisson`, and a `Smoothing` on `CrossEntropy` and
+  `BinaryCrossEntropy`, are held to PyTorch's values and gradients likewise. `OutputActivation` gains `Exp`, through which a
+  Poisson loss on logarithms gives its rates, and `Margin`, by which a hinge's outputs are read as classes at nought. `Loss.Applies`
+  is public and says a softmax before a loss that applies the softmax itself, as it said a sigmoid before a binary cross-entropy:
+  a stack that ends in one is refused where it is compiled, and a description that ends in one leaves it out; the sigmoid's
+  sentences are as they were.
+
+- **A softened loss raises a network's part to the sixth version.** A cross-entropy or a binary cross-entropy that softens its
+  labels writes `smoothing` into the network's part, which is then the sixth version, refused by 0.10.0 by its number rather than
+  by a key it does not know; a loss of the settings it always had writes what it always wrote. A new kind of layer or loss is
+  written as the second version, as new kinds have been: an older library refuses it by its name.
+
+- **A declared network says the new words in both vocabularies, each filling in its own library's numbers.** `learn.network`
+  takes `gelu`, `silu`, `mish`, `leakyRelu`, `prelu`, `elu`, `selu`, `softmax`, `rmsNorm`, `periodic` and `embedding`, and the
+  losses `meanAbsoluteError`, `huber`, `quantile`, `focal`, `hinge` and `poisson`, with `smoothing` on the two cross-entropies,
+  which is left out where there is none. `.WithTorch(…)` and `.WithTensorflow(…)` write each library's own number where a caller
+  leaves one unsaid: a leaky slope of a hundredth or three tenths, one share for a parametric rectifier or one for each feature, a
+  root-mean-square epsilon of a single-precision step or a millionth, a focal loss's alpha of a quarter or none, and a count
+  loss on logarithms or on rates. The periodic embedding's `sigma` has no default in either: the right spread depends on the data,
+  its authors searched it for every dataset, and a number nobody chose would be a choice made for the person. The words that work
+  on an image — a normalisation over groups of channels or over one example's channels, which measure each over the places an
+  image holds, where a row has one — are not words of a declared network, whose rows a pipeline hands over flat.
+
+- **An embedding reads the block a category was written down as.** `PreparedData.CategoryBlock(column)` names the columns an
+  encoder wrote a column of words down as, in the order of its categories, the column kept for an unseen one and the gap marker
+  among them, so exactly one of them holds a one in every row; `embedding` on `learn.network` (`.Embedding(column, width)`) turns
+  that block into a vector it learns for each, the unseen category and the gap each with their own. The block times the vectors
+  is the row a framework's embedding looks up by the category's place — the same numbers, by a product the seam already had — so
+  nothing changes in what a pipeline hands a network or serves. Embeddings read the rows as the pipeline hands them, so they stand
+  before any other layer.
+
+- **A report measures F1, the area under the curve, the error as a share of the answer, and the Brier score.** `f1`, `auc`,
+  `mape` and `brier` are scikit-learn's, held to it to twelve places: F1 and AUC label by label and averaged, the Brier score of
+  one answer's chances or of the chances across labels of which a row holds one. Drawn, the Brier score stands beside the
+  reliability curve of the chances, the rows dealt into ten bins of as many rows each.
+
+- **The readers read the new words.** From Keras: the activations gelu, silu and swish, mish, leaky_relu, elu, selu and softmax
+  wherever they stand; the layers LeakyReLU, PReLU, ELU, Softmax, GroupNormalization — of a group for every channel, an instance
+  normalisation — RMSNormalization and, as the first layer over one category's place, Embedding; and the losses mean absolute
+  error, Huber, Poisson, hinge and binary focal cross-entropy, and the label smoothing of the cross-entropies. From ONNX: Gelu,
+  LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization from operator set 21, RMSNormalization and a
+  softmax between layers; and the spellings PyTorch's two exporters write for an older set — the GELU as Div, Erf, Add and two
+  Muls, or as its hyperbolic tangent's chain, the SiLU as a Sigmoid and a Mul, the mish as a Softplus, a Tanh and a Mul, a group
+  normalisation as a Reshape, an InstanceNormalization and a Reshape back, and a root-mean-square normalisation as Pow,
+  ReduceMean, Add, Sqrt, Reciprocal and two Muls — each recognised only where every number in it is the word's own and nothing
+  outside it takes a value it makes, and each held to a graph an exporter made. From PyTorch: a parametric rectifier's shares and
+  an embedding's vectors.
+
+- **What is refused, and why.** Each of these was looked at and is refused by name, where something says it:
+  - Keras's `LayerNormalization` with `rms_scaling` works its scale out from the variance of the values rather than the root of the
+    mean of their squares, as Keras itself now warns as it deprecates it: a normalisation by the root mean square is read as Keras's
+    `RMSNormalization`.
+  - PyTorch's `SmoothL1Loss` is the Huber loss over its beta, so it is not a second word: `huber` with its delta at that beta
+    learns the same network, its loss beta times as large.
+  - ONNX's `GroupNormalization` of operator sets 18 to 20 scales and shifts each group, and a group normalisation here scales and
+    shifts each channel, as ONNX's does from set 21.
+  - A spelling of several ONNX operators that is not one an exporter writes, or whose numbers are not the word's own, is no word:
+    its nodes are read, or refused, one at a time.
+  - An ONNX embedding is a `Gather` over a batch of whole numbers, and a network here takes single-precision numbers: the
+    vectors go in through the PyTorch or the Keras reader, or by hand, over the category's ones and noughts.
+  - The periodic embedding is no layer of PyTorch, Keras or ONNX, so no reader reads it: its numbers go in by hand.
+  - Keras's embedding is read as the first layer over one place per example; one that masks the place nought, or whose vectors are
+    low-rank factors, is refused, and so is a Keras PReLU with a share for every value of an image, where it goes in.
+  - The focal loss is of labels of nought or one, as torchvision's is, and a softened label is refused: the power it weighs a
+    label by is worked out from the logarithm of the chance the label is given, which for a label of nought or one is minus a
+    softplus and never infinite, and for any other is not. A Keras focal loss that softens its labels is refused for the same
+    reason. The hinge takes labels of nought or one, as Keras's does.
+  - The mean absolute percentage error of a part that holds an answer of nought is refused, naming the row: scikit-learn divides by
+    the smallest number above nought instead, which makes that row's error as large as a number gets and the measure say nothing
+    else.
+  - The area under the curve of a part in which every row holds a class, or none does, is refused, as scikit-learn refuses it:
+    there is no curve to sweep.
+  - The Brier score of labels of which a row holds any number is refused: scikit-learn gives such chances none.
+  - The expected calibration error is not a measure: binned, it misjudges most the models that are best calibrated (Roelofs et
+    al.; Nixon et al.), and the Brier score, a proper scoring rule, bins nothing.
+  - A leaky slope below nought is refused, as Keras refuses it, and so is an exponential unit's alpha below nought, which would
+    bend the values below nothing upwards.
+  - The quantile loss is in neither PyTorch's nor Keras's core, so a network read from either is told it by its caller, as an ONNX
+    or a PyTorch network is told every loss.
+  - From the flock team's letter: the tree-structured Parzen estimator is not written here, by the same rule that keeps every other
+    sampler behind `ISampler`; a periodic embedding's spread, a history's shrink, a likeness's bound and a pruner's start and
+    warm-up have no defaults, since each depends on the data; the cosine is the sine a quarter turn on rather than an operation of
+    its own; and a run that is cancelled gives nothing back, whatever it had trained.
+
+- **Verso 1.2.3 runs a notebook's post-processors in every host, and the guard says so.** Verso's serve, its command-line
+  converter and its editor all ask the notebook's post-processors now, so a notebook of blocks saved as Jupyter from any of them is
+  refused by the same guard; Jupyter keeps a block's kind only for Verso, and every other program shows each block as a raw cell.
+  The guard's messages and its documentation say this rather than naming the hosts that once skipped it.
+
+- **The notebook, the schema and the verb reference follow.** `VERBS.md` and `pipeline.schema.json` hold the new steps, words and
+  measures, and the properties panel and the form edit every one of them.
+
+### Fixed
+
+- **A file written whole is moved into place again when Windows refuses the move for a moment.** `WriteWhole`,
+  `WriteWholeAsync` and `WriteWholeOnceAsync` moved a file into place once, and a refusal at that moment was the answer.
+  Windows refuses a move, with "access denied" or a sharing violation, for as long as something looks at the file — a virus
+  scanner, an indexer, a synchronisation client — and then lets go, and no process need be holding it that anyone can name.
+  Measured on the columns a notebook saves beside itself, with several notebooks working at once in one process, about one
+  save in four hundred and seventy was refused so, and a person met it as "The saved columns could not be written beside the
+  notebook". The move is now made again for up to three seconds, with pauses that grow from a millisecond to fifty. A folder
+  where the file is meant to go, a file marked read-only, a file that is already there and a missing folder are refused at
+  once as before, and what is still refused after the three seconds is the same exception as before. Over the same flow none
+  of 137,094 saves was refused, where 271 of 126,921 had been.
+
 ## [0.10.0]
 
 Everything the parts can be told. A layer here took what it needed and little else — a dense layer always had a bias, its
@@ -132,16 +315,6 @@ PyTorch files that say it. A part that says none of them is written as it always
   whatever else was running: in a process that runs C# cells, as an "unhandled exception in background work" in the output of
   a cell that had nothing to do with it. That task is watched now.
 
-- **A file written whole is moved into place again when Windows refuses the move for a moment.** `WriteWhole`,
-  `WriteWholeAsync` and `WriteWholeOnceAsync` moved a file into place once, and a refusal at that moment was the answer.
-  Windows refuses a move, with "access denied" or a sharing violation, for as long as something looks at the file — a virus
-  scanner, an indexer, a synchronisation client — and then lets go, and no process need be holding it that anyone can name.
-  Measured on the columns a notebook saves beside itself, with several notebooks working at once in one process, about one
-  save in four hundred and seventy was refused so, and a person met it as "The saved columns could not be written beside the
-  notebook". The move is now made again for up to three seconds, with pauses that grow from a millisecond to fifty. A folder
-  where the file is meant to go, a file marked read-only, a file that is already there and a missing folder are refused at
-  once as before, and what is still refused after the three seconds is the same exception as before. Over the same flow none
-  of 137,094 saves was refused, where 271 of 126,921 had been.
 
 ## [0.9.0]
 

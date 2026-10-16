@@ -33,14 +33,16 @@ public static class NetworkDocument
     /// fifth, a part says something 0.10.0 adds: a layer without a bias, a layer held still,
     /// a say in how a layer starts, a penalty or a bound on a layer's numbers, a border that mirrors, repeats or wraps, and,
     /// in the training part, an optimizer's or a schedule's further settings and the options of a run that steps once every
-    /// so many batches, clips each value or keeps an average of the weights. A part is written as the oldest version that says
-    /// what it holds: a network's part, and the training part of a run whose gradients were never clipped, as the second, which
-    /// 0.8.0 reads; the training part of a clipped run as the third, which 0.8.0 refuses by its number; and a part whose
-    /// layers, optimizer or schedule say more than the fourth could, as the fifth, which 0.9.0 refuses by its number rather
-    /// than by a key it does not know. A part of the first, which 0.4.0 wrote, is read as it was written and says nothing of
-    /// them, every window's padding a number.
+    /// so many batches, clips each value or keeps an average of the weights. In the sixth, the training part of a run says its
+    /// epochs were judged by the average of its weights, and a network's part that its loss softens the labels it compares. A
+    /// part is written as the oldest version that says what it holds: a network's part, and the training part of a run whose
+    /// gradients were never clipped, as the second, which 0.8.0 reads; the training part of a clipped run as the third, which
+    /// 0.8.0 refuses by its number; a part whose layers, optimizer or schedule say more than the fourth could, as the fifth,
+    /// which 0.9.0 refuses by its number rather than by a key it does not know; and one that says more than the fifth could,
+    /// as the sixth, which 0.10.0 refuses by its number. A part of the first, which 0.4.0 wrote, is read as it was written and
+    /// says nothing of them, every window's padding a number.
     /// </remarks>
-    public const int Version = 5;
+    public const int Version = 6;
 
     /// <summary>
     /// The version 0.4.0 wrote, whose training part records neither the batch size nor the early stopping of its run: the one
@@ -67,6 +69,12 @@ public static class NetworkDocument
     /// rather than which key it does not know.
     /// </summary>
     internal const int FifthVersion = 5;
+
+    /// <summary>
+    /// The version a part is written as once it says something a library that reads up to the fifth could not: the first
+    /// version 0.10.0 refuses by its number.
+    /// </summary>
+    internal const int SixthVersion = 6;
 
     internal const string KindKey = "kind";
     internal const string PackageKey = "package";
@@ -111,6 +119,7 @@ public static class NetworkDocument
     internal const string StepEveryKey = "stepEvery";
     internal const string AverageKey = "average";
     internal const string AveragedKey = "averaged";
+    internal const string JudgedByAverageKey = "judgedByAverage";
     internal const string LearnsKey = "learns";
     internal const string L1Key = "l1";
     internal const string L2Key = "l2";
@@ -122,7 +131,7 @@ public static class NetworkDocument
     private static readonly string[] NetworkKeys = [VersionKey, LayersKey, ParametersKey, StateKey, LossKey, TrainedOnKey];
 
     private static readonly string[] TrainingKeys =
-        [VersionKey, SeedKey, BatchSizeKey, EarlyStoppingKey, ClipNormKey, ClipValueKey, StepEveryKey, AverageKey, EngineKey, OptimizerKey, ScheduleKey, MemoryKey, AveragedKey, JudgementKey, HistoryKey];
+        [VersionKey, SeedKey, BatchSizeKey, EarlyStoppingKey, ClipNormKey, ClipValueKey, StepEveryKey, AverageKey, JudgedByAverageKey, EngineKey, OptimizerKey, ScheduleKey, MemoryKey, AveragedKey, JudgementKey, HistoryKey];
     private static readonly Assembly OwnAssembly = typeof(NetworkDocument).Assembly;
 
     /// <summary>Writes a network and its loss as one object, and what it was trained on when that is said.</summary>
@@ -145,7 +154,7 @@ public static class NetworkDocument
 
         // The oldest version that says everything in it: the second, which 0.8.0 reads, unless a layer says more.
         writer.WriteStartObject();
-        writer.WriteNumber(VersionKey, VersionOf(network));
+        writer.WriteNumber(VersionKey, VersionOf(network, loss));
         writer.WritePropertyName(LayersKey);
         WriteKind(writer, network);
         WriteSlots(writer, slots, slots.ToDictionary(named => named.Path, named => named.Slot.Value), rules: true);
@@ -409,8 +418,17 @@ public static class NetworkDocument
         return new ResumedRun(compiled, new Checkpoint(resumable));
     }
 
-    /// <summary>Writes a kind as an object: its name, the package it comes from when not this one, and its settings.</summary>
-    /// <exception cref="InvalidOperationException">It is of no kind a file can name.</exception>
+    /// <summary>
+    /// The oldest version of a network's part that says everything it holds: the largest the network, every layer below it and
+    /// the loss it is written with name.
+    /// </summary>
+    /// <remarks>
+    /// A loss is written into the network's part, so a setting of a loss that an older library could not read raises the part
+    /// the way a layer's does: a cross-entropy whose labels are softened names the sixth, and one whose labels are not says
+    /// nothing, so the part is written as it was written before.
+    /// </remarks>
+    internal static int VersionOf(Network network, Loss loss) => Math.Max(VersionOf(network), NeededBy(loss));
+
     /// <summary>
     /// The oldest version of a network's part that says everything the network holds: the largest the network itself and
     /// every layer below it names.
@@ -435,16 +453,22 @@ public static class NetworkDocument
     /// </summary>
     /// <remarks>
     /// An optimizer or a schedule that says nothing an older library could not read names the second, which raises nothing: a
-    /// run whose pace is unrecorded stays the first, and a run that clipped stays the third, as they were written before.
+    /// run whose pace is unrecorded stays the first, and a run that clipped stays the third, as they were written before. A
+    /// run whose epochs were judged by the average of its weights is the sixth.
     /// </remarks>
     internal static int TrainingVersionOf(CompiledNetwork compiled, Pace? pace) =>
         Math.Max(
-            pace is not { } recorded ? FirstVersion : recorded.SaysMore ? FifthVersion : recorded.Clip is null ? SecondVersion : ThirdVersion,
+            pace is not { } recorded ? FirstVersion
+                : recorded.JudgedByAverage ? SixthVersion
+                : recorded.SaysMore ? FifthVersion
+                : recorded.Clip is null ? SecondVersion : ThirdVersion,
             Math.Max(NeededBy(compiled.Optimizer), NeededBy(compiled.Schedule)));
 
     // The version a kind needs of the part it is written into when it says more than the second could; nothing otherwise.
     private static int NeededBy(object thing) => thing is ISaved { FileVersion: > SecondVersion } saved ? saved.FileVersion : 0;
 
+    /// <summary>Writes a kind as an object: its name, the package it comes from when not this one, and its settings.</summary>
+    /// <exception cref="InvalidOperationException">It is of no kind a file can name.</exception>
     internal static void WriteKind(Utf8JsonWriter writer, object thing)
     {
         if (thing is not ISaved saved)
@@ -661,6 +685,11 @@ public static class NetworkDocument
         if (pace.Average is { } share)
         {
             writer.WriteNumber(AverageKey, share);
+        }
+
+        if (pace.JudgedByAverage)
+        {
+            writer.WriteBoolean(JudgedByAverageKey, true);
         }
     }
 

@@ -192,6 +192,44 @@ public class MeasureChartsTests
     }
 
     [Fact]
+    public void TheReliabilityCurve_BinsAPartsRowsByTheChanceSaid_InRunsOfAsManyRows_BesideTheLineWhereSaidIsHeld()
+    {
+        // The six training rows, t = 1…6, held 1 0 1 1 0 1 and were said t / 10: six bins of a row each, the chance said and the class.
+        var measures = Measured(Twelve(), report => report.Measure(Metric.Brier).On(Part.Train, Part.Test).As(Shown.Drawn), (batch, row) => [batch.Features[row][0] / 10]);
+        var figure = MeasureCharts.ReliabilityFigure(measures);
+        var train = figure.SubPlots[0];
+        var curve = train.Series.OfType<LineSeries>().Single(line => line.Label == "rows, in bins of as many");
+
+        Assert.Equal(["train", "test"], figure.SubPlots.Select(axes => axes.Title));
+        Assert.Equal([0.1, 0.2, 0.3, 0.4, 0.5, 0.6], curve.XData, new Tolerance());
+        Assert.Equal([1.0, 0, 1, 1, 0, 1], curve.YData);
+        Assert.Equal("chance of y said", train.XAxis.Label);
+        Assert.Equal("share that held y", train.YAxis.Label);
+        Assert.Equal(figure.ToSvg(), measures.Reliability());
+        Assert.Contains(measures.Reliability(), measures.Report().ToHtml(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ThirteenRows_AreDealtIntoTenBins_TheFirstThreeARowLonger()
+    {
+        var part = Measured(
+            Pdd.Create()
+                .Read(CsvRowSource.FromText("t,y\n" + string.Join('\n', Enumerable.Range(1, 26).Select(t => $"{t},{t % 2}")) + "\n"), "twenty-six rows")
+                .Declare(schema => schema.Integer("t", "y"))
+                .SplitByTime("t", 0.50)
+                .Target("y"),
+            report => report.Measure(Metric.Brier).On(Part.Train).As(Shown.Drawn),
+            (batch, row) => [1 - (batch.Features[row][0] / 100)]).Parts[0];
+
+        var bins = MeasureCharts.Binned(part, 0);
+
+        // Sorted by the chance said, t runs 13 down to 1: bins of 2, 2, 2 and then 1 row each.
+        Assert.Equal(10, bins.Said.Length);
+        Assert.Equal([(0.87 + 0.88) / 2, (0.89 + 0.90) / 2, (0.91 + 0.92) / 2, 0.93], bins.Said[..4], new Tolerance());
+        Assert.Equal([0.5, 0.5, 0.5, 1], bins.Held[..4]);
+    }
+
+    [Fact]
     public void WhatTheMeasuresDoNotHold_IsNotDrawn()
     {
         var onlyMatrices = Measured(Twelve(), report => report.Measure(Metric.ConfusionMatrix).On(Part.Test).As(Shown.Drawn), (batch, row) => [0.3]);
@@ -263,5 +301,12 @@ public class MeasureChartsTests
 
             return new PartPredictions(batch, [.. Enumerable.Range(0, batch.RowCount).Select(row => model(batch, row))]);
         })]);
+    }
+
+    private sealed class Tolerance : IEqualityComparer<double>
+    {
+        public bool Equals(double left, double right) => Math.Abs(left - right) < 1e-12;
+
+        public int GetHashCode(double value) => 0;
     }
 }

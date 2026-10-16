@@ -56,7 +56,7 @@ public class PackageTests
         Assert.Contains("verso", tags);
         Assert.Contains("notebook", tags);
         Assert.Contains("hosting", tags);
-        Assert.Equal("1.2.2", engine.Attribute("Version")!.Value);
+        Assert.Equal("1.2.3", engine.Attribute("Version")!.Value);
         Assert.Equal(typeof(global::Verso.Scaffold).Assembly.GetName().Version!.ToString(3), engine.Attribute("Version")!.Value);
     }
 

@@ -28,6 +28,22 @@ public abstract class Dimension
     /// <summary>What the dimension is called; a candidate reads its value under this name.</summary>
     public string Name { get; }
 
+    /// <summary>
+    /// The word of an earlier choice the dimension is there for, and only then — a momentum for the optimizer that takes one,
+    /// as a space Optuna writes by running has it; there for every candidate, unless said.
+    /// </summary>
+    public Chosen? OnlyWhen { get; init; }
+
+    /// <summary>Whether the dimension is there for a candidate, by what was drawn before it.</summary>
+    /// <param name="drawn">The settings drawn for the candidate so far, or all of them.</param>
+    /// <returns>Whether it is there: always, unless it hangs on a choice, and then when that choice was drawn as its word.</returns>
+    public bool IsThereAmong(IReadOnlyList<Setting> drawn)
+    {
+        ArgumentNullException.ThrowIfNull(drawn);
+
+        return OnlyWhen is not { } chosen || drawn.Any(setting => setting.Name == chosen.Dimension && setting.Choice == chosen.Word);
+    }
+
     /// <summary>Draws a value.</summary>
     /// <param name="draws">The numbers to draw it from.</param>
     /// <returns>The value, under this dimension's name.</returns>
@@ -187,6 +203,11 @@ public sealed class Choices : Dimension
     }
 }
 
+/// <summary>A word of a choice that a dimension is there for.</summary>
+/// <param name="Dimension">The name of the choice, a dimension of words earlier in the space.</param>
+/// <param name="Word">The word that, chosen, puts the dimension there.</param>
+public readonly record struct Chosen(string Dimension, string Word);
+
 /// <summary>
 /// One value a search gave to one dimension.
 /// </summary>
@@ -203,8 +224,13 @@ public sealed class SearchSpace : IReadOnlyList<Dimension>
     private readonly Dimension[] _dimensions;
 
     /// <summary>Declares the space.</summary>
-    /// <param name="dimensions">The dimensions, at least one, no two under one name.</param>
-    /// <exception cref="ArgumentException">There is none, or two share a name.</exception>
+    /// <param name="dimensions">
+    /// The dimensions, at least one, no two under one name, in the order they are drawn: a dimension that is there only when a
+    /// word is chosen stands after the choice it hangs on.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// There is none, two share a name, or one hangs on no earlier dimension of words, or on a word that dimension does not offer.
+    /// </exception>
     public SearchSpace(IEnumerable<Dimension> dimensions)
     {
         ArgumentNullException.ThrowIfNull(dimensions);
@@ -221,6 +247,18 @@ public sealed class SearchSpace : IReadOnlyList<Dimension>
         if (twice is not null)
         {
             throw new ArgumentException($"Two dimensions are called '{twice.Key}': a candidate reads each by its name.", nameof(dimensions));
+        }
+
+        for (var at = 0; at < _dimensions.Length; at++)
+        {
+            if (_dimensions[at].OnlyWhen is { } chosen
+                && !_dimensions.Take(at).OfType<Choices>().Any(choice => choice.Name == chosen.Dimension && choice.Options.Contains(chosen.Word, StringComparer.Ordinal)))
+            {
+                throw new ArgumentException(
+                    $"'{_dimensions[at].Name}' is there only when '{chosen.Word}' is chosen for '{chosen.Dimension}', and no dimension of words before it offers that word: "
+                    + "a dimension hangs on a choice drawn before it.",
+                    nameof(dimensions));
+            }
         }
     }
 

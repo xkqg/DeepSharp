@@ -76,7 +76,7 @@ public class OnnxRefusalTests
 
     private const string LastConv = "/0/0.7/Conv";
 
-    private const string Operators = "an ONNX graph is read here when each of its nodes is a Gemm, MatMul, Add, Conv, ConvTranspose, Pad, MaxPool, AveragePool, GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape, Relu, Tanh, Sigmoid or Softmax, or an Identity, a Cast, a Transpose or a Constant that hands a value on.";
+    private const string Operators = "an ONNX graph is read here when each of its nodes is a Gemm, MatMul, Add, Conv, ConvTranspose, Pad, MaxPool, AveragePool, GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape, Relu, Tanh, Sigmoid, Gelu, LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization, RMSNormalization or Softmax, or an Identity, a Cast, a Transpose or a Constant that hands a value on.";
 
     private const string Pads = "and a window here pads every side alike, or as SAME_UPPER, TensorFlow's 'same'.";
 
@@ -99,8 +99,6 @@ public class OnnxRefusalTests
     private const string NoInput = "and a network here takes one, the batch of its examples.";
 
     private const string NotFlattened = "and a reshape is read here when it flattens each example into one row, as Flatten does.";
-
-    private const string SoftmaxLeft = "it is a softmax, which a network here leaves to its loss: it is read as the last of a graph whose cross-entropy applies it.";
 
     // What tf2onnx writes of a network with batch normalisations for batches of any length: each batch normalisation a Mul
     // by a number of its own for each channel or value — its shift folded into an Add, or into the next layer's bias — and the
@@ -157,13 +155,13 @@ public class OnnxRefusalTests
         // A branch, and what no network here is built of.
         ["a value taken again"] = new(Titanic, model => model.Node("/2/Gemm").Input[0] = "passengers", $"node '/2/Gemm' (Gemm): it takes 'passengers', {Stack}, '/1/Relu_output_0'."),
         ["no value taken"] = new(Titanic, model => model.Node("/1/Relu").Input[0] = "0.bias", $"node '/1/Relu' (Relu): it takes none of the values the graph works out, {Stack}, '/0/Gemm_output_0'."),
-        ["an operator not read"] = new(Titanic, model => model.Node("/1/Relu").OpType = "Elu", $"node '/1/Relu' (Elu): 'Elu' is no operator a network here is built of: {Operators}"),
+        ["an operator not read"] = new(Titanic, model => model.Node("/1/Relu").OpType = "HardSigmoid", $"node '/1/Relu' (HardSigmoid): 'HardSigmoid' is no operator a network here is built of: {Operators}"),
         ["an operator of another domain"] = new(Titanic, model => model.Node("/1/Relu").Domain = "com.microsoft", $"node '/1/Relu' (com.microsoft.Relu): 'com.microsoft.Relu' is no operator a network here is built of: {Operators}"),
         ["an unnamed node"] = new(Titanic, model =>
         {
-            model.Node("/1/Relu").OpType = "Elu";
+            model.Node("/1/Relu").OpType = "HardSigmoid";
             model.Graph.Node[1].Name = string.Empty;
-        }, $"node 1 (Elu): 'Elu' is no operator a network here is built of: {Operators}"),
+        }, $"node 1 (HardSigmoid): 'HardSigmoid' is no operator a network here is built of: {Operators}"),
 
         // A dense layer.
         ["a setting of another type"] = new(Titanic, model => model.Node("/0/Gemm").SetNumber("transB", 1), "node '/0/Gemm' (Gemm): its 'transB' is written as FLOAT, which is not what ONNX writes there."),
@@ -489,9 +487,7 @@ public class OnnxRefusalTests
         }, $"node 'shape' (Constant): it holds its value as 'value_ints', and a constant is read here when it holds a tensor, 'value'.{Environment.NewLine}node '/4/Flatten' (Reshape): it takes '/3/Conv_output_0' and 'target', 2 values the graph works out, {Stack}, '/3/Conv_output_0'."),
 
         // A softmax.
-        ["a softmax within"] = new(Titanic, model => model.Node("/1/Relu").OpType = "Softmax", $"node '/1/Relu' (Softmax): {SoftmaxLeft}"),
-        ["a softmax before a binary cross-entropy"] = new(Titanic, model => Softened(model, 1), $"node 'softmax' (Softmax): {SoftmaxLeft}"),
-        ["a softmax along another axis"] = new(Titanic, model => Softened(model, 0), "node 'softmax' (Softmax): it takes shares along axis 0, and a softmax is read here over the values of a row.") { Loss = () => new CrossEntropy() },
+        ["a softmax along another axis"] = new(Titanic, model => Softened(model, 0), "node 'softmax' (Softmax): it takes shares along axis 0, and a softmax here shares out the values of a row, or the channels of an image.") { Loss = () => new CrossEntropy() },
         ["a softmax over an image"] = new(Images, model =>
         {
             while (model.Graph.Node[^1].Name != "/0/Conv")
@@ -501,22 +497,20 @@ public class OnnxRefusalTests
 
             model.Graph.Node.Add(OnnxFixtures.NodeOf("Softmax", "softmax", ["/0/Conv_output_0"], "shares"));
             model.Graph.Output[0].Name = "shares";
-        }, "node 'softmax' (Softmax): it takes shares over an image, and a softmax is read here over the values of a row.") { Loss = () => new CrossEntropy() },
+        }, "node 'softmax' (Softmax): it takes shares along axis -1, and a softmax here shares out the values of a row, or the channels of an image.") { Loss = () => new CrossEntropy() },
     };
 
     public static TheoryData<string> Named => new(Cases.Keys);
 
     [Fact]
-    public void AStrideForEachAxis_ADilatedWindow_ChannelsInGroups_APaddingForEachAxis_AndAPoolingThatRoundsUp_AreRead_AndWhatIsNoLayerIsStillRefused()
+    public void AStrideForEachAxis_ADilatedWindow_ChannelsInGroups_APaddingForEachAxis_AndAPoolingThatRoundsUp_AreRead_AndTheLeakyRectifierToo()
     {
-        // Every one of these was refused at its node before this release, and every one of them is now a setting a window or
-        // a convolution here has. What is left in this graph is the one node that is no layer at all.
+        // Every one of these was refused at its node before 0.9.0, and every one of them is now a setting a window or a
+        // convolution here has. The one node left that was no layer then, a leaky rectifier, is one from 0.11.0.
         using var graph = OnnxFixtures.Open("onnx-refused.onnx");
-        var refused = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(graph));
+        var read = new OnnxFile(new BinaryCrossEntropy()).Read(graph);
 
-        Assert.Equal(
-            [$"node 'node_leaky_relu' (LeakyRelu): 'LeakyRelu' is no operator a network here is built of: {Operators}"],
-            refused.Message.Split(Environment.NewLine));
+        Assert.Contains(read.Network.HeldLayers(), held => held.Layer is LeakyRelu);
     }
 
     [Fact]
@@ -597,14 +591,14 @@ public class OnnxRefusalTests
         var refused = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(OnnxFixtures.Edited(Titanic, model =>
         {
             model.Graph.Input[0].Type.TensorType.ElemType = 11;
-            model.Node("/1/Relu").OpType = "Elu";
+            model.Node("/1/Relu").OpType = "HardSigmoid";
             model.Graph.Output.Add(new ValueInfoProto { Name = "extra" });
         })));
 
         Assert.Equal(
             [
                 "input 'passengers': it takes DOUBLE values, and a network here takes single-precision numbers, FLOAT.",
-                $"node '/1/Relu' (Elu): 'Elu' is no operator a network here is built of: {Operators}",
+                $"node '/1/Relu' (HardSigmoid): 'HardSigmoid' is no operator a network here is built of: {Operators}",
                 "graph 'main_graph': it gives 2 values, and a network here gives one.",
             ],
             refused.Message.Split(Environment.NewLine));

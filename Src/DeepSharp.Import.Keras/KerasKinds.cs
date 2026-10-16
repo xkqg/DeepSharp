@@ -28,6 +28,12 @@ internal readonly record struct KerasLayer(Action<Sequential>? Words, string Act
     public int[] Sizes { get; init; } = [];
 
     /// <summary>
+    /// The shape of an example the network takes in place of the model's input, for a first layer that takes another: an
+    /// embedding, whose category Keras is handed as its place and the network here as its ones and noughts. Nothing for any other.
+    /// </summary>
+    public Shape? Takes { get; init; }
+
+    /// <summary>
     /// The shape a number of this layer is handed to its slot in: a convolution's kernel, which Keras writes as one length
     /// for each side of its window, then the channels in and the channels out, as the window's places times the channels in
     /// by the channels out — the same numbers in the same order — when the lengths it begins with are the window's sides;
@@ -36,6 +42,12 @@ internal readonly record struct KerasLayer(Action<Sequential>? Words, string Act
     public Shape LaidOut(ulong[] lengths, KerasSlot slot)
     {
         var written = new Shape([.. lengths.Select(length => checked((int)length))]);
+
+        if (slot.Kept == KerasKeeping.Flat)
+        {
+            return new Shape(written.Count);
+        }
+
         var sides = slot.Sides.Length > 0 ? slot.Sides : Sizes;
 
         if (sides.Length == 0 || written.Rank != sides.Length + 2 || !written.Axes[..sides.Length].SequenceEqual(sides))
@@ -106,6 +118,12 @@ internal enum KerasKeeping
 
     /// <summary>A transposed kernel: the window's places by the channels out by the channels in, which a layer here keeps the other way about.</summary>
     GivenBack,
+
+    /// <summary>
+    /// A parametric rectifier's shares: one for each channel, Keras writing a length of one for every axis they are shared over,
+    /// which a layer here keeps as the channels alone, in the same order.
+    /// </summary>
+    Flat,
 }
 
 /// <summary>Where one of a Keras layer's numbers goes: the slot's name, how many layers on from this one it stands, and the window its lengths begin with.</summary>
@@ -161,7 +179,9 @@ internal abstract class KerasKind
         new SpatialDropoutKind("SpatialDropout1D", 1, rate => description => description.SpatialDropout1D(rate)),
         new SpatialDropoutKind("SpatialDropout2D", 2, rate => description => description.SpatialDropout2D(rate)),
         new SpatialDropoutKind("SpatialDropout3D", 3, rate => description => description.SpatialDropout3D(rate)),
+        new GroupNormalizationKind(), new RmsNormalizationKind(), new EmbeddingKind(),
         new FlattenKind(), new ReshapeKind(), new ActivationKind(), new ReluKind(),
+        new LeakyReluKind(), new PReluKind(), new EluKind(), new SoftmaxKind(),
     ];
 
     /// <summary>Every kind read, by the class name Keras writes it under.</summary>
@@ -453,7 +473,9 @@ internal sealed class LayerNormalizationKind : KerasKind
 
         if (layer.Setting("rms_scaling", false))
         {
-            layer.Refuse("it scales by the root mean square alone, which no normalisation here does.");
+            layer.Refuse(
+                "it scales by rms_scaling, which Keras works out from the variance of the values rather than the root of the mean of their squares, "
+                + "and deprecates: a normalisation by the root mean square is Keras's RMSNormalization, which is read.");
         }
 
         var epsilon = layer.Setting<double>("epsilon");

@@ -28,6 +28,8 @@ public class FittedVocabularyTests
         { "normalise.power", [], [], ["centre", "lambda", "spread"] },
         { "encode", [], [], ["categories"] },
         { "encode.categories", [], [], ["c"] },
+        { "encode.piecewise", [], [], ["edges"] },
+        { "history", [], [], ["keys", "order1", "prior", "values"] },
         { "fill.missing", ["gaps"], [], ["value"] },
         { "fill.missing.refused", ["gaps", "share"], ["filled"], [] },
         { "fill.nan", ["notNumbers"], [], [] },
@@ -96,7 +98,7 @@ public class FittedVocabularyTests
 
         var exercised = new[]
             {
-                "normalise", "normalise.power", "encode", "encode.categories", "fill.missing", "fill.missing.refused",
+                "normalise", "normalise.power", "encode", "encode.categories", "encode.piecewise", "history", "fill.missing", "fill.missing.refused",
                 "fill.nan", "fill.nan.mean", "clip",
             }
             .Select(fit => ((IPipelineStep)Of(fit).Step).Verb)
@@ -219,6 +221,8 @@ public class FittedVocabularyTests
         "normalise.power" => (new NormaliseStep("a", Scale.Power), Numbers(1, 2, 3, 4, 10)),
         "encode" => (new EncodeStep("c"), Words("x", "y", "x")),
         "encode.categories" => (new EncodeCategoriesStep(), Words("x", "y", "x")),
+        "encode.piecewise" => (new PiecewiseLinearStep("a", 2), Numbers(1, 2, 3, 4, 10)),
+        "history" => (new HistoryStep("a", "a", ["a"], 2), Numbers(1, 2, 3, 4, 10)),
         "fill.missing" => (FillMissingStep.Of("a", With.Median), Numbers(1, 2, null, 4, 10)),
         "fill.missing.refused" => (FillMissingStep.Of("a", With.Median, 0.10), Numbers(1, 2, null, 4, 10)),
         "fill.nan" => (new FillNaNStep("a"), Numbers(1, 2, 3, 4, 10)),

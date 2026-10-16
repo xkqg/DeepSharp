@@ -29,6 +29,14 @@ internal sealed class KerasModel
         ["relu"] = description => description.Relu(),
         ["tanh"] = description => description.Tanh(),
         ["sigmoid"] = description => description.Sigmoid(),
+        ["gelu"] = description => description.Gelu(),
+        ["silu"] = description => description.Silu(),
+        ["swish"] = description => description.Silu(),
+        ["mish"] = description => description.Mish(),
+        ["leaky_relu"] = description => description.LeakyRelu(0.2),
+        ["elu"] = description => description.Elu(),
+        ["selu"] = description => description.Selu(),
+        ["softmax"] = description => description.Softmax(),
     };
 
     private readonly List<string> _faults = [];
@@ -61,6 +69,7 @@ internal sealed class KerasModel
         var input = InputOf(described, config);
         var built = described.Select(Read).ToList();
 
+        input = Taken(built, input);
         Write(built, Lifted(built, loss));
 
         if (_faults.Count > 0)
@@ -193,6 +202,35 @@ internal sealed class KerasModel
         return new Shape([.. each.Select(length => length!.Value)]);
     }
 
+    // The shape of an example as the network takes it: the model's input, unless its first layer takes another in its place —
+    // an embedding takes its category's ones and noughts where Keras takes one place. A layer that does is read first, over one
+    // place per example, or refused.
+    private static Shape? Taken(List<Built> built, Shape? input)
+    {
+        for (var at = 0; at < built.Count; at++)
+        {
+            if (built[at].Layer.Takes is not { } taken)
+            {
+                continue;
+            }
+
+            if (at > 0)
+            {
+                built[at].Described.Settings.Refuse("it looks a category up by its place, which only the model's input holds: an embedding is read as the first layer, over one category's place per example.");
+            }
+            else if (input is { } given && given != new Shape(1))
+            {
+                built[at].Described.Settings.Refuse($"it is handed examples of {given}, and an embedding is read over one category's place per example, which the network here takes as the category's ones and noughts.");
+            }
+            else
+            {
+                input = taken;
+            }
+        }
+
+        return input;
+    }
+
     // A layer read by its kind, and whether reading it found a fault; a kind not read here is its fault.
     private Built Read(Described layer)
     {
@@ -272,7 +310,7 @@ internal sealed class KerasModel
             if (!Activations.TryGetValue(layer.Activation, out var activation))
             {
                 described.Settings.Refuse(
-                    $"its activation, {layer.Activation.Quoted()}, is none of those read here: linear, relu, tanh and sigmoid, and softmax as the last of a model a categorical cross-entropy trained.");
+                    $"its activation, {layer.Activation.Quoted()}, is none of those read here: linear, relu, tanh, sigmoid, gelu, silu, swish, mish, leaky_relu, elu, selu and softmax.");
             }
             else if (activation is not null)
             {

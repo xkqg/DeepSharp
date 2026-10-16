@@ -60,6 +60,10 @@ internal class NotingBackend(ITensorBackend engine) : ITensorBackend
 
     public Tensor Softplus(Tensor values) => Noted(nameof(Softplus), engine.Softplus(values));
 
+    public Tensor Sin(Tensor values) => Noted(nameof(Sin), engine.Sin(values));
+
+    public Tensor Erf(Tensor values) => Noted(nameof(Erf), engine.Erf(values));
+
     public Tensor Divide(Tensor left, Tensor right) => Noted(nameof(Divide), engine.Divide(left, right));
 
     public Tensor LogSoftmax(Tensor matrix) => Noted(nameof(LogSoftmax), engine.LogSoftmax(matrix));

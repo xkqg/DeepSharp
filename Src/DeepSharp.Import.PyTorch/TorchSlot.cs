@@ -82,6 +82,24 @@ internal sealed class VectorSlot(string path, int length, ChannelOrder? order) :
 }
 
 /// <summary>
+/// An embedding's vectors: a row for each category, in the order of its places, by the numbers of a vector — PyTorch's
+/// <c>Embedding.weight</c> as it is kept, since the row a place looks up is the row the category's one picks here.
+/// </summary>
+/// <param name="path">The slot's path.</param>
+/// <param name="embedding">The layer.</param>
+internal sealed class VectorsSlot(string path, Embedding embedding) : TurnedSlot(path)
+{
+    /// <inheritdoc />
+    protected override Shape Kept => embedding.Weight.Value.Shape;
+
+    /// <inheritdoc />
+    protected override Shape Slot => embedding.Weight.Value.Shape;
+
+    /// <inheritdoc />
+    protected override float[] Turned(float[] kept) => kept;
+}
+
+/// <summary>
 /// A linear layer's weights: PyTorch keeps them outputs by inputs, and here they are inputs by outputs — each input, when a
 /// flatten made the inputs of a series, an image or a volume, found where PyTorch's channel by channel order puts it.
 /// </summary>

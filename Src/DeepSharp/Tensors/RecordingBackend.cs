@@ -101,6 +101,12 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend
     public Tensor Softplus(Tensor values) => Kept(new SoftplusOf(values, _inner.Softplus(values)));
 
     /// <inheritdoc />
+    public Tensor Sin(Tensor values) => Kept(new SineOf(values, _inner.Sin(values)));
+
+    /// <inheritdoc />
+    public Tensor Erf(Tensor values) => Kept(new ErrorFunctionOf(values, _inner.Erf(values)));
+
+    /// <inheritdoc />
     public Tensor Divide(Tensor left, Tensor right) => Kept(new Divided(left, right, _inner.Divide(left, right)));
 
     /// <inheritdoc />
@@ -342,6 +348,22 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend
     {
         public override Tensor Back(ITensorBackend backend, Tensor gradient, int input) =>
             backend.Multiply(gradient, backend.Sigmoid(Values));
+    }
+
+    // The sine's slope is its cosine, which is the sine a quarter of a turn on.
+    private sealed record SineOf(Tensor Values, Tensor Output) : Recorded(Output, [Values])
+    {
+        public override Tensor Back(ITensorBackend backend, Tensor gradient, int input) =>
+            backend.Multiply(gradient, backend.Sin(backend.Add(Values, backend.Fill(Values.Shape, (float)(Math.PI / 2)))));
+    }
+
+    // The error function's slope is two over the root of π times the exponential of minus the square.
+    private sealed record ErrorFunctionOf(Tensor Values, Tensor Output) : Recorded(Output, [Values])
+    {
+        public override Tensor Back(ITensorBackend backend, Tensor gradient, int input) =>
+            backend.Multiply(
+                gradient,
+                backend.Scale(backend.Exp(backend.Scale(backend.Multiply(Values, Values), backend.Fill(new Shape(), -1f))), backend.Fill(new Shape(), (float)(2 / Math.Sqrt(Math.PI)))));
     }
 
     private sealed record Divided(Tensor Left, Tensor Right, Tensor Output) : Recorded(Output, [Left, Right])

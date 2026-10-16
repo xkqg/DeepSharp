@@ -136,6 +136,37 @@ internal sealed class Course
         return handed;
     }
 
+    /// <summary>
+    /// The columns a column of words was written down as, one for each category: each category the training rows held, in the
+    /// order the encoder learned them, the one kept for a category they never held where it is kept, and the one that marks a gap.
+    /// </summary>
+    /// <param name="column">The column of words.</param>
+    /// <param name="fitted">What the run's steps learned, by place.</param>
+    /// <returns>The names of the columns, or nothing when no step the run took wrote that column down one column per category.</returns>
+    /// <remarks>
+    /// The encoder's own naming, so whoever reads the block reads it by the rule that wrote it: each of a row's columns holds a
+    /// one where its category is the row's and a nought elsewhere, and exactly one of them holds a one.
+    /// </remarks>
+    internal IReadOnlyList<string>? CategoryBlock(string column, IReadOnlyDictionary<int, FittedStepValues> fitted)
+    {
+        var encoder = Enumerable.Range(0, Steps.Count)
+            .Where(at => Steps[at] is IEncodesCategories && !Skipped.Contains(at) && fitted.ContainsKey(at))
+            .Select(at => (Step: (IEncodesCategories)Steps[at], Categories: ((IEncodesCategories)Steps[at]).CategoriesIn(fitted[at])))
+            .LastOrDefault(each => each.Categories.ContainsKey(column));
+
+        if (encoder.Step is not { How: As.OneHot } step)
+        {
+            return null;
+        }
+
+        return
+        [
+            .. encoder.Categories[column].Select(category => $"{column}_{category}"),
+            .. step.Unseen == Unseen.Reserve ? [$"{column}_{EncodeStep.Reserved}"] : Array.Empty<string>(),
+            column.Marked,
+        ];
+    }
+
     // The steps a learner with this need does without, among those a run may leave out.
     private static int[] LeftOut(PipelineDeclaration declaration, int[] candidates, Needs needs) =>
         [.. candidates.Where(at => !((IMeetsANeed)declaration.Steps[at]).NeededBy(needs))];

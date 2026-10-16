@@ -503,12 +503,12 @@ The NuGet package System.Security.Cryptography.ProtectedData, its System.Securit
 Copyright (c) .NET Foundation and Contributors. MIT License.
 
 
-Verso 1.2.2
+Verso 1.2.3
 The NuGet package Verso, its Verso.dll (github.com/DataficationSDK/Verso): the notebook engine the server runs on.
 Copyright (c) 2026 Datafication. MIT License.
 
 
-Verso.Abstractions 1.2.2
+Verso.Abstractions 1.2.3
 The NuGet package Verso.Abstractions, its Verso.Abstractions.dll (github.com/DataficationSDK/Verso).
 Copyright (c) 2026 Datafication. MIT License.
 

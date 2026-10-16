@@ -127,7 +127,7 @@ public class PipelineInPlaceTests
     [Fact]
     public void APipelineOfANewerVersion_IsRefusedWhole_AtItsVersion()
     {
-        var fault = Assert.Single(Refused(Around("""{"version": 10, "declaration": [{"step": "anything"}]}""", 2)).Faults);
+        var fault = Assert.Single(Refused(Around("""{"version": 11, "declaration": [{"step": "anything"}]}""", 2)).Faults);
 
         Assert.Equal((7, 16), (fault.Line, fault.Column));
         Assert.Contains("version 10", fault.Message, StringComparison.Ordinal);

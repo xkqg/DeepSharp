@@ -223,6 +223,39 @@ public sealed class EvidenceDrawingTests : IDisposable
         Assert.DoesNotContain("<svg", shown, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void HowAlikeThePartsAre_IsATableOfEveryColumnAgainstEveryTwoParts_TheFlaggedOnesStrong_WithTheRowsBehindEach()
+    {
+        const string Rows = "t,x,y\n1,1,0\n2,2,1\n3,3,0\n4,4,1\n5,5,0\n6,6,1\n7,4,0\n8,5,1\n9,6,0\n10,10,1\n11,11,0\n12,12,1\n";
+        var view = new Pipeline(
+                Pdd.Create().Read(CsvRowSource.FromText(Rows), "rows")
+                    .Declare(schema => schema.Integer("t").Number("x", "y"))
+                    .SplitByTime("t", 0.5, 0.25)
+                    .Target("y")
+                    .Likeness(0.4, "x")
+                    .Declaration,
+                CsvRowSource.FromText(Rows))
+            .ViewAt(5);
+
+        var shown = view.Evidence[4].Accept(new EvidenceView()).Content;
+
+        Assert.Contains("flagged above 0.4", shown, StringComparison.Ordinal);
+        Assert.Contains("<th>train – validation</th>", shown, StringComparison.Ordinal);
+        Assert.Contains("<strong>0.5</strong> (6, 3)", shown, StringComparison.Ordinal);
+        Assert.Contains("<td>x</td>", shown, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void HowAlikeThePartsAre_WhereNothingDividesTheRows_SaysThereIsNothingToCompare()
+    {
+        var declared = Pdd.Create().Read(CsvRowSource.FromText("x\n1\n2\n"), "rows").Declare(schema => schema.Number("x")).Declaration;
+        var view = new Pipeline(new PipelineDeclaration([.. declared.Steps, new LikenessStep(0.2)]), CsvRowSource.FromText("x\n1\n2\n"))
+            .ViewAt(3);
+
+        Assert.Contains("nothing to compare", view.Evidence[2].Accept(new EvidenceView()).Content, StringComparison.Ordinal);
+        Assert.Throws<ArgumentNullException>(() => new EvidenceView().Visit((PartLikeness)null!));
+    }
+
     // Validation and test predicted by a guess from the class alone; the report as a pipeline declares it.
     private static Measures Guessed(Shown shown, Shown? also = null, Metric? only = null)
     {

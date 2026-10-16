@@ -18,16 +18,28 @@ internal readonly record struct KerasLoss(Loss Loss, bool FromLogits)
 {
     private const string Kept = "sum_over_batch_size";
 
-    // The losses read here, by every name Keras writes each under: its own, the short one, and its class's.
-    private static readonly Dictionary<string, Func<Loss>> Named = new(StringComparer.Ordinal)
+    // The losses read here, by every name Keras writes each under: its own, the short one, and its class's — each made from the
+    // settings Keras writes beside it.
+    private static readonly Dictionary<string, Func<KerasSettings, Loss>> Named = new(StringComparer.Ordinal)
     {
-        ["binary_crossentropy"] = () => new BinaryCrossEntropy(),
-        ["BinaryCrossentropy"] = () => new BinaryCrossEntropy(),
-        ["categorical_crossentropy"] = () => new CrossEntropy(),
-        ["CategoricalCrossentropy"] = () => new CrossEntropy(),
-        ["mean_squared_error"] = () => new MeanSquaredError(),
-        ["mse"] = () => new MeanSquaredError(),
-        ["MeanSquaredError"] = () => new MeanSquaredError(),
+        ["binary_crossentropy"] = Binary,
+        ["BinaryCrossentropy"] = Binary,
+        ["categorical_crossentropy"] = Categorical,
+        ["CategoricalCrossentropy"] = Categorical,
+        ["mean_squared_error"] = _ => new MeanSquaredError(),
+        ["mse"] = _ => new MeanSquaredError(),
+        ["MeanSquaredError"] = _ => new MeanSquaredError(),
+        ["mean_absolute_error"] = _ => new MeanAbsoluteError(),
+        ["mae"] = _ => new MeanAbsoluteError(),
+        ["MeanAbsoluteError"] = _ => new MeanAbsoluteError(),
+        ["huber"] = Bent,
+        ["Huber"] = Bent,
+        ["poisson"] = Counted,
+        ["Poisson"] = Counted,
+        ["hinge"] = _ => new Hinge(),
+        ["Hinge"] = _ => new Hinge(),
+        ["binary_focal_crossentropy"] = Focused,
+        ["BinaryFocalCrossentropy"] = Focused,
     };
 
     /// <summary>
@@ -54,25 +66,59 @@ internal readonly record struct KerasLoss(Loss Loss, bool FromLogits)
 
         if (!Named.TryGetValue(name, out var made))
         {
-            faults.Add($"{where}: the loss is {name.Quoted()}, and a Keras model is read here when it was trained with a binary or a categorical cross-entropy or a mean squared error.");
+            faults.Add(
+                $"{where}: the loss is {name.Quoted()}, and a Keras model is read here when it was trained with a binary, a binary focal or a categorical cross-entropy, "
+                + "a mean squared or a mean absolute error, a Huber, a Poisson or a hinge loss.");
 
             return null;
         }
 
         var settings = new KerasSettings(said.Setting("config", default(JsonElement)), where, faults);
-        var smoothing = settings.Setting("label_smoothing", 0.0);
         var reduction = settings.Setting("reduction", Kept);
-
-        if (smoothing != 0)
-        {
-            settings.Refuse(string.Create(CultureInfo.InvariantCulture, $"the loss smooths its labels by {smoothing}, and no loss here smooths them."));
-        }
 
         if (reduction != Kept)
         {
             settings.Refuse($"the loss reduces a batch's losses by '{reduction.Quoted()}', and a loss here takes their mean.");
         }
 
-        return new KerasLoss(made(), settings.Setting("from_logits", false));
+        return new KerasLoss(made(settings), settings.Setting("from_logits", false));
+    }
+
+    // A binary cross-entropy, its labels moved towards a half as Keras's label_smoothing moves them.
+    private static Loss Binary(KerasSettings settings) => new BinaryCrossEntropy { Smoothing = Smoothing(settings) };
+
+    // A categorical cross-entropy, its labels spread over the classes as Keras's label_smoothing spreads them.
+    private static Loss Categorical(KerasSettings settings) => new CrossEntropy { Smoothing = Smoothing(settings) };
+
+    // Keras's Huber loss, bending at its delta.
+    private static Loss Bent(KerasSettings settings) => new Huber(settings.Setting("delta", 1.0));
+
+    // Keras's Poisson loss: on the rates themselves, a ten-millionth added before the logarithm is taken, as Keras adds it.
+    private static Loss Counted(KerasSettings settings) => new Poisson(logInput: false) { Epsilon = 1e-7 };
+
+    // Keras's binary focal cross-entropy: its gamma, and its alpha only where it balances the classes; it softens no labels here.
+    private static Loss Focused(KerasSettings settings)
+    {
+        if (settings.Setting("label_smoothing", 0.0) is var smoothing and not 0)
+        {
+            settings.Refuse(string.Create(CultureInfo.InvariantCulture, $"the focal loss smooths its labels by {smoothing}, and a focal loss here is of labels of nought or one, as torchvision's is."));
+        }
+
+        return new Focal(settings.Setting("gamma", 2.0)) { Alpha = settings.Setting("apply_class_balancing", false) ? settings.Setting("alpha", 0.25) : null };
+    }
+
+    // The share Keras's label_smoothing softens the labels by: refused, and none taken, where it is no share below one.
+    private static double Smoothing(KerasSettings settings)
+    {
+        var smoothing = settings.Setting("label_smoothing", 0.0);
+
+        if (smoothing is >= 0 and < 1)
+        {
+            return smoothing;
+        }
+
+        settings.Refuse(string.Create(CultureInfo.InvariantCulture, $"the loss smooths its labels by {smoothing}, and labels are softened by a share of nothing or more, below one."));
+
+        return 0;
     }
 }

@@ -71,7 +71,7 @@ public class PipelineFileTests
         using var declaration = JsonDocument.Parse(trained.Declaration.ToJson());
         using var whole = JsonDocument.Parse(trained.ToJson());
 
-        Assert.Equal(9, PipelineDeclaration.Version);
+        Assert.Equal(10, PipelineDeclaration.Version);
         Assert.Equal(["version", "declaration"], declaration.RootElement.EnumerateObject().Select(property => property.Name));
         Assert.Equal(["version", "declaration", "fitted"], whole.RootElement.EnumerateObject().Select(property => property.Name));
         Assert.Equal(PipelineDeclaration.Version, declaration.RootElement.GetProperty("version").GetInt32());
@@ -98,7 +98,7 @@ public class PipelineFileTests
         // A newer file may use words this version never had, so none of it is read: the one thing said is
         // that it is newer, rather than a list of faults that are only faults to an older reader.
         const string json = """
-            {"version": 10,
+            {"version": 11,
              "declaration": [{"step": "read.nowhere"}],
              "colour": "red"}
             """;
@@ -108,7 +108,7 @@ public class PipelineFileTests
 
         Assert.Equal(Where(json, "\"version\""), At(fault));
         Assert.Contains("version 10", fault.Message, StringComparison.Ordinal);
-        Assert.Contains("version 9", fault.Message, StringComparison.Ordinal);
+        Assert.Contains("version 10", fault.Message, StringComparison.Ordinal);
         Assert.Contains("newer", fault.Message, StringComparison.Ordinal);
     }
 

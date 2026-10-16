@@ -123,30 +123,40 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
 
         var stopping = EarlyStoppingOf(earlyStopping);
         var clip = ClipOf(clipNorm);
-        var clipValue = RunOption<double>(ClipValueKey, "the bound each value of the run's gradients was clipped to", "a number above nothing", value => value.AsNumber() is { } bound && bound > 0 ? bound : null);
-        var stepEvery = RunOption<int>(StepEveryKey, "how many batches went into each step", "a whole number from two", value => value.AsWhole() is { } whole && whole >= 2 ? whole : null);
-        var average = RunOption<double>(AverageKey, "the share an average of the run's weights kept of itself", "a number above nothing and below one", value => value.AsNumber() is { } share && share > 0 && share < 1 ? share : null);
+        var clipValue = OptionOf<double>(
+            new RunOption(ClipValueKey, "the bound each value of the run's gradients was clipped to", "a number above nothing"),
+            value => value.AsNumber() is { } bound && bound > 0 ? bound : null);
+        var stepEvery = OptionOf<int>(
+            new RunOption(StepEveryKey, "how many batches went into each step", "a whole number from two"),
+            value => value.AsWhole() is { } whole && whole >= 2 ? whole : null);
+        var average = OptionOf<double>(
+            new RunOption(AverageKey, "the share an average of the run's weights kept of itself", "a number above nothing and below one"),
+            value => value.AsNumber() is { } share && share > 0 && share < 1 ? share : null);
+        var judged = OptionOf<bool>(
+            new RunOption(JudgedByAverageKey, "that the run's epochs were judged by the average of its weights", "true") { From = SixthVersion },
+            value => value.ValueKind == JsonValueKind.True ? true : null);
 
         return rows is { } size
-            ? new Pace(size, stopping) { Clip = clip, ClipValue = clipValue, StepEvery = stepEvery ?? 1, Average = average }
+            ? new Pace(size, stopping) { Clip = clip, ClipValue = clipValue, StepEvery = stepEvery ?? 1, Average = average, JudgedByAverage = judged ?? false }
             : null;
     }
 
-    // What a run did beside the pace the earlier versions could say: written from the fifth version on, where it is anything but
-    // the default, and refused in an earlier one, which cannot say it, and where it is written as anything but what it is.
-    private TNumber? RunOption<TNumber>(string key, string says, string shape, Func<JsonElement, TNumber?> read)
-        where TNumber : struct
+    // What a run did beside the pace the earlier versions could say: written from the version that first says it on, where it is
+    // anything but the default, and refused in an earlier one, which cannot say it, and where it is written as anything but what
+    // it is.
+    private TValue? OptionOf<TValue>(RunOption option, Func<JsonElement, TValue?> read)
+        where TValue : struct
     {
-        if (part.Member(key) is not { } written)
+        if (part.Member(option.Key) is not { } written)
         {
             return null;
         }
 
-        string[] at = [.. _here, key];
+        string[] at = [.. _here, option.Key];
 
-        if (version < FifthVersion)
+        if (version < option.From)
         {
-            text.Fault(at, $"{Capitalised(says)}, under '{key}', is written from the fifth version of a training part on, and this one is of the {Ordinal(version)}.");
+            text.Fault(at, $"{Capitalised(option.Says)}, under '{option.Key}', is written from the {Ordinal(option.From)} version of a training part on, and this one is of the {Ordinal(version)}.");
 
             return null;
         }
@@ -156,14 +166,32 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
             return value;
         }
 
-        text.Fault(at, $"{Capitalised(says)} is written under '{key}', as {shape}.");
+        text.Fault(at, $"{Capitalised(option.Says)} is written under '{option.Key}', as {option.Shape}.");
 
         return null;
     }
 
+    /// <summary>An option of a run a training part may say: its key, what it says and how it is written, and the version that first says it.</summary>
+    /// <param name="Key">The key it stands under.</param>
+    /// <param name="Says">What it says, as a refusal names it.</param>
+    /// <param name="Shape">How it is written, as a refusal names it.</param>
+    private readonly record struct RunOption(string Key, string Says, string Shape)
+    {
+        /// <summary>The version of a training part that first says it; the fifth, unless said.</summary>
+        public int From { get; init; } = FifthVersion;
+    }
+
     private static string Capitalised(string words) => char.ToUpperInvariant(words[0]) + words[1..];
 
-    private static string Ordinal(int version) => version switch { FirstVersion => "first", SecondVersion => "second", ThirdVersion => "third", _ => "fourth" };
+    private static string Ordinal(int version) => version switch
+    {
+        FirstVersion => "first",
+        SecondVersion => "second",
+        ThirdVersion => "third",
+        FourthVersion => "fourth",
+        FifthVersion => "fifth",
+        _ => "sixth",
+    };
 
     /// <summary>
     /// What the run averaged of its weights, by path: written exactly where the pace says it kept an average, and each of the

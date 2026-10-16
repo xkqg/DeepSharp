@@ -19,9 +19,9 @@ namespace DeepSharp.Charts;
 /// a row, each measure beside predicting the training rows' average — and beside its rows, when the predictions said it, how
 /// many of them the model learned nothing about — then each confusion matrix, a class held to a row and a class predicted to
 /// a column, with the average's count in brackets. Drawn: every measure as bars beside the average, each confusion matrix as
-/// a heatmap of counts, and — where an amount is measured — what was predicted against what was there, and what was left
-/// over, each the chart <see cref="MeasureCharts"/> draws. A divergence without end is written as ∞ and drawn as no bar. Every
-/// number is written in the invariant culture, every name a
+/// a heatmap of counts, where an amount is measured what was predicted against what was there and what was left over, and
+/// where the Brier score is, the reliability curve of the chances — each the chart <see cref="MeasureCharts"/> draws. A
+/// divergence without end is written as ∞ and drawn as no bar. Every number is written in the invariant culture, every name a
 /// pipeline gives is written as text, and the HTML carries its own look, so it stands on its own wherever it lands.
 /// </remarks>
 public sealed class MeasuresReport
@@ -129,6 +129,11 @@ public sealed class MeasuresReport
         if (measures.Metrics.Any(metric => metric.Family() == MetricFamily.Amounts))
         {
             html.Append(measures.PredictedAgainstActual()).Append(measures.Residuals());
+        }
+
+        if (measures.Metrics.Contains(Metric.Brier))
+        {
+            html.Append(measures.Reliability());
         }
     }
 

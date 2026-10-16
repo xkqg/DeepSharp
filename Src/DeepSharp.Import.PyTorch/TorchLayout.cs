@@ -176,6 +176,28 @@ internal sealed class TorchLayout
 
                     break;
 
+                case PRelu prelu:
+                    // One share for every value, or one for each channel — a feature, where a flatten made the rows, ordered as PyTorch orders it.
+                    var shares = prelu.Count > 1 ? flattened?.OrderFor(path, prelu.Count) : null;
+
+                    foreach (var named in slots)
+                    {
+                        Lay(untold is null || prelu.Count == 1 ? new VectorSlot(named.Path, prelu.Count, shares) : new UntoldSlot(named.Path, untold));
+                    }
+
+                    break;
+
+                case Embedding embedding:
+                    foreach (var named in slots)
+                    {
+                        Lay(new VectorsSlot(named.Path, embedding));
+                    }
+
+                    producers = [.. slots.Select(named => named.Path)];
+                    (flattened, untold) = (null, null);
+                    afterASeries = false;
+                    break;
+
                 case var _ when placed.Flattens:
                     _statable.Add(path);
                     flattened = handed.TryGetValue(path, out var shape) && shape.IsHandableAfter(afterASeries) ? new Flattening(path, shape) : null;
@@ -286,6 +308,26 @@ internal sealed class TorchLayout
                         Lay(ReferenceEquals(named.Slot, convolution.Weight)
                             ? Kernel(named.Path, convolution)
                             : new VectorSlot(named.Path, convolution.OutChannels, null));
+                    }
+
+                    break;
+
+                case PRelu prelu:
+                    // A share for each channel is the same vector channels first or last; for each feature of rows a flatten made of
+                    // images, PyTorch's order is that of the channels, and the code keeps to itself whether such rows reach it.
+                    foreach (var named in own)
+                    {
+                        Lay(prelu.Count == 1 || !hidesImages
+                            ? new VectorSlot(named.Path, prelu.Count, null)
+                            : new UntoldSlot(named.Path, $"is held by a network written as code, whose forward pass keeps to itself whether the parametric rectifier at {at} takes a share for each channel of an image or for each feature of rows a flatten made of one, which PyTorch orders channel by channel."));
+                    }
+
+                    break;
+
+                case Embedding embedding:
+                    foreach (var named in own)
+                    {
+                        Lay(new VectorsSlot(named.Path, embedding));
                     }
 
                     break;

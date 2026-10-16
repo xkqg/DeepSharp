@@ -128,11 +128,12 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// of free numbers and a column that names the row did — so that library names the newer version instead of the word
     /// it does not know. The ninth is that rule applied to the words a declared network is written in: a layer, an
     /// optimizer, a schedule or the run can gain a setting a file may leave out, and a file that names one is refused by its
-    /// number by a library that has not heard of it.
+    /// number by a library that has not heard of it. The tenth is the same rule again, for the verbs and the words the
+    /// release after 0.10.0 adds — among them a run whose epochs are judged by the average of its weights.
     /// A property rather than a constant, so a package compiled against this version reads the number the running
     /// library has.
     /// </remarks>
-    public static int Version => 9;
+    public static int Version => 10;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;

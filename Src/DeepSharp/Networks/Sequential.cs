@@ -307,8 +307,9 @@ public sealed partial class Sequential
     /// <para>
     /// Keras's habit is to end a network in the activation its loss is trained with — <c>Dense(1, activation='sigmoid')</c>
     /// before a binary cross-entropy, which there takes what the network gives. A loss here takes the logits and applies that
-    /// activation itself, so a last <see cref="Sigmoid()"/> before <see cref="BinaryCrossEntropy"/> is lifted into the loss:
-    /// the network ends before it, and every prediction goes through one sigmoid. Before any other loss it stays.
+    /// activation itself, so a last <see cref="Sigmoid()"/> before <see cref="BinaryCrossEntropy"/>, or a last <see cref="Softmax()"/>
+    /// before <see cref="CrossEntropy"/>, is lifted into the loss: the network ends before it, and every prediction goes through
+    /// the loss's activation once. Before any other loss it stays.
     /// </para>
     /// </remarks>
     public CompiledNetwork Compile(Optimizer optimizer, Loss loss, LearningRateSchedule? schedule = null)
@@ -390,6 +391,7 @@ public sealed partial class Sequential
     private Sequential Lifted(Loss loss)
     {
         var lifted = new Sequential(this);
+        var applied = loss.Activation.ToString().ToLowerInvariant();
 
         if (lifted._words[^1].IsAppliedBy(loss))
         {
@@ -399,7 +401,7 @@ public sealed partial class Sequential
         return lifted._words.Count > 0
             ? lifted
             : throw new InvalidOperationException(
-                "This network holds nothing but the sigmoid its loss applies itself: write in the layers before it, and the loss takes its outputs as the logits it applies the sigmoid to.");
+                $"This network holds nothing but the {applied} its loss applies itself: write in the layers before it, and the loss takes its outputs as the logits it applies the {applied} to.");
     }
 
     /// <summary>One word of a description: what it cannot take, what it hands on, and the layer it becomes for what it can take.</summary>

@@ -204,6 +204,12 @@ public sealed class TorchBackend : INamesItsVersionAndDevice
     public Tensor Softplus(Tensor values) => Each(values, static held => held.softplus());
 
     /// <inheritdoc />
+    public Tensor Sin(Tensor values) => Each(values, static held => held.sin());
+
+    /// <inheritdoc />
+    public Tensor Erf(Tensor values) => Each(values, static held => held.erf());
+
+    /// <inheritdoc />
     public Tensor LogSoftmax(Tensor matrix)
     {
         matrix.RequireMatrix(nameof(LogSoftmax));

@@ -18,6 +18,15 @@ public enum OutputActivation
 
     /// <summary>The logistic curve: an output is the logit of a one.</summary>
     Sigmoid,
+
+    /// <summary>The exponential: an output is the logarithm of a count's rate, as a Poisson loss on logarithms takes it.</summary>
+    Exp,
+
+    /// <summary>
+    /// Which side of nought it falls: an output above nought is a one and any other a nought, as a hinge loss reads its margin —
+    /// a class, never a chance.
+    /// </summary>
+    Margin,
 }
 
 /// <summary>
@@ -41,7 +50,13 @@ public abstract class Loss
     /// Whether a layer is the output activation this loss applies to a network's outputs itself — a sigmoid, for a loss whose
     /// outputs are the logits of a one — so that a network compiled with it ends before one.
     /// </summary>
-    internal bool Applies(Layer layer) => layer is Sigmoid && Activation == OutputActivation.Sigmoid;
+    /// <param name="layer">The layer.</param>
+    /// <returns>
+    /// Whether it is a <see cref="Sigmoid"/> before a loss whose outputs are logits of a one, or a <see cref="Softmax"/> before one
+    /// whose outputs are a row's logits.
+    /// </returns>
+    public bool Applies(Layer layer) =>
+        (layer is Sigmoid && Activation == OutputActivation.Sigmoid) || (layer is Softmax && Activation == OutputActivation.Softmax);
 
     /// <summary>The loss of a batch.</summary>
     /// <param name="outputs">The network's raw outputs: a row for each example.</param>
@@ -77,6 +92,8 @@ public abstract class Loss
         {
             OutputActivation.Softmax => backend.Exp(backend.LogSoftmax(outputs)),
             OutputActivation.Sigmoid => backend.Sigmoid(outputs),
+            OutputActivation.Exp => backend.Exp(outputs),
+            OutputActivation.Margin => backend.Positive(outputs),
             _ => outputs,
         };
     }
@@ -142,25 +159,53 @@ public sealed class MeanSquaredError : Loss, ISaved<MeanSquaredError>
 /// </remarks>
 public sealed class CrossEntropy : Loss, ISaved<CrossEntropy>
 {
+    private readonly double _smoothing;
+
+    /// <summary>
+    /// How much of each row's answers is spread evenly over its classes before it is compared: PyTorch's <c>label_smoothing</c> —
+    /// a row of one class keeps one less this share on that class, and every class gets this share over how many there are.
+    /// Nothing, unless said.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a share of nothing or more and below one.</exception>
+    /// <remarks>Written into the network's file only when there is some, which raises the part to the sixth version.</remarks>
+    public double Smoothing
+    {
+        get => _smoothing;
+        init => _smoothing = value.RequireSmoothing(nameof(value));
+    }
+
     /// <inheritdoc />
     public static string Name => "crossEntropy";
 
     /// <inheritdoc />
-    public static CrossEntropy Rebuild(JsonElement settings, Rebuilding rebuilding) => new();
+    public static CrossEntropy Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        return new() { Smoothing = rebuilding.Number(settings, SmoothingExtensions.Key, 0) };
+    }
 
     /// <inheritdoc />
-    /// <remarks>Nothing: it has no settings.</remarks>
-    public void WriteSettings(Utf8JsonWriter writer)
-    {
-    }
+    /// <remarks>How much each row's answers are spread, only where they are.</remarks>
+    public void WriteSettings(Utf8JsonWriter writer) => writer.WriteSmoothing(Smoothing);
+
+    /// <inheritdoc />
+    public int FileVersion => Smoothing.VersionOfSmoothing();
 
     /// <inheritdoc />
     public override OutputActivation Activation => OutputActivation.Softmax;
 
     /// <inheritdoc />
     /// <exception cref="ArgumentException">The outputs are not a matrix of rows and classes.</exception>
-    protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend) =>
-        backend.Scale(backend.Mean(backend.Multiply(answers, backend.LogSoftmax(outputs))), backend.Fill(new Shape(), -outputs.Shape[1]));
+    protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend)
+    {
+        var classes = outputs.Shape.Rank == 2 ? outputs.Shape[1] : 1;
+        var compared = Smoothing == 0
+            ? answers
+            : backend.Add(backend.Scale(answers, backend.Scalar(1 - Smoothing)), backend.Fill(answers.Shape, (float)(Smoothing / classes)));
+
+        return backend.Scale(backend.Mean(backend.Multiply(compared, backend.LogSoftmax(outputs))), backend.Fill(new Shape(), -outputs.Shape[1]));
+    }
 
     /// <inheritdoc />
     /// <remarks>Every share at least nothing, and a row's shares one, within the rounding of their sum.</remarks>
@@ -253,7 +298,7 @@ public sealed class EarthMoversDistance : Loss, ISaved<EarthMoversDistance>
         var shape = backend.Subtract(AsShares(backend, backend.MatMul(shares, columns), ordered), AsShares(backend, backend.MatMul(answers, columns), ordered));
         var left = backend.MatMul(backend.Subtract(shares, answers), Last(outputs.Shape[1]));
 
-        return backend.Add(Summed(backend, backend.MatMul(shape, Below(ordered)), ordered - 1), backend.Mean(Size(backend, left)));
+        return backend.Add(Summed(backend, backend.MatMul(shape, Below(ordered)), ordered - 1), backend.Mean(backend.SizeOf(left)));
     }
 
     /// <inheritdoc />
@@ -273,11 +318,7 @@ public sealed class EarthMoversDistance : Loss, ISaved<EarthMoversDistance>
 
     // The batch's mean of each row's sizes summed: the mean of every size, times how many a row holds.
     private static Tensor Summed(ITensorBackend backend, Tensor differences, int perRow) =>
-        backend.Scale(backend.Mean(Size(backend, differences)), backend.Fill(new Shape(), perRow));
-
-    // The size of every number: the rectified number and the rectified opposite, whose slope at nought is nought.
-    private static Tensor Size(ITensorBackend backend, Tensor values) =>
-        backend.Add(backend.Relu(values), backend.Relu(backend.Scale(values, backend.Fill(new Shape(), -1))));
+        backend.Scale(backend.Mean(backend.SizeOf(differences)), backend.Fill(new Shape(), perRow));
 
     // A column added up to each threshold but the last: column i counts towards threshold j when it is not after it.
     private static Tensor Below(int count) => Filled(count, count - 1, (row, column) => row <= column);
@@ -328,11 +369,117 @@ internal static class ShareExtensions
 /// </remarks>
 public sealed class BinaryCrossEntropy : Loss, ISaved<BinaryCrossEntropy>
 {
+    private readonly double _smoothing;
+
+    /// <summary>
+    /// How far every answer is moved towards a half before it is compared: Keras's <c>label_smoothing</c> — an answer keeps one
+    /// less this share of itself and gains half of it. Nothing, unless said.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a share of nothing or more and below one.</exception>
+    /// <remarks>
+    /// PyTorch's loss on logits has no such setting, so this is Keras's. Written into the network's file only where there is some,
+    /// which raises the part to the sixth version.
+    /// </remarks>
+    public double Smoothing
+    {
+        get => _smoothing;
+        init => _smoothing = value.RequireSmoothing(nameof(value));
+    }
+
     /// <inheritdoc />
     public static string Name => "binaryCrossEntropy";
 
     /// <inheritdoc />
-    public static BinaryCrossEntropy Rebuild(JsonElement settings, Rebuilding rebuilding) => new();
+    public static BinaryCrossEntropy Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        return new() { Smoothing = rebuilding.Number(settings, SmoothingExtensions.Key, 0) };
+    }
+
+    /// <inheritdoc />
+    /// <remarks>How far each answer is moved towards a half, only where it is.</remarks>
+    public void WriteSettings(Utf8JsonWriter writer) => writer.WriteSmoothing(Smoothing);
+
+    /// <inheritdoc />
+    public int FileVersion => Smoothing.VersionOfSmoothing();
+
+    /// <inheritdoc />
+    public override OutputActivation Activation => OutputActivation.Sigmoid;
+
+    /// <inheritdoc />
+    protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend)
+    {
+        var compared = Smoothing == 0
+            ? answers
+            : backend.Add(backend.Scale(answers, backend.Scalar(1 - Smoothing)), backend.Fill(answers.Shape, (float)(Smoothing / 2)));
+
+        return backend.Mean(backend.Subtract(backend.Softplus(outputs), backend.Multiply(outputs, compared)));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Every answer between nothing and one: a label, or the probability of one.</remarks>
+    protected override string? Refused(IReadOnlyList<double> answers) => answers.NotChances();
+}
+
+/// <summary>How a loss of classes says how much its answers are softened, in its file and in its settings.</summary>
+internal static class SmoothingExtensions
+{
+    /// <summary>The setting a loss of classes writes its smoothing under.</summary>
+    internal const string Key = "smoothing";
+
+    extension(double smoothing)
+    {
+        /// <summary>The smoothing, when it is a share of nothing or more and below one.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">It is not.</exception>
+        internal double RequireSmoothing(string parameter) =>
+            smoothing is >= 0 and < 1
+                ? smoothing
+                : throw new ArgumentOutOfRangeException(parameter, smoothing, "How much the answers are softened is a share of nothing or more, below one.");
+
+        /// <summary>The version of a network's part that can say this smoothing: the sixth where there is some, the second where there is none.</summary>
+        internal int VersionOfSmoothing() => smoothing == 0 ? NetworkDocument.SecondVersion : NetworkDocument.SixthVersion;
+    }
+
+    extension(Utf8JsonWriter writer)
+    {
+        /// <summary>Writes the smoothing where there is some, and nothing where there is none, so an unsoftened loss is written as it always was.</summary>
+        internal void WriteSmoothing(double smoothing)
+        {
+            ArgumentNullException.ThrowIfNull(writer);
+
+            if (smoothing != 0)
+            {
+                writer.WriteNumber(Key, smoothing);
+            }
+        }
+    }
+
+    extension(IReadOnlyList<double> answers)
+    {
+        /// <summary>Why a row's answers are not each between nothing and one, when they are not.</summary>
+        internal string? NotChances() =>
+            answers.FirstOrDefault(answer => answer is < 0 or > 1, 0) is var outside and (< 0 or > 1)
+                ? string.Create(CultureInfo.InvariantCulture, $"an answer of {outside} is not between nothing and one.")
+                : null;
+
+        /// <summary>Why a row's answers are not each a label of nought or one, when they are not.</summary>
+        internal string? NotLabels() =>
+            answers.FirstOrDefault(answer => answer is not (0 or 1), 0) is var other and not (0 or 1)
+                ? string.Create(CultureInfo.InvariantCulture, $"an answer of {other} is no label: it is nought or one.")
+                : null;
+    }
+}
+
+/// <summary>The mean of the size of the difference between every output and its answer: for answers that are numbers, PyTorch's <c>L1Loss</c>.</summary>
+/// <remarks>The size is the rectified difference and the rectified opposite, whose slope at nought is nought, as PyTorch's is.</remarks>
+public sealed class MeanAbsoluteError : Loss, ISaved<MeanAbsoluteError>
+{
+    /// <inheritdoc />
+    public static string Name => "meanAbsoluteError";
+
+    /// <inheritdoc />
+    public static MeanAbsoluteError Rebuild(JsonElement settings, Rebuilding rebuilding) => new();
 
     /// <inheritdoc />
     /// <remarks>Nothing: it has no settings.</remarks>
@@ -341,16 +488,330 @@ public sealed class BinaryCrossEntropy : Loss, ISaved<BinaryCrossEntropy>
     }
 
     /// <inheritdoc />
-    public override OutputActivation Activation => OutputActivation.Sigmoid;
+    public override OutputActivation Activation => OutputActivation.Identity;
 
     /// <inheritdoc />
     protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend) =>
-        backend.Mean(backend.Subtract(backend.Softplus(outputs), backend.Multiply(outputs, answers)));
+        backend.Mean(backend.SizeOf(backend.Subtract(outputs, answers)));
+}
+
+/// <summary>
+/// Half the square of the difference near nought and the difference's size away from it: PyTorch's <c>HuberLoss</c> and Keras's
+/// <c>Huber</c>, for answers that are numbers some of which are far off.
+/// </summary>
+/// <remarks>
+/// Within delta of the answer it is half the square of the miss, beyond it delta times the size of the miss less half of delta,
+/// so the two meet with the same slope. PyTorch's <c>SmoothL1Loss</c> is this over delta, its <c>beta</c>, and is not a second kind.
+/// </remarks>
+public sealed class Huber : Loss, ISaved<Huber>
+{
+    private const string DeltaKey = "delta";
+
+    /// <summary>The Huber loss bending at the given distance.</summary>
+    /// <param name="delta">How far from the answer it stops being squared: a number above nothing, one in both PyTorch and Keras.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a finite number above nothing.</exception>
+    public Huber(double delta = 1) =>
+        Delta = double.IsFinite(delta) && delta > 0
+            ? delta
+            : throw new ArgumentOutOfRangeException(nameof(delta), delta, "A Huber loss bends at a distance from the answer above nothing.");
+
+    /// <summary>How far from the answer it stops being squared.</summary>
+    public double Delta { get; }
 
     /// <inheritdoc />
-    /// <remarks>Every answer between nothing and one: a label, or the probability of one.</remarks>
+    public static string Name => "huber";
+
+    /// <inheritdoc />
+    public static Huber Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        return new(rebuilding.Number(settings, DeltaKey));
+    }
+
+    /// <inheritdoc />
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber(DeltaKey, Delta);
+    }
+
+    /// <inheritdoc />
+    public override OutputActivation Activation => OutputActivation.Identity;
+
+    /// <inheritdoc />
+    protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend)
+    {
+        // The size of the miss, the part of it within delta, and what is left beyond: half the square of the first, and delta
+        // times the rest.
+        var size = backend.SizeOf(backend.Subtract(outputs, answers));
+        var within = backend.Subtract(size, backend.Relu(backend.Subtract(size, backend.Fill(size.Shape, (float)Delta))));
+        var squared = backend.Scale(backend.Multiply(within, within), backend.Scalar(0.5));
+
+        return backend.Mean(backend.Add(squared, backend.Scale(backend.Subtract(size, within), backend.Scalar(Delta))));
+    }
+}
+
+/// <summary>
+/// The pinball loss of a quantile: a miss above the answer weighed by one less the quantile, one below it by the quantile — for a
+/// model that answers with the value the answer stays below that share of the time, rather than with its mean.
+/// </summary>
+/// <remarks>
+/// Scikit-learn's <c>mean_pinball_loss</c> at that alpha; neither PyTorch nor Keras has one, so a network read from either is told
+/// it by its caller. Each miss is a rectified difference, whose slope at nought is nought.
+/// </remarks>
+public sealed class Quantile : Loss, ISaved<Quantile>
+{
+    private const string QuantileKey = "quantile";
+
+    /// <summary>The pinball loss of the given quantile.</summary>
+    /// <param name="quantile">The share of the time the answer stays below the value asked for: above nothing and below one.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a share above nothing and below one.</exception>
+    public Quantile(double quantile) =>
+        Share = quantile is > 0 and < 1
+            ? quantile
+            : throw new ArgumentOutOfRangeException(nameof(quantile), quantile, "A quantile is a share above nothing and below one.");
+
+    /// <summary>The share of the time the answer stays below the value asked for.</summary>
+    public double Share { get; }
+
+    /// <inheritdoc />
+    public static string Name => "quantile";
+
+    /// <inheritdoc />
+    public static Quantile Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        return new(rebuilding.Number(settings, QuantileKey));
+    }
+
+    /// <inheritdoc />
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber(QuantileKey, Share);
+    }
+
+    /// <inheritdoc />
+    public override OutputActivation Activation => OutputActivation.Identity;
+
+    /// <inheritdoc />
+    protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend)
+    {
+        var below = backend.Scale(backend.Relu(backend.Subtract(answers, outputs)), backend.Scalar(Share));
+        var above = backend.Scale(backend.Relu(backend.Subtract(outputs, answers)), backend.Scalar(1 - Share));
+
+        return backend.Mean(backend.Add(below, above));
+    }
+}
+
+/// <summary>
+/// The focal loss: a binary cross-entropy on logits, each label's weighed down by how sure of it the network already is — for
+/// answers where one class is rare. The torchvision <c>sigmoid_focal_loss</c> of Lin et al.
+/// </summary>
+/// <remarks>
+/// Each label's cross-entropy times one less the chance given to it, raised to gamma, and, where it is told one, times alpha for a
+/// one and one less alpha for a nought. The answers are labels, nought or one, as torchvision's are: the power is the exponential of
+/// gamma times the logarithm of a chance, and the logarithm of the chance a label is given is minus a softplus of the logit, which
+/// is never nothing, so a network certain of a label sends back no number that is not one. A prediction is the chance of a one.
+/// </remarks>
+public sealed class Focal : Loss, ISaved<Focal>
+{
+    private const string GammaKey = "gamma";
+    private const string AlphaKey = "alpha";
+
+    private readonly double? _alpha;
+
+    /// <summary>The focal loss of the given gamma, without a weight for the rare class.</summary>
+    /// <param name="gamma">How hard a label the network is sure of is weighed down: nothing or more, two in torchvision and Keras.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a finite number of nothing or more.</exception>
+    public Focal(double gamma = 2) =>
+        Gamma = double.IsFinite(gamma) && gamma >= 0
+            ? gamma
+            : throw new ArgumentOutOfRangeException(nameof(gamma), gamma, "A focal loss weighs a sure label down by a power of nothing or more.");
+
+    /// <summary>How hard a label the network is sure of is weighed down.</summary>
+    public double Gamma { get; }
+
+    /// <summary>
+    /// What a one is weighed by, and a nought by one less it: a share between nothing and one, a quarter in torchvision; nothing,
+    /// unless said, for no weight at all, as Keras leaves it.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a share between nothing and one.</exception>
+    public double? Alpha
+    {
+        get => _alpha;
+        init => _alpha = value is null or (>= 0 and <= 1)
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "A focal loss weighs a one by a share between nothing and one.");
+    }
+
+    /// <inheritdoc />
+    public static string Name => "focal";
+
+    /// <inheritdoc />
+    public static Focal Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        return new(rebuilding.Number(settings, GammaKey)) { Alpha = FromWritten(rebuilding.Number(settings, AlphaKey)) };
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Gamma and alpha, alpha written as minus one where there is no weight, as torchvision writes it.</remarks>
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber(GammaKey, Gamma);
+        writer.WriteNumber(AlphaKey, Alpha ?? NoWeight);
+    }
+
+    /// <summary>How torchvision, a network's file and a declaration write a focal loss without a weight for the rare class: an alpha of minus one.</summary>
+    public const double NoWeight = -1;
+
+    /// <summary>The alpha a written number stands for: nothing for minus one, the number itself otherwise.</summary>
+    /// <param name="written">The number written.</param>
+    /// <returns>The alpha.</returns>
+    public static double? FromWritten(double written) => written == NoWeight ? null : written;
+
+    /// <inheritdoc />
+    public override OutputActivation Activation => OutputActivation.Sigmoid;
+
+    /// <inheritdoc />
+    protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend)
+    {
+        var ones = backend.Fill(answers.Shape, 1f);
+        var noughts = backend.Subtract(ones, answers);
+        var crossEntropy = backend.Subtract(backend.Softplus(outputs), backend.Multiply(outputs, answers));
+
+        // The logarithm of one less the chance given to the label: of the chance of a nought where it is a one, and of a one
+        // where it is a nought — each minus a softplus, which no logit makes infinite.
+        var missed = backend.Add(
+            backend.Multiply(answers, backend.Scale(backend.Softplus(outputs), backend.Scalar(-1))),
+            backend.Multiply(noughts, backend.Scale(backend.Softplus(backend.Scale(outputs, backend.Scalar(-1))), backend.Scalar(-1))));
+        var focused = backend.Multiply(crossEntropy, backend.Exp(backend.Scale(missed, backend.Scalar(Gamma))));
+
+        return Alpha is not { } alpha
+            ? backend.Mean(focused)
+            : backend.Mean(backend.Multiply(focused, backend.Add(backend.Scale(answers, backend.Scalar(alpha)), backend.Scale(noughts, backend.Scalar(1 - alpha)))));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Every answer a label, nought or one, as torchvision's focal loss takes them.</remarks>
+    protected override string? Refused(IReadOnlyList<double> answers) => answers.NotLabels();
+}
+
+/// <summary>
+/// The hinge: how far each output falls short of a margin of one on its label's side of nought — Keras's <c>hinge</c>, for answers
+/// that are one thing or the other.
+/// </summary>
+/// <remarks>
+/// A label of nought is taken as minus one and a label of one as one, as Keras takes them, and each output loses the rectified
+/// difference between one and itself times that sign. What a network trained with it gives is a margin, not a chance, so a
+/// prediction is the side of nought it falls: a one above nought, a nought at or below it.
+/// </remarks>
+public sealed class Hinge : Loss, ISaved<Hinge>
+{
+    /// <inheritdoc />
+    public static string Name => "hinge";
+
+    /// <inheritdoc />
+    public static Hinge Rebuild(JsonElement settings, Rebuilding rebuilding) => new();
+
+    /// <inheritdoc />
+    /// <remarks>Nothing: it has no settings.</remarks>
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+    }
+
+    /// <inheritdoc />
+    public override OutputActivation Activation => OutputActivation.Margin;
+
+    /// <inheritdoc />
+    protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend)
+    {
+        var ones = backend.Fill(answers.Shape, 1f);
+        var signs = backend.Subtract(backend.Scale(answers, backend.Scalar(2)), ones);
+
+        return backend.Mean(backend.Relu(backend.Subtract(ones, backend.Multiply(signs, outputs))));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Every answer a label, nought or one.</remarks>
+    protected override string? Refused(IReadOnlyList<double> answers) => answers.NotLabels();
+}
+
+/// <summary>
+/// The negative log-likelihood of a Poisson count: for answers that are counts, each output the logarithm of its rate or the rate
+/// itself — PyTorch's <c>PoissonNLLLoss</c>, and Keras's <c>poisson</c> on rates.
+/// </summary>
+/// <remarks>
+/// On logarithms it is the exponential of the output less the count times the output, and a prediction is the exponential of the
+/// output: the rate. On rates it is the output less the count times the logarithm of the output and a small number added, so a rate
+/// of nought has a logarithm; a network that answers with a rate keeps it above nought itself. The constant terms of the
+/// likelihood are left out, as both leave them out unless told otherwise.
+/// </remarks>
+public sealed class Poisson : Loss, ISaved<Poisson>
+{
+    private const string LogInputKey = "logInput";
+    private const string EpsilonKey = "epsilon";
+
+    private readonly double _epsilon = 1e-8;
+
+    /// <summary>The Poisson loss on the logarithms of the rates, or on the rates.</summary>
+    /// <param name="logInput">Whether every output is the logarithm of a rate, as PyTorch takes it unless told otherwise; or the rate itself, as Keras takes it.</param>
+    public Poisson(bool logInput) => LogInput = logInput;
+
+    /// <summary>Whether every output is the logarithm of a rate rather than the rate itself.</summary>
+    public bool LogInput { get; }
+
+    /// <summary>What is added to a rate before its logarithm is taken: a hundred-millionth, unless said, as PyTorch leaves it; Keras adds a ten-millionth.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a finite number above nothing.</exception>
+    public double Epsilon
+    {
+        get => _epsilon;
+        init => _epsilon = double.IsFinite(value) && value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "What is added to a rate before its logarithm is taken is a number above nothing.");
+    }
+
+    /// <inheritdoc />
+    public static string Name => "poisson";
+
+    /// <inheritdoc />
+    public static Poisson Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        return new(rebuilding.Holds(settings, LogInputKey)) { Epsilon = rebuilding.Number(settings, EpsilonKey) };
+    }
+
+    /// <inheritdoc />
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteBoolean(LogInputKey, LogInput);
+        writer.WriteNumber(EpsilonKey, Epsilon);
+    }
+
+    /// <inheritdoc />
+    public override OutputActivation Activation => LogInput ? OutputActivation.Exp : OutputActivation.Identity;
+
+    /// <inheritdoc />
+    protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend) =>
+        LogInput
+            ? backend.Mean(backend.Subtract(backend.Exp(outputs), backend.Multiply(answers, outputs)))
+            : backend.Mean(backend.Subtract(outputs, backend.Multiply(answers, backend.Log(backend.Add(outputs, backend.Fill(outputs.Shape, (float)Epsilon))))));
+
+    /// <inheritdoc />
+    /// <remarks>Every answer a count: nothing or more.</remarks>
     protected override string? Refused(IReadOnlyList<double> answers) =>
-        answers.FirstOrDefault(answer => answer is < 0 or > 1, 0) is var outside and (< 0 or > 1)
-            ? string.Create(CultureInfo.InvariantCulture, $"an answer of {outside} is not between nothing and one.")
+        answers.FirstOrDefault(answer => answer < 0, 0) is var below and < 0
+            ? string.Create(CultureInfo.InvariantCulture, $"an answer of {below} is below nothing, and a count never is.")
             : null;
 }

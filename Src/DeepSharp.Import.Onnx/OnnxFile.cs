@@ -47,7 +47,11 @@ namespace DeepSharp.Import.Onnx;
 /// What is read: a graph taking one batch — of rows, of series, of images or of volumes — and giving one, each node
 /// taking the value the node before it made, of the operators Gemm, MatMul, Add, Conv, MaxPool, AveragePool,
 /// GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape,
-/// Relu, Tanh, Sigmoid and Softmax, and the Identity, Cast, Transpose and Constant nodes that hand values on. The pads
+/// Relu, Tanh, Sigmoid, Gelu, LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization from operator set
+/// 21, RMSNormalization and Softmax, and the Identity, Cast, Transpose and Constant nodes that hand values on. The spellings
+/// PyTorch's exporters write a GELU, a SiLU, a mish, a group normalisation and a root-mean-square normalisation in for an older
+/// operator set are read as the one layer each spells, where every number in them is the word's own and nothing outside them
+/// takes a value they make. The pads
 /// of a convolution or a pooling, written out one side at a time, are read as TensorFlow's 'same' when they are the
 /// border it gives the images reaching it, and so is auto_pad SAME_UPPER, and SAME_LOWER where the images leave no odd
 /// place for it to put before the axis instead of after it; a pooling counts its padding in each average when

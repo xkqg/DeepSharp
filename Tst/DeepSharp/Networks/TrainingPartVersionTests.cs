@@ -55,15 +55,49 @@ public class TrainingPartVersionTests
         Assert.IsType<SaysMore>(read.Run.Compiled.Optimizer);
         Assert.Equal(written, Written(read.Run.Compiled, read.Run.Checkpoint));
 
-        var later = written.Replace("\"version\":5", "\"version\":6", StringComparison.Ordinal);
+        var later = written.Replace("\"version\":5", "\"version\":7", StringComparison.Ordinal);
         var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(later, "network", "training", catalog));
 
-        Assert.Contains("version 6", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("up to version 5", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("version 7", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("up to version 6", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
-    public void TheVersionAFileOfThisLibraryCanBe_IsTheFifth() => Assert.Equal(5, NetworkDocument.Version);
+    public void ARunThatKeptAnAverage_JudgingItsEpochsByTheWeights_IsWrittenAsTheFifthVersion_AsItWasWritten()
+    {
+        var compiled = new LayerStack(new Dense(1, 1, Draws())).Compile(new Sgd(0.1), new MeanSquaredError());
+        var written = WrittenAsTaken(compiled, average: 0.9, judged: false);
+
+        Assert.Equal(5, VersionOf(written, "training"));
+        Assert.DoesNotContain("judgedByAverage", written, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARunJudgedByTheAverage_IsWrittenAsTheSixthVersion_ReadBack_AndWrittenAgainAsItWas()
+    {
+        var compiled = new LayerStack(new Dense(1, 1, Draws())).Compile(new Sgd(0.1), new MeanSquaredError());
+        var written = WrittenAsTaken(compiled, average: 0.9, judged: true);
+        var read = NetworkDocument.ReadCheckpoint(written, "network", "training", NetworkCatalog.BuiltIn());
+
+        Assert.Equal(6, VersionOf(written, "training"));
+        Assert.Contains("\"judgedByAverage\":true", written, StringComparison.Ordinal);
+        Assert.Equal(written, Written(read.Run.Compiled, read.Run.Checkpoint));
+    }
+
+    [Fact]
+    public void ATrainingPartOfTheFifthVersion_ThatSaysItsEpochsWereJudgedByTheAverage_IsRefused_NamingTheVersionThatSaysIt()
+    {
+        var compiled = new LayerStack(new Dense(1, 1, Draws())).Compile(new Sgd(0.1), new MeanSquaredError());
+        var written = WrittenAsTaken(compiled, average: 0.9, judged: true)
+            .Replace("\"version\":6", "\"version\":5", StringComparison.Ordinal);
+
+        var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(written, "network", "training", NetworkCatalog.BuiltIn()));
+
+        Assert.Contains("written from the sixth version of a training part on, and this one is of the fifth", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void TheVersionAFileOfThisLibraryCanBe_IsTheSixth() => Assert.Equal(6, NetworkDocument.Version);
 
     private static int TrainingVersion(Optimizer optimizer, GradientClip? clip)
     {
@@ -83,6 +117,23 @@ public class TrainingPartVersionTests
         compiled.Fit(rows, validation: null, new FitOptions(seed: 3) { Epochs = 1, BatchSize = 2, GradientClip = clip, Checkpoints = new Checkpoints(checkpoint => kept = checkpoint) });
 
         return kept!;
+    }
+
+    // A run of one epoch that keeps an average, written as it stood when its checkpoint was taken: the network holds its
+    // averages once the run is over, so the file is written while the checkpoint is handed over.
+    private static string WrittenAsTaken(CompiledNetwork compiled, double average, bool judged)
+    {
+        var written = string.Empty;
+        var rows = new TrainingData(
+            Tensor.From(new Shape(4, 1), [0.1f, 0.2f, 0.3f, 0.4f]),
+            Tensor.From(new Shape(4, 1), [0.2f, 0.4f, 0.6f, 0.8f]));
+
+        compiled.Fit(rows, validation: null, new FitOptions(seed: 3)
+        {
+            Epochs = 1, BatchSize = 2, Average = average, JudgedByAverage = judged, Checkpoints = new Checkpoints(checkpoint => written = Written(compiled, checkpoint)),
+        });
+
+        return written;
     }
 
     // The network and the training part, as one file holds them under two keys.

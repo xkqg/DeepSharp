@@ -96,9 +96,10 @@ public sealed class FitOptions
     /// <remarks>
     /// After every step the average of each parameter is its last times this share plus the parameter times what is left of it —
     /// the first being the parameter itself — and when the run has finished, the network holds the averages in place of the
-    /// weights, running statistics aside. Every epoch is judged by the weights as they are. The average is part of a checkpoint,
-    /// so a run goes on from one with it; it cannot be asked for beside restoring the best epoch's weights, which also says what
-    /// the run ends holding.
+    /// weights, running statistics aside. Every epoch is judged by the weights as they are, unless the epochs are
+    /// <see cref="JudgedByAverage"/>. The average is part of a checkpoint, so a run goes on from one with it; while the epochs are
+    /// judged by the weights as they are, it cannot be asked for beside restoring the best epoch's weights, which would then be
+    /// a second answer to what the run ends holding.
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">It is not a share above nothing and below one.</exception>
     public double? Average
@@ -108,6 +109,20 @@ public sealed class FitOptions
             ? value
             : throw new ArgumentOutOfRangeException(nameof(value), value, "The share an average of the weights keeps of itself is above nothing and below one.");
     }
+
+    /// <summary>
+    /// Whether every epoch is judged by the <see cref="Average"/> of the weights rather than by the weights as they are; by the
+    /// weights as they are, unless said.
+    /// </summary>
+    /// <remarks>
+    /// Judged by the average, an epoch's validation loss is the loss of the network holding the averages — running statistics
+    /// aside, as the network ends holding them — so early stopping watches the weights the run will end with, and restoring the
+    /// best epoch brings back that epoch's averages: the one answer to what the run ends holding, as timm's training and Keras's
+    /// <c>SwapEMAWeights</c> judge a model that keeps an average. The run still trains the weights as they are, step by step, so
+    /// the steps it takes are the steps of the run that judges by them. Said without an average, there is nothing to judge by,
+    /// and the run is refused.
+    /// </remarks>
+    public bool JudgedByAverage { get; init; }
 
     /// <summary>
     /// Where the arithmetic runs — the training passes, the looks at the validation rows and the report's measures; the light

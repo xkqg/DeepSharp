@@ -14,7 +14,9 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`drop.warmup`](#dropwarmup) | Drops the rows at the start that an indicator cannot yet speak for. |
 | [`encode`](#encode) | Writes a column of words down as numbers, using the categories the training rows held. |
 | [`encode.categories`](#encodecategories) | Writes every column that stands for a group down as numbers, each by the categories the training rows held. |
+| [`encode.piecewise`](#encodepiecewise) | Writes a column of numbers down as how far each value fills a few bins, their edges the training rows' quantiles. |
 | [`evidence.correlation`](#evidencecorrelation) | Sets out the rows a correlation between columns is drawn from, on the rows the split trains on, and how many it kept. |
+| [`evidence.likeness`](#evidencelikeness) | Sets out how alike the parts a split made are, column by column, and flags the ones further apart than a bound. |
 | [`evidence.profile`](#evidenceprofile) | Profiles the columns where it stands, on the rows the split trains on, and names what is wrong or should not be there, with how each is answered. |
 | [`evidence.report`](#evidencereport) | Names the measures a trained model is held to, the parts they are taken on and how they are shown, each in the answer's own units. |
 | [`feature.add`](#featureadd) | Adds a column worked out from two others by plain arithmetic. |
@@ -24,6 +26,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`feature.timeParts`](#featuretimeparts) | Takes a moment in time apart into the pieces people reason with: an hour, a weekday, a month. |
 | [`fill.missing`](#fillmissing) | Fills the gaps in a column the named way, below the split, and marks where they were. A value no row decided is settle.gaps, above it. |
 | [`fill.nan`](#fillnan) | Deals with a value that is not a number a model can use; refusing it is the default. |
+| [`history`](#history) | Writes beside each row the mean of a column over the earlier training rows of its key, pulled towards the training rows' mean. |
 | [`learn.ml`](#learnml) | Names the trainer from ML.NET this pipeline is declared for: which trainer, the settings it takes and the seed it repeats from. |
 | [`learn.network`](#learnnetwork) | Names the network this pipeline is declared for: its layers, what moves them, what judges them, when the run stops and the engine it runs on. |
 | [`maths`](#maths) | Pulls a column into another shape by arithmetic that learns nothing: a logarithm, a root, a reciprocal. |
@@ -153,6 +156,26 @@ Writes every column that stands for a group down as numbers, each by the categor
 
 Means what it says from version 2 of the file.
 
+## `encode.piecewise`
+
+Writes a column of numbers down as how far each value fills a few bins, their edges the training rows' quantiles.
+
+```json
+{"step":"encode.piecewise","column":"column","bins":8,"outOfRange":"pass"}
+```
+
+| key | holds | an example |
+|---|---|---|
+| `column` | the name of a column holding a number, a whole number or true or false | `"column"` |
+| `bins` | a whole number, at least 2 | `8` |
+| `outOfRange` | one of `pass`, `clip` or `refuse` | `"pass"` |
+
+- **`column`**: The column of numbers to write down as bins.
+- **`bins`**: How many bins the training rows' quantiles divide the values into, at least two; fewer where edges fall together.
+- **`outOfRange`**: What happens to a value beyond the edges the training rows set: let through the end bins, held at them, or refused.
+
+Means what it says from version 10 of the file.
+
 ## `evidence.correlation`
 
 Sets out the rows a correlation between columns is drawn from, on the rows the split trains on, and how many it kept.
@@ -172,6 +195,24 @@ Sets out the rows a correlation between columns is drawn from, on the rows the s
 - **`coefficient`**: Which coefficient is shown: how well two columns lie on a line (pearson), or how well they keep the same order (spearman). Left out, pearson.
 
 Means what it says from version 2 of the file.
+
+## `evidence.likeness`
+
+Sets out how alike the parts a split made are, column by column, and flags the ones further apart than a bound.
+
+```json
+{"step":"evidence.likeness","warnAbove":0.1,"columns":["column"]}
+```
+
+| key | holds | an example |
+|---|---|---|
+| `warnAbove` | a number, 0 or more | `0.1` |
+| `columns` | a list of the names of columns holding anything, each named once; may be left out | `["column"]` |
+
+- **`warnAbove`**: The distance above which two parts are flagged as unlike: a share above nought, at most one.
+- **`columns`**: The columns to compare across the parts; left out, every column where it stands but the answer.
+
+Means what it says from version 10 of the file.
 
 ## `evidence.profile`
 
@@ -201,11 +242,11 @@ Names the measures a trained model is held to, the parts they are taken on and h
 
 | key | holds | an example |
 |---|---|---|
-| `metrics` | a list of one or more of `rmse`, `mae`, `r2`, `accuracy`, `precision`, `recall`, `confusionmatrix`, `emd`, `kl` or `rps` | `["rmse"]` |
+| `metrics` | a list of one or more of `rmse`, `mae`, `r2`, `accuracy`, `precision`, `recall`, `confusionmatrix`, `emd`, `kl`, `rps`, `f1`, `auc`, `mape` or `brier` | `["rmse"]` |
 | `parts` | a list of one or more of `train`, `validation` or `test` | `["validation","test"]` |
 | `shown` | a list of one or more of `drawn` or `numbers` | `["numbers"]` |
 
-- **`metrics`**: The measures, in the order they are shown: rmse, mae and r2 for amounts; accuracy, precision, recall and the confusion matrix for classes; kl for shares of a whole; emd and rps for shares in an order.
+- **`metrics`**: The measures, in the order they are shown: rmse, mae, r2 and mape for amounts; accuracy, precision, recall, the confusion matrix, f1, auc and brier for classes; kl for shares of a whole; emd and rps for shares in an order.
 - **`parts`**: The parts they are taken on, side by side: the rows a model learns from, the rows it is chosen on and the rows it is tested on. The rows held back to predict on, and the rows a split keeps apart, are measured on by nothing.
 - **`shown`**: How they are shown: drawn, as the numbers themselves, or both.
 
@@ -353,6 +394,30 @@ Deals with a value that is not a number a model can use; refusing it is the defa
 
 Means what it says from version 1 of the file.
 
+## `history`
+
+Writes beside each row the mean of a column over the earlier training rows of its key, pulled towards the training rows' mean.
+
+```json
+{"step":"history","key":"key","value":"value","orderBy":["when"],"shrink":3,"into":"value_history_key"}
+```
+
+| key | holds | an example |
+|---|---|---|
+| `key` | the name of a column holding anything | `"key"` |
+| `value` | the name of a column holding a number, a whole number or true or false | `"value"` |
+| `orderBy` | a list of the names of columns holding a moment in time, a whole number or a number, each named once | `["when"]` |
+| `shrink` | a number, 0 or more | `3` |
+| `into` | the name of the column it makes; left out, the step decides | `"value_history_key"` |
+
+- **`key`**: The column whose value says which rows are of one kind: a farm, a type.
+- **`value`**: The column of numbers whose mean over the earlier rows of the same kind is read.
+- **`orderBy`**: The columns that say which rows came before a row: the first decides, each next one decides between rows the ones before call equal.
+- **`shrink`**: How many rows' worth of weight the mean of every training row has beside a key's own rows, above nothing: the larger, the more a key with few rows is pulled towards it.
+- **`into`**: The name of the column it makes; left out, the value's name, 'history' and the key's name.
+
+Means what it says from version 10 of the file.
+
 ## `learn.ml`
 
 Names the trainer from ML.NET this pipeline is declared for: which trainer, the settings it takes and the seed it repeats from.
@@ -381,14 +446,15 @@ Names the network this pipeline is declared for: its layers, what moves them, wh
 
 | key | holds | an example |
 |---|---|---|
-| `layers` | a list of parts, each a name and its settings: `dense`, which takes `units` and may leave out `bias`, `weights`, `biasStart`, `l1`, `l2`, `maxNorm` and `learns`, `relu`, which takes nothing, `tanh`, which takes nothing, `sigmoid`, which takes nothing, `dropout`, which takes `rate`, `batchNorm`, which takes `momentum` or `epsilon` and may leave out `scale`, `shift` and `learns` or `layerNorm`, which takes `epsilon` and may leave out `scale`, `shift` and `learns` | `[{"kind":"dense","units":16},{"kind":"relu"}]` |
+| `layers` | a list of parts, each a name and its settings: `dense`, which takes `units` and may leave out `bias`, `weights`, `biasStart`, `l1`, `l2`, `maxNorm` and `learns`, `relu`, which takes nothing, `tanh`, which takes nothing, `sigmoid`, which takes nothing, `dropout`, which takes `rate`, `batchNorm`, which takes `momentum` or `epsilon` and may leave out `scale`, `shift` and `learns`, `layerNorm`, which takes `epsilon` and may leave out `scale`, `shift` and `learns`, `gelu`, which takes `approximate`, `silu`, which takes nothing, `mish`, which takes nothing, `leakyRelu`, which takes `negativeSlope`, `prelu`, which takes `eachFeature`, `elu`, which takes `alpha`, `selu`, which takes nothing, `softmax`, which takes nothing, `rmsNorm`, which takes `epsilon` and may leave out `scale` and `learns`, `periodic`, which takes `frequencies`, `sigma`, `width` or `lite` or `embedding`, which takes `column` or `width` | `[{"kind":"dense","units":16},{"kind":"relu"}]` |
 | `optimizer` | a part, written as a name and its settings: `sgd`, which takes `rate` or `momentum` and may leave out `weightDecay`, `dampening` and `nesterov`, `adam`, which takes `rate`, `firstMoment`, `secondMoment` or `epsilon` and may leave out `weightDecay` and `amsgrad`, `adamw`, which takes `rate`, `firstMoment`, `secondMoment`, `epsilon` or `weightDecay` and may leave out `amsgrad`, `rmsprop`, which takes `rate`, `alpha`, `epsilon` or `momentum` and may leave out `weightDecay` and `centered` or `nadam`, which takes `rate`, `firstMoment`, `secondMoment`, `epsilon` or `momentumDecay` and may leave out `weightDecay` | `{"kind":"adam","rate":0.001,"firstMoment":0.9,"secondMoment":0.999,"epsilon":1E-08}` |
 | `schedule` | a part, written as a name and its settings: `constant`, which takes nothing, `stepDecay`, which takes `every` or `factor`, `exponentialDecay`, which takes `factor`, `cosineDecay`, which takes `epochs` or `minimum` or `linearWarmup`, which takes `epochs` or `start`; left out, `constant` | left out |
 | `clip` | a number, 0 or more; left out, 0 | left out |
 | `clipValue` | a number, 0 or more; left out, 0 | left out |
 | `stepEvery` | a whole number, at least 1; left out, 1 | left out |
 | `average` | a number, 0 or more; left out, 0 | left out |
-| `loss` | a part, written as a name and its settings: `meanSquaredError`, which takes nothing, `crossEntropy`, which takes nothing, `binaryCrossEntropy`, which takes nothing or `earthMoversDistance`, which takes nothing | `{"kind":"meanSquaredError"}` |
+| `judgedByAverage` | `true` or `false`; left out, `false` | left out |
+| `loss` | a part, written as a name and its settings: `meanSquaredError`, which takes nothing, `crossEntropy`, which may leave out `smoothing`, `binaryCrossEntropy`, which may leave out `smoothing`, `earthMoversDistance`, which takes nothing, `meanAbsoluteError`, which takes nothing, `huber`, which takes `delta`, `quantile`, which takes `quantile`, `focal`, which takes `gamma` or `alpha`, `hinge`, which takes nothing or `poisson`, which takes `logInput` or `epsilon` | `{"kind":"meanSquaredError"}` |
 | `stopping` | a part, written as a name and its settings: `never`, which takes nothing or `patience`, which takes `patience`, `least` or `best` | `{"kind":"never"}` |
 | `engine` | words | `"light"` |
 | `seed` | a whole number | `20260929` |
@@ -402,6 +468,7 @@ Names the network this pipeline is declared for: its layers, what moves them, wh
 - **`clipValue`**: The most any value of a step's gradients may reach, either side of nothing, before they move the network; left out, or nought, they are not clipped by value.
 - **`stepEvery`**: How many batches' gradients are averaged into one step; left out, a step every batch.
 - **`average`**: The share an average of the network's weights keeps of itself at every step, above nothing and below one, written over the weights when the run ends; left out, or nought, none is kept.
+- **`judgedByAverage`**: Whether every epoch is judged by the average of the weights rather than by the weights as they are, so early stopping watches, and restores, the weights the run ends holding; left out, by the weights as they are.
 - **`loss`**: What the network's answers are judged by while it trains.
 - **`stopping`**: When the run stops: at its last pass, or once the validation loss stops falling.
 - **`engine`**: The name of the engine the run's arithmetic happens on; which engine it stands for — and which device it works on — is the application's to say.

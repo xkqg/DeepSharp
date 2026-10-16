@@ -44,9 +44,9 @@ public class KerasRefusalTests
         "a Keras model is read here when each of its layers is a Dense, Conv1D, Conv2D, Conv3D, Conv1DTranspose, Conv2DTranspose, Conv3DTranspose, DepthwiseConv1D, DepthwiseConv2D, "
         + "SeparableConv1D, SeparableConv2D, ZeroPadding1D, ZeroPadding2D, ZeroPadding3D, MaxPooling1D, MaxPooling2D, MaxPooling3D, AveragePooling1D, AveragePooling2D, AveragePooling3D, "
         + "GlobalMaxPooling1D, GlobalMaxPooling2D, GlobalMaxPooling3D, GlobalAveragePooling1D, GlobalAveragePooling2D, GlobalAveragePooling3D, BatchNormalization, LayerNormalization, Dropout, "
-        + "SpatialDropout1D, SpatialDropout2D, SpatialDropout3D, Flatten, Reshape, Activation or ReLU.";
+        + "SpatialDropout1D, SpatialDropout2D, SpatialDropout3D, GroupNormalization, RMSNormalization, Embedding, Flatten, Reshape, Activation, ReLU, LeakyReLU, PReLU, ELU or Softmax.";
 
-    private const string Activations = "linear, relu, tanh and sigmoid, and softmax as the last of a model a categorical cross-entropy trained.";
+    private const string Activations = "linear, relu, tanh, sigmoid, gelu, silu, swish, mish, leaky_relu, elu, selu and softmax.";
 
     [Fact]
     public void AStrideForEachAxis_ADilatedWindow_AndChannelsInGroups_AreRead_AndTheKindThatIsNoLayer_IsStillRefused()
@@ -74,16 +74,16 @@ public class KerasRefusalTests
     [InlineData(Titanic, new[] { "compile_config=-" }, "config.json, compile_config: the model was saved without the loss it was trained with, and a network here answers through its loss.")]
     [InlineData(Titanic, new[] { "compile_config=null" }, "config.json, compile_config: the model was saved without the loss it was trained with, and a network here answers through its loss.")]
     [InlineData(Titanic, new[] { "compile_config.loss=-" }, "config.json, compile_config: the model was saved without the loss it was trained with, and a network here answers through its loss.")]
-    [InlineData(Titanic, new[] { "compile_config.loss=\"hinge\"" }, "config.json, compile_config: the loss is hinge, and a Keras model is read here when it was trained with a binary or a categorical cross-entropy or a mean squared error.")]
-    [InlineData(Titanic, new[] { "compile_config.loss=[\"binary_crossentropy\"]" }, "config.json, compile_config: the loss is [\"binary_crossentropy\"], and a Keras model is read here when it was trained with a binary or a categorical cross-entropy or a mean squared error.")]
-    [InlineData(Titanic, new[] { "compile_config.loss={\"class_name\": \"BinaryCrossentropy\", \"config\": {\"label_smoothing\": 0.1}}" }, "config.json, compile_config: the loss smooths its labels by 0.1, and no loss here smooths them.")]
+    [InlineData(Titanic, new[] { "compile_config.loss=\"squared_hinge\"" }, "config.json, compile_config: the loss is squared_hinge, and a Keras model is read here when it was trained with a binary, a binary focal or a categorical cross-entropy, a mean squared or a mean absolute error, a Huber, a Poisson or a hinge loss.")]
+    [InlineData(Titanic, new[] { "compile_config.loss=[\"binary_crossentropy\"]" }, "config.json, compile_config: the loss is [\"binary_crossentropy\"], and a Keras model is read here when it was trained with a binary, a binary focal or a categorical cross-entropy, a mean squared or a mean absolute error, a Huber, a Poisson or a hinge loss.")]
+    [InlineData(Titanic, new[] { "compile_config.loss={\"class_name\": \"BinaryFocalCrossentropy\", \"config\": {\"label_smoothing\": 0.1}}" }, "config.json, compile_config: the focal loss smooths its labels by 0.1, and a focal loss here is of labels of nought or one, as torchvision's is.")]
     [InlineData(Titanic, new[] { "compile_config.loss={\"class_name\": \"BinaryCrossentropy\", \"config\": {\"reduction\": \"sum\"}}" }, "config.json, compile_config: the loss reduces a batch's losses by 'sum', and a loss here takes their mean.")]
     [InlineData(Titanic, new[] { "compile_config.loss={\"class_name\": \"BinaryCrossentropy\", \"config\": {\"from_logits\": \"yes\"}}" }, "config.json, compile_config: its 'from_logits' is written as \"yes\", which is not what Keras writes there.")]
     [InlineData(Titanic, new[] { "compile_config.loss={\"class_name\": \"BinaryCrossentropy\", \"config\": {\"from_logits\": true}}" }, "config.json, layer 'dense_1' (Dense): the model ends in a sigmoid, and its loss takes logits and applies the sigmoid itself: every prediction would go through it twice.")]
     [InlineData(Titanic, new[] { "config.layers.2.config.activation=\"linear\"" }, "config.json, layer 'dense_1' (Dense): its loss takes the chances a last sigmoid gives, and the model ends in linear: a network here ends before the sigmoid its loss applies itself, so it is read when the model ends in one.")]
     // A layer's activation, bias, settings and precision.
-    [InlineData(Titanic, new[] { "config.layers.1.config.activation=\"softmax\"" }, $"config.json, layer 'dense' (Dense): its activation, softmax, is none of those read here: {Activations}")]
-    [InlineData(Titanic, new[] { "config.layers.1.config.activation=\"gelu\"" }, $"config.json, layer 'dense' (Dense): its activation, gelu, is none of those read here: {Activations}")]
+    [InlineData(Titanic, new[] { "config.layers.1.config.activation=\"softplus\"" }, $"config.json, layer 'dense' (Dense): its activation, softplus, is none of those read here: {Activations}")]
+    [InlineData(Titanic, new[] { "config.layers.1.config.activation=\"hard_sigmoid\"" }, $"config.json, layer 'dense' (Dense): its activation, hard_sigmoid, is none of those read here: {Activations}")]
     [InlineData(Titanic, new[] { "config.layers.1.config.units=-" }, "config.json, layer 'dense' (Dense): it says no 'units'.")]
     [InlineData(Titanic, new[] { "config.layers.1.config.units=\"16\"" }, "config.json, layer 'dense' (Dense): its 'units' is written as \"16\", which is not what Keras writes there.")]
     [InlineData(Titanic, new[] { "config.layers.1.config=-" }, "config.json, layer '' (Dense): it says no 'units'.")]
@@ -100,7 +100,7 @@ public class KerasRefusalTests
     // The normalisations.
     [InlineData(Images, new[] { "config.layers.3.config.axis=1" }, "config.json, layer 'batch_normalization' (BatchNormalization): it normalises over axis 1, and a normalisation here works over the last axis.")]
     [InlineData(Images, new[] { "config.layers.10.config.axis=[1]" }, "config.json, layer 'layer_normalization' (LayerNormalization): it normalises over axis [1], and a normalisation here works over the last axis.")]
-    [InlineData(Images, new[] { "config.layers.10.config.rms_scaling=true" }, "config.json, layer 'layer_normalization' (LayerNormalization): it scales by the root mean square alone, which no normalisation here does.")]
+    [InlineData(Images, new[] { "config.layers.10.config.rms_scaling=true" }, "config.json, layer 'layer_normalization' (LayerNormalization): it scales by rms_scaling, which Keras works out from the variance of the values rather than the root of the mean of their squares, and deprecates: a normalisation by the root mean square is Keras's RMSNormalization, which is read.")]
     // A dropout, a flatten, a relu and a reshape.
     [InlineData(Images, new[] { "config.layers.7.config.noise_shape=[null, 1]" }, "config.json, layer 'dropout' (Dropout): it leaves values out by a noise shape, [null, 1], and a dropout here leaves out each value on its own.")]
     [InlineData(Images, new[] { "config.layers.7.config.rate=1" }, "config.json, layer 'dropout' (Dropout): A dropout leaves out a share of the values, from nothing to below one. (Parameter 'rate') Actual value was 1.")]
@@ -251,13 +251,13 @@ public class KerasRefusalTests
     public void EveryFaultOfADescription_IsNamedAtOnce()
     {
         var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(KerasFixtures.Edited(
-            Images, "config.layers.2.config.padding=\"causal\"", "config.layers.3.config.axis=1", "config.layers.9.config.activation=\"elu\"")));
+            Images, "config.layers.2.config.padding=\"causal\"", "config.layers.3.config.axis=1", "config.layers.9.config.activation=\"softsign\"")));
 
         Assert.Equal(
             [
                 "config.json, layer 'conv2d' (Conv2D): it pads as 'causal', and a window here pads as 'valid' or 'same'.",
                 "config.json, layer 'batch_normalization' (BatchNormalization): it normalises over axis 1, and a normalisation here works over the last axis.",
-                $"config.json, layer 'activation' (Activation): its activation, elu, is none of those read here: {Activations}",
+                $"config.json, layer 'activation' (Activation): its activation, softsign, is none of those read here: {Activations}",
             ],
             refused.Message.Split(Environment.NewLine));
     }

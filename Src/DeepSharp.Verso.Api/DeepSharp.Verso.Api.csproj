@@ -10,7 +10,7 @@
   <ItemGroup>
     <!-- Verso's engine itself, which the notebook package never carries: an application that hosts notebooks runs
          them, so it needs the engine, and this is the package that brings it. -->
-    <PackageReference Include="Verso" Version="1.2.2" />
+    <PackageReference Include="Verso" Version="1.2.3" />
   </ItemGroup>
 
   <ItemGroup>

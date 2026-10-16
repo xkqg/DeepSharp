@@ -9,11 +9,11 @@ using Verso.Serializers;
 namespace DeepSharp.Tests.Notebooks;
 
 /// <summary>
-/// A pipeline notebook is saved as .verso, the one format of Verso's that keeps what kind of cell each one is. Every
-/// other keeps a cell's text and loses its kind — Jupyter brings a block back as a raw cell, Markdown as text fencing
-/// the block's text in, and a file another program wrote may hold it as code — so saving a block in any of them is
-/// refused, and so is opening such a file whose cells turn out to be steps. Verso's own converter between formats runs
-/// no such guard on the way out; that is written down, not trusted, and what it writes is refused on the way in. What a
+/// A pipeline notebook is saved as .verso, the one format whose file keeps what kind of cell each one is wherever it is
+/// opened. Every other keeps a cell's text and may lose its kind — Jupyter keeps it beside the cell for Verso alone and
+/// writes a raw cell for every other program, Markdown brings a block back as text fencing the block's text in, and a
+/// file another program wrote may hold it as code — so saving a block in any of them is refused, and so is opening such a
+/// file whose cells turn out to be steps held as some other kind of cell. What a
 /// block shows is left out of the file by the serializer each of Verso's editors saves with.
 /// </summary>
 public sealed class PersistenceTests : IDisposable
@@ -44,10 +44,11 @@ public sealed class PersistenceTests : IDisposable
         $$"""{"cells": [{"cell_type": "code", "execution_count": null, "metadata": {}, "outputs": [], "source": [{{JsonSerializer.Serialize(source)}}]}], "metadata": {}, "nbformat": 4, "nbformat_minor": 5}""";
 
     [Fact]
-    public async Task OfTheEnginesFormats_OnlyVersoKeepsABlock_WrittenAndReadBack()
+    public async Task OfTheEnginesFormats_VersoAndJupyterKeepABlock_WrittenAndReadBack()
     {
         // What the guard stands on, measured on Verso's own serializers rather than assumed: a Verso whose other
-        // formats learn to keep a cell's kind fails this, and the guard can let that format through then.
+        // formats learn to keep a cell's kind fails this, and the guard can let that format through then. Jupyter learned it:
+        // it keeps the kind of a cell beside the cell, and a block comes back a block.
         await using var notebook = await Notebook.OpenAsync();
         var formats = new HashSet<string>();
         var keeping = new List<string>();
@@ -87,15 +88,15 @@ public sealed class PersistenceTests : IDisposable
         }
 
         Assert.Superset(new HashSet<string> { "verso", "jupyter", "dib", "markdown" }, formats);
-        Assert.Equal(["verso"], keeping);
-        Assert.Equal(new Dictionary<string, string> { ["jupyter"] = "raw", ["markdown"] = "markdown" }, cameBackAs);
+        Assert.Equal(["jupyter", "verso"], keeping.Order(StringComparer.Ordinal));
+        Assert.Equal(new Dictionary<string, string> { ["markdown"] = "markdown" }, cameBackAs);
 
         // .dib is read and never written by this Verso: a file of it can hold blocks only as something else.
         Assert.Equal(["dib"], neverWritten);
     }
 
     [Fact]
-    public async Task ANotebookOfTextBlocksAndCode_WrittenInAnyOtherFormat_IsRefusedWhenReadBack()
+    public async Task ANotebookOfTextBlocksAndCode_WrittenInAFormatThatLosesABlock_IsRefusedWhenReadBack()
     {
         // A notebook as people write them: text, then the blocks, then more text and a C# cell. Markdown reads the text
         // and the blocks' fences back as one cell of text and the C# cell as code, so a block is found inside a cell of
@@ -115,7 +116,7 @@ public sealed class PersistenceTests : IDisposable
 
         var cameBackAs = new Dictionary<string, string>();
 
-        foreach (var serializer in opened.Host.GetSerializers().Where(each => each.FormatId is not "verso" and not "dib"))
+        foreach (var serializer in opened.Host.GetSerializers().Where(each => each.FormatId is not "verso" and not "jupyter" and not "dib"))
         {
             var back = await serializer.DeserializeAsync(await serializer.SerializeAsync(notebook));
             var refused = await Assert.ThrowsAsync<InvalidOperationException>(() => new FormatGuard().PostDeserializeAsync(back, $"old.{serializer.FormatId}"));
@@ -125,7 +126,7 @@ public sealed class PersistenceTests : IDisposable
         }
 
         Assert.Equal(
-            new Dictionary<string, string> { ["jupyter"] = "markdown raw raw raw raw markdown code", ["markdown"] = "markdown code" },
+            new Dictionary<string, string> { ["markdown"] = "markdown code" },
             cameBackAs);
     }
 
@@ -154,6 +155,30 @@ public sealed class PersistenceTests : IDisposable
         var written = await new VersoSerializer().DeserializeAsync(await new VersoSerializer().SerializeAsync(model));
 
         Assert.Equal(Titanic.Length, written.Cells.Count(cell => cell.Type == StepCellType.StepType));
+    }
+
+    [Fact]
+    public async Task ANotebookOfBlocks_IsRefusedAsJupyter_ThoughAJupyterFileVersoWroteOfItsBlocks_OpensThroughTheGuard()
+    {
+        // Jupyter keeps the kind of a block beside it, as a raw cell that says it is a block, and Verso reads it back as one;
+        // every other program shows a raw cell. So a save as .ipynb is still refused, and a Jupyter file that Verso wrote of
+        // blocks — sent here by somebody else's Verso — opens with every block, because none of its steps came back as some
+        // other kind of cell.
+        await using var notebook = await Notebook.OpenAsync();
+
+        foreach (var block in Titanic)
+        {
+            notebook.AddBlock(block);
+        }
+
+        var jupyter = notebook.Host.GetSerializers().Single(each => each.FormatId == "jupyter");
+        var guard = new FormatGuard();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => guard.PreSerializeAsync(notebook.Scaffold.Notebook, "flocks.ipynb"));
+
+        var back = await guard.PostDeserializeAsync(await jupyter.DeserializeAsync(await jupyter.SerializeAsync(notebook.Scaffold.Notebook)), "flocks.ipynb");
+
+        Assert.Equal(Titanic, back.Cells.Where(cell => cell.Type == StepCellType.StepType).Select(cell => cell.Source));
     }
 
     [Fact]

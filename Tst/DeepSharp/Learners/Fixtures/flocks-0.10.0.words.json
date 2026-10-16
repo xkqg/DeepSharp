@@ -1,0 +1,106 @@
+{
+  "layers": {
+    "dense": [
+      "bias",
+      "biasStart",
+      "l1",
+      "l2",
+      "learns",
+      "maxNorm",
+      "units",
+      "weights"
+    ],
+    "relu": [],
+    "tanh": [],
+    "sigmoid": [],
+    "dropout": [
+      "rate"
+    ],
+    "batchNorm": [
+      "epsilon",
+      "learns",
+      "momentum",
+      "scale",
+      "shift"
+    ],
+    "layerNorm": [
+      "epsilon",
+      "learns",
+      "scale",
+      "shift"
+    ]
+  },
+  "optimizers": {
+    "sgd": [
+      "dampening",
+      "momentum",
+      "nesterov",
+      "rate",
+      "weightDecay"
+    ],
+    "adam": [
+      "amsgrad",
+      "epsilon",
+      "firstMoment",
+      "rate",
+      "secondMoment",
+      "weightDecay"
+    ],
+    "adamw": [
+      "amsgrad",
+      "epsilon",
+      "firstMoment",
+      "rate",
+      "secondMoment",
+      "weightDecay"
+    ],
+    "rmsprop": [
+      "alpha",
+      "centered",
+      "epsilon",
+      "momentum",
+      "rate",
+      "weightDecay"
+    ],
+    "nadam": [
+      "epsilon",
+      "firstMoment",
+      "momentumDecay",
+      "rate",
+      "secondMoment",
+      "weightDecay"
+    ]
+  },
+  "losses": {
+    "meanSquaredError": [],
+    "crossEntropy": [],
+    "binaryCrossEntropy": [],
+    "earthMoversDistance": []
+  },
+  "schedules": {
+    "constant": [],
+    "stepDecay": [
+      "every",
+      "factor"
+    ],
+    "exponentialDecay": [
+      "factor"
+    ],
+    "cosineDecay": [
+      "epochs",
+      "minimum"
+    ],
+    "linearWarmup": [
+      "epochs",
+      "start"
+    ]
+  },
+  "stopping": {
+    "never": [],
+    "patience": [
+      "best",
+      "least",
+      "patience"
+    ]
+  }
+}

@@ -18,11 +18,16 @@ namespace DeepSharp.Learners.Networks;
 /// <para>
 /// The layers are the ones a pipeline's rows can reach. A pipeline hands over a flat row of numbers, so the words that
 /// work on a row are here and the ones that work on an image — a window over it, a reshaping of it — are not: a network
-/// that takes images is written as code and trained on data a pipeline did not prepare.
+/// that takes images is written as code and trained on data a pipeline did not prepare. A normalisation over groups of
+/// channels, or over one example's channels, measures each over the places an image holds, and a row has one place, so
+/// neither is a word here either.
 /// </para>
 /// </remarks>
 public static class NetworkWords
 {
+    // The word of a layer that reads a category from its block of columns: lowered only where a pipeline hands its rows over.
+    private const string EmbeddingWord = "embedding";
+
     private static readonly WholeNumberParameter UnitsKey = new("units", "How many numbers the layer answers with.", 16) { AtLeast = 1 };
 
     private static readonly TrueOrFalseParameter BiasKey = new("bias", "Whether the layer adds a bias of its own to every sum; it does, unless it says it does not.", true) { LeftOut = true };
@@ -110,6 +115,53 @@ public static class NetworkWords
 
     private static readonly TrueOrFalseParameter BestKey = new("best", "Whether the run ends holding the numbers of its best pass rather than its last.", true);
 
+    private static readonly TrueOrFalseParameter ApproximateKey =
+        new("approximate", "Whether it is the hyperbolic tangent's approximation of the curve rather than the exact one, which PyTorch and Keras use unless told.", false);
+
+    private static readonly NumberParameter SlopeKey =
+        new("negativeSlope", "The share of a number below nought let through: a hundredth in PyTorch, three tenths in Keras's layer.", 0.01) { AtLeast = 0 };
+
+    private static readonly TrueOrFalseParameter EachFeatureKey =
+        new("eachFeature", "Whether every number of a row learns a share of its own, rather than one share for them all, as PyTorch starts it.", false);
+
+    private static readonly NumberParameter BendKey = new("alpha", "What the numbers below nought bend towards, below nought.", 1) { AtLeast = 0 };
+
+    private static readonly NumberParameter RootEpsilonKey =
+        new("epsilon", "The small number added to the mean of the squares so nothing is divided by nought; PyTorch's is the step a single-precision number takes above one.", 1.1920928955078125e-07) { Above = 0 };
+
+    private static readonly WholeNumberParameter FrequenciesKey = new("frequencies", "How many frequencies each number is turned round at.", 48) { AtLeast = 1 };
+
+    private static readonly NumberParameter SigmaKey =
+        new("sigma", "The spread of the normal curve the frequencies start from: the setting the embedding is most sensitive to, searched for every dataset by its authors, and with no default.", 0.01) { Above = 0 };
+
+    private static readonly WholeNumberParameter WidthKey = new("width", "How many numbers each number of the row comes out as.", 24) { AtLeast = 1 };
+
+    private static readonly TrueOrFalseParameter LiteKey =
+        new("lite", "Whether one linear layer is shared by every number of the row, rather than one of each number's own.", false);
+
+    private static readonly TextParameter EmbeddingColumnKey =
+        new("column", "The column of words whose categories the layer turns into vectors, as it was named before the pipeline wrote it down one column per category.", "category");
+
+    private static readonly WholeNumberParameter EmbeddingWidthKey = new("width", "How many numbers each category's vector holds.", 4) { AtLeast = 1 };
+
+    private static readonly NumberParameter DeltaKey = new("delta", "How far from the answer the loss stops being squared and grows in a straight line.", 1) { Above = 0 };
+
+    private static readonly NumberParameter QuantileKey = new("quantile", "The share of the time the answer is to stay below the value the model gives: above nought and below one.", 0.5) { Above = 0 };
+
+    private static readonly NumberParameter GammaKey = new("gamma", "How hard a label the network is already sure of is weighed down.", 2) { AtLeast = 0 };
+
+    private static readonly NumberParameter BalanceKey =
+        new("alpha", "What a one is weighed by, and a nought by one less it — or minus one for no weight, as torchvision writes it.", 0.25) { AtLeast = -1 };
+
+    private static readonly TrueOrFalseParameter LogInputKey =
+        new("logInput", "Whether the network answers with the logarithm of each count's rate, as PyTorch takes it, rather than the rate itself, as Keras does.", true);
+
+    private static readonly NumberParameter RateEpsilonKey =
+        new("epsilon", "The small number added to a rate before its logarithm is taken: a hundred-millionth in PyTorch, a ten-millionth in Keras.", 1e-8) { Above = 0 };
+
+    private static readonly NumberParameter SmoothingKey =
+        new("smoothing", "How much of the answers is spread evenly before they are compared, so no label is taken as quite certain; none, unless said.", 0) { AtLeast = 0, LeftOut = 0 };
+
     /// <summary>The layers a declared network is built from, in the words a saved network writes them under.</summary>
     public static IReadOnlyList<PartKind> Layers { get; } =
     [
@@ -120,6 +172,17 @@ public static class NetworkWords
         new("dropout", "Leaves a share of the numbers out at every pass while training, and none while serving.", [RateKey]),
         new("batchNorm", "Brings every number to the mean and spread of the rows it was trained on.", [MomentumKey, EpsilonKey, ScaleKey, ShiftKey, LearnsKey]),
         new("layerNorm", "Brings every number of one row to that row's own mean and spread.", [EpsilonKey, ScaleKey, ShiftKey, LearnsKey]),
+        new("gelu", "Weighs every number by the share of a normal curve below it: smooth where relu bends.", [ApproximateKey]),
+        new("silu", "Weighs every number by its own sigmoid; also called swish.", []),
+        new("mish", "Weighs every number by the hyperbolic tangent of its softplus.", []),
+        new("leakyRelu", "Leaves what is above nought, and lets a share of what is below it through.", [SlopeKey]),
+        new("prelu", "Leaves what is above nought, and lets a share of what is below it through that it learns.", [EachFeatureKey]),
+        new("elu", "Leaves what is above nought, and bends what is below it towards minus alpha.", [BendKey]),
+        new("selu", "Bends as elu does, at the alpha and the scale that keep a network's numbers normalised.", []),
+        new("softmax", "Turns the numbers of a row into shares of one whole.", []),
+        new("rmsNorm", "Divides every number of one row by the root of the mean of the row's squares, and scales it.", [RootEpsilonKey, ScaleKey, LearnsKey]),
+        new("periodic", "Turns every number of the row into its cosines and sines at frequencies it learns, through a linear layer: a relu after it makes it PLR.", [FrequenciesKey, SigmaKey, WidthKey, LiteKey]),
+        new(EmbeddingWord, "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.", [EmbeddingColumnKey, EmbeddingWidthKey]),
     ];
 
     /// <summary>The optimizers a declared network is moved by.</summary>
@@ -136,9 +199,15 @@ public static class NetworkWords
     public static IReadOnlyList<PartKind> Losses { get; } =
     [
         new("meanSquaredError", "The mean of the squared differences: an answer that is an amount.", []),
-        new("crossEntropy", "The loss of one answer among several classes, read through a softmax.", []),
-        new("binaryCrossEntropy", "The loss of an answer that is a chance, read through a sigmoid.", []),
+        new("crossEntropy", "The loss of one answer among several classes, read through a softmax.", [SmoothingKey]),
+        new("binaryCrossEntropy", "The loss of an answer that is a chance, read through a sigmoid.", [SmoothingKey]),
         new("earthMoversDistance", "How far the shares have to move along the order of the bands to be the answer's: an answer of shares in an order, read through a softmax.", []),
+        new("meanAbsoluteError", "The mean of the size of the differences: an answer that is an amount, some far off.", []),
+        new("huber", "Half the square of the difference near the answer, its size further off: an amount with outliers.", [DeltaKey]),
+        new("quantile", "The pinball loss: the value the answer stays below a share of the time, rather than its mean.", [QuantileKey]),
+        new("focal", "A binary cross-entropy that weighs down the labels the network is already sure of: a rare class, read through a sigmoid.", [GammaKey, BalanceKey]),
+        new("hinge", "How far each answer falls short of a margin of one on its side of nought: a label, read by the side it falls.", []),
+        new("poisson", "The loss of a count: an answer that is how many times something happened, read through an exponential when it is a logarithm.", [LogInputKey, RateEpsilonKey]),
     ];
 
     /// <summary>How the rate a declared network is moved at changes from epoch to epoch, in the words a network's file writes it in.</summary>
@@ -181,6 +250,69 @@ public static class NetworkWords
                 var made = Word(LayerWords, layer, Layers);
 
                 described = made(described, Layers.Single(kind => kind.Name == layer.Kind).Completed(layer));
+            }
+
+            return described;
+        }
+
+        /// <summary>
+        /// The network a declaration's layers describe, for the rows a run of its pipeline hands over: an embedding's column turned
+        /// into the places of its block among the columns those rows hold.
+        /// </summary>
+        /// <param name="prepared">The run whose rows the network is trained on.</param>
+        /// <returns>The description, ready to be compiled.</returns>
+        /// <exception cref="InvalidOperationException">
+        /// An embedding stands after a layer that is not one, or names a column the pipeline did not write down one column per
+        /// category, or one whose block the rows do not hold whole.
+        /// </exception>
+        /// <remarks>
+        /// An embedding reads a row as the pipeline hands it over, so the embeddings stand first; each replaces its block by its
+        /// vector, and the next one finds its block among the columns that leaves.
+        /// </remarks>
+        internal Sequential Described(PreparedData prepared)
+        {
+            var embeddings = layers.TakeWhile(layer => layer.Kind == EmbeddingWord).Count();
+
+            if (layers.Skip(embeddings).Any(layer => layer.Kind == EmbeddingWord))
+            {
+                throw new InvalidOperationException(
+                    "An embedding reads a category from the row as the pipeline hands it over, so every embedding stands before the first layer that is not one.");
+            }
+
+            if (embeddings == 0)
+            {
+                return layers.Described();
+            }
+
+            List<string> columns = [.. prepared.Batch(Part.Train, TrainedNetwork.FeatureNeeds).FeatureNames];
+            var described = new Sequential();
+
+            foreach (var layer in layers.Take(embeddings))
+            {
+                var column = layer.Text(EmbeddingColumnKey.Key);
+                var width = layer.Whole(EmbeddingWidthKey.Key);
+                var names = prepared.CategoryBlock(column);
+                var block = names.Select(name => columns.IndexOf(name)).ToArray();
+
+                if (block.Any(place => place < 0))
+                {
+                    throw new InvalidOperationException(
+                        $"An embedding of '{column}' reads its block of categories, and the rows handed over do not hold '{names[Array.IndexOf(block, -1)]}' of it: leave the block whole.");
+                }
+
+                described = described.Embedding(block, width);
+
+                var first = block.Min();
+                columns = [
+                    .. columns.Take(first).Where(name => !names.Contains(name)),
+                    .. Enumerable.Range(0, width).Select(number => $"{column}_vector{number}"),
+                    .. columns.Skip(first).Where(name => !names.Contains(name)),
+                ];
+            }
+
+            foreach (var layer in layers.Skip(embeddings))
+            {
+                described = Word(LayerWords, layer, Layers)(described, Layers.Single(kind => kind.Name == layer.Kind).Completed(layer));
             }
 
             return described;
@@ -240,7 +372,7 @@ public static class NetworkWords
         /// <summary>The loss a declared part names.</summary>
         /// <returns>The loss.</returns>
         /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
-        public Loss Judged() => Word(LossWords, loss, Losses)(loss);
+        public Loss Judged() => Word(LossWords, loss, Losses)(Losses.Single(kind => kind.Name == loss.Kind).Completed(loss));
     }
 
     extension(PartDeclaration schedule)
@@ -295,8 +427,16 @@ public static class NetworkWords
     private static TMade Word<TMade>(IReadOnlyDictionary<string, TMade> words, PartDeclaration part, IReadOnlyList<PartKind> kinds) =>
         words.TryGetValue(part.Kind, out var made)
             ? made
-            : throw new NotSupportedException(
-                $"'{part.Kind}' is not a word a declared network is written in: {string.Join(", ", kinds.Select(kind => $"'{kind.Name}'"))}.");
+            : throw new NotSupportedException(Refused.TryGetValue(part.Kind, out var why)
+                ? $"'{part.Kind}' is not a word a declared network is written in: {why}"
+                : $"'{part.Kind}' is not a word a declared network is written in: {string.Join(", ", kinds.Select(kind => $"'{kind.Name}'"))}.");
+
+    // The words left out on purpose, each with why and with the word that says it.
+    private static IReadOnlyDictionary<string, string> Refused { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["smoothL1"] =
+            "PyTorch's SmoothL1Loss is the Huber loss over its beta, so it is one word, 'huber', with its delta at that beta — the same network learned, its loss beta times as large.",
+    };
 
     private static IReadOnlyDictionary<string, Func<Sequential, PartDeclaration, Sequential>> LayerWords { get; } =
         new Dictionary<string, Func<Sequential, PartDeclaration, Sequential>>(StringComparer.Ordinal)
@@ -308,6 +448,19 @@ public static class NetworkWords
             ["dropout"] = (described, layer) => described.Dropout(layer.Number(RateKey.Key)),
             ["batchNorm"] = (described, layer) => GovernedBy(layer, described.BatchNorm(layer.Number(MomentumKey.Key), layer.Number(EpsilonKey.Key), KeptBy(layer))),
             ["layerNorm"] = (described, layer) => GovernedBy(layer, described.LayerNorm(layer.Number(EpsilonKey.Key), KeptBy(layer))),
+            ["gelu"] = (described, layer) => described.Gelu(layer.YesOrNo(ApproximateKey.Key)),
+            ["silu"] = (described, _) => described.Silu(),
+            ["mish"] = (described, _) => described.Mish(),
+            ["leakyRelu"] = (described, layer) => described.LeakyRelu(layer.Number(SlopeKey.Key)),
+            ["prelu"] = (described, layer) => described.PRelu(layer.YesOrNo(EachFeatureKey.Key)),
+            ["elu"] = (described, layer) => described.Elu(layer.Number(BendKey.Key)),
+            ["selu"] = (described, _) => described.Selu(),
+            ["softmax"] = (described, _) => described.Softmax(),
+            ["rmsNorm"] = (described, layer) => GovernedBy(layer, described.RmsNorm(layer.Number(RootEpsilonKey.Key), layer.YesOrNo(ScaleKey.Key))),
+            ["periodic"] = (described, layer) => described.Periodic(
+                new Periodicity(layer.Whole(FrequenciesKey.Key), layer.Number(SigmaKey.Key), layer.Whole(WidthKey.Key)) { Lite = layer.YesOrNo(LiteKey.Key) }),
+            [EmbeddingWord] = (_, layer) => throw new InvalidOperationException(
+                $"An embedding of '{layer.Text(EmbeddingColumnKey.Key)}' reads its block from the rows a pipeline hands over, so it is lowered where they are: train the network behind its pipeline."),
         };
 
     private static IReadOnlyDictionary<string, Func<PartDeclaration, Optimizer>> OptimizerWords { get; } =
@@ -355,9 +508,15 @@ public static class NetworkWords
         new Dictionary<string, Func<PartDeclaration, Loss>>(StringComparer.Ordinal)
         {
             ["meanSquaredError"] = _ => new MeanSquaredError(),
-            ["crossEntropy"] = _ => new CrossEntropy(),
-            ["binaryCrossEntropy"] = _ => new BinaryCrossEntropy(),
+            ["crossEntropy"] = loss => new CrossEntropy { Smoothing = loss.Number(SmoothingKey.Key) },
+            ["binaryCrossEntropy"] = loss => new BinaryCrossEntropy { Smoothing = loss.Number(SmoothingKey.Key) },
             ["earthMoversDistance"] = _ => new EarthMoversDistance(),
+            ["meanAbsoluteError"] = _ => new MeanAbsoluteError(),
+            ["huber"] = loss => new Huber(loss.Number(DeltaKey.Key)),
+            ["quantile"] = loss => new Quantile(loss.Number(QuantileKey.Key)),
+            ["focal"] = loss => new Focal(loss.Number(GammaKey.Key)) { Alpha = Focal.FromWritten(loss.Number(BalanceKey.Key)) },
+            ["hinge"] = _ => new Hinge(),
+            ["poisson"] = loss => new Poisson(loss.YesOrNo(LogInputKey.Key)) { Epsilon = loss.Number(RateEpsilonKey.Key) },
         };
 
     private static IReadOnlyDictionary<string, Func<PartDeclaration, LearningRateSchedule>> ScheduleWords { get; } =

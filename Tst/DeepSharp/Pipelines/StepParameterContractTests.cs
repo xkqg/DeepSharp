@@ -157,7 +157,7 @@ public class StepParameterContractTests
         // New in the second version: dropping columns, encoding every category, putting rows in order. Changed
         // in it: the three splits, which place a row by what it says rather than where it stands, and the
         // warm-up drop, which reads the declared order rather than the file's. New in the third: the report of
-        // what a trained model is measured by. New in the sixth: settling a gap where the features are worked out. New in the eighth: a number written as a place on a circle, and two files read as one.
+        // what a trained model is measured by. New in the sixth: settling a gap where the features are worked out. New in the eighth: a number written as a place on a circle, and two files read as one. New in the tenth: a number written down as how far it fills a few bins, and what the earlier rows of a key held, and how alike the parts are.
         Dictionary<string, int> newer = new(StringComparer.Ordinal)
         {
             ["drop.columns"] = 2,
@@ -182,6 +182,9 @@ public class StepParameterContractTests
             ["feature.cycle"] = 8,
             ["read.join"] = 8,
             ["target.numbers"] = 8,
+            ["encode.piecewise"] = 10,
+            ["history"] = 10,
+            ["evidence.likeness"] = 10,
         };
 
         Assert.All(since, each => Assert.Equal(newer.GetValueOrDefault(each.Key, 1), each.Value));

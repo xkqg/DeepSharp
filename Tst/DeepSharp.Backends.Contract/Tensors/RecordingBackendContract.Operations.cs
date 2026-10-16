@@ -53,6 +53,14 @@ public abstract partial class RecordingBackendContract
         AssertGradientsMatchTheLossNudged((backend, inputs) => backend.Softplus(inputs[0]), Between(-3f, 3f, 3, 4));
 
     [Fact]
+    public void Sin_PassesTheGradientTimesTheCosine() =>
+        AssertGradientsMatchTheLossNudged((backend, inputs) => backend.Sin(inputs[0]), Between(-3f, 3f, 3, 4));
+
+    [Fact]
+    public void Erf_PassesTheGradientTimesTwoOverTheRootOfPiTimesTheExponentialOfMinusTheSquare() =>
+        AssertGradientsMatchTheLossNudged((backend, inputs) => backend.Erf(inputs[0]), Between(-2f, 2f, 3, 4));
+
+    [Fact]
     public void Dividing_PassesTheTopTheGradientOverTheBottom_AndTheBottomMinusTheQuotientOverItself() =>
         AssertGradientsMatchTheLossNudged(
             (backend, inputs) => backend.Divide(inputs[0], inputs[1]), Between(0.3f, 3f, 2, 3), Between(0.3f, 3f, 2, 3).Drawn(anew: 1));
@@ -103,7 +111,8 @@ public abstract partial class RecordingBackendContract
                  {
                      (pass.Relu, _backend.Relu), (pass.Positive, _backend.Positive), (pass.Tanh, _backend.Tanh),
                      (pass.Sigmoid, _backend.Sigmoid), (pass.Exp, _backend.Exp), (pass.Log, _backend.Log), (pass.Sqrt, _backend.Sqrt),
-                     (pass.Softplus, _backend.Softplus), (pass.LogSoftmax, _backend.LogSoftmax), (pass.FirstLargest, _backend.FirstLargest),
+                     (pass.Softplus, _backend.Softplus), (pass.Sin, _backend.Sin), (pass.Erf, _backend.Erf), (pass.LogSoftmax, _backend.LogSoftmax),
+                     (pass.FirstLargest, _backend.FirstLargest),
                  })
         {
             Assert.Equal<float[]>(plain(values).Values.ToArray(), recorded(values).Values.ToArray());

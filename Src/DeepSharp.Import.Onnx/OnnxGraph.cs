@@ -222,6 +222,24 @@ internal sealed class OnnxGraph
                 continue;
             }
 
+            // A word an exporter spelled out of several operators, read as the one layer it is.
+            if (OnnxSpellings.Read(_graph, _numbers, new SpellingAt(place, flowing, reaching)) is { } spelled)
+            {
+                foreach (var at in spelled.Constants)
+                {
+                    Constant(new OnnxNode(_graph.Node[at], at, _faults, _used));
+                }
+
+                built.Add(new Built(node, spelled.Layer, false));
+                reaching = reaching with { Flow = spelled.Layer.After };
+                undeclared = false;
+                previous = node.Operator;
+                flowing = spelled.Output;
+                place = spelled.Last;
+
+                continue;
+            }
+
             if (data.Count != 1 || data[0] != flowing)
             {
                 node.Refuse(Branch(data, flowing));
@@ -392,17 +410,9 @@ internal sealed class OnnxGraph
                 layer = layer with { Words = bare, Unbiased = null };
             }
 
-            // A layer written as no word here is a softmax, which only a cross-entropy that applies it takes over.
-            if (layer.Words is not { } words)
-            {
-                node.Refuse("it is a softmax, which a network here leaves to its loss: it is read as the last of a graph whose cross-entropy applies it.");
-
-                continue;
-            }
-
             try
             {
-                words(_description);
+                layer.Words!(_description);
                 placed.Add(new Placed(placed.Count, node, layer));
             }
             catch (ArgumentException refused)

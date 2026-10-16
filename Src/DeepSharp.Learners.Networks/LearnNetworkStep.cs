@@ -72,6 +72,14 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         LeftOut = 0,
     };
 
+    private static readonly TrueOrFalseParameter JudgedByAverageKey = new(
+        "judgedByAverage",
+        "Whether every epoch is judged by the average of the weights rather than by the weights as they are, so early stopping watches, and restores, the weights the run ends holding; left out, by the weights as they are.",
+        false)
+    {
+        LeftOut = false,
+    };
+
     private static readonly PartsParameter LossKey = new(
         "loss", "What the network's answers are judged by while it trains.", [NetworkWords.Losses[0].Declared()], NetworkWords.Losses)
     {
@@ -155,7 +163,20 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
     public double Average
     {
         get;
-        init => field = value < 1 ? AverageKey.Require(value) : throw new ArgumentOutOfRangeException(nameof(value), value, "The share an average of the weights keeps of itself is below one.");
+        init => field = value < 1
+            ? (value > 0 || !JudgedByAverage ? AverageKey.Require(value) : throw NothingToJudgeBy())
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "The share an average of the weights keeps of itself is below one.");
+    }
+
+    /// <summary>
+    /// Whether every epoch is judged by the average of the weights rather than by the weights as they are; by the weights, unless
+    /// said, as a file written before the key was known ran.
+    /// </summary>
+    /// <exception cref="ArgumentException">It is said of a run that keeps no average.</exception>
+    public bool JudgedByAverage
+    {
+        get;
+        init => field = !value || Average > 0 ? JudgedByAverageKey.Require(value) : throw NothingToJudgeBy();
     }
 
     /// <summary>When the run stops; at its last pass, unless said.</summary>
@@ -212,6 +233,7 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         .With(ClipValueKey, step => step.ClipValue)
         .With(StepEveryKey, step => step.StepEvery)
         .With(AverageKey, step => step.Average)
+        .With(JudgedByAverageKey, step => step.JudgedByAverage)
         .With(LossKey, step => One(step.Loss))
         .With(StoppingKey, step => One(step.Stopping))
         .With(EngineKey, step => step.Engine)
@@ -224,6 +246,10 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
 
     // The one part a key holds, as the parameter that writes it takes them: a list of one.
     private static IReadOnlyList<PartDeclaration> One(PartDeclaration part) => [part];
+
+    // Judging epochs by the average of the weights asks for an average to judge by.
+    private static ArgumentException NothingToJudgeBy() =>
+        new($"Epochs are judged by the average of the weights only in a run that keeps one: say '{AverageKey.Key}' beside '{JudgedByAverageKey.Key}'.");
 
 
     /// <inheritdoc />
@@ -239,6 +265,7 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
             ClipValue = ClipValueKey.Read(element),
             StepEvery = StepEveryKey.Read(element),
             Average = AverageKey.Read(element),
+            JudgedByAverage = JudgedByAverageKey.Read(element),
             Stopping = StoppingKey.Read(element)[0],
             Engine = EngineKey.Read(element),
             Seed = SeedKey.Read(element),
@@ -261,6 +288,7 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         && ClipValue.Equals(other.ClipValue)
         && StepEvery == other.StepEvery
         && Average.Equals(other.Average)
+        && JudgedByAverage == other.JudgedByAverage
         && Stopping == other.Stopping
         && Engine == other.Engine
         && Seed == other.Seed
@@ -284,6 +312,7 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         hash.Add(ClipValue);
         hash.Add(StepEvery);
         hash.Add(Average);
+        hash.Add(JudgedByAverage);
         hash.Add(Stopping);
         hash.Add(Engine);
         hash.Add(Seed);

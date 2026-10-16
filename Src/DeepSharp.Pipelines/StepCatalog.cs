@@ -46,6 +46,8 @@ public sealed class StepCatalog
         catalog.Register<NormaliseStep>();
         catalog.Register<NormaliseRowStep>();
         catalog.Register<EncodeStep>();
+        catalog.Register<PiecewiseLinearStep>();
+        catalog.Register<HistoryStep>();
         catalog.Register<TargetStep>();
         catalog.Register<DistributionStep>();
         catalog.Register<LabelsStep>();
@@ -65,6 +67,7 @@ public sealed class StepCatalog
         catalog.Register<ShuffleStep>();
         catalog.Register<ProfileStep>();
         catalog.Register<CorrelationStep>();
+        catalog.Register<LikenessStep>();
         catalog.Register<ReportStep>();
 
         return catalog;

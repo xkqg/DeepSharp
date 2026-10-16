@@ -158,6 +158,24 @@ public interface ITensorBackend
     /// </remarks>
     Tensor Softplus(Tensor values);
 
+    /// <summary>The sine of every value, in radians.</summary>
+    /// <param name="values">The values.</param>
+    /// <returns>A new tensor of the same shape.</returns>
+    /// <remarks>
+    /// The seam's one periodic operation: a cosine is the sine a quarter of a turn on, so a layer that needs both — a
+    /// periodic embedding of a number — asks for the sine twice, and an engine writes one curve rather than two.
+    /// </remarks>
+    Tensor Sin(Tensor values);
+
+    /// <summary>The error function of every value: twice the share of a normal curve of deviation one over root two that lies within it of nothing.</summary>
+    /// <param name="values">The values.</param>
+    /// <returns>A new tensor of the same shape, every value between minus one and one.</returns>
+    /// <remarks>
+    /// What the exact GELU is written in — the value times half of one plus the error function of the value over the root of two —
+    /// which is PyTorch's and Keras's GELU unless either is told to approximate it, and which no other operation here composes.
+    /// </remarks>
+    Tensor Erf(Tensor values);
+
     /// <summary>Divides one tensor by another of the same shape, value by value.</summary>
     /// <param name="left">The tensor divided.</param>
     /// <param name="right">A tensor of the same shape, divided by.</param>

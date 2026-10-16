@@ -293,6 +293,24 @@ public sealed class NativeMemoryBackend : INamesItsVersionAndDevice
     public Tensor Softplus(Tensor values) => Each(values, static value => value > 20f ? value : LogOfOnePlus(MathF.Exp(value)));
 
     /// <inheritdoc />
+    public Tensor Sin(Tensor values) => Each(values, MathF.Sin);
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// An engine's own error function, not the light engine's: Abramowitz and Stegun's 7.1.26, a rational form in the
+    /// exponential good to a hundred and fifty billionths, worked out in single precision as a native library would.
+    /// </remarks>
+    public Tensor Erf(Tensor values) => Each(values, static value =>
+    {
+        var size = MathF.Abs(value);
+        var t = 1f / (1f + (0.3275911f * size));
+        var poly = t * (0.254829592f + (t * (-0.284496736f + (t * (1.421413741f + (t * (-1.453152027f + (t * 1.061405429f))))))));
+        var erf = 1f - (poly * MathF.Exp(-(size * size)));
+
+        return value < 0 ? -erf : erf;
+    });
+
+    /// <inheritdoc />
     /// <remarks>As libtorch has it: each row less its largest value, less the logarithm of its exponentials' single-precision sum.</remarks>
     public Tensor LogSoftmax(Tensor matrix)
     {

@@ -6,20 +6,21 @@ using Verso.Abstractions;
 namespace DeepSharp.Verso.Notebooks;
 
 /// <summary>
-/// Keeps a notebook of pipeline steps in .verso, the one format of Verso's that keeps a block a block, on the way out
-/// and on the way in.
+/// Keeps a notebook of pipeline steps in .verso, the one format whose file keeps a block a block wherever it is opened, on
+/// the way out and on the way in.
 /// </summary>
 /// <remarks>
-/// Every other format keeps a cell's text and loses what kind of cell it is: Jupyter brings a block back as a raw cell,
-/// Markdown as text that fences the block's text in, and a Jupyter or .dib file another program wrote may hold it as
-/// code. Saving a notebook that holds a block in any of them is refused, and so is opening such a file whose cells turn
-/// out to be steps in any of those forms — recognised by their text, the one thing the format kept. The guard takes
-/// every format but Verso's own, so a format it does not know is refused a block rather than trusted with one; the save
-/// is recognised by its format, since Verso names no file when it saves. The guard runs where the host asks it — Verso's
-/// VS Code host and DeepSharp's own server do, before they write a file and after they read one. Verso's command-line
-/// converter asks nothing on the way out, and the browser editor <c>verso serve</c> starts asks nothing either way, so
-/// there such a file opens with its steps as text; <see cref="RestoreBlocksAction"/> makes blocks of them again, reading
-/// a cell by the same rule as the guard.
+/// Every other format keeps a cell's text and may lose what kind of cell it is. Markdown brings a block back as text that
+/// fences the block's text in, and a .dib file holds it as code. Jupyter keeps the kind beside the cell, where Verso reads
+/// it back, but a Jupyter file is opened by programs that know nothing of it and show each block as a raw cell, and a
+/// Jupyter file such a program wrote holds the steps as code. Saving a notebook that holds a block in any of them is
+/// refused, and so is opening such a file whose cells turn out to be steps held as some other kind of cell — recognised by
+/// their text, the one thing every format keeps; a Jupyter file Verso wrote, whose blocks come back as blocks, opens. The
+/// guard takes every format but Verso's own, so a format it does not know is refused a block rather than trusted with one;
+/// the save is recognised by its format, since Verso names no file when it saves. Every host of Verso's asks it, before it
+/// writes a file and after it reads one — the VS Code host, the browser editor <c>verso serve</c> starts, the command
+/// line's conversion, and DeepSharp's own server — and a file that holds its steps as text anyway is made blocks of again
+/// by <see cref="RestoreBlocksAction"/>, which reads a cell by the same rule as the guard.
 /// </remarks>
 [VersoExtension]
 public sealed class FormatGuard : NotebookExtension, INotebookPostProcessor
@@ -35,7 +36,7 @@ public sealed class FormatGuard : NotebookExtension, INotebookPostProcessor
 
     /// <inheritdoc />
     public override string Description =>
-        "Refuses to save a notebook of pipeline steps in any format but .verso, which alone keeps a block a block, and to open a file of another format whose cells are steps.";
+        "Refuses to save a notebook of pipeline steps in any format but .verso, whose file alone keeps a block a block wherever it is opened, and to open a file of another format whose cells are steps held as some other kind of cell.";
 
     /// <inheritdoc />
     public int Priority => 0;
@@ -51,8 +52,8 @@ public sealed class FormatGuard : NotebookExtension, INotebookPostProcessor
 
         return notebook.Cells.Any(cell => cell.Type == StepCellType.StepType)
             ? throw new InvalidOperationException(
-                "A notebook of pipeline steps is saved as .verso: any other format keeps a cell's text and loses what kind "
-                + "of cell it is, so every block would come back as something else. Save it as .verso, or export the pipeline from the export menu.")
+                "A notebook of pipeline steps is saved as .verso: any other format keeps a cell's text and may lose what kind "
+                + "of cell it is — Jupyter keeps it only for Verso, and every other program shows each block as a raw cell. Save it as .verso, or export the pipeline from the export menu.")
             : Task.FromResult(notebook);
     }
 

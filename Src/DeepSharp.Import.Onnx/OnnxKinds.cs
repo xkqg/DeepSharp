@@ -94,7 +94,8 @@ internal abstract class OnnxKind
         new GemmKind(), new MatMulKind(), new AddKind(), new ConvKind(), new ConvTransposeKind(), new PadKind(), new MaxPoolKind(), new AveragePoolKind(), new GlobalAveragePoolKind(), new GlobalMaxPoolKind(),
         new ReduceKind("ReduceMean", new GlobalAveragePoolKind()), new ReduceKind("ReduceMax", new GlobalMaxPoolKind()), new BatchNormalizationKind(), new LayerNormalizationKind(), new FlattenKind(), new ReshapeKind(),
         new ActivationKind("Relu", description => description.Relu(), null), new ActivationKind("Tanh", description => description.Tanh(), null),
-        new ActivationKind("Sigmoid", description => description.Sigmoid(), OutputActivation.Sigmoid), new SoftmaxKind(),
+        new ActivationKind("Sigmoid", description => description.Sigmoid(), OutputActivation.Sigmoid), new GeluKind(), new LeakyReluKind(), new PReluKind(),
+        new EluKind(), new SeluKind(), new MishKind(), new InstanceNormalizationKind(), new GroupNormalizationKind(), new RmsNormalizationKind(), new SoftmaxKind(),
     ];
 
     /// <summary>Every operator read, by ONNX's name for it.</summary>
@@ -417,7 +418,8 @@ internal sealed class ActivationKind(string name, Action<Sequential> word, Outpu
 }
 
 /// <summary>
-/// ONNX's <c>Softmax</c> over a row: no layer here, read as the last of a graph whose cross-entropy applies it itself.
+/// ONNX's <c>Softmax</c> over the values of a row or over an image's channels: a layer here, and, as the last of a graph whose
+/// cross-entropy applies it itself, left to that loss.
 /// </summary>
 internal sealed class SoftmaxKind : OnnxKind
 {
@@ -428,16 +430,21 @@ internal sealed class SoftmaxKind : OnnxKind
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
     {
         var axis = node.Whole("axis", -1);
+        var rank = reaching.Axes + 2;
 
-        if (IsImage(reaching.Flow))
+        // What a softmax here shares out is the last axis: a row's values, or the channels, which come last here.
+        var overTheLast = reaching.Flow switch
         {
-            node.Refuse("it takes shares over an image, and a softmax is read here over the values of a row.");
-        }
-        else if (axis is not (-1 or 1))
+            Flow.Images => axis == 1 || axis == 1 - rank,
+            Flow.ImagesLast => axis == -1 || axis == rank - 1,
+            _ => axis is -1 or 1,
+        };
+
+        if (!overTheLast)
         {
-            node.Refuse(string.Create(CultureInfo.InvariantCulture, $"it takes shares along axis {axis}, and a softmax is read here over the values of a row."));
+            node.Refuse(string.Create(CultureInfo.InvariantCulture, $"it takes shares along axis {axis}, and a softmax here shares out the values of a row, or the channels of an image."));
         }
 
-        return new OnnxLayer(null, reaching.Flow) { Owned = OutputActivation.Softmax };
+        return new OnnxLayer(description => description.Softmax(), reaching.Flow) { Owned = OutputActivation.Softmax };
     }
 }

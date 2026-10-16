@@ -85,6 +85,8 @@ public abstract class AgreementContract(ITensorBackend engine)
         ["Log"] = engine => engine.Log(Between(new Shape(8, 8), 6, 1e-3f, 1e3f)),
         ["Sqrt"] = engine => engine.Sqrt(Between(new Shape(8, 8), 6, 0f, 1e3f)),
         ["Softplus"] = engine => engine.Softplus(Between(new Shape(8, 8), 6, -40f, 40f)),
+        ["Sin"] = engine => engine.Sin(Between(new Shape(8, 8), 6, -60f, 60f)),
+        ["Erf"] = engine => engine.Erf(Between(new Shape(8, 8), 6, -5f, 5f)),
         ["LogSoftmax"] = engine => engine.LogSoftmax(Between(new Shape(8, 10), 6, -30f, 30f)),
     };
 

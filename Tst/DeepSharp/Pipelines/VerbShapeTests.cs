@@ -24,6 +24,9 @@ public class VerbShapeTests
         ["Encode"] =
             "EncodeCategories() already writes every category at once, taken where it stands, so a list of columns is "
             + "the exception rather than the rule.",
+        ["PiecewiseLinear"] =
+            "It has no kind to group columns by: what it is told — how many bins, and what a value beyond them does — belongs to "
+            + "each column, as a fill's share above which it refuses does.",
         ["Target"] = "It names the one column a model is asked to predict; a pipeline has one output.",
         ["Ahead"] = "It makes the one answer, from the one column it is read from.",
         ["SplitByTime"] = "It divides the rows once, by the one column that says when a row happened.",
@@ -91,7 +94,7 @@ public class VerbShapeTests
         // here first.
         Assert.Equal(
             [
-                "Ahead", "ClipOutliers", "Cycle", "Cyclical", "Encode", "FillMissing", "FillNaN", "Normalise", "Reshape",
+                "Ahead", "ClipOutliers", "Cycle", "Cyclical", "Encode", "FillMissing", "FillNaN", "Normalise", "PiecewiseLinear", "Reshape",
                 "ScaleGiven", "SettleGaps", "SplitByTime", "SplitStratified", "Target", "TimeParts",
                 "TimePartsAsNumbers",
             ],

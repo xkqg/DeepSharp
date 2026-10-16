@@ -771,6 +771,30 @@ public sealed class FittingBuilder
     public FittingBuilder Encode(string column, As how = As.OneHot, Unseen unseen = Unseen.Reserve) =>
         Add(new EncodeStep(column, how, unseen));
 
+    /// <summary>
+    /// Writes a column of numbers down as how far each value fills a few bins, their edges the quantiles of the training rows:
+    /// Gorishniy, Rubachev and Babenko's piecewise linear encoding.
+    /// </summary>
+    /// <param name="column">The column of numbers.</param>
+    /// <param name="bins">How many bins, at least two; fewer where the training rows' quantiles fall together.</param>
+    /// <param name="outOfRange">What happens to a value beyond the edges: let through the end bins, held at them, or refused.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public FittingBuilder PiecewiseLinear(string column, int bins, OutOfRange outOfRange = OutOfRange.Pass) =>
+        Add(new PiecewiseLinearStep(column, bins, outOfRange));
+
+    /// <summary>
+    /// Writes beside each row the mean of a column over the training rows of its key that came strictly before it, pulled
+    /// towards the mean of every training row: a type history, a farm history.
+    /// </summary>
+    /// <param name="key">The column whose value says which rows are of one kind.</param>
+    /// <param name="value">The column of numbers whose earlier mean is read; it may be the answer.</param>
+    /// <param name="shrink">How many rows' worth of weight the training rows' mean has beside a key's own rows, above nothing.</param>
+    /// <param name="orderBy">The columns that say which rows came before a row, the one that decides first first.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <remarks>The column it makes is named after the value, 'history' and the key; <see cref="HistoryStep"/> has the whole rule.</remarks>
+    public FittingBuilder History(string key, string value, double shrink, params string[] orderBy) =>
+        Add(new HistoryStep(key, value, orderBy, shrink));
+
     /// <summary>Brings each row onto a comparable scale, learning nothing.</summary>
     /// <param name="norm">How the row's size is measured.</param>
     /// <param name="columns">The columns that make up the row.</param>
@@ -821,6 +845,15 @@ public sealed class FittingBuilder
     /// <returns>This builder, so the next verb can be written after it.</returns>
     /// <remarks>The column that says where a gap was is written always, and this is how it is left out.</remarks>
     public FittingBuilder Drop(params string[] columns) => Add(new DropColumnsStep(columns));
+
+    /// <summary>
+    /// Sets out how alike the parts a split made are, column by column — the Kolmogorov–Smirnov distance for numbers, the total
+    /// variation for words — and flags every distance above a bound.
+    /// </summary>
+    /// <param name="warnAbove">The distance above which two parts are flagged as unlike: above nought, at most one.</param>
+    /// <param name="columns">The columns to compare; none, for every column where it stands but the answer.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    public FittingBuilder Likeness(double warnAbove, params string[] columns) => Add(new LikenessStep(warnAbove, columns));
 
     /// <summary>Profiles the columns where it stands, on the training rows.</summary>
     /// <param name="columns">The columns to profile; none, for every column here.</param>

@@ -35,6 +35,8 @@ public sealed class PoolingTests() : PoolingContract(Card.First());
 
 public sealed class PaddingTests() : PaddingContract(Card.First());
 
+public sealed class VocabularyTests() : VocabularyContract(Card.First());
+
 public sealed class SpatialDropoutTests() : SpatialDropoutContract(Card.First());
 
 public sealed class NormalisationTests() : NormalisationContract(Card.First());

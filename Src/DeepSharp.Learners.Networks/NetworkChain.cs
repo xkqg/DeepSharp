@@ -68,6 +68,9 @@ public enum Vocabularies
 /// </remarks>
 public sealed class NetworkDeclaration
 {
+    // What PyTorch adds to the mean of the squares of a root-mean-square normalisation unless told otherwise.
+    private const double RmsNormSingleStep = 1.1920928955078125e-07;
+
     private readonly List<PartDeclaration> _layers = [];
     private readonly Vocabularies _words;
 
@@ -79,6 +82,7 @@ public sealed class NetworkDeclaration
     private double _clipValue;
     private int _stepEvery = 1;
     private double _average;
+    private bool _judgedByAverage;
     private double? _decay;
     private double? _dampening;
     private bool _nesterov;
@@ -232,6 +236,87 @@ public sealed class NetworkDeclaration
             .With("epsilon", PartValue.Of(epsilon ?? (_words == Vocabularies.Keras ? 1e-3 : 1e-5)))
             .With("scale", PartValue.Of(scale))
             .With("shift", PartValue.Of(shift)));
+
+    /// <summary>A layer that weighs every number by the share of a normal curve below it: the GELU.</summary>
+    /// <param name="approximate">Whether it is the hyperbolic tangent's approximation; exact, as both libraries leave it, unless said.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Gelu(bool approximate = false) => Layer("gelu", new PartSetting("approximate", PartValue.Of(approximate)));
+
+    /// <summary>A layer that weighs every number by its own sigmoid: the SiLU, also called swish.</summary>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Silu() => Layer("silu");
+
+    /// <summary>A layer that weighs every number by the hyperbolic tangent of its softplus: mish.</summary>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Mish() => Layer("mish");
+
+    /// <summary>A layer that leaves what is above nought and lets a share of what is below it through.</summary>
+    /// <param name="negativeSlope">The share; each library's own, unless said: a hundredth in PyTorch, three tenths in Keras's layer.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration LeakyRelu(double? negativeSlope = null) =>
+        Layer("leakyRelu", new PartSetting("negativeSlope", PartValue.Of(negativeSlope ?? (_words == Vocabularies.Keras ? 0.3 : 0.01))));
+
+    /// <summary>A layer that leaves what is above nought and lets a share of what is below it through that it learns.</summary>
+    /// <param name="eachFeature">
+    /// Whether every number of the row learns a share of its own; each library's own, unless said: one share for them all in
+    /// PyTorch, one for each in Keras.
+    /// </param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration PRelu(bool? eachFeature = null) =>
+        Layer("prelu", new PartSetting("eachFeature", PartValue.Of(eachFeature ?? _words == Vocabularies.Keras)));
+
+    /// <summary>A layer that leaves what is above nought and bends what is below it towards minus alpha: the ELU.</summary>
+    /// <param name="alpha">What it bends towards, below nought; one, as both libraries leave it, unless said.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Elu(double alpha = 1) => Layer("elu", new PartSetting("alpha", PartValue.Of(alpha)));
+
+    /// <summary>A layer that bends as the ELU does at the alpha and the scale that keep a network's numbers normalised: the SELU.</summary>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Selu() => Layer("selu");
+
+    /// <summary>A layer that turns the numbers of a row into shares of one whole.</summary>
+    /// <returns>The declaration.</returns>
+    /// <remarks>Last, before a cross-entropy, it is lifted into the loss, which applies the softmax itself.</remarks>
+    public NetworkDeclaration Softmax() => Layer("softmax");
+
+    /// <summary>A layer that divides every number of one row by the root of the mean of the row's squares, and scales it.</summary>
+    /// <param name="epsilon">The small number added to the mean of the squares; each library's own, unless said.</param>
+    /// <param name="scale">Whether it scales what it normalised by a scale of its own; it does, unless said.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration RmsNorm(double? epsilon = null, bool scale = true) => Layer(
+        Kind("rmsNorm").Declared()
+            .With("epsilon", PartValue.Of(epsilon ?? (_words == Vocabularies.Keras ? 1e-6 : RmsNormSingleStep)))
+            .With("scale", PartValue.Of(scale)));
+
+    /// <summary>
+    /// A layer that turns every number of the row into its cosines and sines at frequencies it learns, through a linear layer:
+    /// Gorishniy et al.'s periodic embedding, their PLR once a <see cref="Relu"/> follows it.
+    /// </summary>
+    /// <param name="sigma">The spread of the normal curve the frequencies start from: said every time, since the right one depends on the data.</param>
+    /// <param name="frequencies">How many frequencies each number has; forty-eight, as their package leaves it, unless said.</param>
+    /// <param name="width">How many numbers each number comes out as; twenty-four, as their package leaves it, unless said.</param>
+    /// <param name="lite">Whether one linear layer is shared by every number of the row; it is not, unless said.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Periodic(double sigma, int frequencies = 48, int width = 24, bool lite = false) => Layer(
+        "periodic",
+        new PartSetting("frequencies", PartValue.Of(frequencies)),
+        new PartSetting("sigma", PartValue.Of(sigma)),
+        new PartSetting("width", PartValue.Of(width)),
+        new PartSetting("lite", PartValue.Of(lite)));
+
+    /// <summary>
+    /// A layer that turns the columns a category was written down as into a small vector it learns for each category: an
+    /// embedding, over the block the pipeline's encoder wrote, its own vector for a category the training rows never held and for
+    /// a gap.
+    /// </summary>
+    /// <param name="column">The column of words, as it was named before the pipeline wrote it down one column per category.</param>
+    /// <param name="width">How many numbers each category's vector holds.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>It reads the rows as the pipeline hands them over, so every embedding stands before the first layer that is not one.</remarks>
+    public NetworkDeclaration Embedding(string column, int width) => Layer(
+        "embedding",
+        new PartSetting("column", PartValue.Of(column)),
+        new PartSetting("width", PartValue.Of(width)));
 
     /// <summary>Moves the network's numbers against their gradients.</summary>
     /// <param name="rate">How far one step moves them; each library's own, unless said.</param>
@@ -427,6 +512,57 @@ public sealed class NetworkDeclaration
     /// <remarks>Only an output whose answers are in an order can mean it: a distribution said to be ordered.</remarks>
     public NetworkDeclaration EarthMoversDistance() => Judged("earthMoversDistance");
 
+    /// <summary>Judges one answer among several classes, read through a softmax, against answers softened by a share spread evenly over the classes.</summary>
+    /// <param name="smoothing">The share: nought or more, below one.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration CrossEntropy(double smoothing) => Judged("crossEntropy", Smoothed(smoothing));
+
+    /// <summary>Judges an answer that is a chance, read through a sigmoid, against answers moved a share of the way towards a half.</summary>
+    /// <param name="smoothing">The share: nought or more, below one.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration BinaryCrossEntropy(double smoothing) => Judged("binaryCrossEntropy", Smoothed(smoothing));
+
+    /// <summary>Judges the answers by the mean of the size of their differences: an amount, some far off.</summary>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration MeanAbsoluteError() => Judged("meanAbsoluteError");
+
+    /// <summary>Judges the answers by half the square of the difference near them and its size further off: an amount with outliers.</summary>
+    /// <param name="delta">How far from the answer the loss stops being squared; one, as both libraries leave it, unless said.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Huber(double delta = 1) => Judged("huber", new PartSetting("delta", PartValue.Of(delta)));
+
+    /// <summary>Judges the answers by the pinball loss of a quantile: the value the answer stays below that share of the time.</summary>
+    /// <param name="quantile">The share: above nought and below one.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Quantile(double quantile) => Judged("quantile", new PartSetting("quantile", PartValue.Of(quantile)));
+
+    /// <summary>Judges labels by a binary cross-entropy that weighs down the ones the network is already sure of, read through a sigmoid: a rare class.</summary>
+    /// <param name="gamma">How hard a sure label is weighed down; two, as both libraries leave it, unless said.</param>
+    /// <param name="alpha">
+    /// What a one is weighed by, and a nought by one less it, or minus one for no weight, as torchvision writes it; each library's own,
+    /// unless said: a quarter in torchvision, none in Keras.
+    /// </param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Focal(double gamma = 2, double? alpha = null) => Judged(
+        "focal",
+        new PartSetting("gamma", PartValue.Of(gamma)),
+        new PartSetting("alpha", PartValue.Of(alpha ?? (_words == Vocabularies.Keras ? global::DeepSharp.Networks.Focal.NoWeight : 0.25))));
+
+    /// <summary>Judges labels by how far each answer falls short of a margin of one on its side of nought, as Keras's hinge does; read by the side it falls.</summary>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Hinge() => Judged("hinge");
+
+    /// <summary>Judges counts by the negative log-likelihood of a Poisson count.</summary>
+    /// <param name="logInput">
+    /// Whether the network answers with the logarithm of each count's rate; each library's own, unless said: the logarithm in
+    /// PyTorch, the rate itself in Keras.
+    /// </param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Poisson(bool? logInput = null) => Judged(
+        "poisson",
+        new PartSetting("logInput", PartValue.Of(logInput ?? _words != Vocabularies.Keras)),
+        new PartSetting("epsilon", PartValue.Of(_words == Vocabularies.Keras ? 1e-7 : 1e-8)));
+
     /// <summary>How the run goes: the number every draw is worked out from, how many passes, and how many rows a step.</summary>
     /// <param name="seed">The number every random draw of the run is worked out from.</param>
     /// <param name="epochs">How many times the run goes over the training rows, at most; a hundred, unless said.</param>
@@ -545,6 +681,19 @@ public sealed class NetworkDeclaration
         return this;
     }
 
+    /// <summary>
+    /// Judges every epoch by the average of the weights rather than by the weights as they are, so early stopping watches — and,
+    /// where it restores the best, brings back — the weights the run ends holding.
+    /// </summary>
+    /// <returns>The declaration.</returns>
+    /// <remarks>Said of a run that keeps no <see cref="Average"/>, the step is refused where it is made.</remarks>
+    public NetworkDeclaration JudgedByAverage()
+    {
+        _judgedByAverage = true;
+
+        return this;
+    }
+
     /// <summary>Runs on the engine that goes by this name.</summary>
     /// <param name="engine">The engine's name, as the application gives it — and with it, the device it works on.</param>
     /// <returns>The declaration.</returns>
@@ -563,6 +712,7 @@ public sealed class NetworkDeclaration
         ClipValue = _clipValue,
         StepEvery = _stepEvery,
         Average = _average,
+        JudgedByAverage = _judgedByAverage,
         Stopping = _stopping,
         Engine = _engine,
         Seed = _seed,
@@ -607,12 +757,16 @@ public sealed class NetworkDeclaration
     // written out again here.
     private static PartKind Kind(string name) => NetworkWords.Layers.Single(kind => kind.Name == name);
 
-    private NetworkDeclaration Judged(string kind)
+    private NetworkDeclaration Judged(string kind, params PartSetting[] settings)
     {
-        _loss = new PartDeclaration(kind, []);
+        _loss = new PartDeclaration(kind, settings);
 
         return this;
     }
+
+    // The smoothing of a loss of classes, written only where there is some, so an unsoftened loss is declared as it always was.
+    private static PartSetting[] Smoothed(double smoothing) => smoothing == 0 ? [] : [new PartSetting("smoothing", PartValue.Of(smoothing))];
+
 
     private NetworkDeclaration Scheduled(string kind, params PartSetting[] settings)
     {

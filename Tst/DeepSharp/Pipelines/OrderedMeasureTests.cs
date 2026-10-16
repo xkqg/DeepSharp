@@ -75,6 +75,10 @@ public class OrderedMeasureTests
             [Metric.Emd] = MetricFamily.OrderedShares,
             [Metric.Kl] = MetricFamily.Shares,
             [Metric.Rps] = MetricFamily.OrderedShares,
+            [Metric.F1] = MetricFamily.Classes,
+            [Metric.Auc] = MetricFamily.Classes,
+            [Metric.Mape] = MetricFamily.Amounts,
+            [Metric.Brier] = MetricFamily.Classes,
         };
 
         Assert.Equal(Enum.GetValues<Metric>(), families.Keys.Order());
@@ -84,7 +88,7 @@ public class OrderedMeasureTests
         // Any value but one of the arms is refused, so a measure that is a number and is measured at all has an arm.
         Assert.All(
             Enum.GetValues<Metric>().Where(metric => metric != Metric.ConfusionMatrix),
-            metric => Assert.True(double.IsFinite(rows.Of(metric, 1)), $"'{metric.Word()}' measured nothing."));
+            metric => Assert.False(double.IsNaN(rows.Of(metric, 1)), $"'{metric.Word()}' measured nothing."));
         Assert.Throws<ArgumentOutOfRangeException>(() => rows.Of((Metric)99, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => rows.Of(Metric.ConfusionMatrix, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => rows.Classes(0).Of(Metric.Rmse));

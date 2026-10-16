@@ -11,9 +11,10 @@ namespace DeepSharp.Networks;
 /// numbers it learns.
 /// </summary>
 /// <remarks>
-/// The last axis is a row's features, or an image's channels, which come last here. What the two normalisations share is
-/// written once, here — taking the batch as rows of that axis, the scale and the shift, and what is added to a variance
-/// before its root is taken — and each says only what it measures the mean and the spread over.
+/// The last axis is a row's features, or an image's channels, which come last here. What the normalisations share is written
+/// once, here — taking the batch as rows of that axis, the scale and the shift, and what is added to a variance before its
+/// root is taken — and each says only what it measures the mean and the spread over: the batch, a row, a group of one
+/// example's channels over every place it holds, or a row's root mean square alone.
 /// </remarks>
 public abstract class Normalisation : Layer
 {
@@ -69,7 +70,7 @@ public abstract class Normalisation : Layer
 
         var backend = pass.Backend;
         var rows = backend.Reshape(input, new Shape(input.Shape.Count / Features, Features));
-        var normalised = Normalise(rows, pass);
+        var normalised = Normalise(rows, input.Shape, pass);
 
         var scaled = Weight is null ? normalised : backend.Multiply(normalised, backend.RowsOf(Weight.Value, rows.Shape[0]));
 
@@ -103,9 +104,51 @@ public abstract class Normalisation : Layer
 
     /// <summary>The rows brought to a mean of nothing and a spread of one, over whatever this normalisation measures them.</summary>
     /// <param name="rows">A row for every place, a column for every feature.</param>
+    /// <param name="input">The shape of the batch the rows were taken from: its first axis the examples, which a normalisation over one example's places tells apart.</param>
     /// <param name="pass">The pass: whether it trains, and the backend.</param>
     /// <returns>The normalised rows, before the scale and the shift.</returns>
-    private protected abstract Tensor Normalise(Tensor rows, Pass pass);
+    private protected abstract Tensor Normalise(Tensor rows, Shape input, Pass pass);
+
+    /// <summary>
+    /// The rows brought to a mean of nothing and a spread of one over each group of an example's channels, every place of the
+    /// example taken together: what PyTorch's GroupNorm measures, its channels first and here last.
+    /// </summary>
+    /// <param name="backend">The engine the arithmetic runs on.</param>
+    /// <param name="rows">A row for every place, a column for every channel.</param>
+    /// <param name="examples">How many examples the rows were taken from, each the same number of places.</param>
+    /// <param name="groups">How many groups the channels are in, each of the channels that stand together.</param>
+    /// <returns>The normalised rows.</returns>
+    /// <remarks>
+    /// Each example is laid out as one row of its places' channels, and which group a value belongs to is a matrix of noughts and
+    /// ones worked out from the shapes alone: the row times it, over how many values a group holds, is each group's mean, and that
+    /// times the matrix turned round lays every group's mean back over its values. The variance is counted over every value, as
+    /// PyTorch counts it, and nothing is added to the seam.
+    /// </remarks>
+    private protected Tensor OverGroups(ITensorBackend backend, Tensor rows, int examples, int groups)
+    {
+        var width = rows.Shape.Count / examples;
+        var inGroup = Features / groups;
+        var member = new float[width * groups];
+        var laidBack = new float[groups * width];
+
+        for (var at = 0; at < width; at++)
+        {
+            var group = at % Features / inGroup;
+
+            member[(at * groups) + group] = 1f;
+            laidBack[(group * width) + at] = 1f;
+        }
+
+        var into = Tensor.From(new Shape(width, groups), member);
+        var back = Tensor.From(new Shape(groups, width), laidBack);
+        var share = backend.Scalar(groups / (double)width);
+        var values = backend.Reshape(rows, new Shape(examples, width));
+
+        var centred = backend.Subtract(values, backend.MatMul(backend.Scale(backend.MatMul(values, into), share), back));
+        var variance = backend.Scale(backend.MatMul(backend.Multiply(centred, centred), into), share);
+
+        return backend.Reshape(backend.Divide(centred, backend.MatMul(Spread(backend, variance), back)), rows.Shape);
+    }
 
     /// <summary>The spread a variance stands for: its root, once <see cref="Epsilon"/> is added.</summary>
     private protected Tensor Spread(ITensorBackend backend, Tensor variance) =>
@@ -208,7 +251,7 @@ public sealed class BatchNorm : Normalisation, ISaved<BatchNorm>
 
     /// <inheritdoc />
     /// <exception cref="ArgumentException">A training pass hands it a single row, which has no spread to measure.</exception>
-    private protected override Tensor Normalise(Tensor rows, Pass pass)
+    private protected override Tensor Normalise(Tensor rows, Shape input, Pass pass)
     {
         var backend = pass.Backend;
         var count = rows.Shape[0];
@@ -296,7 +339,7 @@ public sealed class LayerNorm : Normalisation, ISaved<LayerNorm>
     }
 
     /// <inheritdoc />
-    private protected override Tensor Normalise(Tensor rows, Pass pass)
+    private protected override Tensor Normalise(Tensor rows, Shape input, Pass pass)
     {
         var backend = pass.Backend;
         var share = backend.Scalar(1.0 / Features);
@@ -306,6 +349,192 @@ public sealed class LayerNorm : Normalisation, ISaved<LayerNorm>
         var variance = backend.Scale(backend.SumRows(backend.Transpose(backend.Multiply(centred, centred))), share);
 
         return backend.Divide(centred, backend.ColumnsOf(Spread(backend, variance), Features));
+    }
+}
+
+/// <summary>
+/// A group normalisation: each example measured over every place it holds, a group of its channels at a time, the same in
+/// training and afterwards — PyTorch's <c>GroupNorm</c> and Keras's <c>GroupNormalization</c>.
+/// </summary>
+/// <remarks>
+/// The channels are the last axis, and stand together in groups of as many as divide them evenly, the first group the first
+/// channels. It keeps no running statistic and does not care how many examples a batch holds; it scales and shifts each channel,
+/// not each group.
+/// </remarks>
+public sealed class GroupNorm : Normalisation, ISaved<GroupNorm>
+{
+    private const string GroupsKey = "groups";
+
+    /// <summary>A group normalisation of so many channels in so many groups, starting at a scale of one and a shift of nothing.</summary>
+    /// <param name="channels">How many channels the last axis holds.</param>
+    /// <param name="groups">How many groups they stand in: one at least, and a number that divides them.</param>
+    /// <exception cref="ArgumentOutOfRangeException">There are fewer than one channel or one group.</exception>
+    /// <exception cref="ArgumentException">The groups do not divide the channels.</exception>
+    public GroupNorm(int channels, int groups)
+        : this(channels, groups, default)
+    {
+    }
+
+    /// <summary>A group normalisation of so many channels in so many groups, with the scale and the shift it is told to keep.</summary>
+    /// <param name="channels">How many channels the last axis holds.</param>
+    /// <param name="groups">How many groups they stand in: one at least, and a number that divides them.</param>
+    /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one.</param>
+    /// <exception cref="ArgumentOutOfRangeException">There are fewer than one channel or one group.</exception>
+    /// <exception cref="ArgumentException">The groups do not divide the channels.</exception>
+    public GroupNorm(int channels, int groups, Affine affine)
+        : base(channels, affine)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(groups, 1);
+
+        Groups = channels % groups == 0
+            ? groups
+            : throw new ArgumentException($"A group normalisation puts its channels in groups that divide them evenly, and {channels} channels do not go into {groups}.", nameof(groups));
+    }
+
+    /// <summary>How many groups the channels stand in.</summary>
+    public int Groups { get; }
+
+    /// <inheritdoc />
+    public static string Name => "groupNorm";
+
+    /// <inheritdoc />
+    public static GroupNorm Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        return new(rebuilding.Whole(settings, "features"), rebuilding.Whole(settings, GroupsKey), AffineIn(settings, rebuilding)) { Epsilon = rebuilding.Number(settings, "epsilon") };
+    }
+
+    /// <inheritdoc />
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber("features", Features);
+        writer.WriteNumber(GroupsKey, Groups);
+        writer.WriteNumber("epsilon", Epsilon);
+        WriteAffine(writer);
+    }
+
+    /// <inheritdoc />
+    private protected override Tensor Normalise(Tensor rows, Shape input, Pass pass) => OverGroups(pass.Backend, rows, input[0], Groups);
+}
+
+/// <summary>
+/// An instance normalisation: each channel of each example measured over every place the example holds, the same in training
+/// and afterwards — PyTorch's <c>InstanceNorm</c>, and Keras's <c>GroupNormalization</c> with a group for every channel.
+/// </summary>
+/// <remarks>
+/// A group normalisation with as many groups as channels, kept as a kind of its own so a file says which it is. PyTorch's starts
+/// without a scale or a shift, and one read from PyTorch's words says so; here it keeps both, unless it is told otherwise, as
+/// every other normalisation does. It keeps no running statistic.
+/// </remarks>
+public sealed class InstanceNorm : Normalisation, ISaved<InstanceNorm>
+{
+    /// <summary>An instance normalisation of so many channels, starting at a scale of one and a shift of nothing.</summary>
+    /// <param name="channels">How many channels the last axis holds.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It holds fewer than one.</exception>
+    public InstanceNorm(int channels)
+        : this(channels, default)
+    {
+    }
+
+    /// <summary>An instance normalisation of so many channels, with the scale and the shift it is told to keep.</summary>
+    /// <param name="channels">How many channels the last axis holds.</param>
+    /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one — PyTorch's <c>affine</c>.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It holds fewer than one.</exception>
+    public InstanceNorm(int channels, Affine affine)
+        : base(channels, affine)
+    {
+    }
+
+    /// <inheritdoc />
+    public static string Name => "instanceNorm";
+
+    /// <inheritdoc />
+    public static InstanceNorm Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        return new(rebuilding.Whole(settings, "features"), AffineIn(settings, rebuilding)) { Epsilon = rebuilding.Number(settings, "epsilon") };
+    }
+
+    /// <inheritdoc />
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber("features", Features);
+        writer.WriteNumber("epsilon", Epsilon);
+        WriteAffine(writer);
+    }
+
+    /// <inheritdoc />
+    private protected override Tensor Normalise(Tensor rows, Shape input, Pass pass) => OverGroups(pass.Backend, rows, input[0], Features);
+}
+
+/// <summary>
+/// A root-mean-square normalisation: each row of the last axis divided by the root of the mean of its squares, and scaled —
+/// nothing is taken from it first and nothing added after, as PyTorch's <c>RMSNorm</c> and Keras's <c>RMSNormalization</c> have it.
+/// </summary>
+/// <remarks>
+/// It scales each feature by a number it learns, its slot PyTorch's <c>weight</c>, unless it is told to keep no scale, and it
+/// never shifts. What is added to the mean of the squares before its root is taken is the smallest step a single-precision
+/// number takes above one, unless said, as PyTorch leaves it; Keras adds a millionth, and a description in Keras's words says so.
+/// </remarks>
+public sealed class RmsNorm : Normalisation, ISaved<RmsNorm>
+{
+    /// <summary>What PyTorch adds to the mean of the squares unless told otherwise: the step a single-precision number takes above one.</summary>
+    internal const double SingleStep = 1.1920928955078125e-07;
+
+    /// <summary>A root-mean-square normalisation of so many features, starting at a scale of one.</summary>
+    /// <param name="features">How many features the last axis holds.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It holds fewer than one.</exception>
+    public RmsNorm(int features)
+        : this(features, scale: true)
+    {
+    }
+
+    /// <summary>A root-mean-square normalisation of so many features, with a scale or without one.</summary>
+    /// <param name="features">How many features the last axis holds.</param>
+    /// <param name="scale">Whether it scales each feature by a number it learns — PyTorch's <c>elementwise_affine</c>.</param>
+    /// <exception cref="ArgumentOutOfRangeException">It holds fewer than one.</exception>
+    public RmsNorm(int features, bool scale)
+        : base(features, new Affine { WithoutScale = !scale, WithoutShift = true }) => Epsilon = SingleStep;
+
+    /// <inheritdoc />
+    public static string Name => "rmsNorm";
+
+    /// <inheritdoc />
+    public static RmsNorm Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        return new(rebuilding.Whole(settings, "features"), rebuilding.Yes(settings, "scale")) { Epsilon = rebuilding.Number(settings, "epsilon") };
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Its features and what is added to the mean of the squares; that it has no scale, only where it has none.</remarks>
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber("features", Features);
+        writer.WriteNumber("epsilon", Epsilon);
+
+        if (Affine.WithoutScale)
+        {
+            writer.WriteBoolean("scale", false);
+        }
+    }
+
+    /// <inheritdoc />
+    private protected override Tensor Normalise(Tensor rows, Shape input, Pass pass)
+    {
+        var backend = pass.Backend;
+        var meanSquare = backend.Scale(backend.SumRows(backend.Transpose(backend.Multiply(rows, rows))), backend.Scalar(1.0 / Features));
+
+        return backend.Divide(rows, backend.ColumnsOf(Spread(backend, meanSquare), Features));
     }
 }
 

@@ -25,7 +25,8 @@ namespace DeepSharp.Import.Keras;
 /// while the layer is <c>dense_2</c>.
 /// </para>
 /// <para>
-/// The loss is the one the model was compiled with — a binary or a categorical cross-entropy, or a mean squared error —
+/// The loss is the one the model was compiled with — a binary, a binary focal or a categorical cross-entropy, a mean squared
+/// or a mean absolute error, a Huber, a Poisson or a hinge loss, a cross-entropy's label smoothing read as its smoothing —
 /// and the network ends where that loss takes over: a last sigmoid before a binary cross-entropy, or a last softmax before
 /// a categorical one, trained on the chances it gives, is lifted into the loss, which applies it to every prediction; a
 /// model trained on its logits is read as it stands.
@@ -35,8 +36,10 @@ namespace DeepSharp.Import.Keras;
 /// their transposed, depthwise and separable forms, and ZeroPadding layers; MaxPooling and AveragePooling layers and
 /// GlobalMaxPooling and GlobalAveragePooling layers along one, two and three axes, the global ones keeping their axes when
 /// Keras's <c>keepdims</c> says; BatchNormalization, LayerNormalization, Dropout and SpatialDropout1D, SpatialDropout2D and
-/// SpatialDropout3D layers; and Flatten, Reshape, Activation and ReLU layers; and the linear, relu, tanh and sigmoid
-/// activations. A dense layer or a convolution without a bias (<c>use_bias</c> false) is read as a layer without one, and a
+/// SpatialDropout3D layers; GroupNormalization — of a group for every channel, an instance normalisation — and
+/// RMSNormalization; an Embedding as the first layer over one category's place, the network here taking that category's ones
+/// and noughts instead; Flatten, Reshape, Activation, ReLU, LeakyReLU, PReLU, ELU and Softmax layers; and the linear, relu,
+/// tanh, sigmoid, gelu, silu, swish, mish, leaky_relu, elu, selu and softmax activations. A dense layer or a convolution without a bias (<c>use_bias</c> false) is read as a layer without one, and a
 /// normalisation without its scale or its shift (<c>scale</c> or <c>center</c> false) as one that keeps neither; a layer's
 /// L1, L2 and L1L2 regularizers, its MaxNorm constraints — over the axes a unit's numbers lie along — and its <c>trainable</c>
 /// switch as the rules of its numbers (a penalty the loss adds, a bound after every step, a layer held still), while any other
@@ -46,10 +49,11 @@ namespace DeepSharp.Import.Keras;
 /// window's size when it says none. What is refused, at the layer that says it and every such layer at once: any other kind
 /// of layer or activation; a window padded otherwise than 'valid' or 'same' — and 'causal' for a convolution along a
 /// series; any layer of series, images or volumes with its channels first; a normalisation over another axis than the last,
-/// or a layer normalisation by the root mean square alone; a dropout by a noise shape; a reshape that leaves a length to be
+/// or a layer normalisation scaled by <c>rms_scaling</c>, which Keras works out from the variance; an embedding anywhere but
+/// first, over more than one place, masking the place nought or of low-rank factors; a dropout by a noise shape; a reshape that leaves a length to be
 /// worked out; a relu with a cap, a slope or a threshold; a model of another kind than a Sequential, of another precision,
-/// of an input whose lengths are not all stated, or saved without its loss; and a loss that smooths its labels or adds a
-/// batch's losses up rather than taking their mean. A description that says a layer keeps less than the file's numbers
+/// of an input whose lengths are not all stated, or saved without its loss; and a focal loss that smooths its labels, or a
+/// loss that adds a batch's losses up rather than taking their mean. A description that says a layer keeps less than the file's numbers
 /// hold is refused at the number the network has no slot for, and one that says it keeps more at the slot left empty.
 /// </para>
 /// </remarks>

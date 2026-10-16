@@ -11,9 +11,11 @@ namespace DeepSharp.Learners.Networks;
 /// <remarks>
 /// The seam a smarter search plugs into: a sampler that learns from the trials that finished — a tree of Parzen
 /// estimators, say — can live in any assembly and be handed to a <see cref="Study"/>. It is handed the space, the place of
-/// the trial it suggests for, and the trials that finished before it, and must give a candidate with one setting for every
-/// dimension of the space, in the order of the space. Anything it draws should be worked out from its own seed and the
-/// trial's place, as <see cref="RandomSampler"/> does, so a study run again is the same study.
+/// the trial it suggests for, and the trials before it — those that were pruned among them, which say so — and must give a
+/// candidate with one setting for every dimension of the space that is there for it, in the order of the space: a dimension
+/// that hangs on a choice is there when the candidate chose its word, as <see cref="Dimension.IsThereAmong"/> says, and has no
+/// setting otherwise. Anything it draws should be worked out from its own seed and the trial's place, as
+/// <see cref="RandomSampler"/> does, so a study run again is the same study.
 /// </remarks>
 public interface ISampler
 {
@@ -21,7 +23,7 @@ public interface ISampler
     /// <param name="space">What may vary.</param>
     /// <param name="trial">The place of the trial, from nought.</param>
     /// <param name="finished">The trials before it, each with how it was judged.</param>
-    /// <returns>A value for every dimension of the space.</returns>
+    /// <returns>A value for every dimension of the space that is there for the candidate.</returns>
     Candidate Suggest(SearchSpace space, int trial, IReadOnlyList<Trial> finished);
 }
 
@@ -55,6 +57,13 @@ public sealed class RandomSampler : ISampler
         ArgumentNullException.ThrowIfNull(space);
         ArgumentOutOfRangeException.ThrowIfNegative(trial);
 
-        return new Candidate(space.Select(dimension => dimension.Draw(_stream.Draw($"search:{dimension.Name}", trial, 0))));
+        var drawn = new List<Setting>();
+
+        foreach (var dimension in space.Where(dimension => dimension.IsThereAmong(drawn)))
+        {
+            drawn.Add(dimension.Draw(_stream.Draw($"search:{dimension.Name}", trial, 0)));
+        }
+
+        return new Candidate(drawn);
     }
 }

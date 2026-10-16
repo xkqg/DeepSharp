@@ -71,6 +71,8 @@ public abstract class RefusalContract(ITensorBackend engine)
         ["Log of nothing"] = new(engine => engine.Log(null!), "values"),
         ["Sqrt of nothing"] = new(engine => engine.Sqrt(null!), "values"),
         ["Softplus of nothing"] = new(engine => engine.Softplus(null!), "values"),
+        ["Sin of nothing"] = new(engine => engine.Sin(null!), "values"),
+        ["Erf of nothing"] = new(engine => engine.Erf(null!), "values"),
     };
 
     private readonly ITensorBackend _backend = engine;

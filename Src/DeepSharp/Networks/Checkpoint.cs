@@ -150,12 +150,15 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
     /// <summary>The share an average of its weights kept of itself; nothing when it kept none.</summary>
     public double? Average { get; init; }
 
+    /// <summary>Whether its epochs were judged by the average of its weights rather than by the weights as they stood.</summary>
+    public bool JudgedByAverage { get; init; }
+
     /// <summary>Whether it says anything an earlier version of a training part could not: a clipped value, a window of batches, an average.</summary>
     public bool SaysMore => ClipValue is not null || StepEvery != 1 || Average is not null;
 
     /// <summary>How a run handed these options goes through its epochs.</summary>
     /// <param name="options">What the run is handed.</param>
-    /// <returns>Its batch size, its early stopping, its clips, its window of batches and its average.</returns>
+    /// <returns>Its batch size, its early stopping, its clips, its window of batches, its average and how its epochs were judged.</returns>
     public static Pace Of(FitOptions options) =>
         new(options.BatchSize, options.EarlyStopping)
         {
@@ -163,6 +166,7 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
             ClipValue = options.ClipValue,
             StepEvery = options.StepEvery,
             Average = options.Average,
+            JudgedByAverage = options.JudgedByAverage,
         };
 
     /// <summary>
@@ -207,6 +211,13 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
         if (AverageUnlike(options.Average) is { } average)
         {
             yield return average;
+        }
+
+        if (JudgedByAverage != options.JudgedByAverage)
+        {
+            yield return JudgedByAverage
+                ? "The checkpoint was taken of a run whose epochs were judged by the average of its weights, and going on judging them by the weights as they stand would stop it and keep its best otherwise."
+                : "The checkpoint was taken of a run whose epochs were judged by the weights as they stand, and going on judging them by the average of its weights would stop it and keep its best otherwise.";
         }
     }
 

@@ -72,15 +72,58 @@ public enum Metric
     /// a whole as the earth mover's distance does. New in the eighth version of the file.
     /// </remarks>
     Rps,
+
+    /// <summary>
+    /// The harmonic mean of precision and recall: for each class, twice the rows rightly predicted to hold it over the rows that
+    /// hold it and the rows predicted to, averaged over the classes — scikit-learn's F1, its macro average.
+    /// </summary>
+    /// <remarks>A class no row holds and none is predicted to counts nought, as scikit-learn counts it. New in the tenth version of the file.</remarks>
+    F1,
+
+    /// <summary>
+    /// The area under the curve a threshold sweeps out: for each class, the chance that a row holding it is given a higher chance
+    /// of it than a row that does not, ties counting half, averaged over the classes — scikit-learn's ROC AUC, its macro average.
+    /// </summary>
+    /// <remarks>
+    /// Taken of the chances themselves, before any threshold, so a model is measured on how it ranks its rows. A part in which every
+    /// row holds a class, or none does, has no such area, and is refused, as scikit-learn refuses it. New in the tenth version of the
+    /// file.
+    /// </remarks>
+    Auc,
+
+    /// <summary>
+    /// The error as a share of the answer: the size of each error over the size of its answer, averaged — scikit-learn's mean
+    /// absolute percentage error, as a share rather than a percentage.
+    /// </summary>
+    /// <remarks>
+    /// An answer of nought has no share to be measured as, and a part that holds one is refused: scikit-learn divides by the
+    /// smallest number above nought instead, which makes such a row's error as large as a number gets and the measure say nothing
+    /// else. New in the tenth version of the file.
+    /// </remarks>
+    Mape,
+
+    /// <summary>
+    /// The Brier score: the mean of the squared distance between each chance said and the class held — whether a model that says
+    /// seventy per cent is right seven times in ten, as one number — scikit-learn's <c>brier_score_loss</c>.
+    /// </summary>
+    /// <remarks>
+    /// Of one answer, the chance of a one; of labels of which a row holds one, the row's chances across them, their squared
+    /// distances added up over the labels, as scikit-learn adds them. Labels of which a row holds any number have no such score in
+    /// scikit-learn, and are refused. Drawn, it is beside the reliability curve: the rows in bins of as many rows each, the chance
+    /// said in a bin against how often the class was held. The expected calibration error is no measure here: it bins the chances,
+    /// and binned it misjudges most the models that are best calibrated (Roelofs et al.; Nixon et al.), where the Brier score is a
+    /// proper scoring rule that bins nothing. New in the tenth version of the file.
+    /// </remarks>
+    Brier,
 }
 
 /// <summary>What a measure is taken of, which decides the outputs a report may name it against.</summary>
 public enum MetricFamily
 {
-    /// <summary>Amounts, column by column: rmse, mae and r2, taken of any output.</summary>
+    /// <summary>Amounts, column by column: rmse, mae, r2 and mape, taken of any output.</summary>
     Amounts,
 
-    /// <summary>Classes, each answer nought or one: accuracy, precision, recall and the confusion matrix, of an output whose answers can be classes.</summary>
+    /// <summary>Classes, each answer nought or one: accuracy, precision, recall, the confusion matrix, f1, auc and brier, of an output whose answers can be classes.</summary>
     Classes,
 
     /// <summary>Shares of a whole, row by row: kl, of a distribution.</summary>
@@ -129,7 +172,7 @@ public sealed record ReportStep : IPipelineStep<ReportStep>, INamesTheMeasures, 
 {
     private static readonly SeveralOfParameter<Metric> MetricsKey = new(
         "metrics",
-        "The measures, in the order they are shown: rmse, mae and r2 for amounts; accuracy, precision, recall and the confusion matrix for classes; kl for shares of a whole; emd and rps for shares in an order.",
+        "The measures, in the order they are shown: rmse, mae, r2 and mape for amounts; accuracy, precision, recall, the confusion matrix, f1, auc and brier for classes; kl for shares of a whole; emd and rps for shares in an order.",
         [Metric.Rmse]);
 
     private static readonly SeveralOfParameter<Part> PartsKey = new(
@@ -305,15 +348,15 @@ public static class MetricExtensions
         /// <exception cref="ArgumentOutOfRangeException">The value is none of the measures: a number cast to the set.</exception>
         public MetricFamily Family() => metric switch
         {
-            Metric.Rmse or Metric.Mae or Metric.R2 => MetricFamily.Amounts,
-            Metric.Accuracy or Metric.Precision or Metric.Recall or Metric.ConfusionMatrix => MetricFamily.Classes,
+            Metric.Rmse or Metric.Mae or Metric.R2 or Metric.Mape => MetricFamily.Amounts,
+            Metric.Accuracy or Metric.Precision or Metric.Recall or Metric.ConfusionMatrix or Metric.F1 or Metric.Auc or Metric.Brier => MetricFamily.Classes,
             Metric.Kl => MetricFamily.Shares,
             Metric.Emd or Metric.Rps => MetricFamily.OrderedShares,
             _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "This is none of the measures a report can name."),
         };
 
         /// <summary>Whether a measure counts classes, which only answers that can be classes have.</summary>
-        /// <returns><see langword="true"/> for accuracy, precision, recall and the confusion matrix.</returns>
+        /// <returns><see langword="true"/> for accuracy, precision, recall, the confusion matrix, f1, auc and brier.</returns>
         internal bool CountsClasses() => metric.Family() == MetricFamily.Classes;
 
         /// <summary>Whether a measure compares shares of a whole, row by row.</summary>

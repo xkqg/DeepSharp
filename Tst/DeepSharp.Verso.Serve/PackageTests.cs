@@ -51,7 +51,7 @@ public class PackageTests
         ];
 
         Assert.Contains("Parquet.Net 6.1.0", carried);
-        Assert.Contains("Verso 1.2.2", carried);
+        Assert.Contains("Verso 1.2.3", carried);
 
         var unnamed = carried.Where(library => !notices.Contains($"\n\n{library}\n", StringComparison.Ordinal)).ToArray();
 

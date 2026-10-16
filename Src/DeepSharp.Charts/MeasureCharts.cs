@@ -43,6 +43,19 @@ public static class MeasureCharts
         /// <remarks>Residuals scattered evenly about nought are what a model that learned what there was to learn leaves behind.</remarks>
         public string Residuals() => ResidualFigure(measures).ToSvg();
 
+        /// <summary>
+        /// The reliability curve of every answer's chances, part by part: the rows sorted by the chance said, in bins of as many
+        /// rows each, the mean chance said in a bin against the share of its rows that held the class — beside the line where the
+        /// two agree, which a model whose seventy per cent is right seven times in ten lies on.
+        /// </summary>
+        /// <returns>The chart, as the text of an SVG.</returns>
+        /// <remarks>
+        /// Ten bins, or as many as a part has rows when it has fewer, each a run of the sorted rows as numpy's <c>array_split</c>
+        /// deals them — scikit-learn's <c>calibration_curve</c> with <c>strategy='quantile'</c> in spirit, every bin holding rows, so
+        /// no point stands on two rows while another stands on two hundred, the bias of equal-width bins Roelofs et al. measured.
+        /// </remarks>
+        public string Reliability() => ReliabilityFigure(measures).ToSvg();
+
         /// <summary>Every measure that is a number as bars: each part's, beside predicting the training rows' average.</summary>
         /// <returns>The chart, as the text of an SVG.</returns>
         /// <exception cref="ArgumentException">The measures hold no number: the report names the confusion matrix alone.</exception>
@@ -126,6 +139,49 @@ public static class MeasureCharts
                 .Scatter(predicted, left, points => points.Label = "rows")
                 .AxHLine(0);
         });
+
+    /// <summary>The figure <see cref="Reliability"/> draws: the parts across, the answers down.</summary>
+    internal static Figure ReliabilityFigure(Measures measures) =>
+        EachPartAndAnswer(measures, (axes, part, answer) =>
+        {
+            var name = measures.Answers[answer];
+            var bins = Binned(part, answer);
+
+            axes.SetXLabel($"chance of {name} said").SetYLabel($"share that held {name}").SetXLim(0, 1).SetYLim(0, 1)
+                .Plot([0, 1], [0, 1], line =>
+                {
+                    line.Label = "said = held";
+                    line.LineStyle = LineStyle.Dashed;
+                })
+                .Plot(bins.Said, bins.Held, line =>
+                {
+                    line.Label = "rows, in bins of as many";
+                    line.Marker = MarkerStyle.Circle;
+                });
+        });
+
+    // A part's rows sorted by the chance said of one answer and dealt into ten runs — fewer when there are fewer rows — the first
+    // runs a row longer where they do not divide evenly: each run's mean chance said, and the share of its rows that held it.
+    internal static Bins Binned(PartMeasures part, int answer)
+    {
+        var order = Enumerable.Range(0, part.Rows).OrderBy(row => part.Predicted[row][answer]).ToArray();
+        var count = Math.Min(10, order.Length);
+        var said = new double[count];
+        var held = new double[count];
+        var start = 0;
+
+        for (var bin = 0; bin < count; bin++)
+        {
+            var length = (order.Length / count) + (bin < order.Length % count ? 1 : 0);
+            var rows = order[start..(start + length)];
+
+            said[bin] = rows.Average(row => part.Predicted[row][answer]);
+            held[bin] = rows.Average(row => part.Actual[row][answer] > 0.5 ? 1.0 : 0.0);
+            start += length;
+        }
+
+        return new Bins(said, held);
+    }
 
     /// <summary>The figure <see cref="Bars"/> draws: a panel to each measure, the parts along it.</summary>
     internal static Figure BarFigure(Measures measures)
@@ -233,4 +289,9 @@ public static class MeasureCharts
             .SetYTickLocator(new FixedLocator(positions))
             .SetYTickFormatter(new CategoryFormatter(classes, reversed: true));
     }
+
+    /// <summary>The points of a reliability curve: each bin's mean chance said, and the share of its rows that held the class.</summary>
+    /// <param name="Said">Each bin's mean chance said, rising.</param>
+    /// <param name="Held">The share of each bin's rows that held the class.</param>
+    internal readonly record struct Bins(double[] Said, double[] Held);
 }
