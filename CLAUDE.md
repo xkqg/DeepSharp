@@ -55,6 +55,7 @@ dotnet run --project Tst/DeepSharp.Verso.Notebooks/DeepSharp.Verso.Notebooks.Tes
 dotnet run --project Tst/DeepSharp.Verso.Api/DeepSharp.Verso.Api.Tests.csproj -c Release -f net10.0
 dotnet run --project Tst/DeepSharp.Verso.Serve/DeepSharp.Verso.Serve.Tests.csproj -c Release -f net10.0
 dotnet run --project Tst/DeepSharp.Backends.TorchSharp/DeepSharp.Backends.TorchSharp.Tests.csproj -c Release -f net10.0
+dotnet run --project Tst/DeepSharp.Learners.MLNet/DeepSharp.Learners.MLNet.Tests.csproj -c Release -f net10.0
 ./tools/coverage/run.ps1 -Check                  # every suite, 90/90 per class, as CI runs it
 dotnet pack DeepSharp.slnx -c Release -o nupkgs  # every package, as the release makes them
 bash tools/serve/check.sh nupkgs                 # deepsharp-serve from its package, started as CI starts it
@@ -73,6 +74,37 @@ brings that library and the native side it comes with: the core's suite never ca
 gate measures on .NET 10 and runs every suite on .NET 8 as well. Each test project is an executable — xunit v3 runs
 in-process, so `dotnet test` is not how a suite is run here. Pass `-- -class <full name>` or
 `-- -method <full name>` to run one: a single dash, because the runner refuses `--class` as an unknown option.
+
+`pipeline.schema.json` and `VERBS.md` are written by the steps themselves and never edited by hand. When what a verb
+takes or writes changes, write them again and commit what changed with the change:
+
+```
+DEEPSHARP_REGEN_GOLDEN=1 dotnet run --project Tst/DeepSharp/DeepSharp.Tests.csproj -c Release -f net10.0 -- -class DeepSharp.Tests.Pipelines.ProjectionTests
+```
+
+The tests that compile the README's code and the wiki's read the wiki from a clone beside this repository, as
+`../DeepSharp.wiki`. The browser suite (`DeepSharp.Verso.Serve.Tests`) holds thousands of the machine's ephemeral
+ports at its peak, so keep the suites started side by side few; a red from many at once is the machine before it is
+the code.
+
+## Where things are
+
+`ARCHITECTURE.md` opens with the layout, folder by folder. What makes it a structure is four seams, one interface
+each, and a package implements exactly one of them:
+
+| seam | the question it answers |
+|---|---|
+| `ITensorBackend` | where the arithmetic runs (`CpuBackend` in the core, `DeepSharp.Backends.TorchSharp`) |
+| `IRowSource` | where the rows come from (the core's comma-separated reader, Parquet, Excel, JSON, DataFrame) |
+| a learner (`INamesTheLearner`) | what learns from prepared data (`DeepSharp.Learners.Networks`, `DeepSharp.Learners.ML` with ML.NET's trainer in `.MLNet`) |
+| `IImporter` | what a model trained elsewhere looks like here (`DeepSharp.Import.PyTorch`, `.Keras`, `.Onnx`) |
+
+The notebook packages, the charts, the indicators and the Binance landing implement none of the four, each for a
+reason `ARCHITECTURE.md` gives. A package is named for the role it plays, never for the vendor it brings.
+
+Two shape rules are held by tests rather than by review: an extension method is a member of an
+`extension(T value) { … }` block, never a `this` parameter, and a method or constructor takes four parameters at most
+(`ParameterListTests`).
 
 ## No request to Binance from here, ever
 
