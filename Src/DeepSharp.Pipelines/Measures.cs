@@ -247,7 +247,7 @@ internal sealed class Answered(IReadOnlyList<double[]> actual, IReadOnlyList<dou
         {
             var end = start;
 
-            while (end + 1 < order.Length && Predicted[order[end + 1]][column] == Predicted[order[start]][column])
+            while (end + 1 < order.Length && Predicted[order[end + 1]][column].Equals(Predicted[order[start]][column]))
             {
                 end++;
             }

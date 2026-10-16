@@ -339,7 +339,7 @@ public sealed class Elu : Layer, ISaved<Elu>
         var bent = backend.Scale(backend.Subtract(backend.Exp(backend.Subtract(input, backend.Relu(input))), backend.Fill(input.Shape, 1f)), backend.Scalar(alpha));
         var unit = backend.Add(backend.Multiply(above, input), backend.Multiply(backend.Subtract(backend.Fill(input.Shape, 1f), above), bent));
 
-        return scale == 1 ? unit : backend.Scale(unit, backend.Scalar(scale));
+        return scale is 1d ? unit : backend.Scale(unit, backend.Scalar(scale));
     }
 }
 

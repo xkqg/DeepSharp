@@ -765,7 +765,7 @@ public sealed class NetworkDeclaration
     }
 
     // The smoothing of a loss of classes, written only where there is some, so an unsoftened loss is declared as it always was.
-    private static PartSetting[] Smoothed(double smoothing) => smoothing == 0 ? [] : [new PartSetting("smoothing", PartValue.Of(smoothing))];
+    private static PartSetting[] Smoothed(double smoothing) => smoothing is 0d ? [] : [new PartSetting("smoothing", PartValue.Of(smoothing))];
 
 
     private NetworkDeclaration Scheduled(string kind, params PartSetting[] settings)

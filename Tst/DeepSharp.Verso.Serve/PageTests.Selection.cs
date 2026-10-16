@@ -243,12 +243,14 @@ public sealed partial class PageTests
         await Expect(Cell(page, 1).Locator(".outputs")).ToHaveTextAsync("2", new() { Timeout = 30_000 });
 
         // By its keys: the code cell chosen stays chosen.
+        await UntilTheRunEndsAsync(page);
         await Cell(page, 1).Locator(".cell-bar").ClickAsync();
         await page.Keyboard.PressAsync("Control+Alt+Enter");
         await Expect(Cell(page, 1).Locator(".cell-bar .status")).ToHaveTextAsync(new Regex(@"\[2\]"), new() { Timeout = 30_000 });
         await Expect(Cell(page, 1)).ToHaveClassAsync(Chosen);
 
         // And a Markdown cell chosen leaves the choice, as a cell shown rendered does when it runs.
+        await UntilTheRunEndsAsync(page);
         await Cell(page, 0).Locator(".outputs").ClickAsync();
         await Expect(Cell(page, 0)).ToHaveClassAsync(Chosen);
         await page.Keyboard.PressAsync("Control+Alt+Enter");

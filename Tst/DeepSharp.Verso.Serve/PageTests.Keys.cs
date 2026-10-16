@@ -18,6 +18,11 @@ public sealed partial class PageTests
     private static async Task UntilShownAsync(Microsoft.Playwright.ILocator cell, string text) =>
         await Expect(cell.Locator(".outputs")).ToContainTextAsync(text, new() { Timeout = 30_000 });
 
+    // A cell's output shows before the page is told its run is over, and a run chord pressed in between asks no run, as
+    // Verso's editor starts none while one is under way: the Stop leaves exactly when the page knows no run is.
+    private static async Task UntilTheRunEndsAsync(Microsoft.Playwright.IPage page) =>
+        await Expect(page.Locator("#stop")).ToBeHiddenAsync(new() { Timeout = 30_000 });
+
     [Fact]
     public async Task ShiftEnter_RunsTheCell_AndSelectsTheOneBelow_AndOnTheLastAddsACodeCell()
     {
@@ -31,6 +36,7 @@ public sealed partial class PageTests
         await UntilShownAsync(Cell(page, 0), "2");
         await Expect(Cell(page, 1)).ToHaveClassAsync(new Regex(@"\bselected\b"));
         await Expect(first).ToBeFocusedAsync();
+        await UntilTheRunEndsAsync(page);
 
         await Cell(page, 1).Locator("textarea.source").PressAsync("Shift+Enter");
 

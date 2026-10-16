@@ -106,7 +106,7 @@ public class NewMeasureTests
     public void AMeasureOfClasses_IsRefusedWhereTheAnswersAreAmounts_AsEveryMeasureOfClassesIs()
     {
         var refused = Assert.Throws<DeclarationException>(() => Pdd.Create()
-            .Read(new InMemoryRowSource(["t", "a"], [.. Enumerable.Range(1, 20).Select(t => (IReadOnlyList<string?>)[Written(t), Written(t)])]), "rows")
+            .Read(new InMemoryRowSource(["t", "a"], [.. Enumerable.Range(1, 20).Select(IReadOnlyList<string?> (t) => [Written(t), Written(t)])]), "rows")
             .Declare(schema => schema.Integer("t").Number("a"))
             .OrderBy("t")
             .SplitByTime("t", 0.50, 0.25, 1)
@@ -123,7 +123,7 @@ public class NewMeasureTests
         string[] names = width == 1 ? ["a"] : ["a", "b", "c"];
 
         return output(Pdd.Create()
-                .Read(new InMemoryRowSource(["t", .. names], [.. Enumerable.Range(1, 20).Select(t => (IReadOnlyList<string?>)[Written(t), .. answers(t).Select(Written)])]), "twenty rows")
+                .Read(new InMemoryRowSource(["t", .. names], [.. Enumerable.Range(1, 20).Select(IReadOnlyList<string?> (t) => [Written(t), .. answers(t).Select(Written)])]), "twenty rows")
                 .Declare(schema => schema.Integer("t").Number(names))
                 .SplitByTime("t", 0.50, 0.25))
             .Report(report => report.Measure(metrics).On(ThreeParts).As(Shown.Numbers))

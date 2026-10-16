@@ -389,7 +389,7 @@ public sealed class CpuBackend : INamesItsVersionAndDevice
             for (var n = 1; n < 100; n++)
             {
                 term *= -(x * x) / n;
-                var added = term / ((2 * n) + 1);
+                var added = term / ((2d * n) + 1);
 
                 sum += added;
 

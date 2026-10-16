@@ -200,7 +200,7 @@ public sealed class CrossEntropy : Loss, ISaved<CrossEntropy>
     protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend)
     {
         var classes = outputs.Shape.Rank == 2 ? outputs.Shape[1] : 1;
-        var compared = Smoothing == 0
+        var compared = Smoothing is 0d
             ? answers
             : backend.Add(backend.Scale(answers, backend.Scalar(1 - Smoothing)), backend.Fill(answers.Shape, (float)(Smoothing / classes)));
 
@@ -410,7 +410,7 @@ public sealed class BinaryCrossEntropy : Loss, ISaved<BinaryCrossEntropy>
     /// <inheritdoc />
     protected override Tensor Computed(Tensor outputs, Tensor answers, ITensorBackend backend)
     {
-        var compared = Smoothing == 0
+        var compared = Smoothing is 0d
             ? answers
             : backend.Add(backend.Scale(answers, backend.Scalar(1 - Smoothing)), backend.Fill(answers.Shape, (float)(Smoothing / 2)));
 
@@ -438,7 +438,7 @@ internal static class SmoothingExtensions
                 : throw new ArgumentOutOfRangeException(parameter, smoothing, "How much the answers are softened is a share of nothing or more, below one.");
 
         /// <summary>The version of a network's part that can say this smoothing: the sixth where there is some, the second where there is none.</summary>
-        internal int VersionOfSmoothing() => smoothing == 0 ? NetworkDocument.SecondVersion : NetworkDocument.SixthVersion;
+        internal int VersionOfSmoothing() => smoothing is 0d ? NetworkDocument.SecondVersion : NetworkDocument.SixthVersion;
     }
 
     extension(Utf8JsonWriter writer)
@@ -448,7 +448,7 @@ internal static class SmoothingExtensions
         {
             ArgumentNullException.ThrowIfNull(writer);
 
-            if (smoothing != 0)
+            if (smoothing is not 0d)
             {
                 writer.WriteNumber(Key, smoothing);
             }
@@ -676,7 +676,7 @@ public sealed class Focal : Loss, ISaved<Focal>
     /// <summary>The alpha a written number stands for: nothing for minus one, the number itself otherwise.</summary>
     /// <param name="written">The number written.</param>
     /// <returns>The alpha.</returns>
-    public static double? FromWritten(double written) => written == NoWeight ? null : written;
+    public static double? FromWritten(double written) => written is NoWeight ? null : written;
 
     /// <inheritdoc />
     public override OutputActivation Activation => OutputActivation.Sigmoid;

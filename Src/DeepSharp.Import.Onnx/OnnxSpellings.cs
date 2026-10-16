@@ -155,7 +155,7 @@ internal abstract class Operand
         new Of((cursor, name) => cursor.FloatsOf(name) is [var held] && Math.Abs(held - expected) <= 1e-6 * Math.Max(1, Math.Abs(expected)));
 
     /// <summary>Numbers the graph holds, every one of them the given value.</summary>
-    public static Operand All(float value) => new Of((cursor, name) => cursor.FloatsOf(name) is { Length: > 0 } held && held.All(each => each == value));
+    public static Operand All(float value) => new Of((cursor, name) => cursor.FloatsOf(name) is { Length: > 0 } held && held.All(each => each.Equals(value)));
 
     /// <summary>Numbers the graph holds, kept under a name for the layer.</summary>
     public static Operand Held(string key) => new Of((cursor, name) => cursor.Capture(key, name));
