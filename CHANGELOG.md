@@ -79,7 +79,10 @@ PyTorch files that say it. A part that says none of them is written as it always
   brings each gradient value to a bound before the norm is clipped; `StepEvery` takes a step from the mean of the gradients of
   that many batches, and a window never goes across the end of an epoch; `Average` keeps an exponential moving average of the
   weights and leaves the network holding it when the run has finished, and is refused beside restoring the best epoch's weights.
-  Their keys on `learn.network` are `clipValue`, `stepEvery` and `average`, and the chain has `.ClipValue(…)`, `.StepEvery(…)`
+  The reason is that an epoch is judged by the weights as they stand, not by their average: the best epoch's weights and the
+  average are then two different answers to which weights the run ends holding, and a run that asked for both would have to
+  drop one of them without saying so. Early stopping that does not restore goes with an average, and stops the run when the
+  weights as they stand no longer improve. Their keys on `learn.network` are `clipValue`, `stepEvery` and `average`, and the chain has `.ClipValue(…)`, `.StepEvery(…)`
   and `.Average(…)`. A gradient that holds a value that is not a finite number is refused by name rather than clipped. No member
   was added to the tensor seam for any of this: the larger, the smaller and a value held between two bounds are made of
   operations an engine already had, and an engine written outside the library has nothing new to write.
