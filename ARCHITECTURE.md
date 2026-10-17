@@ -486,8 +486,9 @@ the measures of amounts and of classes by scikit-learn's definition, checked aga
 the three that compare shares by scipy's and Weigel's, checked against scipy and xskillscore (see "A distribution can be
 in an order"). Where scikit-learn would give a number that says nothing, the measure is refused instead, naming the row or
 the part: the error as a share of an answer of nought, which scikit-learn divides by the smallest number above nought and so
-makes as large as a number gets; the area under the curve of a part that holds one class; and the Brier score of labels of
-which a row holds any number, which scikit-learn has none of. The expected calibration error is not built: binned, it
+makes as large as a number gets; the area under the curve of a part that holds one class, which scikit-learn says is not
+defined and gives no number for; and the Brier score of labels of which a row holds any number, which scikit-learn scores as
+one class of many while it warns that the chances do not add up to one. The expected calibration error is not built: binned, it
 misjudges most the models that are best calibrated, and the Brier score — a proper scoring rule that bins nothing — is the
 number, with the reliability curve beside it as the picture, its bins of as many rows each. Predictions are measured only when
 they are for the part's rows in the order the part hands them over, which the rows' keys are how to tell: answered in

@@ -91,7 +91,7 @@ public class NewMeasureTests
     {
         var prepared = Rows(t => [t % 2, t % 3 == 0 ? 1 : 0, t % 5 == 0 ? 1 : 0], fitting => fitting.Labels(["a", "b", "c"], 0), Metric.Brier);
 
-        Assert.Contains("scikit-learn gives such chances no Brier score", Assert.Throws<InvalidOperationException>(() => Measured(prepared, Likely)).Message, StringComparison.Ordinal);
+        Assert.Contains("scikit-learn takes each row for one class of many, warns that the chances do not add up to one, and gives a number that measures nothing these labels mean",Assert.Throws<InvalidOperationException>(() => Measured(prepared, Likely)).Message, StringComparison.Ordinal);
     }
 
     [Fact]

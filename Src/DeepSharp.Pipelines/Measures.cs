@@ -601,7 +601,7 @@ internal sealed class Measurement
 
     // What the measures of 0.11.0 cannot be taken of: an answer of nought, which has no share to be an error of; a class every
     // row of the part holds alike, which leaves no curve to sweep; and chances of labels a row holds any number of, which
-    // scikit-learn gives no Brier score.
+    // scikit-learn scores as one class of many, warning that they do not add up to one.
     private void ThrowIfUnmeasurable(Part part, Answered model, int[] readAt, int ones)
     {
         if (_report.Metrics.Contains(Metric.Mape))
@@ -628,7 +628,7 @@ internal sealed class Measurement
         {
             throw new InvalidOperationException(
                 $"brier measures the chance of one answer, or the chances across labels of which a row holds one, and '{_output.Verb}' says a row holds any number of "
-                + $"{string.Join(", ", _output.Answers.Select(answer => $"'{answer}'"))}: scikit-learn gives such chances no Brier score. Measure each label by auc.");
+                + $"{string.Join(", ", _output.Answers.Select(answer => $"'{answer}'"))}: scikit-learn takes each row for one class of many, warns that the chances do not add up to one, and gives a number that measures nothing these labels mean. Measure each label by auc.");
         }
     }
 

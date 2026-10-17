@@ -147,13 +147,15 @@ in the operators its newer sets have and in the several operators PyTorch's expo
   - The focal loss is of labels of nought or one, as torchvision's is, and a softened label is refused: the power it weighs a
     label by is worked out from the logarithm of the chance the label is given, which for a label of nought or one is minus a
     softplus and never infinite, and for any other is not. A Keras focal loss that softens its labels is refused for the same
-    reason. The hinge takes labels of nought or one, as Keras's does.
+    reason. The hinge takes labels of nought or one and reads them as minus one and one, as Keras turns such labels; a label of
+    minus one, which Keras also takes, is refused, since a label here is nought or one wherever it is written.
   - The mean absolute percentage error of a part that holds an answer of nought is refused, naming the row: scikit-learn divides by
     the smallest number above nought instead, which makes that row's error as large as a number gets and the measure say nothing
     else.
-  - The area under the curve of a part in which every row holds a class, or none does, is refused, as scikit-learn refuses it:
-    there is no curve to sweep.
-  - The Brier score of labels of which a row holds any number is refused: scikit-learn gives such chances none.
+  - The area under the curve of a part in which every row holds a class, or none does, is refused: there is no curve to sweep, and
+    scikit-learn says the area is not defined there and gives no number.
+  - The Brier score of labels of which a row holds any number is refused: scikit-learn, handed them, takes each row for one class
+    of many, warns that the chances do not add up to one, and still gives a number, which measures nothing these labels mean.
   - The expected calibration error is not a measure: binned, it misjudges most the models that are best calibrated (Roelofs et
     al.; Nixon et al.), and the Brier score, a proper scoring rule, bins nothing.
   - A leaky slope below nought is refused, as Keras refuses it, and so is an exponential unit's alpha below nought, which would

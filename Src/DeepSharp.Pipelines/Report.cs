@@ -86,7 +86,7 @@ public enum Metric
     /// </summary>
     /// <remarks>
     /// Taken of the chances themselves, before any threshold, so a model is measured on how it ranks its rows. A part in which every
-    /// row holds a class, or none does, has no such area, and is refused, as scikit-learn refuses it. New in the tenth version of the
+    /// row holds a class, or none does, has no such area, and is refused: scikit-learn says the area is not defined there and gives no number. New in the tenth version of the
     /// file.
     /// </remarks>
     Auc,
