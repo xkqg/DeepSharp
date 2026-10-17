@@ -34,7 +34,7 @@ internal sealed class Walk(Course course, WalkMode mode, SourceFolder folder)
     private int _through;
 
     // The steps as they were declared: where the schema, the split and the output stand, which no course moves.
-    private PipelineDeclaration Declaration => course.Declaration;
+    internal PipelineDeclaration Declaration => course.Declaration;
 
     /// <summary>The table as it stands at the step being walked.</summary>
     /// <remarks>

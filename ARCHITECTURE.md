@@ -78,6 +78,8 @@ Src/DeepSharp.Pipelines/          the data side
                                     the profile and the correlation a run is declared to produce, how alike the parts of
                                     its split are, the report of what a trained model is held to, how it measured, and
                                     the predictions it measured as text
+    Tallies.cs Watching.cs          a column of rows counted, each value once, which both distances are worked out from;
+                                    the training rows a pipeline keeps, and a window of served rows measured against them
     RowSource.cs SourceFolder.cs Binding.cs Table.cs RowIdentity.cs TrainingValues.cs
                                     rows, where a path is read from, typed columns, who a row is, what a fit sees
     FileBytesExtensions.cs          a file's bytes, once in hand, read as a file is read as text
@@ -512,7 +514,8 @@ is a step somebody declares.
 
 Every figure is drawn by one package, `DeepSharp.Charts`, with **MatPlotLibNet**: a correlation as a heatmap, a
 report's measures as bars beside the average, each confusion matrix as a heatmap of counts, what was predicted against
-what was there, and what was left over. The pipeline holds only the declaration and the numbers, and the notebook draws
+what was there, what was left over, and the windows a served model met, each watched column's distance from the training
+rows window by window under the bound it is flagged above. The pipeline holds only the declaration and the numbers, and the notebook draws
 through the same package, so a figure is drawn one way wherever it is shown.
 
 The report itself is rendered there too, and only there: `measures.Report()` is the measures as the report says they
@@ -568,8 +571,9 @@ one way while training and another way live, which is the same leak running back
 A fit does not only learn. It **learns** a value — a mean, a bound, the categories it found — and a replay reads it. It
 **decides** something from what it saw, such as whether a column with that many gaps is filled at all, and a replay reads
 that too, so rows served long afterwards keep meeting the pipeline the model was trained with. And it **sees**: how many
-gaps there were, how many values were no number, how many lay outside its bounds. The third is evidence, written down so a
-person can see what the fit was looking at, and no replay may depend on it.
+gaps there were, how many values were no number, how many lay outside its bounds — and, for a watch, the training rows
+themselves, counted. The third is evidence, written down so a person, or a window of rows measured later, can see what the
+fit was looking at, and no replay may depend on it. What is seen may be a number, a list of words or a run of numbers.
 
 The three are said apart in one bag, because that is what the file holds: one object of names and values, in one order,
 marking none of them. So a pipeline published before the three words existed still loads, and a bag read back from a file
@@ -580,6 +584,46 @@ A decision is read back as the choice it was, never as a number to compare. The 
 but a decision is a nought or a one and never a measurement, so asking for it gives the whole number the fit wrote — a
 value a hair wide of one, which a hand-edited file can hold, reads as the nearest. A replay that asked whether a number
 equalled nought would be comparing fractions to learn something that was never a fraction.
+
+### A served model is watched against the rows it learned from
+
+The likeness of the parts measures how far validation and test are from the training rows, once, while every row is there.
+A model that ships meets rows nobody had when it was fitted, and the pipeline it is served behind is read from its file,
+which holds what the steps learned and not the rows they learned it from — so the rows a served model met had nothing to be
+measured against. `watch.reference` is the step that keeps them. Below the split, from the training rows alone, it counts
+every column it watches — each value once with how many training rows hold it, each word with its count, and the rows that
+hold none — and writes the counts into the fit as what it saw. Its replay changes nothing and reads nothing, so a pipeline
+that declares it serves rows exactly as one that does not, and a test holds every word it writes to never being read.
+
+`prepared.Watched(window)` measures a window of rows — a day of them, an hour, a thousand, as the caller groups them —
+against those counts. The window is replayed with what the training rows taught every step above the watch, and stopped
+there: a category is still a word where it is measured, so one the training rows never held counts against them rather
+than being refused by an encoder below. Each column is measured by the distance its kind takes, the same two the likeness
+of the parts takes and by the same code — the counted forms of the Kolmogorov–Smirnov distance and of the total variation
+give, to the bit, what the rows themselves would — so a window of exactly the test rows is as far from the training rows as
+the likeness of the parts says the test part is. Every column says how many rows its distance was worked out from beside its
+flag, and the window says the first and the last moment it holds in the first column its rows are ordered or divided in time
+by. There is no least window: a distance over a few rows is noise as much as anything, which the rows beside it say, and how
+many rows make a window is the caller's to say by the rows it hands in. Nothing is learned from a window, and the library
+keeps none between calls; the series is the caller's, and `DeepSharp.Charts` draws it.
+
+Left unnamed, the watch keeps every column but the id, the answer and the columns the rows are ordered or divided in time
+by: every window holds those otherwise than the training rows by construction, and measuring them would flag every one. The
+likeness of the parts, left unnamed, still measures them, as it always did — a verb never changes its meaning in place.
+
+The counts are exact, so they grow with what the rows hold. A column of numbers kept to two places is a few thousand values;
+one in which every value is its own keeps a number for every training row. A hundred thousand training rows of fifty columns,
+forty of them numbers with every digit, make a file of 173 MB; the same columns kept to two places, 12 MB. A summary would be
+smaller and would measure another distance, which the watch promises not to; naming the columns watched is how the file is
+kept small. A model trained before its pipeline kept the rows cannot be watched until both are made again: the counts are part
+of the fit, so adding them makes another fit, and a network is held to the one it was trained behind.
+
+A window gets a distance and no p-value. The usual test answers whether two sets of rows could have been drawn from one
+distribution, and over a hundred thousand training rows it says no to windows a few hundredths apart, which nobody would act
+on. The bound the person sets is on how far apart is too far, and that is what the distance says. For words the distance is
+the total variation, half the sum of how far each word's share moved, where Deequ, NannyML, SageMaker and TensorFlow Data
+Validation take the largest move of any one word: the likeness of the parts measures words so, a window is measured by the
+same rule, and the two agree when one word moves.
 
 ### What that makes the carrier
 
@@ -859,6 +903,14 @@ file 0.9.0 wrote is read, written again and served as it was, and the repository
 wrote for a test to hold every release after it to that. It is per instance, as the fourth was: the same dense layer is the
 second version or the fifth by what it was told, and the training part is as high as the highest of what its run, its
 optimizer and its schedule say.
+
+The tenth and the eleventh versions are that rule again. The tenth adds the steps that write a number as how far it fills a
+few bins, a key's history and the likeness of the parts, with the words of a declared network and the measures of a report
+that came with them; the eleventh adds one verb, `watch.reference`. A file written against an earlier version reads and means
+what it meant, and a pipeline that says nothing new writes what it wrote before, but for its number; 0.10.0 refuses a file of
+the tenth whole, and 0.11.0 one of the eleventh, each naming the version. A file names the version of the library that wrote
+it, never the oldest one its steps would need: a writer that looked through the steps to choose its number would be a second
+rule for what a file is.
 
 ### The share you never write down
 
@@ -3493,8 +3545,9 @@ is what shows a feature that knows the future of the rows it is measured on.
 The metrics the training loop already keeps are what the charts are drawn from — the caller never assembles arrays
 to plot. `DeepSharp.Charts` draws a run's loss curve and the learning rate every epoch took from its history; the
 measures as bars beside the average, each confusion matrix as a heatmap of counts, what was predicted against what was
-there and what was left over from a report's measures; and a correlation from the rows it was drawn from — each as the
-text of an SVG. The drawing itself is **MatPlotLibNet**, in a package of its own, so a trainer on a headless machine
+there and what was left over from a report's measures; a correlation from the rows it was drawn from; and the windows a
+served model met from what measuring each gave, which is the one list a caller hands in, since the library keeps no
+window between calls — each as the text of an SVG. The drawing itself is **MatPlotLibNet**, in a package of its own, so a trainer on a headless machine
 does not carry a renderer, and nothing of MatPlotLibNet shows in what the package hands out, so the drawing library can
 change without a line of anybody's code changing with it.
 

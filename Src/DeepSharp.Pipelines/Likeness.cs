@@ -82,30 +82,7 @@ public sealed class PartLikeness : Evidence
             throw new ArgumentException("A distance is between two sets that each hold a value.");
         }
 
-        double[] one = [.. first.Order()];
-        double[] other = [.. second.Order()];
-        int at = 0, elsewhere = 0;
-        var most = 0d;
-
-        // Every value either set holds, in order, each with every copy of it in both sets taken at once.
-        while (at < one.Length || elsewhere < other.Length)
-        {
-            var value = elsewhere >= other.Length || (at < one.Length && one[at] <= other[elsewhere]) ? one[at] : other[elsewhere];
-
-            while (at < one.Length && one[at] <= value)
-            {
-                at++;
-            }
-
-            while (elsewhere < other.Length && other[elsewhere] <= value)
-            {
-                elsewhere++;
-            }
-
-            most = Math.Max(most, Math.Abs(((double)at / one.Length) - ((double)elsewhere / other.Length)));
-        }
-
-        return most;
+        return NumbersTallied.Of(first, gaps: 0).ApartFrom(NumbersTallied.Of(second, gaps: 0));
     }
 
     /// <summary>The total variation distance between two sets of words: half the sum of how far each word's share differs.</summary>
@@ -123,10 +100,7 @@ public sealed class PartLikeness : Evidence
             throw new ArgumentException("A distance is between two sets that each hold a word.");
         }
 
-        var shares = first.Concat(second).Distinct(StringComparer.Ordinal)
-            .Select(word => Math.Abs(((double)first.Count(each => each == word) / first.Count) - ((double)second.Count(each => each == word) / second.Count)));
-
-        return shares.Sum() / 2;
+        return WordsTallied.Of(first, gaps: 0).ApartFrom(WordsTallied.Of(second, gaps: 0));
     }
 
     /// <inheritdoc />
@@ -149,7 +123,7 @@ public sealed class PartLikeness : Evidence
 /// </remarks>
 public sealed record LikenessStep : IPipelineStep<LikenessStep>, IProducesEvidence, IDescribesColumns
 {
-    private static readonly NumberParameter WarnAboveKey = new(
+    internal static readonly NumberParameter WarnAboveKey = new(
         "warnAbove", "The distance above which two parts are flagged as unlike: a share above nought, at most one.", 0.1)
     {
         AtLeast = 0,
@@ -236,29 +210,19 @@ public sealed record LikenessStep : IPipelineStep<LikenessStep>, IProducesEviden
 
     private ColumnLikeness Measured(Table table, IReadOnlyList<Standing> standings, string name, Pair[] pairs)
     {
-        if (table[name] is TextColumn words)
-        {
-            IReadOnlyList<string> In(Standing part) =>
-                [.. Enumerable.Range(0, table.RowCount).Where(row => standings[row] == part && !words.IsMissing(row)).Select(row => words.TextAt(row)!)];
+        Tally In(Standing part) => Tally.Of(table, name, [.. Enumerable.Range(0, table.RowCount).Where(row => standings[row] == part)]);
 
-            return new ColumnLikeness(name, Distance.TotalVariation, [.. pairs.Select(pair => Apart(In(pair.First), In(pair.Second), pair, PartLikeness.TotalVariation))]);
-        }
+        var tallies = pairs.SelectMany(pair => new[] { pair.First, pair.Second }).Distinct().ToDictionary(part => part, In);
+        var distance = table[name] is TextColumn ? Distance.TotalVariation : Distance.KolmogorovSmirnov;
 
-        var values = table[name] is Column<DateTime> moments
-            ? [.. Enumerable.Range(0, table.RowCount).Select(row => moments[row] is { } moment ? (moment - DateTime.UnixEpoch).TotalDays : (double?)null)]
-            : table.NumbersOf(name);
-
-        IReadOnlyList<double> Numbers(Standing part) =>
-            [.. Enumerable.Range(0, table.RowCount).Where(row => standings[row] == part && values[row] is { } value && double.IsFinite(value)).Select(row => values[row]!.Value)];
-
-        return new ColumnLikeness(name, Distance.KolmogorovSmirnov, [.. pairs.Select(pair => Apart(Numbers(pair.First), Numbers(pair.Second), pair, PartLikeness.KolmogorovSmirnov))]);
+        return new ColumnLikeness(name, distance, [.. pairs.Select(pair => Apart(tallies[pair.First], tallies[pair.Second], pair))]);
     }
 
-    private PartsApart Apart<TValue>(IReadOnlyList<TValue> first, IReadOnlyList<TValue> second, Pair pair, Func<IReadOnlyList<TValue>, IReadOnlyList<TValue>, double> distance)
+    private PartsApart Apart(Tally first, Tally second, Pair pair)
     {
-        var apart = first.Count > 0 && second.Count > 0 ? distance(first, second) : double.NaN;
+        var apart = first.ApartFrom(second);
 
-        return new PartsApart(pair.First, pair.Second, apart, apart > WarnAbove) { FirstRows = first.Count, SecondRows = second.Count };
+        return new PartsApart(pair.First, pair.Second, apart, apart > WarnAbove) { FirstRows = first.Held, SecondRows = second.Held };
     }
 
     /// <summary>Reads this step back out of a file.</summary>

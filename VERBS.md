@@ -51,6 +51,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`target.distribution`](#targetdistribution) | Names the columns a model is asked to predict as one answer: how a whole is divided among them, in their order. |
 | [`target.labels`](#targetlabels) | Names the columns a model is asked to predict as one answer of labels, each nought or one on every row. |
 | [`target.numbers`](#targetnumbers) | Names the columns a model is asked to predict as one answer of free numbers, each any finite number. |
+| [`watch.reference`](#watchreference) | Keeps the training rows of the columns it watches, as counts, so rows served later can be measured against them. |
 
 ## `declare`
 
@@ -894,3 +895,21 @@ Names the columns a model is asked to predict as one answer of free numbers, eac
 - **`columns`**: The columns holding the numbers of the answer, in their order: at least two.
 
 Means what it says from version 8 of the file.
+
+## `watch.reference`
+
+Keeps the training rows of the columns it watches, as counts, so rows served later can be measured against them.
+
+```json
+{"step":"watch.reference","warnAbove":0.1,"columns":["column"]}
+```
+
+| key | holds | an example |
+|---|---|---|
+| `warnAbove` | a number, 0 or more | `0.1` |
+| `columns` | a list of the names of columns holding anything, each named once; may be left out | `["column"]` |
+
+- **`warnAbove`**: The distance above which two parts are flagged as unlike: a share above nought, at most one.
+- **`columns`**: The columns to keep the training rows of; left out, every column where it stands but the id, the answer and the columns the rows are ordered or divided in time by.
+
+Means what it says from version 11 of the file.

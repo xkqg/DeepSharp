@@ -68,6 +68,7 @@ public sealed class StepCatalog
         catalog.Register<ProfileStep>();
         catalog.Register<CorrelationStep>();
         catalog.Register<LikenessStep>();
+        catalog.Register<WatchStep>();
         catalog.Register<ReportStep>();
 
         return catalog;

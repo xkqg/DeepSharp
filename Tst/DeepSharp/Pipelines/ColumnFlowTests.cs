@@ -404,6 +404,7 @@ public class ColumnFlowTests
             "encode" => new EncodeStep("g"),
             "encode.piecewise" => new PiecewiseLinearStep("b", 3),
             "history" => new HistoryStep("g", "b", ["when"], 2),
+            "watch.reference" => new WatchStep(0.2, ["a", "g"]),
             "encode.categories" => new EncodeCategoriesStep(As.Ordinal),
             "outliers.clip" => new ClipOutliersStep("b"),
             "drop.columns" => new DropColumnsStep(["w"]),

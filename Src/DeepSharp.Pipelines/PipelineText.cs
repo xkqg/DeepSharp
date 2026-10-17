@@ -42,12 +42,14 @@ public sealed class PipelineText
 
     private const string VersionKey = "version";
 
-    private readonly string _unversioned;
+    // Only the digest of the text without its version is ever asked for, so the text itself is not held: a pipeline that keeps
+    // its training rows is written in hundreds of megabytes, and the text is held once, as it is written back.
+    private readonly string _fitDigest;
 
     private PipelineText(JsonElement pipeline)
     {
         Text = Written(pipeline, withVersion: true);
-        _unversioned = Written(pipeline, withVersion: false);
+        _fitDigest = Hex(Written(pipeline, withVersion: false));
         Version = pipeline.TryGetProperty(VersionKey, out var named)
                   && int.TryParse(named.GetRawText(), NumberStyles.None, CultureInfo.InvariantCulture, out var version)
             ? version
@@ -74,7 +76,7 @@ public sealed class PipelineText
     /// The same fit has the same one written under any version from <see cref="FirstComparable"/> to the one this library
     /// writes, and another fit — other steps, or other numbers learned from other rows — has another.
     /// </remarks>
-    public string FitDigest => Hex(_unversioned);
+    public string FitDigest => _fitDigest;
 
     /// <summary>A pipeline as this library writes it.</summary>
     /// <param name="prepared">The pipeline, run or read back.</param>

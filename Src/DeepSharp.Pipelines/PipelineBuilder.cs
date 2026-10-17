@@ -855,6 +855,17 @@ public sealed class FittingBuilder
     /// <returns>This builder, so the next verb can be written after it.</returns>
     public FittingBuilder Likeness(double warnAbove, params string[] columns) => Add(new LikenessStep(warnAbove, columns));
 
+    /// <summary>
+    /// Keeps the training rows of these columns, as counts, so the rows a served model meets can be measured against them —
+    /// every column but the id, the answer and the order when none is named. Rows served later are measured by
+    /// <see cref="Watching.Watched(PreparedData, IRowSource)"/>, window by window.
+    /// </summary>
+    /// <param name="warnAbove">The distance above which a window of served rows is flagged: above nought, at most one.</param>
+    /// <param name="columns">The columns to keep; none, for every column but the id, the answer and the order.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The bound is not above nought and at most one.</exception>
+    public FittingBuilder Watch(double warnAbove, params string[] columns) => Add(new WatchStep(warnAbove, columns));
+
     /// <summary>Profiles the columns where it stands, on the training rows.</summary>
     /// <param name="columns">The columns to profile; none, for every column here.</param>
     /// <returns>This builder, so the next verb can be written after it.</returns>

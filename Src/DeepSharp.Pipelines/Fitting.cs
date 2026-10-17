@@ -35,7 +35,7 @@ public sealed class FittedStepValues
     /// <summary>What this step learned, as numbers.</summary>
     public IReadOnlyDictionary<string, double> Numbers => _numbers;
 
-    /// <summary>The names of the numbers this step only counted: what it saw, which no replay reads.</summary>
+    /// <summary>The names of what this step only saw — a count, or a run or a list it kept to be looked at — which no replay reads.</summary>
     public IReadOnlyCollection<string> Counts => _counts;
 
     /// <summary>The names of what this step decided from what it saw, which a replay reads.</summary>
@@ -82,15 +82,7 @@ public sealed class FittedStepValues
         ThrowIfNotFinite(name, value);
 
         _numbers[name] = value;
-
-        if (said == Said.Seen)
-        {
-            _counts.Add(name);
-        }
-        else
-        {
-            _counts.Remove(name);
-        }
+        Seen(name, said);
 
         if (said == Said.Decided)
         {
@@ -106,12 +98,21 @@ public sealed class FittedStepValues
     /// <param name="name">What the list is.</param>
     /// <param name="values">The list.</param>
     /// <exception cref="ArgumentException">The name already holds another kind of thing.</exception>
-    public void Learned(string name, IReadOnlyList<string> values)
+    public void Learned(string name, IReadOnlyList<string> values) => List(name, values, Said.Learned);
+
+    /// <summary>Records a list of words this step saw while it was fitted: evidence, which no replay reads.</summary>
+    /// <param name="name">What the list is.</param>
+    /// <param name="values">The words.</param>
+    /// <exception cref="ArgumentException">The name already holds another kind of thing.</exception>
+    public void Saw(string name, IReadOnlyList<string> values) => List(name, values, Said.Seen);
+
+    private void List(string name, IReadOnlyList<string> values, Said said)
     {
         ArgumentNullException.ThrowIfNull(values);
         ThrowIfHeldAsAnotherKind(name, Kind.List);
 
         _lists[name] = values;
+        Seen(name, said);
     }
 
     /// <summary>Records a run of numbers this step learned.</summary>
@@ -119,7 +120,16 @@ public sealed class FittedStepValues
     /// <param name="values">The numbers, in order.</param>
     /// <exception cref="ArgumentException">The name already holds another kind of thing.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A number in the run is not finite.</exception>
-    public void Learned(string name, IReadOnlyList<double> values)
+    public void Learned(string name, IReadOnlyList<double> values) => Run(name, values, Said.Learned);
+
+    /// <summary>Records a run of numbers this step saw while it was fitted: evidence, which no replay reads.</summary>
+    /// <param name="name">What the run is.</param>
+    /// <param name="values">The numbers, in order.</param>
+    /// <exception cref="ArgumentException">The name already holds another kind of thing.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A number in the run is not finite.</exception>
+    public void Saw(string name, IReadOnlyList<double> values) => Run(name, values, Said.Seen);
+
+    private void Run(string name, IReadOnlyList<double> values, Said said)
     {
         ArgumentNullException.ThrowIfNull(values);
         ThrowIfHeldAsAnotherKind(name, Kind.Run);
@@ -130,6 +140,20 @@ public sealed class FittedStepValues
         }
 
         _curves[name] = values;
+        Seen(name, said);
+    }
+
+    // A name is among what was only seen exactly when its last writing said so.
+    private void Seen(string name, Said said)
+    {
+        if (said == Said.Seen)
+        {
+            _counts.Add(name);
+        }
+        else
+        {
+            _counts.Remove(name);
+        }
     }
 
     /// <summary>Records something this step wrote down in words.</summary>

@@ -66,6 +66,7 @@ public class PipelineTextTests
         ("target.distribution", 2),
         ("target.labels", 2),
         ("target.numbers", 8),
+        ("watch.reference", 11),
     ];
 
     private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };

@@ -3,6 +3,113 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.12.0]
+
+A model watched after it ships. The likeness of the parts measured how far training, validation and test lie apart, once,
+while every row was there; a pipeline read from its file keeps what its steps learned and not the rows they learned it from,
+so the rows a served model met had nothing to be measured against, and a model whose world had moved on went on answering as
+if it had not. A pipeline can now keep its training rows, counted, and a window of served rows is measured against them by the
+same two distances and the same rule as the likeness of the parts, flagged above a bound the person sets, beside the rows each
+distance was worked out from and the moments the window spans. Nothing is learned from the served rows, so the reference stays
+the one the model was fitted on.
+
+### Upgrading from 0.11.0
+
+- **The pipeline file is at version 11.** Everything written before still reads and means what it meant, and a pipeline that
+  says nothing new writes what it wrote before, but for its number; 0.11.0 refuses a file of the eleventh whole, naming the
+  version. `watch.reference` is what a file of the eleventh can say that an older one could not.
+
+- **A model trained behind a 0.11.0 pipeline serves as it did, and is watched once both are made again.** Its pipeline keeps
+  no training rows, so a window has nothing to be measured against; fitting the pipeline again with the watch makes another
+  fit — the counts are part of it — and a network is held to the fit it was trained behind, so the network is trained again
+  behind the new one.
+
+- **What a fit sees can be a list.** `FittedStepValues.Saw(name, words)` and `Saw(name, numbers)` write a list of words or a
+  run of numbers as seen, beside the count `Saw(name, count)` always wrote: written down for a person, or for a window measured
+  later, and never read by a replay, which a test holds every step that ships to.
+
+### Added
+
+- **A pipeline keeps the training rows a served model is measured against.** `watch.reference` (`.Watch(warnAbove,
+  columns…)`), below the split, counts the training rows of every column it watches — each value of a column of numbers once
+  with how many rows hold it, each word with its count, a moment as the days it stands from 1970, and the rows that hold none
+  — and writes the counts into the fit as what it saw. Its replay changes nothing and reads nothing, so a pipeline that
+  declares it serves rows exactly as one that does not. Left unnamed, it watches every column but the id, the answer and the
+  columns the rows are ordered or divided in time by, which every window holds otherwise than the training rows by
+  construction. Its bound has no default and is its own, since a pipeline may declare no likeness to borrow one from.
+
+- **A window of served rows is measured against them.** `prepared.Watched(window)` replays the rows with what the training
+  rows taught every step above the watch, stops there — so a category is still a word, and one the training rows never held is
+  measured rather than refused by an encoder below — and gives a `WindowLikeness`: for every watched column the distance its
+  kind takes, the two-sample Kolmogorov–Smirnov distance for numbers and moments and the total variation for words, whether it
+  is above the bound, and how many rows of the window and of the training rows held a value and how many held none; and for
+  the window, how many rows it held and the first and the last moment in the first column its rows are ordered or divided in
+  time by. A column of which the window or the training rows hold no value has no distance and no flag. A pipeline read from
+  its file measures a window exactly as the run that wrote it, and a window of exactly the test rows is as far from the
+  training rows as the likeness of the parts says the test part is.
+
+- **The windows are drawn one beside another.** `windows.Distances()` in `DeepSharp.Charts` draws every watched column's
+  distance window by window as a line, under the bound, the windows at their first moment when every one has one and numbered
+  from one otherwise; a window without a distance for a column leaves its line open there. Windows measured by another watch
+  are refused rather than drawn as one.
+
+- **What a watch costs, measured.** A hundred thousand training rows of fifty columns — forty of numbers written with every
+  digit, so that every value is its own, the most a column can keep, and ten of twenty words each — watched whole, on one
+  Windows machine on .NET 10: the fit takes 5.8 seconds where the same pipeline without the watch takes 4.1; the file is 173 MB
+  and is written in a second; reading it back takes 1.4 seconds and the text a network carries of it 1.8; a window of a
+  thousand rows is measured in 0.3 seconds; and a server that reads the file and the text beside it holds 2.4 GB, at most
+  4.3 GB while it reads. The same columns kept to two places make a file of 12 MB, read back in 0.3 seconds, measured in 0.07
+  and served in at most 352 MB. Naming the columns watched is how the file is kept small.
+
+- **Every release shows what it brought in code.** The wiki's Examples page has a section to each release, the newest first,
+  what is new and what was improved, each with a line on what it buys and a block written against the library as it is now;
+  the start page's row for a release leads to it, and a test compiles every block. A call renamed since has no block.
+
+- **The repository carries the roadmap.** `ROADMAP.md` is the table of the wiki's roadmap, what is done and what comes next in
+  order, held to the wiki's by a test; every row's section stays on the wiki.
+
+### Changed
+
+- **The likeness of the parts is worked out from counts.** `evidence.likeness` counts each part's values once and measures the
+  counts, by the same code the watch uses, and gives to the bit what it gave before: the counted forms of both distances are
+  held to the one-by-one ones over four thousand random cases, ties among them.
+
+- **A pipeline's text holds the pipeline once.** `PipelineText` kept the text twice — as written and without its version, for
+  the digest two fits are compared by — and keeps the second's digest now, so a network's file read back holds half what it held
+  of its pipeline. On Windows, where the JSON writer ends its lines otherwise, writing a text this large also leaves about a
+  gigabyte in .NET's shared buffers once, which every text after reuses.
+
+### What was decided, and why
+
+Each of these was settled before the watch was built; the first is the one thing the code refuses.
+
+- **A window measured against a pipeline that keeps no training rows** is refused: "This pipeline keeps none of the rows it was
+  fitted on, so the rows it is served have nothing to be measured against." A file holds no rows unless a step keeps them, and
+  the refusal names the step to declare. A pipeline that keeps them at two places is refused too, since a window is measured
+  against one.
+- **A summary of the training rows** — a sketch of their quantiles, a histogram — is not kept: a summary changes the distance,
+  and the watch promises the one the likeness of the parts measures.
+- **A series of windows held by the library** is not built: the library holds nothing between calls, and the caller groups the
+  rows by the question it asks — a day, an hour, a farm — which the library cannot know.
+- **A least window** is not set: a window of a few rows is flagged as the likeness of the parts flags a small part, above the
+  bound, and every column says how many rows its distance was worked out from beside it. A least size would be a second rule
+  for when a distance counts, and a number the person never set.
+- **The share of gaps** has no flag of its own: the two distances are what is measured, and the gaps of the window and of the
+  training rows are reported beside them as counts.
+- **For words the distance is the total variation**, half the sum of how far each word's share moved, where Deequ, NannyML,
+  SageMaker and TensorFlow Data Validation take the largest move of any one word: the likeness of the parts measures words so,
+  a window is measured by the same rule, and the two agree when one word moves.
+- **A cap on how many words a column keeps** is not built: it would be a second rule for which columns are watched, and the
+  person names them.
+- **`evidence.likeness` keeps its default columns**, the ones the rows are ordered and divided by among them, though the watch
+  leaves those out: a verb never changes its meaning in place.
+- **A file is stamped with the version of the library that wrote it**, the eleventh for every file 0.12.0 writes, never with
+  the oldest version its steps would need: a writer that looked through the steps to choose its number would be a second rule
+  for what a file is.
+- **No p-value is given**: the usual test answers whether two sets of rows could come from one distribution, and over a
+  hundred thousand training rows it says no to windows a few hundredths apart, which nobody would act on; the bound is on how
+  far apart is too far, and the distance says that.
+
 ## [0.11.0]
 
 The third letter of the flock team, and the words a model is written in. The team that weighs flocks asked for a number

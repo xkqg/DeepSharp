@@ -18,6 +18,17 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.12.0 is about a model watched after it ships.** A pipeline read from its file kept what its steps learned and not
+the rows they learned it from, so the rows a served model met had nothing to be measured against, and a model whose world
+had moved on went on answering as if it had not. `.Watch(warnAbove)` below the split keeps the training rows of the columns
+it watches, counted — each value once with how many rows hold it — and changes nothing a replay does. `prepared.Watched(window)`
+measures a window of served rows against them, column by column, by the same two distances the likeness of the parts takes —
+Kolmogorov–Smirnov for numbers and moments, total variation for words — flagged above the watch's bound, each beside the rows
+it was worked out from, and says when the window was. Nothing is learned from a window, the windows are the caller's, and
+`windows.Distances()` in `DeepSharp.Charts` draws them one beside another. The pipeline file is at version 11, and a file
+0.11.0 wrote is read, written again and served as it was; a model trained behind it is watched once its pipeline is fitted
+again with the watch and the model trained behind that fit.
+
 **0.11.0 is about the third letter of the flock team, and the words a model is written in.** The team that weighs
 flocks asked for a number written down as how far it fills a few bins, for the periodic embedding of a number, for a report
 of how alike the parts of a split are, for a search that stops a hopeless trial, chooses a setting only when another is chosen
@@ -31,22 +42,6 @@ with its reliability curve. Each is held to the framework that has it on every e
 PyTorch files that say it — ONNX's both as the operators of its newer sets and as the several operators PyTorch's exporters
 spell it in for older ones. The pipeline file is at version 10, and a file 0.10.0 wrote is read, written again and served as
 it was.
-
-**0.10.0 is about everything the parts can be told.** A layer here took what it needed and little else: a dense layer
-always had a bias, its numbers always started the same way, every layer learned, and a padding added noughts or one value
-and nothing else. The optimizer and the run around it took a rate and a few switches. A source that said more was refused
-at the setting that said it, and this release builds what those refusals named. A layer can leave out its bias, and a
-normalisation its scale or its shift. A `Beginning` says how a layer's numbers start — Glorot's, He's, a normal
-draw, a truncated one, an orthogonal matrix, ones, a constant — and a padding can fill its places from the example itself,
-mirrored, repeated or gone round. A layer's numbers can carry a penalty (L1, L2), a bound on the norm of each unit's
-numbers, or be held still while the rest of the network learns. Optimizers take a weight decay added to the gradient,
-dampening, Nesterov momentum, AMSGrad and the centred form; a run can clip each gradient value, step once every several
-batches, and keep a running average of its weights. Each is held to PyTorch's own numbers, step by step on every engine,
-and a run that has them goes on from its checkpoint bit for bit. The three readers read what they used to refuse: Keras's
-`use_bias`, `center` and `scale`, its regularizers, its MaxNorm constraints and `trainable`; ONNX's layers without a bias
-and its reflect, edge and wrap pads; and PyTorch's layers without one. The pipeline file is at version 9 and a network's
-and a run's part at 5, and a part that says none of the new is written as it always was: a file 0.9.0 wrote is read, written
-again and served as it was.
 
 Earlier releases are in the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md), which records what each one
 added, and the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what is done, what is still to come, and what is left out on purpose.
@@ -374,10 +369,11 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | [TorchSharp backend](https://github.com/xkqg/DeepSharp/wiki/TorchSharp-backend) | The engine on libtorch: what your application brings, what the engine is held to, and when it is the faster. |
 | [Importing a model](https://github.com/xkqg/DeepSharp/wiki/Importing-a-model) | A model PyTorch, Keras or an ONNX exporter saved, read into the same network: what each reader reads, and what it refuses. |
 | [Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook) | A pipeline written block by block in Verso, and the data at any block. |
+| [Examples](https://github.com/xkqg/DeepSharp/wiki/Examples) | What each release brought, in code: what is new and what was improved, newest first, every block compiled against the library as it is now. |
 | [Architecture](https://github.com/xkqg/DeepSharp/wiki/Architecture) | The design decisions, and what was deliberately left out. |
 | [Next to TorchSharp, TensorFlow.NET and ML.NET](https://github.com/xkqg/DeepSharp/wiki#how-this-sits-next-to-torchsharp-tensorflownet-and-mlnet) | What those give you, what they do not, why the choice of engine stays a choice, and where a trainer from ML.NET fits. |
 | [Quality](https://github.com/xkqg/DeepSharp/wiki/Quality) | What has to be true before anything is allowed in. |
-| [Roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) | What is done and what is still to come, in the order each row needs the one above it, and what is left out on purpose. |
+| [Roadmap](https://github.com/xkqg/DeepSharp/blob/main/ROADMAP.md) | What is done and what is still to come, in the order each row needs the one above it — and, on the [wiki's page](https://github.com/xkqg/DeepSharp/wiki/Roadmap), what each row takes and what is left out on purpose. |
 | [Contributing](https://github.com/xkqg/DeepSharp/blob/main/CONTRIBUTING.md) | A failing test first, no warnings, a coverage check that fails rather than reports. |
 | [Security](https://github.com/xkqg/DeepSharp/wiki/Security) | What counts as a vulnerability here, and how to report one. |
 

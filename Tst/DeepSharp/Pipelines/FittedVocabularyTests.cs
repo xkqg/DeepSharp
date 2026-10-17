@@ -35,6 +35,7 @@ public class FittedVocabularyTests
         { "fill.nan", ["notNumbers"], [], [] },
         { "fill.nan.mean", ["notNumbers"], [], ["value"] },
         { "clip", ["outside"], [], ["lower", "upper"] },
+        { "watch.reference", ["a.counts", "a.gaps", "a.values", "columns"], [], [] },
     };
 
     [Theory]
@@ -99,7 +100,7 @@ public class FittedVocabularyTests
         var exercised = new[]
             {
                 "normalise", "normalise.power", "encode", "encode.categories", "encode.piecewise", "history", "fill.missing", "fill.missing.refused",
-                "fill.nan", "fill.nan.mean", "clip",
+                "fill.nan", "fill.nan.mean", "clip", "watch.reference",
             }
             .Select(fit => ((IPipelineStep)Of(fit).Step).Verb)
             .ToHashSet(StringComparer.Ordinal);
@@ -137,6 +138,34 @@ public class FittedVocabularyTests
         Assert.Equal(["gaps"], said.Counts);
         Assert.Equal(["filled"], said.Decisions);
         Assert.Equal(133, said.Number("gaps"));
+    }
+
+    [Fact]
+    public void ARunOrAListAFitOnlySaw_IsSaidAsSeen_AndWrittenAsTheFileAlwaysHeldIt()
+    {
+        // What a fit saw can be more than a count: every value a column held and how many rows held each. It is written the way
+        // a run and a list always were, and said as seen, so no replay may read it.
+        var said = new FittedStepValues();
+        said.Saw("a.values", [1, 2.5]);
+        said.Saw("a.counts", [3, 1]);
+        said.Saw("c.words", ["x", "y"]);
+
+        var plainly = new FittedStepValues();
+        plainly.Learned("a.values", [1, 2.5]);
+        plainly.Learned("a.counts", [3, 1]);
+        plainly.Learned("c.words", ["x", "y"]);
+
+        Assert.Equal(Written(plainly), Written(said));
+        Assert.Equal(["a.counts", "a.values", "c.words"], said.Counts.Order(StringComparer.Ordinal));
+        Assert.Equal([1, 2.5], said.Curve("a.values"));
+        Assert.Equal(["x", "y"], said.List("c.words"));
+
+        said.Learned("a.values", [4d]);
+        said.Learned("c.words", ["z"]);
+
+        Assert.Equal(["a.counts"], said.Counts);
+        Assert.Throws<ArgumentException>(() => said.Saw("a.counts", ["words"]));
+        Assert.Throws<ArgumentOutOfRangeException>(() => said.Saw("b.values", [double.NaN]));
     }
 
     [Fact]
@@ -227,6 +256,7 @@ public class FittedVocabularyTests
         "fill.missing.refused" => (FillMissingStep.Of("a", With.Median, 0.10), Numbers(1, 2, null, 4, 10)),
         "fill.nan" => (new FillNaNStep("a"), Numbers(1, 2, 3, 4, 10)),
         "fill.nan.mean" => (new FillNaNStep("a", With.Mean), Numbers(1, 2, double.NaN, 4, 10)),
+        "watch.reference" => (new WatchStep(0.2), Numbers(1, 2, null, 4, 10)),
         _ => (new ClipOutliersStep("a"), Numbers(1, 2, 3, 4, 100)),
     };
 
