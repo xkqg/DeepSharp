@@ -1,7 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using System.Text.RegularExpressions;
 using System.Xml.Linq;
 
 namespace DeepSharp.Tests.Packaging;
@@ -12,11 +11,8 @@ namespace DeepSharp.Tests.Packaging;
 /// compiled with every other block of the wiki; this holds the page's shape: the release this build is comes first and shows
 /// something, every section names a release the changelog has, and the start page's row for the release leads to it.
 /// </summary>
-public sealed partial class ExamplesPageTests
+public sealed class ExamplesPageTests
 {
-    [GeneratedRegex("^## (?<version>\\d+\\.\\d+\\.\\d+)$", RegexOptions.Multiline)]
-    private static partial Regex Release();
-
     private static string Page => File.ReadAllText(Path.Join(Wiki.Folder, "Examples.md")).ReplaceLineEndings("\n");
 
     private static string Building =>
@@ -25,32 +21,27 @@ public sealed partial class ExamplesPageTests
     [Fact]
     public void TheReleaseThisBuildIs_ComesFirst_AndShowsWhatItBroughtInCode()
     {
-        var sections = Release().Matches(Page).ToArray();
-        var first = sections[0];
-        var end = sections.Length > 1 ? sections[1].Index : Page.Length;
+        var first = Sections()[0];
 
-        Assert.Equal(Building, first.Groups["version"].Value);
-        Assert.NotEmpty(Wiki.Read("Examples.md", Page[first.Index..end]).Programs);
+        Assert.Equal(Version.Parse(Building), first.Version);
+        Assert.NotEmpty(Wiki.Read("Examples.md", first.Text).Programs);
     }
 
     [Fact]
     public void EverySection_IsAReleaseTheChangelogHas_NewestFirst_SaidAsNewOrImproved()
     {
         var changelog = File.ReadAllText(Path.Join(Repository.Root, "CHANGELOG.md"));
-        var sections = Release().Matches(Page).ToArray();
-        Version[] versions = [.. sections.Select(section => Version.Parse(section.Groups["version"].Value))];
+        var sections = Sections();
+        Version[] versions = [.. sections.Select(section => section.Version)];
 
         Assert.Equal(versions.OrderDescending(), versions);
         Assert.All(versions, version => Assert.Contains($"## [{version}]", changelog, StringComparison.Ordinal));
 
-        for (var at = 0; at < sections.Length; at++)
+        foreach (var section in sections)
         {
-            var end = at + 1 < sections.Length ? sections[at + 1].Index : Page.Length;
-            var section = Page[sections[at].Index..end];
-
             Assert.True(
-                section.Contains("\n### New\n", StringComparison.Ordinal) || section.Contains("\n### Improved\n", StringComparison.Ordinal),
-                $"The examples of {versions[at]} say neither what is new nor what was improved.");
+                section.Text.Contains("\n### New\n", StringComparison.Ordinal) || section.Text.Contains("\n### Improved\n", StringComparison.Ordinal),
+                $"The examples of {section.Version} say neither what is new nor what was improved.");
         }
     }
 
@@ -62,5 +53,22 @@ public sealed partial class ExamplesPageTests
         var row = home.Split('\n').Single(line => line.StartsWith($"| {minor} |", StringComparison.Ordinal));
 
         Assert.Contains($"(Examples#{Building.Replace(".", string.Empty, StringComparison.Ordinal)})", row, StringComparison.Ordinal);
+    }
+
+    // The page's releases in the order they stand: every section whose heading is a version, up to the next heading.
+    private static Section[] Sections() =>
+    [
+        .. Page.Split("\n## ").Skip(1)
+            .Select(chunk => new Section(chunk[..chunk.IndexOf('\n', StringComparison.Ordinal)], "## " + chunk))
+            .Where(section => section.Heading.Split('.').Length == 3 && Version.TryParse(section.Heading, out _)),
+    ];
+
+    /// <summary>One section of the page.</summary>
+    /// <param name="Heading">What its heading says.</param>
+    /// <param name="Text">The section, from its heading to the next.</param>
+    private readonly record struct Section(string Heading, string Text)
+    {
+        /// <summary>The release the section is of.</summary>
+        public Version Version => Version.Parse(Heading);
     }
 }

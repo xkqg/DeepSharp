@@ -44,7 +44,7 @@ public static class WindowCharts
         var first = windows[0];
         string[] columns = [.. first.Columns.Select(column => column.Column)];
 
-        if (windows.Any(window => window.WarnAbove != first.WarnAbove || !window.Columns.Select(column => column.Column).SequenceEqual(columns)))
+        if (windows.Any(window => !window.WarnAbove.Equals(first.WarnAbove) || !window.Columns.Select(column => column.Column).SequenceEqual(columns)))
         {
             throw new ArgumentException("The windows are drawn against one watch, and these were measured over other columns or under another bound.", nameof(windows));
         }
