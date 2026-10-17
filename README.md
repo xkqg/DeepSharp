@@ -43,7 +43,9 @@ PyTorch files that say it — ONNX's both as the operators of its newer sets and
 spell it in for older ones. The pipeline file is at version 10, and a file 0.10.0 wrote is read, written again and served as
 it was.
 
-Earlier releases are in the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md), which records what each one
+Every release that brought something to call, this one and the ones before it, has examples on the wiki: what is new and what was improved, in code that
+is compiled against the library as it is now — see [Examples](https://github.com/xkqg/DeepSharp/wiki/Examples). Earlier
+releases are in the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md), which records what each one
 added, and the [roadmap](https://github.com/xkqg/DeepSharp/wiki/Roadmap) says what is done, what is still to come, and what is left out on purpose.
 
 ```
@@ -359,6 +361,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | | |
 |---|---|
 | [Getting started](https://github.com/xkqg/DeepSharp/wiki/Getting-Started) | Install it, add two tensors, prepare a real file, train a network on it. |
+| [Examples](https://github.com/xkqg/DeepSharp/wiki/Examples) | What each release brought, in code: what is new and what was improved, newest first, every block compiled against the library as it is now. |
 | [Starting from a course](https://github.com/xkqg/DeepSharp/wiki/Starting-from-a-course) | Every step of a prepared pipeline in the order the steps belong, each waiting for what only you know: a table's and a series', as a value, a file and two buttons in the notebook. |
 | [PDD](https://github.com/xkqg/DeepSharp/wiki/PDD) | The idea this library is built around, and the mistake it removes. |
 | [Pipeline](https://github.com/xkqg/DeepSharp/wiki/Pipeline) | Every verb in the order you write it: readers, features, the split, gaps, scales, what a model is asked to predict, the handover, and a run for each learner. |
@@ -369,7 +372,6 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | [TorchSharp backend](https://github.com/xkqg/DeepSharp/wiki/TorchSharp-backend) | The engine on libtorch: what your application brings, what the engine is held to, and when it is the faster. |
 | [Importing a model](https://github.com/xkqg/DeepSharp/wiki/Importing-a-model) | A model PyTorch, Keras or an ONNX exporter saved, read into the same network: what each reader reads, and what it refuses. |
 | [Notebook](https://github.com/xkqg/DeepSharp/wiki/Notebook) | A pipeline written block by block in Verso, and the data at any block. |
-| [Examples](https://github.com/xkqg/DeepSharp/wiki/Examples) | What each release brought, in code: what is new and what was improved, newest first, every block compiled against the library as it is now. |
 | [Architecture](https://github.com/xkqg/DeepSharp/wiki/Architecture) | The design decisions, and what was deliberately left out. |
 | [Next to TorchSharp, TensorFlow.NET and ML.NET](https://github.com/xkqg/DeepSharp/wiki#how-this-sits-next-to-torchsharp-tensorflownet-and-mlnet) | What those give you, what they do not, why the choice of engine stays a choice, and where a trainer from ML.NET fits. |
 | [Quality](https://github.com/xkqg/DeepSharp/wiki/Quality) | What has to be true before anything is allowed in. |
