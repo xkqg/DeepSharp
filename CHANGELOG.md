@@ -121,8 +121,8 @@ in the operators its newer sets have and in the several operators PyTorch's expo
   wherever they stand; the layers LeakyReLU, PReLU, ELU, Softmax, GroupNormalization — of a group for every channel, an instance
   normalisation — RMSNormalization and, as the first layer over one category's place, Embedding; and the losses mean absolute
   error, Huber, Poisson, hinge and binary focal cross-entropy, and the label smoothing of the cross-entropies. From ONNX: Gelu,
-  LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization from operator set 21, RMSNormalization and a
-  softmax between layers; and the spellings PyTorch's two exporters write for an older set — the GELU as Div, Erf, Add and two
+  LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization as operator set 21 has it — a scale and a shift
+  for each channel, where the sets 18 to 20 that also have it keep them for each group — RMSNormalization and a softmax between layers; and the spellings PyTorch's two exporters write for an older set — the GELU as Div, Erf, Add and two
   Muls, or as its hyperbolic tangent's chain, the SiLU as a Sigmoid and a Mul, the mish as a Softplus, a Tanh and a Mul, a group
   normalisation as a Reshape, an InstanceNormalization and a Reshape back, and a root-mean-square normalisation as Pow,
   ReduceMean, Add, Sqrt, Reciprocal and two Muls — each recognised only where every number in it is the word's own and nothing

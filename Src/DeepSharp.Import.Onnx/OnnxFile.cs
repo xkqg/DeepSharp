@@ -47,8 +47,8 @@ namespace DeepSharp.Import.Onnx;
 /// What is read: a graph taking one batch — of rows, of series, of images or of volumes — and giving one, each node
 /// taking the value the node before it made, of the operators Gemm, MatMul, Add, Conv, MaxPool, AveragePool,
 /// GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape,
-/// Relu, Tanh, Sigmoid, Gelu, LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization from operator set
-/// 21, RMSNormalization and Softmax, and the Identity, Cast, Transpose and Constant nodes that hand values on. The spellings
+/// Relu, Tanh, Sigmoid, Gelu, LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization as operator
+/// set 21 has it — a scale and a shift for each channel, not for each group as the sets 18 to 20 have them — RMSNormalization and Softmax, and the Identity, Cast, Transpose and Constant nodes that hand values on. The spellings
 /// PyTorch's exporters write a GELU, a SiLU, a mish, a group normalisation and a root-mean-square normalisation in for an older
 /// operator set are read as the one layer each spells, where every number in them is the word's own and nothing outside them
 /// takes a value they make. The pads

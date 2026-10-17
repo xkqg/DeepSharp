@@ -11,7 +11,7 @@ namespace DeepSharp.Tests.Import;
 /// <summary>
 /// The ONNX graphs PyTorch's two exporters make of the words 0.11.0 reads (Fixtures/onnx-vocabulary-fixtures.py made them): the
 /// single operators of the newer operator sets — Gelu, LeakyRelu, PRelu, Elu, Selu, Mish, Softmax between layers,
-/// InstanceNormalization, GroupNormalization from set 21, RMSNormalization — and the spellings an exporter asked for an older set
+/// InstanceNormalization, GroupNormalization as set 21 has it, RMSNormalization — and the spellings an exporter asked for an older set
 /// writes the same words in, each recognised as the layer it spells and held to what PyTorch answered through the graph.
 /// </summary>
 public class OnnxVocabularyFileTests
