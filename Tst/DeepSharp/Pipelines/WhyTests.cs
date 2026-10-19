@@ -224,6 +224,76 @@ public class WhyTests
         Assert.Throws<ArgumentOutOfRangeException>(() => Prepared().MakeUpOf(Handed(), -1, new Redraws(1, 1)));
     }
 
+    // Rows of a flag, a group, a number and an answer; the group is declared a category and dropped before anything encodes it.
+    private static readonly string[] OtherColumns = ["flag", "group", "x", "y"];
+
+    private static InMemoryRowSource OtherSource(Func<int, string?> x) => new(
+        OtherColumns,
+        [.. Enumerable.Range(1, 60).Select(t => (IReadOnlyList<string?>)[t % 2 == 0 ? "true" : "false", t % 3 == 0 ? "b" : "a", x(t), "0"])]);
+
+    private static PreparedData OtherPrepared() =>
+        Pdd.Create()
+            .Read(OtherSource(t => (t / 10.0).ToString("R", CultureInfo.InvariantCulture)), "sixty")
+            .Declare(schema => schema.Boolean("flag").Category("group").Number("x", "y"))
+            .SplitAtRandom(0.70, 0.15, 3)
+            .Drop("group")
+            .Target("y")
+            .Build()
+            .Run();
+
+    private static IReadOnlyList<double[]> SaidOfX(IRowSource rows) =>
+        [.. rows.Rows.Select(row => new[] { string.IsNullOrWhiteSpace(row[2]) ? 0 : 2 * double.Parse(row[2]!, CultureInfo.InvariantCulture) })];
+
+    [Fact]
+    public void AColumnThatIsNeitherANumberNorACategory_HasNoRangeToMoveThrough()
+    {
+        var refused = Assert.Throws<ArgumentException>(
+            () => OtherPrepared().DependenceOn(new RowsAnswered(OtherSource(t => (t / 10.0).ToString("R", CultureInfo.InvariantCulture)), SaidOfX), new Moving("flag", 3)));
+
+        Assert.Contains("which has no range to move through", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AColumnThePipelineNeverDeclared_HasNoRangeToMoveThrough_SayingSo()
+    {
+        var rows = OtherSource(t => (t / 10.0).ToString("R", CultureInfo.InvariantCulture));
+        var withExtra = new InMemoryRowSource([.. OtherColumns, "extra"], rows.Rows.Select(row => (IReadOnlyList<string?>)[.. row, "?"]));
+
+        var refused = Assert.Throws<ArgumentException>(() => OtherPrepared().DependenceOn(new RowsAnswered(withExtra, SaidOfX), new Moving("extra", 3)));
+
+        Assert.Contains("something the pipeline does not declare", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACategoryNoEncoderLearned_MovesThroughTheValuesTheRowsHandedInHold()
+    {
+        var dependence = OtherPrepared().DependenceOn(new RowsAnswered(OtherSource(t => (t / 10.0).ToString("R", CultureInfo.InvariantCulture)), SaidOfX), new Moving("group", 3));
+
+        Assert.Equal(["a", "b"], dependence.Values);
+    }
+
+    [Fact]
+    public void ANumberTheRowsHandedInNeverHold_HasNoRangeToMoveThrough()
+    {
+        var refused = Assert.Throws<ArgumentException>(
+            () => OtherPrepared().DependenceOn(new RowsAnswered(OtherSource(_ => null), SaidOfX), new Moving("x", 3)));
+
+        Assert.Contains("holds no number in the rows handed in", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void APipelineThatNamesNoAnswer_HasNoneToAskWhyOf()
+    {
+        var unanswered = Pdd.Create()
+            .Read(Source(Rows()), "a hundred and twenty")
+            .Declare(schema => schema.Integer("t").Number("x", "z", "y").Category("sex"))
+            .SplitAtRandom(0.70, 0.15, 3)
+            .Build()
+            .Run();
+
+        Assert.Contains("names no answer", Assert.Throws<ArgumentException>(() => unanswered.RelianceOn(Handed(), new Redraws(1, 1))).Message, StringComparison.Ordinal);
+    }
+
     private sealed class ColumnComparer : IEqualityComparer<ColumnReliance>
     {
         public bool Equals(ColumnReliance? left, ColumnReliance? right) =>

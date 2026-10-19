@@ -101,4 +101,15 @@ public class VocabularyEdgeTests
         Assert.Contains("embedding, takes each example as a row of numbers", notARow.Message, StringComparison.Ordinal);
         Assert.Contains("reads a category from column 4 of the row, and each row reaching it holds 3", beyond.Message, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ATokenEmbeddingWord_RefusesAnExampleThatIsNoRowOfIds_AndLowersOneThatIs()
+    {
+        var notARow = Assert.Throws<ArgumentException>(() => new Sequential().TokenEmbedding(10, 3).Lower(new Shape(2, 3), new RandomStream(1)));
+        var lowered = new Sequential().TokenEmbedding(10, 3).Lower(new Shape(4), new RandomStream(1));
+
+        Assert.Contains("tokenEmbedding, takes each example as a row of ids", notARow.Message, StringComparison.Ordinal);
+        Assert.NotNull(lowered);
+    }
+
 }

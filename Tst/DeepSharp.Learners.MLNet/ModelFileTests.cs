@@ -51,6 +51,24 @@ public class ModelFileTests
     }
 
     [Fact]
+    public void RowsThePipelineHandsOverAsOtherFeaturesThanTheModelLearned_AreRefusedNamingBoth()
+    {
+        // The model is the same and what it is said to have learned from is not, which no model trained here can be: the private parts of a
+        // trained one are handed to the constructor the training uses, with other names for its features.
+        var trained = Passengers().TrainWithML();
+        const System.Reflection.BindingFlags Private = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var model = (Microsoft.ML.ITransformer)typeof(TrainedMLModel).GetField("_model", Private)!.GetValue(trained)!;
+        var context = (Microsoft.ML.MLContext)typeof(TrainedMLModel).GetField("_context", Private)!.GetValue(trained)!;
+        var other = new TrainedMLModel(model, context, trained.Prepared, trained.TrainedOn with { Features = ["elsewhere"] });
+        var served = CsvRowSource.FromText(string.Join('\n', File.ReadLines(Repository.Data("titanic.csv")).Take(13)) + "\n");
+
+        var refused = Assert.Throws<InvalidOperationException>(() => other.Predict(served));
+
+        Assert.Contains("'elsewhere'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("a model answers only what it learned from", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ItNamesTheLibraryThatWroteTheModel_AndTheProcessorItWasWrittenOn()
     {
         // Without these a reader that cannot open the archive can say nothing useful: the model is ML.NET's own format,

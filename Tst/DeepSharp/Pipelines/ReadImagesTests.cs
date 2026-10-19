@@ -241,4 +241,16 @@ public class ReadImagesTests
         Assert.Equal("image.0", batch.FeatureNames[0]);
         Assert.Equal([2, 4, 3], batch.ExampleShape);
     }
+
+    [Fact]
+    public void FourChannels_ReadAPictureWithHowMuchShowsThrough_WhichAPictureWithoutOneShowsWhole()
+    {
+        using var folder = Pictures();
+        var source = new ReadImagesStep(folder.Path, new ImageShape(4, 2, 4)).Open(SourceFolder.WorkingDirectory);
+        var cell = MediaCell.Parse(source.Rows.First()[0]!);
+
+        Assert.Equal([2, 4, 4], cell.Shape);
+        Assert.Equal(1f, cell.Values[3], 4);
+    }
+
 }

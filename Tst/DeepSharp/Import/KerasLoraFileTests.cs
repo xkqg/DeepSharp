@@ -105,4 +105,14 @@ public class KerasLoraFileTests
             Assert.Equal(expected[at], actual[at], 5);
         }
     }
+    [Theory]
+    [InlineData("config.layers.1.config.lora_alpha=0")]
+    [InlineData("config.layers.1.config.lora_rank=0")]
+    public void APairOfNoRankOrNoAlpha_IsRefusedNamingBoth(string edit)
+    {
+        var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(KerasFixtures.Edited("keras-lora.keras", edit)));
+
+        Assert.Contains("its low-rank pair is of rank", refused.Message, StringComparison.Ordinal);
+    }
+
 }

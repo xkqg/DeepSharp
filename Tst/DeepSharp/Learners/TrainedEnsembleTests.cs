@@ -140,6 +140,7 @@ public class TrainedEnsembleTests
         Assert.Throws<ArgumentException>(() => Trained(prepared, []));
         Assert.Throws<ArgumentNullException>(() => Trained(prepared, null!));
         Assert.Throws<ArgumentException>(() => TrainedEnsemble.Of([Alone(prepared, step)]));
+        Assert.Contains("0 were given", Assert.Throws<ArgumentException>(() => TrainedEnsemble.Of([])).Message, StringComparison.Ordinal);
     }
 
     [Fact]

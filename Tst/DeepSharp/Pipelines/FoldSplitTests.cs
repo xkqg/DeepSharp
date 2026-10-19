@@ -333,4 +333,19 @@ public class FoldSplitTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new Origin(1, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new Origin(3, 3));
     }
+
+    [Theory]
+    [InlineData("origin", "origins")]
+    [InlineData("origins", "origin")]
+    public void AFileThatNamesOneKeyOfAnOrigin_WithoutTheOther_IsRefusedNamingWhatItSays(string left, string said)
+    {
+        var node = System.Text.Json.Nodes.JsonNode.Parse(new SplitByTimeStep("Date", SplitShares.Of(0.75), 2, new Origin(3, 1)).Canonical())!.AsObject();
+
+        node.Remove(left);
+
+        var refused = Assert.Throws<FormatException>(() => SplitByTimeStep.ReadFrom(JsonDocument.Parse(node.ToJsonString()).RootElement));
+
+        Assert.Contains($"this file says only '{said}'", refused.Message, StringComparison.Ordinal);
+    }
+
 }
