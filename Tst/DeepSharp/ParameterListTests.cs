@@ -48,6 +48,7 @@ public class ParameterListTests
         ["DeepSharp.Pipelines.Binance"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines.DataFrame"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines.Excel"] = "DeepSharp.Tests",
+        ["DeepSharp.Pipelines.Images"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines.Indicators"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines.Json"] = "DeepSharp.Tests",
         ["DeepSharp.Pipelines.Parquet"] = "DeepSharp.Tests",

@@ -144,6 +144,7 @@ public sealed class StepCatalog
             ["learn.ml"] = "DeepSharp.Learners.ML",
             ["learn.network"] = "DeepSharp.Learners.Networks",
             ["read.excel"] = "DeepSharp.Pipelines.Excel",
+            ["read.images"] = "DeepSharp.Pipelines.Images",
             ["read.json"] = "DeepSharp.Pipelines.Json",
             ["read.parquet"] = "DeepSharp.Pipelines.Parquet",
         };

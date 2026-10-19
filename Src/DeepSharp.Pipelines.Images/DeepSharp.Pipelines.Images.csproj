@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Pipelines.Images</PackageId>
+    <Description>Reads a DeepSharp pipeline's rows out of a folder of pictures, a folder to each class: .ReadImages(path, shape) in the chain, read.images in a pipeline file, replayed like any other file the pipeline reads. PNG, JPEG, BMP, GIF and TGA, each file a row whose pixels are one cell of a fixed size and a fixed number of channels that the step says — a picture of another size is refused and never resized — and the class the name of its folder, with a column of nought and one for each class a learner is handed the answer by.</Description>
+    <PackageTags>machine-learning;pipeline;images;png;jpeg;computer-vision;data-preparation;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- StbImageSharp 2.30.16, public domain or MIT (github.com/StbSharp/StbImageSharp): a decoder written in C# alone, with
+         no native library beside it. -->
+    <PackageReference Include="StbImageSharp" Version="2.30.16" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>

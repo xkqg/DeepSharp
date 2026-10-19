@@ -20,6 +20,7 @@
                 <ModulePath>.*DeepSharp[.]Pipelines[.]Binance[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]DataFrame[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]Excel[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Pipelines[.]Images[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]Indicators[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]Json[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Pipelines[.]Parquet[.]dll$</ModulePath>

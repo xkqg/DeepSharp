@@ -64,6 +64,7 @@
             "outliers.clip",
             "read.csv",
             "read.excel",
+            "read.images",
             "read.join",
             "read.json",
             "read.parquet",
@@ -506,6 +507,21 @@
           },
           "then": {
             "$ref": "#/$defs/read.excel"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "read.images"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/read.images"
           }
         },
         {
@@ -3903,6 +3919,46 @@
       ],
       "additionalProperties": false
     },
+    "read.images": {
+      "description": "Reads the rows from a folder of pictures, a folder to a class: a picture a row at the size and channels the step says, the folder it stands in the answer, and a column of nought and one for each class.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "read.images"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The folder the pictures will be in, when the pipeline runs: a folder to each class, pictures of .png, .jpg, .bmp, .gif or .tga in each."
+        },
+        "width": {
+          "description": "How many pixels across every picture is; one that is not is refused, never resized.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "height": {
+          "description": "How many pixels down every picture is; one that is not is refused, never resized.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "channels": {
+          "description": "How many numbers each pixel is: 1 for grey, 3 for red green blue, 4 with how much shows through.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "path",
+        "width",
+        "height",
+        "channels"
+      ],
+      "additionalProperties": false
+    },
     "read.join": {
       "description": "Reads two comma-separated files as one source: each row of the left file beside the one row of the right file its key names. Rows served later arrive already joined.",
       "type": "object",
@@ -4652,6 +4708,7 @@
                       "learn.ml",
                       "learn.network",
                       "order.by",
+                      "read.images",
                       "read.join",
                       "read.texts",
                       "scale.given",
@@ -4697,6 +4754,7 @@
                       "history",
                       "learn.ml",
                       "learn.network",
+                      "read.images",
                       "read.join",
                       "read.texts",
                       "scale.given",
@@ -4735,6 +4793,7 @@
                       "history",
                       "learn.ml",
                       "learn.network",
+                      "read.images",
                       "read.join",
                       "read.texts",
                       "scale.given",
@@ -4772,6 +4831,7 @@
                       "feature.cycle",
                       "history",
                       "learn.ml",
+                      "read.images",
                       "read.join",
                       "read.texts",
                       "scale.given",
@@ -4809,6 +4869,7 @@
                       "feature.cycle",
                       "history",
                       "learn.ml",
+                      "read.images",
                       "read.join",
                       "read.texts",
                       "scale.given",
@@ -4844,6 +4905,7 @@
                       "evidence.likeness",
                       "feature.cycle",
                       "history",
+                      "read.images",
                       "read.join",
                       "read.texts",
                       "target.numbers",
@@ -4876,6 +4938,7 @@
                       "encode.piecewise",
                       "evidence.likeness",
                       "history",
+                      "read.images",
                       "read.texts",
                       "watch.reference"
                     ]
@@ -4903,6 +4966,7 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "read.images",
                       "read.texts",
                       "watch.reference"
                     ]
@@ -4930,6 +4994,7 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "read.images",
                       "read.texts"
                     ]
                   }

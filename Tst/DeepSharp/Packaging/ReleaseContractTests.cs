@@ -408,7 +408,7 @@ public class ReleaseContractTests
         // A package new this release is in neither list above: it is packed, and nothing is asked of a baseline it never
         // had. Naming them here is what keeps "new" from becoming a word anybody can use for a package that simply
         // dropped out of the published list by accident.
-        string[] newThisRelease = [];
+        string[] newThisRelease = ["DeepSharp.Pipelines.Images"];
 
         Assert.All(newThisRelease, package => Assert.DoesNotContain($";{package};", props, StringComparison.Ordinal));
         Assert.Equal(packable.Order(StringComparer.Ordinal), publishedBefore.Concat(newThisRelease).Order(StringComparer.Ordinal));

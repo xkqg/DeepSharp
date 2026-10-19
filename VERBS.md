@@ -36,6 +36,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`outliers.clip`](#outliersclip) | Holds the extreme values of a column to bounds learned from the training rows. |
 | [`read.csv`](#readcsv) | Reads the rows from a comma-separated file. |
 | [`read.excel`](#readexcel) | Reads the rows from a sheet of an Excel workbook, the first unless one is named, its first row naming the columns. |
+| [`read.images`](#readimages) | Reads the rows from a folder of pictures, a folder to a class: a picture a row at the size and channels the step says, the folder it stands in the answer, and a column of nought and one for each class. |
 | [`read.join`](#readjoin) | Reads two comma-separated files as one source: each row of the left file beside the one row of the right file its key names. Rows served later arrive already joined. |
 | [`read.json`](#readjson) | Reads the rows from a JSON file holding an array of records, one object a row, every value as the file writes it. |
 | [`read.parquet`](#readparquet) | Reads the rows from an Apache Parquet file, which says what each of its columns holds. |
@@ -609,6 +610,28 @@ Reads the rows from a sheet of an Excel workbook, the first unless one is named,
 - **`sheet`**: The sheet the rows are on. Left out, the first sheet.
 
 Means what it says from version 1 of the file.
+
+## `read.images`
+
+Reads the rows from a folder of pictures, a folder to a class: a picture a row at the size and channels the step says, the folder it stands in the answer, and a column of nought and one for each class.
+
+```json
+{"step":"read.images","path":"pictures","width":28,"height":28,"channels":3}
+```
+
+| key | holds | an example |
+|---|---|---|
+| `path` | the path of a file; a relative one is read from the pipeline's folder | `"pictures"` |
+| `width` | a whole number, at least 1 | `28` |
+| `height` | a whole number, at least 1 | `28` |
+| `channels` | a whole number, at least 1 | `3` |
+
+- **`path`**: The folder the pictures will be in, when the pipeline runs: a folder to each class, pictures of .png, .jpg, .bmp, .gif or .tga in each.
+- **`width`**: How many pixels across every picture is; one that is not is refused, never resized.
+- **`height`**: How many pixels down every picture is; one that is not is refused, never resized.
+- **`channels`**: How many numbers each pixel is: 1 for grey, 3 for red green blue, 4 with how much shows through.
+
+Means what it says from version 12 of the file.
 
 ## `read.join`
 

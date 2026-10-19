@@ -51,6 +51,7 @@ public class PipelineTextTests
         ("outliers.clip", 1),
         ("read.csv", 1),
         ("read.excel", 1),
+        ("read.images", 12),
         ("read.join", 8),
         ("read.json", 1),
         ("read.parquet", 1),
