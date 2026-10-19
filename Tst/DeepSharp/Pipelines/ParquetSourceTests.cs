@@ -242,28 +242,39 @@ public sealed class ParquetSourceTests : IDisposable
         var step = new ReadParquetStep("titanic.parquet");
         string?[][] alone = [.. step.Open(bytes, "titanic.parquet").Rows.Select(row => row.ToArray())];
         var differing = new System.Collections.Concurrent.ConcurrentBag<string>();
-        var readers = Enumerable.Range(0, 400).Select(reader => Task.Run(() =>
-        {
-            var rows = step.Open(bytes, "titanic.parquet").Rows.ToArray();
 
-            for (var row = 0; row < alone.Length; row++)
+        // Sixteen threads of their own, each reading one file and then writing another, four hundred times each way between them. Eight
+        // hundred tasks on the pool the process shares held every thread of it for as long as this test ran, and each test beside it that
+        // waits for the pool — a delay of a millisecond, say — waited for them: more than thirty seconds in a run of the whole suite.
+        const int Threads = 16;
+        const int Turns = 400;
+        var workers = Enumerable.Range(0, Threads).Select(worker => Task.Factory.StartNew(
+            () =>
             {
-                if (!alone[row].SequenceEqual(rows[row]))
+                for (var reader = worker; reader < Turns; reader += Threads)
                 {
-                    differing.Add($"reader {reader}, row {row + 1}: [{string.Join("|", rows[row])}] where alone [{string.Join("|", alone[row])}]");
+                    var rows = step.Open(bytes, "titanic.parquet").Rows.ToArray();
+
+                    for (var row = 0; row < alone.Length; row++)
+                    {
+                        if (!alone[row].SequenceEqual(rows[row]))
+                        {
+                            differing.Add($"reader {reader}, row {row + 1}: [{string.Join("|", rows[row])}] where alone [{string.Join("|", alone[row])}]");
+                        }
+                    }
+
+                    using var stream = new MemoryStream();
+
+                    ParquetSerializer.SerializeAsync(Enumerable.Range(0, 2000).Select(at => new Tagged { Id = at, Tags = [at, at + 1] }), stream).GetAwaiter().GetResult();
+                    stream.Position = 0;
+                    ParquetSerializer.DeserializeAsync<Tagged>(stream).GetAwaiter().GetResult();
                 }
-            }
-        }));
-        var writers = Enumerable.Range(0, 400).Select(_ => Task.Run(async () =>
-        {
-            using var stream = new MemoryStream();
+            },
+            TestContext.Current.CancellationToken,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default)).ToArray();
 
-            await ParquetSerializer.SerializeAsync(Enumerable.Range(0, 2000).Select(at => new Tagged { Id = at, Tags = [at, at + 1] }), stream);
-            stream.Position = 0;
-            await ParquetSerializer.DeserializeAsync<Tagged>(stream);
-        }));
-
-        await Task.WhenAll(readers.Concat(writers));
+        await Task.WhenAll(workers);
 
         Assert.Empty(differing.Take(5));
     }
