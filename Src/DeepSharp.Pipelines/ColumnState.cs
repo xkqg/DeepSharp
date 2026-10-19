@@ -237,7 +237,7 @@ public sealed class ColumnState
         string[] excluded = [.. columns.Where(column => column.Excluded).Select(column => column.Name)];
 
         return new(
-            [.. taking.Select(column => new KnownColumn(column.Name, column.Kind, !column.Optional) { IsId = column.Id })],
+            [.. taking.Select(column => new KnownColumn(column.Name, column.Kind, !column.Optional, Lands: column.Kind == ColumnKind.Media ? Form.Signed : null) { IsId = column.Id })],
             new Unnamed([], Gone: excluded, Open: remainder == Remainder.Keep),
             taking.Where(column => column.Optional).ToDictionary(
                 column => column.Name, _ => "the schema allows the rows not to have it", StringComparer.Ordinal),

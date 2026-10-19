@@ -101,6 +101,7 @@ internal static class VerbReference
             [ColumnKind.Boolean] = "true or false",
             [ColumnKind.Timestamp] = "a moment in time",
             [ColumnKind.Category] = "a category",
+            [ColumnKind.Media] = "an array of one shape to a row: the pixels of an image, the samples of a sound or the ids of a text's tokens, as a media reader writes them",
         };
 
         public IReadOnlyList<Row> Visit(TextParameter parameter) =>

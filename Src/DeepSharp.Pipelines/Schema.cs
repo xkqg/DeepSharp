@@ -31,6 +31,15 @@ public enum ColumnKind
     /// handover rather than silently dropped.
     /// </remarks>
     Category,
+
+    /// <summary>An array of a fixed shape to a row: the pixels of an image, the samples of a sound, the ids of a text's tokens.</summary>
+    /// <remarks>
+    /// Read from a cell a media reader wrote (<see cref="MediaCell"/>) and kept whole, a row to an array. Its values land between
+    /// minus one and one by the rule that decoded them, so nothing is scaled; an array of another shape than the first is
+    /// refused, naming the row, and nothing is resized. Only steps that work on a column as it is take one — drop it, split by it,
+    /// hand it to a network — and what looks at every column leaves it out unasked.
+    /// </remarks>
+    Media,
 }
 
 /// <summary>What happens to the columns the schema does not mention.</summary>
@@ -137,6 +146,12 @@ public sealed class SchemaBuilder
     /// The list of categories is still learned from the training rows alone, when they are encoded.
     /// </remarks>
     public SchemaBuilder Category(params string[] names) => Add(names, ColumnKind.Category);
+
+    /// <summary>Columns of arrays of one shape each: images, sounds or the ids of tokens, as a media reader wrote them.</summary>
+    /// <param name="names">The column names.</param>
+    /// <returns>This schema, so the next kind can be written after it.</returns>
+    /// <remarks>A row is known by the numbers it holds, not by the file they came from; every array has the shape of the first.</remarks>
+    public SchemaBuilder Media(params string[] names) => Add(names, ColumnKind.Media);
 
     /// <summary>A column the source is allowed not to have at all.</summary>
     /// <param name="name">The column name.</param>

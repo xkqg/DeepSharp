@@ -110,13 +110,13 @@ public class DeclaredVocabularyTests
     }
 
     [Fact]
-    public void EveryLayerWord_IsAKindANetworksFileNames_AndTheOnesThatWorkOnAnImageAreNotWords()
+    public void EveryLayerWord_IsAKindANetworksFileNames_TheVariationsOfAnImageAndTheFlatteningOfOneAmongThem()
     {
         var catalog = NetworkCatalog.BuiltIn().Names.ToHashSet(StringComparer.Ordinal);
 
         Assert.All(NetworkWords.Layers, kind => Assert.Contains(kind.Name, catalog));
         Assert.Equal(
-            ["batchNorm", "dense", "dropout", "elu", "embedding", "gelu", "layerNorm", "leakyRelu", "mish", "periodic", "prelu", "relu", "rmsNorm", "selu", "sigmoid", "silu", "softmax", "tanh"],
+            ["batchNorm", "dense", "dropout", "elu", "embedding", "flatten", "gaussianNoise", "gelu", "layerNorm", "leakyRelu", "mish", "periodic", "prelu", "randomCrop", "randomFlip", "relu", "rmsNorm", "selu", "sigmoid", "silu", "softmax", "tanh"],
             NetworkWords.Layers.Select(kind => kind.Name).Order(StringComparer.Ordinal));
     }
 

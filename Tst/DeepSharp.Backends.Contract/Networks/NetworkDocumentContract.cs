@@ -894,10 +894,10 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
             ["adam", "adamw", "adaptiveavgpool1d", "adaptiveavgpool2d", "adaptiveavgpool3d", "adaptivemaxpool1d", "adaptivemaxpool2d",
              "adaptivemaxpool3d", "avgpool1d", "avgpool2d", "avgpool3d", "batchNorm", "binaryCrossEntropy", "constant", "conv1d", "conv1dtranspose",
              "conv2d", "conv2dtranspose", "conv3d", "conv3dtranspose", "cosineDecay", "crossEntropy", "dense", "dropout", "earthMoversDistance",
-             "elu", "embedding", "exponentialDecay", "flatten", "focal", "gelu", "globalavgpool1d", "globalavgpool2d", "globalavgpool3d", "globalmaxpool1d",
+             "elu", "embedding", "exponentialDecay", "flatten", "focal", "gaussianNoise", "gelu", "globalavgpool1d", "globalavgpool2d", "globalavgpool3d", "globalmaxpool1d",
              "globalmaxpool2d", "globalmaxpool3d", "groupNorm", "hinge", "huber", "instanceNorm", "layerNorm", "leakyRelu", "linearWarmup",
              "maxpool1d", "maxpool2d", "maxpool3d", "meanAbsoluteError", "meanSquaredError", "mish", "nadam", "pad1d", "pad2d", "pad3d", "periodic",
-             "poisson", "prelu", "quantile", "relu", "reshape", "rmsNorm", "rmsprop", "selu", "sgd", "sigmoid", "silu", "softmax", "spatialdropout1d",
+             "poisson", "prelu", "quantile", "randomCrop", "randomFlip", "relu", "reshape", "rmsNorm", "rmsprop", "selu", "sgd", "sigmoid", "silu", "softmax", "spatialdropout1d",
              "spatialdropout2d", "spatialdropout3d", "stack", "stepDecay", "tanh"],
             catalog.Names.Order(StringComparer.Ordinal));
         Assert.Throws<ArgumentException>(() => catalog.Register<Dense>());

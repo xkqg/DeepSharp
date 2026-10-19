@@ -67,7 +67,7 @@ public sealed class RandomFlip : Variation, ISaved<RandomFlip>
     /// <param name="vertical">Whether an image is mirrored across its rows, top for bottom.</param>
     /// <param name="seed">The number the flips are drawn from.</param>
     public RandomFlip(bool horizontal, bool vertical, long seed)
-        : base("randomflip", seed)
+        : base("randomFlip", seed)
     {
         Horizontal = horizontal;
         Vertical = vertical;
@@ -80,7 +80,7 @@ public sealed class RandomFlip : Variation, ISaved<RandomFlip>
     public bool Vertical { get; }
 
     /// <inheritdoc />
-    public static string Name => "randomflip";
+    public static string Name => "randomFlip";
 
     /// <inheritdoc />
     public static RandomFlip Rebuild(JsonElement settings, Rebuilding rebuilding)
@@ -150,7 +150,7 @@ public sealed class RandomCrop : Variation, ISaved<RandomCrop>
     /// <param name="seed">The number the shifts are drawn from.</param>
     /// <exception cref="ArgumentOutOfRangeException">The border is below nought.</exception>
     public RandomCrop(int pad, long seed)
-        : base("randomcrop", seed)
+        : base("randomCrop", seed)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(pad);
 
@@ -161,7 +161,7 @@ public sealed class RandomCrop : Variation, ISaved<RandomCrop>
     public int Pad { get; }
 
     /// <inheritdoc />
-    public static string Name => "randomcrop";
+    public static string Name => "randomCrop";
 
     /// <inheritdoc />
     public static RandomCrop Rebuild(JsonElement settings, Rebuilding rebuilding)
@@ -234,7 +234,7 @@ public sealed class GaussianNoise : Variation, ISaved<GaussianNoise>
     /// <param name="seed">The number the noise is drawn from.</param>
     /// <exception cref="ArgumentOutOfRangeException">The spread is not a number of nought or more.</exception>
     public GaussianNoise(double spread, long seed)
-        : base("gaussiannoise", seed)
+        : base("gaussianNoise", seed)
     {
         if (!(spread >= 0) || !double.IsFinite(spread))
         {
@@ -248,7 +248,7 @@ public sealed class GaussianNoise : Variation, ISaved<GaussianNoise>
     public double Spread { get; }
 
     /// <inheritdoc />
-    public static string Name => "gaussiannoise";
+    public static string Name => "gaussianNoise";
 
     /// <inheritdoc />
     public static GaussianNoise Rebuild(JsonElement settings, Rebuilding rebuilding)

@@ -118,7 +118,7 @@ public sealed record WatchStep : IPipelineStep<WatchStep>, IFittedStep, IDescrib
     private IReadOnlyList<string> Watched(Table table, ViewedDeclaration declared) =>
         Columns.Count > 0
             ? Columns
-            : [.. table.Columns.Select(column => column.Name)
+            : [.. table.Columns.Where(column => column.Kind != ColumnKind.Media).Select(column => column.Name)
                 .Where(name => name != table.Id && !declared.Answers.Contains(name, StringComparer.Ordinal) && !declared.OrderedBy.Contains(name, StringComparer.Ordinal))];
 
     // Each watched column of the training rows, counted, and said as seen.

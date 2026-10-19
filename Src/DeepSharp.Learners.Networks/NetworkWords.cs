@@ -153,6 +153,21 @@ public static class NetworkWords
 
     private static readonly WholeNumberParameter EmbeddingWidthKey = new("width", "How many numbers each category's vector holds.", 4) { AtLeast = 1 };
 
+    private static readonly TrueOrFalseParameter FlipAcrossKey =
+        new("horizontal", "Whether an image is mirrored across its columns, left for right, with a chance of a half.", true);
+
+    private static readonly TrueOrFalseParameter FlipDownKey =
+        new("vertical", "Whether an image is mirrored across its rows, top for bottom, with a chance of a half.", false);
+
+    private static readonly WholeNumberParameter VariationSeedKey =
+        new("seed", "The number the variation is drawn from: its own, which the run's seed moves nothing of, and with no default.", 1);
+
+    private static readonly WholeNumberParameter PadKey =
+        new("pad", "How many places an image is padded by on every side, and so how far it can move; what moves in from outside is nought.", 2) { AtLeast = 0 };
+
+    private static readonly NumberParameter SpreadKey =
+        new("spread", "The standard deviation of the normal noise added to every number.", 0.1) { AtLeast = 0 };
+
     private static readonly NumberParameter DeltaKey = new("delta", "How far from the answer the loss stops being squared and grows in a straight line.", 1) { Above = 0 };
 
     private static readonly NumberParameter QuantileKey = new("quantile", "The share of the time the answer is to stay below the value the model gives: above nought and below one.", 0.5) { Above = 0 };
@@ -191,6 +206,10 @@ public static class NetworkWords
         new("softmax", "Turns the numbers of a row into shares of one whole.", []),
         new("rmsNorm", "Divides every number of one row by the root of the mean of the row's squares, and scales it.", [RootEpsilonKey, ScaleKey, LearnsKey, RateShareKey]),
         new("periodic", "Turns every number of the row into its cosines and sines at frequencies it learns, through a linear layer: a relu after it makes it PLR.", [FrequenciesKey, SigmaKey, WidthKey, LiteKey]),
+        new("randomFlip", "Mirrors images at random while training and not while serving; it varies the rows themselves, so it stands first.", [FlipAcrossKey, FlipDownKey, VariationSeedKey]),
+        new("randomCrop", "Shifts images at random while training and not while serving, padding each and cutting a window of its own size out; it stands first.", [PadKey, VariationSeedKey]),
+        new("gaussianNoise", "Adds normal noise to every number while training and not while serving; it stands first.", [SpreadKey, VariationSeedKey]),
+        new("flatten", "Lays an example out as one row of numbers: an image as the row of its pixels.", []),
         new(EmbeddingWord, "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.", [EmbeddingColumnKey, EmbeddingWidthKey]),
     ];
 
@@ -331,6 +350,24 @@ public static class NetworkWords
         /// <exception cref="ArgumentException">A dense layer has no bias and says how its bias starts.</exception>
         internal void RequireCoherent()
         {
+            var learned = -1;
+
+            for (var at = 0; at < layers.Count; at++)
+            {
+                var varies = layers[at].Kind is "randomFlip" or "randomCrop" or "gaussianNoise";
+
+                if (!varies && learned < 0)
+                {
+                    learned = at;
+                }
+                else if (varies && learned >= 0)
+                {
+                    throw new ArgumentException(
+                        $"A '{layers[at].Kind}' varies the rows themselves, made on the values as the batch carries them: it stands first, before the '{layers[learned].Kind}' written ahead of it.",
+                        nameof(layers));
+                }
+            }
+
             foreach (var layer in layers.Where(each => each.Kind == "dense" && !each.YesOrNo(BiasKey.Key) && each.Text(BiasStartKey.Key) != BiasStartKey.LeftOut?.Word()))
             {
                 throw new ArgumentException(
@@ -461,6 +498,10 @@ public static class NetworkWords
             ["tanh"] = (described, _) => described.Tanh(),
             ["sigmoid"] = (described, _) => described.Sigmoid(),
             ["dropout"] = (described, layer) => described.Dropout(layer.Number(RateKey.Key)),
+            ["randomFlip"] = (described, layer) => described.RandomFlip(layer.YesOrNo(FlipAcrossKey.Key), layer.YesOrNo(FlipDownKey.Key), layer.Whole(VariationSeedKey.Key)),
+            ["randomCrop"] = (described, layer) => described.RandomCrop(layer.Whole(PadKey.Key), layer.Whole(VariationSeedKey.Key)),
+            ["gaussianNoise"] = (described, layer) => described.GaussianNoise(layer.Number(SpreadKey.Key), layer.Whole(VariationSeedKey.Key)),
+            ["flatten"] = (described, _) => described.Flatten(),
             ["batchNorm"] = (described, layer) => GovernedBy(layer, described.BatchNorm(layer.Number(MomentumKey.Key), layer.Number(EpsilonKey.Key), KeptBy(layer))),
             ["layerNorm"] = (described, layer) => GovernedBy(layer, described.LayerNorm(layer.Number(EpsilonKey.Key), KeptBy(layer))),
             ["gelu"] = (described, layer) => described.Gelu(layer.YesOrNo(ApproximateKey.Key)),

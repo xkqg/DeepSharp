@@ -263,9 +263,9 @@ public class VariationTests
         var read = NetworkDocument.ReadNetwork(Encoding.UTF8.GetString(buffer.WrittenSpan), "network", catalog);
         var layers = read.Network.HeldLayers().Select(held => held.Layer).ToArray();
 
-        Assert.Contains("randomflip", catalog.Names);
-        Assert.Contains("randomcrop", catalog.Names);
-        Assert.Contains("gaussiannoise", catalog.Names);
+        Assert.Contains("randomFlip", catalog.Names);
+        Assert.Contains("randomCrop", catalog.Names);
+        Assert.Contains("gaussianNoise", catalog.Names);
 
         var flip = Assert.IsType<RandomFlip>(layers[0]);
         var crop = Assert.IsType<RandomCrop>(layers[1]);

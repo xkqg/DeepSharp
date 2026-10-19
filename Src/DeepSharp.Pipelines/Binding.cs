@@ -132,11 +132,54 @@ public static class SchemaBinding
             // Words keep a cell of spaces as the words it is; only an empty cell is a gap.
             ColumnKind.Text or ColumnKind.Category => new TextColumn(
                 declared.Name, declared.Kind, cells.Select(cell => string.IsNullOrEmpty(cell) ? null : cell)),
+            ColumnKind.Media => Arrays(declared, cells, faults),
             ColumnKind.Number => new Column<double>(declared.Name, ColumnKind.Number, Values(declared, cells, CellTextExtensions.AsNumber, faults)),
             ColumnKind.Integer => new Column<long>(declared.Name, ColumnKind.Integer, Values(declared, cells, CellTextExtensions.AsWholeNumber, faults)),
             ColumnKind.Boolean => new Column<bool>(declared.Name, ColumnKind.Boolean, Values(declared, cells, CellTextExtensions.AsTrueOrFalse, faults)),
             _ => new Column<DateTime>(declared.Name, ColumnKind.Timestamp, Values(declared, cells, cell => cell.AsMoment(declared.Format), faults)),
         };
+    }
+
+    // A media column: each cell a media cell as a reader wrote it, or a gap. A cell that is none, or has another shape than the first,
+    // is written down with its row rather than thrown, as any unreadable cell is.
+    private static IColumn Arrays(ColumnDeclaration declared, string?[] cells, List<string> faults)
+    {
+        var read = new MediaCell?[cells.Length];
+
+        for (var row = 0; row < cells.Length; row++)
+        {
+            if (string.IsNullOrEmpty(cells[row]))
+            {
+                continue;
+            }
+
+            try
+            {
+                read[row] = MediaCell.Parse(cells[row]!);
+            }
+            catch (FormatException fault)
+            {
+                faults.Add($"Row {row + 1}, column '{declared.Name}': {fault.Message}");
+            }
+        }
+
+        if (faults.Count > 0 || read.All(cell => cell is null))
+        {
+            faults.Add($"Column '{declared.Name}' holds no array to give it a shape.");
+
+            return new TextColumn(declared.Name, cells);
+        }
+
+        try
+        {
+            return new MediaColumn(declared.Name, read);
+        }
+        catch (ArgumentException fault)
+        {
+            faults.Add(fault.Message);
+
+            return new TextColumn(declared.Name, cells);
+        }
     }
 
     private static T?[] Values<T>(ColumnDeclaration declared, string?[] cells, Func<string?, CellRead<T>> read, List<string> faults)

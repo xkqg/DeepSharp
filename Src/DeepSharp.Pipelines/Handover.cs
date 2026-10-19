@@ -77,6 +77,13 @@ public readonly record struct Batch(
     /// </remarks>
     public IReadOnlyDictionary<string, IReadOnlyList<string>>? Categories { get; init; }
 
+    /// <summary>
+    /// The shape of one example, when the features are one column of media — an image of rows, columns and channels, a sound of its
+    /// length — which the features then hold flattened; nothing when the features are anything else.
+    /// </summary>
+    /// <remarks>A learner that takes examples of a shape lays each row out as it, instead of stating the image's size twice.</remarks>
+    public IReadOnlyList<int>? ExampleShape { get; init; }
+
     /// <summary>How many rows this batch holds.</summary>
     public int RowCount => Features.Count;
 
@@ -125,6 +132,9 @@ public readonly record struct ServedBatch(
     /// over so; nothing, for a batch <see cref="Handover.Served(PreparedData, IRowSource, Needs)"/> did not make.
     /// </summary>
     public IReadOnlyDictionary<string, IReadOnlyList<string>>? Categories { get; init; }
+
+    /// <summary>The shape of one example, as <see cref="Batch.ExampleShape"/> says it for the training rows; nothing, for a batch <see cref="Handover.Served(PreparedData, IRowSource, Needs)"/> did not make.</summary>
+    public IReadOnlyList<int>? ExampleShape { get; init; }
 
     /// <summary>How many rows were served.</summary>
     public int RowCount => Features.Count;
@@ -228,6 +238,7 @@ public static class Handover
                 Keys = features.Keys,
                 Ids = IdsOf(prepared.Table, rows),
                 Categories = features.Categories,
+                ExampleShape = features.Shape,
             };
         }
 
@@ -270,6 +281,7 @@ public static class Handover
                 Keys = features.Keys,
                 Ids = IdsOf(table, all),
                 Categories = features.Categories,
+                ExampleShape = features.Shape,
             };
         }
     }
@@ -331,7 +343,7 @@ public static class Handover
         {
             // Where each feature lands, as the steps the run took say: every one of them at once.
             var declared = prepared.Course.ColumnsBefore(prepared.Course.Steps.Count);
-            string[] off = [.. features.Where(column => declared.LandsOf(column.Name) is null).Select(column => $"'{column.Name}'")];
+            string[] off = [.. features.Where(column => declared.LandsOf(column.Name) is null && column is not MediaColumn { Ids: true }).Select(column => $"'{column.Name}'")];
 
             if (off.Length > 0)
             {
@@ -342,7 +354,9 @@ public static class Handover
             }
         }
 
-        var values = features.Select(column => table.NumbersOf(column.Name)).ToArray();
+        // A column of media is laid out flat, an array a feature of its own for each number it holds; any other is one number a row.
+        var values = features.Select(column => column is MediaColumn ? [] : table.NumbersOf(column.Name)).ToArray();
+        var widths = features.Select(column => column is MediaColumn media ? media.Width : 1).ToArray();
         var handed = new List<double[]>(rows.Length);
         var madeFrom = MadeFrom(prepared);
 
@@ -350,23 +364,47 @@ public static class Handover
         {
             // A refusal names the row as it was read, which is the row a person can find in their file.
             var readAt = table.Identities[row].ReadAt;
-            var line = new double[features.Length];
+            var line = new double[widths.Sum()];
+            var place = 0;
 
             for (var at = 0; at < features.Length; at++)
             {
-                line[at] = Handed(values[at][row], features[at].Name, readAt, madeFrom);
+                if (features[at] is MediaColumn media)
+                {
+                    var array = media.ValuesAt(row) ?? throw new InvalidOperationException(
+                        string.Create(CultureInfo.InvariantCulture, $"Row {readAt + 1} of '{media.Name}' has no array. Drop the rows that lack one, or leave the column out."));
+
+                    for (var number = 0; number < array.Length; number++)
+                    {
+                        line[place + number] = array[number];
+                    }
+                }
+                else
+                {
+                    line[place] = Handed(values[at][row], features[at].Name, readAt, madeFrom);
+                }
+
+                place += widths[at];
             }
 
             handed.Add(line);
         }
 
-        string[] names = [.. features.Select(column => column.Name)];
+        string[] names =
+        [
+            .. features.SelectMany(column => column is MediaColumn media
+                ? Enumerable.Range(0, media.Width).Select(number => string.Create(CultureInfo.InvariantCulture, $"{media.Name}.{number}"))
+                : [column.Name]),
+        ];
 
         return new HandedFeatures(
             names,
             handed,
             [.. rows.Select(row => table.Identities[row].Key)],
-            prepared.Course.CategoriesHanded(prepared.Fitted).Where(each => names.Contains(each.Key)).ToDictionary(StringComparer.Ordinal));
+            prepared.Course.CategoriesHanded(prepared.Fitted).Where(each => names.Contains(each.Key)).ToDictionary(StringComparer.Ordinal))
+        {
+            Shape = features is [MediaColumn only] ? only.Shape : null,
+        };
     }
 
     // The id of each row, as the column that names it holds it at the end of the pipeline; nothing when no column does, or
@@ -494,7 +532,11 @@ internal readonly record struct HandedFeatures(
     IReadOnlyList<string> Names,
     IReadOnlyList<double[]> Rows,
     IReadOnlyList<RowKey> Keys,
-    IReadOnlyDictionary<string, IReadOnlyList<string>> Categories);
+    IReadOnlyDictionary<string, IReadOnlyList<string>> Categories)
+{
+    /// <summary>The shape of one example, when the features are one column of media.</summary>
+    public IReadOnlyList<int>? Shape { get; init; }
+}
 
 /// <summary>The answers of some rows, and their keys: what the report measures predictions against.</summary>
 /// <param name="Names">The answers the output names, in its order; nothing when the pipeline names no output.</param>

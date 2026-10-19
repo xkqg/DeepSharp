@@ -410,7 +410,7 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
         var table = view.Table;
         var measured = view.MeasuredRows();
         // Every column where it stands but the id, which names the rows and is never measured; named outright, it is profiled.
-        var names = Columns.Count > 0 ? Columns : [.. table.Columns.Select(column => column.Name).Where(name => name != table.Id)];
+        var names = Columns.Count > 0 ? Columns : [.. table.Columns.Where(column => column.Kind != ColumnKind.Media).Select(column => column.Name).Where(name => name != table.Id)];
         var profiles = names.Select(name => Profiled(view, table[name], measured)).ToArray();
         ProfileAlert[] alerts = [.. profiles.SelectMany(profile => Alerts(view, profile)), .. Pairs(view, names, measured)];
 

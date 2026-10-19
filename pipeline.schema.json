@@ -865,12 +865,13 @@
                       "integer",
                       "boolean",
                       "timestamp",
-                      "category"
+                      "category",
+                      "media"
                     ]
                   },
                   {
                     "type": "string",
-                    "pattern": "^(?:[Tt][Ee][Xx][Tt]|[Nn][Uu][Mm][Bb][Ee][Rr]|[Ii][Nn][Tt][Ee][Gg][Ee][Rr]|[Bb][Oo][Oo][Ll][Ee][Aa][Nn]|[Tt][Ii][Mm][Ee][Ss][Tt][Aa][Mm][Pp]|[Cc][Aa][Tt][Ee][Gg][Oo][Rr][Yy])$"
+                    "pattern": "^(?:[Tt][Ee][Xx][Tt]|[Nn][Uu][Mm][Bb][Ee][Rr]|[Ii][Nn][Tt][Ee][Gg][Ee][Rr]|[Bb][Oo][Oo][Ll][Ee][Aa][Nn]|[Tt][Ii][Mm][Ee][Ss][Tt][Aa][Mm][Pp]|[Cc][Aa][Tt][Ee][Gg][Oo][Rr][Yy]|[Mm][Ee][Dd][Ii][Aa])$"
                   }
                 ],
                 "description": "What the column holds."
@@ -892,12 +893,13 @@
                       "integer",
                       "boolean",
                       "timestamp",
-                      "category"
+                      "category",
+                      "media"
                     ]
                   },
                   {
                     "type": "string",
-                    "pattern": "^(?:[Tt][Ee][Xx][Tt]|[Nn][Uu][Mm][Bb][Ee][Rr]|[Ii][Nn][Tt][Ee][Gg][Ee][Rr]|[Bb][Oo][Oo][Ll][Ee][Aa][Nn]|[Tt][Ii][Mm][Ee][Ss][Tt][Aa][Mm][Pp]|[Cc][Aa][Tt][Ee][Gg][Oo][Rr][Yy])$"
+                    "pattern": "^(?:[Tt][Ee][Xx][Tt]|[Nn][Uu][Mm][Bb][Ee][Rr]|[Ii][Nn][Tt][Ee][Gg][Ee][Rr]|[Bb][Oo][Oo][Ll][Ee][Aa][Nn]|[Tt][Ii][Mm][Ee][Ss][Tt][Aa][Mm][Pp]|[Cc][Aa][Tt][Ee][Gg][Oo][Rr][Yy]|[Mm][Ee][Dd][Ii][Aa])$"
                   }
                 ],
                 "description": "The kind a category column held before it was made one, so it can go back to it. Left out, there is none.",
@@ -2560,6 +2562,139 @@
                   "sigma",
                   "width",
                   "lite"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Mirrors images at random while training and not while serving; it varies the rows themselves, so it stands first.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "randomFlip"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Rr][Aa][Nn][Dd][Oo][Mm][Ff][Ll][Ii][Pp])$"
+                      }
+                    ]
+                  },
+                  "horizontal": {
+                    "description": "Whether an image is mirrored across its columns, left for right, with a chance of a half.",
+                    "type": "boolean"
+                  },
+                  "vertical": {
+                    "description": "Whether an image is mirrored across its rows, top for bottom, with a chance of a half.",
+                    "type": "boolean"
+                  },
+                  "seed": {
+                    "description": "The number the variation is drawn from: its own, which the run's seed moves nothing of, and with no default.",
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "kind",
+                  "horizontal",
+                  "vertical",
+                  "seed"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Shifts images at random while training and not while serving, padding each and cutting a window of its own size out; it stands first.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "randomCrop"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Rr][Aa][Nn][Dd][Oo][Mm][Cc][Rr][Oo][Pp])$"
+                      }
+                    ]
+                  },
+                  "pad": {
+                    "description": "How many places an image is padded by on every side, and so how far it can move; what moves in from outside is nought.",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "seed": {
+                    "description": "The number the variation is drawn from: its own, which the run's seed moves nothing of, and with no default.",
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "kind",
+                  "pad",
+                  "seed"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Adds normal noise to every number while training and not while serving; it stands first.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "gaussianNoise"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Gg][Aa][Uu][Ss][Ss][Ii][Aa][Nn][Nn][Oo][Ii][Ss][Ee])$"
+                      }
+                    ]
+                  },
+                  "spread": {
+                    "description": "The standard deviation of the normal noise added to every number.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  },
+                  "seed": {
+                    "description": "The number the variation is drawn from: its own, which the run's seed moves nothing of, and with no default.",
+                    "type": "integer",
+                    "minimum": -2147483648,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "kind",
+                  "spread",
+                  "seed"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Lays an example out as one row of numbers: an image as the row of its pixels.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "flatten"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ff][Ll][Aa][Tt][Tt][Ee][Nn])$"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "kind"
                 ],
                 "additionalProperties": false
               },

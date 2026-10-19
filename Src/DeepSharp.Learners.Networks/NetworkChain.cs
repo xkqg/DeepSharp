@@ -221,6 +221,36 @@ public sealed class NetworkDeclaration
     /// <returns>The declaration.</returns>
     public NetworkDeclaration Dropout(double rate) => Layer("dropout", new PartSetting("rate", PartValue.Of(rate)));
 
+    /// <summary>A variation that mirrors images at random while the network trains, and not while it answers.</summary>
+    /// <param name="seed">The number the flips are drawn from: the layer's own, which the run's seed moves nothing of.</param>
+    /// <param name="horizontal">Whether an image is mirrored across its columns.</param>
+    /// <param name="vertical">Whether an image is mirrored across its rows.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>It varies the rows themselves, so it stands first, before any layer that learns.</remarks>
+    public NetworkDeclaration RandomFlip(int seed, bool horizontal = true, bool vertical = false) => Layer(
+        "randomFlip",
+        new PartSetting("horizontal", PartValue.Of(horizontal)),
+        new PartSetting("vertical", PartValue.Of(vertical)),
+        new PartSetting("seed", PartValue.Of(seed)));
+
+    /// <summary>A variation that shifts images at random while the network trains: each padded and a window of its own size cut out.</summary>
+    /// <param name="pad">How many places an image is padded by on every side, and so how far it can move.</param>
+    /// <param name="seed">The number the shifts are drawn from: the layer's own.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration RandomCrop(int pad, int seed) => Layer(
+        "randomCrop", new PartSetting("pad", PartValue.Of(pad)), new PartSetting("seed", PartValue.Of(seed)));
+
+    /// <summary>A variation that adds normal noise to every number while the network trains.</summary>
+    /// <param name="spread">The standard deviation of the noise.</param>
+    /// <param name="seed">The number the noise is drawn from: the layer's own.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration GaussianNoise(double spread, int seed) => Layer(
+        "gaussianNoise", new PartSetting("spread", PartValue.Of(spread)), new PartSetting("seed", PartValue.Of(seed)));
+
+    /// <summary>A layer that lays an example out as one row of numbers: an image as the row of its pixels.</summary>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Flatten() => Layer("flatten");
+
     /// <summary>A layer that brings every number to the mean and spread of the rows it was trained on.</summary>
     /// <param name="momentum">How much of what was measured before carries on; each library's own, unless said.</param>
     /// <param name="epsilon">The small number added so nothing is divided by nought; each library's own, unless said.</param>
