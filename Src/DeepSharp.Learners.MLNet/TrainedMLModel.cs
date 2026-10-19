@@ -105,6 +105,32 @@ public sealed class TrainedMLModel
         }).ToJson();
     }
 
+    /// <summary>What this model predicts for rows that arrived after training, in the answer's own units.</summary>
+    /// <param name="rows">The rows, with the columns the pipeline reads; the answer's own column needs not be among them.</param>
+    /// <returns>For each row, in the order they were handed in, the answer.</returns>
+    /// <exception cref="ArgumentNullException">There are no rows.</exception>
+    /// <exception cref="InvalidOperationException">The pipeline hands over other features than the model was trained on.</exception>
+    /// <remarks>Each row is replayed with the numbers the training rows produced, scored by the model, and brought back through the pipeline's way back.</remarks>
+    public IReadOnlyList<double[]> Predict(IRowSource rows)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+
+        var served = Prepared.Served(rows, LearnMLStep.FeatureNeeds);
+
+        if (!served.FeatureNames.SequenceEqual(TrainedOn.Features))
+        {
+            throw new InvalidOperationException(
+                $"This model was trained on {string.Join(", ", TrainedOn.Features.Select(name => $"'{name}'"))}, and its pipeline hands over {string.Join(", ", served.FeatureNames.Select(name => $"'{name}'"))}: a model answers only what it learned from.");
+        }
+
+        var scored = _model.Transform(HandedRows.Of(_context, new Batch(served.FeatureNames, served.Features, null), TrainedOn.Classes, answers: false));
+
+        return Prepared.BackToOriginal(
+            [.. _context.Data.CreateEnumerable<ScoredRow>(scored, reuseRowObject: false).Select(row => new[] { (double)row.Score })],
+            served,
+            rows);
+    }
+
     /// <summary>What this model predicts for every row of a part of the run it was trained behind.</summary>
     /// <param name="part">The part.</param>
     /// <returns>One prediction a row, in the order the handover gives them.</returns>
