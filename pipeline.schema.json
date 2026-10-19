@@ -82,6 +82,7 @@
             "target.distribution",
             "target.labels",
             "target.numbers",
+            "tokenize",
             "watch.reference"
           ]
         }
@@ -778,6 +779,21 @@
           },
           "then": {
             "$ref": "#/$defs/target.numbers"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "tokenize"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/tokenize"
           }
         },
         {
@@ -4687,6 +4703,39 @@
       ],
       "additionalProperties": false
     },
+    "tokenize": {
+      "description": "Cuts a column of text into ids of the words the training rows held most often, every row the same number of them, for an embedding to take.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "tokenize"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column of text to cut into ids."
+        },
+        "length": {
+          "description": "How many ids every row is written as: a longer text is cut at it, a shorter one filled up with the padding id, nought.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "vocabulary": {
+          "description": "How many ids there are, the padding id (nought) and the id of a word never seen (one) among them: the words the training rows held most often take the rest.",
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "length",
+        "vocabulary"
+      ],
+      "additionalProperties": false
+    },
     "watch.reference": {
       "description": "Keeps the training rows of the columns it watches, as counts, so rows served later can be measured against them.",
       "type": "object",
@@ -4778,6 +4827,7 @@
                       "target.distribution",
                       "target.labels",
                       "target.numbers",
+                      "tokenize",
                       "watch.reference"
                     ]
                   }
@@ -4819,6 +4869,7 @@
                       "settle.gaps",
                       "shuffle",
                       "target.numbers",
+                      "tokenize",
                       "watch.reference"
                     ]
                   }
@@ -4859,6 +4910,7 @@
                       "settle.gaps",
                       "shuffle",
                       "target.numbers",
+                      "tokenize",
                       "watch.reference"
                     ]
                   }
@@ -4898,6 +4950,7 @@
                       "settle.gaps",
                       "shuffle",
                       "target.numbers",
+                      "tokenize",
                       "watch.reference"
                     ]
                   }
@@ -4936,6 +4989,7 @@
                       "scale.given",
                       "shuffle",
                       "target.numbers",
+                      "tokenize",
                       "watch.reference"
                     ]
                   }
@@ -4971,6 +5025,7 @@
                       "read.sounds",
                       "read.texts",
                       "target.numbers",
+                      "tokenize",
                       "watch.reference"
                     ]
                   }
@@ -5003,6 +5058,7 @@
                       "read.images",
                       "read.sounds",
                       "read.texts",
+                      "tokenize",
                       "watch.reference"
                     ]
                   }
@@ -5032,6 +5088,7 @@
                       "read.images",
                       "read.sounds",
                       "read.texts",
+                      "tokenize",
                       "watch.reference"
                     ]
                   }
@@ -5060,7 +5117,8 @@
                     "enum": [
                       "read.images",
                       "read.sounds",
-                      "read.texts"
+                      "read.texts",
+                      "tokenize"
                     ]
                   }
                 }

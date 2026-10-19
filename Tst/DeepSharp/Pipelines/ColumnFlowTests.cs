@@ -402,6 +402,7 @@ public class ColumnFlowTests
             "normalise" => new NormaliseStep("b"),
             "normalise.row" => new NormaliseRowStep(["a", "b"]),
             "encode" => new EncodeStep("g"),
+            "tokenize" => new TokenizeStep("w", 3, 10),
             "encode.piecewise" => new PiecewiseLinearStep("b", 3),
             "history" => new HistoryStep("g", "b", ["when"], 2),
             "watch.reference" => new WatchStep(0.2, ["a", "g"]),

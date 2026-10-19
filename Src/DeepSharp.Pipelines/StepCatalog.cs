@@ -48,6 +48,7 @@ public sealed class StepCatalog
         catalog.Register<NormaliseStep>();
         catalog.Register<NormaliseRowStep>();
         catalog.Register<EncodeStep>();
+        catalog.Register<TokenizeStep>();
         catalog.Register<PiecewiseLinearStep>();
         catalog.Register<HistoryStep>();
         catalog.Register<TargetStep>();

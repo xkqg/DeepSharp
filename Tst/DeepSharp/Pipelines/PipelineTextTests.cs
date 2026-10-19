@@ -69,6 +69,7 @@ public class PipelineTextTests
         ("target.distribution", 2),
         ("target.labels", 2),
         ("target.numbers", 8),
+        ("tokenize", 12),
         ("watch.reference", 11),
     ];
 

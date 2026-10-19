@@ -854,6 +854,18 @@ public sealed class FittingBuilder
         Add(new EncodeStep(column, how, unseen));
 
     /// <summary>
+    /// Cuts a column of text into the ids an embedding takes: the words the training rows held most often, each a whole number, and every row
+    /// the same number of them.
+    /// </summary>
+    /// <param name="column">The column of text.</param>
+    /// <param name="length">How many ids every row is written as: a longer text is cut at it, a shorter one filled up with nought.</param>
+    /// <param name="vocabulary">How many ids there are, nought for padding and one for a word never seen among them: three at least.</param>
+    /// <returns>This builder, so the next verb can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The length is below one, or the vocabulary below three.</exception>
+    public FittingBuilder Tokenize(string column, int length, int vocabulary) =>
+        Add(new TokenizeStep(column, length, vocabulary));
+
+    /// <summary>
     /// Writes a column of numbers down as how far each value fills a few bins, their edges the quantiles of the training rows:
     /// Gorishniy, Rubachev and Babenko's piecewise linear encoding.
     /// </summary>

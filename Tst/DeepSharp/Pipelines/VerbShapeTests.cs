@@ -27,6 +27,8 @@ public class VerbShapeTests
         ["PiecewiseLinear"] =
             "It has no kind to group columns by: what it is told — how many bins, and what a value beyond them does — belongs to "
             + "each column, as a fill's share above which it refuses does.",
+        ["Tokenize"] =
+            "What it is told — how long a row's ids are and how many ids there are — belongs to each column of text, as a piecewise encoding's bins do, and a vocabulary is learned for the one column alone.",
         ["Target"] = "It names the one column a model is asked to predict; a pipeline has one output.",
         ["Ahead"] = "It makes the one answer, from the one column it is read from.",
         ["SplitByTime"] = "It divides the rows once, by the one column that says when a row happened.",
@@ -96,7 +98,7 @@ public class VerbShapeTests
             [
                 "Ahead", "ClipOutliers", "Cycle", "Cyclical", "Encode", "FillMissing", "FillNaN", "Normalise", "PiecewiseLinear", "Reshape",
                 "ScaleGiven", "SettleGaps", "SplitByTime", "SplitStratified", "Target", "TimeParts",
-                "TimePartsAsNumbers",
+                "TimePartsAsNumbers", "Tokenize",
             ],
             OfTheShape().Select(each => each.Verb).Order(StringComparer.Ordinal));
     }

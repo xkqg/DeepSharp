@@ -171,6 +171,7 @@ public class StepParameterContractTests
             ["read.images"] = 12,
             ["read.sounds"] = 12,
             ["read.texts"] = 12,
+            ["tokenize"] = 12,
             ["scale.given"] = 7,
             ["settle.gaps"] = 6,
             ["shuffle"] = 7,

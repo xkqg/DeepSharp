@@ -54,6 +54,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`target.distribution`](#targetdistribution) | Names the columns a model is asked to predict as one answer: how a whole is divided among them, in their order. |
 | [`target.labels`](#targetlabels) | Names the columns a model is asked to predict as one answer of labels, each nought or one on every row. |
 | [`target.numbers`](#targetnumbers) | Names the columns a model is asked to predict as one answer of free numbers, each any finite number. |
+| [`tokenize`](#tokenize) | Cuts a column of text into ids of the words the training rows held most often, every row the same number of them, for an embedding to take. |
 | [`watch.reference`](#watchreference) | Keeps the training rows of the columns it watches, as counts, so rows served later can be measured against them. |
 
 ## `declare`
@@ -973,6 +974,26 @@ Names the columns a model is asked to predict as one answer of free numbers, eac
 - **`columns`**: The columns holding the numbers of the answer, in their order: at least two.
 
 Means what it says from version 8 of the file.
+
+## `tokenize`
+
+Cuts a column of text into ids of the words the training rows held most often, every row the same number of them, for an embedding to take.
+
+```json
+{"step":"tokenize","column":"review","length":32,"vocabulary":5000}
+```
+
+| key | holds | an example |
+|---|---|---|
+| `column` | the name of a column holding words | `"review"` |
+| `length` | a whole number, at least 1 | `32` |
+| `vocabulary` | a whole number, at least 3 | `5000` |
+
+- **`column`**: The column of text to cut into ids.
+- **`length`**: How many ids every row is written as: a longer text is cut at it, a shorter one filled up with the padding id, nought.
+- **`vocabulary`**: How many ids there are, the padding id (nought) and the id of a word never seen (one) among them: the words the training rows held most often take the rest.
+
+Means what it says from version 12 of the file.
 
 ## `watch.reference`
 
