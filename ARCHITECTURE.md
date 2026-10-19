@@ -1199,7 +1199,7 @@ which outside thing it carries.
 ```
 DeepSharp                   tensors, the backend seam, the light engine, the layers and networks, the training loop
 DeepSharp.Pipelines               the pipeline, ending at prepared splits and the declared evidence
-DeepSharp.Pipelines.<Format>      a reader: Parquet, Excel, Json
+DeepSharp.Pipelines.<Format>      a reader: Parquet, Excel, Json, Images, Sound
 DeepSharp.Pipelines.<Source>      a live source, Binance so far: it fetches and lands, it does not read during training
 DeepSharp.Learners.<Name>   something that learns from prepared data, behind the learner seam
 DeepSharp.Backends.<Name>   an engine behind ITensorBackend
@@ -1587,6 +1587,44 @@ order of the rows, as text, and a trained network's predictions carry them too, 
 prediction finds it again. A gap in the id of a row that reaches the end is refused. The part is optional and not written
 when it is false, and an older reader refuses it by name. The row's own key is still what identifies a row to the library;
 the id is what identifies it to the person.
+
+### Pictures, recordings and texts are rows of arrays, and the reader owns the shape
+
+A table of numbers was the only thing a pipeline could hold, so a picture was either flattened into a column for each pixel
+by whoever read it, or it was no row at all. What is held now is a **media column**: an array of one shape a row, kept whole,
+declared in the schema (`schema.Media("image")`) and written by a reader as one cell of text — a kind, a shape and a payload,
+`u8[28x28x1]:…`. There are four kinds, and each is read by one fixed arithmetic: a byte `v` is `v / 127.5 − 1`, a sixteen-bit
+sample is `v / 32768`, a float is itself, and an id is a whole number that is never scaled. A cell is text because every reader
+already produces text and the schema already turns text into columns, so nothing about how rows arrive had to change; the column
+that results holds arrays and not a cell of text for each number — sixty thousand pictures of 28 by 28 peak at 0.7 GB in the
+process, measured.
+
+The shape is the reader's to state and nobody else's to repeat. A picture reader is told the width, the height and the channels
+and refuses a picture of any other size; a sound reader is told the rate, the length and the channels. Nothing is resized, cut,
+mixed or resampled, because a pipeline that did would have decided something about the data that no step of its file says. The
+handover flattens an array into `name.0`, `name.1` and so on, lands bytes and samples in −1..1 as every number lands, and carries
+the shape of one example beside the rows (`ExampleShape`), which a network lays its rows out by: a convolution reads an image whole
+and a dense layer reads it as a row, with the size said once. A tree is handed the flattened pixels like any other row.
+
+A row of a media column is known by what its array holds — a digest of its numbers and its shape — and never by the path of the
+file it was read from, which is the rule every other source is under. A folder to a class is read by one generic reader
+(`FilesAsRows`): a file a row, in the order of the paths, the folder it stands in as the answer, and a column of nought and one
+for each class, which is how `Labels` takes it. The core owns that reader and the one for plain text, because a text file needs no
+library; pictures and recordings each have a package of their own, so a project that reads none carries neither decoder, and
+neither brings a native library with it. A notebook leaves all three out and says why: every view of a block reads its rows
+again, and a folder of files read again for every view is what a C# cell is for.
+
+Two things are learned or drawn, and both keep to the rule the rest of the design is under. A **vocabulary** is learned from the
+training rows alone (`tokenize`): the words they held, the most frequent first, nought for padding and one for a word they never
+held, written as ids of one length and replayed unchanged on validation, on test and on a served row. A **variation** of the
+training rows — a flip, a crop, noise — belongs to a network and not to a step, because it must never reach a report: it is drawn
+while a batch passes, from a seed of its own keyed by the layer's place, the epoch and the step, and it stands first. Nothing is
+kept of it, so the rows the pipeline hands over are the rows, whole, and a run resumed at an epoch draws what it would have drawn.
+
+The text layer is an average and not a sequence. `TokenEmbedding` looks each id up in vectors it learns and averages the words of a
+row, leaving the padding out, as a product of a matrix of each id's share of the row with the weight — a product the seam already
+has, so the libtorch engine answers it with nothing added to the seam. What it does not keep is the order of the words; a model of
+a sequence is a different layer, and a row that remembers is a different piece of work.
 
 ### The test rows can be dealt apart from the rest
 

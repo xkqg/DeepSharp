@@ -30,9 +30,9 @@ is true, and the [changelog](CHANGELOG.md) is where it says so.
 | **Done** | The vocabulary a model is written in | The activations, normalisations, losses and measures other libraries write. |
 | **Done** | A model watched after it ships | The rows a served model meets, measured window by window against the training rows its pipeline keeps. |
 | **Done** | Training further from what was read | A rate of its own for a group of layers, and the low-rank pair beside a held kernel. |
-| **Later** | Data that is not a table | Images, sound and text read in as rows, varied while training only, and text cut into tokens. |
-| **Later** | Several networks, one answer | Networks trained apart — a study's best, or one design under other seeds — answering together. |
-| **Later** | The answer and what it is worth | Splits that cut more than once, an interval around the answer, and why a model answers as it does. |
+| **Done** | Data that is not a table | Images, sound and text read in as rows, varied while training only, and text cut into tokens. |
+| **Done** | Several networks, one answer | Networks trained apart — a study's best, or one design under other seeds — answering together. |
+| **Done** | The answer and what it is worth | Splits that cut more than once, an interval around the answer, and why a model answers as it does. |
 | **Later** | A network that is not a straight line | Branches, so a residual block, a U-shaped network or two inputs can be written, read and saved. |
 | **Later** | A row that remembers | The layers that carry something from one step of a series to the next. |
 | **Later** | Attention, and what it attends over | Attention, its many-headed form, the order of a sequence, and one encoder block. |
