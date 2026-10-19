@@ -270,6 +270,56 @@ public abstract class VocabularyContract(ITensorBackend engine)
         Assert.Throws<ArgumentException>(() => layer.Forward(Tensor.Zeros(new Shape(1, 5)), Pass.Evaluation(_backend)));
     }
 
+    [Fact]
+    public void ATokenEmbedding_IsTheMeanOfTheVectorsOfTheIdsARowHolds_PaddingLeftOut_AndARowOfPaddingIsNothing()
+    {
+        // Two rows of four ids over a vocabulary of five: the first holds ids 2, 3 and 2 and a padding, the second only padding.
+        var network = new LayerStack(new TokenEmbedding(4, 5, 2, Draws()));
+        var vectors = Tensor.From(new Shape(5, 2), [100f, 101f, 10f, 11f, 20f, 21f, 30f, 31f, 40f, 41f]);
+        network.Load([new SlotEntry("0.weight", vectors, "test")]);
+        var rows = Tensor.From(new Shape(2, 4), [2f, 3f, 2f, 0f, 0f, 0f, 0f, 0f]);
+
+        var made = network.Forward(rows, Pass.Evaluation(_backend));
+
+        Assert.Equal(new Shape(2, 2), made.Shape);
+        Assert.Equal(new[] { 23.3333f, 24.3333f, 0f, 0f }, made.Values.ToArray().Select(value => (float)Math.Round(value, 4)).ToArray());
+    }
+
+    [Fact]
+    public void TheGradientOfATokenEmbedding_ReachesOnlyTheVectorsOfTheIdsTheRowsHold_AndNeverThePaddings()
+    {
+        var layer = new TokenEmbedding(3, 4, 2, Draws());
+        var rows = Tensor.From(new Shape(2, 3), [1f, 3f, 0f, 3f, 3f, 3f]);
+        var weights = Tensor.From(new Shape(2, 2), [1f, 2f, 3f, 4f]);
+        var recording = new RecordingBackend(_backend);
+
+        var loss = recording.Mean(recording.Multiply(layer.Forward(rows, Pass.Evaluation(recording)), weights));
+        var gradient = recording.GradientsOf(loss, [layer.Weight.Value])[layer.Weight.Value];
+
+        // Row one is the mean of ids 1 and 3 (a half each), row two of id 3 three times (all of it); each row's weights over the four values.
+        Assert.Equal(new[] { 0f, 0f, 0.5f * 1f / 4, 0.5f * 2f / 4, 0f, 0f, (0.5f * 1f + 3f) / 4, (0.5f * 2f + 4f) / 4 }, gradient.Values.ToArray().Select(value => (float)Math.Round(value, 5)).ToArray());
+    }
+
+    [Fact]
+    public void ATokenEmbedding_StartsAsPyTorchsEmbeddingDoes_AndIsWrittenSayingItsShape_AndRefusesWhatIsNotAnId()
+    {
+        var layer = new TokenEmbedding(6, 50, 3, Draws());
+        var text = Written(new LayerStack(layer), new MeanSquaredError());
+        var read = Assert.IsType<TokenEmbedding>(Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(text, "network", NetworkCatalog.BuiltIn()).Network).Layers[0]);
+
+        Assert.Equal(new Shape(50, 3), layer.Weight.Value.Shape);
+        Assert.Equal(6, read.Length);
+        Assert.Equal(50, read.Vocabulary);
+        Assert.Equal(3, read.Width);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TokenEmbedding(0, 50, 3, Draws()));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TokenEmbedding(6, 2, 3, Draws()));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TokenEmbedding(6, 50, 0, Draws()));
+        Assert.Throws<ArgumentException>(() => layer.Forward(Tensor.Zeros(new Shape(1, 5)), Pass.Evaluation(_backend)));
+        Assert.Contains("50", Assert.Throws<ArgumentException>(() => layer.Forward(Tensor.From(new Shape(1, 6), [1f, 2f, 3f, 50f, 0f, 0f]), Pass.Evaluation(_backend))).Message, StringComparison.Ordinal);
+        Assert.Throws<ArgumentException>(() => layer.Forward(Tensor.From(new Shape(1, 6), [1f, 2.5f, 3f, 0f, 0f, 0f]), Pass.Evaluation(_backend)));
+        Assert.Throws<ArgumentException>(() => layer.Forward(Tensor.From(new Shape(1, 6), [1f, -1f, 3f, 0f, 0f, 0f]), Pass.Evaluation(_backend)));
+    }
+
     private (LayerStack Network, Tensor Input, JsonElement Expected) LayerCase(string name)
     {
         var expected = Reference.GetProperty("layers").EnumerateArray().Single(each => each.GetProperty("name").GetString() == name);

@@ -898,7 +898,7 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
              "globalmaxpool2d", "globalmaxpool3d", "groupNorm", "hinge", "huber", "instanceNorm", "layerNorm", "leakyRelu", "linearWarmup",
              "maxpool1d", "maxpool2d", "maxpool3d", "meanAbsoluteError", "meanSquaredError", "mish", "nadam", "pad1d", "pad2d", "pad3d", "periodic",
              "poisson", "prelu", "quantile", "randomCrop", "randomFlip", "relu", "reshape", "rmsNorm", "rmsprop", "selu", "sgd", "sigmoid", "silu", "softmax", "spatialdropout1d",
-             "spatialdropout2d", "spatialdropout3d", "stack", "stepDecay", "tanh"],
+             "spatialdropout2d", "spatialdropout3d", "stack", "stepDecay", "tanh", "tokenEmbedding"],
             catalog.Names.Order(StringComparer.Ordinal));
         Assert.Throws<ArgumentException>(() => catalog.Register<Dense>());
     }

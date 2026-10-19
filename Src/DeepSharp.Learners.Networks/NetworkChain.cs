@@ -381,6 +381,19 @@ public sealed class NetworkDeclaration
         new PartSetting("column", PartValue.Of(column)),
         new PartSetting("width", PartValue.Of(width)));
 
+    /// <summary>
+    /// A layer that turns a text, the ids a pipeline's tokenizer cut it into, into one small vector: each id looked up in vectors the layer
+    /// learns, and the vectors of the words averaged.
+    /// </summary>
+    /// <param name="vocabulary">How many ids there are, as the tokenizer was told: padding and the id of a word never seen among them.</param>
+    /// <param name="width">How many numbers each id's vector holds.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>It reads the rows as the pipeline hands them over, so it stands first. Padding, id nought, is left out of the average.</remarks>
+    public NetworkDeclaration TokenEmbedding(int vocabulary, int width) => Layer(
+        "tokenEmbedding",
+        new PartSetting("vocabulary", PartValue.Of(vocabulary)),
+        new PartSetting("width", PartValue.Of(width)));
+
     /// <summary>Moves the network's numbers against their gradients.</summary>
     /// <param name="rate">How far one step moves them; each library's own, unless said.</param>
     /// <param name="momentum">How much of the last step's velocity carries on; none, unless said.</param>

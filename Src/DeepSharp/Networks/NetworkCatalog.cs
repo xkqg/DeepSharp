@@ -52,6 +52,7 @@ public sealed class NetworkCatalog
         .Register<RmsNorm>()
         .Register<Periodic>()
         .Register<Embedding>()
+        .Register<TokenEmbedding>()
         .Register<Conv2D>()
         .Register<Conv1D>()
         .Register<Conv3D>()

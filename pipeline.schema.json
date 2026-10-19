@@ -2763,6 +2763,42 @@
                 "additionalProperties": false
               },
               {
+                "description": "Turns the ids a pipeline cut a text into to one small vector: each id looked up in vectors it learns, the vectors of the words averaged and the padding left out; it reads the rows as the pipeline hands them over, so it stands first.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "tokenEmbedding"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Tt][Oo][Kk][Ee][Nn][Ee][Mm][Bb][Ee][Dd][Dd][Ii][Nn][Gg])$"
+                      }
+                    ]
+                  },
+                  "vocabulary": {
+                    "description": "How many ids there are, as the tokenizer was told: the padding id (nought) and the id of a word never seen (one) among them.",
+                    "type": "integer",
+                    "minimum": 3,
+                    "maximum": 2147483647
+                  },
+                  "width": {
+                    "description": "How many numbers each id's vector holds.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  }
+                },
+                "required": [
+                  "kind",
+                  "vocabulary",
+                  "width"
+                ],
+                "additionalProperties": false
+              },
+              {
                 "description": "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.",
                 "properties": {
                   "kind": {

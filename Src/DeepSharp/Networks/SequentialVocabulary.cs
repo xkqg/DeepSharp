@@ -188,6 +188,23 @@ public sealed partial class Sequential
         return Add(new EmbeddingWord([.. block], width));
     }
 
+    /// <summary>A text as one small vector: the ids of a row looked up in vectors it learns, and the vectors of the words averaged.</summary>
+    /// <param name="vocabulary">How many ids there are, padding and the id of a word never seen among them: three at least.</param>
+    /// <param name="width">How many numbers each id's vector holds.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The vocabulary is below three, or a vector holds fewer than one number.</exception>
+    /// <remarks>
+    /// A row is the ids a tokenizer wrote (<c>Tokenize</c> in a pipeline), id nought being padding that is left out of the average. The
+    /// layer takes each example as a row of ids, and so stands first.
+    /// </remarks>
+    public Sequential TokenEmbedding(int vocabulary, int width)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(vocabulary, 3);
+        ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
+
+        return Add(new TokenEmbeddingWord(vocabulary, width));
+    }
+
     /// <summary>A parametric rectifier, of one share or of one for each channel of the last axis.</summary>
     private sealed record ParametricWord(bool EachChannel) : IWord
     {
@@ -209,6 +226,16 @@ public sealed partial class Sequential
         public Shape After(Shape each) => each;
 
         public Layer Make(Shape each, Draws draws) => Made(each[each.Rank - 1]);
+    }
+
+    /// <summary>The ids of a text averaged as the vectors they stand for: a row of ids comes out as one vector.</summary>
+    private sealed record TokenEmbeddingWord(int Vocabulary, int Width) : IWord
+    {
+        public string? Refusal(Shape each) => each.Rank == 1 ? null : $"tokenEmbedding, takes each example as a row of ids, and each reaching it is {each}.";
+
+        public Shape After(Shape each) => new(Width);
+
+        public Layer Make(Shape each, Draws draws) => new TokenEmbedding(each[0], Vocabulary, Width, draws);
     }
 
     /// <summary>An embedding of a category held by a block of a row's columns: the block gone, and a vector in its place.</summary>

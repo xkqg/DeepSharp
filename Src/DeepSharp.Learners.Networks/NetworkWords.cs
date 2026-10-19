@@ -151,6 +151,11 @@ public static class NetworkWords
     private static readonly TextParameter EmbeddingColumnKey =
         new("column", "The column of words whose categories the layer turns into vectors, as it was named before the pipeline wrote it down one column per category.", "category");
 
+    private static readonly WholeNumberParameter TokenVocabularyKey =
+        new("vocabulary", "How many ids there are, as the tokenizer was told: the padding id (nought) and the id of a word never seen (one) among them.", 5000) { AtLeast = 3 };
+
+    private static readonly WholeNumberParameter TokenWidthKey = new("width", "How many numbers each id's vector holds.", 16) { AtLeast = 1 };
+
     private static readonly WholeNumberParameter EmbeddingWidthKey = new("width", "How many numbers each category's vector holds.", 4) { AtLeast = 1 };
 
     private static readonly TrueOrFalseParameter FlipAcrossKey =
@@ -210,6 +215,7 @@ public static class NetworkWords
         new("randomCrop", "Shifts images at random while training and not while serving, padding each and cutting a window of its own size out; it stands first.", [PadKey, VariationSeedKey]),
         new("gaussianNoise", "Adds normal noise to every number while training and not while serving; it stands first.", [SpreadKey, VariationSeedKey]),
         new("flatten", "Lays an example out as one row of numbers: an image as the row of its pixels.", []),
+        new("tokenEmbedding", "Turns the ids a pipeline cut a text into to one small vector: each id looked up in vectors it learns, the vectors of the words averaged and the padding left out; it reads the rows as the pipeline hands them over, so it stands first.", [TokenVocabularyKey, TokenWidthKey]),
         new(EmbeddingWord, "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.", [EmbeddingColumnKey, EmbeddingWidthKey]),
     ];
 
@@ -515,6 +521,7 @@ public static class NetworkWords
             ["rmsNorm"] = (described, layer) => GovernedBy(layer, described.RmsNorm(layer.Number(RootEpsilonKey.Key), layer.YesOrNo(ScaleKey.Key))),
             ["periodic"] = (described, layer) => described.Periodic(
                 new Periodicity(layer.Whole(FrequenciesKey.Key), layer.Number(SigmaKey.Key), layer.Whole(WidthKey.Key)) { Lite = layer.YesOrNo(LiteKey.Key) }),
+            ["tokenEmbedding"] = (described, layer) => described.TokenEmbedding(layer.Whole(TokenVocabularyKey.Key), layer.Whole(TokenWidthKey.Key)),
             [EmbeddingWord] = (_, layer) => throw new InvalidOperationException(
                 $"An embedding of '{layer.Text(EmbeddingColumnKey.Key)}' reads its block from the rows a pipeline hands over, so it is lowered where they are: train the network behind its pipeline."),
         };
