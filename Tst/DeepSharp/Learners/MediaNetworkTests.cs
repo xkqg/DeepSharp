@@ -5,6 +5,7 @@ using DeepSharp.Learners.Networks;
 using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 using DeepSharp.Tensors;
+using DeepSharp.Tests.Import;
 
 namespace DeepSharp.Tests.Learners;
 
@@ -124,5 +125,38 @@ public class MediaNetworkTests
         var twice = trained.Predict(Images(5, offset: 9)).Answers;
 
         Assert.Equal(again, twice);
+    }
+
+    [Fact]
+    public void AConvolutionalModelKerasTrained_IsTrainedFurtherOnMediaRows_WithoutTheImagesSizeStatedTwice()
+    {
+        // The model reads an image of 9 rows, 8 columns and 2 channels and answers three classes; the rows say each as the reader wrote it.
+        var random = new Random(77);
+        var rows = Enumerable.Range(0, 90).Select(at =>
+        {
+            var pixels = new byte[9 * 8 * 2];
+            var kind = at % 3;
+
+            for (var pixel = 0; pixel < pixels.Length; pixel++)
+            {
+                pixels[pixel] = (byte)(random.Next(80) + (kind * 60));
+            }
+
+            return (IReadOnlyList<string?>)[MediaCell.Pixels([9, 8, 2], pixels), kind == 0 ? "1" : "0", kind == 1 ? "1" : "0", kind == 2 ? "1" : "0"];
+        });
+        var prepared = Pdd.Create()
+            .Read(new InMemoryRowSource(["image", "a", "b", "c"], rows), "ninety images")
+            .Declare(schema => schema.Media("image").Integer("a", "b", "c"))
+            .SplitAtRandom(0.60, 0.20, 3)
+            .Labels(["a", "b", "c"], ones: 1)
+            .Report(report => report.Measure(Metric.Accuracy).On(Part.Validation, Part.Test).As(Shown.Numbers))
+            .Build()
+            .Run();
+        var saved = new DeepSharp.Import.Keras.KerasFile().Read(KerasFixtures.Open("keras-spatial-image.keras"));
+        var trained = saved.Network.Compile(new Adam(0.01), saved.Loss).Fit(prepared, new FitOptions(seed: 1) { Epochs = 4 });
+
+        Assert.Equal(4, trained.History!.Epochs.Count);
+        Assert.Equal(9 * 8 * 2, trained.TrainedOn.Features.Count);
+        Assert.NotNull(trained.Measures);
     }
 }

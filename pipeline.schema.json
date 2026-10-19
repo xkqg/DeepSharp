@@ -68,6 +68,7 @@
             "read.json",
             "read.parquet",
             "read.rows",
+            "read.texts",
             "scale.given",
             "settle.gaps",
             "shuffle",
@@ -565,6 +566,21 @@
           },
           "then": {
             "$ref": "#/$defs/read.rows"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "read.texts"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/read.texts"
           }
         },
         {
@@ -4054,6 +4070,25 @@
       ],
       "additionalProperties": false
     },
+    "read.texts": {
+      "description": "Reads the rows from a folder of text files, a folder to a class: a file a row, the folder it stands in the answer, and a column of nought and one for each class.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "read.texts"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The folder the text files will be in, when the pipeline runs: a folder to each class, files of .txt in each."
+        }
+      },
+      "required": [
+        "step",
+        "path"
+      ],
+      "additionalProperties": false
+    },
     "scale.given": {
       "description": "Scales a column into a range from bounds you give, above the split, so a feature worked out after it is worked out from scaled columns.",
       "type": "object",
@@ -4618,6 +4653,7 @@
                       "learn.network",
                       "order.by",
                       "read.join",
+                      "read.texts",
                       "scale.given",
                       "settle.gaps",
                       "shuffle",
@@ -4662,6 +4698,7 @@
                       "learn.ml",
                       "learn.network",
                       "read.join",
+                      "read.texts",
                       "scale.given",
                       "settle.gaps",
                       "shuffle",
@@ -4699,6 +4736,7 @@
                       "learn.ml",
                       "learn.network",
                       "read.join",
+                      "read.texts",
                       "scale.given",
                       "settle.gaps",
                       "shuffle",
@@ -4735,6 +4773,7 @@
                       "history",
                       "learn.ml",
                       "read.join",
+                      "read.texts",
                       "scale.given",
                       "settle.gaps",
                       "shuffle",
@@ -4771,6 +4810,7 @@
                       "history",
                       "learn.ml",
                       "read.join",
+                      "read.texts",
                       "scale.given",
                       "shuffle",
                       "target.numbers",
@@ -4805,6 +4845,7 @@
                       "feature.cycle",
                       "history",
                       "read.join",
+                      "read.texts",
                       "target.numbers",
                       "watch.reference"
                     ]
@@ -4835,6 +4876,7 @@
                       "encode.piecewise",
                       "evidence.likeness",
                       "history",
+                      "read.texts",
                       "watch.reference"
                     ]
                   }
@@ -4861,7 +4903,34 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "read.texts",
                       "watch.reference"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 12
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "declaration": {
+            "items": {
+              "properties": {
+                "step": {
+                  "not": {
+                    "enum": [
+                      "read.texts"
                     ]
                   }
                 }

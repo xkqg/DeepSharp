@@ -25,6 +25,7 @@ public sealed class StepCatalog
     // because a host may still teach it a verb after that. It also makes the one rule atomic: TryAdd either
     // takes the slot or refuses it, so two packages registering the same verb cannot both believe they won.
     private readonly ConcurrentDictionary<string, Verb> _verbs = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _left = new(StringComparer.Ordinal);
 
     /// <summary>The verbs this library ships with, in a catalog of their own.</summary>
     /// <returns>A new catalog; the caller owns it.</returns>
@@ -33,6 +34,7 @@ public sealed class StepCatalog
         var catalog = new StepCatalog();
 
         catalog.Register<ReadCsvStep>();
+        catalog.Register<ReadTextsStep>();
         catalog.Register<ReadRowsStep>();
         catalog.Register<ReadJoinStep>();
         catalog.Register<DeclareStep>();
@@ -104,6 +106,24 @@ public sealed class StepCatalog
         Add(TStep.Name, new Verb(
             element => TStep.ReadFrom(element),
             new StepDescription(TStep.Name, TStep.Purpose, TStep.Since, TStep.Parameters.All)));
+    }
+
+    /// <summary>Leaves a verb out of this catalog, with the reason: a host that carries the library but not everything it can read.</summary>
+    /// <param name="verb">The verb.</param>
+    /// <param name="because">Why this catalog does not carry it, said to whoever names it.</param>
+    /// <returns>This catalog, so the leaving out reads as one sentence.</returns>
+    /// <exception cref="ArgumentException">The verb or the reason is empty.</exception>
+    public StepCatalog Without(string verb, string because)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(verb);
+        ArgumentException.ThrowIfNullOrWhiteSpace(because);
+
+        if (_verbs.TryRemove(verb, out _))
+        {
+            _left[verb] = because;
+        }
+
+        return this;
     }
 
     /// <summary>Whether this catalog can read a step written under that name.</summary>
@@ -426,6 +446,11 @@ public sealed class StepCatalog
     /// <summary>Why a verb cannot be read here: it is another package's, or nothing anywhere knows it.</summary>
     internal string Unknown(string verb)
     {
+        if (_left.TryGetValue(verb, out var because))
+        {
+            return $"'{verb.Quoted()}' is a step this catalog leaves out: {because}";
+        }
+
         if (PackageThatBrings(verb) is { } package)
         {
             return $"'{verb.Quoted()}' is a step from {package}, which is not registered here. Reference the package and "

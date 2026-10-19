@@ -323,9 +323,9 @@ public static class ColumnChoiceExtensions
 
             return
             [
-                .. Enum.GetValues<ColumnKind>().Where(kind => declared is not null
+                .. Enum.GetValues<ColumnKind>().Where(kind => (kind != ColumnKind.Media || declared?.Kind == ColumnKind.Media) && (declared is not null
                     ? kind == declared.Kind || Changes(declaration, () => declaration.WithKind(column, kind))
-                    : Changes(declaration, () => declaration.Including(column, kind, header))),
+                    : Changes(declaration, () => declaration.Including(column, kind, header)))),
             ];
         }
 

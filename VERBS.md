@@ -40,6 +40,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`read.json`](#readjson) | Reads the rows from a JSON file holding an array of records, one object a row, every value as the file writes it. |
 | [`read.parquet`](#readparquet) | Reads the rows from an Apache Parquet file, which says what each of its columns holds. |
 | [`read.rows`](#readrows) | Takes rows that are handed in rather than opened: a table already in memory, a reader over a query. |
+| [`read.texts`](#readtexts) | Reads the rows from a folder of text files, a folder to a class: a file a row, the folder it stands in the answer, and a column of nought and one for each class. |
 | [`scale.given`](#scalegiven) | Scales a column into a range from bounds you give, above the split, so a feature worked out after it is worked out from scaled columns. |
 | [`settle.gaps`](#settlegaps) | Settles the gaps in a column with a value no row decided, so a feature worked out from it is not a gap. |
 | [`shuffle`](#shuffle) | Puts the rows in an order drawn from a seed, before they are divided, so every part holds the same mixture. |
@@ -678,6 +679,22 @@ Takes rows that are handed in rather than opened: a table already in memory, a r
 - **`description`**: What the rows are, for whoever reads the file later.
 
 Means what it says from version 1 of the file.
+
+## `read.texts`
+
+Reads the rows from a folder of text files, a folder to a class: a file a row, the folder it stands in the answer, and a column of nought and one for each class.
+
+```json
+{"step":"read.texts","path":"texts"}
+```
+
+| key | holds | an example |
+|---|---|---|
+| `path` | the path of a file; a relative one is read from the pipeline's folder | `"texts"` |
+
+- **`path`**: The folder the text files will be in, when the pipeline runs: a folder to each class, files of .txt in each.
+
+Means what it says from version 12 of the file.
 
 ## `scale.given`
 

@@ -154,7 +154,7 @@ internal sealed class ColumnList
         if (list.Picks.Range)
         {
             html.Append(" taking them in as ");
-            Kinds(html, RangeKind(list, "include"), [ColumnKind.Text, .. Enum.GetValues<ColumnKind>().Where(kind => kind != ColumnKind.Text)], list.Picks.IncludeKind ?? ColumnKind.Text);
+            Kinds(html, RangeKind(list, "include"), [ColumnKind.Text, .. Enum.GetValues<ColumnKind>().Where(kind => kind is not (ColumnKind.Text or ColumnKind.Media))], list.Picks.IncludeKind ?? ColumnKind.Text);
         }
 
         html.Append("</div>");

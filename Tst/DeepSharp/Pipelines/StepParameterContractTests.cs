@@ -168,6 +168,7 @@ public class StepParameterContractTests
             ["evidence.report"] = 3,
             ["order.by"] = 2,
             ["learn.ml"] = 7,
+            ["read.texts"] = 12,
             ["scale.given"] = 7,
             ["settle.gaps"] = 6,
             ["shuffle"] = 7,

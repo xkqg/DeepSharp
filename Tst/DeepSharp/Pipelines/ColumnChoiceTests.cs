@@ -495,10 +495,13 @@ public class ColumnChoiceTests
         var category = Then(Titanic().WithKind("pclass", ColumnKind.Category));
 
         // Nothing reads pclass; normalise reads fare as what reads as a number; sex is taken in with whichever kind is picked.
-        Assert.Equal(Enum.GetValues<ColumnKind>(), Titanic().KindsFor("pclass", Header));
+        // Media is never offered to a column read as text: a file or a folder of files is what makes one.
+        var offered = Enum.GetValues<ColumnKind>().Where(kind => kind != ColumnKind.Media).ToArray();
+
+        Assert.Equal(offered, Titanic().KindsFor("pclass", Header));
         Assert.Equal(ColumnKinds.Numbers, Titanic().KindsFor("fare", Header));
-        Assert.Equal(Enum.GetValues<ColumnKind>(), Titanic().KindsFor("sex", Header));
-        Assert.Equal(Enum.GetValues<ColumnKind>(), category.KindsFor("pclass", Header));
+        Assert.Equal(offered, Titanic().KindsFor("sex", Header));
+        Assert.Equal(offered, category.KindsFor("pclass", Header));
 
         // A column kept with the rest, or one a step makes, is given a kind by nothing here.
         Assert.Empty(Titanic(Remainder.Keep).KindsFor("sex", Header));
