@@ -168,29 +168,40 @@ public sealed partial class PageTests
         await using var served = await StartAsync();
         await SaveAsync(
             "counting.verso",
-            new CellModel { Type = "code", Language = "csharp", Source = """Verso.Abstractions.CellOutput.Widget("<!doctype html><html><body><button id='more'>More</button><span id='count'>0</span><script>document.getElementById('more').onclick = function () { var count = document.getElementById('count'); count.textContent = String(Number(count.textContent) + 1); };</script></body></html>")""" });
+            new CellModel
+            {
+                Type = "code",
+                Language = "csharp",
+                Source = """Verso.Abstractions.CellOutput.Widget("<!doctype html><html><body><button id='more'>More</button><span id='count'>0</span><script>window.__log = []; document.addEventListener('click', function (e) { window.__log.push(Math.round(performance.now()) + 'ms ' + document.readyState + ' click on ' + e.target.tagName + ' trusted=' + e.isTrusted + ' at ' + e.clientX + ',' + e.clientY); }, true); document.getElementById('more').onclick = function () { var count = document.getElementById('count'); count.textContent = String(Number(count.textContent) + 1); };</script></body></html>")""",
+            });
 
         var page = await OpenAsync(served, "counting.verso");
 
-        await page.EvaluateAsync("() => { window.__trace = []; const t0 = performance.now(); const stamp = (what) => window.__trace.push(Math.round(performance.now() - t0) + 'ms ' + what); new MutationObserver((records) => { for (const r of records) { for (const n of r.addedNodes) { if (n.nodeType === 1) { const frames = n.matches && n.matches('iframe') ? [n] : Array.from(n.querySelectorAll ? n.querySelectorAll('iframe') : []); for (const f of frames) { stamp('iframe added'); f.addEventListener('load', () => stamp('iframe load')); } } } for (const n of r.removedNodes) { if (n.nodeType === 1 && ((n.matches && n.matches('iframe')) || (n.querySelector && n.querySelector('iframe')))) stamp('iframe removed'); } } }).observe(document.body, { childList: true, subtree: true }); }");
+        // What the page does with the widget's frame, in one clock, so a failure says whether the frame was drawn again, resized or hit.
+        await page.EvaluateAsync("() => { window.__trace = []; const t0 = performance.now(); window.__stamp = (what) => window.__trace.push(Math.round(performance.now() - t0) + 'ms ' + what); window.addEventListener('message', (e) => { if (e.data && e.data.type) window.__stamp('message ' + e.data.type + ' ' + (e.data.height ?? '')); }); new MutationObserver((records) => { for (const r of records) { for (const n of r.addedNodes) { if (n.nodeType === 1) { const frames = n.matches && n.matches('iframe') ? [n] : Array.from(n.querySelectorAll ? n.querySelectorAll('iframe') : []); for (const f of frames) { window.__stamp('iframe added'); f.addEventListener('load', () => window.__stamp('iframe load')); } } } for (const n of r.removedNodes) { if (n.nodeType === 1 && ((n.matches && n.matches('iframe')) || (n.querySelector && n.querySelector('iframe')))) window.__stamp('iframe removed'); } } }).observe(document.body, { childList: true, subtree: true }); }");
         await Cell(page, 0).Locator("button.run").ClickAsync();
 
         var inside = Cell(page, 0).FrameLocator(".outputs iframe.widget");
 
         await WidgetLoadedAsync(page);
-        await inside.Locator("#more").ClickAsync();
-        await inside.Locator("#more").ClickAsync();
 
         try
         {
+            await page.EvaluateAsync("() => window.__stamp('first click sent, frame is ' + document.querySelector('iframe.widget').getBoundingClientRect().height + ' high')");
+            await inside.Locator("#more").ClickAsync();
+            await page.EvaluateAsync("() => window.__stamp('first click done')");
+            await inside.Locator("#more").ClickAsync();
+            await page.EvaluateAsync("() => window.__stamp('second click done, frame is ' + document.querySelector('iframe.widget').getBoundingClientRect().height + ' high')");
             await Expect(inside.Locator("#count")).ToHaveTextAsync("2");
         }
         catch (Microsoft.Playwright.PlaywrightException fault)
         {
-            // Seen once in some forty full runs and never alone: whether the frame was drawn again between the two clicks is the thing to know.
+            // Seen in two of four full runs of the whole suite under coverage and in none alone: what the page drew, and what the widget itself heard.
             var trace = await page.EvaluateAsync<string[]>("() => window.__trace");
+            var heard = await inside.Locator("body").EvaluateAsync<string[]>("() => window.__log");
 
-            throw new InvalidOperationException($"The widget did not count two clicks. Its frame, as the page drew it: {string.Join(" | ", trace)}.", fault);
+            throw new InvalidOperationException(
+                $"The widget did not count two clicks. The page: {string.Join(" | ", trace)}. The widget heard: {string.Join(" | ", heard)}.", fault);
         }
 
         await Cell(page, 0).Locator(".cell-bar").ClickAsync();
