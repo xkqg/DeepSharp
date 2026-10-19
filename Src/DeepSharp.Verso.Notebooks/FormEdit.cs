@@ -141,8 +141,8 @@ internal sealed class FormEdit(string field, FieldValue value, FormScope scope, 
 
         _step[field] = Share();
 
-        // A split writes all four shares, predict too, so each is there to add up.
-        var others = parameter.Keys.Where(key => key != SplitSharesParameter.TestKey).Sum(key => _step[key]!.GetValue<decimal>());
+        // A split writes train, validation, test and predict, and calibration when it sets rows aside for it: a share it leaves out is nought.
+        var others = parameter.Keys.Where(key => key != SplitSharesParameter.TestKey).Sum(key => _step[key]?.GetValue<decimal>() ?? 0m);
 
         _step[SplitSharesParameter.TestKey] = 1m - others;
 

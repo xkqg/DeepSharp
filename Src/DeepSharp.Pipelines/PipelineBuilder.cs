@@ -19,6 +19,7 @@ public sealed class PipelineBuilder
     private readonly List<IPipelineStep> _steps = [];
     private bool _split;
     private double _predict;
+    private double _calibration;
     private Form? _features;
     private IRowSource? _rows;
 
@@ -501,6 +502,37 @@ public sealed class PipelineBuilder
         return this;
     }
 
+    /// <summary>Sets a share of the rows aside to calibrate an interval on.</summary>
+    /// <param name="share">How much to set aside, as a fraction or as a percentage.</param>
+    /// <returns>This builder, so the split can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The share is not a share.</exception>
+    /// <exception cref="InvalidOperationException">A share has already been set aside, or this builder has been split.</exception>
+    /// <remarks>
+    /// A part of its own, beside training, validation and test: nothing is fitted on these rows and nothing is chosen by them, so
+    /// the errors a model makes on them are the errors it will make on rows it has not seen. <c>Calibrate(10)</c> sets a tenth of
+    /// the rows aside; what is left is divided as the split says.
+    /// </remarks>
+    public PipelineBuilder Calibrate(double share)
+    {
+        ThrowIfSplit();
+
+        if (!double.IsFinite(share) || share <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(share), share, "A share to calibrate on is more than none of the data.");
+        }
+
+        if (_calibration > 0)
+        {
+            throw new InvalidOperationException(
+                $"This pipeline already sets {_calibration} aside to calibrate on, and a second share would quietly replace the first.");
+        }
+
+        _calibration = share;
+
+        return this;
+    }
+
     /// <summary>Splits the rows by where they sit in time, and opens the half of the chain that learns.</summary>
     /// <param name="column">The column that says when a row happened.</param>
     /// <param name="train">The share the model learns from.</param>
@@ -516,7 +548,7 @@ public sealed class PipelineBuilder
     /// up to more than everything there is. <c>80, 10</c> and <c>0.80, 0.10</c> say the same thing.
     /// </remarks>
     public FittingBuilder SplitByTime(string column, double train, double validation = 0) =>
-        Split(new SplitByTimeStep(column, SplitShares.Of(train, validation, _predict)));
+        Split(new SplitByTimeStep(column, SplitShares.Of(train, validation, _predict, _calibration)));
 
     /// <summary>Splits the rows by where they sit in time, keeping the last moments of every part apart.</summary>
     /// <param name="column">The column that says when a row happened.</param>
@@ -532,7 +564,7 @@ public sealed class PipelineBuilder
     /// model is measured on. The rows kept apart are fitted on by nothing and handed to nothing.
     /// </remarks>
     public FittingBuilder SplitByTime(string column, double train, double validation, int gap) =>
-        Split(new SplitByTimeStep(column, SplitShares.Of(train, validation, _predict), gap));
+        Split(new SplitByTimeStep(column, SplitShares.Of(train, validation, _predict, _calibration), gap));
 
     /// <summary>Splits the rows at random, and opens the half of the chain that learns.</summary>
     /// <param name="train">The share the model learns from.</param>
@@ -544,7 +576,7 @@ public sealed class PipelineBuilder
     /// out rather than written, as it is everywhere here.
     /// </remarks>
     public FittingBuilder SplitAtRandom(double train, double validation = 0, int seed = 20260923) =>
-        Split(new SplitAtRandomStep(SplitShares.Of(train, validation, _predict), seed));
+        Split(new SplitAtRandomStep(SplitShares.Of(train, validation, _predict, _calibration), seed));
 
     /// <summary>Splits the rows at random with the rows to be measured on dealt by a number of their own.</summary>
     /// <param name="train">The share the model learns from.</param>
@@ -557,7 +589,7 @@ public sealed class PipelineBuilder
     /// to see how much a result owes to the luck of the deal, measures every trial on the rows no trial learned from.
     /// </remarks>
     public FittingBuilder SplitAtRandom(double train, double validation, int seed, int testSeed) =>
-        Split(new SplitAtRandomStep(SplitShares.Of(train, validation, _predict), seed, testSeed));
+        Split(new SplitAtRandomStep(SplitShares.Of(train, validation, _predict, _calibration), seed, testSeed));
 
     /// <summary>Splits at random so that the rows that are neither test nor predict are cut into slices, one of them validation.</summary>
     /// <param name="train">The share the rows that learn and are chosen with make of all of them.</param>
@@ -569,7 +601,7 @@ public sealed class PipelineBuilder
     /// pipeline of its own: build one for each index, and the test rows are the same on all of them.
     /// </remarks>
     public FittingBuilder SplitAtRandom(double train, Fold fold, int seed = 20260923) =>
-        Split(new SplitAtRandomStep(SplitShares.Of(train, 0, _predict), seed, null, fold));
+        Split(new SplitAtRandomStep(SplitShares.Of(train, 0, _predict, _calibration), seed, null, fold));
 
     /// <summary>Splits at random into folds, the rows to be measured on dealt by a number of their own.</summary>
     /// <param name="train">The share the rows that learn and are chosen with make of all of them.</param>
@@ -578,7 +610,7 @@ public sealed class PipelineBuilder
     /// <param name="testSeed">The number that deals the rows to be measured on.</param>
     /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
     public FittingBuilder SplitAtRandom(double train, Fold fold, int seed, int testSeed) =>
-        Split(new SplitAtRandomStep(SplitShares.Of(train, 0, _predict), seed, testSeed, fold));
+        Split(new SplitAtRandomStep(SplitShares.Of(train, 0, _predict, _calibration), seed, testSeed, fold));
 
     /// <summary>Splits at random into folds while keeping the mixture of one column the same in every part and every slice.</summary>
     /// <param name="column">The column whose mixture is kept.</param>
@@ -587,7 +619,7 @@ public sealed class PipelineBuilder
     /// <param name="seed">The number that makes the shuffle repeatable.</param>
     /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
     public FittingBuilder SplitStratified(string column, double train, Fold fold, int seed = 20260923) =>
-        Split(new SplitStratifiedStep(column, SplitShares.Of(train, 0, _predict), seed, fold));
+        Split(new SplitStratifiedStep(column, SplitShares.Of(train, 0, _predict, _calibration), seed, fold));
 
     /// <summary>Splits by time so that the cut between training and validation stands at one of several places.</summary>
     /// <param name="column">The column that says when a row happened.</param>
@@ -600,7 +632,7 @@ public sealed class PipelineBuilder
     /// whose training rows are the earlier blocks and whose validation rows are the next, and the test rows are one block at the end.
     /// </remarks>
     public FittingBuilder SplitByTime(string column, double train, Origin origin, int gap = 0) =>
-        Split(new SplitByTimeStep(column, SplitShares.Of(train, 0, _predict), gap, origin));
+        Split(new SplitByTimeStep(column, SplitShares.Of(train, 0, _predict, _calibration), gap, origin));
 
     /// <summary>Splits at random while keeping the mixture of one column the same in every part.</summary>
     /// <param name="column">The column whose mixture is kept.</param>
@@ -611,7 +643,7 @@ public sealed class PipelineBuilder
     /// <remarks>The right split when an answer is rare enough that a plain shuffle could lose it.</remarks>
     public FittingBuilder SplitStratified(
         string column, double train, double validation = 0, int seed = 20260923) =>
-        Split(new SplitStratifiedStep(column, SplitShares.Of(train, validation, _predict), seed));
+        Split(new SplitStratifiedStep(column, SplitShares.Of(train, validation, _predict, _calibration), seed));
 
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
@@ -624,6 +656,13 @@ public sealed class PipelineBuilder
         {
             throw new InvalidOperationException(
                 $"This pipeline holds {_predict} back to predict on but never splits the rows, and the "
+                + "split is what sets that share aside.");
+        }
+
+        if (_calibration > 0)
+        {
+            throw new InvalidOperationException(
+                $"This pipeline sets {_calibration} aside to calibrate on but never splits the rows, and the "
                 + "split is what sets that share aside.");
         }
 

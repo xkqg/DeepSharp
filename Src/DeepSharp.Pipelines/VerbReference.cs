@@ -165,6 +165,7 @@ internal static class VerbReference
             new("validation", "the share used while choosing between models: nought to one"),
             new("test", "the share kept back until the end: above nought, at most one"),
             new("predict", "the share held back to predict on: nought to one, and none when it is left out"),
+            new("calibration", "the share an interval is calibrated on: nought to one, and none when it is left out"),
         ];
 
         public IReadOnlyList<Row> Visit(ColumnDeclarationsParameter parameter) =>

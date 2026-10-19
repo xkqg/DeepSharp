@@ -4046,7 +4046,7 @@
           "const": "split.atRandom"
         },
         "train": {
-          "description": "How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.",
+          "description": "How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.",
           "type": "number",
           "exclusiveMinimum": 0,
           "maximum": 1
@@ -4065,6 +4065,12 @@
         },
         "predict": {
           "description": "The share held back to predict on; none when it is left out.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "calibration": {
+          "description": "The share an interval is calibrated on, fitted on by nothing and chosen by nothing; none when it is left out.",
           "type": "number",
           "minimum": 0,
           "maximum": 1
@@ -4116,7 +4122,7 @@
           "description": "The column that says when a row happened."
         },
         "train": {
-          "description": "How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.",
+          "description": "How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.",
           "type": "number",
           "exclusiveMinimum": 0,
           "maximum": 1
@@ -4135,6 +4141,12 @@
         },
         "predict": {
           "description": "The share held back to predict on; none when it is left out.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "calibration": {
+          "description": "The share an interval is calibrated on, fitted on by nothing and chosen by nothing; none when it is left out.",
           "type": "number",
           "minimum": 0,
           "maximum": 1
@@ -4180,7 +4192,7 @@
           "description": "The column whose mixture of values is kept the same in every part."
         },
         "train": {
-          "description": "How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.",
+          "description": "How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.",
           "type": "number",
           "exclusiveMinimum": 0,
           "maximum": 1
@@ -4199,6 +4211,12 @@
         },
         "predict": {
           "description": "The share held back to predict on; none when it is left out.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "calibration": {
+          "description": "The share an interval is calibrated on, fitted on by nothing and chosen by nothing; none when it is left out.",
           "type": "number",
           "minimum": 0,
           "maximum": 1

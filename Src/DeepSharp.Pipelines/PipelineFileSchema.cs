@@ -371,6 +371,7 @@ internal static class PipelineFileSchema
             new("validation", AShare("The share used while choosing between models.", orNothing: true)),
             new("test", AShare("The share kept back until the end.", orNothing: false)),
             new("predict", AShare("The share held back to predict on; none when it is left out.", orNothing: true)),
+            new("calibration", AShare("The share an interval is calibrated on, fitted on by nothing and chosen by nothing; none when it is left out.", orNothing: true)),
         ];
 
         public IReadOnlyList<PropertySchema> Visit(ColumnDeclarationsParameter parameter)

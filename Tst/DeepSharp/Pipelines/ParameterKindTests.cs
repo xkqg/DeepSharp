@@ -415,7 +415,7 @@ public class ParameterKindTests
         Assert.Throws<ArgumentException>(() => new TextParameter(" ", "Something.", "x"));
         Assert.Throws<ArgumentException>(() => new TextParameter("key", " ", "x"));
         Assert.Equal(["key"], new TextParameter("key", "Something.", "x").Keys);
-        Assert.Equal(["train", "validation", "test", "predict"], new SplitSharesParameter().Keys);
+        Assert.Equal(["train", "validation", "test", "predict", "calibration"], new SplitSharesParameter().Keys);
     }
 
     [Theory]

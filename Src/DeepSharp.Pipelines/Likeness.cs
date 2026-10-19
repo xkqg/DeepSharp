@@ -201,7 +201,7 @@ public sealed record LikenessStep : IPipelineStep<LikenessStep>, IProducesEviden
         var named = Columns.Count > 0
             ? Columns
             : [.. table.Columns.Select(column => column.Name).Where(name => name != table.Id && !view.Answers.Contains(name, StringComparer.Ordinal))];
-        Standing[] parts = [Standing.Train, Standing.Validation, Standing.Test];
+        Standing[] parts = [Standing.Train, Standing.Validation, Standing.Calibration, Standing.Test];
         var present = parts.Where(part => view.Standings.Contains(part)).ToArray();
         var pairs = present.SelectMany((first, at) => present.Skip(at + 1).Select(second => new Pair(first, second))).ToArray();
 

@@ -989,7 +989,7 @@ public sealed class FillStrategyParameter : StepParameter<FillStrategy>
 /// </remarks>
 public sealed class SplitSharesParameter() : StepParameter<SplitShares>(
     "train",
-    "How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.",
+    "How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.",
     new SplitShares(0.70, 0.15, 0.15))
 {
     /// <summary>
@@ -999,7 +999,7 @@ public sealed class SplitSharesParameter() : StepParameter<SplitShares>(
     public const string TestKey = "test";
 
     /// <inheritdoc />
-    public override IReadOnlyList<string> Keys { get; } = ["train", "validation", TestKey, "predict"];
+    public override IReadOnlyList<string> Keys { get; } = ["train", "validation", TestKey, "predict", "calibration"];
 
     /// <inheritdoc />
     public override IReadOnlyList<string> RequiredKeys { get; } = ["train", "validation", TestKey];
@@ -1009,7 +1009,8 @@ public sealed class SplitSharesParameter() : StepParameter<SplitShares>(
         new(step.RequiredNumber("train"),
             step.RequiredNumber("validation"),
             step.RequiredNumber(TestKey),
-            step.OptionalNumber("predict"));
+            step.OptionalNumber("predict"),
+            step.OptionalNumber("calibration"));
 
     /// <inheritdoc />
     public override void Write(Utf8JsonWriter writer, SplitShares value)
@@ -1020,6 +1021,12 @@ public sealed class SplitSharesParameter() : StepParameter<SplitShares>(
         writer.WriteNumber("validation", value.Validation);
         writer.WriteNumber(TestKey, value.Test);
         writer.WriteNumber("predict", value.Predict);
+
+        // Only a split that sets rows aside to calibrate on says so: every other one is written as it always was.
+        if (value.Calibration > 0)
+        {
+            writer.WriteNumber("calibration", value.Calibration);
+        }
     }
 
     /// <inheritdoc />

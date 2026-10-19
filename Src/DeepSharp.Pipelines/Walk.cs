@@ -155,6 +155,11 @@ internal sealed class Walk(Course course, WalkMode mode, SourceFolder folder)
                 seen.Learned("rows.gap", gap);
             }
 
+            if (parts.Count(each => each == Part.Calibration) is > 0 and var calibration)
+            {
+                seen.Learned("rows.calibration", calibration);
+            }
+
             // A source that leaves rows out says how many beside what each part holds: rows a join found no partner for
             // were never divided, and a fit that did not say so would pass for one over every row of the file.
             if (_rows is JoinedRows { LeftOut: { } leftOut })

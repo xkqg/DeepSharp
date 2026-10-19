@@ -32,6 +32,9 @@ public enum Standing
 
     /// <summary>A row the split keeps apart at the end of its part: fitted on by nothing, handed to nothing.</summary>
     Gap,
+
+    /// <summary>A row the split sets aside to calibrate an interval on: fitted on by nothing, and chosen by nothing.</summary>
+    Calibration,
 }
 
 /// <summary>

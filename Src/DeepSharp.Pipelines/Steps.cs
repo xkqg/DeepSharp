@@ -292,7 +292,7 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
         var column = table[Column];
         var when = Comparer<int>.Create(table.RowOrderBy(Column));
 
-        foreach (var part in new[] { Part.Train, Part.Validation, Part.Test, Part.Predict })
+        foreach (var part in new[] { Part.Train, Part.Validation, Part.Calibration, Part.Test, Part.Predict })
         {
             var rows = Enumerable.Range(0, table.RowCount).Where(row => parts[row] == part).Order(when).ToArray();
 

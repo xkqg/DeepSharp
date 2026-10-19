@@ -749,12 +749,13 @@ Divides the rows at random, the same way every time for the same seed.
 | `validation` | the share used while choosing between models: nought to one | `0.15` |
 | `test` | the share kept back until the end: above nought, at most one | `0.15` |
 | `predict` | the share held back to predict on: nought to one, and none when it is left out | `0` |
+| `calibration` | the share an interval is calibrated on: nought to one, and none when it is left out | left out |
 | `seed` | a whole number | `20260923` |
 | `testSeed` | a whole number, at least 0; left out, -1 | `99` |
 | `folds` | a whole number, at least 2; left out, 0 | `5` |
 | `fold` | a whole number, at least 0; left out, -1 | `0` |
 
-- **`train`**: How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.
+- **`train`**: How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.
 - **`seed`**: The number that makes the shuffle repeatable: the same seed deals the same rows the same way.
 - **`testSeed`**: The number that deals the rows to be measured on, none or more. Given, those rows are the same whatever the seed is, and the seed deals the rest. Left out, the seed deals every part.
 - **`folds`**: How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.
@@ -777,12 +778,13 @@ Divides the rows by when they happened: the earliest to learn from, the latest t
 | `validation` | the share used while choosing between models: nought to one | `0.15` |
 | `test` | the share kept back until the end: above nought, at most one | `0.15` |
 | `predict` | the share held back to predict on: nought to one, and none when it is left out | `0` |
+| `calibration` | the share an interval is calibrated on: nought to one, and none when it is left out | left out |
 | `gap` | a whole number, at least 0; left out, 0 | left out |
 | `origins` | a whole number, at least 2; left out, 0 | `3` |
 | `origin` | a whole number, at least 0; left out, -1 | `0` |
 
 - **`column`**: The column that says when a row happened.
-- **`train`**: How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.
+- **`train`**: How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.
 - **`gap`**: How many of the last moments of every part are kept apart, fitted on by nothing and handed to nothing: at least as many as the rows an answer reads ahead. Left out, none.
 - **`origins`**: How many places the cut between training and validation is moved to, at least two; the rows that are neither test nor predict are cut into one block more. Left out, the rows are cut once, as shares say.
 - **`origin`**: Which of the places this is, counted from nought; said with origins, and below them.
@@ -804,12 +806,13 @@ Divides the rows at random while keeping the mixture of one column the same in e
 | `validation` | the share used while choosing between models: nought to one | `0.15` |
 | `test` | the share kept back until the end: above nought, at most one | `0.15` |
 | `predict` | the share held back to predict on: nought to one, and none when it is left out | `0` |
+| `calibration` | the share an interval is calibrated on: nought to one, and none when it is left out | left out |
 | `seed` | a whole number | `20260923` |
 | `folds` | a whole number, at least 2; left out, 0 | `5` |
 | `fold` | a whole number, at least 0; left out, -1 | `0` |
 
 - **`column`**: The column whose mixture of values is kept the same in every part.
-- **`train`**: How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.
+- **`train`**: How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.
 - **`seed`**: The number that makes the shuffle repeatable: the same seed deals the same rows the same way.
 - **`folds`**: How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.
 - **`fold`**: Which of the slices is validation, counted from nought; said with folds, and below them.

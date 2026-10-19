@@ -36,6 +36,14 @@ public enum Part
     /// them.
     /// </remarks>
     Gap,
+
+    /// <summary>The rows an interval is calibrated on: fitted on by nothing, and chosen by nothing.</summary>
+    /// <remarks>
+    /// Not training, which fits on them; not validation, which chooses between models by them and so has already seen what it
+    /// chose; and not test, which a number is reported on once everything else is settled. A split that sets none aside
+    /// divides the rows exactly as it always did.
+    /// </remarks>
+    Calibration,
 }
 
 /// <summary>
@@ -45,17 +53,19 @@ public enum Part
 /// <param name="Validation">The share used while choosing between models.</param>
 /// <param name="Test">The share kept back until the end.</param>
 /// <param name="Predict">The share held back to predict on; usually none.</param>
+/// <param name="Calibration">The share an interval is calibrated on; usually none.</param>
 /// <remarks>
-/// One type rather than four loose numbers, because they are only meaningful together: each has to be a
+/// One type rather than five loose numbers, because they are only meaningful together: each has to be a
 /// share, and together they have to make a whole. Written as the negation of what a share is, because every
 /// comparison against a not-a-number is false and a range test lets NaN through.
 /// </remarks>
-public readonly record struct SplitShares(double Train, double Validation, double Test, double Predict = 0)
+public readonly record struct SplitShares(double Train, double Validation, double Test, double Predict = 0, double Calibration = 0)
 {
     /// <summary>The shares you write down; the one to be measured on is worked out.</summary>
     /// <param name="train">The share the model learns from.</param>
     /// <param name="validation">The share used while choosing between models; none, unless you say.</param>
     /// <param name="predict">The share held back to predict on; none, unless you say.</param>
+    /// <param name="calibration">The share an interval is calibrated on; none, unless you say.</param>
     /// <returns>The shares, as fractions.</returns>
     /// <exception cref="ArgumentException">They ask for more than there is, or leave nothing to measure on.</exception>
     /// <exception cref="ArgumentOutOfRangeException">One of them is not a number.</exception>
@@ -66,7 +76,7 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
     /// and <c>Of(0.7, 0.1, 10)</c>, which mixes the two, is refused rather than read as seven-tenths of a
     /// percent.
     /// </remarks>
-    public static SplitShares Of(double train, double validation = 0, double predict = 0)
+    public static SplitShares Of(double train, double validation = 0, double predict = 0, double calibration = 0)
     {
         // A share that is not a finite number is refused before anything is added up: the sum of an
         // infinity is an infinity, and the message would then be about a whole rather than about the
@@ -74,19 +84,20 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
         ThrowIfNotFinite(train, nameof(train));
         ThrowIfNotFinite(validation, nameof(validation));
         ThrowIfNotFinite(predict, nameof(predict));
+        ThrowIfNotFinite(calibration, nameof(calibration));
 
         // Percentages or fractions, decided by whether any one of them is bigger than a whole — not by
         // what they add up to, because 0.70 and 0.45 add up to more than one while plainly being written
         // as fractions, and reading them as percentages would quietly make training seven-tenths of one.
-        var spoken = train + validation + predict;
-        var whole = train > 1 || validation > 1 || predict > 1 ? 100 : 1;
+        var spoken = train + validation + predict + calibration;
+        var whole = train > 1 || validation > 1 || predict > 1 || calibration > 1 ? 100 : 1;
 
-        if (whole == 100 && new[] { train, validation, predict }.Any(share => share > 0 && share < 1))
+        if (whole == 100 && new[] { train, validation, predict, calibration }.Any(share => share > 0 && share < 1))
         {
             throw new ArgumentException(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{train}, {validation} and {predict} are not written in the same units: one of them is a fraction among percentages."),
+                    $"{train}, {validation}, {predict} and {calibration} are not written in the same units: one of them is a fraction among percentages."),
                 nameof(train));
         }
 
@@ -95,7 +106,7 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
             throw new ArgumentException(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{train}, {validation} and {predict} ask for {spoken:0.####} of {whole}, and a split cannot use more rows than there are."),
+                    $"{train}, {validation}, {predict} and {calibration} ask for {spoken:0.####} of {whole}, and a split cannot use more rows than there are."),
                 nameof(train));
         }
 
@@ -104,7 +115,7 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
             throw new ArgumentException(
                 string.Create(
                     CultureInfo.InvariantCulture,
-                    $"{train}, {validation} and {predict} are the whole of the data and leave nothing to be measured on."),
+                    $"{train}, {validation}, {predict} and {calibration} are the whole of the data and leave nothing to be measured on."),
                 nameof(train));
         }
 
@@ -113,7 +124,7 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
         // to compare equal.
         var test = Math.Round(whole - spoken, 12);
 
-        return new SplitShares(train / whole, validation / whole, test / whole, predict / whole);
+        return new SplitShares(train / whole, validation / whole, test / whole, predict / whole, calibration / whole);
     }
 
     /// <summary>Checks that these are shares that make a whole.</summary>
@@ -130,8 +141,9 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
         // nothing, because a model learns from one and is measured on the other.
         ThrowIfNotAShareOrNothing(Validation, nameof(Validation));
         ThrowIfNotAShareOrNothing(Predict, nameof(Predict));
+        ThrowIfNotAShareOrNothing(Calibration, nameof(Calibration));
 
-        var total = Train + Validation + Test + Predict;
+        var total = Train + Validation + Test + Predict + Calibration;
 
         if (Math.Abs(total - 1) > 1e-9)
         {
@@ -145,11 +157,12 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
 
     /// <summary>Hands out the parts for a given number of rows, in order.</summary>
     /// <param name="rows">How many rows there are.</param>
-    /// <returns>Which part each position belongs to, training first and predict last.</returns>
+    /// <returns>Which part each position belongs to, training first and predict last; the calibration rows come before the test rows.</returns>
     public Part[] Over(int rows)
     {
         var train = (int)Math.Round(rows * Train, MidpointRounding.AwayFromZero);
         var validation = (int)Math.Round(rows * Validation, MidpointRounding.AwayFromZero);
+        var calibration = (int)Math.Round(rows * Calibration, MidpointRounding.AwayFromZero);
         var test = (int)Math.Round(rows * Test, MidpointRounding.AwayFromZero);
 
         var parts = new Part[rows];
@@ -158,7 +171,8 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
         {
             parts[at] = at < train ? Part.Train
                 : at < train + validation ? Part.Validation
-                : at < train + validation + test || Predict == 0 ? Part.Test
+                : at < train + validation + calibration ? Part.Calibration
+                : at < train + validation + calibration + test || Predict == 0 ? Part.Test
                 : Part.Predict;
         }
 

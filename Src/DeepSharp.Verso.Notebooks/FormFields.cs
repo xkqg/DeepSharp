@@ -112,10 +112,11 @@ internal sealed class FormFields(JsonElement step, FormScope scope) : IStepParam
                 Written(parameter.Key, FillStrategyParameter.ValueKey), parameter.Description)];
     }
 
-    // Train, validation and predict are set; test is what they leave, worked out rather than typed.
+    // Train, validation, predict and calibration are set; test is what they leave, worked out rather than typed. A share a split
+    // sets aside none of is left out of its file, and shows as nought.
     public IEnumerable<PropertyField> Visit(SplitSharesParameter parameter) =>
         parameter.Keys.Select(key => new PropertyField(
-            key, key, PropertyFieldType.Text, Written(key), parameter.Description, IsReadOnly: key == SplitSharesParameter.TestKey));
+            key, key, PropertyFieldType.Text, step.TryGetProperty(key, out var written) ? written.GetRawText() : "0", parameter.Description, IsReadOnly: key == SplitSharesParameter.TestKey));
 
     // One pick per column the source has — the kind the schema gives it, or not taken — whether each column taken may
     // be absent from the rows, for each taken timestamp how its moments are written, empty for ISO 8601, for each
