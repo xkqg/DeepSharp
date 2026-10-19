@@ -346,6 +346,6 @@ public sealed class MediaColumn : IColumn
             BinaryPrimitives.WriteSingleLittleEndian(bytes.AsSpan((Shape.Count * 4) + (at * 4)), values[at]);
         }
 
-        return "media:" + Convert.ToHexStringLower(SHA256.HashData(bytes));
+        return "media:" + Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     }
 }
