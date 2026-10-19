@@ -238,17 +238,14 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
     }
 
     /// <summary>Declares a split at random that cuts the rows that are neither test nor predict into folds, one of them validation.</summary>
-    /// <param name="shares">How much goes to training and test; no validation share, since the fold says what validation is.</param>
+    /// <param name="shares">How much goes to training and test; a validation share, which the fold has no use for, only adds to the rows that are cut.</param>
     /// <param name="seed">The number that deals the rows into slices.</param>
     /// <param name="testSeed">The number that deals the rows to be measured on, none or more; nothing, for the seed to deal them.</param>
     /// <param name="fold">Which slice is validation.</param>
-    /// <exception cref="ArgumentException">The shares say a validation share.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The test seed is below nought.</exception>
     public SplitAtRandomStep(SplitShares shares, int seed, int? testSeed, Fold fold)
         : this(shares, seed)
     {
-        Slices.RequireNoValidationShare(shares);
-
         TestSeed = testSeed is { } locked ? TestSeedKey.Require(locked) : null;
         Fold = fold;
     }
@@ -336,7 +333,7 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
     // are training, and a repeated record stays in the slice its first copy is in.
     private Part[] Folded(Table table, Part[] parts, int[] rows, Fold slice)
     {
-        var left = rows.Where(row => parts[row] == Part.Train).ToArray();
+        var left = rows.Where(row => parts[row] is Part.Train or Part.Validation).ToArray();
 
         parts.Sliced(table.Ranked(left, Seed), slice, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
 
@@ -346,7 +343,6 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
-    /// <exception cref="ArgumentException">The file gives a validation share beside folds.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The file gives a test seed below nought, or a fold it does not have.</exception>
     /// <exception cref="FormatException">The file names one of a fold's two keys without the other.</exception>
     public static SplitAtRandomStep ReadFrom(JsonElement element) =>
@@ -389,15 +385,13 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
 
     /// <summary>Declares a split that keeps the mixture of a column in every part and cuts the learning rows into folds.</summary>
     /// <param name="column">The column whose mixture is kept.</param>
-    /// <param name="shares">How much goes to training and test; no validation share, since the fold says what validation is.</param>
+    /// <param name="shares">How much goes to training and test; a validation share, which the fold has no use for, only adds to the rows that are cut.</param>
     /// <param name="seed">The number that makes the shuffle repeatable.</param>
     /// <param name="fold">Which slice of each group is validation.</param>
-    /// <exception cref="ArgumentException">The column has no name, or the shares say a validation share.</exception>
+    /// <exception cref="ArgumentException">The column has no name.</exception>
     public SplitStratifiedStep(string column, SplitShares shares, int seed, Fold fold)
         : this(column, shares, seed)
     {
-        Slices.RequireNoValidationShare(shares);
-
         Fold = fold;
     }
 
@@ -468,7 +462,7 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
 
             if (Fold is { } slice)
             {
-                parts.Sliced([.. ranked.Where(row => parts[row] == Part.Train)], slice, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
+                parts.Sliced([.. ranked.Where(row => parts[row] is Part.Train or Part.Validation)], slice, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
             }
         }
 

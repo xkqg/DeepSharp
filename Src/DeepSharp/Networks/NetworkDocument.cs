@@ -331,7 +331,7 @@ public static class NetworkDocument
         {
             var place = saved.Count.ToString(CultureInfo.InvariantCulture);
 
-            saved.Add(NetworkIn(ReaderAt(element, [property, place], $"{property} {saved.Count + 1}", text, NetworkKeys), text, catalog));
+            saved.Add(NetworkIn(ReaderAt(element, [property, place], text, NetworkKeys), text, catalog));
         }
 
         return saved;
@@ -792,13 +792,16 @@ public static class NetworkDocument
             throw text.Refused();
         }
 
-        return ReaderAt(part, [property], property, text, keys);
+        return ReaderAt(part, [property], text, keys);
     }
 
-    // The reader of a part that stands at a path in the file, named in a refusal by a label: an object of a version this
+    // The reader of a part that stands at a path in the file, named in a refusal by where it stands: an object of a version this
     // library reads, holding only the keys it knows, read as a part of the version it names.
-    private static PartReader ReaderAt(JsonElement part, string[] path, string label, NetworkText text, string[] keys)
+    private static PartReader ReaderAt(JsonElement part, string[] path, NetworkText text, string[] keys)
     {
+        // A part under a key at the top is the key; one in a list under it is the key and its place counted from one.
+        var label = path.Length == 1 ? path[0] : string.Create(CultureInfo.InvariantCulture, $"{path[0]} {int.Parse(path[1], CultureInfo.InvariantCulture) + 1}");
+
         if (part.ValueKind != JsonValueKind.Object)
         {
             text.Fault(path, $"The '{label}' part is no object.");

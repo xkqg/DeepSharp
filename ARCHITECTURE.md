@@ -237,7 +237,7 @@ that would take every row a model learns from or is measured on is refused.
 
 A small table is measured by the luck of one deal, and a fold is how that is answered without a second kind of split: it is
 an ordinary split that says which slice of the rows that learn is validation. The rows that are neither test nor predict
-are ranked as every split ranks them and cut into k slices of about as many rows, a repeated record staying in one, and the
+are ranked as every split ranks them (a validation share, which a fold has no use for, only adds to them) and cut into k slices of about as many rows, a repeated record staying in one, and the
 test rows are the same on every fold, since they are dealt by the seed or the test seed alone and the fold only reads what
 is left. In a series the same idea moves the cut: the rows that learn, in the order of their time, are k + 1 blocks, and
 origin i trains on the first i + 1 and validates on the next, so what a model learned from always came before what it is

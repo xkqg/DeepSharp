@@ -32,7 +32,7 @@ public class TrainedEnsembleFileTests
             .Build();
         var step = Assert.IsType<LearnNetworkStep>(pipeline.Declaration.Learner);
 
-        return pipeline.RunFor(step.Needs).TrainEnsemble([step, step with { Seed = 2 }, step with { Seed = 3 }], blend, cancellation: TestContext.Current.CancellationToken);
+        return pipeline.RunFor(step.Needs).TrainEnsemble([step, step with { Seed = 2 }, step with { Seed = 3 }], new EnsembleOptions { Blend = blend, Cancellation = TestContext.Current.CancellationToken });
     }
 
     private static CsvRowSource Served() =>

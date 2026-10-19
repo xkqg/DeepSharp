@@ -44,7 +44,7 @@ public class TrainedEnsembleTests
     }
 
     private static TrainedEnsemble Trained(PreparedData prepared, IReadOnlyList<LearnNetworkStep> steps, Blend blend = Blend.Average) =>
-        prepared.TrainEnsemble(steps, blend, cancellation: TestContext.Current.CancellationToken);
+        prepared.TrainEnsemble(steps, new EnsembleOptions { Blend = blend, Cancellation = TestContext.Current.CancellationToken });
 
     private static TrainedNetwork Alone(PreparedData prepared, LearnNetworkStep step) =>
         prepared.Train(step, cancellation: TestContext.Current.CancellationToken);

@@ -191,21 +191,14 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
 
     /// <summary>Declares a split in time whose cut between training and validation is moved to one of several places.</summary>
     /// <param name="column">The column that says when a row happened.</param>
-    /// <param name="shares">How much goes to training and test; no validation share, since the origin says what validation is.</param>
+    /// <param name="shares">How much goes to training and test; a validation share, which the origin has no use for, only adds to the rows that are cut.</param>
     /// <param name="gap">How many of the last moments of training and of validation are kept apart; none for no gap.</param>
     /// <param name="origin">Which place the cut stands at.</param>
-    /// <exception cref="ArgumentException">The column has no name, the shares do not make a whole, or they say a validation share.</exception>
+    /// <exception cref="ArgumentException">The column has no name, or the shares do not make a whole.</exception>
     /// <exception cref="ArgumentOutOfRangeException">A share is not a share, or the gap is below nothing.</exception>
     public SplitByTimeStep(string column, SplitShares shares, int gap, Origin origin)
         : this(column, shares, gap)
     {
-        if (shares.Validation != 0)
-        {
-            throw new ArgumentException(
-                "An origin says which rows are validation — the block after the training rows — so shares beside it say no validation share: leave it out.",
-                nameof(shares));
-        }
-
         Origin = origin;
     }
 
@@ -255,7 +248,7 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
         {
             // The rows that learn in the order of their time, cut into one block more than there are origins: the blocks up to the
             // origin are training, the next is validation, and the rows after it are fitted on by nothing.
-            var learning = order.Where(row => parts[row] == Part.Train).ToArray();
+            var learning = order.Where(row => parts[row] is Part.Train or Part.Validation).ToArray();
             var blocks = new int[learning.Length];
 
             for (var at = 0; at < learning.Length; at++)

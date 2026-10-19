@@ -197,19 +197,29 @@ public class FoldSplitTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new Fold(folds, index));
 
     [Fact]
-    public void AValidationShare_IsRefusedBesideFolds_ForTheFoldsSayWhatValidationIs()
+    public void AValidationShareBesideFolds_IsNoUseToThem_ItOnlyAddsToTheRowsThatAreCut()
     {
-        var refused = Assert.Throws<ArgumentException>(() => new SplitAtRandomStep(SplitShares.Of(0.7, 0.1), 42, null, new Fold(5, 0)));
+        // Eighty per cent cut, as a train of 0.65 and a validation of 0.15 say it, is eighty per cent cut: the fold is validation.
+        var table = Dealt(0).Table;
+        Part[] said = new SplitAtRandomStep(SplitShares.Of(0.80), 42, null, new Fold(5, 2)).Assign(table);
+        Part[] added = new SplitAtRandomStep(SplitShares.Of(0.65, 0.15), 42, null, new Fold(5, 2)).Assign(table);
+        Part[] stratifiedSaid = new SplitStratifiedStep("survived", SplitShares.Of(0.80), 42, new Fold(5, 2)).Assign(table);
+        Part[] stratifiedAdded = new SplitStratifiedStep("survived", SplitShares.Of(0.65, 0.15), 42, new Fold(5, 2)).Assign(table);
+        Part[] sparedSaid = new SplitAtRandomStep(SplitShares.Of(0.80), 42, 7, new Fold(5, 2)).Assign(table);
+        Part[] sparedAdded = new SplitAtRandomStep(SplitShares.Of(0.65, 0.15), 42, 7, new Fold(5, 2)).Assign(table);
 
-        Assert.Contains("validation", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("folds", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(said, added);
+        // Each group rounds its own shares to rows, so the cut may differ by a row in a group.
+        Assert.InRange(stratifiedAdded.Count(part => part is Part.Train or Part.Validation), stratifiedSaid.Count(part => part is Part.Train or Part.Validation) - 2, stratifiedSaid.Count(part => part is Part.Train or Part.Validation) + 2);
+        Assert.Contains(Part.Validation, stratifiedAdded);
+        Assert.Equal(sparedSaid, sparedAdded);
+        Assert.Contains(Part.Validation, added);
     }
 
     [Theory]
     [InlineData("""{"step":"split.atRandom","train":0.8,"validation":0,"test":0.2,"predict":0,"seed":42,"folds":5}""", "fold")]
     [InlineData("""{"step":"split.atRandom","train":0.8,"validation":0,"test":0.2,"predict":0,"seed":42,"fold":2}""", "folds")]
     [InlineData("""{"step":"split.atRandom","train":0.8,"validation":0,"test":0.2,"predict":0,"seed":42,"folds":5,"fold":5}""", "fold")]
-    [InlineData("""{"step":"split.atRandom","train":0.8,"validation":0.1,"test":0.1,"predict":0,"seed":42,"folds":5,"fold":1}""", "validation")]
     public void AFileThatSaysFoldsBadly_IsRefusedWhereItIsRead(string step, string names)
     {
         var json = $$"""{"version": 12, "declaration": [{"step": "read.csv", "path": "x.csv"}, {{step}}]}""";
@@ -307,7 +317,7 @@ public class FoldSplitTests
     }
 
     [Fact]
-    public void AnOrigin_IsWrittenInTheFile_ReadBackEqual_AndRefusedBesideAValidationShare()
+    public void AnOrigin_IsWrittenInTheFile_ReadBackEqual_AndAValidationShareBesideItOnlyAddsToTheRowsThatAreCut()
     {
         var step = new SplitByTimeStep("Date", SplitShares.Of(0.75), 2, new Origin(3, 1));
         var written = JsonDocument.Parse(step.Canonical()).RootElement;
@@ -315,7 +325,11 @@ public class FoldSplitTests
         Assert.Equal(3, written.GetProperty("origins").GetInt32());
         Assert.Equal(1, written.GetProperty("origin").GetInt32());
         Assert.Equal(step, SplitByTimeStep.ReadFrom(written));
-        Assert.Throws<ArgumentException>(() => new SplitByTimeStep("Date", SplitShares.Of(0.7, 0.05), 0, new Origin(3, 1)));
+        var table = Rolled(0).Table;
+
+        Assert.Equal(
+            new SplitByTimeStep("Date", SplitShares.Of(0.75), 0, new Origin(3, 1)).Assign(table),
+            new SplitByTimeStep("Date", SplitShares.Of(0.70, 0.05), 0, new Origin(3, 1)).Assign(table));
         Assert.Throws<ArgumentOutOfRangeException>(() => new Origin(1, 0));
         Assert.Throws<ArgumentOutOfRangeException>(() => new Origin(3, 3));
     }

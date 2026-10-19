@@ -14,7 +14,8 @@ namespace DeepSharp.Pipelines;
 /// slice is validation: the rows that are neither test nor predict are dealt in the order the seed ranks them into <see cref="Folds"/>
 /// slices of about as many rows, a repeated record staying in one, and the test rows are the same on every fold — the seed deals
 /// them alone, or the test seed does. Every fold is a pipeline of its own with a fit of its own, so a network trained behind one is
-/// refused beside another.
+/// refused beside another. The shares beside a fold say how many rows are cut — training and validation together — and a validation
+/// share is not asked for: the slice is what validation is, so one that is said only adds to the rows that are cut.
 /// </remarks>
 public readonly record struct Fold
 {
@@ -52,6 +53,7 @@ public readonly record struct Fold
     {
         AtLeast = 2,
         LeftOut = 0,
+        OnlyWhenMeant = true,
     };
 
     /// <summary>The key a file names which slice is validation under.</summary>
@@ -62,6 +64,7 @@ public readonly record struct Fold
     {
         AtLeast = 0,
         LeftOut = -1,
+        OnlyWhenMeant = true,
     };
 
     /// <summary>Which slice a row belongs to, when so many rows are dealt in order into this many slices.</summary>
@@ -85,18 +88,6 @@ public readonly record struct Fold
             : throw new FormatException($"A fold says how many slices there are, '{FoldsKey.Key}', and which of them is validation, '{FoldKey.Key}': this file says only '{(folds ? FoldsKey.Key : FoldKey.Key)}'.");
     }
 
-    /// <summary>Refuses shares that say a validation share where folds say what validation is.</summary>
-    /// <param name="shares">The shares the step is given.</param>
-    /// <exception cref="ArgumentException">They say a validation share.</exception>
-    internal static void RequireNoValidationShare(SplitShares shares)
-    {
-        if (shares.Validation != 0)
-        {
-            throw new ArgumentException(
-                "Folds say which rows are validation — one slice of the rows that are neither test nor predict — so the shares beside folds say no validation share: leave it out.",
-                nameof(shares));
-        }
-    }
 }
 
 /// <summary>
@@ -146,6 +137,7 @@ public readonly record struct Origin
     {
         AtLeast = 2,
         LeftOut = 0,
+        OnlyWhenMeant = true,
     };
 
     /// <summary>The key a file names which place this is under.</summary>
@@ -156,6 +148,7 @@ public readonly record struct Origin
     {
         AtLeast = 0,
         LeftOut = -1,
+        OnlyWhenMeant = true,
     };
 
     /// <summary>Which block a row belongs to, when so many rows are dealt in time order into one block more than there are origins.</summary>

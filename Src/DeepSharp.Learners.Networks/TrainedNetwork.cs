@@ -224,11 +224,11 @@ public sealed class TrainedNetwork
         ];
     }
 
-    /// <summary>What a network answers for a part's rows, as the report measures them: each row named with the features it moves away from the one value every training row held them at.</summary>
-    internal static PartPredictions Predicted(Network network, Loss loss, Batch batch, Chunking chunking, TrainedOn trainedOn) =>
-        new(batch, Answered(network, loss, batch.Features, chunking))
+    /// <summary>What this network answers for a part's rows, as the report measures them: each row named with the features it moves away from the one value every training row held them at.</summary>
+    internal PartPredictions Predicted(Batch batch, Chunking chunking) =>
+        new(batch, Answered(Network, Loss, batch.Features, chunking))
         {
-            Unfamiliar = Unfamiliar(trainedOn, batch.Features),
+            Unfamiliar = Unfamiliar(TrainedOn, batch.Features),
         };
 
     /// <summary>

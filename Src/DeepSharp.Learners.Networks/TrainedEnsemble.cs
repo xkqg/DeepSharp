@@ -257,6 +257,19 @@ public sealed class TrainedEnsemble
     }
 }
 
+/// <summary>How an ensemble is trained, beyond the declarations of its members.</summary>
+public sealed class EnsembleOptions
+{
+    /// <summary>How the members' answers become one; averaged, unless said.</summary>
+    public Blend Blend { get; init; } = Blend.Average;
+
+    /// <summary>The engines the names in the members' declarations stand for; the light engine alone, unless given.</summary>
+    public Engines? Engines { get; init; }
+
+    /// <summary>What stops the run before the next batch or the next look at the validation rows of any member; nothing stops it, unless said.</summary>
+    public CancellationToken Cancellation { get; init; }
+}
+
 /// <summary>Training several networks behind one fit, and choosing them from a study.</summary>
 public static class EnsembleExtensions
 {
@@ -264,9 +277,7 @@ public static class EnsembleExtensions
     {
         /// <summary>Trains several declared networks on the rows a run of a pipeline prepared, and puts them together as one ensemble.</summary>
         /// <param name="members">The networks to train: at least two, each its layers, what moves them and what judges them, and its own seed.</param>
-        /// <param name="blend">How their answers become one; averaged, unless said.</param>
-        /// <param name="engines">The engines the names in the declarations stand for; the light engine alone, unless given.</param>
-        /// <param name="cancellation">What stops the run before its next batch or its next look at the validation rows.</param>
+        /// <param name="options">How their answers become one, the engines the names in the declarations stand for, and what stops the run; averaged, on the light engine alone and unstoppable, unless said.</param>
         /// <returns>The ensemble, with the pipeline's report measured of it beside each member, when the pipeline declares one.</returns>
         /// <exception cref="ArgumentNullException">There is nothing prepared, or no members.</exception>
         /// <exception cref="ArgumentException">There are fewer than two members, or two are the same declaration under the same seed.</exception>
@@ -275,10 +286,14 @@ public static class EnsembleExtensions
         /// Two members that are the same declaration under the same seed train the same network twice, which is no second opinion:
         /// they are refused, naming both. To train one declaration several times, give each a seed — <c>step with { Seed = 2 }</c>.
         /// </remarks>
-        public TrainedEnsemble TrainEnsemble(IReadOnlyList<LearnNetworkStep> members, Blend blend = Blend.Average, Engines? engines = null, CancellationToken cancellation = default)
+        public TrainedEnsemble TrainEnsemble(IReadOnlyList<LearnNetworkStep> members, EnsembleOptions? options = null)
         {
             ArgumentNullException.ThrowIfNull(prepared);
             ArgumentNullException.ThrowIfNull(members);
+
+            var blend = options?.Blend ?? Blend.Average;
+            var engines = options?.Engines;
+            var cancellation = options?.Cancellation ?? default;
 
             if (members.Count < 2)
             {
@@ -315,7 +330,7 @@ public static class EnsembleExtensions
                 {
                     var chunking = new Chunking((engines ?? new Engines()).Named(members[at].Engine), members[at].Batch);
 
-                    return (IReadOnlyList<PartPredictions>)[.. named.Select(part => TrainedNetwork.Predicted(network.Network, network.Loss, prepared.Batch(part, TrainedNetwork.FeatureNeeds), chunking, network.TrainedOn))];
+                    return (IReadOnlyList<PartPredictions>)[.. named.Select(part => network.Predicted(prepared.Batch(part, TrainedNetwork.FeatureNeeds), chunking))];
                 }),
             ];
 

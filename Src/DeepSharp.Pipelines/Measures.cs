@@ -510,17 +510,17 @@ internal sealed class Measurement
             measurement.On(
                 part,
                 given[0][part],
-                (actual, readAt) => measurement.Combined(blend, [.. given.Select(each => each[part])], part, actual, readAt));
+                rows => measurement.Combined(blend, [.. given.Select(each => each[part])], part, rows));
 
         return new EnsembleMeasures(new Measures(report, prepared, [.. report.Parts.Select(OnPart)], null), alone, blend);
     }
 
     // What the members said of one part's rows, each brought back into the answer's own units and then combined.
-    private IReadOnlyList<double[]> Combined(Blend blend, PartPredictions[] members, Part part, IReadOnlyList<double[]> actual, int[] readAt)
+    private IReadOnlyList<double[]> Combined(Blend blend, PartPredictions[] members, Part part, AnswersRead rows)
     {
         if (blend == Blend.Vote)
         {
-            ThrowIfNotVotable(actual, readAt);
+            ThrowIfNotVotable(rows.Actual, rows.ReadAt);
         }
 
         return blend.Combine([.. members.Select(member => _prepared.BackToOriginal(member.Predictions, part))], _output.Ones);
@@ -608,11 +608,16 @@ internal sealed class Measurement
     // The measures of one part: its rows' answers and keys, checked against the rows the predictions were made for, both
     // brought back into the answer's units, and measured beside the training rows' average brought back the same way.
     private PartMeasures On(Part part, PartPredictions given) =>
-        On(part, given, (_, _) => _prepared.BackToOriginal(given.Predictions, part));
+        On(part, given, _ => _prepared.BackToOriginal(given.Predictions, part));
+
+    /// <summary>A part's answers in their own units, and where each of its rows was read.</summary>
+    /// <param name="Actual">Each row's answers.</param>
+    /// <param name="ReadAt">Where each row was read, from nought.</param>
+    private readonly record struct AnswersRead(IReadOnlyList<double[]> Actual, int[] ReadAt);
 
     // The measures of one part, the predictions brought back into the answer's units by the given hand: handed the answers in
     // those units and where each row was read, it gives what was predicted for each row in them.
-    private PartMeasures On(Part part, PartPredictions given, Func<IReadOnlyList<double[]>, int[], IReadOnlyList<double[]>> predictedInOwnUnits)
+    private PartMeasures On(Part part, PartPredictions given, Func<AnswersRead, IReadOnlyList<double[]>> predictedInOwnUnits)
     {
         var handed = Handover.AnswersOf(_prepared, part);
         var rows = handed.Keys.Count;
@@ -636,7 +641,7 @@ internal sealed class Measurement
         int[] readAt = [.. Enumerable.Range(0, _prepared.Table.RowCount).Where(row => _prepared.Parts[row] == part).Select(row => _prepared.Table.Identities[row].ReadAt)];
         var inTheOrder = _output.InTheOrder();
         var actual = _prepared.BackToOriginal(handed.Answers!, part);
-        var model = new Answered(actual, predictedInOwnUnits(actual, readAt)) { InTheOrder = inTheOrder };
+        var model = new Answered(actual, predictedInOwnUnits(new AnswersRead(actual, readAt))) { InTheOrder = inTheOrder };
         var average = new Answered(model.Actual, _prepared.BackToOriginal([.. Enumerable.Repeat(_average, rows)], part)) { InTheOrder = inTheOrder };
 
         ThrowIfNotFinite(model.Predicted, readAt);

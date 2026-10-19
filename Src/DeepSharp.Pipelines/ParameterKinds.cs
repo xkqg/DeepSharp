@@ -546,6 +546,16 @@ public sealed class WholeNumberParameter : StepParameter<int>
     /// </summary>
     public int? LeftOut { get; init; }
 
+    /// <summary>
+    /// Whether a course's skeleton leaves the key out, though the step may do without it: a key whose example would decide what the
+    /// person did not — a fold, which turns every split of a course into a cut of its rows — and so is said only by the
+    /// person who means it.
+    /// </summary>
+    internal bool OnlyWhenMeant { get; init; }
+
+    /// <inheritdoc />
+    internal override bool IsLeftToThePerson => OnlyWhenMeant;
+
     /// <inheritdoc />
     public override IReadOnlyList<string> RequiredKeys => LeftOut is null ? Keys : [];
 
