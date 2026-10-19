@@ -32,7 +32,7 @@ public sealed class TrainedNetwork
 
     // How many rows a serving pass takes at once, unless a caller says otherwise: Keras's own default for `model.predict`,
     // the same default FitOptions.BatchSize holds for a run unless it is told another.
-    private const int ServingBatchSize = 32;
+    internal const int ServingBatchSize = 32;
 
     /// <summary>
     /// What a network needs of the features it is handed, stated once for every place it is handed them: every feature on one
@@ -223,6 +223,13 @@ public sealed class TrainedNetwork
             .. rows.Select(row => (IReadOnlyList<string>)[.. held.Where(at => row[at] != unvaried[features[at]]).Select(at => features[at])]),
         ];
     }
+
+    /// <summary>What a network answers for a part's rows, as the report measures them: each row named with the features it moves away from the one value every training row held them at.</summary>
+    internal static PartPredictions Predicted(Network network, Loss loss, Batch batch, Chunking chunking, TrainedOn trainedOn) =>
+        new(batch, Answered(network, loss, batch.Features, chunking))
+        {
+            Unfamiliar = Unfamiliar(trainedOn, batch.Features),
+        };
 
     /// <summary>
     /// What the network answers for rows of features, as a pipeline hands them over: <see cref="Network.Predict"/> on the

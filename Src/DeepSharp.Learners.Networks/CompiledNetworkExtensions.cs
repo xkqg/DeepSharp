@@ -67,7 +67,7 @@ public static class CompiledNetworkExtensions
             var trainedOn = TrainedNetwork.TrainedOnOf(prepared, train, options.Seed, epoch);
             var chunking = new Chunking(options.Backend, options.BatchSize);
             var measures = prepared.Declaration.Report is { } report
-                ? prepared.Measure([.. report.Parts.Distinct().Select(part => Predicted(compiled, prepared.Batch(part, TrainedNetwork.FeatureNeeds), chunking, trainedOn))])
+                ? prepared.Measure([.. report.Parts.Distinct().Select(part => TrainedNetwork.Predicted(compiled.Network, compiled.Loss, prepared.Batch(part, TrainedNetwork.FeatureNeeds), chunking, trainedOn))])
                 : null;
 
             return new TrainedNetwork(compiled.Network, compiled.Loss, prepared, trainedOn)
@@ -104,14 +104,6 @@ public static class CompiledNetworkExtensions
                 $"This loss takes the last answer for what is left of the whole, and '{output.Verb}' makes no such answer: compile with new EarthMoversDistance().");
         }
     }
-
-    // What the network answers for a part's rows, as the report measures them: on the run's engine, a chunk of rows at a
-    // time, each row named with the features it moves away from the one value every training row held them at.
-    private static PartPredictions Predicted(CompiledNetwork compiled, Batch batch, Chunking chunking, TrainedOn trainedOn) =>
-        new(batch, TrainedNetwork.Answered(compiled.Network, compiled.Loss, batch.Features, chunking))
-        {
-            Unfamiliar = TrainedNetwork.Unfamiliar(trainedOn, batch.Features),
-        };
 
     // The rows of a part as the loop takes them: floats, and each row named by where it was read.
     private static TrainingData Handed(Batch batch, PreparedData prepared) =>

@@ -248,6 +248,16 @@ beside one another — each value, the mean, the sample standard deviation, the 
 about whether a spread is wide, as the paired comparison of two pipelines says nothing about whether a difference
 matters. A study takes the folds as its deals, so a candidate is judged by the mean of its validation loss over them.
 
+Deals and members are two shapes and are not one. Several fits of one declaration — folds, a study's deals, a comparison — each have a
+fit of their own and so a digest of their own. Several networks behind one fit are an ensemble: one pipeline is fitted once, every
+member is trained on the rows it prepared, and a served row is replayed and named once for all of them. Their answers meet in the
+answer's own units, never in the units a network was trained in, because the way back is not affine — a log is undone by an
+exponential, and the mean of exponentials is not the exponential of the mean — so the measurement door takes every member's
+predictions as they were handed over, brings each back and only then combines, and the same door measures each member alone on the same
+rows. Numbers are averaged, and classes are averaged as chances or counted as votes, a tie going to the higher mean chance. An ensemble is
+kept as a file of its own, not as a network with a list: the single reader and the ensemble reader each refuse the other's file by name, and a
+reader that does not know the file refuses it whole instead of reading one member of it.
+
 Reading ahead is held to that. Only an output reads rows after its own — a feature that knows the future scores
 well on every row it is measured on and on none it is asked about — and an output that does stands below a split in
 time whose gap is at least as wide as how far it reads, the rows ordered by the column that split divides by and

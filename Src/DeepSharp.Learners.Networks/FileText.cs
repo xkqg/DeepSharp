@@ -27,17 +27,23 @@ internal sealed class FileText
     // token it has reached.
     private const int Piece = 1 << 16;
 
-    private static readonly string[] Parts = [TrainedNetwork.VersionKey, TrainedNetwork.NetworkKey, TrainedNetwork.PipelineKey, TrainedNetwork.TrainingKey];
+    private static readonly string[] NetworkParts = [TrainedNetwork.VersionKey, TrainedNetwork.NetworkKey, TrainedNetwork.PipelineKey, TrainedNetwork.TrainingKey];
+
+    private static readonly string[] EnsembleParts = [TrainedNetwork.VersionKey, TrainedEnsemble.BlendKey, NetworkDocument.NetworksKey, TrainedNetwork.PipelineKey];
 
     private readonly string _json;
+    private readonly bool _ensemble;
     private readonly Dictionary<string, long> _places = new(StringComparer.Ordinal);
     private byte[]? _pipeline;
 
     /// <summary>Surveys a file's top.</summary>
+    /// <param name="json">The file.</param>
+    /// <param name="ensemble">Whether the file is an ensemble's, with several networks and a blend, rather than a single network's.</param>
     /// <exception cref="NetworkFileException">The text is not JSON, not one object, of no version this library reads, or holds what is no part of it.</exception>
-    public FileText(string json)
+    public FileText(string json, bool ensemble = false)
     {
         _json = json;
+        _ensemble = ensemble;
 
         var faults = Survey();
 
@@ -49,7 +55,16 @@ internal sealed class FileText
 
     /// <summary>A refusal of the file, placed at the part a key stands for.</summary>
     /// <remarks>Only ever asked of a part its reader has read, so the key stands in the file.</remarks>
-    public NetworkFileException Refused(string key, string message) => new(Placed([new Noted(_places[key], message)]));
+    public NetworkFileException Refused(string key, string message) => new(Placed([new Noted(_places.GetValueOrDefault(key), message)]));
+
+    /// <summary>The word the file names its members' blend by; nothing when the file names none as text.</summary>
+    public string? Blend { get; private set; }
+
+    private string[] Parts => _ensemble ? EnsembleParts : NetworkParts;
+
+    private string Noun => _ensemble ? "an ensemble's" : "a trained network's";
+
+    private int Version => _ensemble ? TrainedEnsemble.Version : TrainedNetwork.Version;
 
     /// <summary>The pipeline the file carries, its text taken from the file as it stands there.</summary>
     /// <exception cref="NetworkFileException">The file carries no pipeline: nothing under its key, or no object.</exception>
@@ -58,7 +73,7 @@ internal sealed class FileText
             ? PipelineText.Of(pipeline)
             : throw new NetworkFileException(Placed([new Noted(
                 _places.GetValueOrDefault(TrainedNetwork.PipelineKey),
-                $"This file carries no pipeline: a trained network's file carries the pipeline it was trained behind, as an object under '{TrainedNetwork.PipelineKey}'.")]));
+                $"This file carries no pipeline: {Noun} file carries the pipeline it was trained behind, as an object under '{TrainedNetwork.PipelineKey}'.")]));
 
     private List<Noted> Survey()
     {
@@ -87,7 +102,9 @@ internal sealed class FileText
                     {
                         if (reader.TokenType != JsonTokenType.StartObject)
                         {
-                            faults.Add(new Noted(0, "A trained network's file is one JSON object: its version, its network and the pipeline it was trained behind."));
+                            faults.Add(new Noted(0, _ensemble
+                                ? "An ensemble's file is one JSON object: its version, how its members' answers become one, its networks and the pipeline they were trained behind."
+                                : "A trained network's file is one JSON object: its version, its network and the pipeline it was trained behind."));
 
                             return faults;
                         }
@@ -120,6 +137,10 @@ internal sealed class FileText
                         if (key == TrainedNetwork.VersionKey)
                         {
                             version = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var number) ? number : 0;
+                        }
+                        else if (_ensemble && key == TrainedEnsemble.BlendKey && reader.TokenType == JsonTokenType.String)
+                        {
+                            Blend = reader.GetString();
                         }
 
                         within = reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray;
@@ -154,13 +175,13 @@ internal sealed class FileText
         {
             faults.Insert(0, new Noted(
                 _places.GetValueOrDefault(TrainedNetwork.VersionKey),
-                $"A trained network's file names the whole number of the version it was written against, from 1, under '{TrainedNetwork.VersionKey}'."));
+                $"{(_ensemble ? "An ensemble's" : "A trained network's")} file names the whole number of the version it was written against, from 1, under '{TrainedNetwork.VersionKey}'."));
         }
-        else if (version > TrainedNetwork.Version)
+        else if (version > Version)
         {
             faults.Insert(0, new Noted(
                 _places[TrainedNetwork.VersionKey],
-                string.Create(CultureInfo.InvariantCulture, $"This file was written against version {version}, by a newer DeepSharp than this one, which reads up to version {TrainedNetwork.Version}: read it with that DeepSharp.")));
+                string.Create(CultureInfo.InvariantCulture, $"This file was written against version {version}, by a newer DeepSharp than this one, which reads up to version {Version}: read it with that DeepSharp.")));
         }
 
         return faults;
@@ -177,12 +198,22 @@ internal sealed class FileText
 
             if (!Parts.Contains(key))
             {
-                faults.Add(new Noted(at, $"'{key}' is no part of a trained network's file: it holds its version, its network, the pipeline it was trained behind and, for a checkpoint, what the run needs to go on."));
+                faults.Add(new Noted(at, NotAPart(key!)));
             }
 
             key = null;
         }
     }
+
+    // What is said of a key that is no part of the file: that it is the other kind of file's, by name, or that it is nobody's.
+    private string NotAPart(string key) =>
+        !_ensemble && key is NetworkDocument.NetworksKey or TrainedEnsemble.BlendKey
+            ? $"'{key}' is a part of an ensemble's file, and this is read as a single network's: read an ensemble with TrainedEnsemble.FromJson."
+            : _ensemble && key is TrainedNetwork.NetworkKey or TrainedNetwork.TrainingKey
+                ? $"'{key}' is a part of a single network's file, and this is read as an ensemble's: read a single network with TrainedNetwork.FromJson."
+                : _ensemble
+                    ? $"'{key}' is no part of an ensemble's file: it holds its version, how its members' answers become one, its networks and the pipeline they were trained behind."
+                    : $"'{key}' is no part of a trained network's file: it holds its version, its network, the pipeline it was trained behind and, for a checkpoint, what the run needs to go on.";
 
     /// <summary>Where a reader's fault is, from the line and the byte in that line it names, both from nought.</summary>
     /// <remarks>

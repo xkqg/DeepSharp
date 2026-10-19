@@ -83,6 +83,9 @@ public static class NetworkDocument
     /// </summary>
     internal const int SeventhVersion = 7;
 
+    /// <summary>The key a file that holds several networks keeps them in, as a list.</summary>
+    public const string NetworksKey = "networks";
+
     internal const string KindKey = "kind";
     internal const string PackageKey = "package";
     internal const string VersionKey = "version";
@@ -299,6 +302,39 @@ public static class NetworkDocument
         using var document = text.Parsed();
 
         return NetworkIn(ReaderOf(document.RootElement, property, text, NetworkKeys), text, catalog);
+    }
+
+    /// <summary>Reads every network and its loss from the objects of the list under a key at the top of a file, the text read once for all.</summary>
+    /// <param name="json">The whole file.</param>
+    /// <param name="property">The key the list stands under.</param>
+    /// <param name="catalog">The kinds the networks may be made of.</param>
+    /// <returns>The networks in the order of the list, every slot holding the numbers written, each with its loss.</returns>
+    /// <exception cref="NetworkFileException">Anything in the list is wrong: the faults of the first network that has any, at their line and column in the file.</exception>
+    public static IReadOnlyList<SavedNetwork> ReadNetworks(string json, string property, NetworkCatalog catalog)
+    {
+        ArgumentNullException.ThrowIfNull(property);
+        ArgumentNullException.ThrowIfNull(catalog);
+
+        var text = TextOf(json);
+        using var document = text.Parsed();
+
+        if (document.RootElement.Member(property) is not { ValueKind: JsonValueKind.Array } list)
+        {
+            text.Fault([property], $"This file holds no list under '{property}'.");
+
+            throw text.Refused();
+        }
+
+        var saved = new List<SavedNetwork>();
+
+        foreach (var element in list.EnumerateArray())
+        {
+            var place = saved.Count.ToString(CultureInfo.InvariantCulture);
+
+            saved.Add(NetworkIn(ReaderAt(element, [property, place], $"{property} {saved.Count + 1}", text, NetworkKeys), text, catalog));
+        }
+
+        return saved;
     }
 
     /// <summary>
@@ -756,27 +792,41 @@ public static class NetworkDocument
             throw text.Refused();
         }
 
+        return ReaderAt(part, [property], property, text, keys);
+    }
+
+    // The reader of a part that stands at a path in the file, named in a refusal by a label: an object of a version this
+    // library reads, holding only the keys it knows, read as a part of the version it names.
+    private static PartReader ReaderAt(JsonElement part, string[] path, string label, NetworkText text, string[] keys)
+    {
+        if (part.ValueKind != JsonValueKind.Object)
+        {
+            text.Fault(path, $"The '{label}' part is no object.");
+
+            throw text.Refused();
+        }
+
         if (part.Member(VersionKey)?.AsWhole() is not { } number || number < 1)
         {
-            text.Fault([property, VersionKey], $"The '{property}' part names the whole number of the version it was written against, from 1, under '{VersionKey}'.");
+            text.Fault([.. path, VersionKey], $"The '{label}' part names the whole number of the version it was written against, from 1, under '{VersionKey}'.");
 
             throw text.Refused();
         }
 
         if (number > Version)
         {
-            text.Fault([property, VersionKey], string.Create(CultureInfo.InvariantCulture,
-                $"The '{property}' part was written against version {number}, by a newer DeepSharp than this one, which reads up to version {Version}. Nothing in it is read: read it with that DeepSharp."));
+            text.Fault([.. path, VersionKey], string.Create(CultureInfo.InvariantCulture,
+                $"The '{label}' part was written against version {number}, by a newer DeepSharp than this one, which reads up to version {Version}. Nothing in it is read: read it with that DeepSharp."));
 
             throw text.Refused();
         }
 
         foreach (var unknown in part.EnumerateObject().Select(each => each.Name).Where(name => !keys.Contains(name)))
         {
-            text.Fault([property, unknown], $"The '{property}' part has no '{unknown.Quoted()}'. It holds: {string.Join(", ", keys)}.");
+            text.Fault([.. path, unknown], $"The '{label}' part has no '{unknown.Quoted()}'. It holds: {string.Join(", ", keys)}.");
         }
 
-        return new PartReader(text, property, part, number);
+        return new PartReader(text, path, part, number);
     }
 }
 

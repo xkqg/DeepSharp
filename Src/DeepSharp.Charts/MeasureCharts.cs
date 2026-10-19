@@ -80,6 +80,18 @@ public static class MeasureCharts
         }
     }
 
+    extension(EnsembleMeasures ensemble)
+    {
+        /// <summary>
+        /// Every measure that is a number as bars: the ensemble's bar beside each member's and beside predicting the training rows'
+        /// average, part by part.
+        /// </summary>
+        /// <returns>The chart, as the text of an SVG.</returns>
+        /// <exception cref="ArgumentException">The measures hold no number: the report names the confusion matrix alone.</exception>
+        /// <remarks>What combining bought is the gap between the ensemble's bar and the members'; a measure without end stands at nothing, as in <see cref="Bars"/>.</remarks>
+        public string BarsWithMembers() => EnsembleBarFigure(ensemble).ToSvg();
+    }
+
     extension(MeasuresAcross across)
     {
         /// <summary>
@@ -94,6 +106,46 @@ public static class MeasureCharts
         /// <see cref="Bars"/>.
         /// </remarks>
         public string AcrossFolds() => AcrossFoldsFigure(across).ToSvg();
+    }
+
+    /// <summary>The figure <see cref="BarsWithMembers"/> draws: a panel to each measure, the parts along it.</summary>
+    internal static Figure EnsembleBarFigure(EnsembleMeasures ensemble)
+    {
+        ArgumentNullException.ThrowIfNull(ensemble);
+
+        var whole = ensemble.Ensemble;
+        var count = whole.Parts[0].Values.Count;
+
+        if (count == 0)
+        {
+            throw new ArgumentException("These measures hold no number to draw as bars: the report names the confusion matrix alone.", nameof(ensemble));
+        }
+
+        string[] parts = [.. whole.Parts.Select(part => part.Part.Word())];
+        var builder = new FigureBuilder().WithSize(Side * count, Side);
+
+        for (var metric = 0; metric < count; metric++)
+        {
+            var at = metric;
+            double[] together = [.. whole.Parts.Select(part => part.Values[at].Value)];
+            double[] average = [.. whole.Parts.Select(part => part.Values[at].Baseline)];
+            BarGroup[] groups =
+            [
+                new("ensemble", [.. together.Select(Drawable)]),
+                .. ensemble.Members.Select((member, number) => new BarGroup($"member {number + 1}", [.. member.Parts.Select(part => Drawable(part.Values[at].Value))])),
+                new("average", [.. average.Select(Drawable)]),
+            ];
+
+            string[] infinite = [.. new[] { Infinite("ensemble's", together, parts), Infinite("average's", average, parts) }.Where(said => said.Length > 0)];
+            var title = whole.Parts[0].Values[at].Metric.Word() + (infinite.Length > 0 ? $": {string.Join("; ", infinite)}" : string.Empty);
+
+            builder.AddSubPlot(1, count, metric + 1, axes => axes
+                .WithTitle(title)
+                .GroupedBar(parts, groups)
+                .WithLegend());
+        }
+
+        return builder.Build();
     }
 
     /// <summary>The figure <see cref="AcrossFolds"/> draws: a panel to each measure, the parts along it.</summary>

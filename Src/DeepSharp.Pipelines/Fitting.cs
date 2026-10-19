@@ -763,6 +763,13 @@ public sealed class PreparedData
     public IReadOnlyList<double[]> BackToOriginal(IReadOnlyList<double[]> predictions, ServedBatch served, IRowSource rows)
     {
         ArgumentNullException.ThrowIfNull(predictions);
+
+        return Back(predictions, Found(served, rows));
+    }
+
+    // The served rows found again among the rows handed in, each by where it was handed in and checked by its key.
+    private RowAsRead[] Found(ServedBatch served, IRowSource rows)
+    {
         ArgumentNullException.ThrowIfNull(rows);
 
         if (served.Keys is not { } keys || keys.Count != served.HandedInAt.Count)
@@ -789,7 +796,30 @@ public sealed class PreparedData
             found[at] = new RowAsRead(asRead, handedIn);
         }
 
-        return Back(predictions, found);
+        return found;
+    }
+
+    /// <summary>Puts several members' predictions for served rows back into the units each answer was read in, and combines them there.</summary>
+    /// <param name="members">For each member, what it said for each served row, in the order they were served.</param>
+    /// <param name="served">What <see cref="Handover.Served(PreparedData, IRowSource, Needs)"/> handed over for these rows.</param>
+    /// <param name="rows">The rows that were handed in to be served, in the order they were handed in.</param>
+    /// <param name="blend">How the members' answers become one.</param>
+    /// <returns>One answer for each served row, in the units of the column each answer comes back to.</returns>
+    /// <exception cref="ArgumentException">There are no members; or, as <see cref="BackToOriginal(IReadOnlyList{double[]}, ServedBatch, IRowSource)"/> refuses them.</exception>
+    /// <exception cref="InvalidOperationException">As <see cref="BackToOriginal(IReadOnlyList{double[]}, ServedBatch, IRowSource)"/> refuses.</exception>
+    /// <remarks>The rows are walked once, whatever the number of members.</remarks>
+    public IReadOnlyList<double[]> BackToOriginal(IReadOnlyList<IReadOnlyList<double[]>> members, ServedBatch served, IRowSource rows, Blend blend)
+    {
+        ArgumentNullException.ThrowIfNull(members);
+
+        if (members.Count == 0)
+        {
+            throw new ArgumentException("An ensemble's answers are combined from at least one member's.", nameof(members));
+        }
+
+        var found = Found(served, rows);
+
+        return blend.Combine([.. members.Select(member => Back(member, found))], Declaration.Output?.Ones ?? 0);
     }
 
     private IReadOnlyList<double[]> Back(IReadOnlyList<double[]> predictions, RowAsRead[] rows)
@@ -909,6 +939,27 @@ public sealed class PreparedData
 
         return Measurement.Of(this, [.. written.Parts.Select(part => part.ToPartPredictions())]);
     }
+
+    /// <summary>
+    /// Measures several members' predictions as one ensemble, and each member alone, by this pipeline's report: every member is
+    /// brought back into the answer's own units first, and the ensemble is combined there.
+    /// </summary>
+    /// <param name="members">
+    /// For each member, what it predicted for every part the report names, as <see cref="Measure"/> takes one member's: in the
+    /// units the answers were handed over in. At least two.
+    /// </param>
+    /// <param name="blend">How the members' answers become one: averaged, unless said.</param>
+    /// <returns>The ensemble's measures beside each member's, on the very same rows.</returns>
+    /// <exception cref="ArgumentException">There are fewer than two members; or a member's predictions are refused as <see cref="Measure"/> refuses them.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The blend is none of the blends.</exception>
+    /// <exception cref="InvalidOperationException">As <see cref="Measure"/> refuses; or the members vote on an answer that is no class.</exception>
+    /// <remarks>
+    /// A way back is not a straight line — a log is undone by an exponential, and the mean of exponentials is not the exponential
+    /// of the mean — so the members meet in the answer's own units and not before. An ensemble's measures hold what the members
+    /// said together, which no one text holds: each member's measures cross as text, the ensemble's do not.
+    /// </remarks>
+    public EnsembleMeasures MeasureEnsemble(IReadOnlyList<IReadOnlyList<PartPredictions>> members, Blend blend = Blend.Average) =>
+        Measurement.OfEnsemble(this, members, blend);
 
     private static string Quoted(IEnumerable<string> names) => string.Join(", ", names.Select(name => $"'{name}'"));
 

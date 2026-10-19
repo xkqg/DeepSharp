@@ -60,6 +60,29 @@ public class LibtorchRunTests
     }
 
     [Fact]
+    public void AnEnsembleOfNetworksTrainedOnLibtorch_ServesOnItAndOnTheLightEngineAlike_EachAnswerItsMembersCombined()
+    {
+        var engine = TorchBackend.OnCpu();
+        var prepared = Passengers.Prepared();
+        var members = Enumerable.Range(1, 3)
+            .Select(seed => new Sequential().Dense(16).Relu().Dense(1)
+                .Compile(new Adam(0.01), new BinaryCrossEntropy())
+                .Fit(prepared, new FitOptions(seed) { Backend = engine, Epochs = 5 }))
+            .ToArray();
+        var ensemble = TrainedEnsemble.Of(members);
+
+        var onLibtorch = ensemble.Predict(Passengers.Served(), engine).Answers;
+        var onLight = ensemble.Predict(Passengers.Served()).Answers;
+
+        AssertAlike(onLight, onLibtorch);
+
+        for (var row = 0; row < 2; row++)
+        {
+            Assert.Equal(members.Average(member => member.Predict(Passengers.Served(), engine).Answers[row][0]), onLibtorch[row][0], 1e-12);
+        }
+    }
+
+    [Fact]
     public void ANetworkTrainedOnTheLightEngine_ServesOnLibtorch_AnsweringAlike_ItsPredictionsWorkedOutThere()
     {
         var engine = TorchBackend.OnCpu();

@@ -14,9 +14,9 @@ namespace DeepSharp.Networks;
 /// fault is noted where it stands and the reading goes on, so a file is refused once, with every fault in it. The part is
 /// read as the version it names — one this library reads — says it is written.
 /// </remarks>
-internal sealed class PartReader(NetworkText text, string property, JsonElement part, int version)
+internal sealed class PartReader(NetworkText text, string[] here, JsonElement part, int version)
 {
-    private readonly string[] _here = [property];
+    private readonly string[] _here = here;
 
     // What the file says of the learning of each parameter beside its numbers, by path: only what it says.
     private readonly Dictionary<string, SlotRules> _rules = new(StringComparer.Ordinal);
@@ -26,8 +26,13 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
     /// statistics, what the optimizer remembers of a parameter, or a slot of the best epoch's — whose numbers are read from
     /// the text where they stand, rather than parsed with the rest of the part.
     /// </summary>
-    /// <param name="path">The list's path from the top of the file, the key of the part it stands in first.</param>
-    public static bool ReadsApart(string[] path) =>
+    /// <param name="path">
+    /// The list's path from the top of the file, the key of the part it stands in first — and, for a part that is an element of
+    /// the list under <see cref="NetworksKey"/>, the place of the element after it.
+    /// </param>
+    public static bool ReadsApart(string[] path) => ReadsApartIn(path is [NetworksKey, _, ..] ? [path[0], .. path[2..]] : path);
+
+    private static bool ReadsApartIn(string[] path) =>
         path is [_, ParametersKey or StateKey, _, ValuesKey]
             or [_, MemoryKey, _, TensorsKey, _, ValuesKey]
             or [_, AveragedKey, _, ValuesKey]

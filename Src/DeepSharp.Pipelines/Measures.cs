@@ -127,7 +127,7 @@ public sealed class Measures : Evidence
 {
     // A report stands below an output, so the pipeline it was measured on names the answers: the declaration refuses one that
     // does not.
-    internal Measures(INamesTheMeasures report, PreparedData measuredOn, IReadOnlyList<PartMeasures> parts, IReadOnlyList<WrittenPart> predicted)
+    internal Measures(INamesTheMeasures report, PreparedData measuredOn, IReadOnlyList<PartMeasures> parts, IReadOnlyList<WrittenPart>? predicted)
     {
         Metrics = report.Metrics;
         Shown = report.Shown;
@@ -151,7 +151,8 @@ public sealed class Measures : Evidence
 
     // What they were measured from: for each part the report names, once and in its order, the keys of its rows, what was
     // predicted for each and what the model said of each — none of the rows' numbers, which the text never carries.
-    internal IReadOnlyList<WrittenPart> Predicted { get; }
+    // An ensemble's measures hold none: they were taken from what several members said, which no single text holds.
+    internal IReadOnlyList<WrittenPart>? Predicted { get; }
 
     // The run they were measured on: the fit the predictions were made behind, which their text names.
     private PreparedData MeasuredOn { get; }
@@ -172,7 +173,13 @@ public sealed class Measures : Evidence
     /// network's file is held to its pipeline by, or on a run of every step of the same declaration; what it is measured
     /// against, and the way back to the answers' own units, are the run's that measures it.
     /// </remarks>
-    public string PredictionsToJson() => new WrittenPredictions(WrittenFit.Of(MeasuredOn), Answers, Predicted).ToJson();
+    /// <exception cref="InvalidOperationException">These are an ensemble's measures: what the members said together is no one text; each member's measures cross.</exception>
+    public string PredictionsToJson() =>
+        Predicted is { } written
+            ? new WrittenPredictions(WrittenFit.Of(MeasuredOn), Answers, written).ToJson()
+            : throw new InvalidOperationException(
+                "These are the measures of an ensemble, taken from what its members said once each was brought back into the answer's own units, and no one text holds that: "
+                + "what each member said crosses as text, from the member's own measures, EnsembleMeasures.Members[i].PredictionsToJson().");
 
     /// <inheritdoc />
     public override TResult Accept<TResult>(IEvidenceVisitor<TResult> visitor)
@@ -471,6 +478,73 @@ internal sealed class Measurement
             [.. report.Parts.Distinct().Select(part => WrittenPart.Of(part, given[part]))]);
     }
 
+    /// <summary>The measures of several members' predictions combined, beside each member's own.</summary>
+    /// <param name="prepared">The run.</param>
+    /// <param name="members">What each member predicted, for each part the report names.</param>
+    /// <param name="blend">How the members' answers become one.</param>
+    /// <returns>The ensemble's measures and each member's.</returns>
+    public static EnsembleMeasures OfEnsemble(PreparedData prepared, IReadOnlyList<IReadOnlyList<PartPredictions>> members, Blend blend)
+    {
+        ArgumentNullException.ThrowIfNull(members);
+
+        if (!Enum.IsDefined(blend))
+        {
+            throw new ArgumentOutOfRangeException(nameof(blend), blend, "An ensemble's answers are averaged or voted for.");
+        }
+
+        if (members.Count < 2)
+        {
+            throw new ArgumentException(
+                string.Create(CultureInfo.InvariantCulture, $"An ensemble is of at least two members, and {members.Count} {(members.Count == 1 ? "was" : "were")} given: measure one network's predictions with Measure."),
+                nameof(members));
+        }
+
+        // Every member is measured alone first, which holds its predictions to the part's own rows in their order.
+        Measures[] alone = [.. members.Select(member => Of(prepared, member))];
+
+        var report = prepared.Declaration.Report!;
+        var measurement = new Measurement(prepared, report, prepared.Declaration.Output!, Average(prepared));
+        var given = members.Select(member => Given(report, member)).ToArray();
+
+        PartMeasures OnPart(Part part) =>
+            measurement.On(
+                part,
+                given[0][part],
+                (actual, readAt) => measurement.Combined(blend, [.. given.Select(each => each[part])], part, actual, readAt));
+
+        return new EnsembleMeasures(new Measures(report, prepared, [.. report.Parts.Select(OnPart)], null), alone, blend);
+    }
+
+    // What the members said of one part's rows, each brought back into the answer's own units and then combined.
+    private IReadOnlyList<double[]> Combined(Blend blend, PartPredictions[] members, Part part, IReadOnlyList<double[]> actual, int[] readAt)
+    {
+        if (blend == Blend.Vote)
+        {
+            ThrowIfNotVotable(actual, readAt);
+        }
+
+        return blend.Combine([.. members.Select(member => _prepared.BackToOriginal(member.Predictions, part))], _output.Ones);
+    }
+
+    // Votes are counted of classes, each answer nought or one.
+    private void ThrowIfNotVotable(IReadOnlyList<double[]> actual, int[] readAt)
+    {
+        for (var row = 0; row < actual.Count; row++)
+        {
+            for (var column = 0; column < actual[row].Length; column++)
+            {
+                var value = actual[row][column];
+
+                if (Math.Abs(value) > Tolerance && Math.Abs(value - 1) > Tolerance)
+                {
+                    throw new InvalidOperationException(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Row {readAt[row] + 1} of '{_output.Answers[column]}' is {value}, which is no class: votes are counted of classes, each nought or one. The members' answers to an amount are averaged."));
+                }
+            }
+        }
+    }
+
     // The predictions by the part they were made for: one set for every part the report names, and for none else.
     private static Dictionary<Part, PartPredictions> Given(INamesTheMeasures report, IReadOnlyList<PartPredictions> predictions)
     {
@@ -533,7 +607,12 @@ internal sealed class Measurement
 
     // The measures of one part: its rows' answers and keys, checked against the rows the predictions were made for, both
     // brought back into the answer's units, and measured beside the training rows' average brought back the same way.
-    private PartMeasures On(Part part, PartPredictions given)
+    private PartMeasures On(Part part, PartPredictions given) =>
+        On(part, given, (_, _) => _prepared.BackToOriginal(given.Predictions, part));
+
+    // The measures of one part, the predictions brought back into the answer's units by the given hand: handed the answers in
+    // those units and where each row was read, it gives what was predicted for each row in them.
+    private PartMeasures On(Part part, PartPredictions given, Func<IReadOnlyList<double[]>, int[], IReadOnlyList<double[]>> predictedInOwnUnits)
     {
         var handed = Handover.AnswersOf(_prepared, part);
         var rows = handed.Keys.Count;
@@ -556,7 +635,8 @@ internal sealed class Measurement
 
         int[] readAt = [.. Enumerable.Range(0, _prepared.Table.RowCount).Where(row => _prepared.Parts[row] == part).Select(row => _prepared.Table.Identities[row].ReadAt)];
         var inTheOrder = _output.InTheOrder();
-        var model = new Answered(_prepared.BackToOriginal(handed.Answers!, part), _prepared.BackToOriginal(given.Predictions, part)) { InTheOrder = inTheOrder };
+        var actual = _prepared.BackToOriginal(handed.Answers!, part);
+        var model = new Answered(actual, predictedInOwnUnits(actual, readAt)) { InTheOrder = inTheOrder };
         var average = new Answered(model.Actual, _prepared.BackToOriginal([.. Enumerable.Repeat(_average, rows)], part)) { InTheOrder = inTheOrder };
 
         ThrowIfNotFinite(model.Predicted, readAt);
