@@ -117,7 +117,7 @@ public class CalibrationPartTests
     public void ASplitThatSetsNoneAside_IsWrittenExactlyAsItWas_AndOneThatDoesNamesIt()
     {
         var none = new SplitAtRandomStep(SplitShares.Of(0.7, 0.15), 1);
-        var some = new SplitAtRandomStep(SplitShares.Of(0.6, 0.15, calibration: 0.1), 1);
+        var some = new SplitAtRandomStep(SplitShares.Of(0.6, 0.15, 0, calibration: 0.1), 1);
 
         Assert.DoesNotContain("calibration", Encoding.UTF8.GetString(none.Canonical()), StringComparison.Ordinal);
         Assert.Contains("\"calibration\":0.1", Encoding.UTF8.GetString(some.Canonical()), StringComparison.Ordinal);
@@ -128,8 +128,8 @@ public class CalibrationPartTests
     [Fact]
     public void ShareForCalibration_IsHeldToTheRulesOfEveryShare()
     {
-        Assert.Throws<ArgumentException>(() => SplitShares.Of(0.6, 0.2, calibration: 0.2));
-        Assert.Throws<ArgumentOutOfRangeException>(() => SplitShares.Of(0.6, 0.1, calibration: double.NaN));
+        Assert.Throws<ArgumentException>(() => SplitShares.Of(0.6, 0.2, 0, calibration: 0.2));
+        Assert.Throws<ArgumentOutOfRangeException>(() => SplitShares.Of(0.6, 0.1, 0, calibration: double.NaN));
         Assert.Throws<InvalidOperationException>(() => Pdd.Create().ReadCsv(Repository.Data("titanic.csv")).Calibrate(0.1).Build());
         Assert.Throws<ArgumentOutOfRangeException>(() => Pdd.Create().Calibrate(0));
         Assert.Throws<InvalidOperationException>(() => Pdd.Create().Calibrate(0.1).Calibrate(0.1));

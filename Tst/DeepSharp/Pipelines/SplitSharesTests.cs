@@ -231,4 +231,17 @@ public class SplitSharesTests
                         + prepared.CountIn(Part.Test)
                         + prepared.CountIn(Part.Predict));
     }
+    [Fact]
+    public void TheFormsThatNamedFourParts_StillStandBesideTheOnesThatNameFive_SoNothingWrittenAgainstTheLastReleaseBreaks()
+    {
+        var four = new SplitShares(0.7, 0.1, 0.1, 0.1);
+        var (train, validation, test, predict) = four;
+
+        Assert.Equal(new SplitShares(0.7, 0.1, 0.1, 0.1, 0), four);
+        Assert.Equal(0, four.Calibration);
+        Assert.Equal([0.7, 0.1, 0.1, 0.1], [train, validation, test, predict]);
+        Assert.Equal(SplitShares.Of(0.7, 0.1, 0.1), SplitShares.Of(0.7, 0.1, 0.1, 0));
+        Assert.Equal(0.1, SplitShares.Of(0.6, 0.1, 0.1, 0.1).Calibration, 12);
+    }
+
 }

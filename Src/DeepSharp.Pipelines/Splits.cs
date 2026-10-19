@@ -61,11 +61,45 @@ public enum Part
 /// </remarks>
 public readonly record struct SplitShares(double Train, double Validation, double Test, double Predict = 0, double Calibration = 0)
 {
-    /// <summary>The shares you write down; the one to be measured on is worked out.</summary>
+    /// <summary>Shares of four parts: training, validation, test and predict, none of them to calibrate an interval on.</summary>
+    /// <param name="train">The share the model learns from.</param>
+    /// <param name="validation">The share used while choosing between models.</param>
+    /// <param name="test">The share kept back until the end.</param>
+    /// <param name="predict">The share held back to predict on.</param>
+    /// <remarks>The form the shares had before a share could be set aside to calibrate on, kept so that nothing written against it breaks.</remarks>
+    public SplitShares(double train, double validation, double test, double predict)
+        : this(train, validation, test, predict, 0)
+    {
+    }
+
+    /// <summary>The four shares that were all there was before a share could be set aside to calibrate on.</summary>
+    /// <param name="train">The share the model learns from.</param>
+    /// <param name="validation">The share used while choosing between models.</param>
+    /// <param name="test">The share kept back until the end.</param>
+    /// <param name="predict">The share held back to predict on.</param>
+    public void Deconstruct(out double train, out double validation, out double test, out double predict)
+    {
+        train = Train;
+        validation = Validation;
+        test = Test;
+        predict = Predict;
+    }
+
+    /// <summary>The shares you write down, none of them to calibrate an interval on; the one to be measured on is worked out.</summary>
     /// <param name="train">The share the model learns from.</param>
     /// <param name="validation">The share used while choosing between models; none, unless you say.</param>
     /// <param name="predict">The share held back to predict on; none, unless you say.</param>
-    /// <param name="calibration">The share an interval is calibrated on; none, unless you say.</param>
+    /// <returns>The shares, as fractions.</returns>
+    /// <exception cref="ArgumentException">They ask for more than there is, or leave nothing to measure on.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">One of them is not a number.</exception>
+    /// <remarks>The form this had before a share could be set aside to calibrate on, kept so that nothing written against it breaks.</remarks>
+    public static SplitShares Of(double train, double validation = 0, double predict = 0) => Of(train, validation, predict, calibration: 0);
+
+    /// <summary>The shares you write down; the one to be measured on is worked out.</summary>
+    /// <param name="train">The share the model learns from.</param>
+    /// <param name="validation">The share used while choosing between models.</param>
+    /// <param name="predict">The share held back to predict on.</param>
+    /// <param name="calibration">The share an interval is calibrated on.</param>
     /// <returns>The shares, as fractions.</returns>
     /// <exception cref="ArgumentException">They ask for more than there is, or leave nothing to measure on.</exception>
     /// <exception cref="ArgumentOutOfRangeException">One of them is not a number.</exception>
@@ -76,7 +110,7 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
     /// and <c>Of(0.7, 0.1, 10)</c>, which mixes the two, is refused rather than read as seven-tenths of a
     /// percent.
     /// </remarks>
-    public static SplitShares Of(double train, double validation = 0, double predict = 0, double calibration = 0)
+    public static SplitShares Of(double train, double validation, double predict, double calibration)
     {
         // A share that is not a finite number is refused before anything is added up: the sum of an
         // infinity is an infinity, and the message would then be about a whole rather than about the
