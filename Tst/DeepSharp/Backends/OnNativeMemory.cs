@@ -25,6 +25,7 @@ public sealed class DenseTests() : DenseContract(new NativeMemoryBackend());
 public sealed class BeginningTests() : BeginningContract(new NativeMemoryBackend());
 public sealed class RunOptionsTests() : RunOptionsContract(new NativeMemoryBackend());
 public sealed class RulesTests() : RulesContract(new NativeMemoryBackend());
+public sealed class LowRankTests() : LowRankContract(new NativeMemoryBackend());
 
 public sealed class DropoutTests() : DropoutContract(new NativeMemoryBackend());
 

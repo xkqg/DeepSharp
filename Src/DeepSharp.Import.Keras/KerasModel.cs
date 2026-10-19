@@ -108,8 +108,9 @@ internal sealed class KerasModel
 
                 // A number beyond the layer's slots goes nowhere, and is named by the layer and the name the file holds it
                 // under; it is handed on in the shape the file writes, since no slot says another.
-                var known = at < placed.Layer.Slots.Count;
-                var slot = known ? placed.Layer.Slots[at] : new KerasSlot(number.Name, 0, []);
+                var named = placed.Layer.SlotCalled(number.Name);
+                var known = named is not null || at < placed.Layer.Slots.Count;
+                var slot = named ?? (known ? placed.Layer.Slots[at] : new KerasSlot(number.Name, 0, []));
                 var path = known
                     ? string.Create(CultureInfo.InvariantCulture, $"{placed.Place + slot.Away}.{slot.Named}")
                     : $"{held.Layer}.{number.Name}";
@@ -128,6 +129,8 @@ internal sealed class KerasModel
             }
         }
 
+        entries.AddRange(Fresh(network, numbers));
+
         var faults = new List<SlotLoadFault>(unread);
 
         try
@@ -141,6 +144,32 @@ internal sealed class KerasModel
         }
 
         return faults.Count > 0 ? throw new SlotLoadException(faults) : new SavedNetwork(network, _loss);
+    }
+
+    // The numbers of the slots a file leaves out because Keras merged them into another — a low-rank pair, in the archive Keras 3
+    // saves — which the network begins afresh: the numbers it was lowered with go in, so the pair is there to be trained.
+    private IEnumerable<SlotEntry> Fresh(LayerStack network, IReadOnlyList<LayerNumbers> numbers)
+    {
+        var slots = network.Slots().ToDictionary(named => named.Path, named => named.Slot.Value, StringComparer.Ordinal);
+
+        foreach (var (name, placed) in _placed.Where(each => each.Value.Layer.Fresh.Count > 0))
+        {
+            var held = numbers.Where(each => each.Layer == name).Select(each => each.Numbers.Count).DefaultIfEmpty(0).Max();
+
+            for (var at = Math.Max(held, 0); at < placed.Layer.Slots.Count; at++)
+            {
+                var slot = placed.Layer.Slots[at];
+
+                if (!placed.Layer.Fresh.Contains(slot))
+                {
+                    continue;
+                }
+
+                var path = string.Create(CultureInfo.InvariantCulture, $"{placed.Place + slot.Away}.{slot.Named}");
+
+                yield return new SlotEntry(path, slots[path], $"{_where}: the pair of layer '{name}' is saved merged into its kernel, so it begins afresh");
+            }
+        }
     }
 
     // What a Keras activation is owned by: the output activation of a loss here that applies it itself.

@@ -108,4 +108,69 @@ public class DeclaredRateShareTests
         Assert.Contains("\"rateShare\": 0.1", declaration.ToJson(), StringComparison.Ordinal);
         Assert.Contains("\"rateShare\": 2", declaration.ToJson(), StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void TheDenseWord_TakesALowRankPair_AsSettingsLeavingOutMeansNoneOf()
+    {
+        var dense = Word("dense");
+
+        Assert.Equal(0, dense.Declared().Number("rank"));
+        Assert.Equal(0, dense.Declared().Number("alpha"));
+        Assert.Empty(dense.Settings.Single(setting => setting.Key == "rank").RequiredKeys);
+        Assert.DoesNotContain(Word("batchNorm").Settings, setting => setting.Key == "rank");
+    }
+
+    [Fact]
+    public void ADenseWordWithARank_BecomesALayerWithAPairBesideItsHeldKernel_TheAlphaTheRankWhereItIsLeftOut()
+    {
+        var pair = new[]
+        {
+            Word("dense").Declared().With("units", PartValue.Of(3)).With("rank", PartValue.Of(2)).With("alpha", PartValue.Of(8.0)),
+            Word("dense").Declared().With("units", PartValue.Of(1)).With("rank", PartValue.Of(1)),
+        }.Described().Lower(new Shape(2), new RandomStream(1));
+        var first = Assert.IsType<Dense>(pair.Layers[0]);
+        var second = Assert.IsType<Dense>(pair.Layers[1]);
+
+        Assert.Equal(new LowRank(2, 8), first.LowRank);
+        Assert.False(first.Weight.Learns);
+        Assert.Equal(new LowRank(1), second.LowRank);
+        Assert.Equal(1, second.LowRank!.Value.Scale);
+    }
+
+    [Fact]
+    public void TheLowRankDoor_SaysThePairOfTheLayerWrittenLast_AndWritesItOnlyWhenSaid()
+    {
+        var step = Learner(network => network.Dense(4).LowRank(2, 6).Relu().Dense(1));
+        var plain = Learner(network => network.Dense(4).Relu().Dense(1));
+        var text = DeclaredNetworkTests.Passengers().WithTorch(network => network.Dense(4).Relu().Dense(1).Adam(0.01).MeanSquaredError().Run(1)).Build().Declaration.ToJson();
+
+        Assert.Equal(2, step.Layers[0].Number("rank"));
+        Assert.Equal(6, step.Layers[0].Number("alpha"));
+        Assert.Equal(0, plain.Layers[0].Number("rank"));
+        Assert.DoesNotContain("\"rank\"", text, StringComparison.Ordinal);
+        Assert.DoesNotContain("alpha", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ALowRankPairForALayerThatTakesNone_OrOfNoRank_IsRefusedByName()
+    {
+        Assert.Contains("batchNorm", Assert.Throws<NotSupportedException>(() => Learner(network => network.Dense(4).BatchNorm().LowRank(2).Dense(1))).Message, StringComparison.Ordinal);
+        Assert.Throws<InvalidOperationException>(() => Learner(network => network.LowRank(2).Dense(1)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Learner(network => network.Dense(1).LowRank(0)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Learner(network => network.Dense(1).LowRank(2, double.NaN)));
+    }
+
+    [Fact]
+    public void ADeclarationWithAPair_GoesThroughTheFileAndComesBackTheSame_AndTrainsAHeldKernelStill()
+    {
+        var declaration = DeclaredNetworkTests.Passengers()
+            .WithTorch(network => network.Dense(4).LowRank(2, 4).Relu().Dense(1).Adam(0.01).BinaryCrossEntropy().Run(20260929, epochs: 2))
+            .Build().Declaration;
+        var again = PipelineDeclaration.FromJson(declaration.ToJson(), StepCatalog.BuiltIn().WithNetworks());
+
+        Assert.Equal(declaration, again);
+        Assert.Equal(declaration.ToJson(), again.ToJson());
+        Assert.Contains("\"rank\": 2", declaration.ToJson(), StringComparison.Ordinal);
+        Assert.Contains("\"alpha\": 4", declaration.ToJson(), StringComparison.Ordinal);
+    }
 }

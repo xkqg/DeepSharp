@@ -28,9 +28,9 @@ Src/DeepSharp/Networks/           the model side
                                     walk, how a window is written to a network's file and read back, and which place of
                                     the example fills each place a padding adds
     Periodic.cs Embedding.cs        the periodic embedding of a number, and a category's vector over the block its encoder wrote
-    Beginning.cs Initialisers.cs RandomStream.cs Philox.cs Draws.cs
-                                    how a layer begins and whether it has a bias, what its numbers start at, and the one
-                                    source every draw is counted from
+    Beginning.cs Initialisers.cs RandomStream.cs Philox.cs Draws.cs LowRank.cs
+                                    how a layer begins, whether it has a bias and whether a low-rank pair sits beside its
+                                    held kernel, what its numbers start at, and the one source every draw is counted from
     SlotRules.cs SequentialRules.cs
                                     the penalty, the bound and the hold a parameter can carry, and the words that put
                                     them on a layer
@@ -903,6 +903,11 @@ file 0.9.0 wrote is read, written again and served as it was, and the repository
 wrote for a test to hold every release after it to that. It is per instance, as the fourth was: the same dense layer is the
 second version or the fifth by what it was told, and the training part is as high as the highest of what its run, its
 optimizer and its schedule say.
+
+The twelfth version of the pipeline's file and the seventh of a network's part are that rule again, for what the release after
+0.12.0 adds. A network's part is the seventh when a number in it says a share of the run's rate, or a dense layer a low-rank
+pair, and only then: a part that says neither is written as the version it always was, so 0.12.0 reads it, and one that says
+either is refused by it by its number.
 
 The tenth and the eleventh versions are that rule again. The tenth adds the steps that write a number as how far it fills a
 few bins, a key's history and the likeness of the parts, with the words of a declared network and the measures of a report
@@ -2860,6 +2865,40 @@ refused by name, as it is under another seed, and letting a held layer learn aga
 it starts empty, as in PyTorch. A file writes `learns: false`, `l1`, `l2` and `maxNorm` beside a slot's shape and values, each
 only when it says something, which makes the network's part the fifth and writes every other part as it was. Nothing is
 renamed: a held number is the number at the same path.
+
+A rate of its own is the same kind of thing and stands in the same place. A parameter's rules say a share of the run's rate its
+numbers move at, `RateShare`, and the optimizer applies it once, where it moves a parameter: the rate the schedule gives the
+epoch times the share. Every optimizer's `Moved` uses the rate it is handed as a scale and nothing else, so what an optimizer
+remembers of a parameter — a velocity, a running mean — is worked out from its gradients alone and a share changes how far a
+step goes, never what is remembered; PyTorch's parameter group is the same arithmetic, and five optimizers were matched to it,
+step by step. It is one mechanism and not two: an optimizer with groups of its own would be a second owner of the rate, and a
+rule of a parameter is where its other rules already are, said by the same three doors — `layer.ScaleRate(…)` in code,
+`.RateShare(…)` in a description and in a declaration — and recorded by a checkpoint, so a run gone on under other shares is
+refused naming each. A share of nothing is refused in favour of the hold, which is what moving nothing is. A word that puts a
+penalty or a bound after a word that gave a share keeps the share; it had wiped it, since a word replaced the rules whole. It is
+written beside the slot's numbers as `rateShare`, which makes the network's part the seventh version, per number: a part that
+says no share is the part 0.12.0 wrote.
+
+### A layer may keep a low-rank pair beside a held kernel
+
+A large layer is adapted by holding its kernel still and training a small pair of matrices beside it, and a reader of a Keras
+file meets one, since that is where it is written. A dense layer begun with a `LowRank` — a rank and an alpha, the alpha being
+the rank where it is left out — keeps `lora_a`, inputs by the rank, and `lora_b`, the rank by outputs, after its weights and its
+bias, and holds its weights. It answers with `x W + (x A B) · alpha / rank`, which is Keras's `enable_lora`. B starts at nothing and
+A evenly as He's uniform initialisation draws it, which is Keras's `he_uniform`: the first step's answer is the kernel's own,
+and the pair does not stay at nothing, since two matrices that are both nothing give neither a gradient. It is a setting of the
+dense layer and not a kind of its own, because a kind of its own would compute a dense layer twice. Like a bias, a pair is a
+number the layer has or has not, so it is said where the layer begins; its rank and alpha are written into the layer's settings,
+which makes the network's part the seventh version for that layer, and a dense layer without a pair is written as it always
+was. Its answers and a step of its training are held to Keras's on every engine.
+
+Keras saves a layer that has a pair in two ways, and the reader holds each to what it measured. The archive Keras 3 saves holds
+the kernel merged — the held kernel plus the pair's product scaled by alpha over the rank — and neither matrix, with the rank
+and the alpha in its description, and reloaded it answers as before with both matrices at nothing, a pair that could never
+learn. So the layer read from it holds the merged kernel and begins a pair of its own, whose first matrix is drawn and whose
+second is nothing, and answers as Keras does. The HDF5 file Keras saved before holds the kernel, the bias and both matrices as
+they are, and lists them trainable first and the held kernel last, so they are placed by their names and not by where they
+stand. A merge back into the kernel is not built: a merged kernel cannot be trained further, and the pair is small.
 
 Rules reach a layer by three doors that say one thing. In code, `Parameter.Rules` and the layer's `Hold()`; in a description,
 the words `Ruled(weights, bias)` and `Held()`, which act on the layer before them; in a declaration, the settings `l1`, `l2`,

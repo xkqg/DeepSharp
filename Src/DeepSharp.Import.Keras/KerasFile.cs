@@ -32,7 +32,9 @@ namespace DeepSharp.Import.Keras;
 /// model trained on its logits is read as it stands.
 /// </para>
 /// <para>
-/// What is read: a Sequential model working in single precision, of Dense layers; Conv1D, Conv2D and Conv3D convolutions,
+/// What is read: a Sequential model working in single precision, of Dense layers — one that has a low-rank pair beside its held
+/// kernel (<c>enable_lora</c>) too, from the archive Keras 3 saves, which holds the kernel merged with the pair and so begins a
+/// pair of its own, and from the HDF5 file, which holds the kernel and both matrices as they are; Conv1D, Conv2D and Conv3D convolutions,
 /// their transposed, depthwise and separable forms, and ZeroPadding layers; MaxPooling and AveragePooling layers and
 /// GlobalMaxPooling and GlobalAveragePooling layers along one, two and three axes, the global ones keeping their axes when
 /// Keras's <c>keepdims</c> says; BatchNormalization, LayerNormalization, Dropout and SpatialDropout1D, SpatialDropout2D and

@@ -24,6 +24,7 @@ public sealed class DenseTests() : DenseContract(new CpuBackend());
 public sealed class BeginningTests() : BeginningContract(new CpuBackend());
 public sealed class RunOptionsTests() : RunOptionsContract(new CpuBackend());
 public sealed class RulesTests() : RulesContract(new CpuBackend());
+public sealed class LowRankTests() : LowRankContract(new CpuBackend());
 
 public sealed class DropoutTests() : DropoutContract(new CpuBackend());
 

@@ -57,6 +57,12 @@ public static class NetworkWords
     private static readonly NumberParameter RateShareKey =
         new("rateShare", "The share of the run's rate the layer's numbers move at, as a learning rate of their own for a part of the network; the whole rate, unless said.", 1) { Above = 0, LeftOut = 1 };
 
+    private static readonly WholeNumberParameter RankKey =
+        new("rank", "The rank of a low-rank pair kept beside the layer's held kernel, as Keras's enable_lora keeps one; nought, or left out, for no pair.", 4) { AtLeast = 1, LeftOut = 0 };
+
+    private static readonly NumberParameter PairAlphaKey =
+        new("alpha", "What the pair's product is scaled by over the rank; nought, or left out, for the rank itself, which scales by one.", 8) { AtLeast = 0, LeftOut = 0 };
+
     private static readonly NumberParameter RateKey = new("rate", "The share of numbers left out at every pass while training, between nothing and one.", 0.2) { Above = 0 };
 
     private static readonly NumberParameter MomentumKey = new("momentum", "How much of what was measured before carries on.", 0.9) { AtLeast = 0 };
@@ -168,7 +174,7 @@ public static class NetworkWords
     /// <summary>The layers a declared network is built from, in the words a saved network writes them under.</summary>
     public static IReadOnlyList<PartKind> Layers { get; } =
     [
-        new("dense", "A layer that answers with as many numbers as it is given, each a weighted sum of the ones below it.", [UnitsKey, BiasKey, WeightsKey, BiasStartKey, L1Key, L2Key, MaxNormKey, LearnsKey, RateShareKey]),
+        new("dense", "A layer that answers with as many numbers as it is given, each a weighted sum of the ones below it.", [UnitsKey, BiasKey, WeightsKey, BiasStartKey, L1Key, L2Key, MaxNormKey, LearnsKey, RateShareKey, RankKey, PairAlphaKey]),
         new("relu", "Leaves what is below nought at nought.", []),
         new("tanh", "Squashes every number between minus one and one.", []),
         new("sigmoid", "Squashes every number between nought and one.", []),
@@ -400,6 +406,7 @@ public static class NetworkWords
         Weights = Enum.Parse<InitialiserWord>(layer.Text(WeightsKey.Key), ignoreCase: true).Made(),
         Bias = layer.YesOrNo(BiasKey.Key) ? Enum.Parse<InitialiserWord>(layer.Text(BiasStartKey.Key), ignoreCase: true).Made() : null,
         WithoutBias = !layer.YesOrNo(BiasKey.Key),
+        LowRank = layer.Whole(RankKey.Key) is > 0 and var rank ? new LowRank(rank, layer.Number(PairAlphaKey.Key) is > 0 and var alpha ? alpha : null) : null,
     };
 
     // The rules a declared layer says of its numbers, put on the layer the description just made: a penalty and a bound on its

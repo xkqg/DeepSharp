@@ -25,7 +25,7 @@ public class DeclaredRulesTests
     [Fact]
     public void TheWordsOfTheLayers_TakeTheRulesAsSettingsThatLeavingOutMeansNoneOf()
     {
-        Assert.Equal(["units", "bias", "weights", "biasStart", "l1", "l2", "maxNorm", "learns", "rateShare"], Word("dense").Settings.Select(setting => setting.Key));
+        Assert.Equal(["units", "bias", "weights", "biasStart", "l1", "l2", "maxNorm", "learns", "rateShare", "rank", "alpha"], Word("dense").Settings.Select(setting => setting.Key));
         Assert.Equal(["momentum", "epsilon", "scale", "shift", "learns", "rateShare"], Word("batchNorm").Settings.Select(setting => setting.Key));
         Assert.Equal(["epsilon", "scale", "shift", "learns", "rateShare"], Word("layerNorm").Settings.Select(setting => setting.Key));
         Assert.Equal(["units"], Word("dense").Settings.Where(setting => setting.RequiredKeys.Count > 0).Select(setting => setting.Key));

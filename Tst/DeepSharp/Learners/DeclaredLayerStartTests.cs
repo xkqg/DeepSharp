@@ -199,7 +199,7 @@ public class DeclaredLayerStartTests
         var batch = NetworkWords.Layers.Single(kind => kind.Name == "batchNorm");
         var layer = NetworkWords.Layers.Single(kind => kind.Name == "layerNorm");
 
-        Assert.Equal(["units", "bias", "weights", "biasStart", "l1", "l2", "maxNorm", "learns", "rateShare"], dense.Settings.Select(setting => setting.Key));
+        Assert.Equal(["units", "bias", "weights", "biasStart", "l1", "l2", "maxNorm", "learns", "rateShare", "rank", "alpha"], dense.Settings.Select(setting => setting.Key));
         Assert.Equal(["momentum", "epsilon", "scale", "shift", "learns", "rateShare"], batch.Settings.Select(setting => setting.Key));
         Assert.Equal(["epsilon", "scale", "shift", "learns", "rateShare"], layer.Settings.Select(setting => setting.Key));
         Assert.Equal(["units"], dense.Settings.Where(setting => setting.RequiredKeys.Count > 0).Select(setting => setting.Key));

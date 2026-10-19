@@ -16,7 +16,9 @@ namespace DeepSharp.Networks;
 /// slot while its tensor is replaced. Every optimizer here works as PyTorch's of the same name, with its defaults, and with
 /// the options PyTorch gives it, each off unless said: the weight decay SGD, Adam, RMSprop and NAdam add to the gradient
 /// before anything else is done with it, SGD's dampening and Nesterov's momentum, AMSGrad for Adam and AdamW, and RMSprop's
-/// centred form. AdamW's weight decay is its own, decoupled from the gradient as AdamW decays. An option that is on keeps a
+/// centred form. AdamW's weight decay is its own, decoupled from the gradient as AdamW decays. A parameter whose rules say a share of
+/// the rate (<see cref="SlotRules.RateShare"/>) is moved by the rate it is handed times that share, which every optimizer uses as a scale and
+/// nothing else, so what it remembers of the parameter is worked out from its gradients alone. An option that is on keeps a
 /// tensor of its own beside the others, and a checkpoint of a run without it is refused by the name of that tensor, as one
 /// that holds a tensor this optimizer does not keep is.
 /// </remarks>

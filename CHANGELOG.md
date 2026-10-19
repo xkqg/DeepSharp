@@ -7,6 +7,22 @@ as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 What a model is worth, and more ways to train it: data that is not a table, several networks answering as one, an interval and a reason with every answer, and a rate of its own for a part of a network. The sections below say what each brought.
 
+### Upgrading from 0.12.0
+
+- **The pipeline file is at version 12.** Everything written before still reads and means what it meant, and a pipeline that says nothing new writes what it wrote before, but for its number; 0.12.0 refuses a file of the twelfth whole, naming the version.
+
+- **A network's part is at version 7.** It is written as the oldest version that says what it holds, per layer and per number, so a network that says neither a share of the rate nor a low-rank pair is written exactly as 0.12.0 wrote it, and 0.12.0 refuses a part of the seventh whole, naming the version, rather than stumbling over a key it does not know.
+
+- **A rule word after the word that gives a share of the rate no longer wipes it, and the other way round.** `Ruled` puts a penalty and a bound as it always did, and keeps what an earlier word put beside them: a hold, a share of the rate.
+
+### Added
+
+- **A part of a network can move at a rate of its own.** A parameter's rules say a share of the run's rate its numbers move at (`SlotRules.RateShare`), and the optimizer moves it by the rate the schedule gives the epoch times that share, on every optimizer; what an optimizer remembers of a parameter is worked out from its gradients alone, so a share changes how far a step goes and never what is remembered. It is said where every other rule of a parameter is said: `layer.ScaleRate(…)` in code, `.RateShare(…)` in a description in Keras's words and in a declaration, and `rateShare` on a declared dense layer or normalisation. A share is above nothing; to move nothing, hold the numbers still. A checkpoint records the shares and a run gone on under other ones is refused, naming each. Held to PyTorch's parameter groups, step by step, for Sgd, Adam, AdamW, RMSprop and Nadam, on the light engine and the native one.
+
+- **A dense layer can keep a low-rank pair beside its held kernel.** A `LowRank` of a rank and an alpha, given where the layer begins, makes `lora_a` and `lora_b` next to the kernel, which is held: the layer answers with the kernel's product plus the pair's, scaled by alpha over the rank, and only the pair and the bias learn. The second matrix starts at nothing, so the first step's answer is the kernel's own. This is Keras's `enable_lora`, and the answers and a step of training are held to Keras's on every engine. A declared dense layer takes `rank` and `alpha`, and the chain has `.LowRank(rank, alpha)`.
+
+- **A Keras model with a low-rank pair is read in both files Keras saves it to.** The archive Keras 3 saves holds the kernel merged with the pair's product and neither matrix, so the layer read from it holds that kernel and begins a pair of its own, whose second matrix is nothing; the HDF5 file Keras saved before holds the kernel, the bias and both matrices as they are, and they are placed by their names, since that file lists a layer's trainable numbers before the held kernel. Both answer as Keras answers and are trained further with the kernel held. An embedding made of low-rank factors is still refused by name.
+
 ### Changed
 
 - **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.18.2**, and every package reference is taken at its newest version when the release is made.

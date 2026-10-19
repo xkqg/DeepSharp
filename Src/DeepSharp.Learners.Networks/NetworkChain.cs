@@ -184,6 +184,26 @@ public sealed class NetworkDeclaration
     /// </remarks>
     public NetworkDeclaration RateShare(double share) => OnTheLastLayer("RateShare", "rateShare", new SlotRules { RateShare = share }.RateShare!.Value);
 
+    /// <summary>Keeps a low-rank pair beside the held kernel of the dense layer written last, as Keras's <c>enable_lora</c> does.</summary>
+    /// <param name="rank">The rank of the pair: at least one.</param>
+    /// <param name="alpha">What the pair's product is scaled by over the rank; the rank itself, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The rank is below one, or the alpha is not a finite number above nothing.</exception>
+    /// <exception cref="InvalidOperationException">No layer is written yet.</exception>
+    /// <exception cref="NotSupportedException">The layer written last is no dense layer.</exception>
+    /// <remarks>
+    /// The kernel is held still and the pair and the bias learn; the layer answers with the kernel's product plus the pair's,
+    /// scaled by alpha over the rank. The network's file then names the seventh version of the network's part.
+    /// </remarks>
+    public NetworkDeclaration LowRank(int rank, double? alpha = null)
+    {
+        _ = new LowRank(rank, alpha);
+
+        var ranked = OnTheLastLayer("LowRank", "rank", (double)rank);
+
+        return alpha is { } scaled ? ranked.OnTheLastLayer("LowRank", "alpha", scaled) : ranked;
+    }
+
     /// <summary>A layer that leaves what is below nought at nought.</summary>
     /// <returns>The declaration.</returns>
     public NetworkDeclaration Relu() => Layer("relu");

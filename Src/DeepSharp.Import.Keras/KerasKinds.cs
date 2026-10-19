@@ -20,6 +20,25 @@ internal readonly record struct KerasLayer(Action<Sequential>? Words, string Act
     /// <summary>The slots its numbers go into, in the order Keras keeps its numbers.</summary>
     public IReadOnlyList<KerasSlot> Slots { get; init; } = [];
 
+    /// <summary>
+    /// The slots a file may leave without a number because Keras saves them merged into another: a low-rank pair, whose product
+    /// the archive Keras 3 saves adds into the kernel. The layer begins them afresh, and a file that holds them gives their numbers.
+    /// </summary>
+    public IReadOnlyList<KerasSlot> Fresh { get; init; } = [];
+
+    /// <summary>
+    /// The slot each number goes into by the name the file gives it, for a layer whose numbers the HDF5 file Keras saved before
+    /// does not list in the order the layer keeps them: it lists a layer's trainable numbers and then those that do not train, so
+    /// a layer with a held kernel lists its bias and its pair before its kernel. A name no entry here ends in is placed by its place.
+    /// </summary>
+    public IReadOnlyDictionary<string, KerasSlot> Called { get; init; } = new Dictionary<string, KerasSlot>();
+
+    /// <summary>The slot a number goes into by the name the file gives it, when this layer places its numbers by name.</summary>
+    /// <param name="name">The name the file gives the number: a dataset's path, whose last part is the number's own name.</param>
+    /// <returns>The slot; nothing when no name here is the name's last part.</returns>
+    public KerasSlot? SlotCalled(string name) =>
+        Called.Count > 0 && Called.TryGetValue(name[(name.LastIndexOf('/') + 1)..], out var slot) ? (KerasSlot?)slot : null;
+
     /// <summary>How many layers of a description this one Keras layer writes; one, unless it is more than one layer here.</summary>
     /// <remarks>Keras's separable convolution is a depthwise convolution and a convolution of a one-by-one window, which are two layers here.</remarks>
     public int Places { get; init; } = 1;
@@ -426,10 +445,39 @@ internal sealed class DenseKind : KerasKind
     {
         var units = layer.Setting<int>("units");
         var bias = KeepsBias(layer);
-        var start = Starting(bias);
+        var pair = layer.Says("lora_rank") ? PairOf(layer) : null;
+        var start = Starting(bias) with { LowRank = pair };
         var rules = new Rules(Governing(layer, "kernel", 2, [0]), bias ? Governing(layer, "bias", 1, [0]) : default, Held(layer));
 
-        return new KerasLayer(description => rules.Put(description.Dense(units, start)), ActivationOf(layer)) { Slots = WithBias("weight", bias) };
+        // Keras saves a layer with a pair as the archive and as the HDF5 file it saved before, and they hold it differently: the
+        // file holds the kernel, the bias and both matrices, each as it is; the archive holds the kernel merged with the pair's
+        // product and neither matrix, so the layer begins its pair afresh.
+        KerasSlot[] slots = pair is null ? WithBias("weight", bias) : [.. WithBias("weight", bias), "lora_a", "lora_b"];
+
+        return new KerasLayer(description => rules.Put(description.Dense(units, start)), ActivationOf(layer))
+        {
+            Slots = slots,
+            Fresh = pair is null ? [] : ["lora_a", "lora_b"],
+            Called = pair is null
+                ? new Dictionary<string, KerasSlot>()
+                : new Dictionary<string, KerasSlot> { ["kernel"] = "weight", ["bias"] = "bias", ["lora_kernel_a"] = "lora_a", ["lora_kernel_b"] = "lora_b" },
+        };
+    }
+
+    // The pair a Dense layer was given with enable_lora: its rank, and its alpha, which is the rank where Keras leaves it out.
+    private static LowRank? PairOf(KerasSettings layer)
+    {
+        var rank = layer.Setting<int>("lora_rank");
+        var alpha = layer.Setting("lora_alpha", (double)rank);
+
+        if (rank < 1 || !double.IsFinite(alpha) || alpha <= 0)
+        {
+            layer.Refuse($"its low-rank pair is of rank {rank} and alpha {alpha}, and a pair here is of a rank from one and an alpha above nothing.");
+
+            return null;
+        }
+
+        return new LowRank(rank, alpha);
     }
 }
 

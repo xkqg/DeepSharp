@@ -24,6 +24,7 @@ public sealed class DenseTests() : DenseContract(Card.First());
 public sealed class BeginningTests() : BeginningContract(Card.First());
 public sealed class RunOptionsTests() : RunOptionsContract(Card.First());
 public sealed class RulesTests() : RulesContract(Card.First());
+public sealed class LowRankTests() : LowRankContract(Card.First());
 
 public sealed class DropoutTests() : DropoutContract(Card.First());
 

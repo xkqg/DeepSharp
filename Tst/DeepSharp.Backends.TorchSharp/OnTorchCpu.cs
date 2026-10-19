@@ -24,6 +24,7 @@ public sealed class DenseTests() : DenseContract(TorchBackend.OnCpu());
 public sealed class BeginningTests() : BeginningContract(TorchBackend.OnCpu());
 public sealed class RunOptionsTests() : RunOptionsContract(TorchBackend.OnCpu());
 public sealed class RulesTests() : RulesContract(TorchBackend.OnCpu());
+public sealed class LowRankTests() : LowRankContract(TorchBackend.OnCpu());
 
 public sealed class DropoutTests() : DropoutContract(TorchBackend.OnCpu());
 
