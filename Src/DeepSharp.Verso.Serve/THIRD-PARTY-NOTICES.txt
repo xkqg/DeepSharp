@@ -306,12 +306,12 @@ The NuGet package Markdig, its Markdig.dll (github.com/xoofx/markdig), which dra
 Copyright (c) 2018-2019, Alexandre Mutel. BSD 2-Clause License.
 
 
-MatPlotLibNet 1.18.1
+MatPlotLibNet 1.18.2
 The NuGet package MatPlotLibNet, its MatPlotLibNet.dll (github.com/xkqg/MatPlotLibNet): the charts and colour maps.
 Copyright (c) 2026 H.P. Gansevoort (xkqg). MIT License.
 
 
-MatPlotLibNet.DataFrame 1.18.1
+MatPlotLibNet.DataFrame 1.18.2
 The NuGet package MatPlotLibNet.DataFrame, its MatPlotLibNet.DataFrame.dll (github.com/xkqg/MatPlotLibNet).
 Copyright (c) 2026 H.P. Gansevoort (xkqg). MIT License.
 
@@ -375,7 +375,7 @@ translations of its messages (github.com/dotnet/roslyn).
 Copyright (c) .NET Foundation and Contributors. MIT License.
 
 
-Microsoft.Data.Analysis 0.23.0
+Microsoft.Data.Analysis 0.23.1
 The NuGet package Microsoft.Data.Analysis, its Microsoft.Data.Analysis.dll (github.com/dotnet/machinelearning):
 Microsoft's DataFrame.
 Copyright (c) .NET Foundation and Contributors. MIT License.
@@ -398,7 +398,7 @@ The NuGet package Microsoft.IO.RecyclableMemoryStream, its Microsoft.IO.Recyclab
 Copyright (c) 2015-2016 Microsoft. MIT License.
 
 
-Microsoft.ML.DataView 5.0.0
+Microsoft.ML.DataView 5.0.1
 The NuGet package Microsoft.ML.DataView, its Microsoft.ML.DataView.dll (github.com/dotnet/machinelearning).
 Copyright (c) .NET Foundation and Contributors. MIT License.
 

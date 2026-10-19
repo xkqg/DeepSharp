@@ -31,20 +31,6 @@ it was worked out from, and says when the window was. Nothing is learned from a 
 0.11.0 wrote is read, written again and served as it was; a model trained behind it is watched once its pipeline is fitted
 again with the watch and the model trained behind that fit.
 
-**0.11.0 is about the third letter of the flock team, and the words a model is written in.** The team that weighs
-flocks asked for a number written down as how far it fills a few bins, for the periodic embedding of a number, for a report
-of how alike the parts of a split are, for a search that stops a hopeless trial, chooses a setting only when another is chosen
-and goes on from the trials it ran before, and for a running statistic of each key that a single new flock is served with as
-the training rows were — each fitted on the training rows alone and replayed unchanged. Beside them stand the words the
-frameworks had and this library did not: GELU, SiLU, mish, the leaky, parametric and self-normalising rectifiers and softmax
-as a layer; normalisations over groups of channels, over one example's channels and by the root mean square; a category as a
-small vector learned over the columns its encoder wrote; the losses of absolute errors, outliers, quantiles, a rare class,
-margins, counts and softened labels; and F1, the area under the curve, the error as a share of the answer and the Brier score
-with its reliability curve. Each is held to the framework that has it on every engine, and read from the Keras, ONNX and
-PyTorch files that say it — ONNX's both as the operators of its newer sets and as the several operators PyTorch's exporters
-spell it in for older ones. The pipeline file is at version 10, and a file 0.10.0 wrote is read, written again and served as
-it was.
-
 Every release that brought something to call, this one and the ones before it, has examples on the wiki: what is new and what was improved, in code that
 is compiled against the library as it is now — see [Examples](https://github.com/xkqg/DeepSharp/wiki/Examples). Earlier
 releases are in the [changelog](https://github.com/xkqg/DeepSharp/blob/main/CHANGELOG.md), which records what each one

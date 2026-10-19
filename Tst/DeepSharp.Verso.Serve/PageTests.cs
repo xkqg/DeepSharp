@@ -100,6 +100,26 @@ public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browser
     // A notebook's socket, as another page of this server opens one.
     private static Task<PageSocket> SocketAsync(Served served, string notebook) => PageSocket.OpenAsync(served.Address, notebook, Token);
 
+    // The notebook as it is kept once it says what is waited for: asked again until it does, so no clock decides.
+    private static async Task<NotebookVersion> SavedAsync(Served served, string notebook, Func<NotebookVersion, bool> says)
+    {
+        using var limit = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+
+        limit.CancelAfter(TimeSpan.FromSeconds(30));
+
+        while (true)
+        {
+            var current = await CurrentAsync(served, notebook);
+
+            if (says(current))
+            {
+                return current;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(50), limit.Token);
+        }
+    }
+
     private static ILocator Cell(IPage page, int index) => page.Locator("section.cell").Nth(index);
 
     [Fact]
@@ -153,7 +173,8 @@ public sealed partial class PageTests(Browsers browsers) : IClassFixture<Browser
 
         await Expect(page.Locator("section.cell").Nth(1).Locator("textarea.source")).ToHaveValueAsync(new System.Text.RegularExpressions.Regex("\"deck\""));
 
-        var before = (await CurrentAsync(served, "titanic.verso")).Version;
+        // The page shows the grid a moment before the notebook keeps it, so the version to hold still is the one that has it.
+        var before = (await SavedAsync(served, "titanic.verso", saved => saved.Cells[0].Outputs.Count > 1)).Version;
         var button = Cell(page, 0).Locator("button[data-action]").First;
 
         await button.FocusAsync();
