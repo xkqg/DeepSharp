@@ -166,18 +166,33 @@ public sealed partial class PageTests
     public async Task AWidget_KeepsWhatItShows_WhileItsOutputStaysTheSame()
     {
         await using var served = await StartAsync();
-        var page = await RunOneAsync(
-            served,
+        await SaveAsync(
             "counting.verso",
-            """Verso.Abstractions.CellOutput.Widget("<!doctype html><html><body><button id='more'>More</button><span id='count'>0</span><script>document.getElementById('more').onclick = function () { var count = document.getElementById('count'); count.textContent = String(Number(count.textContent) + 1); };</script></body></html>")""");
+            new CellModel { Type = "code", Language = "csharp", Source = """Verso.Abstractions.CellOutput.Widget("<!doctype html><html><body><button id='more'>More</button><span id='count'>0</span><script>document.getElementById('more').onclick = function () { var count = document.getElementById('count'); count.textContent = String(Number(count.textContent) + 1); };</script></body></html>")""" });
+
+        var page = await OpenAsync(served, "counting.verso");
+
+        await page.EvaluateAsync("() => { window.__trace = []; const t0 = performance.now(); const stamp = (what) => window.__trace.push(Math.round(performance.now() - t0) + 'ms ' + what); new MutationObserver((records) => { for (const r of records) { for (const n of r.addedNodes) { if (n.nodeType === 1) { const frames = n.matches && n.matches('iframe') ? [n] : Array.from(n.querySelectorAll ? n.querySelectorAll('iframe') : []); for (const f of frames) { stamp('iframe added'); f.addEventListener('load', () => stamp('iframe load')); } } } for (const n of r.removedNodes) { if (n.nodeType === 1 && ((n.matches && n.matches('iframe')) || (n.querySelector && n.querySelector('iframe')))) stamp('iframe removed'); } } }).observe(document.body, { childList: true, subtree: true }); }");
+        await Cell(page, 0).Locator("button.run").ClickAsync();
+
         var inside = Cell(page, 0).FrameLocator(".outputs iframe.widget");
 
         await WidgetLoadedAsync(page);
         await inside.Locator("#more").ClickAsync();
         await inside.Locator("#more").ClickAsync();
-        await Expect(inside.Locator("#count")).ToHaveTextAsync("2");
 
-        // The cell is drawn again, chosen: what it shows is what it showed, so the widget goes on as it was.
+        try
+        {
+            await Expect(inside.Locator("#count")).ToHaveTextAsync("2");
+        }
+        catch (Microsoft.Playwright.PlaywrightException fault)
+        {
+            // Seen once in some forty full runs and never alone: whether the frame was drawn again between the two clicks is the thing to know.
+            var trace = await page.EvaluateAsync<string[]>("() => window.__trace");
+
+            throw new InvalidOperationException($"The widget did not count two clicks. Its frame, as the page drew it: {string.Join(" | ", trace)}.", fault);
+        }
+
         await Cell(page, 0).Locator(".cell-bar").ClickAsync();
         await Expect(Cell(page, 0)).ToHaveClassAsync(new System.Text.RegularExpressions.Regex(@"\bselected\b"));
 
