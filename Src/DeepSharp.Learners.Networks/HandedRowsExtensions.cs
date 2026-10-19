@@ -17,7 +17,13 @@ internal static class HandedRowsExtensions
         /// <summary>The rows as one tensor of floats: row after row in their order, each value the float nearest it.</summary>
         /// <param name="width">How many values each row holds.</param>
         /// <returns>A tensor as tall as there are rows, and as wide as said.</returns>
-        internal Tensor Floats(int width) =>
-            Tensor.From(new Shape(rows.Count, width), [.. rows.SelectMany(row => row.Select(value => (float)value))]);
+        internal Tensor Floats(int width) => rows.Floats(width, null);
+
+        /// <summary>The rows as one tensor of floats, each row laid out as one example of the given shape: an image, a sound.</summary>
+        /// <param name="width">How many values each row holds.</param>
+        /// <param name="example">The shape of one example, or nothing for a flat row.</param>
+        /// <returns>A tensor as tall as there are rows, each row the shape of an example.</returns>
+        internal Tensor Floats(int width, IReadOnlyList<int>? example) =>
+            Tensor.From(example is null ? new Shape(rows.Count, width) : new Shape([rows.Count, .. example]), [.. rows.SelectMany(row => row.Select(value => (float)value))]);
     }
 }

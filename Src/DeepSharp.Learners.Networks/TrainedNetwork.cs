@@ -180,7 +180,7 @@ public sealed class TrainedNetwork
                 $"This network was trained on {Listed(TrainedOn.Features)}, and its pipeline hands over {Listed(served.FeatureNames)}: a network answers only what it learned from.");
         }
 
-        var answers = Prepared.BackToOriginal(Answered(Network, Loss, served.Features, new Chunking(backend, ServingBatchSize)), served, rows);
+        var answers = Prepared.BackToOriginal(Answered(Network, Loss, served.Features, new Chunking(backend, ServingBatchSize) { Example = served.ExampleShape }), served, rows);
         var ends = Interval?.Around(answers);
 
         return new Predictions(TrainedOn.Answers, answers, served.HandedInAt)
@@ -294,7 +294,7 @@ public sealed class TrainedNetwork
 
     /// <summary>What this network answers for a part's rows, as the report measures them: each row named with the features it moves away from the one value every training row held them at.</summary>
     internal PartPredictions Predicted(Batch batch, Chunking chunking) =>
-        new(batch, Answered(Network, Loss, batch.Features, chunking))
+        new(batch, Answered(Network, Loss, batch.Features, chunking with { Example = batch.ExampleShape }))
         {
             Unfamiliar = Unfamiliar(TrainedOn, batch.Features),
         };
@@ -317,7 +317,7 @@ public sealed class TrainedNetwork
         for (var start = 0; start < features.Count; start += chunking.BatchSize)
         {
             var count = Math.Min(chunking.BatchSize, features.Count - start);
-            var outputs = network.Predict(features.Skip(start).Take(count).ToArray().Floats(width), loss, chunking.Backend);
+            var outputs = network.Predict(features.Skip(start).Take(count).ToArray().Floats(width, chunking.Example), loss, chunking.Backend);
             var values = outputs.Values.ToArray();
             var columns = outputs.Shape[1];
 
@@ -467,4 +467,8 @@ internal readonly record struct FileFault(string Key, string Message);
 /// did; serving's are thirty-two, Keras's own default for a model's <c>predict</c>. Chunking changes nothing an evaluation
 /// pass computes — a row's answer never depends on which other rows share its pass — only how many passes carry it.
 /// </remarks>
-internal readonly record struct Chunking(ITensorBackend Backend, int BatchSize);
+internal readonly record struct Chunking(ITensorBackend Backend, int BatchSize)
+{
+    /// <summary>The shape of one example the rows are laid out as, when the pipeline hands them over with one; flat rows, otherwise.</summary>
+    public IReadOnlyList<int>? Example { get; init; }
+}

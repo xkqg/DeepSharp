@@ -312,7 +312,7 @@ public sealed class TrainedEnsemble
                 $"These networks were trained on {string.Join(", ", first.TrainedOn.Features.Select(name => $"'{name}'"))}, and their pipeline hands over {string.Join(", ", served.FeatureNames.Select(name => $"'{name}'"))}: a network answers only what it learned from.");
         }
 
-        var chunking = new Chunking(backend, TrainedNetwork.ServingBatchSize);
+        var chunking = new Chunking(backend, TrainedNetwork.ServingBatchSize) { Example = served.ExampleShape };
         IReadOnlyList<double[]>[] said = [.. Members.Select(member => (IReadOnlyList<double[]>)TrainedNetwork.Answered(member.Network, member.Loss, served.Features, chunking))];
 
         var answers = Prepared.BackToOriginal(said, served, rows, Blend);

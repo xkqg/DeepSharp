@@ -108,14 +108,14 @@ public static class CompiledNetworkExtensions
     // What the network answers for a part's rows, as the report measures them: on the run's engine, a chunk of rows at a
     // time, each row named with the features it moves away from the one value every training row held them at.
     private static PartPredictions Predicted(CompiledNetwork compiled, Batch batch, Chunking chunking, TrainedOn trainedOn) =>
-        new(batch, TrainedNetwork.Answered(compiled.Network, compiled.Loss, batch.Features, chunking))
+        new(batch, TrainedNetwork.Answered(compiled.Network, compiled.Loss, batch.Features, chunking with { Example = batch.ExampleShape }))
         {
             Unfamiliar = TrainedNetwork.Unfamiliar(trainedOn, batch.Features),
         };
 
     // The rows of a part as the loop takes them: floats, and each row named by where it was read.
     private static TrainingData Handed(Batch batch, PreparedData prepared) =>
-        new(batch.Features.Floats(batch.Width), batch.Answers!.Floats(batch.AnswerNames!.Count))
+        new(batch.Features.Floats(batch.Width, batch.ExampleShape), batch.Answers!.Floats(batch.AnswerNames!.Count))
         {
             RowNames =
             [
