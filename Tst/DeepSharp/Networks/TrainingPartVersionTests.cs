@@ -55,11 +55,11 @@ public class TrainingPartVersionTests
         Assert.IsType<SaysMore>(read.Run.Compiled.Optimizer);
         Assert.Equal(written, Written(read.Run.Compiled, read.Run.Checkpoint));
 
-        var later = written.Replace("\"version\":5", "\"version\":7", StringComparison.Ordinal);
+        var later = written.Replace("\"version\":5", "\"version\":8", StringComparison.Ordinal);
         var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(later, "network", "training", catalog));
 
-        Assert.Contains("version 7", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("up to version 6", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("version 8", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("up to version 7", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class TrainingPartVersionTests
     }
 
     [Fact]
-    public void TheVersionAFileOfThisLibraryCanBe_IsTheSixth() => Assert.Equal(6, NetworkDocument.Version);
+    public void TheVersionAFileOfThisLibraryCanBe_IsTheSeventh() => Assert.Equal(7, NetworkDocument.Version);
 
     private static int TrainingVersion(Optimizer optimizer, GradientClip? clip)
     {

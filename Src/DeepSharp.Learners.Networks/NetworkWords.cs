@@ -54,6 +54,9 @@ public static class NetworkWords
     private static readonly TrueOrFalseParameter LearnsKey =
         new("learns", "Whether the layer's numbers learn, or are held still as Keras's trainable = False holds them; they learn, unless said.", true) { LeftOut = true };
 
+    private static readonly NumberParameter RateShareKey =
+        new("rateShare", "The share of the run's rate the layer's numbers move at, as a learning rate of their own for a part of the network; the whole rate, unless said.", 1) { Above = 0, LeftOut = 1 };
+
     private static readonly NumberParameter RateKey = new("rate", "The share of numbers left out at every pass while training, between nothing and one.", 0.2) { Above = 0 };
 
     private static readonly NumberParameter MomentumKey = new("momentum", "How much of what was measured before carries on.", 0.9) { AtLeast = 0 };
@@ -165,13 +168,13 @@ public static class NetworkWords
     /// <summary>The layers a declared network is built from, in the words a saved network writes them under.</summary>
     public static IReadOnlyList<PartKind> Layers { get; } =
     [
-        new("dense", "A layer that answers with as many numbers as it is given, each a weighted sum of the ones below it.", [UnitsKey, BiasKey, WeightsKey, BiasStartKey, L1Key, L2Key, MaxNormKey, LearnsKey]),
+        new("dense", "A layer that answers with as many numbers as it is given, each a weighted sum of the ones below it.", [UnitsKey, BiasKey, WeightsKey, BiasStartKey, L1Key, L2Key, MaxNormKey, LearnsKey, RateShareKey]),
         new("relu", "Leaves what is below nought at nought.", []),
         new("tanh", "Squashes every number between minus one and one.", []),
         new("sigmoid", "Squashes every number between nought and one.", []),
         new("dropout", "Leaves a share of the numbers out at every pass while training, and none while serving.", [RateKey]),
-        new("batchNorm", "Brings every number to the mean and spread of the rows it was trained on.", [MomentumKey, EpsilonKey, ScaleKey, ShiftKey, LearnsKey]),
-        new("layerNorm", "Brings every number of one row to that row's own mean and spread.", [EpsilonKey, ScaleKey, ShiftKey, LearnsKey]),
+        new("batchNorm", "Brings every number to the mean and spread of the rows it was trained on.", [MomentumKey, EpsilonKey, ScaleKey, ShiftKey, LearnsKey, RateShareKey]),
+        new("layerNorm", "Brings every number of one row to that row's own mean and spread.", [EpsilonKey, ScaleKey, ShiftKey, LearnsKey, RateShareKey]),
         new("gelu", "Weighs every number by the share of a normal curve below it: smooth where relu bends.", [ApproximateKey]),
         new("silu", "Weighs every number by its own sigmoid; also called swish.", []),
         new("mish", "Weighs every number by the hyperbolic tangent of its softplus.", []),
@@ -180,7 +183,7 @@ public static class NetworkWords
         new("elu", "Leaves what is above nought, and bends what is below it towards minus alpha.", [BendKey]),
         new("selu", "Bends as elu does, at the alpha and the scale that keep a network's numbers normalised.", []),
         new("softmax", "Turns the numbers of a row into shares of one whole.", []),
-        new("rmsNorm", "Divides every number of one row by the root of the mean of the row's squares, and scales it.", [RootEpsilonKey, ScaleKey, LearnsKey]),
+        new("rmsNorm", "Divides every number of one row by the root of the mean of the row's squares, and scales it.", [RootEpsilonKey, ScaleKey, LearnsKey, RateShareKey]),
         new("periodic", "Turns every number of the row into its cosines and sines at frequencies it learns, through a linear layer: a relu after it makes it PLR.", [FrequenciesKey, SigmaKey, WidthKey, LiteKey]),
         new(EmbeddingWord, "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.", [EmbeddingColumnKey, EmbeddingWidthKey]),
     ];
@@ -410,6 +413,11 @@ public static class NetworkWords
         if (rules != default)
         {
             described = described.Ruled(rules);
+        }
+
+        if (layer.Holds(RateShareKey.Key) && layer.Number(RateShareKey.Key) is var share && share != RateShareKey.LeftOut)
+        {
+            described = described.RateShare(share);
         }
 
         return layer.YesOrNo(LearnsKey.Key) ? described : described.Held();

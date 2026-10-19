@@ -54,8 +54,11 @@ public abstract class Optimizer
 
             // PyTorch's weight_decay: the parameter times the decay is added to the gradient first, so a parameter whose gradient
             // is nothing shrinks all the same, and everything the step remembers is worked out from the sum.
+            // The rate of this parameter: the step's rate, or its share of it when the parameter's rules say one.
+            var moves = parameter.Rules.RateShare is { } share ? rate * share : rate;
+
             parameter.Replace(parameter.Bounded(
-                Moved(parameter, decay > 0 ? arithmetic.Add(gradient, arithmetic.Scale(parameter.Value, Scalar(arithmetic, decay))) : gradient, rate, arithmetic),
+                Moved(parameter, decay > 0 ? arithmetic.Add(gradient, arithmetic.Scale(parameter.Value, Scalar(arithmetic, decay))) : gradient, moves, arithmetic),
                 arithmetic));
         }
     }

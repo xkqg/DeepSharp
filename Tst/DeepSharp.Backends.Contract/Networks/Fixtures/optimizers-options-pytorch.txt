@@ -75,3 +75,10 @@ rules bound-on-a-bias: {'steps': 3, 'bounds': {'hidden.bias': 0.1, 'output.bias'
 rules held: {'steps': 3, 'held': ['hidden.weight', 'hidden.bias']}; farthest from the run without them: 0.006618201732635498; losses [0.6452890634536743, 0.6396766304969788, 0.6343399882316589]
 rules held-with-a-penalty-and-a-bound: {'steps': 3, 'held': ['hidden.weight', 'hidden.bias'], 'penalties': {'output.weight': [0.02, 0.01]}, 'bounds': {'output.weight': 0.25}}; farthest from the run without them: 0.12293258309364319; losses [0.6609890460968018, 0.6507244110107422, 0.6457289457321167]
 
+shares sgd-slow-hidden: sgd lr=0.1 {'momentum': 0.9}, {'hidden.weight': 0.1, 'hidden.bias': 0.1}; farthest from the same walk at the whole rate: 0.01114518940448761; losses [0.6452890634536743, 0.6396468877792358, 0.6294456720352173]
+shares sgd-decay-fast-biases: sgd lr=0.1 {'weightDecay': 0.1}, {'hidden.bias': 3.0, 'output.bias': 3.0}; farthest from the same walk at the whole rate: 0.09222182631492615; losses [0.6452890634536743, 0.6329672932624817, 0.6226145625114441]
+shares adam-slow-hidden: adam lr=0.05 {}, {'hidden.weight': 0.1, 'hidden.bias': 0.1}; farthest from the same walk at the whole rate: 0.1345560997724533; losses [0.6452890634536743, 0.6278061866760254, 0.6105320453643799]
+shares adamw-slow-output: adamw lr=0.05 {'weightDecay': 0.1}, {'output.weight': 0.2, 'output.bias': 0.2}; farthest from the same walk at the whole rate: 0.11920636147260666; losses [0.6452890634536743, 0.6317274570465088, 0.6144533753395081]
+shares rmsprop-slow-hidden: rmsprop lr=0.01 {}, {'hidden.weight': 0.1, 'hidden.bias': 0.1}; farthest from the same walk at the whole rate: 0.23946300148963928; losses [0.6452890634536743, 0.6111680269241333, 0.5858246684074402]
+shares nadam-fast-output: nadam lr=0.01 {}, {'output.weight': 4.0, 'output.bias': 4.0}; farthest from the same walk at the whole rate: 0.0863986611366272; losses [0.6452890634536743, 0.629417896270752, 0.6152701377868652]
+

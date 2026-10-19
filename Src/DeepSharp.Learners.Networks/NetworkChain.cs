@@ -171,6 +171,19 @@ public sealed class NetworkDeclaration
     /// <exception cref="NotSupportedException">The layer written last has no numbers to hold.</exception>
     public NetworkDeclaration Held() => OnTheLastLayer("Held", "learns", false);
 
+    /// <summary>Gives the numbers of the layer written last a share of the run's rate to move at: a learning rate of their own for a part of the network.</summary>
+    /// <param name="share">The share of the rate: above nothing; one is the whole rate, as a layer that says none has.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a finite number above nothing.</exception>
+    /// <exception cref="InvalidOperationException">No layer is written yet.</exception>
+    /// <exception cref="NotSupportedException">The layer written last has no numbers to give a share.</exception>
+    /// <remarks>
+    /// PyTorch's learning rate of a parameter group, said of a layer, so a network read from elsewhere can be trained further with
+    /// its first layers moving slower than its last. A step moves the layer's numbers by the rate the schedule gives the epoch
+    /// times the share. To hold numbers still, say <see cref="Held"/>: a share of nothing is refused.
+    /// </remarks>
+    public NetworkDeclaration RateShare(double share) => OnTheLastLayer("RateShare", "rateShare", new SlotRules { RateShare = share }.RateShare!.Value);
+
     /// <summary>A layer that leaves what is below nought at nought.</summary>
     /// <returns>The declaration.</returns>
     public NetworkDeclaration Relu() => Layer("relu");

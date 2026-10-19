@@ -113,6 +113,23 @@ public abstract class Layer
         }
     }
 
+    /// <summary>Gives every number this layer and the layers it holds learn a share of the run's rate to move at, and keeps their other rules.</summary>
+    /// <param name="share">The share of the rate: a finite number above nothing; one is the whole rate, which takes a share off.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The share is not a finite number above nothing.</exception>
+    /// <remarks>
+    /// PyTorch's learning rate of a parameter group, said of a layer. It is a rule of each parameter, written beside its numbers
+    /// in the network's file; a layer without parameters has none to give a share.
+    /// </remarks>
+    public void ScaleRate(double share)
+    {
+        var rules = new SlotRules { RateShare = share };
+
+        foreach (var parameter in Parameters())
+        {
+            parameter.Rules = parameter.Rules with { RateShare = share == 1 ? null : rules.RateShare };
+        }
+    }
+
     /// <summary>What this layer computes of its input: the forward pass, written in the pass's backend.</summary>
     /// <param name="input">What the layer is handed.</param>
     /// <param name="pass">The backend the arithmetic runs on, and whether this pass trains.</param>

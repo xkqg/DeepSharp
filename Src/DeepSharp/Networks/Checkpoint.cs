@@ -63,6 +63,9 @@ internal sealed record Resumable(long Seed, IReadOnlyList<Epoch> History, IReadO
     /// <summary>The paths of the parameters that were held still, in order; nothing when the checkpoint does not say, as one read from an earlier file does not.</summary>
     public IReadOnlyList<string>? Held { get; init; }
 
+    /// <summary>The share of the run's rate each parameter that has one moved at, by path; empty when none had one.</summary>
+    public IReadOnlyDictionary<string, double>? RateShares { get; init; }
+
     /// <summary>The average of the weights the run kept, by the path of the parameter each belongs to; nothing when it kept none.</summary>
     public IReadOnlyDictionary<string, Tensor>? Averaged { get; init; }
 

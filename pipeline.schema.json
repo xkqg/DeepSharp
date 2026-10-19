@@ -2048,6 +2048,12 @@
                   "learns": {
                     "description": "Whether the layer's numbers learn, or are held still as Keras's trainable = False holds them; they learn, unless said.",
                     "type": "boolean"
+                  },
+                  "rateShare": {
+                    "description": "The share of the run's rate the layer's numbers move at, as a learning rate of their own for a part of the network; the whole rate, unless said.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1.7976931348623157E+308
                   }
                 },
                 "required": [
@@ -2190,6 +2196,12 @@
                   "learns": {
                     "description": "Whether the layer's numbers learn, or are held still as Keras's trainable = False holds them; they learn, unless said.",
                     "type": "boolean"
+                  },
+                  "rateShare": {
+                    "description": "The share of the run's rate the layer's numbers move at, as a learning rate of their own for a part of the network; the whole rate, unless said.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1.7976931348623157E+308
                   }
                 },
                 "required": [
@@ -2232,6 +2244,12 @@
                   "learns": {
                     "description": "Whether the layer's numbers learn, or are held still as Keras's trainable = False holds them; they learn, unless said.",
                     "type": "boolean"
+                  },
+                  "rateShare": {
+                    "description": "The share of the run's rate the layer's numbers move at, as a learning rate of their own for a part of the network; the whole rate, unless said.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1.7976931348623157E+308
                   }
                 },
                 "required": [
@@ -2469,6 +2487,12 @@
                   "learns": {
                     "description": "Whether the layer's numbers learn, or are held still as Keras's trainable = False holds them; they learn, unless said.",
                     "type": "boolean"
+                  },
+                  "rateShare": {
+                    "description": "The share of the run's rate the layer's numbers move at, as a learning rate of their own for a part of the network; the whole rate, unless said.",
+                    "type": "number",
+                    "exclusiveMinimum": 0,
+                    "maximum": 1.7976931348623157E+308
                   }
                 },
                 "required": [

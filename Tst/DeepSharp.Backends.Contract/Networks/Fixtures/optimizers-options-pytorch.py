@@ -255,6 +255,61 @@ for name, setting in rule_runs:
     fixture["rules"].append({"name": name, **setting, "losses": losses, "parameters": parameters})
 print()
 
+# ---- the rate shares: a rate of its own for a parameter ------------------------------------------------------------------------
+#
+# PyTorch's parameter groups, one group to a parameter: each group's learning rate is the optimizer's times the share the
+# parameter has, the others' the whole. DeepSharp says it as a share of the rate in the rules of a parameter. Full batches of
+# four through the walked network, three steps; every walk is also walked with every share at one, and the file says how far apart
+# the two ended, so a share that changes nothing on these rows cannot stand as a test of itself.
+
+
+def shared(make, steps, shares):
+    hidden, output, model = network()
+    named = {"hidden.weight": hidden.weight, "hidden.bias": hidden.bias, "output.weight": output.weight, "output.bias": output.bias}
+    groups = [{"params": [parameter], "share": shares.get(name, 1.0)} for name, parameter in named.items()]
+    optimizer = make(groups)
+    loss_of = torch.nn.BCEWithLogitsLoss()
+    losses = []
+    for _ in range(steps):
+        optimizer.zero_grad()
+        loss = loss_of(model(passengers), survived)
+        loss.backward()
+        optimizer.step()
+        losses.append(float(loss.item()))
+    return losses, {
+        "hidden.weight": values(hidden.weight.detach().t().contiguous()),
+        "hidden.bias": values(hidden.bias),
+        "output.weight": values(output.weight),
+        "output.bias": values(output.bias),
+    }
+
+
+def grouped(optimizer, rate, **options):
+    def make(groups):
+        return optimizer([{"params": group["params"], "lr": rate * group["share"]} for group in groups], lr=rate, **options)
+
+    return make
+
+
+share_runs = [
+    ("sgd-slow-hidden", "sgd", 0.1, {"momentum": 0.9}, grouped(torch.optim.SGD, 0.1, momentum=0.9), {"hidden.weight": 0.1, "hidden.bias": 0.1}),
+    ("sgd-decay-fast-biases", "sgd", 0.1, {"weightDecay": 0.1}, grouped(torch.optim.SGD, 0.1, weight_decay=0.1), {"hidden.bias": 3.0, "output.bias": 3.0}),
+    ("adam-slow-hidden", "adam", 0.05, {}, grouped(torch.optim.Adam, 0.05), {"hidden.weight": 0.1, "hidden.bias": 0.1}),
+    ("adamw-slow-output", "adamw", 0.05, {"weightDecay": 0.1}, grouped(torch.optim.AdamW, 0.05, weight_decay=0.1), {"output.weight": 0.2, "output.bias": 0.2}),
+    ("rmsprop-slow-hidden", "rmsprop", 0.01, {}, grouped(torch.optim.RMSprop, 0.01), {"hidden.weight": 0.1, "hidden.bias": 0.1}),
+    ("nadam-fast-output", "nadam", 0.01, {}, grouped(torch.optim.NAdam, 0.01), {"output.weight": 4.0, "output.bias": 4.0}),
+]
+
+fixture["shares"] = []
+for name, kind, rate, settings, make, shares in share_runs:
+    losses, parameters = shared(make, 3, shares)
+    _, whole = shared(make, 3, {})
+    gap = apart(parameters, whole)
+    print(f"shares {name}: {kind} lr={rate} {settings}, {shares}; farthest from the same walk at the whole rate: {gap!r}; losses {losses!r}")
+    assert gap > 1e-4, f"{name}: the shares change nothing on these rows"
+    fixture["shares"].append({"name": name, "optimizer": kind, "rate": rate, "settings": settings, "shares": shares, "steps": 3, "losses": losses, "parameters": parameters})
+print()
+
 with open(os.path.join(here, "optimizers-options-pytorch.json"), "w", encoding="utf-8", newline="\n") as file:
     json.dump(fixture, file, indent=1)
     file.write("\n")

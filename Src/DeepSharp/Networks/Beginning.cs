@@ -32,6 +32,14 @@ public readonly record struct Beginning(Draws Draws)
     /// <summary>Whether the layer has no bias at all; it has one, unless said.</summary>
     public bool WithoutBias { get; init; }
 
+    /// <summary>The low-rank pair a dense layer keeps beside its held kernel; none, unless said.</summary>
+    /// <remarks>
+    /// Like a bias, a pair is a number the layer has or has not, so it is said where the layer begins. A, the pair\'s first matrix,
+    /// is drawn after the weights and the bias, evenly as He\'s uniform initialisation draws it, which is Keras\'s <c>he_uniform</c>;
+    /// B starts at nothing and draws nothing. Only a dense layer takes one.
+    /// </remarks>
+    public LowRank? LowRank { get; init; }
+
     /// <summary>Refuses a beginning without draws, and one that wants no bias and says how to start it.</summary>
     /// <returns>This beginning.</returns>
     /// <exception cref="ArgumentNullException">There are no draws.</exception>

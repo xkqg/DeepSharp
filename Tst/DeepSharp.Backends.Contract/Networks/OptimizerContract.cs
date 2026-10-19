@@ -25,6 +25,13 @@ public abstract class OptimizerContract(ITensorBackend engine)
 
     public static TheoryData<string> OptionWalks { get; } = [.. Options.EnumerateArray().Select(each => each.GetProperty("name").GetString()!)];
 
+    // A rate of its own for a parameter, on the same rows: PyTorch's parameter groups, one to a parameter.
+    private static readonly JsonElement Shares = JsonDocument
+        .Parse(File.ReadAllText(Path.Join(Repository.Root, "Tst", "DeepSharp.Backends.Contract", "Networks", "Fixtures", "optimizers-options-pytorch.json")))
+        .RootElement.GetProperty("shares");
+
+    public static TheoryData<string> ShareWalks { get; } = [.. Shares.EnumerateArray().Select(each => each.GetProperty("name").GetString()!)];
+
     [Fact]
     public void Adam_OverThreeStepsOnTitanicsPassengers_MovesEveryParameterAsPyTorchsAdamDoes()
     {
@@ -276,6 +283,45 @@ public abstract class OptimizerContract(ITensorBackend engine)
         var hidden = new Dense(WalkedRows.HiddenWeights(), WalkedRows.HiddenBias());
         var output = new Dense(WalkedRows.OutputWeights(), WalkedRows.OutputBias());
         var network = new LayerStack(hidden, new Relu(), output);
+        var optimizer = OptimizerOf(walk);
+        var losses = walk.GetProperty("losses").EnumerateArray().Select(loss => loss.GetDouble()).ToArray();
+
+        for (var step = 0; step < losses.Length; step++)
+        {
+            var loss = Stepped(network, optimizer, new BinaryCrossEntropy(), WalkedRows.Passengers(), WalkedRows.Survived());
+
+            Assert.Equal(losses[step], loss, step == 0 ? AgreementContract.Bound(WalkedRows.SurvivedLossTermsSize()) : 1e-6);
+        }
+
+        var parameters = walk.GetProperty("parameters");
+
+        AssertClose(Doubles(parameters, "hidden.weight"), hidden.Weight.Value);
+        AssertClose(Doubles(parameters, "hidden.bias"), hidden.Bias!.Value);
+        AssertClose(Doubles(parameters, "output.weight"), output.Weight.Value);
+        AssertClose(Doubles(parameters, "output.bias"), output.Bias!.Value);
+    }
+
+    [Theory]
+    [MemberData(nameof(ShareWalks), MemberType = typeof(OptimizerContract))]
+    public void AShareOfTheRate_MovesAParameterStepForStep_AsPyTorchsParameterGroupDoes(string name)
+    {
+        var walk = Shares.EnumerateArray().Single(each => each.GetProperty("name").GetString() == name);
+        var hidden = new Dense(WalkedRows.HiddenWeights(), WalkedRows.HiddenBias());
+        var output = new Dense(WalkedRows.OutputWeights(), WalkedRows.OutputBias());
+        var network = new LayerStack(hidden, new Relu(), output);
+        var named = new Dictionary<string, Parameter>
+        {
+            ["hidden.weight"] = hidden.Weight,
+            ["hidden.bias"] = hidden.Bias!,
+            ["output.weight"] = output.Weight,
+            ["output.bias"] = output.Bias!,
+        };
+
+        foreach (var share in walk.GetProperty("shares").EnumerateObject())
+        {
+            named[share.Name].Rules = named[share.Name].Rules with { RateShare = share.Value.GetDouble() };
+        }
+
         var optimizer = OptimizerOf(walk);
         var losses = walk.GetProperty("losses").EnumerateArray().Select(loss => loss.GetDouble()).ToArray();
 

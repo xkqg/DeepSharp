@@ -511,7 +511,7 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         });
         var first = text.Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
 
-        Assert.Equal(6, NetworkDocument.Version);
+        Assert.Equal(7, NetworkDocument.Version);
         Assert.Contains("\"version\": 2", text, StringComparison.Ordinal);
         Assert.Null(NetworkDocument.ReadNetwork(first, "network", NetworkCatalog.BuiltIn()).TrainedOn!.Unvaried);
     }

@@ -40,9 +40,10 @@ public static class NetworkDocument
     /// 0.8.0 refuses by its number; a part whose layers, optimizer or schedule say more than the fourth could, as the fifth,
     /// which 0.9.0 refuses by its number rather than by a key it does not know; and one that says more than the fifth could,
     /// as the sixth, which 0.10.0 refuses by its number. A part of the first, which 0.4.0 wrote, is read as it was written and
-    /// says nothing of them, every window's padding a number.
+    /// says nothing of them, every window's padding a number. In the seventh, a parameter says a share of the run's rate its
+    /// numbers move at, and the part is the first that 0.12.0 refuses by its number; the training part is not raised by it.
     /// </remarks>
-    public const int Version = 6;
+    public const int Version = 7;
 
     /// <summary>
     /// The version 0.4.0 wrote, whose training part records neither the batch size nor the early stopping of its run: the one
@@ -75,6 +76,12 @@ public static class NetworkDocument
     /// version 0.10.0 refuses by its number.
     /// </summary>
     internal const int SixthVersion = 6;
+
+    /// <summary>
+    /// The version a network's part is written as once a parameter in it says a share of the run's rate: the first version 0.12.0
+    /// refuses by its number rather than by the key it does not know.
+    /// </summary>
+    internal const int SeventhVersion = 7;
 
     internal const string KindKey = "kind";
     internal const string PackageKey = "package";
@@ -124,6 +131,7 @@ public static class NetworkDocument
     internal const string L1Key = "l1";
     internal const string L2Key = "l2";
     internal const string MaxNormKey = "maxNorm";
+    internal const string RateShareKey = "rateShare";
     internal const string EngineKey = "engine";
     internal const string NameKey = "name";
     internal const string DeviceKey = "device";
@@ -409,6 +417,7 @@ public static class NetworkDocument
         var resumable = new Resumable(seed, history!, slots.ToDictionary(named => named.Key, named => named.Value.Value), memory)
         {
             Held = [.. slots.Where(each => each.Value is Parameter { Learns: false }).Select(each => each.Key).Order(StringComparer.Ordinal)],
+            RateShares = CompiledNetwork.Shared(network.Network),
             Judgement = judgement,
             Pace = pace,
             Engine = engine,
@@ -444,7 +453,8 @@ public static class NetworkDocument
                 .Select(held => held.Layer)
                 .Prepend(network)
                 .Max(layer => layer is ISaved saved ? saved.FileVersion : SecondVersion),
-            network.Parameters().Any(parameter => !parameter.Rules.IsDefault) ? FifthVersion : 0);
+            network.Parameters().Any(parameter => parameter.Rules.RateShare is not null) ? SeventhVersion
+                : network.Parameters().Any(parameter => !parameter.Rules.IsDefault) ? FifthVersion : 0);
 
     /// <summary>
     /// The oldest version of a training part that says everything the run holds: what it records of the pace the run went at —
@@ -577,6 +587,11 @@ public static class NetworkDocument
         if (rules.MaxNorm is { } bound)
         {
             writer.WriteNumber(MaxNormKey, bound);
+        }
+
+        if (rules.RateShare is { } share)
+        {
+            writer.WriteNumber(RateShareKey, share);
         }
     }
 

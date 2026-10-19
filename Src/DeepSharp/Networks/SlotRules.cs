@@ -52,6 +52,27 @@ public readonly record struct SlotRules
     /// <summary>Whether the numbers are held still: moved by no step, and out of the loss's gradient; they learn, unless said.</summary>
     public bool Held { get; init; }
 
+    /// <summary>
+    /// The share of the run's rate the numbers move at, so a part of a network can learn faster or slower than the rest: the
+    /// whole rate, unless said. PyTorch's learning rate of a parameter group, said of the parameter it is about.
+    /// </summary>
+    /// <remarks>
+    /// A step moves the numbers by the rate the schedule gives the epoch times this share, and what an optimizer remembers of
+    /// them is worked out from their gradients alone, so the share changes how far a step goes and never what is remembered.
+    /// A share of nothing would move nothing: that is what <see cref="Held"/> says, and it is refused here in its favour.
+    /// </remarks>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a finite number above nothing.</exception>
+    public double? RateShare
+    {
+        get;
+        init => field = value is null || (double.IsFinite(value.Value) && value.Value > 0)
+            ? value
+            : throw new ArgumentOutOfRangeException(
+                nameof(value),
+                value,
+                "A share of the rate is a finite number above nothing; numbers that no step should move are held still, with Held.");
+    }
+
     /// <summary>Whether the numbers learn.</summary>
     public bool Learns => !Held;
 

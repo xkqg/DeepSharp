@@ -258,6 +258,12 @@ public sealed class CompiledNetwork
             throw new ArgumentException(
                 $"The checkpoint was taken of a network whose {Held([.. was])}, and going on with a network whose {Held(held)} would learn otherwise.", "options");
         }
+
+        if (state.RateShares is { } shared && !Shared(network).SequenceEqual(shared))
+        {
+            throw new ArgumentException(
+                $"The checkpoint was taken of a network whose {Rates(shared)}, and going on with a network whose {Rates(Shared(network))} would move every step otherwise.", "options");
+        }
     }
 
     // A bound is held per unit, and a transposed convolution's numbers are not laid out by unit: the rules a network carries are
@@ -297,6 +303,19 @@ public sealed class CompiledNetwork
             }
         }
     }
+
+    // The share of the run's rate each parameter that has one moves at, by path in the order of the paths: what a checkpoint is taken under.
+    internal static IReadOnlyDictionary<string, double> Shared(Network network) =>
+        network.Slots()
+            .Where(named => named.Slot is Parameter { Rules.RateShare: not null })
+            .OrderBy(named => named.Path, StringComparer.Ordinal)
+            .ToDictionary(named => named.Path, named => ((Parameter)named.Slot).Rules.RateShare!.Value, StringComparer.Ordinal);
+
+    // Which parameters a refusal says move at a share of the rate: the paths and their shares, or that none does.
+    private static string Rates(IReadOnlyDictionary<string, double> shares) =>
+        shares.Count == 0
+            ? "parameters all moved at the whole rate"
+            : $"parameters {string.Join(", ", shares.Select(each => string.Create(CultureInfo.InvariantCulture, $"'{each.Key}' moved at {each.Value} of the rate")))}";
 
     // Which parameters a refusal says are held still: the paths, or that none is.
     private static string Held(string[] paths) => paths.Length == 0 ? "parameters all learned" : $"parameters {string.Join(", ", paths.Select(path => $"'{path}'"))} were held still";
@@ -487,6 +506,7 @@ public sealed class CompiledNetwork
                 Engine = Engine.Of(options.Backend),
                 Averaged = options.Average is null ? null : Averaged(),
                 Held = [.. compiled.Network.Slots().Where(named => named.Slot is Parameter { Learns: false }).Select(named => named.Path).Order(StringComparer.Ordinal)],
+                RateShares = Shared(compiled.Network),
             });
         }
 

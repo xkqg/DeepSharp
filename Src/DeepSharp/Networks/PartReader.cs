@@ -190,7 +190,8 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
         ThirdVersion => "third",
         FourthVersion => "fourth",
         FifthVersion => "fifth",
-        _ => "sixth",
+        SixthVersion => "sixth",
+        _ => "seventh",
     };
 
     /// <summary>
@@ -704,7 +705,7 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
     }
 
     // The keys beside a parameter's numbers that say what the learning does to them.
-    private static readonly string[] RuleKeys = [LearnsKey, L1Key, L2Key, MaxNormKey];
+    private static readonly string[] RuleKeys = [LearnsKey, L1Key, L2Key, MaxNormKey, RateShareKey];
 
     // What a parameter's entry says beside its numbers of what the learning does to them: held still, a penalty, a bound. Nothing
     // where it says none of it; and each is refused in a part of an earlier version than the fifth, which cannot say it, and
@@ -718,9 +719,12 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
         {
             says = true;
 
-            if (version < FifthVersion)
+            // A hold, a penalty and a bound are written from the fifth version on; a share of the rate from the seventh.
+            var from = key == RateShareKey ? SeventhVersion : FifthVersion;
+
+            if (version < from)
             {
-                text.Fault([.. at, key], $"What the learning does to a parameter's numbers, under '{key}', is written from the fifth version of a network's part on, and this one is of the {Ordinal(version)}.");
+                text.Fault([.. at, key], $"What the learning does to a parameter's numbers, under '{key}', is written from the {Ordinal(from)} version of a network's part on, and this one is of the {Ordinal(version)}.");
 
                 continue;
             }
@@ -740,6 +744,9 @@ internal sealed class PartReader(NetworkText text, string property, JsonElement 
                     break;
                 case MaxNormKey when value.AsNumber() is { } bound && bound > 0 && double.IsFinite(bound):
                     rules = rules with { MaxNorm = bound };
+                    break;
+                case RateShareKey when value.AsNumber() is { } share && share > 0 && double.IsFinite(share):
+                    rules = rules with { RateShare = share };
                     break;
                 default:
                     text.Fault([.. at, key], key == LearnsKey

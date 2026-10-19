@@ -15,9 +15,18 @@ namespace DeepSharp.Networks;
 /// times the weights is the batch's outputs; PyTorch keeps the same numbers turned round. The slots are named as PyTorch
 /// names them, <c>weight</c> and <c>bias</c>. A layer without a bias keeps the <c>weight</c> alone, Keras's
 /// <c>use_bias=False</c> and PyTorch's <c>bias=False</c>, and writes into its file that it has none.
+/// <para>
+/// A layer begun with a <see cref="LowRank"/> keeps a pair of matrices beside its kernel, <c>lora_a</c> and <c>lora_b</c>, as
+/// Keras's <c>enable_lora</c> does: the kernel is held still and the pair and the bias learn, and the layer answers with the
+/// kernel's product plus the pair's, scaled by alpha over the rank. It writes its rank and its alpha into its file, which makes
+/// the network's part the seventh version.
+/// </para>
 /// </remarks>
 public sealed class Dense : Layer, ISaved<Dense>
 {
+    private const string RankKey = "rank";
+    private const string AlphaKey = "alpha";
+
     /// <summary>A linear layer that starts as PyTorch's does: weights and bias evenly within one over the root of the inputs.</summary>
     /// <param name="inputs">How many values each row it reads holds.</param>
     /// <param name="outputs">How many values it makes of each row.</param>
@@ -46,6 +55,16 @@ public sealed class Dense : Layer, ISaved<Dense>
 
         Weight = AddParameter("weight", begun.WeightsOf(new Shape(inputs, outputs), fans));
         Bias = begun.BiasOf(new Shape(outputs), fans) is { } bias ? AddParameter("bias", bias) : null;
+
+        if (begun.LowRank is { } pair)
+        {
+            // Keras's enable_lora: the kernel is held, A starts evenly as He's uniform initialisation draws it and B at nothing, so
+            // the answer at the first step is the kernel's own.
+            LowRank = pair;
+            Weight.Rules = Weight.Rules with { Held = true };
+            A = AddParameter("lora_a", new KaimingUniform(0).Draw(new Shape(inputs, pair.Rank), fans, begun.Draws));
+            B = AddParameter("lora_b", Tensor.Zeros(new Shape(pair.Rank, outputs)));
+        }
     }
 
     /// <summary>A linear layer that starts at the given numbers.</summary>
@@ -73,6 +92,15 @@ public sealed class Dense : Layer, ISaved<Dense>
     /// <summary>The bias: one value for each output; nothing for a layer built without one.</summary>
     public Parameter? Bias { get; }
 
+    /// <summary>The low-rank pair beside the held kernel: its rank and its alpha; nothing for a layer built without one.</summary>
+    public LowRank? LowRank { get; }
+
+    /// <summary>The pair's first matrix: as many rows as the layer has inputs, the rank columns; nothing for a layer without a pair.</summary>
+    public Parameter? A { get; }
+
+    /// <summary>The pair's second matrix: the rank rows, as many columns as the layer has outputs; nothing for a layer without a pair.</summary>
+    public Parameter? B { get; }
+
     /// <summary>How many values each row it reads holds.</summary>
     public int Inputs => Weight.Value.Shape[0];
 
@@ -90,11 +118,35 @@ public sealed class Dense : Layer, ISaved<Dense>
         return new(
             rebuilding.Whole(settings, "inputs"),
             rebuilding.Whole(settings, "outputs"),
-            new Beginning(rebuilding.Draws) { WithoutBias = !rebuilding.Yes(settings, "bias") });
+            new Beginning(rebuilding.Draws)
+            {
+                WithoutBias = !rebuilding.Yes(settings, "bias"),
+                LowRank = PairIn(settings, rebuilding),
+            });
+    }
+
+    // The pair a layer was written with: its rank, and its alpha where it is not the rank; none for a layer written without a rank.
+    private static LowRank? PairIn(JsonElement settings, Rebuilding rebuilding)
+    {
+        if (settings.Member(RankKey) is null)
+        {
+            return settings.Member(AlphaKey) is null ? null : throw rebuilding.Refuse(AlphaKey, "written only beside a rank, the rank of the pair it scales");
+        }
+
+        var rank = rebuilding.Whole(settings, RankKey);
+
+        if (rank < 1)
+        {
+            throw rebuilding.Refuse(RankKey, "a whole number from one");
+        }
+
+        var alpha = rebuilding.Number(settings, AlphaKey, rank);
+
+        return double.IsFinite(alpha) && alpha > 0 ? new LowRank(rank, alpha) : throw rebuilding.Refuse(AlphaKey, "a number above nothing");
     }
 
     /// <inheritdoc />
-    public int FileVersion => Bias is null ? NetworkDocument.FifthVersion : NetworkDocument.SecondVersion;
+    public int FileVersion => LowRank is not null ? NetworkDocument.SeventhVersion : Bias is null ? NetworkDocument.FifthVersion : NetworkDocument.SecondVersion;
 
     /// <inheritdoc />
     public void WriteSettings(Utf8JsonWriter writer)
@@ -108,12 +160,26 @@ public sealed class Dense : Layer, ISaved<Dense>
         {
             writer.WriteBoolean("bias", false);
         }
+
+        if (LowRank is { } pair)
+        {
+            writer.WriteNumber(RankKey, pair.Rank);
+            writer.WriteNumber(AlphaKey, pair.Alpha);
+        }
     }
 
     /// <inheritdoc />
     protected override Tensor Compute(Tensor input, Pass pass)
     {
         var product = pass.Backend.MatMul(input, Weight.Value);
+
+        if (LowRank is { } pair)
+        {
+            // x W + (x A B) · alpha / rank: what Keras's Dense answers once enable_lora has been called.
+            var beside = pass.Backend.MatMul(pass.Backend.MatMul(input, A!.Value), B!.Value);
+
+            product = pass.Backend.Add(product, pair.Scale == 1 ? beside : pass.Backend.Scale(beside, pass.Backend.Fill(new Shape(), (float)pair.Scale)));
+        }
 
         return Bias is null ? product : pass.Backend.AddRow(product, Bias.Value);
     }

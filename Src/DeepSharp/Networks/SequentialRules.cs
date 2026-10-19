@@ -22,7 +22,7 @@ public sealed partial class Sequential
     public Sequential Ruled(SlotRules weights, SlotRules bias = default)
     {
         RequireWord();
-        _words[^1] = new RuledWord(_words[^1], weights, bias, Held: false);
+        _words[^1] = new RuledWord(_words[^1], weights, bias, Held: false, RateShare: null);
 
         return this;
     }
@@ -34,7 +34,26 @@ public sealed partial class Sequential
     public Sequential Held()
     {
         RequireWord();
-        _words[^1] = new RuledWord(_words[^1], default, default, Held: true);
+        _words[^1] = new RuledWord(_words[^1], default, default, Held: true, RateShare: null);
+
+        return this;
+    }
+
+    /// <summary>Gives the numbers of the layer the last word makes a share of the run's rate to move at: PyTorch's learning rate of a parameter group.</summary>
+    /// <param name="share">The share of the rate: a finite number above nothing; one is the whole rate.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="InvalidOperationException">No word is written yet.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The share is not a finite number above nothing.</exception>
+    /// <remarks>
+    /// It goes on every number the layer keeps, and with the other rule words in either order: what a penalty, a bound or a hold
+    /// put on a number is kept. A word whose layer holds no number — an activation, a pooling — has none to give a share, and is
+    /// made as it was.
+    /// </remarks>
+    public Sequential RateShare(double share)
+    {
+        RequireWord();
+        _ = new SlotRules { RateShare = share };
+        _words[^1] = new RuledWord(_words[^1], default, default, Held: false, RateShare: share);
 
         return this;
     }
@@ -48,7 +67,7 @@ public sealed partial class Sequential
     }
 
     /// <summary>A word whose layer is made as the word makes it, and then has rules put on its numbers.</summary>
-    private sealed record RuledWord(IWord Inner, SlotRules Weights, SlotRules Bias, bool Held) : IWord
+    private sealed record RuledWord(IWord Inner, SlotRules Weights, SlotRules Bias, bool Held, double? RateShare) : IWord
     {
         public string? Refusal(Shape each) => Inner.Refusal(each);
 
@@ -68,10 +87,16 @@ public sealed partial class Sequential
                 layer.Hold();
             }
 
+            if (RateShare is { } share)
+            {
+                layer.ScaleRate(share);
+            }
+
             return layer;
         }
 
-        // The rules go on the layer's own number of that name; a layer that holds none is refused where a rule is said for it.
+        // The rules go on the layer's own number of that name; a layer that holds none is refused where a rule is said for it. A
+        // penalty and a bound are put as said, and what an earlier word put beside them — a hold, a share of the rate — is kept.
         private static void Put(Layer layer, string name, SlotRules rules)
         {
             if (rules.IsDefault)
@@ -82,7 +107,7 @@ public sealed partial class Sequential
             var parameter = layer.Slots().Select(named => named.Path == name ? named.Slot as Parameter : null).FirstOrDefault(found => found is not null)
                 ?? throw new ArgumentException($"A {layer.GetType().Name} holds no '{name}' to put rules on.", nameof(rules));
 
-            parameter.Rules = rules with { Held = parameter.Rules.Held || rules.Held };
+            parameter.Rules = rules with { Held = parameter.Rules.Held || rules.Held, RateShare = rules.RateShare ?? parameter.Rules.RateShare };
         }
     }
 }
