@@ -23,7 +23,10 @@ internal static class NotebookVerbs
     /// <summary>A new catalog of every verb a notebook can hold.</summary>
     /// <returns>The catalog.</returns>
     public static StepCatalog Catalog() => StepCatalog.BuiltIn().WithIndicators().WithParquet().WithExcel().WithJson().WithNetworks().WithML()
-        .Without(
-            "read.texts",
-            "a notebook's block does not carry the readers of folders of files, since every view would read every file again: read them in a C# cell and hand the rows over.");
+        .Without("read.texts", FolderReaders)
+        .Without("read.images", FolderReaders)
+        .Without("read.sounds", FolderReaders);
+
+    private const string FolderReaders =
+        "a notebook's block does not carry the readers of folders of files, since every view would read every file again: read them in a C# cell and hand the rows over.";
 }

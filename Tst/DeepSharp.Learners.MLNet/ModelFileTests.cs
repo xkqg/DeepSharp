@@ -37,6 +37,20 @@ public class ModelFileTests
     }
 
     [Fact]
+    public void AModelAskedForItsFileTwice_WritesTheSameBytes_EvenWhenTheArchivesOwnClockHasTicked()
+    {
+        // ML.NET stamps the entries of its archive with the time it saves them, in steps of two seconds, so a model saved again
+        // after a tick is a different file of the same model, and the file a digest binds is not the one written next. The
+        // sleep is not a wait for something to happen: it only makes sure the clock has ticked, which is what the repro needs.
+        var trained = Passengers().TrainWithML();
+        var first = trained.ToJson();
+
+        Thread.Sleep(TimeSpan.FromMilliseconds(2200));
+
+        Assert.Equal(first, trained.ToJson());
+    }
+
+    [Fact]
     public void ItNamesTheLibraryThatWroteTheModel_AndTheProcessorItWasWrittenOn()
     {
         // Without these a reader that cannot open the archive can say nothing useful: the model is ML.NET's own format,

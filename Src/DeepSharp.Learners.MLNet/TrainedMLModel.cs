@@ -32,6 +32,7 @@ public sealed class TrainedMLModel
         Trainer = step.Trainer;
         Seed = step.Seed;
         TrainedOn = trainedOn;
+        Archive = new Lazy<byte[]>(Saved, LazyThreadSafetyMode.ExecutionAndPublication);
     }
 
     /// <summary>The run this model was trained behind: its steps, its parts and everything they learned.</summary>
@@ -51,6 +52,10 @@ public sealed class TrainedMLModel
     /// <see cref="WithInterval(double)"/> gives it one.
     /// </summary>
     public ConformalInterval? Interval { get; private init; }
+
+    // ML.NET's archive of the model, saved once: it stamps its entries with the time it is saved, so a model saved at every call would
+    // write a different file each time it is asked, and the file a digest binds is not the one written next.
+    private Lazy<byte[]> Archive { get; init; }
 
     /// <summary>How the pipeline's own report measures this model, on the parts the report names.</summary>
     /// <returns>The measures, or nothing when the pipeline declares no report.</returns>
@@ -74,7 +79,7 @@ public sealed class TrainedMLModel
     /// calibration rows, in the answer's own units. It is kept in the model's file.
     /// </remarks>
     public TrainedMLModel WithInterval(double alpha) =>
-        new(_model, _context, Prepared, TrainedOn) { Interval = Prepared.IntervalOf(PredictedFor(Part.Calibration), alpha) };
+        new(_model, _context, Prepared, TrainedOn) { Interval = Prepared.IntervalOf(PredictedFor(Part.Calibration), alpha), Archive = Archive };
 
     // What the model predicts for a part, as the pipeline measures predictions: one answer a row.
     private PartPredictions PredictedFor(Part part) =>
@@ -88,11 +93,7 @@ public sealed class TrainedMLModel
     /// </remarks>
     public string ToJson()
     {
-        using var saved = new MemoryStream();
-
-        _context.Model.Save(_model, inputSchema: null, saved);
-
-        return (MLModelFile.Of(PipelineText.Of(Prepared), Trainer, saved.ToArray()) with
+        return (MLModelFile.Of(PipelineText.Of(Prepared), Trainer, Archive.Value) with
         {
             Seed = Seed,
             Library = typeof(MLContext).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion,
@@ -103,6 +104,15 @@ public sealed class TrainedMLModel
             Rows = TrainedOn.Rows,
             Interval = Interval,
         }).ToJson();
+    }
+
+    private byte[] Saved()
+    {
+        using var saved = new MemoryStream();
+
+        _context.Model.Save(_model, inputSchema: null, saved);
+
+        return saved.ToArray();
     }
 
     /// <summary>What this model predicts for rows that arrived after training, in the answer's own units.</summary>

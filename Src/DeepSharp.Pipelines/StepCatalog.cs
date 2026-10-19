@@ -119,13 +119,17 @@ public sealed class StepCatalog
         ArgumentException.ThrowIfNullOrWhiteSpace(verb);
         ArgumentException.ThrowIfNullOrWhiteSpace(because);
 
-        if (_verbs.TryRemove(verb, out _))
-        {
-            _left[verb] = because;
-        }
+        // Recorded whether or not it was registered: a catalog that never carried the package is told why all the same.
+        _verbs.TryRemove(verb, out _);
+        _left[verb] = because;
 
         return this;
     }
+
+    /// <summary>Whether this catalog leaves a verb out on purpose, and says so to whoever names it.</summary>
+    /// <param name="verb">The name to look for.</param>
+    /// <returns><see langword="true"/> when <see cref="Without(string, string)"/> left the verb out.</returns>
+    public bool LeavesOut(string verb) => _left.ContainsKey(verb);
 
     /// <summary>Whether this catalog can read a step written under that name.</summary>
     /// <param name="verb">The name to look for.</param>

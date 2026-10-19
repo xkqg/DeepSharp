@@ -72,7 +72,24 @@ public class BlockTests
         var catalog = NotebookVerbs.Catalog();
 
         Assert.NotEmpty(StepCatalog.VerbsOtherPackagesBring);
-        Assert.All(StepCatalog.VerbsOtherPackagesBring.Keys, verb => Assert.True(catalog.Knows(verb), verb));
+        Assert.All(StepCatalog.VerbsOtherPackagesBring.Keys, verb => Assert.True(catalog.Knows(verb) || catalog.LeavesOut(verb), verb));
+    }
+
+    [Theory]
+    [InlineData("read.texts")]
+    [InlineData("read.images")]
+    [InlineData("read.sounds")]
+    public void TheReadersOfFolders_AreLeftOutOfTheNotebook_AndABlockNamingOneIsToldWhy(string verb)
+    {
+        // A view of a block reads its rows again, and a folder of files read again for every view is what a C# cell is for.
+        var catalog = NotebookVerbs.Catalog();
+
+        Assert.False(catalog.Knows(verb));
+        Assert.True(catalog.LeavesOut(verb));
+        var refused = Assert.Throws<NotSupportedException>(() => catalog.Read(System.Text.Json.JsonDocument.Parse("{\"step\": \"" + verb + "\", \"path\": \"x\"}").RootElement));
+
+        Assert.Contains("leaves out", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("C# cell", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
