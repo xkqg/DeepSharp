@@ -9,7 +9,8 @@
 
   <ItemGroup>
     <!-- NAudio.Core 2.4.0, MIT (github.com/naudio/NAudio): the managed part of NAudio alone, which reads a WAV file on any platform
-         and brings no Windows API and no native library with it. -->
+         and brings no Windows API and no native library with it. A deliberate pin, the newest that runs on .NET 8, which every package
+         here still supports: NAudio.Core 3.x is built for .NET 9 and later only. -->
     <PackageReference Include="NAudio.Core" Version="2.4.0" />
   </ItemGroup>
 

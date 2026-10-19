@@ -53,7 +53,7 @@ What a model is worth, and more ways to train it: data that is not a table, seve
 
 ### Changed
 
-- **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.18.2**, and every package reference is taken at its newest version when the release is made.
+- **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.18.2**, and every package reference is taken at its newest version when the release is made, but for two pins that name their reason in the project: Verso.Abstractions's range, and NAudio.Core 2.4.0, the newest that runs on .NET 8 — its 3.x is built for .NET 9 and later.
 
 ## [0.12.0]
 
