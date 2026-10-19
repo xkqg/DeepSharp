@@ -56,6 +56,49 @@ public class HandoverTests
         Assert.Contains("one answer", refused.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void RowsThatAreImages_AreHandedToATreeAsTheRowOfTheirPixels_AndAServedImageIsAnsweredAsATrainingOneIs()
+    {
+        // Images of 6 by 6, the answer being whether the left half is brighter than the right: a tree reads the pixels flattened,
+        // with no shape stated, as it reads any other row of numbers.
+        static InMemoryRowSource Images(int count, int offset)
+        {
+            var random = new Random(41 + offset);
+
+            return new InMemoryRowSource(
+                ["image", "bright"],
+                [.. Enumerable.Range(0, count).Select(_ =>
+                {
+                    var leftBright = random.NextDouble() < 0.5;
+                    var pixels = new byte[36];
+
+                    for (var at = 0; at < pixels.Length; at++)
+                    {
+                        pixels[at] = (byte)((((at % 6) < 3) == leftBright ? 170 : 60) + random.Next(40));
+                    }
+
+                    return (IReadOnlyList<string?>)[MediaCell.Pixels([6, 6, 1], pixels), leftBright ? "1" : "0"];
+                })]);
+        }
+
+        var trained = Pdd.Create()
+            .Read(Images(300, 0), "three hundred images")
+            .Declare(schema => schema.Media("image").Integer("bright"))
+            .SplitAtRandom(0.60, 0.20, 3)
+            .Target("bright")
+            .Report(report => report.Measure(Metric.Accuracy).On(Part.Test).As(Shown.Numbers))
+            .WithML(trainer => trainer.FastTree(trees: 20))
+            .Build()
+            .TrainWithML();
+        var accuracy = trained.Measures!.Parts.Single().Values.Single(value => value.Metric == Metric.Accuracy);
+        var answered = trained.Predict(Images(40, 5));
+        var held = Images(40, 5).Rows.Select(row => row[1] == "1" ? 1 : 0).ToArray();
+
+        Assert.True(accuracy.Value > 0.9, $"accuracy {accuracy.Value}");
+        Assert.Equal(36, trained.TrainedOn.Features.Count);
+        Assert.True(Enumerable.Range(0, 40).Count(at => (answered[at][0] >= 0.5 ? 1 : 0) == held[at]) >= 34);
+    }
+
     /// <summary>One row as the view hands it on, read back to count what went in.</summary>
     private sealed class Scored
     {

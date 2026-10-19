@@ -288,6 +288,8 @@ public class ReaderTests
     [Theory]
     [InlineData(typeof(ReadParquetStep), "Parquet")]
     [InlineData(typeof(ReadExcelStep), "ExcelDataReader")]
+    [InlineData(typeof(ReadImagesStep), "StbImageSharp")]
+    [InlineData(typeof(ReadSoundsStep), "NAudio.Core")]
     [InlineData(typeof(ReadJsonStep), null)]
     public void EachReadersPackage_ReferencesThePipelineAndTheOneLibraryItBrings_AndNothingElse(Type step, string? library)
     {
