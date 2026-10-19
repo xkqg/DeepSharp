@@ -15,7 +15,7 @@
          in one test project is NU1608, an error here (measured). -->
     <PackageReference Include="Verso.Abstractions" Version="[1.1.0, 2.0.0)" />
     <!-- The colour maps and the correlation are borrowed, as the indicators are; every figure is DeepSharp.Charts'. -->
-    <PackageReference Include="MatPlotLibNet" Version="1.18.1" />
+    <PackageReference Include="MatPlotLibNet" Version="1.18.2" />
   </ItemGroup>
 
   <ItemGroup>

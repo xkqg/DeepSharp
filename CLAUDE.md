@@ -87,6 +87,25 @@ The tests that compile the README's code and the wiki's read the wiki from a clo
 ports at its peak, so keep the suites started side by side few; a red from many at once is the machine before it is
 the code.
 
+## Build-wide facts that bite
+
+- `Directory.Build.props` is the one place for `<Version>` (owner-assigned; never edit it, a test refuses a second one),
+  C# 14, nullable, `TreatWarningsAsErrors` and `GenerateDocumentationFile` (an undocumented public member fails the build).
+- `dotnet pack` compares each package's public surface with the last release (`PackageValidationBaselineVersion`; the
+  `PublishedBefore` list names which packages have a baseline). A break that is meant goes in a suppression file beside the
+  project plus the changelog's upgrading notes; a package new in a release joins `PublishedBefore` in the next release.
+- A package that brings a verb must also be referenced by the notebook project and the core suite's project (hand-written
+  lists, held to each other by tests) — a verb package missing from one is a red test, not a runtime surprise.
+- `DeepSharp` (tensors) and `DeepSharp.Pipelines` never reference each other; they meet only in
+  `DeepSharp.Learners.Networks`. A test reads the assembly references, so a new reference between them fails.
+- First step of any work: move every package reference to the newest version on nuget.org — `MatPlotLibNet*` always, with no
+  exception (owner's own library) — then build and run the gate. That includes TorchSharp with its `libtorch-*` and
+  `TorchSharp-cuda-*` packages (they move together) and CudaSharp, wherever it is used. Only a deliberate pin with its
+  reason named stays back (Verso.Abstractions' range). The versions that ship are the newest at delivery, so look them up
+  again just before the release is made, and the changelog section of the DeepSharp version being delivered names them.
+- No Python under `Src`, in a shipped file, or referenced by a package (`PythonInTheTestsOnlyTests`); fixture scripts live in
+  the `Fixtures` folder of the suite that reads their output and are run by hand.
+
 ## Where things are
 
 `ARCHITECTURE.md` opens with the layout, folder by folder. What makes it a structure is four seams, one interface

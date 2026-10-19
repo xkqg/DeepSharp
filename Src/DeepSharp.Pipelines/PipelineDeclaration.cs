@@ -131,11 +131,12 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// number by a library that has not heard of it. The tenth is the same rule again, for the verbs and the words the
     /// release after 0.10.0 adds — among them a run whose epochs are judged by the average of its weights. The eleventh is
     /// the step that keeps the training rows a served model is watched against, which a library that has not heard of it
-    /// refuses by the number rather than by the verb.
+    /// refuses by the number rather than by the verb. The twelfth is the same rule once more, for what the release after 0.12.0
+    /// adds: rows that are not a table, a split that cuts more than once and one that sets rows aside to calibrate an interval.
     /// A property rather than a constant, so a package compiled against this version reads the number the running
     /// library has.
     /// </remarks>
-    public static int Version => 11;
+    public static int Version => 12;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;

@@ -3,6 +3,14 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.13.0]
+
+What a model is worth, and more ways to train it: data that is not a table, several networks answering as one, an interval and a reason with every answer, and a rate of its own for a part of a network. The sections below say what each brought.
+
+### Changed
+
+- **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.18.2**, and every package reference is taken at its newest version when the release is made.
+
 ## [0.12.0]
 
 A model watched after it ships. The likeness of the parts measured how far training, validation and test lie apart, once,

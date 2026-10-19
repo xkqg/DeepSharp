@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 11
+      "maximum": 12
     },
     "declaration": {
       "description": "The steps, in the order they run.",

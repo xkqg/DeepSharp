@@ -18,6 +18,8 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.13.0 is about what a model is worth, and more ways to train it.**
+
 **0.12.0 is about a model watched after it ships.** A pipeline read from its file kept what its steps learned and not
 the rows they learned it from, so the rows a served model met had nothing to be measured against, and a model whose world
 had moved on went on answering as if it had not. `.Watch(warnAbove)` below the split keeps the training rows of the columns

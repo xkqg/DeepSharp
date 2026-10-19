@@ -415,7 +415,7 @@ public class ReleaseContractTests
 
         // The baseline is the release nuget.org carries, which is the one before this build's. Left behind it, a surface
         // the last release added could be removed with nothing to say so.
-        Assert.Equal("0.11.0", baseline);
+        Assert.Equal("0.12.0", baseline);
         Assert.True(Version.Parse(baseline) < Version.Parse(DeclaredVersion()), "The baseline is the release before this one, never this one.");
     }
 
