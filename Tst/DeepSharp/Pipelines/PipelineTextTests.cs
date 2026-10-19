@@ -56,6 +56,7 @@ public class PipelineTextTests
         ("read.json", 1),
         ("read.parquet", 1),
         ("read.rows", 1),
+        ("read.sounds", 12),
         ("read.texts", 12),
         ("scale.given", 7),
         ("settle.gaps", 6),

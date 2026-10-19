@@ -41,6 +41,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`read.json`](#readjson) | Reads the rows from a JSON file holding an array of records, one object a row, every value as the file writes it. |
 | [`read.parquet`](#readparquet) | Reads the rows from an Apache Parquet file, which says what each of its columns holds. |
 | [`read.rows`](#readrows) | Takes rows that are handed in rather than opened: a table already in memory, a reader over a query. |
+| [`read.sounds`](#readsounds) | Reads the rows from a folder of WAV recordings, a folder to a class: a recording a row at the length, channels and rate the step says, the folder it stands in the answer, and a column of nought and one for each class. |
 | [`read.texts`](#readtexts) | Reads the rows from a folder of text files, a folder to a class: a file a row, the folder it stands in the answer, and a column of nought and one for each class. |
 | [`scale.given`](#scalegiven) | Scales a column into a range from bounds you give, above the split, so a feature worked out after it is worked out from scaled columns. |
 | [`settle.gaps`](#settlegaps) | Settles the gaps in a column with a value no row decided, so a feature worked out from it is not a gap. |
@@ -702,6 +703,28 @@ Takes rows that are handed in rather than opened: a table already in memory, a r
 - **`description`**: What the rows are, for whoever reads the file later.
 
 Means what it says from version 1 of the file.
+
+## `read.sounds`
+
+Reads the rows from a folder of WAV recordings, a folder to a class: a recording a row at the length, channels and rate the step says, the folder it stands in the answer, and a column of nought and one for each class.
+
+```json
+{"step":"read.sounds","path":"recordings","rate":16000,"length":16000,"channels":1}
+```
+
+| key | holds | an example |
+|---|---|---|
+| `path` | the path of a file; a relative one is read from the pipeline's folder | `"recordings"` |
+| `rate` | a whole number, at least 1 | `16000` |
+| `length` | a whole number, at least 1 | `16000` |
+| `channels` | a whole number, at least 1 | `1` |
+
+- **`path`**: The folder the recordings will be in, when the pipeline runs: a folder to each class, files of .wav in each.
+- **`rate`**: How many samples a second every recording has; one that has another rate is refused, never resampled.
+- **`length`**: How many samples each channel of every recording holds; a longer or shorter one is refused, never cut or padded.
+- **`channels`**: How many channels every recording has; one that has another number is refused, never mixed.
+
+Means what it says from version 12 of the file.
 
 ## `read.texts`
 

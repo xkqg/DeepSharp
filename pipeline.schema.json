@@ -69,6 +69,7 @@
             "read.json",
             "read.parquet",
             "read.rows",
+            "read.sounds",
             "read.texts",
             "scale.given",
             "settle.gaps",
@@ -582,6 +583,21 @@
           },
           "then": {
             "$ref": "#/$defs/read.rows"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "read.sounds"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/read.sounds"
           }
         },
         {
@@ -4126,6 +4142,46 @@
       ],
       "additionalProperties": false
     },
+    "read.sounds": {
+      "description": "Reads the rows from a folder of WAV recordings, a folder to a class: a recording a row at the length, channels and rate the step says, the folder it stands in the answer, and a column of nought and one for each class.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "read.sounds"
+        },
+        "path": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The folder the recordings will be in, when the pipeline runs: a folder to each class, files of .wav in each."
+        },
+        "rate": {
+          "description": "How many samples a second every recording has; one that has another rate is refused, never resampled.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "length": {
+          "description": "How many samples each channel of every recording holds; a longer or shorter one is refused, never cut or padded.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "channels": {
+          "description": "How many channels every recording has; one that has another number is refused, never mixed.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "path",
+        "rate",
+        "length",
+        "channels"
+      ],
+      "additionalProperties": false
+    },
     "read.texts": {
       "description": "Reads the rows from a folder of text files, a folder to a class: a file a row, the folder it stands in the answer, and a column of nought and one for each class.",
       "type": "object",
@@ -4710,6 +4766,7 @@
                       "order.by",
                       "read.images",
                       "read.join",
+                      "read.sounds",
                       "read.texts",
                       "scale.given",
                       "settle.gaps",
@@ -4756,6 +4813,7 @@
                       "learn.network",
                       "read.images",
                       "read.join",
+                      "read.sounds",
                       "read.texts",
                       "scale.given",
                       "settle.gaps",
@@ -4795,6 +4853,7 @@
                       "learn.network",
                       "read.images",
                       "read.join",
+                      "read.sounds",
                       "read.texts",
                       "scale.given",
                       "settle.gaps",
@@ -4833,6 +4892,7 @@
                       "learn.ml",
                       "read.images",
                       "read.join",
+                      "read.sounds",
                       "read.texts",
                       "scale.given",
                       "settle.gaps",
@@ -4871,6 +4931,7 @@
                       "learn.ml",
                       "read.images",
                       "read.join",
+                      "read.sounds",
                       "read.texts",
                       "scale.given",
                       "shuffle",
@@ -4907,6 +4968,7 @@
                       "history",
                       "read.images",
                       "read.join",
+                      "read.sounds",
                       "read.texts",
                       "target.numbers",
                       "watch.reference"
@@ -4939,6 +5001,7 @@
                       "evidence.likeness",
                       "history",
                       "read.images",
+                      "read.sounds",
                       "read.texts",
                       "watch.reference"
                     ]
@@ -4967,6 +5030,7 @@
                   "not": {
                     "enum": [
                       "read.images",
+                      "read.sounds",
                       "read.texts",
                       "watch.reference"
                     ]
@@ -4995,6 +5059,7 @@
                   "not": {
                     "enum": [
                       "read.images",
+                      "read.sounds",
                       "read.texts"
                     ]
                   }

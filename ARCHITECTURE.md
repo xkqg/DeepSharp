@@ -95,6 +95,7 @@ Src/DeepSharp.Pipelines.DataFrame/   a reader of Microsoft's DataFrame, through 
 Src/DeepSharp.Pipelines.Parquet/     a reader of Apache Parquet files, through Parquet.Net
 Src/DeepSharp.Pipelines.Excel/       a reader of Excel workbooks, through ExcelDataReader
 Src/DeepSharp.Pipelines.Images/      a reader of a folder of pictures, a folder to a class, through StbImageSharp
+Src/DeepSharp.Pipelines.Sound/       a reader of a folder of WAV recordings, a folder to a class, through NAudio.Core
 Src/DeepSharp.Pipelines.Json/        a reader of JSON files holding an array of records
 Src/DeepSharp.Pipelines.Indicators/  indicators over a series, as verbs
 Src/DeepSharp.Pipelines.Binance/     a live source: the candles of a market on Binance, fetched once over a closed window

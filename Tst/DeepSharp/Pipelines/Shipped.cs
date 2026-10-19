@@ -20,7 +20,7 @@ internal static class Shipped
 {
     /// <summary>What each package that brings verbs offers a catalog.</summary>
     public static IReadOnlyList<IStepContribution> Contributions { get; } =
-        [new IndicatorSteps(), new ParquetSteps(), new ExcelSteps(), new ImagesSteps(), new JsonSteps(), new NetworkSteps(), new MLSteps()];
+        [new IndicatorSteps(), new ParquetSteps(), new ExcelSteps(), new ImagesSteps(), new SoundsSteps(), new JsonSteps(), new NetworkSteps(), new MLSteps()];
 
     /// <summary>The assemblies the steps are defined in: the pipeline's and each package's.</summary>
     public static IReadOnlyList<Assembly> StepAssemblies { get; } =

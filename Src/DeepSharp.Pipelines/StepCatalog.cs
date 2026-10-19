@@ -147,6 +147,7 @@ public sealed class StepCatalog
             ["read.images"] = "DeepSharp.Pipelines.Images",
             ["read.json"] = "DeepSharp.Pipelines.Json",
             ["read.parquet"] = "DeepSharp.Pipelines.Parquet",
+            ["read.sounds"] = "DeepSharp.Pipelines.Sound",
         };
 
     /// <summary>The package that brings a verb, when it is one of DeepSharp's own packages.</summary>

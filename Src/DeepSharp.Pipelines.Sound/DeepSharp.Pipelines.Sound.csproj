@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <PackageId>DeepSharp.Pipelines.Sound</PackageId>
+    <Description>Reads a DeepSharp pipeline's rows out of a folder of recordings, a folder to each class: .ReadSounds(path, shape) in the chain, read.sounds in a pipeline file, replayed like any other file the pipeline reads. WAV files, each one row whose samples are one cell of a fixed length, channel count and rate that the step says — a recording of another length, channels or rate is refused and never cut, mixed or resampled — and the class the name of its folder, with a column of nought and one for each class a learner is handed the answer by.</Description>
+    <PackageTags>machine-learning;pipeline;audio;sound;wav;data-preparation;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- NAudio.Core 2.4.0, MIT (github.com/naudio/NAudio): the managed part of NAudio alone, which reads a WAV file on any platform
+         and brings no Windows API and no native library with it. -->
+    <PackageReference Include="NAudio.Core" Version="2.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+    <None Include="..\..\assets\icon.png" Pack="true" PackagePath="\" Visible="false" />
+  </ItemGroup>
+
+</Project>
