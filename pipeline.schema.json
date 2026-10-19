@@ -2054,6 +2054,18 @@
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "maximum": 1.7976931348623157E+308
+                  },
+                  "rank": {
+                    "description": "The rank of a low-rank pair kept beside the layer's held kernel, as Keras's enable_lora keeps one; nought, or left out, for no pair.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "alpha": {
+                    "description": "What the pair's product is scaled by over the rank; nought, or left out, for the rank itself, which scales by one.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.7976931348623157E+308
                   }
                 },
                 "required": [
@@ -4068,6 +4080,18 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 2147483647
+        },
+        "folds": {
+          "description": "How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.",
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 2147483647
+        },
+        "fold": {
+          "description": "Which of the slices is validation, counted from nought; said with folds, and below them.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
         }
       },
       "required": [
@@ -4117,6 +4141,18 @@
         },
         "gap": {
           "description": "How many of the last moments of every part are kept apart, fitted on by nothing and handed to nothing: at least as many as the rows an answer reads ahead. Left out, none.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "origins": {
+          "description": "How many places the cut between training and validation is moved to, at least two; the rows that are neither test nor predict are cut into one block more. Left out, the rows are cut once, as shares say.",
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 2147483647
+        },
+        "origin": {
+          "description": "Which of the places this is, counted from nought; said with origins, and below them.",
           "type": "integer",
           "minimum": 0,
           "maximum": 2147483647
@@ -4171,6 +4207,18 @@
           "description": "The number that makes the shuffle repeatable: the same seed deals the same rows the same way.",
           "type": "integer",
           "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "folds": {
+          "description": "How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.",
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 2147483647
+        },
+        "fold": {
+          "description": "Which of the slices is validation, counted from nought; said with folds, and below them.",
+          "type": "integer",
+          "minimum": 0,
           "maximum": 2147483647
         }
       },

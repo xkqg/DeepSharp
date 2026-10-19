@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using System.Text.Json;
+using Slices = DeepSharp.Pipelines.Fold;
 
 namespace DeepSharp.Pipelines;
 
@@ -236,11 +237,29 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
         TestSeed = TestSeedKey.Require(testSeed);
     }
 
+    /// <summary>Declares a split at random that cuts the rows that are neither test nor predict into folds, one of them validation.</summary>
+    /// <param name="shares">How much goes to training and test; no validation share, since the fold says what validation is.</param>
+    /// <param name="seed">The number that deals the rows into slices.</param>
+    /// <param name="testSeed">The number that deals the rows to be measured on, none or more; nothing, for the seed to deal them.</param>
+    /// <param name="fold">Which slice is validation.</param>
+    /// <exception cref="ArgumentException">The shares say a validation share.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The test seed is below nought.</exception>
+    public SplitAtRandomStep(SplitShares shares, int seed, int? testSeed, Fold fold)
+        : this(shares, seed)
+    {
+        Slices.RequireNoValidationShare(shares);
+
+        TestSeed = testSeed is { } locked ? TestSeedKey.Require(locked) : null;
+        Fold = fold;
+    }
+
     /// <inheritdoc />
     public static StepParameters<SplitAtRandomStep> Parameters { get; } = new StepParameters<SplitAtRandomStep>()
         .With(SharesKey, step => step.Shares)
         .With(SeedKey, step => step.Seed)
-        .With(TestSeedKey, step => step.TestSeed ?? TestSeedKey.LeftOut!.Value);
+        .With(TestSeedKey, step => step.TestSeed ?? TestSeedKey.LeftOut!.Value)
+        .With(Slices.FoldsKey, step => step.Fold?.Folds ?? 0)
+        .With(Slices.FoldKey, step => step.Fold?.Index ?? -1);
 
     /// <summary>How much goes to training, validation and test.</summary>
     public SplitShares Shares { get; }
@@ -254,6 +273,9 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
     /// the seed deals what is left into training and validation.
     /// </remarks>
     public int? TestSeed { get; }
+
+    /// <summary>Which slice of the rows that are neither test nor predict is validation; nothing when the rows are cut once, as the shares say.</summary>
+    public Fold? Fold { get; }
 
     /// <inheritdoc />
     public static string Name => "split.atRandom";
@@ -293,7 +315,7 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
 
         if (TestSeed is null)
         {
-            return parts;
+            return Fold is { } slice ? Folded(table, parts, rows, slice) : parts;
         }
 
         var left = rows.Where(row => parts[row] is Part.Train or Part.Validation).ToArray();
@@ -307,17 +329,32 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
 
         parts.KeptTogether(again, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
 
+        return Fold is { } folded ? Folded(table, parts, rows, folded) : parts;
+    }
+
+    // The rows that learn, dealt again in the order the seed ranks them into slices: the fold's slice is validation and the others
+    // are training, and a repeated record stays in the slice its first copy is in.
+    private Part[] Folded(Table table, Part[] parts, int[] rows, Fold slice)
+    {
+        var left = rows.Where(row => parts[row] == Part.Train).ToArray();
+
+        parts.Sliced(table.Ranked(left, Seed), slice, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
+
         return parts;
     }
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
-    /// <exception cref="ArgumentOutOfRangeException">The file gives a test seed below nought.</exception>
+    /// <exception cref="ArgumentException">The file gives a validation share beside folds.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The file gives a test seed below nought, or a fold it does not have.</exception>
+    /// <exception cref="FormatException">The file names one of a fold's two keys without the other.</exception>
     public static SplitAtRandomStep ReadFrom(JsonElement element) =>
-        element.TryGetProperty(TestSeedKey.Key, out _)
-            ? new(SharesKey.Read(element), SeedKey.Read(element), TestSeedKey.Read(element))
-            : new(SharesKey.Read(element), SeedKey.Read(element));
+        Slices.ReadFrom(element) is { } folded
+            ? new(SharesKey.Read(element), SeedKey.Read(element), element.TryGetProperty(TestSeedKey.Key, out _) ? TestSeedKey.Read(element) : null, folded)
+            : element.TryGetProperty(TestSeedKey.Key, out _)
+                ? new(SharesKey.Read(element), SeedKey.Read(element), TestSeedKey.Read(element))
+                : new(SharesKey.Read(element), SeedKey.Read(element));
 }
 
 /// <summary>
@@ -350,14 +387,33 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
         Seed = SeedKey.Require(seed);
     }
 
+    /// <summary>Declares a split that keeps the mixture of a column in every part and cuts the learning rows into folds.</summary>
+    /// <param name="column">The column whose mixture is kept.</param>
+    /// <param name="shares">How much goes to training and test; no validation share, since the fold says what validation is.</param>
+    /// <param name="seed">The number that makes the shuffle repeatable.</param>
+    /// <param name="fold">Which slice of each group is validation.</param>
+    /// <exception cref="ArgumentException">The column has no name, or the shares say a validation share.</exception>
+    public SplitStratifiedStep(string column, SplitShares shares, int seed, Fold fold)
+        : this(column, shares, seed)
+    {
+        Slices.RequireNoValidationShare(shares);
+
+        Fold = fold;
+    }
+
     /// <inheritdoc />
     public static StepParameters<SplitStratifiedStep> Parameters { get; } = new StepParameters<SplitStratifiedStep>()
         .With(ColumnKey, step => step.Column)
         .With(SharesKey, step => step.Shares)
-        .With(SeedKey, step => step.Seed);
+        .With(SeedKey, step => step.Seed)
+        .With(Slices.FoldsKey, step => step.Fold?.Folds ?? 0)
+        .With(Slices.FoldKey, step => step.Fold?.Index ?? -1);
 
     /// <summary>The column whose mixture is kept the same in every part.</summary>
     public string Column { get; }
+
+    /// <summary>Which slice of each group of the rows that are neither test nor predict is validation; nothing when the rows are cut once.</summary>
+    public Fold? Fold { get; }
 
     /// <summary>How much goes to training, validation and test.</summary>
     public SplitShares Shares { get; }
@@ -409,6 +465,11 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
             }
 
             parts.KeptTogether(ranked, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
+
+            if (Fold is { } slice)
+            {
+                parts.Sliced([.. ranked.Where(row => parts[row] == Part.Train)], slice, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
+            }
         }
 
         return parts;
@@ -418,7 +479,9 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     public static SplitStratifiedStep ReadFrom(JsonElement element) =>
-        new(ColumnKey.Read(element), SharesKey.Read(element), SeedKey.Read(element));
+        Slices.ReadFrom(element) is { } folded
+            ? new(ColumnKey.Read(element), SharesKey.Read(element), SeedKey.Read(element), folded)
+            : new(ColumnKey.Read(element), SharesKey.Read(element), SeedKey.Read(element));
 }
 
 /// <summary>
@@ -461,6 +524,21 @@ internal static class SplitPlacement
                 {
                     parts[ordered[at]] = parts[ordered[at - 1]];
                 }
+            }
+        }
+
+        /// <summary>Deals the rows that learn into slices in the order given: the fold's slice is validation and the others are training.</summary>
+        /// <param name="ordered">The rows that learn, in the order the seed ranks them.</param>
+        /// <param name="slice">Which slice is validation.</param>
+        /// <param name="together">Whether a row is a copy of the one before it, which stays in its slice.</param>
+        internal void Sliced(int[] ordered, Fold slice, Func<int, int, bool> together)
+        {
+            var slices = new int[ordered.Length];
+
+            for (var at = 0; at < ordered.Length; at++)
+            {
+                slices[at] = at > 0 && together(ordered[at - 1], ordered[at]) ? slices[at - 1] : slice.SliceOf(at, ordered.Length);
+                parts[ordered[at]] = slices[at] == slice.Index ? Part.Validation : Part.Train;
             }
         }
 

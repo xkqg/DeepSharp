@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Globalization;
+using Places = DeepSharp.Pipelines.Origin;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
@@ -188,14 +189,39 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
         Gap = GapKey.Require(gap);
     }
 
+    /// <summary>Declares a split in time whose cut between training and validation is moved to one of several places.</summary>
+    /// <param name="column">The column that says when a row happened.</param>
+    /// <param name="shares">How much goes to training and test; no validation share, since the origin says what validation is.</param>
+    /// <param name="gap">How many of the last moments of training and of validation are kept apart; none for no gap.</param>
+    /// <param name="origin">Which place the cut stands at.</param>
+    /// <exception cref="ArgumentException">The column has no name, the shares do not make a whole, or they say a validation share.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A share is not a share, or the gap is below nothing.</exception>
+    public SplitByTimeStep(string column, SplitShares shares, int gap, Origin origin)
+        : this(column, shares, gap)
+    {
+        if (shares.Validation != 0)
+        {
+            throw new ArgumentException(
+                "An origin says which rows are validation — the block after the training rows — so shares beside it say no validation share: leave it out.",
+                nameof(shares));
+        }
+
+        Origin = origin;
+    }
+
     /// <inheritdoc />
     public static StepParameters<SplitByTimeStep> Parameters { get; } = new StepParameters<SplitByTimeStep>()
         .With(ColumnKey, step => step.Column)
         .With(SharesKey, step => step.Shares)
-        .With(GapKey, step => step.Gap);
+        .With(GapKey, step => step.Gap)
+        .With(Places.OriginsKey, step => step.Origin?.Origins ?? 0)
+        .With(Places.OriginKey, step => step.Origin?.Index ?? -1);
 
     /// <summary>The column that says when a row happened.</summary>
     public string Column { get; }
+
+    /// <summary>Which place the cut between training and validation stands at; nothing when the rows are cut once, as the shares say.</summary>
+    public Origin? Origin { get; }
 
     /// <summary>How much goes to training, validation, test and predicting.</summary>
     public SplitShares Shares { get; }
@@ -224,6 +250,21 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
         var parts = Shares.Over(table.RowCount).Placed(order);
 
         parts.KeptTogether(order, (one, other) => when(one, other) == 0);
+
+        if (Origin is { } place)
+        {
+            // The rows that learn in the order of their time, cut into one block more than there are origins: the blocks up to the
+            // origin are training, the next is validation, and the rows after it are fitted on by nothing.
+            var learning = order.Where(row => parts[row] == Part.Train).ToArray();
+            var blocks = new int[learning.Length];
+
+            for (var at = 0; at < learning.Length; at++)
+            {
+                blocks[at] = at > 0 && when(learning[at - 1], learning[at]) == 0 ? blocks[at - 1] : place.BlockOf(at, learning.Length);
+                parts[learning[at]] = blocks[at] <= place.Index ? Part.Train : blocks[at] == place.Index + 1 ? Part.Validation : Part.Gap;
+            }
+        }
+
         parts.Gapped(order, Gap, (one, other) => when(one, other) == 0);
 
         // A gap wider than a part takes the whole of it, and a model with nothing to learn from, or nothing to be
@@ -296,7 +337,9 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
     /// <returns>The step the file describes.</returns>
     /// <exception cref="FormatException">A parameter is missing or is of the wrong kind.</exception>
     public static SplitByTimeStep ReadFrom(JsonElement element) =>
-        new(ColumnKey.Read(element), SharesKey.Read(element), GapKey.Read(element));
+        Places.ReadFrom(element) is { } placed
+            ? new(ColumnKey.Read(element), SharesKey.Read(element), GapKey.Read(element), placed)
+            : new(ColumnKey.Read(element), SharesKey.Read(element), GapKey.Read(element));
 }
 
 /// <summary>

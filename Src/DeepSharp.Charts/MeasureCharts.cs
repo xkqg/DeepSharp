@@ -80,6 +80,57 @@ public static class MeasureCharts
         }
     }
 
+    extension(MeasuresAcross across)
+    {
+        /// <summary>
+        /// What the folds measured, every measure that is a number as a panel: each part's mean over the folds with its spread as a
+        /// bar about it, beside the mean of the folds' baselines.
+        /// </summary>
+        /// <returns>The chart, as the text of an SVG.</returns>
+        /// <exception cref="ArgumentException">The report names the confusion matrix alone: there is no number to draw.</exception>
+        /// <remarks>
+        /// A model that beats its baseline by less than its folds differ by is seen as a bar that reaches across the baseline. A
+        /// mean without end — a divergence from a prediction of nought on every fold — stands at nothing, as it does in
+        /// <see cref="Bars"/>.
+        /// </remarks>
+        public string AcrossFolds() => AcrossFoldsFigure(across).ToSvg();
+    }
+
+    /// <summary>The figure <see cref="AcrossFolds"/> draws: a panel to each measure, the parts along it.</summary>
+    internal static Figure AcrossFoldsFigure(MeasuresAcross across)
+    {
+        ArgumentNullException.ThrowIfNull(across);
+
+        var count = across.Parts[0].Values.Count;
+
+        if (count == 0)
+        {
+            throw new ArgumentException("These folds hold no number to draw: the report names the confusion matrix alone.", nameof(across));
+        }
+
+        string[] parts = [.. across.Parts.Select(part => part.Part.Word())];
+        double[] places = [.. Enumerable.Range(0, parts.Length).Select(place => (double)place)];
+        var builder = new FigureBuilder().WithSize(Side * count, Side);
+
+        for (var metric = 0; metric < count; metric++)
+        {
+            var at = metric;
+            MeasuredAcross[] measured = [.. across.Parts.Select(part => part.Values[at])];
+            double[] spread = [.. measured.Select(value => Drawable(value.Spread))];
+            var title = $"{measured[0].Metric.Word()}, the mean of {across.Folds} folds";
+
+            builder.AddSubPlot(1, count, metric + 1, axes => axes
+                .WithTitle(title)
+                .ErrorBar(places, [.. measured.Select(value => Drawable(value.Mean))], spread, spread, bars => bars.Label = "mean, and its spread")
+                .Scatter(places, [.. measured.Select(value => Drawable(value.Baseline))], points => points.Label = "average")
+                .SetXTickLocator(new FixedLocator(places))
+                .SetXTickFormatter(new CategoryFormatter(parts))
+                .WithLegend());
+        }
+
+        return builder.Build();
+    }
+
     /// <summary>The figure <see cref="ConfusionMatrices"/> draws: the parts across, each part's matrices down.</summary>
     internal static Figure ConfusionFigure(Measures measures)
     {

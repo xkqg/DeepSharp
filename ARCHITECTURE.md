@@ -235,6 +235,19 @@ model is measured on: in the published price series, five days ahead, the last f
 answers from validation. The gap counts moments rather than rows, so it never divides a moment either, and a gap
 that would take every row a model learns from or is measured on is refused.
 
+A small table is measured by the luck of one deal, and a fold is how that is answered without a second kind of split: it is
+an ordinary split that says which slice of the rows that learn is validation. The rows that are neither test nor predict
+are ranked as every split ranks them and cut into k slices of about as many rows, a repeated record staying in one, and the
+test rows are the same on every fold, since they are dealt by the seed or the test seed alone and the fold only reads what
+is left. In a series the same idea moves the cut: the rows that learn, in the order of their time, are k + 1 blocks, and
+origin i trains on the first i + 1 and validates on the next, so what a model learned from always came before what it is
+chosen on. A fold is a pipeline of its own, with a fit of its own, because everything below the split is learned from that
+fold's training rows alone; the folds are not one pipeline run k times, and a network trained behind one is refused beside
+another. What lies across them is not learned and is held by nothing: `MeasuresAcross` lays the measures of the folds
+beside one another — each value, the mean, the sample standard deviation, the mean of the baselines — and says nothing
+about whether a spread is wide, as the paired comparison of two pipelines says nothing about whether a difference
+matters. A study takes the folds as its deals, so a candidate is judged by the mean of its validation loss over them.
+
 Reading ahead is held to that. Only an output reads rows after its own — a feature that knows the future scores
 well on every row it is measured on and on none it is asked about — and an output that does stands below a split in
 time whose gap is at least as wide as how far it reads, the rows ordered by the column that split divides by and

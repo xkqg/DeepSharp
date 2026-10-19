@@ -447,7 +447,7 @@ Names the network this pipeline is declared for: its layers, what moves them, wh
 
 | key | holds | an example |
 |---|---|---|
-| `layers` | a list of parts, each a name and its settings: `dense`, which takes `units` and may leave out `bias`, `weights`, `biasStart`, `l1`, `l2`, `maxNorm`, `learns` and `rateShare`, `relu`, which takes nothing, `tanh`, which takes nothing, `sigmoid`, which takes nothing, `dropout`, which takes `rate`, `batchNorm`, which takes `momentum` or `epsilon` and may leave out `scale`, `shift`, `learns` and `rateShare`, `layerNorm`, which takes `epsilon` and may leave out `scale`, `shift`, `learns` and `rateShare`, `gelu`, which takes `approximate`, `silu`, which takes nothing, `mish`, which takes nothing, `leakyRelu`, which takes `negativeSlope`, `prelu`, which takes `eachFeature`, `elu`, which takes `alpha`, `selu`, which takes nothing, `softmax`, which takes nothing, `rmsNorm`, which takes `epsilon` and may leave out `scale`, `learns` and `rateShare`, `periodic`, which takes `frequencies`, `sigma`, `width` or `lite` or `embedding`, which takes `column` or `width` | `[{"kind":"dense","units":16},{"kind":"relu"}]` |
+| `layers` | a list of parts, each a name and its settings: `dense`, which takes `units` and may leave out `bias`, `weights`, `biasStart`, `l1`, `l2`, `maxNorm`, `learns`, `rateShare`, `rank` and `alpha`, `relu`, which takes nothing, `tanh`, which takes nothing, `sigmoid`, which takes nothing, `dropout`, which takes `rate`, `batchNorm`, which takes `momentum` or `epsilon` and may leave out `scale`, `shift`, `learns` and `rateShare`, `layerNorm`, which takes `epsilon` and may leave out `scale`, `shift`, `learns` and `rateShare`, `gelu`, which takes `approximate`, `silu`, which takes nothing, `mish`, which takes nothing, `leakyRelu`, which takes `negativeSlope`, `prelu`, which takes `eachFeature`, `elu`, which takes `alpha`, `selu`, which takes nothing, `softmax`, which takes nothing, `rmsNorm`, which takes `epsilon` and may leave out `scale`, `learns` and `rateShare`, `periodic`, which takes `frequencies`, `sigma`, `width` or `lite` or `embedding`, which takes `column` or `width` | `[{"kind":"dense","units":16},{"kind":"relu"}]` |
 | `optimizer` | a part, written as a name and its settings: `sgd`, which takes `rate` or `momentum` and may leave out `weightDecay`, `dampening` and `nesterov`, `adam`, which takes `rate`, `firstMoment`, `secondMoment` or `epsilon` and may leave out `weightDecay` and `amsgrad`, `adamw`, which takes `rate`, `firstMoment`, `secondMoment`, `epsilon` or `weightDecay` and may leave out `amsgrad`, `rmsprop`, which takes `rate`, `alpha`, `epsilon` or `momentum` and may leave out `weightDecay` and `centered` or `nadam`, which takes `rate`, `firstMoment`, `secondMoment`, `epsilon` or `momentumDecay` and may leave out `weightDecay` | `{"kind":"adam","rate":0.001,"firstMoment":0.9,"secondMoment":0.999,"epsilon":1E-08}` |
 | `schedule` | a part, written as a name and its settings: `constant`, which takes nothing, `stepDecay`, which takes `every` or `factor`, `exponentialDecay`, which takes `factor`, `cosineDecay`, which takes `epochs` or `minimum` or `linearWarmup`, which takes `epochs` or `start`; left out, `constant` | left out |
 | `clip` | a number, 0 or more; left out, 0 | left out |
@@ -740,7 +740,7 @@ Means what it says from version 7 of the file.
 Divides the rows at random, the same way every time for the same seed.
 
 ```json
-{"step":"split.atRandom","train":0.7,"validation":0.15,"test":0.15,"predict":0,"seed":20260923,"testSeed":99}
+{"step":"split.atRandom","train":0.7,"validation":0.15,"test":0.15,"predict":0,"seed":20260923,"testSeed":99,"folds":5,"fold":0}
 ```
 
 | key | holds | an example |
@@ -751,10 +751,14 @@ Divides the rows at random, the same way every time for the same seed.
 | `predict` | the share held back to predict on: nought to one, and none when it is left out | `0` |
 | `seed` | a whole number | `20260923` |
 | `testSeed` | a whole number, at least 0; left out, -1 | `99` |
+| `folds` | a whole number, at least 2; left out, 0 | `5` |
+| `fold` | a whole number, at least 0; left out, -1 | `0` |
 
 - **`train`**: How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.
 - **`seed`**: The number that makes the shuffle repeatable: the same seed deals the same rows the same way.
 - **`testSeed`**: The number that deals the rows to be measured on, none or more. Given, those rows are the same whatever the seed is, and the seed deals the rest. Left out, the seed deals every part.
+- **`folds`**: How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.
+- **`fold`**: Which of the slices is validation, counted from nought; said with folds, and below them.
 
 Means what it says from version 2 of the file.
 
@@ -763,7 +767,7 @@ Means what it says from version 2 of the file.
 Divides the rows by when they happened: the earliest to learn from, the latest to be measured on.
 
 ```json
-{"step":"split.byTime","column":"when","train":0.7,"validation":0.15,"test":0.15,"predict":0}
+{"step":"split.byTime","column":"when","train":0.7,"validation":0.15,"test":0.15,"predict":0,"origins":3,"origin":0}
 ```
 
 | key | holds | an example |
@@ -774,10 +778,14 @@ Divides the rows by when they happened: the earliest to learn from, the latest t
 | `test` | the share kept back until the end: above nought, at most one | `0.15` |
 | `predict` | the share held back to predict on: nought to one, and none when it is left out | `0` |
 | `gap` | a whole number, at least 0; left out, 0 | left out |
+| `origins` | a whole number, at least 2; left out, 0 | `3` |
+| `origin` | a whole number, at least 0; left out, -1 | `0` |
 
 - **`column`**: The column that says when a row happened.
 - **`train`**: How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.
 - **`gap`**: How many of the last moments of every part are kept apart, fitted on by nothing and handed to nothing: at least as many as the rows an answer reads ahead. Left out, none.
+- **`origins`**: How many places the cut between training and validation is moved to, at least two; the rows that are neither test nor predict are cut into one block more. Left out, the rows are cut once, as shares say.
+- **`origin`**: Which of the places this is, counted from nought; said with origins, and below them.
 
 Means what it says from version 2 of the file.
 
@@ -786,7 +794,7 @@ Means what it says from version 2 of the file.
 Divides the rows at random while keeping the mixture of one column the same in every part.
 
 ```json
-{"step":"split.stratified","column":"class","train":0.7,"validation":0.15,"test":0.15,"predict":0,"seed":20260923}
+{"step":"split.stratified","column":"class","train":0.7,"validation":0.15,"test":0.15,"predict":0,"seed":20260923,"folds":5,"fold":0}
 ```
 
 | key | holds | an example |
@@ -797,10 +805,14 @@ Divides the rows at random while keeping the mixture of one column the same in e
 | `test` | the share kept back until the end: above nought, at most one | `0.15` |
 | `predict` | the share held back to predict on: nought to one, and none when it is left out | `0` |
 | `seed` | a whole number | `20260923` |
+| `folds` | a whole number, at least 2; left out, 0 | `5` |
+| `fold` | a whole number, at least 0; left out, -1 | `0` |
 
 - **`column`**: The column whose mixture of values is kept the same in every part.
 - **`train`**: How the rows are shared out: training, validation, test and a part to predict on, which together make the whole.
 - **`seed`**: The number that makes the shuffle repeatable: the same seed deals the same rows the same way.
+- **`folds`**: How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.
+- **`fold`**: Which of the slices is validation, counted from nought; said with folds, and below them.
 
 Means what it says from version 2 of the file.
 

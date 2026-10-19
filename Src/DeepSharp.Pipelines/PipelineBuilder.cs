@@ -559,6 +559,49 @@ public sealed class PipelineBuilder
     public FittingBuilder SplitAtRandom(double train, double validation, int seed, int testSeed) =>
         Split(new SplitAtRandomStep(SplitShares.Of(train, validation, _predict), seed, testSeed));
 
+    /// <summary>Splits at random so that the rows that are neither test nor predict are cut into slices, one of them validation.</summary>
+    /// <param name="train">The share the rows that learn and are chosen with make of all of them.</param>
+    /// <param name="fold">Which slice is validation, of how many.</param>
+    /// <param name="seed">The number that deals the rows into slices and, unless a test seed says otherwise, into test.</param>
+    /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
+    /// <remarks>
+    /// A small table is measured by the luck of one deal; folds measure it by every row being validation once. Every fold is a
+    /// pipeline of its own: build one for each index, and the test rows are the same on all of them.
+    /// </remarks>
+    public FittingBuilder SplitAtRandom(double train, Fold fold, int seed = 20260923) =>
+        Split(new SplitAtRandomStep(SplitShares.Of(train, 0, _predict), seed, null, fold));
+
+    /// <summary>Splits at random into folds, the rows to be measured on dealt by a number of their own.</summary>
+    /// <param name="train">The share the rows that learn and are chosen with make of all of them.</param>
+    /// <param name="fold">Which slice is validation, of how many.</param>
+    /// <param name="seed">The number that deals the rows into slices.</param>
+    /// <param name="testSeed">The number that deals the rows to be measured on.</param>
+    /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
+    public FittingBuilder SplitAtRandom(double train, Fold fold, int seed, int testSeed) =>
+        Split(new SplitAtRandomStep(SplitShares.Of(train, 0, _predict), seed, testSeed, fold));
+
+    /// <summary>Splits at random into folds while keeping the mixture of one column the same in every part and every slice.</summary>
+    /// <param name="column">The column whose mixture is kept.</param>
+    /// <param name="train">The share the rows that learn and are chosen with make of all of them.</param>
+    /// <param name="fold">Which slice of each group is validation, of how many.</param>
+    /// <param name="seed">The number that makes the shuffle repeatable.</param>
+    /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
+    public FittingBuilder SplitStratified(string column, double train, Fold fold, int seed = 20260923) =>
+        Split(new SplitStratifiedStep(column, SplitShares.Of(train, 0, _predict), seed, fold));
+
+    /// <summary>Splits by time so that the cut between training and validation stands at one of several places.</summary>
+    /// <param name="column">The column that says when a row happened.</param>
+    /// <param name="train">The share the rows that learn and are chosen with make of all of them; the rest is test.</param>
+    /// <param name="origin">Which place the cut stands at, of how many.</param>
+    /// <param name="gap">How many of the last moments of training and of validation are kept apart; none, unless said.</param>
+    /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
+    /// <remarks>
+    /// A series is measured as forecasting is by moving the cut forward and fitting again: every origin is a pipeline of its own,
+    /// whose training rows are the earlier blocks and whose validation rows are the next, and the test rows are one block at the end.
+    /// </remarks>
+    public FittingBuilder SplitByTime(string column, double train, Origin origin, int gap = 0) =>
+        Split(new SplitByTimeStep(column, SplitShares.Of(train, 0, _predict), gap, origin));
+
     /// <summary>Splits at random while keeping the mixture of one column the same in every part.</summary>
     /// <param name="column">The column whose mixture is kept.</param>
     /// <param name="train">The share the model learns from.</param>
