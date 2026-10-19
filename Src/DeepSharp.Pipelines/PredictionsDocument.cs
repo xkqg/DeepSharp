@@ -16,19 +16,20 @@ namespace DeepSharp.Pipelines;
 /// For each row, the features the model said it was handed a value of that it learned nothing about; nothing when it said
 /// nothing of them.
 /// </param>
+/// <param name="Margins">The margin the model gave each answer, in the answer's own units; nothing when it has no interval.</param>
 internal readonly record struct WrittenPart(
-    Part Part, IReadOnlyList<RowKey> Keys, IReadOnlyList<double[]> Predictions, IReadOnlyList<IReadOnlyList<string>>? Unfamiliar)
+    Part Part, IReadOnlyList<RowKey> Keys, IReadOnlyList<double[]> Predictions, IReadOnlyList<IReadOnlyList<string>>? Unfamiliar, IReadOnlyList<double>? Margins = null)
 {
     /// <summary>What a model predicted for a part, as the text keeps it: the keys of its rows, and none of their numbers.</summary>
     /// <param name="part">The part.</param>
     /// <param name="given">The predictions measured for it, made for a batch the pipeline handed over.</param>
     /// <returns>The part as the text holds it.</returns>
-    public static WrittenPart Of(Part part, PartPredictions given) => new(part, given.Batch.Keys!, given.Predictions, given.Unfamiliar);
+    public static WrittenPart Of(Part part, PartPredictions given) => new(part, given.Batch.Keys!, given.Predictions, given.Unfamiliar, given.Margins);
 
     /// <summary>The predictions as measuring takes them: made for a batch that is the part and the keys of its rows.</summary>
     /// <returns>The predictions, whose batch holds no numbers, since the text carries none.</returns>
     public PartPredictions ToPartPredictions() =>
-        new(new Batch([], [], null) { Part = Part, Keys = Keys }, Predictions) { Unfamiliar = Unfamiliar };
+        new(new Batch([], [], null) { Part = Part, Keys = Keys }, Predictions) { Unfamiliar = Unfamiliar, Margins = Margins };
 }
 
 /// <summary>
@@ -154,8 +155,8 @@ internal readonly record struct WrittenPredictions(WrittenFit Behind, IReadOnlyL
 /// </remarks>
 internal static class PredictionsDocument
 {
-    /// <summary>The version of the text this library writes and reads up to.</summary>
-    public const int Version = 1;
+    /// <summary>The version of the text this library reads up to; predictions with margins are written as the second, any other as the first.</summary>
+    public const int Version = 2;
 
     private const string VersionKey = "version";
     private const string PipelineKey = "pipeline";
@@ -167,6 +168,7 @@ internal static class PredictionsDocument
     private const string KeysKey = "keys";
     private const string PredictionsKey = "predictions";
     private const string UnfamiliarKey = "unfamiliar";
+    private const string MarginsKey = "margins";
 
     /// <summary>Writes what a model predicted as its text.</summary>
     /// <param name="predicted">The fit they were made behind, the answers, and each part the report measures.</param>
@@ -178,7 +180,7 @@ internal static class PredictionsDocument
         using (var writer = new Utf8JsonWriter(buffer))
         {
             writer.WriteStartObject();
-            writer.WriteNumber(VersionKey, Version);
+            writer.WriteNumber(VersionKey, predicted.Parts.Any(part => part.Margins is not null) ? Version : 1);
             writer.WriteStartObject(PipelineKey);
             writer.WriteString(FitKey, predicted.Behind.Fit);
             writer.WriteNumber(VersionKey, predicted.Behind.Version);
@@ -302,6 +304,18 @@ internal static class PredictionsDocument
 
         writer.WriteEndArray();
 
+        if (part.Margins is { } margins)
+        {
+            writer.WriteStartArray(MarginsKey);
+
+            foreach (var margin in margins)
+            {
+                writer.WriteNumberValue(margin);
+            }
+
+            writer.WriteEndArray();
+        }
+
         if (part.Unfamiliar is { } unfamiliar)
         {
             writer.WriteStartArray(UnfamiliarKey);
@@ -341,7 +355,8 @@ internal static class PredictionsDocument
             part,
             [.. Names(List(written, KeysKey, where), $"{where}'s '{KeysKey}'").Select(key => Key(key, where))],
             [.. List(written, PredictionsKey, where).EnumerateArray().Select(row => Numbers(row, where))],
-            written.TryGetProperty(UnfamiliarKey, out var said) && said.ValueKind != JsonValueKind.Null ? Unfamiliar(said, where) : null);
+            written.TryGetProperty(UnfamiliarKey, out var said) && said.ValueKind != JsonValueKind.Null ? Unfamiliar(said, where) : null,
+            written.TryGetProperty(MarginsKey, out var margins) ? Margins(margins, where) : null);
     }
 
     // The fit the predictions were made behind: its digest, and the version of the pipeline file its pipeline names.
@@ -391,6 +406,12 @@ internal static class PredictionsDocument
             ? [.. row.EnumerateArray().Select(value => value.ValueKind == JsonValueKind.Number ? value.GetDouble() : throw NotTheText(said))]
             : throw NotTheText(said);
     }
+
+    // What the model gave each answer on either side of what it said: a list of numbers.
+    private static double[] Margins(JsonElement said, string where) =>
+        said.ValueKind == JsonValueKind.Array
+            ? [.. said.EnumerateArray().Select(value => value.ValueKind == JsonValueKind.Number ? value.GetDouble() : throw NotTheText($"{where}'s '{MarginsKey}' holds {value.GetRawText()}, which is not a number"))]
+            : throw NotTheText($"{where}'s '{MarginsKey}' is not a list of numbers");
 
     // For each row, the names of the features the model said it learned nothing about.
     private static IReadOnlyList<string>[] Unfamiliar(JsonElement said, string where)

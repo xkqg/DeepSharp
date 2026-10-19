@@ -22,9 +22,10 @@ namespace DeepSharp.Learners.Networks;
 /// </remarks>
 public sealed class TrainedNetwork
 {
-    /// <summary>The version of the one file this library writes and reads up to.</summary>
-    public const int Version = 1;
+    /// <summary>The version of the one file this library reads up to; a file with no interval is written as the first, one with an interval as the second.</summary>
+    public const int Version = 2;
 
+    internal const string IntervalKey = "interval";
     internal const string VersionKey = "version";
     internal const string NetworkKey = "network";
     internal const string PipelineKey = "pipeline";
@@ -68,8 +69,17 @@ public sealed class TrainedNetwork
     /// <summary>What the run did, epoch by epoch; nothing for a network read from its file.</summary>
     public History? History { get; internal init; }
 
-    /// <summary>How the pipeline's report measured it; nothing when the pipeline declares no report, or for a network read from its file.</summary>
+    /// <summary>
+    /// How the pipeline's report measured it; nothing when the pipeline declares no report, or for a network read from its file.
+    /// A report that names coverage or width measures them once the network has an interval, `WithInterval`.
+    /// </summary>
     public Measures? Measures { get; internal init; }
+
+    /// <summary>
+    /// The width its answers are worth: the margin the errors on the calibration rows allow, at the level it was given. Nothing
+    /// until <see cref="WithInterval(double)"/> gives it one.
+    /// </summary>
+    public ConformalInterval? Interval { get; internal init; }
 
     /// <summary>
     /// The pipeline's text as the one file carries it: as the file held it, for a network read from one; as this library
@@ -80,6 +90,51 @@ public sealed class TrainedNetwork
         get => _carried ??= PipelineText.Of(Prepared);
         init => _carried = value;
     }
+
+    /// <summary>A network of the same numbers with the width its answers are worth, worked out on the rows the pipeline set aside to calibrate on.</summary>
+    /// <param name="alpha">The share of rows allowed to land outside the margin: above nothing and below one. Required.</param>
+    /// <returns>
+    /// The same network behind the same pipeline, its answers coming with a lower and an upper end, and its report measured again
+    /// with the coverage and width of the interval when it names them.
+    /// </returns>
+    /// <exception cref="ArgumentOutOfRangeException">The level is not above nothing and below one.</exception>
+    /// <exception cref="InvalidOperationException">The pipeline sets no rows aside to calibrate on, they are too few for the level, or the answers are classes.</exception>
+    /// <remarks>
+    /// Split conformal prediction on a point answer: the margin is the ⌈(n+1)(1−α)⌉-th smallest of the errors on the n calibration
+    /// rows, in the answer's own units, so a row the network has not seen lands within it of what the network says with a chance of
+    /// at least 1−α, as long as the rows are exchangeable with the calibration rows. It is the same on every row. Training the
+    /// network further gives a new network, which has no interval: its errors are no longer those these were worked out from.
+    /// </remarks>
+    public TrainedNetwork WithInterval(double alpha) => WithInterval(alpha, new CpuBackend());
+
+    /// <summary>A network of the same numbers with the width its answers are worth, answered for the calibration rows on the engine handed in.</summary>
+    /// <param name="alpha">The share of rows allowed to land outside the margin: above nothing and below one. Required.</param>
+    /// <param name="backend">Where the arithmetic runs, for this call alone.</param>
+    /// <returns>The same network behind the same pipeline, with an interval.</returns>
+    /// <exception cref="ArgumentNullException">There is no engine.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The level is not above nothing and below one.</exception>
+    /// <exception cref="InvalidOperationException">The pipeline sets no rows aside to calibrate on, they are too few for the level, or the answers are classes.</exception>
+    public TrainedNetwork WithInterval(double alpha, ITensorBackend backend)
+    {
+        ArgumentNullException.ThrowIfNull(backend);
+
+        var chunking = new Chunking(backend, ServingBatchSize);
+        var interval = Prepared.IntervalOf(Predicted(Prepared.Batch(Part.Calibration, FeatureNeeds), chunking), alpha);
+
+        return new TrainedNetwork(Network, Loss, Prepared, TrainedOn)
+        {
+            History = History,
+            Measures = Report(chunking, interval),
+            Carried = Carried,
+            Interval = interval,
+        };
+    }
+
+    // The report measured again, with the interval's margins, when it names the coverage or the width of one; as it was otherwise.
+    private Measures? Report(Chunking chunking, ConformalInterval interval) =>
+        Prepared.Declaration.Report is { } report && report.Metrics.Any(metric => metric is Metric.Coverage or Metric.Width)
+            ? Prepared.Measure([.. report.Parts.Distinct().Select(part => Predicted(Prepared.Batch(part, FeatureNeeds), chunking) with { Margins = interval.Margins })])
+            : Measures;
 
     /// <summary>What the network predicts for rows that arrived after training, in the answer's own units, on a light engine of its own.</summary>
     /// <param name="rows">The rows, without the answer: it is what is being asked.</param>
@@ -125,10 +180,15 @@ public sealed class TrainedNetwork
                 $"This network was trained on {Listed(TrainedOn.Features)}, and its pipeline hands over {Listed(served.FeatureNames)}: a network answers only what it learned from.");
         }
 
-        return new Predictions(TrainedOn.Answers, Prepared.BackToOriginal(Answered(Network, Loss, served.Features, new Chunking(backend, ServingBatchSize)), served, rows), served.HandedInAt)
+        var answers = Prepared.BackToOriginal(Answered(Network, Loss, served.Features, new Chunking(backend, ServingBatchSize)), served, rows);
+        var ends = Interval?.Around(answers);
+
+        return new Predictions(TrainedOn.Answers, answers, served.HandedInAt)
         {
             Unfamiliar = Unfamiliar(TrainedOn, served.Features),
             Ids = served.Ids,
+            Lower = ends?.Lower,
+            Upper = ends?.Upper,
         };
     }
 
@@ -139,7 +199,8 @@ public sealed class TrainedNetwork
     /// </exception>
     /// <remarks>
     /// <para>
-    /// A network read from its file writes the pipeline back as that file carried it, not as this library would write the
+    /// A network with an interval says it under one key at the end, and then names the second version of the file; one without is
+    /// written as it always was. A network read from its file writes the pipeline back as that file carried it, not as this library would write the
     /// pipeline now, so what the network recorded of the fit it was trained behind still holds of the file written again.
     /// </para>
     /// <para>
@@ -183,7 +244,14 @@ public sealed class TrainedNetwork
             throw file.Refused(mismatch.Key, mismatch.Message);
         }
 
-        return new TrainedNetwork(saved.Network, saved.Loss, prepared, trainedOn) { Carried = carried };
+        var interval = file.Interval();
+
+        if (interval is not null && interval.Margins.Count != trainedOn.Answers.Count)
+        {
+            throw file.Refused(IntervalKey, $"The interval names {interval.Margins.Count} margins, and the network answers {trainedOn.Answers.Count}: it has one margin for each answer.");
+        }
+
+        return new TrainedNetwork(saved.Network, saved.Loss, prepared, trainedOn) { Carried = carried, Interval = interval };
     }
 
     /// <summary>A network behind a pipeline, as it stands at the start of a run: whatever its numbers are, trained on nothing yet.</summary>
@@ -297,7 +365,7 @@ public sealed class TrainedNetwork
         using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
         {
             writer.WriteStartObject();
-            writer.WriteNumber(VersionKey, Version);
+            writer.WriteNumber(VersionKey, Interval is null ? 1 : Version);
             writer.WritePropertyName(NetworkKey);
             NetworkDocument.WriteNetwork(writer, Network, Loss, TrainedOn);
             writer.WritePropertyName(PipelineKey);
@@ -307,6 +375,12 @@ public sealed class TrainedNetwork
             {
                 writer.WritePropertyName(TrainingKey);
                 NetworkDocument.WriteTraining(writer, compiled!, checkpoint);
+            }
+
+            if (Interval is { } interval)
+            {
+                writer.WritePropertyName(IntervalKey);
+                interval.WriteTo(writer);
             }
 
             writer.WriteEndObject();
@@ -368,6 +442,15 @@ public readonly record struct Predictions(IReadOnlyList<string> AnswerNames, IRe
     /// stood. Nothing when the schema names no id.
     /// </summary>
     public IReadOnlyList<string>? Ids { get; init; }
+
+    /// <summary>
+    /// For each served row, in the order of <see cref="Answers"/>, the answers less the margin of the interval the network was
+    /// given; nothing when it was given none.
+    /// </summary>
+    public IReadOnlyList<double[]>? Lower { get; init; }
+
+    /// <summary>For each served row, the answers plus the margin of the interval the network was given; nothing when it was given none.</summary>
+    public IReadOnlyList<double[]>? Upper { get; init; }
 }
 
 /// <summary>A fault in the one file: the part it is in, and what is wrong.</summary>

@@ -243,11 +243,11 @@ Names the measures a trained model is held to, the parts they are taken on and h
 
 | key | holds | an example |
 |---|---|---|
-| `metrics` | a list of one or more of `rmse`, `mae`, `r2`, `accuracy`, `precision`, `recall`, `confusionmatrix`, `emd`, `kl`, `rps`, `f1`, `auc`, `mape` or `brier` | `["rmse"]` |
+| `metrics` | a list of one or more of `rmse`, `mae`, `r2`, `accuracy`, `precision`, `recall`, `confusionmatrix`, `emd`, `kl`, `rps`, `f1`, `auc`, `mape`, `brier`, `coverage` or `width` | `["rmse"]` |
 | `parts` | a list of one or more of `train`, `validation` or `test` | `["validation","test"]` |
 | `shown` | a list of one or more of `drawn` or `numbers` | `["numbers"]` |
 
-- **`metrics`**: The measures, in the order they are shown: rmse, mae, r2 and mape for amounts; accuracy, precision, recall, the confusion matrix, f1, auc and brier for classes; kl for shares of a whole; emd and rps for shares in an order.
+- **`metrics`**: The measures, in the order they are shown: rmse, mae, r2 and mape for amounts, and the coverage and width of an interval; accuracy, precision, recall, the confusion matrix, f1, auc and brier for classes; kl for shares of a whole; emd and rps for shares in an order.
 - **`parts`**: The parts they are taken on, side by side: the rows a model learns from, the rows it is chosen on and the rows it is tested on. The rows held back to predict on, and the rows a split keeps apart, are measured on by nothing.
 - **`shown`**: How they are shown: drawn, as the numbers themselves, or both.
 

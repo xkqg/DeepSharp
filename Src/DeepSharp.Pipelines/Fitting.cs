@@ -949,6 +949,7 @@ public sealed class PreparedData
     /// units the answers were handed over in. At least two.
     /// </param>
     /// <param name="blend">How the members' answers become one: averaged, unless said.</param>
+    /// <param name="interval">The interval the ensemble was given, so the report's coverage and width are measured of it; none, and they are left out.</param>
     /// <returns>The ensemble's measures beside each member's, on the very same rows.</returns>
     /// <exception cref="ArgumentException">There are fewer than two members; or a member's predictions are refused as <see cref="Measure"/> refuses them.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The blend is none of the blends.</exception>
@@ -958,8 +959,37 @@ public sealed class PreparedData
     /// of the mean — so the members meet in the answer's own units and not before. An ensemble's measures hold what the members
     /// said together, which no one text holds: each member's measures cross as text, the ensemble's do not.
     /// </remarks>
-    public EnsembleMeasures MeasureEnsemble(IReadOnlyList<IReadOnlyList<PartPredictions>> members, Blend blend = Blend.Average) =>
-        Measurement.OfEnsemble(this, members, blend);
+    public EnsembleMeasures MeasureEnsemble(IReadOnlyList<IReadOnlyList<PartPredictions>> members, Blend blend = Blend.Average, ConformalInterval? interval = null) =>
+        Measurement.OfEnsemble(this, members, blend, interval);
+
+    /// <summary>The interval a model's predictions for the calibration rows allow, at a level: split conformal prediction.</summary>
+    /// <param name="calibration">What the model predicted for the rows the pipeline set aside to calibrate on, as <see cref="Measure"/> takes predictions: in the units the answers were handed over in.</param>
+    /// <param name="alpha">The share of rows allowed to land outside the margin: above nothing and below one. Required.</param>
+    /// <returns>A margin for each answer, in its own units.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The level is not above nothing and below one.</exception>
+    /// <exception cref="InvalidOperationException">The pipeline sets no rows aside; its answers are classes; or the rows hold no margin that keeps the promise.</exception>
+    /// <exception cref="ArgumentException">The predictions are not for the calibration rows, or not one for each of them.</exception>
+    /// <remarks>
+    /// The margin is the ⌈(n+1)(1−α)⌉-th smallest of the errors on the n calibration rows, in the answer's own units — the errors are
+    /// worked out after each prediction has come back through the way back. A row the model has not seen then lands within the
+    /// margin of what the model says with a chance of at least 1−α, whatever the model is, as long as the rows are exchangeable with
+    /// the calibration rows. It says nothing of any one row, and a series whose later rows differ from its earlier ones breaks the
+    /// promise it rests on.
+    /// </remarks>
+    public ConformalInterval IntervalOf(PartPredictions calibration, double alpha) =>
+        Conformal.Of(this, [calibration], Blend.Average, alpha);
+
+    /// <summary>The interval several members\' predictions for the calibration rows allow, once combined, at a level.</summary>
+    /// <param name="members">What each member predicted for the calibration rows, in the units the answers were handed over in. At least one.</param>
+    /// <param name="blend">How the members\' answers become one.</param>
+    /// <param name="alpha">The share of rows allowed to land outside the margin: above nothing and below one. Required.</param>
+    /// <returns>A margin for each answer, in its own units, of the combined answer.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The level is not above nothing and below one.</exception>
+    /// <exception cref="InvalidOperationException">As <see cref="IntervalOf(PartPredictions, double)"/> refuses.</exception>
+    /// <exception cref="ArgumentException">As <see cref="IntervalOf(PartPredictions, double)"/> refuses, or there are no members.</exception>
+    /// <remarks>Each member comes back into the answer\'s own units first and the errors are those of what they say together.</remarks>
+    public ConformalInterval IntervalOf(IReadOnlyList<PartPredictions> members, Blend blend, double alpha) =>
+        Conformal.Of(this, members, blend, alpha);
 
     private static string Quoted(IEnumerable<string> names) => string.Join(", ", names.Select(name => $"'{name}'"));
 

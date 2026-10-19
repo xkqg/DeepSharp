@@ -1327,7 +1327,7 @@
           "const": "evidence.report"
         },
         "metrics": {
-          "description": "The measures, in the order they are shown: rmse, mae, r2 and mape for amounts; accuracy, precision, recall, the confusion matrix, f1, auc and brier for classes; kl for shares of a whole; emd and rps for shares in an order.",
+          "description": "The measures, in the order they are shown: rmse, mae, r2 and mape for amounts, and the coverage and width of an interval; accuracy, precision, recall, the confusion matrix, f1, auc and brier for classes; kl for shares of a whole; emd and rps for shares in an order.",
           "type": "array",
           "minItems": 1,
           "items": {
@@ -1347,12 +1347,14 @@
                   "f1",
                   "auc",
                   "mape",
-                  "brier"
+                  "brier",
+                  "coverage",
+                  "width"
                 ]
               },
               {
                 "type": "string",
-                "pattern": "^(?:[Rr][Mm][Ss][Ee]|[Mm][Aa][Ee]|[Rr]2|[Aa][Cc][Cc][Uu][Rr][Aa][Cc][Yy]|[Pp][Rr][Ee][Cc][Ii][Ss][Ii][Oo][Nn]|[Rr][Ee][Cc][Aa][Ll][Ll]|[Cc][Oo][Nn][Ff][Uu][Ss][Ii][Oo][Nn][Mm][Aa][Tt][Rr][Ii][Xx]|[Ee][Mm][Dd]|[Kk][Ll]|[Rr][Pp][Ss]|[Ff]1|[Aa][Uu][Cc]|[Mm][Aa][Pp][Ee]|[Bb][Rr][Ii][Ee][Rr])$"
+                "pattern": "^(?:[Rr][Mm][Ss][Ee]|[Mm][Aa][Ee]|[Rr]2|[Aa][Cc][Cc][Uu][Rr][Aa][Cc][Yy]|[Pp][Rr][Ee][Cc][Ii][Ss][Ii][Oo][Nn]|[Rr][Ee][Cc][Aa][Ll][Ll]|[Cc][Oo][Nn][Ff][Uu][Ss][Ii][Oo][Nn][Mm][Aa][Tt][Rr][Ii][Xx]|[Ee][Mm][Dd]|[Kk][Ll]|[Rr][Pp][Ss]|[Ff]1|[Aa][Uu][Cc]|[Mm][Aa][Pp][Ee]|[Bb][Rr][Ii][Ee][Rr]|[Cc][Oo][Vv][Ee][Rr][Aa][Gg][Ee]|[Ww][Ii][Dd][Tt][Hh])$"
               }
             ]
           }

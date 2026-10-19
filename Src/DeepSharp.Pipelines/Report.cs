@@ -115,12 +115,26 @@ public enum Metric
     /// proper scoring rule that bins nothing. New in the tenth version of the file.
     /// </remarks>
     Brier,
+
+    /// <summary>
+    /// The share of rows whose answer lands within the interval the model gave it: the predicted number, less and plus the margin of
+    /// its answer — averaged over the answers.
+    /// </summary>
+    /// <remarks>
+    /// Measured of a model that has an interval, and left out of the report's numbers until it has one. Beside it stands the same
+    /// share for predicting the training rows' average with the same margin. New in the thirteenth version of the file.
+    /// </remarks>
+    Coverage,
+
+    /// <summary>The width of the interval the model gave each answer: twice its margin, in the answer's own units, averaged over the answers.</summary>
+    /// <remarks>The same on every row, so the same beside the training rows' average. Left out of the report\'s numbers until the model has an interval. New in the thirteenth version of the file.</remarks>
+    Width,
 }
 
 /// <summary>What a measure is taken of, which decides the outputs a report may name it against.</summary>
 public enum MetricFamily
 {
-    /// <summary>Amounts, column by column: rmse, mae, r2 and mape, taken of any output.</summary>
+    /// <summary>Amounts, column by column: rmse, mae, r2, mape, and the coverage and width of an interval, taken of any output.</summary>
     Amounts,
 
     /// <summary>Classes, each answer nought or one: accuracy, precision, recall, the confusion matrix, f1, auc and brier, of an output whose answers can be classes.</summary>
@@ -172,7 +186,7 @@ public sealed record ReportStep : IPipelineStep<ReportStep>, INamesTheMeasures, 
 {
     private static readonly SeveralOfParameter<Metric> MetricsKey = new(
         "metrics",
-        "The measures, in the order they are shown: rmse, mae, r2 and mape for amounts; accuracy, precision, recall, the confusion matrix, f1, auc and brier for classes; kl for shares of a whole; emd and rps for shares in an order.",
+        "The measures, in the order they are shown: rmse, mae, r2 and mape for amounts, and the coverage and width of an interval; accuracy, precision, recall, the confusion matrix, f1, auc and brier for classes; kl for shares of a whole; emd and rps for shares in an order.",
         [Metric.Rmse]);
 
     private static readonly SeveralOfParameter<Part> PartsKey = new(
@@ -348,7 +362,7 @@ public static class MetricExtensions
         /// <exception cref="ArgumentOutOfRangeException">The value is none of the measures: a number cast to the set.</exception>
         public MetricFamily Family() => metric switch
         {
-            Metric.Rmse or Metric.Mae or Metric.R2 or Metric.Mape => MetricFamily.Amounts,
+            Metric.Rmse or Metric.Mae or Metric.R2 or Metric.Mape or Metric.Coverage or Metric.Width => MetricFamily.Amounts,
             Metric.Accuracy or Metric.Precision or Metric.Recall or Metric.ConfusionMatrix or Metric.F1 or Metric.Auc or Metric.Brier => MetricFamily.Classes,
             Metric.Kl => MetricFamily.Shares,
             Metric.Emd or Metric.Rps => MetricFamily.OrderedShares,

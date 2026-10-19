@@ -62,7 +62,7 @@ public class OrderedMeasureTests
     {
         // A measure added later cannot fall through to another's arithmetic: every one is said, and one that is none of them
         // is refused.
-        var rows = new Answered([[1, 0], [0, 1]], [[0.75, 0.25], [0.5, 0.5]]);
+        var rows = new Answered([[1, 0], [0, 1]], [[0.75, 0.25], [0.5, 0.5]]) { Margins = [0.5, 0.5] };
         var families = new Dictionary<Metric, MetricFamily>
         {
             [Metric.Rmse] = MetricFamily.Amounts,
@@ -79,6 +79,8 @@ public class OrderedMeasureTests
             [Metric.Auc] = MetricFamily.Classes,
             [Metric.Mape] = MetricFamily.Amounts,
             [Metric.Brier] = MetricFamily.Classes,
+            [Metric.Coverage] = MetricFamily.Amounts,
+            [Metric.Width] = MetricFamily.Amounts,
         };
 
         Assert.Equal(Enum.GetValues<Metric>(), families.Keys.Order());

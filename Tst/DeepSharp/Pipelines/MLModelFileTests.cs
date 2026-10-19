@@ -35,7 +35,9 @@ public class MLModelFileTests
         Assert.False(read.Classes);
         Assert.Equal(["fare", "age"], read.Features);
         Assert.Equal(3, read.Rows);
-        Assert.Equal(1, MLModelFile.Version);
+        // The file reads up to the second version, in which an interval is named; one with none is written as the first.
+        Assert.Equal(2, MLModelFile.Version);
+        Assert.Null(read.Interval);
     }
 
     [Fact]

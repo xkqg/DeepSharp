@@ -248,6 +248,8 @@ beside one another — each value, the mean, the sample standard deviation, the 
 about whether a spread is wide, as the paired comparison of two pipelines says nothing about whether a difference
 matters. A study takes the folds as its deals, so a candidate is judged by the mean of its validation loss over them.
 
+A part of the rows is set aside for a width and not for a number: `Calibration` is fitted on by nothing and chosen by nothing, which is what lets the errors made there stand for the errors made on rows nobody has seen. Validation cannot be it, since a model is chosen by validation and so has already seen what it chose; test cannot, since a number is reported there once everything else is settled. An interval is therefore the pipeline's and not a learner's: the margin is the ⌈(n+1)(1−α)⌉-th smallest error on those rows in the answer's own units, worked out once beside the measures from whatever a model predicted, so a network, an ensemble and a tree are given it by the same arithmetic and keep it under one key in their own files. It is the same width on every row, holds on average over exchangeable rows, and says nothing of one row.
+
 Deals and members are two shapes and are not one. Several fits of one declaration — folds, a study's deals, a comparison — each have a
 fit of their own and so a digest of their own. Several networks behind one fit are an ensemble: one pipeline is fitted once, every
 member is trained on the rows it prepared, and a served row is replayed and named once for all of them. Their answers meet in the

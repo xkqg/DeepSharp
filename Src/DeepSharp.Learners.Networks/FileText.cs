@@ -27,14 +27,14 @@ internal sealed class FileText
     // token it has reached.
     private const int Piece = 1 << 16;
 
-    private static readonly string[] NetworkParts = [TrainedNetwork.VersionKey, TrainedNetwork.NetworkKey, TrainedNetwork.PipelineKey, TrainedNetwork.TrainingKey];
+    private static readonly string[] NetworkParts = [TrainedNetwork.VersionKey, TrainedNetwork.NetworkKey, TrainedNetwork.PipelineKey, TrainedNetwork.TrainingKey, TrainedNetwork.IntervalKey];
 
-    private static readonly string[] EnsembleParts = [TrainedNetwork.VersionKey, TrainedEnsemble.BlendKey, NetworkDocument.NetworksKey, TrainedNetwork.PipelineKey];
+    private static readonly string[] EnsembleParts = [TrainedNetwork.VersionKey, TrainedEnsemble.BlendKey, NetworkDocument.NetworksKey, TrainedNetwork.PipelineKey, TrainedNetwork.IntervalKey];
 
     private readonly string _json;
     private readonly bool _ensemble;
     private readonly Dictionary<string, long> _places = new(StringComparer.Ordinal);
-    private byte[]? _pipeline;
+    private readonly Dictionary<string, byte[]> _kept = new(StringComparer.Ordinal);
 
     /// <summary>Surveys a file's top.</summary>
     /// <param name="json">The file.</param>
@@ -69,11 +69,34 @@ internal sealed class FileText
     /// <summary>The pipeline the file carries, its text taken from the file as it stands there.</summary>
     /// <exception cref="NetworkFileException">The file carries no pipeline: nothing under its key, or no object.</exception>
     public PipelineText Pipeline() =>
-        _pipeline is { } pipeline
+        _kept.TryGetValue(TrainedNetwork.PipelineKey, out var pipeline)
             ? PipelineText.Of(pipeline)
             : throw new NetworkFileException(Placed([new Noted(
                 _places.GetValueOrDefault(TrainedNetwork.PipelineKey),
                 $"This file carries no pipeline: {Noun} file carries the pipeline it was trained behind, as an object under '{TrainedNetwork.PipelineKey}'.")]));
+
+    /// <summary>The interval the file carries; nothing when it carries none.</summary>
+    /// <exception cref="NetworkFileException">What is under the key is no interval: the fault, placed at the key.</exception>
+    public ConformalInterval? Interval()
+    {
+        if (!_kept.TryGetValue(TrainedNetwork.IntervalKey, out var bytes))
+        {
+            return _places.ContainsKey(TrainedNetwork.IntervalKey)
+                ? throw Refused(TrainedNetwork.IntervalKey, $"An interval is an object: its level, the rows it was worked out from and its margins, under '{TrainedNetwork.IntervalKey}'.")
+                : null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(bytes);
+
+            return ConformalInterval.ReadFrom(document.RootElement);
+        }
+        catch (FormatException fault)
+        {
+            throw Refused(TrainedNetwork.IntervalKey, fault.Message);
+        }
+    }
 
     private List<Noted> Survey()
     {
@@ -83,7 +106,7 @@ internal sealed class FileText
         var opened = false;
         var ended = false;
         var within = false;
-        var taking = false;
+        string? keeping = null;
         string? key = null;
         var at = 0L;
         int? version = null;
@@ -144,7 +167,7 @@ internal sealed class FileText
                         }
 
                         within = reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray;
-                        taking = key == TrainedNetwork.PipelineKey && reader.TokenType == JsonTokenType.StartObject && _pipeline is null;
+                        keeping = key is TrainedNetwork.PipelineKey or TrainedNetwork.IntervalKey && reader.TokenType == JsonTokenType.StartObject && !_kept.ContainsKey(key) ? key : null;
                         from = (int)reader.TokenStartIndex;
 
                         if (!within)
@@ -154,8 +177,8 @@ internal sealed class FileText
                     }
                 }
 
-                // A pipeline that goes on into the next piece: what of it this piece held.
-                if (taking)
+                // A pipeline or an interval that goes on into the next piece: what of it this piece held.
+                if (keeping is not null)
                 {
                     taken.Write(pieces.Bytes(from, (int)reader.BytesConsumed));
                 }
@@ -189,11 +212,12 @@ internal sealed class FileText
         // A part has been read past: the pipeline's bytes kept when they are the pipeline's, and a key that is no part named.
         void Passed(ref Utf8JsonReader reader, int start)
         {
-            if (taking)
+            if (keeping is { } kept)
             {
                 taken.Write(pieces.Bytes(start, (int)reader.BytesConsumed));
-                _pipeline = taken.WrittenSpan.ToArray();
-                taking = false;
+                _kept[kept] = taken.WrittenSpan.ToArray();
+                taken.Clear();
+                keeping = null;
             }
 
             if (!Parts.Contains(key))

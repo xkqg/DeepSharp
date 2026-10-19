@@ -252,10 +252,10 @@ public class HandBackTests
     [Fact]
     public void ATextANewerDeepSharpWrote_IsRefusedAsNewer()
     {
-        var refused = Assert.Throws<ArgumentException>(() => Passengers().MeasureAgain("""{"version": 2, "answers": [], "parts": []}"""));
+        var refused = Assert.Throws<ArgumentException>(() => Passengers().MeasureAgain("""{"version": 3, "answers": [], "parts": []}"""));
 
         Assert.Contains("newer DeepSharp", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("version 2", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("version 3", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -294,7 +294,7 @@ public class ReportTests
         var shown = Assert.IsType<SeveralOfParameter<Shown>>(description.Parameters.Single(parameter => parameter.Key == "shown"));
 
         Assert.Equal(["train", "validation", "test"], parts.Choices);
-        Assert.Equal(["rmse", "mae", "r2", "accuracy", "precision", "recall", "confusionmatrix", "emd", "kl", "rps", "f1", "auc", "mape", "brier"], metrics.Choices);
+        Assert.Equal(["rmse", "mae", "r2", "accuracy", "precision", "recall", "confusionmatrix", "emd", "kl", "rps", "f1", "auc", "mape", "brier", "coverage", "width"], metrics.Choices);
         Assert.Equal(["drawn", "numbers"], shown.Choices);
         Assert.Equal(["metrics", "parts", "shown"], description.Parameters.Select(parameter => parameter.Key));
 

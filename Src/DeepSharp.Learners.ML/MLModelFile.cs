@@ -37,9 +37,10 @@ public sealed record MLModelFile
     private const string RowsKey = "rows";
     private const string ModelKey = "model";
     private const string PipelineKey = "pipeline";
+    private const string IntervalKey = "interval";
 
-    /// <summary>The version of the model file this library writes.</summary>
-    public const int Version = 1;
+    /// <summary>The version of the model file this library reads up to; a file with no interval is written as the first, one with an interval as the second.</summary>
+    public const int Version = 2;
 
     private MLModelFile(PipelineText carried, PartDeclaration trainer, byte[] model)
     {
@@ -78,6 +79,9 @@ public sealed record MLModelFile
     /// <summary>ML.NET's own archive of the model, as it saved it.</summary>
     public byte[] Model { get; }
 
+    /// <summary>The width its answers are worth, as the pipeline works it out from the calibration rows; nothing when the model was given none.</summary>
+    public ConformalInterval? Interval { get; init; }
+
     /// <summary>This file as its text.</summary>
     /// <returns>The text, a line feed between lines.</returns>
     public string ToJson()
@@ -86,7 +90,7 @@ public sealed record MLModelFile
         using (var writer = new Utf8JsonWriter(written, new JsonWriterOptions { Indented = true }))
         {
             writer.WriteStartObject();
-            writer.WriteNumber(VersionKey, Version);
+            writer.WriteNumber(VersionKey, Interval is null ? 1 : Version);
             writer.WriteString(LibraryKey, Library);
             writer.WriteString(ProcessorKey, Processor);
             writer.WritePropertyName(TrainerKey);
@@ -107,6 +111,13 @@ public sealed record MLModelFile
             writer.WriteBase64String(ModelKey, Model);
             writer.WritePropertyName(PipelineKey);
             writer.WriteRawValue(Carried.Text);
+
+            if (Interval is { } interval)
+            {
+                writer.WritePropertyName(IntervalKey);
+                interval.WriteTo(writer);
+            }
+
             writer.WriteEndObject();
         }
 
@@ -159,6 +170,7 @@ public sealed record MLModelFile
             Answer = Text(surveyed, root, AnswerKey),
             Classes = root.TryGetProperty(ClassesKey, out var classes) && classes.ValueKind is JsonValueKind.True,
             Rows = (int)Number(surveyed, root, RowsKey),
+            Interval = ReadInterval(surveyed, root),
             Features = root.TryGetProperty(FeaturesKey, out var features) && features.ValueKind is JsonValueKind.Array
                 ? [.. features.EnumerateArray().Select(each => each.GetString() ?? string.Empty)]
                 : [],
@@ -192,6 +204,23 @@ public sealed record MLModelFile
             [.. trainer.EnumerateObject()
                 .Where(setting => setting.Name != "kind")
                 .Select(setting => new PartSetting(setting.Name, PartValue.Of(setting.Value.GetDouble())))]);
+    }
+
+    private static ConformalInterval? ReadInterval(SurveyedText surveyed, JsonElement root)
+    {
+        if (!root.TryGetProperty(IntervalKey, out var interval))
+        {
+            return null;
+        }
+
+        try
+        {
+            return ConformalInterval.ReadFrom(interval);
+        }
+        catch (FormatException fault)
+        {
+            throw Refused(surveyed, fault.Message);
+        }
     }
 
     private static byte[] Bytes(SurveyedText surveyed, JsonElement root)

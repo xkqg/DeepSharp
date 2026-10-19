@@ -46,6 +46,12 @@ public sealed class TrainedMLModel
     /// <summary>What the model was trained on: how many rows, and the features and answer it was handed.</summary>
     public TrainedOnRows TrainedOn { get; }
 
+    /// <summary>
+    /// The width its answers are worth: the margin the errors on the calibration rows allow, at the level it was given. Nothing until
+    /// <see cref="WithInterval(double)"/> gives it one.
+    /// </summary>
+    public ConformalInterval? Interval { get; private init; }
+
     /// <summary>How the pipeline's own report measures this model, on the parts the report names.</summary>
     /// <returns>The measures, or nothing when the pipeline declares no report.</returns>
     /// <remarks>
@@ -55,10 +61,24 @@ public sealed class TrainedMLModel
     /// </remarks>
     public Measures? Measures =>
         Prepared.Declaration.Steps.OfType<INamesTheMeasures>().FirstOrDefault() is { } report
-            ? Prepared.Measure([.. report.Parts.Select(part => new PartPredictions(
-                Prepared.Batch(part, LearnMLStep.FeatureNeeds),
-                [.. Predict(part).Select(prediction => new[] { prediction })]))])
+            ? Prepared.Measure([.. report.Parts.Select(part => PredictedFor(part) with { Margins = Interval?.Margins })])
             : null;
+
+    /// <summary>The same model with the width its answers are worth, worked out on the rows the pipeline set aside to calibrate on.</summary>
+    /// <param name="alpha">The share of rows allowed to land outside the margin: above nothing and below one. Required.</param>
+    /// <returns>The same model behind the same pipeline, its report measured with the coverage and width of the interval when it names them.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The level is not above nothing and below one.</exception>
+    /// <exception cref="InvalidOperationException">The pipeline sets no rows aside to calibrate on, they are too few for the level, or the answer is a class.</exception>
+    /// <remarks>
+    /// The same split conformal prediction a network is given: the margin is the ⌈(n+1)(1−α)⌉-th smallest of this model's errors on the
+    /// calibration rows, in the answer's own units. It is kept in the model's file.
+    /// </remarks>
+    public TrainedMLModel WithInterval(double alpha) =>
+        new(_model, _context, Prepared, TrainedOn) { Interval = Prepared.IntervalOf(PredictedFor(Part.Calibration), alpha) };
+
+    // What the model predicts for a part, as the pipeline measures predictions: one answer a row.
+    private PartPredictions PredictedFor(Part part) =>
+        new(Prepared.Batch(part, LearnMLStep.FeatureNeeds), [.. Predict(part).Select(prediction => new[] { prediction })]);
 
     /// <summary>This model and the pipeline it was trained behind, as one file.</summary>
     /// <returns>The file's text.</returns>
@@ -81,6 +101,7 @@ public sealed class TrainedMLModel
             Classes = TrainedOn.Classes,
             Features = TrainedOn.Features,
             Rows = TrainedOn.Rows,
+            Interval = Interval,
         }).ToJson();
     }
 

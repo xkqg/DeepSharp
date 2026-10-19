@@ -57,6 +57,12 @@ public sealed class TrainedEnsemble
     /// </summary>
     public EnsembleMeasures? Measures { get; internal init; }
 
+    /// <summary>
+    /// The width the ensemble\'s answers are worth: the margin the errors of its combined answer on the calibration rows allow.
+    /// Nothing until <see cref="WithInterval(double)"/> gives it one.
+    /// </summary>
+    public ConformalInterval? Interval { get; internal init; }
+
     /// <summary>Puts networks that were trained behind one fit together as an ensemble.</summary>
     /// <param name="members">The networks: at least two, all trained behind the same fit of a pipeline.</param>
     /// <param name="blend">How their answers become one; averaged, unless said.</param>
@@ -124,6 +130,13 @@ public sealed class TrainedEnsemble
             writer.WriteEndArray();
             writer.WritePropertyName(TrainedNetwork.PipelineKey);
             writer.WriteRawValue(Members[0].Carried.Text);
+
+            if (Interval is { } interval)
+            {
+                writer.WritePropertyName(TrainedNetwork.IntervalKey);
+                interval.WriteTo(writer);
+            }
+
             writer.WriteEndObject();
         }
 
@@ -185,7 +198,14 @@ public sealed class TrainedEnsemble
             members.Add(new TrainedNetwork(saved[at].Network, saved[at].Loss, prepared, trainedOn) { Carried = carried });
         }
 
-        return new TrainedEnsemble(members, blend);
+        var interval = file.Interval();
+
+        if (interval is not null && interval.Margins.Count != members[0].TrainedOn.Answers.Count)
+        {
+            throw file.Refused(TrainedNetwork.IntervalKey, $"The interval names {interval.Margins.Count} margins, and the networks answer {members[0].TrainedOn.Answers.Count}: it has one margin for each answer.");
+        }
+
+        return new TrainedEnsemble(members, blend) { Interval = interval };
     }
 
     /// <summary>Refuses an ensemble holding more parameters than a text can hold.</summary>
@@ -214,6 +234,52 @@ public sealed class TrainedEnsemble
                     System.Globalization.CultureInfo.InvariantCulture,
                     $"This ensemble's file would be {length:N0} characters long, and .NET makes no text longer than {MostText:N0}: keep fewer members, or smaller ones."));
         }
+    }
+
+    /// <summary>An ensemble of the same members with the width its combined answers are worth, worked out on the rows the pipeline set aside to calibrate on.</summary>
+    /// <param name="alpha">The share of rows allowed to land outside the margin: above nothing and below one. Required.</param>
+    /// <returns>The same members behind the same pipeline, answering with a lower and an upper end.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The level is not above nothing and below one.</exception>
+    /// <exception cref="InvalidOperationException">The pipeline sets no rows aside to calibrate on, they are too few for the level, or the answers are classes.</exception>
+    /// <remarks>
+    /// The errors are those of the combined answer, in the answer\'s own units, so the margin is the ensemble\'s and no member\'s: it is
+    /// the same split conformal prediction on a point answer, of whatever answers the ensemble gives.
+    /// </remarks>
+    public TrainedEnsemble WithInterval(double alpha) => WithInterval(alpha, new CpuBackend());
+
+    /// <summary>An ensemble of the same members with the width its combined answers are worth, answered for the calibration rows on the engine handed in.</summary>
+    /// <param name="alpha">The share of rows allowed to land outside the margin: above nothing and below one. Required.</param>
+    /// <param name="backend">Where the arithmetic runs, for this call alone.</param>
+    /// <returns>The same members behind the same pipeline, with an interval.</returns>
+    /// <exception cref="ArgumentNullException">There is no engine.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The level is not above nothing and below one.</exception>
+    /// <exception cref="InvalidOperationException">The pipeline sets no rows aside to calibrate on, they are too few for the level, or the answers are classes.</exception>
+    public TrainedEnsemble WithInterval(double alpha, ITensorBackend backend)
+    {
+        ArgumentNullException.ThrowIfNull(backend);
+
+        var chunking = new Chunking(backend, TrainedNetwork.ServingBatchSize);
+        var calibration = Prepared.Batch(Part.Calibration, TrainedNetwork.FeatureNeeds);
+        var interval = Prepared.IntervalOf([.. Members.Select(member => member.Predicted(calibration, chunking))], Blend, alpha);
+
+        return new TrainedEnsemble(Members, Blend) { Interval = interval, Measures = Report(chunking, interval) };
+    }
+
+    // The report measured again, with the interval\'s margins, when it names the coverage or the width of one; as it was otherwise.
+    private EnsembleMeasures? Report(Chunking chunking, ConformalInterval interval)
+    {
+        if (Prepared.Declaration.Report is not { } report || !report.Metrics.Any(metric => metric is Metric.Coverage or Metric.Width))
+        {
+            return Measures;
+        }
+
+        var parts = report.Parts.Distinct().ToArray();
+        IReadOnlyList<IReadOnlyList<PartPredictions>> said =
+        [
+            .. Members.Select(member => (IReadOnlyList<PartPredictions>)[.. parts.Select(part => member.Predicted(Prepared.Batch(part, TrainedNetwork.FeatureNeeds), chunking))]),
+        ];
+
+        return Prepared.MeasureEnsemble(said, Blend, interval);
     }
 
     /// <summary>What the ensemble predicts for rows that arrived after training, in the answer's own units, on a light engine of its own.</summary>
@@ -249,10 +315,15 @@ public sealed class TrainedEnsemble
         var chunking = new Chunking(backend, TrainedNetwork.ServingBatchSize);
         IReadOnlyList<double[]>[] said = [.. Members.Select(member => (IReadOnlyList<double[]>)TrainedNetwork.Answered(member.Network, member.Loss, served.Features, chunking))];
 
-        return new Predictions(first.TrainedOn.Answers, Prepared.BackToOriginal(said, served, rows, Blend), served.HandedInAt)
+        var answers = Prepared.BackToOriginal(said, served, rows, Blend);
+        var ends = Interval?.Around(answers);
+
+        return new Predictions(first.TrainedOn.Answers, answers, served.HandedInAt)
         {
             Unfamiliar = TrainedNetwork.Unfamiliar(first.TrainedOn, served.Features),
             Ids = served.Ids,
+            Lower = ends?.Lower,
+            Upper = ends?.Upper,
         };
     }
 }

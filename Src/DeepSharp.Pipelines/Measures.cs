@@ -32,6 +32,16 @@ public readonly record struct PartPredictions(Batch Batch, IReadOnlyList<double[
     /// says so of a row that moves it. The report counts the rows of each part that name any, beside its measures.
     /// </remarks>
     public IReadOnlyList<IReadOnlyList<string>>? Unfamiliar { get; init; }
+
+    /// <summary>
+    /// The margin the model gave each answer on either side of what it says, in the answer's own units: the half-width of its
+    /// interval. Nothing when the model has none.
+    /// </summary>
+    /// <remarks>
+    /// With it, a report that names <see cref="Metric.Coverage"/> or <see cref="Metric.Width"/> measures them; without it, they are
+    /// left out of the numbers, for nothing says how wide an interval is. One for every part the report measures, or for none.
+    /// </remarks>
+    public IReadOnlyList<double>? Margins { get; init; }
 }
 
 /// <summary>One measure of one part, beside the same measure of predicting the training rows' average answer.</summary>
@@ -127,7 +137,7 @@ public sealed class Measures : Evidence
 {
     // A report stands below an output, so the pipeline it was measured on names the answers: the declaration refuses one that
     // does not.
-    internal Measures(INamesTheMeasures report, PreparedData measuredOn, IReadOnlyList<PartMeasures> parts, IReadOnlyList<WrittenPart>? predicted)
+    internal Measures(ReportedAs report, PreparedData measuredOn, IReadOnlyList<PartMeasures> parts, IReadOnlyList<WrittenPart>? predicted)
     {
         Metrics = report.Metrics;
         Shown = report.Shown;
@@ -190,6 +200,11 @@ public sealed class Measures : Evidence
     }
 }
 
+/// <summary>How a report measured: the measures it took, which are those it names but for an interval's when the model had none, and how they are shown.</summary>
+/// <param name="Metrics">The measures taken, in the order the report names them.</param>
+/// <param name="Shown">How they are shown.</param>
+internal readonly record struct ReportedAs(IReadOnlyList<Metric> Metrics, IReadOnlyList<Shown> Shown);
+
 /// <summary>The answers of a part's rows in their own units, and what was predicted for each, in the same units.</summary>
 /// <param name="actual">Each row's answers.</param>
 /// <param name="predicted">What was predicted for each row, as many numbers as it has answers.</param>
@@ -209,6 +224,9 @@ internal sealed class Answered(IReadOnlyList<double[]> actual, IReadOnlyList<dou
     /// <summary>How many of the answers, from the first, stand in the output's order; every one, unless said.</summary>
     public int? InTheOrder { get; init; }
 
+    /// <summary>The margin each answer's prediction is given on either side, when there is an interval.</summary>
+    public IReadOnlyList<double>? Margins { get; init; }
+
     private int Width => Actual[0].Length;
 
     /// <summary>A measure that is a number.</summary>
@@ -227,11 +245,17 @@ internal sealed class Answered(IReadOnlyList<double[]> actual, IReadOnlyList<dou
         Metric.Rps => RowByRow(InTheOrder ?? Width, Ranked),
         Metric.Mape => Averaged(AbsolutePercentage),
         Metric.Auc => Averaged(AreaUnderTheCurve),
+        Metric.Coverage => Averaged(column => Rows().Average(row => Math.Abs(Actual[row][column] - Predicted[row][column]) <= Margin(column) ? 1.0 : 0.0)),
+        Metric.Width => Averaged(column => 2 * Margin(column)),
         Metric.Brier => ones == 1 && Width > 1
             ? Rows().Average(row => Enumerable.Range(0, Width).Sum(column => Squared(Predicted[row][column] - Actual[row][column])))
             : Averaged(column => Rows().Average(row => Squared(Predicted[row][column] - Actual[row][column]))),
         _ => throw new ArgumentOutOfRangeException(nameof(metric), metric, "A measure that is a number is one of the measures, and the confusion matrix is none."),
     };
+
+    // The margin of an answer; an interval's measure is taken of predictions that have one.
+    private double Margin(int column) =>
+        (Margins ?? throw new InvalidOperationException("Coverage and width are measured of an interval, and these predictions have no margins.")).ElementAt(column);
 
     /// <summary>Whether every answer of a column is the same class in these rows, which leaves no area under a curve.</summary>
     /// <param name="column">The answer.</param>
@@ -452,7 +476,13 @@ internal sealed class Measurement
         _report = report;
         _output = output;
         _average = average;
+        Metrics = report.Metrics;
     }
+
+    // The measures taken: those the report names, but for the coverage and width of an interval when the model gave none.
+    private IReadOnlyList<Metric> Metrics { get; init; }
+
+    private static bool IsAnIntervals(Metric metric) => metric is Metric.Coverage or Metric.Width;
 
     /// <summary>The measures of these predictions, as the pipeline's report declares them.</summary>
     /// <param name="prepared">The run.</param>
@@ -466,13 +496,14 @@ internal sealed class Measurement
         prepared.RequireRows();
 
         var given = Given(report, predictions);
+        var margined = ThrowIfSomeAreMarginedAndSomeAreNot(given);
 
         // A report stands below an output: the declaration refuses one that does not.
         var output = prepared.Declaration.Output!;
-        var measurement = new Measurement(prepared, report, output, Average(prepared));
+        var measurement = new Measurement(prepared, report, output, Average(prepared)) { Metrics = EffectiveMetrics(report, margined) };
 
         return new Measures(
-            report,
+            new ReportedAs(measurement.Metrics, report.Shown),
             prepared,
             [.. report.Parts.Select(part => measurement.On(part, given[part]))],
             [.. report.Parts.Distinct().Select(part => WrittenPart.Of(part, given[part]))]);
@@ -482,8 +513,9 @@ internal sealed class Measurement
     /// <param name="prepared">The run.</param>
     /// <param name="members">What each member predicted, for each part the report names.</param>
     /// <param name="blend">How the members' answers become one.</param>
+    /// <param name="interval">The interval the ensemble was given, when it has one.</param>
     /// <returns>The ensemble's measures and each member's.</returns>
-    public static EnsembleMeasures OfEnsemble(PreparedData prepared, IReadOnlyList<IReadOnlyList<PartPredictions>> members, Blend blend)
+    public static EnsembleMeasures OfEnsemble(PreparedData prepared, IReadOnlyList<IReadOnlyList<PartPredictions>> members, Blend blend, ConformalInterval? interval)
     {
         ArgumentNullException.ThrowIfNull(members);
 
@@ -503,16 +535,48 @@ internal sealed class Measurement
         Measures[] alone = [.. members.Select(member => Of(prepared, member))];
 
         var report = prepared.Declaration.Report!;
-        var measurement = new Measurement(prepared, report, prepared.Declaration.Output!, Average(prepared));
+        var measurement = new Measurement(prepared, report, prepared.Declaration.Output!, Average(prepared)) { Metrics = EffectiveMetrics(report, interval is not null) };
         var given = members.Select(member => Given(report, member)).ToArray();
 
         PartMeasures OnPart(Part part) =>
             measurement.On(
                 part,
-                given[0][part],
+                given[0][part] with { Margins = interval?.Margins },
                 rows => measurement.Combined(blend, [.. given.Select(each => each[part])], part, rows));
 
-        return new EnsembleMeasures(new Measures(report, prepared, [.. report.Parts.Select(OnPart)], null), alone, blend);
+        return new EnsembleMeasures(new Measures(new ReportedAs(measurement.Metrics, report.Shown), prepared, [.. report.Parts.Select(OnPart)], null), alone, blend);
+    }
+
+    // The report\'s measures, but for an interval\'s when the predictions came with no margins.
+    private static IReadOnlyList<Metric> EffectiveMetrics(INamesTheMeasures report, bool margined) =>
+        margined ? report.Metrics : [.. report.Metrics.Where(metric => !IsAnIntervals(metric))];
+
+    // Margins for every part the report measures, or for none: the numbers of one part would stand beside another\'s that has none.
+    private static bool ThrowIfSomeAreMarginedAndSomeAreNot(Dictionary<Part, PartPredictions> given)
+    {
+        var margined = given.Values.Count(each => each.Margins is not null);
+
+        if (margined != 0 && margined != given.Count)
+        {
+            throw new ArgumentException(
+                "Some of these predictions come with margins and some do not: an interval is given for every part the report measures, or for none, or the parts are measured by other measures.",
+                "predictions");
+        }
+
+        return margined != 0;
+    }
+
+    // One margin for each answer, none below nought: what an interval holds on either side of a prediction.
+    private void ThrowIfBadMargins(IReadOnlyList<double> margins)
+    {
+        if (margins.Count != _output.Answers.Count || margins.Any(margin => !double.IsFinite(margin) || margin < 0))
+        {
+            throw new ArgumentException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"The margins are one number for each of the {_output.Answers.Count} answers, each nought or more, as an interval's half-width is: {margins.Count} were given."),
+                "predictions");
+        }
     }
 
     // What the members said of one part's rows, each brought back into the answer's own units and then combined.
@@ -641,8 +705,15 @@ internal sealed class Measurement
         int[] readAt = [.. Enumerable.Range(0, _prepared.Table.RowCount).Where(row => _prepared.Parts[row] == part).Select(row => _prepared.Table.Identities[row].ReadAt)];
         var inTheOrder = _output.InTheOrder();
         var actual = _prepared.BackToOriginal(handed.Answers!, part);
-        var model = new Answered(actual, predictedInOwnUnits(new AnswersRead(actual, readAt))) { InTheOrder = inTheOrder };
-        var average = new Answered(model.Actual, _prepared.BackToOriginal([.. Enumerable.Repeat(_average, rows)], part)) { InTheOrder = inTheOrder };
+        var margins = given.Margins;
+
+        if (margins is not null)
+        {
+            ThrowIfBadMargins(margins);
+        }
+
+        var model = new Answered(actual, predictedInOwnUnits(new AnswersRead(actual, readAt))) { InTheOrder = inTheOrder, Margins = margins };
+        var average = new Answered(model.Actual, _prepared.BackToOriginal([.. Enumerable.Repeat(_average, rows)], part)) { InTheOrder = inTheOrder, Margins = margins };
 
         ThrowIfNotFinite(model.Predicted, readAt);
 
@@ -669,7 +740,7 @@ internal sealed class Measurement
 
         Measured[] values =
         [
-            .. _report.Metrics
+            .. Metrics
                 .Where(metric => metric != Metric.ConfusionMatrix)
                 .Select(metric => new Measured(metric, model.Of(metric, ones), average.Of(metric, ones))),
         ];
@@ -718,7 +789,7 @@ internal sealed class Measurement
     }
 
     // The part's rows in the order the part hands them over, known by their keys: anything else is measured against other rows.
-    private static void ThrowIfOtherRows(Part part, IReadOnlyList<RowKey> keys, IReadOnlyList<RowKey> given)
+    internal static void ThrowIfOtherRows(Part part, IReadOnlyList<RowKey> keys, IReadOnlyList<RowKey> given)
     {
         if (given.Count != keys.Count)
         {

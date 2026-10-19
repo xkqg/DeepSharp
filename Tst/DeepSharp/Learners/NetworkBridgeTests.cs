@@ -402,7 +402,7 @@ public class NetworkBridgeTests
     }
 
     [Theory]
-    [InlineData("""{"version": 2, "network": {}, "pipeline": {}}""", "version 2")]
+    [InlineData("""{"version": 3, "network": {}, "pipeline": {}}""", "version 3")]
     [InlineData("""{"version": 1, "network": {}, "pipeline": {}, "weights": {}}""", "'weights'")]
     [InlineData("""{"version": 1, "network": {}, "pipeline": {}, "weights": [1]}""", "'weights'")]
     [InlineData("""{"version": 1, "network": {}, "pipeline": {}, "pipeline": {}}""", "'pipeline' is written twice")]
