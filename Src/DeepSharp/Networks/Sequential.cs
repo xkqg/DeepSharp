@@ -123,6 +123,35 @@ public sealed partial class Sequential
     /// <exception cref="ArgumentOutOfRangeException">The rate is not a share below one.</exception>
     public Sequential Dropout(double rate) => Add(new DropoutWord(global::DeepSharp.Networks.Dropout.RequireRate(rate)));
 
+    /// <summary>Mirrors images at random while training, each by a coin of its own across the axes it is told to.</summary>
+    /// <param name="horizontal">Whether an image is mirrored across its columns.</param>
+    /// <param name="vertical">Whether an image is mirrored across its rows.</param>
+    /// <param name="seed">The number the flips are drawn from: the layer's own, which the run's seed moves nothing of.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="InvalidOperationException">A layer that is no variation is written already: a variation stands first.</exception>
+    public Sequential RandomFlip(bool horizontal, bool vertical, long seed) => Add(new FlipWord(horizontal, vertical, seed));
+
+    /// <summary>Shifts images at random while training, by padding each and cutting a window of its own size out at a place drawn for it.</summary>
+    /// <param name="pad">How many places an image is padded by on every side, and so how far it can move.</param>
+    /// <param name="seed">The number the shifts are drawn from: the layer's own.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The border is below nought.</exception>
+    /// <exception cref="InvalidOperationException">A layer that is no variation is written already: a variation stands first.</exception>
+    public Sequential RandomCrop(int pad, long seed)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(pad);
+
+        return Add(new CropWord(pad, seed));
+    }
+
+    /// <summary>Adds noise to every value while training: normal, of the spread it is told.</summary>
+    /// <param name="spread">The standard deviation of the noise; nought for none.</param>
+    /// <param name="seed">The number the noise is drawn from: the layer's own.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The spread is not a number of nought or more.</exception>
+    /// <exception cref="InvalidOperationException">A layer that is no variation is written already: a variation stands first.</exception>
+    public Sequential GaussianNoise(double spread, long seed) => Add(new NoiseWord(new GaussianNoise(spread, seed).Spread, seed));
+
     /// <summary>Normalises each feature — the last axis of an example — over the batch.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <remarks>As PyTorch leaves it: a momentum of a tenth, in PyTorch's meaning, and an epsilon of a hundred-thousandth.</remarks>
@@ -381,6 +410,12 @@ public sealed partial class Sequential
 
     private Sequential Add(IWord word)
     {
+        if (word is IVariationWord && _words.Exists(each => each is not IVariationWord))
+        {
+            throw new InvalidOperationException(
+                "A variation is of the rows themselves, made on the values as the batch carries them: it stands first, before any layer that learns.");
+        }
+
         _words.Add(word);
 
         return this;
@@ -452,6 +487,38 @@ public sealed partial class Sequential
         public Shape After(Shape each) => new(Units);
 
         public Layer Make(Shape each, Draws draws) => new Dense(each[0], Units, Begins with { Draws = draws });
+    }
+
+    // A word that varies the rows while a network trains, and so stands before every other.
+    private interface IVariationWord : IWord
+    {
+    }
+
+    private sealed record FlipWord(bool Horizontal, bool Vertical, long Seed) : IVariationWord
+    {
+        public string? Refusal(Shape each) => each.Rank == 3 ? null : $"randomflip, takes each example as an image of rows, columns and channels, and each reaching it is {each}.";
+
+        public Shape After(Shape each) => each;
+
+        public Layer Make(Shape each, Draws draws) => new RandomFlip(Horizontal, Vertical, Seed);
+    }
+
+    private sealed record CropWord(int Pad, long Seed) : IVariationWord
+    {
+        public string? Refusal(Shape each) => each.Rank == 3 ? null : $"randomcrop, takes each example as an image of rows, columns and channels, and each reaching it is {each}.";
+
+        public Shape After(Shape each) => each;
+
+        public Layer Make(Shape each, Draws draws) => new RandomCrop(Pad, Seed);
+    }
+
+    private sealed record NoiseWord(double Spread, long Seed) : IVariationWord
+    {
+        public string? Refusal(Shape each) => null;
+
+        public Shape After(Shape each) => each;
+
+        public Layer Make(Shape each, Draws draws) => new GaussianNoise(Spread, Seed);
     }
 
     private sealed record DropoutWord(double Rate) : IWord
