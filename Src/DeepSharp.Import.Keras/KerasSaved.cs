@@ -135,12 +135,32 @@ internal static class KerasArchive
         var vars = group.Group("vars");
         var layer = vars.AttributeExists("name") ? vars.Attribute("name").Read<string>() : $"layers/{group.Name}";
 
-        return new LayerNumbers(
-            layer,
-            [.. vars.Children().OfType<IH5Dataset>()
-                .OrderBy(dataset => dataset.Name.Length).ThenBy(dataset => dataset.Name, StringComparer.Ordinal)
-                .Select(dataset => HeldNumber.Of(dataset, dataset.Name, $"model.weights.h5, layers/{group.Name}/vars/{dataset.Name}"))]);
+        return new LayerNumbers(layer, [.. Held(group, string.Empty, $"model.weights.h5, layers/{group.Name}")]);
     }
+
+    // A group's numbers in the order Keras numbers them, then those of the groups below it — a recurrent layer keeps its own under its
+    // cell, and a bidirectional layer keeps those of each direction under a layer of its own: the forward ones, then the backward ones.
+    private static IEnumerable<HeldNumber> Held(IH5Group group, string within, string where)
+    {
+        if (group.LinkExists("vars"))
+        {
+            foreach (var dataset in group.Group("vars").Children().OfType<IH5Dataset>().OrderBy(dataset => dataset.Name.Length).ThenBy(dataset => dataset.Name, StringComparer.Ordinal))
+            {
+                yield return HeldNumber.Of(dataset, $"{within}{dataset.Name}", $"{where}/vars/{dataset.Name}");
+            }
+        }
+
+        foreach (var below in group.Children().OfType<IH5Group>().Where(each => each.Name != "vars").OrderBy(each => Order(each.Name)).ThenBy(each => each.Name, StringComparer.Ordinal))
+        {
+            foreach (var number in Held(below, $"{within}{below.Name}/", $"{where}/{below.Name}"))
+            {
+                yield return number;
+            }
+        }
+    }
+
+    // The order the groups below a layer are read in: its forward direction, its backward one, then its cell.
+    private static int Order(string name) => name switch { "forward_layer" => 0, "backward_layer" => 1, "cell" => 2, _ => 3 };
 }
 
 /// <summary>

@@ -39,6 +39,12 @@ internal readonly record struct KerasLayer(Action<Sequential>? Words, string Act
     public KerasSlot? SlotCalled(string name) =>
         Called.Count > 0 && Called.TryGetValue(name[(name.LastIndexOf('/') + 1)..], out var slot) ? (KerasSlot?)slot : null;
 
+    /// <summary>
+    /// What the layer's numbers become, for a layer whose numbers the file holds otherwise than the slots keep them: in another order, split in
+    /// two, or fewer than the slots. It takes the numbers the file holds, in the order the file lists them, and gives the slots' numbers.
+    /// </summary>
+    public Func<IReadOnlyList<HeldNumber>, IReadOnlyList<RemadeNumber>>? Remade { get; init; }
+
     /// <summary>How many layers of a description this one Keras layer writes; one, unless it is more than one layer here.</summary>
     /// <remarks>Keras's separable convolution is a depthwise convolution and a convolution of a one-by-one window, which are two layers here.</remarks>
     public int Places { get; init; } = 1;
@@ -126,6 +132,13 @@ internal readonly record struct KerasLayer(Action<Sequential>? Words, string Act
     }
 }
 
+/// <summary>A number of a layer as its slot keeps it, made of the numbers the file holds.</summary>
+/// <param name="Slot">The slot's name in the layer.</param>
+/// <param name="Shape">The shape the numbers are handed to the slot in.</param>
+/// <param name="Values">The numbers, row-major.</param>
+/// <param name="Source">Where the file holds the numbers they were made of, for a fault to name.</param>
+internal readonly record struct RemadeNumber(string Slot, Shape Shape, float[] Values, string Source);
+
 /// <summary>How Keras keeps a number that a layer here keeps in another shape, or in another order.</summary>
 internal enum KerasKeeping
 {
@@ -199,6 +212,7 @@ internal abstract class KerasKind
         new SpatialDropoutKind("SpatialDropout2D", 2, rate => description => description.SpatialDropout2D(rate)),
         new SpatialDropoutKind("SpatialDropout3D", 3, rate => description => description.SpatialDropout3D(rate)),
         new GroupNormalizationKind(), new RmsNormalizationKind(), new EmbeddingKind(),
+        new RecurrentKind("LSTM"), new RecurrentKind("GRU"), new BidirectionalKind(),
         new FlattenKind(), new ReshapeKind(), new ActivationKind(), new ReluKind(),
         new LeakyReluKind(), new PReluKind(), new EluKind(), new SoftmaxKind(),
     ];

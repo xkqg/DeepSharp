@@ -113,6 +113,17 @@ internal sealed class KerasModel
             // A layer the model does not name has no slots, so each of its numbers is refused as a path the network lacks.
             var placed = _placed.TryGetValue(held.Layer, out var found) ? found : new Placed(-1, new KerasLayer(null, "linear"));
 
+            // A layer whose numbers the file holds otherwise than the slots keep them makes the slots' numbers of them.
+            if (placed.Layer.Remade is { } remake && held.Numbers.All(number => number.Values is not null))
+            {
+                entries.AddRange(remake(held.Numbers).Select(made => new SlotEntry(
+                    string.Create(CultureInfo.InvariantCulture, $"{placed.Place}.{made.Slot}"),
+                    Tensor.From(made.Shape, made.Values),
+                    made.Source)));
+
+                continue;
+            }
+
             for (var at = 0; at < held.Numbers.Count; at++)
             {
                 var number = held.Numbers[at];

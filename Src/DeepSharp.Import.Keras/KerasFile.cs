@@ -40,7 +40,9 @@ namespace DeepSharp.Import.Keras;
 /// Keras's <c>keepdims</c> says; BatchNormalization, LayerNormalization, Dropout and SpatialDropout1D, SpatialDropout2D and
 /// SpatialDropout3D layers; GroupNormalization — of a group for every channel, an instance normalisation — and
 /// RMSNormalization; an Embedding as the first layer over one category's place, the network here taking that category's ones
-/// and noughts instead; Flatten, Reshape, Activation, ReLU, LeakyReLU, PReLU, ELU and Softmax layers; and the linear, relu,
+/// and noughts instead; LSTM and GRU layers — alone, or inside a Bidirectional layer that lays the two directions side by side — read
+/// to their last state or at every step, a GRU as Keras 3 makes it (the reset gate taken after the hidden numbers' own bias), whose numbers
+/// a layer keeps under its cell and whose gates stand in another order than the library's, so they are put in it; Flatten, Reshape, Activation, ReLU, LeakyReLU, PReLU, ELU and Softmax layers; and the linear, relu,
 /// tanh, sigmoid, gelu, silu, swish, mish, leaky_relu, elu, selu and softmax activations. A dense layer or a convolution without a bias (<c>use_bias</c> false) is read as a layer without one, and a
 /// normalisation without its scale or its shift (<c>scale</c> or <c>center</c> false) as one that keeps neither; a layer's
 /// L1, L2 and L1L2 regularizers, its MaxNorm constraints — over the axes a unit's numbers lie along — and its <c>trainable</c>
@@ -53,7 +55,9 @@ namespace DeepSharp.Import.Keras;
 /// series; any layer of series, images or volumes with its channels first; a normalisation over another axis than the last,
 /// or a layer normalisation scaled by <c>rms_scaling</c>, which Keras works out from the variance; an embedding anywhere but
 /// first, over more than one place, masking the place nought or of low-rank factors; a dropout by a noise shape; a reshape that leaves a length to be
-/// worked out; a relu with a cap, a slope or a threshold; a model of another kind than a Sequential or a Functional one, of another precision,
+/// worked out; a recurrent layer that reads backwards, drops numbers out inside itself, keeps its state from batch to batch, hands its state
+/// back, works with other activations than the hyperbolic tangent and the sigmoid, keeps no bias or penalises its numbers, a GRU that takes
+/// its reset gate before the bias (the form Keras 2 made the default), and a Bidirectional layer that merges otherwise than by concat; a relu with a cap, a slope or a threshold; a model of another kind than a Sequential or a Functional one, of another precision,
 /// of an input whose lengths are not all stated, or saved without its loss; and a focal loss that smooths its labels, or a
 /// loss that adds a batch's losses up rather than taking their mean. A description that says a layer keeps less than the file's numbers
 /// hold is refused at the number the network has no slot for, and one that says it keeps more at the slot left empty.
