@@ -58,3 +58,4 @@ public sealed class BranchTests() : BranchContract(new CpuBackend());
 
 public sealed class RecurrentTests() : RecurrentContract(new CpuBackend());
 public sealed class AttentionTests() : AttentionContract(new CpuBackend());
+public sealed class ColumnTokensTests() : ColumnTokensContract(new CpuBackend());
