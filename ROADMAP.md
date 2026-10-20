@@ -33,11 +33,12 @@ is true, and the [changelog](CHANGELOG.md) is where it says so.
 | **Done** | Data that is not a table | Images, sound and text read in as rows, varied while training only, and text cut into tokens. |
 | **Done** | Several networks, one answer | Networks trained apart — a study's best, or one design under other seeds — answering together. |
 | **Done** | The answer and what it is worth | Splits that cut more than once, an interval around the answer, and why a model answers as it does. |
-| **Later** | A network that is not a straight line | Branches, so a residual block, a U-shaped network or two inputs can be written, read and saved. |
-| **Later** | A row that remembers | The layers that carry something from one step of a series to the next. |
-| **Later** | Attention, and what it attends over | Attention, its many-headed form, the order of a sequence, and one encoder block. |
-| **Later** | Writing what others can read | Writing a model in the graph format every runtime reads. |
-| **Later** | A table of its own | A model that reads a table a column at a time, measured against ML.NET's trees. |
+| **Done** | What the flock team asked for a fourth time | The light engine's products and Adam's step faster by the very same bits, a rate that follows the training loss, a history over its last few places, and a study that prepares a pipeline for every candidate. |
+| **Done** | A network that is not a straight line | Branches: a residual block, a block that reads everything made before it, two inputs and a U, written, read and saved. |
+| **Done** | A row that remembers | An LSTM and a GRU, in one direction or both, to the last state or at every step, over series of unequal lengths. |
+| **Done** | Attention, and what it attends over | Attention, its many-headed form, the positions of the steps, and one encoder block as PyTorch makes it. |
+| **Done** | Writing what others can read | `DeepSharp.Export.Onnx`: a trained network written as an ONNX graph and answered through by ONNX Runtime. |
+| **Done** | A table of its own | A model that reads a table a column at a time was built and measured against ML.NET's trees, and not kept. |
 | **Later** | The engine's own arithmetic | Half-width numbers, a scaled loss and larger batches in the same memory, behind the seam. |
 | **Later** | More than one graphics card | One run spread over several cards, by an engine behind the seam that already does it. |
 | **Later** | Smaller numbers to serve with | A trained model kept in whole numbers of eight bits, so it answers in less memory and time. |

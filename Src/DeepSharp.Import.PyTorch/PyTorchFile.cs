@@ -20,7 +20,9 @@ namespace DeepSharp.Import.PyTorch;
 /// never off the numbers' shape: a linear layer's weights are kept outputs by inputs there and inputs by outputs here, so
 /// they are turned round; a convolution's kernel, along one, two or three axes, is kept channels out, channels in, then the
 /// window's steps, rows and columns there, and here the window's places and then the channels in by the channels out;
-/// biases and what a normalisation keeps are kept alike. PyTorch lays a series, an image or a volume out channel by channel
+/// biases and what a normalisation keeps are kept alike; a recurrent layer's weights and multi-head attention's projections
+/// (<c>in_proj_weight</c>, <c>out_proj.weight</c>) are kept outputs by inputs there, the gates and the query, key and value blocks one
+/// after another along the outputs in the same order here, so they are turned round and nothing more. PyTorch lays a series, an image or a volume out channel by channel
 /// and this library place by place, so the rows a flatten makes of them are ordered otherwise there, and every number the next
 /// linear layer and any normalisation before it keeps for them is put in its place here — which takes knowing what the
 /// flatten is handed: an <see cref="Example"/> the network takes, run through it as zeros, or <see cref="Flattened"/> stating

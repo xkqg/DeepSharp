@@ -10,6 +10,7 @@
                 <ModulePath>.*DeepSharp[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Backends[.]TorchSharp[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Charts[.]dll$</ModulePath>
+                <ModulePath>.*DeepSharp[.]Export[.]Onnx[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Import[.]Keras[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Import[.]Onnx[.]dll$</ModulePath>
                 <ModulePath>.*DeepSharp[.]Import[.]PyTorch[.]dll$</ModulePath>

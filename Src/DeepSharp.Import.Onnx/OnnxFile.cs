@@ -84,6 +84,12 @@ namespace DeepSharp.Import.Onnx;
 /// taken, and a stack's last states picked out of several layers by Gather and Concat.
 /// </para>
 /// <para>
+/// A product of a series — a graph that takes steps by channels, which a MatMul multiplies along its last axis — by weights the graph
+/// holds is a dense layer over the channels of every step, and the Attention operator of operator set 23 over three of them (or the
+/// one) is the layer that looks across the steps, its heads and its causality read from <c>q_num_heads</c> and <c>is_causal</c>. A
+/// mask, a scale of its own, a softcap, its scores handed on and a past of keys are refused at the node.
+/// </para>
+/// <para>
 /// What is refused, at the node that says it and every such node at once: a node taking values no node made, or several that
 /// are no Add of two or Concat, and any other operator, among them every other Reduce, any Unsqueeze and Squeeze
 /// but those round the pooling of a series, the Mul tf2onnx writes a batch normalisation as, and the Shape and Gather it works a

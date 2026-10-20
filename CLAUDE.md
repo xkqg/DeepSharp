@@ -120,7 +120,7 @@ each, and a package implements exactly one of them:
 | a learner (`INamesTheLearner`) | what learns from prepared data (`DeepSharp.Learners.Networks`, `DeepSharp.Learners.ML` with ML.NET's trainer in `.MLNet`) |
 | `IImporter` | what a model trained elsewhere looks like here (`DeepSharp.Import.PyTorch`, `.Keras`, `.Onnx`) |
 
-The notebook packages, the charts, the indicators and the Binance landing implement none of the four, each for a
+The notebook packages, the charts, the indicators, the Binance landing and the ONNX writer implement none of the four, each for a
 reason `ARCHITECTURE.md` gives. A package is named for the role it plays, never for the vendor it brings.
 
 Two shape rules are held by tests rather than by review: an extension method is a member of an

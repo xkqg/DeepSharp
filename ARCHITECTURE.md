@@ -104,6 +104,8 @@ Src/DeepSharp.Import.PyTorch/        a reader of what PyTorch saved — a safete
                                      and torch.save's .pt, its pickle read by a weights-only interpreter of its own
 Src/DeepSharp.Import.Keras/          a reader of the models Keras saved, .keras and .h5, through PureHDF
 Src/DeepSharp.Import.Onnx/           a reader of ONNX graphs — PyTorch's, Keras's and tf2onnx's — through OnnxSharp
+Src/DeepSharp.Export.Onnx/           a writer of ONNX graphs from a network's steps, through OnnxSharp's messages; it implements
+                                     no seam, and a runtime that only answers is not an engine
 Src/DeepSharp.Learners.Networks/     where a network meets a pipeline: trained behind it, serving, the one file
 Src/DeepSharp.Learners.ML/           where a trainer from ML.NET is declared, and its model read and written; no ML.NET
 Src/DeepSharp.Learners.MLNet/        the half that carries ML.NET: the rows handed over, the tree fitted, the file written
@@ -1244,13 +1246,16 @@ to implement **one** interface, and the four are not interchangeable:
 | `IImporter` | what does a model trained elsewhere look like here | a reader of one framework's saved models or weight files |
 
 A package that implements two of them is doing two jobs and should be two packages; a package that
-implements none is a convenience and belongs in whatever it is convenient for. Three kinds are the deliberate
+implements none is a convenience and belongs in whatever it is convenient for. Four kinds are the deliberate
 exceptions, each a package for a reason of its own. A front end: the notebook implements none of the four, because it
 is not a part of the pipeline but a way of writing one and looking at it, and it sits beside the seams the way the
 charts do. A live source: it feeds the second seam without implementing it, since what it lands is a file, and the
 core's own comma-separated reader is the `IRowSource` of that landed fetch; it is a package for what it carries, the
 HTTP, the retries and the pacing that a project serving a trained model has no use for. And the indicators, which are
-verbs over a series and implement no seam either, a package for the library whose arithmetic they borrow.
+verbs over a series and implement no seam either, a package for the library whose arithmetic they borrow. And a writer of
+ONNX graphs, which is the mirror of the importer and not a fifth seam: what it writes is a file for another runtime, produced
+from the model, and no second implementation of anything the model is — it is a package so that a project that only trains
+carries neither the messages it writes with nor the proof that they are right.
 
 A seam is only real when two implementations of it differ in kind, so each one is held to that: the backend
 has a pure-managed engine beside a native one, rows arrive from a file and from a database reader, a
@@ -3106,6 +3111,60 @@ a parameter the first time and 173 after, and 432 and 232 with the best epoch's 
 and 128, the first time as after. `CheckpointFile.Read` reads through it, so the file is read whole before it is held to
 the pipeline handed over: a file that is wrong itself is refused for that, whichever pipeline it is handed.
 
+### A step can ask for another, and a series is read a step at a time
+
+A stack was a line until a step could say which steps it takes. A step is a layer under a name — its place, counted from nought,
+unless it is called something — and takes the work of the step before it unless it names others; the last step is what the
+network gives, every other must be taken by a later one, and a layer is run once. The name is the path of everything the step
+holds, so a step called `second` holds `second.weight` as a module a network written as code calls second does, and a name holds
+no dot or comma, is no whole number and is neither `input` (what the network was handed) nor `input.mask`, which holds a dot no
+name a person gives can and is how a step inside a block names the mask of the padding the block was handed. Three layers
+join: a `Sum`, a `Concatenation` along the last axis and `Columns`, which takes some of a row's columns and is how a network of
+two inputs reads each from the one row it is handed. All three are made of the products and sums every engine already has, so no
+engine learned anything for them; a residual block, a block that reads everything before it, two inputs and a U give PyTorch's
+values and gradients to the input and to every number learned, on every engine the contract suites bind. A stack of layers alone is
+written as it always was; one that names a step or takes another than the step before is the eighth version of a network's part,
+which an older library refuses by its number. The measurement that decided the seam stays shut is a number: the LSTM written as
+code, with a split and a join the seam has no member for, spent 97 per cent of a step on the light engine and 81 on libtorch in
+the products that pick a step out and place one in; built as a layer that takes its time-major view once, it spends 15 to 22
+and 22 to 37, and attention, made one series and one head at a time, 23 to 40 of a step in its products. A member for a product
+over a batch, or for cutting a row out of a matrix, would halve those and would break every engine outside this repository, so it
+waits for a release that breaks the seam anyway.
+
+A layer that carries a state from one step of a series to the next — `Lstm`, `Gru` — keeps its weights inputs by outputs, as a
+linear layer's are, with the gates in PyTorch's order, and runs its steps on the tape the engines already record, so the gradient
+runs back through time with no rule of its own. A batch of series of unequal lengths is read each as it would be read alone by a
+mask taken as the layer's second step: a padding step leaves the state as it was and makes nothing, which is what PyTorch's packed
+batch gives. The mask is the ids themselves — a token embedding that keeps its steps and a layer that makes the mask of a row of ids
+— because the tokens already carry their padding, and a numeric series of unequal lengths would need a lengths column the pipeline
+has no carrier for, so it is refused by name. Attention is made one series and one head at a time of the same products, masks by
+adding what is far below nothing to the scores, and makes a step with no key left to look at nothing, as PyTorch 2.14.1 makes it
+(measured, not assumed: zeros, not not-a-numbers). An encoder block is a description inside a description — `Block` — whose
+steps are named as the modules of PyTorch's `TransformerEncoderLayer` are, so a state dict goes in by name, and whose width is
+known only where it is lowered. A declared network is a flat list of named steps: a nested description is code, the file and
+the readers, and a declaration cannot hold one.
+
+A table model that turns each column into a token and reads the tokens with these layers was built, held to PyTorch's on every
+engine, and measured against ML.NET's trees by a rule written before the first run. It did not beat them by more than the spread
+of its own seeds, and it is not kept; the numbers are in the changelog, and attention and the encoder block, which it was made of,
+stay.
+
+### A graph is written from the model and never read back as it
+
+`DeepSharp.Export.Onnx` writes a stack of steps as an ONNX graph, and implements none of the four seams: the graph is a file for
+another runtime, produced from the model, which is not a second representation of a network held in step with the first. Each
+kind of layer is written by one class listed in one place, and a layer of no listed class is refused by name rather than written as
+something it is not; a network written as code declares no order, so there is no graph to write it as. The graph asks for the
+oldest operator set that holds every node, per node, and for the IR version ONNX pairs with it, so a graph of dense layers is read
+by the oldest runtimes; a node written for an older set states its axes as an input when the graph's set is one that has them so.
+How a number is laid out — a weight turned round, a kernel's axes, an LSTM's gates in ONNX's order — is one source file compiled into
+the package that reads a graph and the package that writes one, so the two cannot disagree, and a graph written is read back into the
+same numbers by the reader wherever the reader reads the nodes. The proof is a runtime: a seventh suite answers every graph through
+ONNX Runtime, on one thread so the order of its arithmetic is the same each time, and holds the answers to the network's. The runtime
+is the suite's, never the package's. Serving on that runtime is not built: a network trained behind a pipeline answers the rows
+the pipeline prepared, and a runtime that serves raw rows would answer other rows, while the fitted verbs — a fill, a scale, an
+encoding — are not in the graph.
+
 ### Numbers trained elsewhere go in by path, under the same rule
 
 A model trained somewhere else reaches a network here through an importer, `IImporter`, whose `Read` hands back what
@@ -3266,9 +3325,10 @@ the ReduceMean or ReduceMax over every place of each channel that PyTorch's defa
 one place as; a BatchNormalization with ONNX's momentum, which is Keras's, and its epsilon; a Flatten, or the Reshape PyTorch's default
 exporter writes a flatten as — and the words lowered as any description is, onto a stack like any other. A Cast into
 single-precision numbers, which Keras's export puts round nearly every node, is nothing here. What reads as a stack is a
-chain: each node takes the value the one before it made. A node that takes another — a network adding its input back after
-a layer is the plainest case — is a branch no stack has, and is refused at that node, as is every node of an operator no
-layer here is.
+chain of steps, each taking the value of the node that made what it names — the node before it, or an earlier one: a value
+added back after the layers that worked on it is a `Sum` of two steps, a Concat the steps laid side by side, and a Split or
+a Slice of a row's columns a step of its own. A node that takes a value no node made, or several that are no Add of two or
+Concat, is refused at that node, as is every node of an operator no layer here is.
 
 A `Conv`, a `ConvTranspose` and a `LayerNormalization` that name no bias are read as the layer without one, which is how
 PyTorch exports a layer made without it.
@@ -3344,7 +3404,7 @@ and an Add, casts around each. tf2onnx 1.17.0, converting TensorFlow 2.21.0's Sa
 and an Add, or as a Gemm whose weights are inputs by outputs; a batch normalisation as a Mul by a number for each channel,
 its shift folded into a neighbouring bias; and, for a SavedModel of batches of any length, a flatten whose target a side
 graph of Shape, Gather, Cast, Slice and Concat works out from the batch's length. No layer here is a Mul, and a side graph
-off the chain is a branch, so both are refused at their nodes: a network with a batch normalisation does not reach here
+off the chain is no layer, so both are refused at their nodes: a network with a batch normalisation does not reach here
 through tf2onnx, and one that flattens images does when its SavedModel is exported for a batch of a fixed length, whose
 flatten's target is then a number.
 
@@ -3702,7 +3762,17 @@ all, and Keras is not a thing it has. What the reference says is the spec; what 
   process's console while it runs, so a turn held any narrower let two runs print into each other.
 - **A graph that is not a model.** The declarative front door produces the same object the imperative
   one does. Two representations of one network means two engines to keep in step, and they diverge on the
-  first unusual model.
+  first unusual model. A step that takes what an earlier step made is inside the one model every engine runs and every file holds,
+  and a graph written for another runtime is produced from the model and never read back as it.
+- **Serving on another runtime.** A runtime that only answers is not an engine: it cannot train, and the rows it serves are not the
+  rows the pipeline prepared.
+- **A table model of its own, a validation plateau, a tree of Parzen estimators and a vectorised exponential.** Each was asked for
+  and each stays out for a measured reason: the table model did not beat the trees by more than the spread of its seeds, a rate
+  that listens to the loss a model is chosen on lets those rows shape its weights, a sampler that learns from its trials is a
+  search of its own behind the `ISampler` seam, and an exponential from the vector instructions changes the last bit of some
+  answers.
+- **A seam member for a product over a batch, or for cutting a row out of a matrix.** The built layers spend a fifth to a third
+  of a step in the products that stand for them; the member would halve that and break every engine outside this repository.
 - **A random source the process shares.** Every draw is counted from a seed that is handed in, which is why a network
   described in Keras's words is built once the run's seed is known.
 - **A schedule that watches the validation loss.** It would let the rows a model is chosen on shape its weights; it was asked

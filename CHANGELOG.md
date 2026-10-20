@@ -5,7 +5,83 @@ as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.14.0]
 
-Where the light engine can be made faster without a bit of any answer changing, and a network that is not a straight line. The sections below say what each brought, what it refuses and why, and what changes for you.
+Where the light engine can be made faster without a bit of any answer changing, and a network that is not a straight line. A step of a network may take what an earlier step made, so a residual block, a block that reads everything made before it, two inputs and a U can be written, read and saved; a layer can read a series a step at a time (an LSTM and a GRU) and look across its steps (attention, many-headed, with the positions of the steps and one encoder block); and a trained network can be written as an ONNX graph, in its own package, and answered through by ONNX Runtime as the network answers. The sections below say what each brought, what it refuses and why, and what changes for you.
+
+### Upgrading from 0.13.0
+
+- **The pipeline file is at version 13.** Everything written before still reads and means what it meant, and a pipeline that says nothing new writes what it wrote before, but for its number; 0.13.0 refuses a file of the thirteenth whole, naming the version. A file of the thirteenth can say a `trainingPlateau` schedule, a `window` on a history, a name and the steps a layer takes, the layers `add`, `concatenate`, `columns`, `lstm`, `gru`, `unpadded`, `multiHeadAttention`, `attention` and `sinePositions`, and a `keepSteps` on a token embedding.
+
+- **A network's part is at version 8.** It is written as the oldest version that says what it holds: a stack whose steps are all unnamed and each take the step before is written exactly as 0.13.0 wrote it, and a part that names a step, takes another than the one before, or holds a layer new in this release is the eighth, which 0.13.0 refuses by its number. A training part names the eighth only when its schedule is a `trainingPlateau`, or a warm-up that hands over to one.
+
+- **A dense layer works on the last axis of what it is handed.** Over a series, an image or a volume it is the same layer applied to the channels of every place, as Keras's and PyTorch's are; it used to refuse anything but a row. A description that only held together because a dense layer after a convolution was an error now builds.
+
+- **`input` and `input.mask` are the two names no step can have.** A name was already some text with no dot or comma in it, which is no whole number and not `input`; `input.mask` holds a dot, which no name a person gives can, and is how a step inside a block names the mask of the padding the block was handed.
+
+- **The ONNX operator sets a graph asks for are the oldest that hold its nodes**, per node: a graph of dense layers is operator set 7 and IR version 3, and the first node that asks for a later set raises it. A node that states its axes as an attribute in the older sets states them as an input when the graph's set is one that has them so.
+
+### Added
+
+- **A step of a network may take what an earlier step made.** A stack's steps are layers under a name, each taking the work of the step before it unless it names others, and the last is what the network gives. A `Sum` adds what two steps or more made, a `Concatenation` lays them side by side along the last axis, and `Columns` takes some of a row's columns as a step of its own, which is how a network of two inputs reads each from the one row it is handed. In code the words are `Named`, `Takes`, `Add`, `Concatenate`, `Columns` and `Block`; in a pipeline's file a layer carries a `name` and a `takes`, a list of names separated by commas. Nothing is taken from a step that has not run, nothing is made that nothing uses, and a layer is run once. All three joins are made of the products and sums every engine already has, so no engine learned anything for them, and a residual block, a dense block, two inputs and a U give PyTorch's values and gradients on the light engine, the native one and libtorch.
+
+- **Three readers read a branch.** ONNX: a node that takes the value of an earlier node, an `Add` of two values, a `Concat`, and a `Split` or a `Slice` of a row's columns. Keras: a Functional model, whose layers each take the layers they name, in either file Keras saves, with an `Add`, a `Concatenate` and several inputs handed to the network as the columns of one row. PyTorch: a state dict of modules called as the steps are, found by the names of the steps. A model trained elsewhere arrives as it was.
+
+- **A layer reads a series a step at a time.** `Lstm` and `Gru`, in one direction or both (`bothWays`), of several layers (`layers`), to the last state or at every step (`sequences`), their weights named as PyTorch names them (`weight_ih_l0`, `bias_hh_l0_reverse`) and kept inputs by outputs with the gates in PyTorch's order. A batch of series of unequal lengths is read each as it would be read alone: given a mask as its second take, a padding step leaves the state as it was and makes nothing, and a series read backwards starts from its own end. The gradient runs back through the steps on the tape, and the values and gradients are PyTorch's on every engine. `TokenEmbedding` can keep its steps (`keepSteps`) and `Unpadded` makes the mask of a row of ids, a one where an id is a word and a nought where it is padding; `EveryStep` runs a description over every step of a series.
+
+- **A layer looks across the steps of a series.** `Attention`, scaled dot-product attention over queries, keys and values handed to it apart or over the series itself, and `MultiHeadAttention`, whose slots are PyTorch's (`in_proj_weight`, `in_proj_bias` and the linear layer `out_proj`), with a mask of the steps that take part, a causal mask, and a dropout of the weights drawn from the pass. A step with no key left to look at is made nothing, as PyTorch 2.14.1 makes it (measured: it makes zeros, not not-a-numbers). `SinePositions` adds the sine and cosine positions of *Attention Is All You Need*, and `EncoderBlock(new EncoderShape(heads, feedForward))` is PyTorch's `TransformerEncoderLayer` under the names its state dict gives, norm after or before the sums, ReLU or GELU, with the padding mask as the block's second take. The words are in a pipeline's file as `multiHeadAttention`, `attention` and `sinePositions`.
+
+- **A block may be handed the mask of the padding.** A stack whose steps name `input.mask` is a block that takes the mask as its second take (`Forward(input, mask, pass)`, and `Lower(shape, maskShape, stream)` for the description of one); asked to run without a mask, or handed one it does not use, it refuses by name.
+
+- **The three readers read what the new layers need.** ONNX: `LSTM` and `GRU` nodes started from nought, in one direction or both, to the last states or at every step, with the squeezes, transposes, gathers and reshapes that put what they gave in order, and the `Attention` operator of operator set 23 over three steps or one. Keras: `LSTM`, `GRU`, a `Bidirectional` wrapper and `MultiHeadAttention` called over one series (`use_causal_mask` included), in both files Keras saves; Keras keeps a layer's numbers one group deeper and a GRU's gates in another order, and they are put in the library's. PyTorch: the weights of a recurrent layer and of multi-head attention, turned round, under the names a state dict gives them, and an encoder layer found by its attributes. What a reader will not read is refused at the node, naming it: the lengths of the series handed to a recurrent node, a state the graph works out, peepholes, other activations, a batch-first layout, attention over two series, a mask a graph works out, a softcap.
+
+- **A network can be written as an ONNX graph, in a package of its own.** `DeepSharp.Export.Onnx` writes a stack of steps with `new OnnxExport(shape).ToBytes(network, loss)`: dense layers, normalisations, activations, convolutions, poolings, pads, embeddings, the periodic embedding, the joins, an LSTM and a GRU (one node for each layer, the two directions in the one node, the lengths of the series from the mask), attention decomposed into the nodes of the oldest sets that hold it, and the encoder block; the output activation its loss applies is the graph's last node, and the feature names go into the graph's metadata. Its own seventh suite answers every graph through ONNX Runtime and holds the numbers to the network's. A network written as code, and a layer written as no ONNX node, are refused by name.
+
+- **A learning rate that follows the training loss.** `Plateau(patience, factor, minimum)` in a declaration, and `TrainingPlateau` in code, is PyTorch's `ReduceLROnPlateau` watching the loss the run trained on and never the validation loss; its rates are PyTorch's epoch by epoch (a fixture beside the tests holds them to it), and a warm-up may hand over to it, which PyTorch's own `SequentialLR` refuses. A schedule is asked for the rate after the losses of the epochs so far, and a run that goes on from a checkpoint under another schedule or another rate is refused, naming the epoch whose rate differs.
+
+- **A history can be told how far back to read.** `History(key, value, new HistoryReach(shrink, window), orderBy)` reads the last `window` places of the order — a farm's last three flocks. Rows of one date are one place, so a window never cuts between them; what it holds is added up row by row in an order the same whatever order the rows are handed in; a window that holds nothing reads the mean of every training row, and a window needs no weight beside it.
+
+- **A study prepares a pipeline for every candidate, and judges a model of several networks.** A pipeline handed for each candidate and deal is prepared for every trial, and each preparation is held to the rows the first was judged and measured on: the same validation rows on a deal for every candidate, and the same rows to be measured on throughout, since scores are chosen between only where they were measured alike. A candidate may declare several networks, each trained behind a pipeline of its own and judged by one number a `Judge` of the caller's gives for the networks a deal trained; the trial keeps every network's declaration and the result every network it trained.
+
+- **A host can say how many threads one large product may be spread over.** `CpuBackend { Threads = n }` spreads a product of 2^24 multiply-adds or more over stretches of its rows, one thread to a stretch; a row is added up by one thread, so every product has the very bits it has on one. The default starts no thread.
+
+### Improved
+
+- **The light engine's product is worked a vector's width of columns at a time.** The answers have the very bits 0.13.0 gave, which a copy of 0.13.0's arithmetic and a digest of what it made hold it to. Measured on one machine, a layer of 70 by 128 took 316 and now 47 microseconds, a product of 2^24 multiply-adds 17.3 and now 2.6 milliseconds, a layer of 256 4.7 and now 0.66, and a run of 640 flocks through 128 and 70 bands 23.8 and now 10.7 milliseconds an epoch. A weight's gradient is multiplied from the activations as they lie, so the turned copy is never made.
+
+- **A step of Adam or AdamW is one pass.** What was about twenty operations of the engine and as many tensors for every parameter is one pass over the numbers that makes the bits those operations make — the same roundings in the same order, nothing fused — under AMSGrad and a coupled decay too; an engine that cannot is asked for the twenty as before. A table of 623 rows allocates 39 per cent fewer bytes an epoch and 640 flocks over 70 bands 54 per cent fewer.
+
+- **A log-softmax row's largest is found by the vector instructions**, and again one value at a time where it is a nought of either sign or no number, since which of two is kept is the instruction's to say. Measured, 6 to 7 per cent on rows of 70 columns or more, the same bits.
+
+- **A candidate is held to its space by value.** A learning rate of 99 for a range that stops at a tenth, a layer of two and a half units and a word the space never offered are refused before a network learns from them, naming the dimension; a sampler's answer used to be taken as it came.
+
+### Fixed
+
+- **A warm-up that handed over to a schedule that says more was written as less.** A `LinearWarmup` handing over to a schedule of the eighth version wrote a training part of the seventh; it now writes the later one.
+
+- **A graph that asked for a later operator set than one of its nodes was written for was an invalid model.** A global pooling that drops its axes and a recurrent layer's last state stated their axes as an attribute, which operator sets 13 and 18 moved to an input, so a graph with a GELU beside them (operator set 20) would not load. The graph now states them as its own set does.
+
+### Changed
+
+- **A twenty-second package.** `DeepSharp.Export.Onnx` joins the twenty-one: `dotnet pack DeepSharp.slnx` makes all twenty-two, and the suite that answers its graphs through ONNX Runtime is the seventh.
+
+### Refused, with the measured reason
+
+- **A table model that reads a row a column at a time was built, measured and not kept.** Each column of a row turned into a token of its own — the column's value times a vector the layer learns, plus one — read by two encoder layers, averaged and put through a linear layer, with PyTorch's table model as the reference, was trained on five seeds against ML.NET's boosted trees on the same rows, by a rule written down before the first run: kept if it beat the trees by more than the spread of its seeds on either dataset. On the passengers (accuracy on the validation rows) it reached 0.8256 against the trees' 0.7744 with a spread of 0.0752; on the bike-sharing days (mean absolute error in bikes) 691.8 against 696.8 with a spread of 138.4. Neither is more than the spread, so the layer, its contract and its harness are removed.
+
+- **Attention over a batch in one product, and a slice or a join on the seam.** A seam member for a product over a batch, or for cutting a row out of a matrix, was held back on a number: the built LSTM spends 15 to 22 per cent of a step (light engine) and 22 to 37 per cent (libtorch) in the products that pick and place a step, against 97 and 81 per cent when it is written as code with a split and a join, and attention made one series and one head at a time spends 23 to 40 per cent of a step in its products. Neither is the half that would pay for breaking every outside engine.
+
+- **A validation plateau, and a schedule that sees the validation loss.** A rate that listens to the loss a model is chosen on lets the rows it is chosen on shape its weights; the plateau built watches the training loss.
+
+- **A tree of Parzen estimators.** `ISampler` is the plug a cleverer search is written against, and one is not written here: a sampler that learns from its trials is a search of its own.
+
+- **A vectorised exponential in the log-softmax, and a product with its right side turned.** Both change the last bit of some answers, which the release does not allow; the largest of a row is found by the vector instructions because it makes the same bits.
+
+- **A mask of the padding that is not a step.** A recurrent or attention layer takes the mask of the padding as a step it is given (`Unpadded` from the same ids the embedding reads), and a mask a graph works out, a length for each series handed to a node, or a batch of numbers of unequal lengths is refused by name: the tokens already carry their padding.
+
+- **A fully masked row that is not a number.** PyTorch 2.14.1 makes zeros of an attention step with no key to look at, as ONNX's errata have it, and so does the layer, in every engine and in the graph it is written as.
+
+- **A once-seen libtorch error with no repro.** The `toFloat` error seen once on a parallel training could not be made again: 750,659,072 additions of an implicit scalar on five threads under a gen-0 collection every millisecond made none, and 1,309 trainings in parallel in a minute made none. Nothing in the engine was changed on a theory; both soaks are kept as explicit tests, to be read and not gated.
+
+- **Rows handed to a history at serve time.** They are not read: nothing is learned from the rows served, so a history served alone reads the last places of its training rows, the reference the model was fitted on.
 
 ## [0.13.0]
 
