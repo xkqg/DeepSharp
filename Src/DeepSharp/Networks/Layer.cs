@@ -130,6 +130,12 @@ public abstract class Layer
         }
     }
 
+    /// <summary>Whether the layer takes the work of this many steps: one, unless it joins several.</summary>
+    internal virtual bool Accepts(int steps) => steps == 1;
+
+    /// <summary>Runs the layer over what the steps it takes made, in the order it takes them: the one tensor a layer works on, or the several a join does.</summary>
+    internal virtual Tensor Taking(IReadOnlyList<Tensor> inputs, Pass pass) => Forward(inputs[0], pass);
+
     /// <summary>What this layer computes of its input: the forward pass, written in the pass's backend.</summary>
     /// <param name="input">What the layer is handed.</param>
     /// <param name="pass">The backend the arithmetic runs on, and whether this pass trains.</param>

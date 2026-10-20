@@ -113,6 +113,30 @@ public sealed class Rebuilding
     public IReadOnlyList<double> Numbers(JsonElement settings, string key) =>
         [.. Listed(settings, key, "a list of numbers").Select(element => element.AsNumber() ?? throw Refusal(key, "a list of numbers"))];
 
+    /// <summary>A list of words a kind was written with, or what it means by not having been written with them.</summary>
+    /// <param name="settings">The object the kind was written as.</param>
+    /// <param name="key">The setting.</param>
+    /// <param name="whenAbsent">What the kind means where the setting is not written.</param>
+    /// <returns>Its words, or <paramref name="whenAbsent"/>.</returns>
+    /// <exception cref="FormatException">The setting is written as something that is not a list of text.</exception>
+    public IReadOnlyList<string> Words(JsonElement settings, string key, IReadOnlyList<string> whenAbsent) =>
+        settings.Member(key) is null
+            ? whenAbsent
+            : [.. Listed(settings, key, "a list of words").Select(element => element.ValueKind == JsonValueKind.String ? element.GetString()! : throw Refusal(key, "a list of words"))];
+
+    /// <summary>A list of lists of words a kind was written with, or what it means by not having been written with them.</summary>
+    /// <param name="settings">The object the kind was written as.</param>
+    /// <param name="key">The setting.</param>
+    /// <param name="whenAbsent">What the kind means where the setting is not written.</param>
+    /// <returns>Its lists, or <paramref name="whenAbsent"/>.</returns>
+    /// <exception cref="FormatException">The setting is written as something that is not a list of lists of text.</exception>
+    public IReadOnlyList<IReadOnlyList<string>> WordLists(JsonElement settings, string key, IReadOnlyList<IReadOnlyList<string>> whenAbsent) =>
+        settings.Member(key) is null
+            ? whenAbsent
+            : [.. Listed(settings, key, "a list of lists of words").Select(list => list.ValueKind == JsonValueKind.Array
+                ? (IReadOnlyList<string>)[.. list.EnumerateArray().Select(element => element.ValueKind == JsonValueKind.String ? element.GetString()! : throw Refusal(key, "a list of lists of words"))]
+                : throw Refusal(key, "a list of lists of words"))];
+
     /// <summary>The layers a kind holds, written as a list under a setting, each rebuilt through the catalog.</summary>
     /// <param name="settings">The object the kind was written as.</param>
     /// <param name="key">The setting.</param>

@@ -154,11 +154,25 @@ public sealed class Snapshot
     internal IReadOnlyList<SlotValue> Values { get; }
 }
 
-/// <summary>Layers run one after another, each handed what the one before it made: the stack Keras's words describe.</summary>
-/// <remarks>Each layer is named by its place in the stack, from nought, so its slots' paths start with it: <c>0.weight</c>.</remarks>
+/// <summary>
+/// Steps that run one after another, each handed what the one before it made — the stack Keras's words describe — or, where a step
+/// says so, what an earlier step made, or what several made: the network a residual block, a block that reads everything made
+/// before it, or one shaped like a U is.
+/// </summary>
+/// <remarks>
+/// Each step is a layer under a name — its place in the stack, counted from nought, unless it is called something — and takes the
+/// work of the step before it unless it names others. The last step is what the network gives; every other step must be taken by
+/// a later one, or its work would be made and never used. A layer belongs to one step, so what a step made is handed on and the
+/// layer is never run twice. A stack of layers alone is the straight stack it always was, written to its file as it always was.
+/// </remarks>
 public sealed class LayerStack : Network, ISaved<LayerStack>
 {
-    private readonly Layer[] _layers;
+    private const string NamesKey = "names";
+    private const string TakesKey = "takes";
+
+    private readonly PlacedStep[] _steps;
+    private readonly bool _named;
+    private readonly bool _branches;
 
     /// <summary>A stack of the given layers, in their order.</summary>
     /// <param name="layers">The layers; at least one, each held by no other network.</param>
@@ -172,19 +186,35 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
     /// <param name="layers">The layers; at least one, each held by no other network.</param>
     /// <exception cref="ArgumentException">There are no layers, or one is held by another network already.</exception>
     public LayerStack(IEnumerable<Layer> layers)
+        : this(Straight(layers))
     {
-        ArgumentNullException.ThrowIfNull(layers);
+    }
 
-        _layers = [.. layers];
+    /// <summary>A stack of the given steps, in their order.</summary>
+    /// <param name="steps">The steps; at least one. Each takes the work of the step before it unless it names others, and each but the last is taken by a later one.</param>
+    /// <exception cref="ArgumentException">
+    /// There are no steps; a name is empty, holds a dot or a comma, is a whole number or is <see cref="Step.Input"/>, or is a name twice;
+    /// a step takes one that is not before it; a layer takes more steps than it works on, or fewer than it joins; a step is taken by no
+    /// later one; or a layer is held by another network already.
+    /// </exception>
+    public LayerStack(IEnumerable<Step> steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
 
-        if (_layers.Length == 0)
+        var asked = steps.ToArray();
+
+        if (asked.Length == 0)
         {
-            throw new ArgumentException("A stack holds at least one layer.", nameof(layers));
+            throw new ArgumentException("A stack holds at least one layer.", nameof(steps));
         }
 
-        for (var place = 0; place < _layers.Length; place++)
+        _steps = Placed(asked);
+        _named = asked.Any(step => step.Name is not null);
+        _branches = _steps.Select((step, place) => step.Takes.SequenceEqual([place == 0 ? Step.Input : _steps[place - 1].Name])).Any(straight => !straight);
+
+        foreach (var step in _steps)
         {
-            AddLayer(place.ToString(CultureInfo.InvariantCulture), _layers[place]);
+            AddLayer(step.Name, step.Layer);
         }
     }
 
@@ -193,37 +223,188 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
     /// The stack's own layers alone; <see cref="Layer.HeldLayers()"/>, called, walks every layer below it with its path, as for
     /// any layer.
     /// </remarks>
-    public IReadOnlyList<Layer> Layers => _layers;
+    public IReadOnlyList<Layer> Layers => [.. _steps.Select(step => step.Layer)];
+
+    /// <summary>The steps, in the order they run, each with the name it goes by and the names of the steps it takes.</summary>
+    public IReadOnlyList<PlacedStep> Steps => _steps;
 
     /// <inheritdoc />
     public static string Name => "stack";
+
+    /// <inheritdoc />
+    /// <remarks>The eighth when a step is named or takes the work of a step other than the one before it, which an older library cannot read; the second otherwise.</remarks>
+    public int FileVersion => _named || _branches ? NetworkDocument.EighthVersion : NetworkDocument.SecondVersion;
 
     /// <inheritdoc />
     public static LayerStack Rebuild(JsonElement settings, Rebuilding rebuilding)
     {
         ArgumentNullException.ThrowIfNull(rebuilding);
 
-        return new(rebuilding.Layers(settings, "layers"));
+        var layers = rebuilding.Layers(settings, "layers");
+        var names = rebuilding.Words(settings, NamesKey, []);
+        var takes = rebuilding.WordLists(settings, TakesKey, []);
+
+        if (names.Count > 0 && names.Count != layers.Count)
+        {
+            throw rebuilding.Refuse(NamesKey, $"one name for each of the {layers.Count} layers, and these are {names.Count}");
+        }
+
+        if (takes.Count > 0 && takes.Count != layers.Count)
+        {
+            throw rebuilding.Refuse(TakesKey, $"one list of steps for each of the {layers.Count} layers, and these are {takes.Count}");
+        }
+
+        try
+        {
+            return new(layers.Select((layer, place) => new Step(
+                layer,
+                names.Count > 0 && names[place] != place.ToString(CultureInfo.InvariantCulture) ? names[place] : null,
+                takes.Count > 0 ? takes[place] : null)));
+        }
+        catch (ArgumentException refused)
+        {
+            throw rebuilding.Refuse(takes.Count > 0 ? TakesKey : NamesKey, refused.Message);
+        }
     }
 
     /// <inheritdoc />
-    /// <remarks>Its layers, each written as the kind it is, in their order.</remarks>
+    /// <remarks>
+    /// Its layers, each written as the kind it is, in their order — and, only where a step is named or takes another step than the
+    /// one before it, the names of the steps and the names each takes, which a stack of layers alone has no need of.
+    /// </remarks>
     public void WriteSettings(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
 
         writer.WriteStartArray("layers");
 
-        foreach (var layer in _layers)
+        foreach (var step in _steps)
         {
-            NetworkDocument.WriteKind(writer, layer);
+            NetworkDocument.WriteKind(writer, step.Layer);
         }
 
         writer.WriteEndArray();
+
+        if (_named)
+        {
+            writer.WriteStartArray(NamesKey);
+
+            foreach (var step in _steps)
+            {
+                writer.WriteStringValue(step.Name);
+            }
+
+            writer.WriteEndArray();
+        }
+
+        if (_branches)
+        {
+            writer.WriteStartArray(TakesKey);
+
+            foreach (var step in _steps)
+            {
+                writer.WriteStartArray();
+
+                foreach (var taken in step.Takes)
+                {
+                    writer.WriteStringValue(taken);
+                }
+
+                writer.WriteEndArray();
+            }
+
+            writer.WriteEndArray();
+        }
     }
 
     /// <inheritdoc />
-    protected override Tensor Compute(Tensor input, Pass pass) => _layers.Aggregate(input, (handed, layer) => layer.Forward(handed, pass));
+    protected override Tensor Compute(Tensor input, Pass pass)
+    {
+        var made = new Dictionary<string, Tensor>(StringComparer.Ordinal) { [Step.Input] = input };
+        var last = input;
+
+        foreach (var step in _steps)
+        {
+            last = step.Layer.Taking([.. step.Takes.Select(taken => made[taken])], pass);
+            made[step.Name] = last;
+        }
+
+        return last;
+    }
+
+    private static IEnumerable<Step> Straight(IEnumerable<Layer> layers)
+    {
+        ArgumentNullException.ThrowIfNull(layers);
+
+        return layers.Select(layer => new Step(layer));
+    }
+
+    // Each step with its name and what it takes worked out, and the rules that make a stack of them one network held to.
+    private static PlacedStep[] Placed(Step[] asked)
+    {
+        var placed = new PlacedStep[asked.Length];
+        var known = new HashSet<string>(StringComparer.Ordinal) { Step.Input };
+
+        for (var place = 0; place < asked.Length; place++)
+        {
+            var step = asked[place];
+            var name = step.Name is { } given ? RequireName(given) : place.ToString(CultureInfo.InvariantCulture);
+
+            if (!known.Add(name))
+            {
+                throw new ArgumentException($"Two steps are called '{name}': a step is known by its name to the steps that take its work.", nameof(asked));
+            }
+
+            IReadOnlyList<string> takes = step.Takes is { } said ? [.. said] : [place == 0 ? Step.Input : placed[place - 1].Name];
+
+            foreach (var taken in takes)
+            {
+                if (taken == name || !known.Contains(taken))
+                {
+                    throw new ArgumentException($"The step '{name}' takes '{taken}', which is not the input or a step before it.", nameof(asked));
+                }
+            }
+
+            if (!(step.Layer ?? throw new ArgumentException($"The step '{name}' has no layer.", nameof(asked))).Accepts(takes.Count))
+            {
+                throw new ArgumentException(
+                    $"The step '{name}' takes the work of {takes.Count} steps, and a {step.Layer.GetType().Name} works on {(step.Layer.Accepts(1) ? "one" : "two or more")}.",
+                    nameof(asked));
+            }
+
+            placed[place] = new PlacedStep(name, step.Layer, takes);
+        }
+
+        var taken2 = placed.SelectMany(step => step.Takes).ToHashSet(StringComparer.Ordinal);
+
+        foreach (var step in placed[..^1])
+        {
+            if (!taken2.Contains(step.Name))
+            {
+                throw new ArgumentException(
+                    $"The step '{step.Name}' is taken by no later step, so its work would be made and never used: only the last step is what the network gives.",
+                    nameof(asked));
+            }
+        }
+
+        return placed;
+    }
+
+    private static string RequireName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name)
+            || name.Contains('.', StringComparison.Ordinal)
+            || name.Contains(',', StringComparison.Ordinal)
+            || int.TryParse(name, NumberStyles.None, CultureInfo.InvariantCulture, out _)
+            || name == Step.Input)
+        {
+            throw new ArgumentException(
+                $"'{name}' cannot name a step: a name is some text with no dot or comma in it, which is not a whole number — those are the places of the steps nobody named — and is not '{Step.Input}'.",
+                nameof(name));
+        }
+
+        return name;
+    }
 }
 
 /// <summary>A slot and the tensor it held when a snapshot was taken.</summary>

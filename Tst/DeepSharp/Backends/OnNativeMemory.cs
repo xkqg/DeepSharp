@@ -54,3 +54,5 @@ public sealed class SequentialTests() : SequentialContract(new NativeMemoryBacke
 public sealed class LoopTests() : LoopContract(new NativeMemoryBackend());
 
 public sealed class NetworkDocumentTests() : NetworkDocumentContract(new NativeMemoryBackend());
+
+public sealed class BranchTests() : BranchContract(new NativeMemoryBackend());

@@ -53,3 +53,5 @@ public sealed class SequentialTests() : SequentialContract(Card.First());
 public sealed class LoopTests() : LoopContract(Card.First());
 
 public sealed class NetworkDocumentTests() : NetworkDocumentContract(Card.First());
+
+public sealed class BranchTests() : BranchContract(Card.First());
