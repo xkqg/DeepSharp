@@ -102,6 +102,24 @@ internal sealed class GraphDraft
         return output;
     }
 
+    /// <summary>Adds a node that gives several values.</summary>
+    /// <param name="at">What the node is.</param>
+    /// <param name="inputs">The names of the values it takes.</param>
+    /// <param name="outputs">The names of the values it gives, in order.</param>
+    /// <returns>The names of the values it gives.</returns>
+    public string[] Nodes(NodeOf at, string[] inputs, string[] outputs)
+    {
+        var node = new NodeProto { OpType = at.Operator, Name = at.Name };
+
+        node.Input.AddRange(inputs);
+        node.Output.AddRange(outputs);
+        at.Attributes?.Invoke(node);
+        _graph.Node.Add(node);
+        _opset = Math.Max(_opset, at.Since);
+
+        return outputs;
+    }
+
     private static ValueInfoProto Value(string name, ReadOnlySpan<int> lengths)
     {
         var shape = new TensorShapeProto();

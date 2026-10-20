@@ -87,6 +87,12 @@ internal sealed class TokenEmbeddingKind : ExportKind<TokenEmbedding>
         var graph = at.Graph;
         var vocabulary = layer.Vocabulary;
         var ids = graph.Node(at.Node("Cast", 6) with { Attributes = node => node.State("to", 7L) }, [at.Input.Name], $"{at.Path}/Cast");
+
+        if (layer.KeepsSteps)
+        {
+            return Kept(layer, at, ids);
+        }
+
         var hot = graph.Node(
             at.Node("OneHot", 9),
             [ids, graph.Wholes(at.Number("vocabulary"), vocabulary), graph.Number(at.Number("values"), [2], [0f, 1f])],
@@ -98,6 +104,24 @@ internal sealed class TokenEmbeddingKind : ExportKind<TokenEmbedding>
         var shares = graph.Node(at.Node("Div", 7), [words, divisor], $"{at.Path}/Div");
 
         return at.Giving(graph.Node(at.Node("MatMul", 1), [shares, graph.Number(at.Number(layer.Weight.Name), [vocabulary, layer.Width], layer.Weight.Value.Values)], at.Path));
+    }
+
+    // Each id's vector at its step, the padding nothing: the vectors looked up by their ids, held where an id is a word, and laid out with the
+    // channels first, as the graph holds a series.
+    private static Value Kept(TokenEmbedding layer, Writing at, string ids)
+    {
+        var graph = at.Graph;
+        var gathered = graph.Node(
+            at.Node("Gather", 1) with { Attributes = node => node.State("axis", 0L) },
+            [graph.Number(at.Number(layer.Weight.Name), [layer.Vocabulary, layer.Width], layer.Weight.Value.Values), ids],
+            $"{at.Path}/Gather");
+        var words = graph.Node(
+            at.Node("Unsqueeze", 1) with { Attributes = node => node.States("axes", 2L) },
+            [graph.Node(at.Node("Clip", 11), [at.Input.Name, graph.Number(at.Number("least"), [], [0f]), graph.Number(at.Number("most"), [], [1f])], $"{at.Path}/Clip")],
+            $"{at.Path}/Unsqueeze");
+        var held = graph.Node(at.Node("Mul", 7), [gathered, words], $"{at.Path}/Mul");
+
+        return at.Giving(graph.Node(at.Node("Transpose", 1) with { Attributes = node => node.States("perm", 0L, 2L, 1L) }, [held], at.Path));
     }
 
     // The axes a reduction runs over, as an attribute (before the thirteenth operator set made them an input), and whether it keeps them.
