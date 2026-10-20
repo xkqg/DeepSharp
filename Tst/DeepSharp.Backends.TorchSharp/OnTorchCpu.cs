@@ -57,3 +57,4 @@ public sealed class NetworkDocumentTests() : NetworkDocumentContract(TorchBacken
 public sealed class BranchTests() : BranchContract(TorchBackend.OnCpu());
 
 public sealed class RecurrentTests() : RecurrentContract(TorchBackend.OnCpu());
+public sealed class AttentionTests() : AttentionContract(TorchBackend.OnCpu());
