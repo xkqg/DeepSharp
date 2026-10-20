@@ -2979,7 +2979,7 @@
                 "additionalProperties": false
               },
               {
-                "description": "Turns the ids a pipeline cut a text into to one small vector: each id looked up in vectors it learns, the vectors of the words averaged and the padding left out; it reads the rows as the pipeline hands them over, so it stands first.",
+                "description": "Turns the ids a pipeline cut a text into to one small vector: each id looked up in vectors it learns, the vectors of the words averaged and the padding left out — or, kept a step at a time, each id its own vector and the padding nothing; it reads the rows as the pipeline hands them over, so it stands first.",
                 "properties": {
                   "kind": {
                     "anyOf": [
@@ -3006,6 +3006,10 @@
                     "minimum": 1,
                     "maximum": 2147483647
                   },
+                  "keepSteps": {
+                    "description": "Whether each id keeps its own vector at its step, the padding nothing, instead of the average of the words'; the average, unless said.",
+                    "type": "boolean"
+                  },
                   "name": {
                     "type": "string",
                     "pattern": "\\S",
@@ -3021,6 +3025,144 @@
                   "kind",
                   "vocabulary",
                   "width"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "The mask of a row of ids: a one where an id is a word, a nought where it is padding; a recurrent layer takes it as its second step, from the same ids the embedding reads.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "unpadded"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Uu][Nn][Pp][Aa][Dd][Dd][Ee][Dd])$"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "A long short-term memory layer that reads each series a step at a time and carries a state along it, as PyTorch's nn.LSTM does; given a mask as its second step, a batch of series of unequal lengths is read each as it would be read alone.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "lstm"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ll][Ss][Tt][Mm])$"
+                      }
+                    ]
+                  },
+                  "units": {
+                    "description": "How many numbers the layer answers with.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "layers": {
+                    "description": "How many layers are stacked, each reading the steps the one below made; one, unless said.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "bothWays": {
+                    "description": "Whether a second state reads each series back from its own end, the two laid side by side; one direction, unless said.",
+                    "type": "boolean"
+                  },
+                  "sequences": {
+                    "description": "Whether the layer makes its state at every step instead of at the last; the last, unless said.",
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "units"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "A gated recurrent unit that reads each series a step at a time and carries a state along it, as PyTorch's nn.GRU does; given a mask as its second step, a batch of series of unequal lengths is read each as it would be read alone.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "gru"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Gg][Rr][Uu])$"
+                      }
+                    ]
+                  },
+                  "units": {
+                    "description": "How many numbers the layer answers with.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "layers": {
+                    "description": "How many layers are stacked, each reading the steps the one below made; one, unless said.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "bothWays": {
+                    "description": "Whether a second state reads each series back from its own end, the two laid side by side; one direction, unless said.",
+                    "type": "boolean"
+                  },
+                  "sequences": {
+                    "description": "Whether the layer makes its state at every step instead of at the last; the last, unless said.",
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "units"
                 ],
                 "additionalProperties": false
               },

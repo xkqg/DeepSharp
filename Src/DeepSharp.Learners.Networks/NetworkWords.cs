@@ -176,6 +176,18 @@ public static class NetworkWords
     private static readonly WholeNumberParameter TokenVocabularyKey =
         new("vocabulary", "How many ids there are, as the tokenizer was told: the padding id (nought) and the id of a word never seen (one) among them.", 5000) { AtLeast = 3 };
 
+    private static readonly WholeNumberParameter RecurrentLayersKey =
+        new("layers", "How many layers are stacked, each reading the steps the one below made; one, unless said.", 1) { AtLeast = 1, LeftOut = 1 };
+
+    private static readonly TrueOrFalseParameter BothWaysKey =
+        new("bothWays", "Whether a second state reads each series back from its own end, the two laid side by side; one direction, unless said.", false) { LeftOut = false };
+
+    private static readonly TrueOrFalseParameter SequencesKey =
+        new("sequences", "Whether the layer makes its state at every step instead of at the last; the last, unless said.", false) { LeftOut = false };
+
+    private static readonly TrueOrFalseParameter KeepStepsKey =
+        new("keepSteps", "Whether each id keeps its own vector at its step, the padding nothing, instead of the average of the words'; the average, unless said.", false) { LeftOut = false };
+
     private static readonly WholeNumberParameter TokenWidthKey = new("width", "How many numbers each id's vector holds.", 16) { AtLeast = 1 };
 
     private static readonly WholeNumberParameter EmbeddingWidthKey = new("width", "How many numbers each category's vector holds.", 4) { AtLeast = 1 };
@@ -237,7 +249,10 @@ public static class NetworkWords
         Step("randomCrop", "Shifts images at random while training and not while serving, padding each and cutting a window of its own size out; it stands first.", [PadKey, VariationSeedKey]),
         Step("gaussianNoise", "Adds normal noise to every number while training and not while serving; it stands first.", [SpreadKey, VariationSeedKey]),
         Step("flatten", "Lays an example out as one row of numbers: an image as the row of its pixels.", []),
-        Step("tokenEmbedding", "Turns the ids a pipeline cut a text into to one small vector: each id looked up in vectors it learns, the vectors of the words averaged and the padding left out; it reads the rows as the pipeline hands them over, so it stands first.", [TokenVocabularyKey, TokenWidthKey]),
+        Step("tokenEmbedding", "Turns the ids a pipeline cut a text into to one small vector: each id looked up in vectors it learns, the vectors of the words averaged and the padding left out — or, kept a step at a time, each id its own vector and the padding nothing; it reads the rows as the pipeline hands them over, so it stands first.", [TokenVocabularyKey, TokenWidthKey, KeepStepsKey]),
+        Step("unpadded", "The mask of a row of ids: a one where an id is a word, a nought where it is padding; a recurrent layer takes it as its second step, from the same ids the embedding reads.", []),
+        Step("lstm", "A long short-term memory layer that reads each series a step at a time and carries a state along it, as PyTorch's nn.LSTM does; given a mask as its second step, a batch of series of unequal lengths is read each as it would be read alone.", [UnitsKey, RecurrentLayersKey, BothWaysKey, SequencesKey]),
+        Step("gru", "A gated recurrent unit that reads each series a step at a time and carries a state along it, as PyTorch's nn.GRU does; given a mask as its second step, a batch of series of unequal lengths is read each as it would be read alone.", [UnitsKey, RecurrentLayersKey, BothWaysKey, SequencesKey]),
         Step("add", "Adds up what the steps it takes made, value by value: a residual block's way of handing on what it was given beside what it made. It takes two steps or more, which must be of one shape.", []),
         Step("concatenate", "Lays what the steps it takes made side by side along the last axis, in the order they are taken: a block that reads everything made before it. It takes two steps or more, alike in every axis but the last.", []),
         Step("columns", "Takes some of the columns of a row as a step of its own: how a network of two inputs reads each of them from the one row it is handed.", [ColumnFirstKey, ColumnCountKey]),
@@ -625,7 +640,10 @@ public static class NetworkWords
             ["rmsNorm"] = (described, layer) => GovernedBy(layer, described.RmsNorm(layer.Number(RootEpsilonKey.Key), layer.YesOrNo(ScaleKey.Key))),
             ["periodic"] = (described, layer) => described.Periodic(
                 new Periodicity(layer.Whole(FrequenciesKey.Key), layer.Number(SigmaKey.Key), layer.Whole(WidthKey.Key)) { Lite = layer.YesOrNo(LiteKey.Key) }),
-            ["tokenEmbedding"] = (described, layer) => described.TokenEmbedding(layer.Whole(TokenVocabularyKey.Key), layer.Whole(TokenWidthKey.Key)),
+            ["tokenEmbedding"] = (described, layer) => described.TokenEmbedding(layer.Whole(TokenVocabularyKey.Key), layer.Whole(TokenWidthKey.Key), layer.YesOrNo(KeepStepsKey.Key)),
+            ["unpadded"] = (described, _) => described.Unpadded(),
+            ["lstm"] = (described, layer) => described.Lstm(layer.Whole(UnitsKey.Key), layer.YesOrNo(BothWaysKey.Key), layer.Whole(RecurrentLayersKey.Key), layer.YesOrNo(SequencesKey.Key)),
+            ["gru"] = (described, layer) => described.Gru(layer.Whole(UnitsKey.Key), layer.YesOrNo(BothWaysKey.Key), layer.Whole(RecurrentLayersKey.Key), layer.YesOrNo(SequencesKey.Key)),
             [EmbeddingWord] = (_, layer) => throw new InvalidOperationException(
                 $"An embedding of '{layer.Text(EmbeddingColumnKey.Key)}' reads its block from the rows a pipeline hands over, so it is lowered where they are: train the network behind its pipeline."),
         };

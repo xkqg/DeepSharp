@@ -438,6 +438,65 @@ public sealed class NetworkDeclaration
         new PartSetting("vocabulary", PartValue.Of(vocabulary)),
         new PartSetting("width", PartValue.Of(width)));
 
+    /// <summary>
+    /// A layer that turns a text, the ids a pipeline's tokenizer cut it into, into small vectors it learns, either averaged into one or kept
+    /// a step at a time.
+    /// </summary>
+    /// <param name="vocabulary">How many ids there are, as the tokenizer was told: padding and the id of a word never seen among them.</param>
+    /// <param name="width">How many numbers each id's vector holds.</param>
+    /// <param name="keepSteps">Whether each id keeps its own vector at its step, the padding nothing, for a recurrent layer to read; the average of the words' otherwise.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>It reads the rows as the pipeline hands them over, so it stands first. The network's file then names the eighth version of the network's part.</remarks>
+    public NetworkDeclaration TokenEmbedding(int vocabulary, int width, bool keepSteps) =>
+        keepSteps
+            ? Layer("tokenEmbedding", new PartSetting("vocabulary", PartValue.Of(vocabulary)), new PartSetting("width", PartValue.Of(width)), new PartSetting("keepSteps", PartValue.Of(true)))
+            : TokenEmbedding(vocabulary, width);
+
+    /// <summary>The mask of a row of ids: a one where an id is a word, a nought where it is padding.</summary>
+    /// <returns>The declaration.</returns>
+    /// <remarks>It takes the ids the embedding reads, so it is written <c>.Unpadded().Takes("input")</c>; a recurrent layer takes it as its second step.</remarks>
+    public NetworkDeclaration Unpadded() => Layer("unpadded");
+
+    /// <summary>A long short-term memory layer that reads each series a step at a time, as PyTorch's <c>nn.LSTM</c> does.</summary>
+    /// <param name="hidden">How many numbers the state it carries along a series holds.</param>
+    /// <param name="bothWays">Whether a second state reads each series back from its own end, the two laid side by side; one direction, unless said.</param>
+    /// <param name="layers">How many layers are stacked, each reading the steps of the one below; one, unless said.</param>
+    /// <param name="sequences">Whether it makes its state at every step instead of the last; the last, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>Given a mask as its second step — <c>.Takes("steps", "mask")</c> — a batch of series of unequal lengths is read each as it would be read alone.</remarks>
+    public NetworkDeclaration Lstm(int hidden, bool bothWays = false, int layers = 1, bool sequences = false) => Recurrent("lstm", hidden, bothWays, layers, sequences);
+
+    /// <summary>A gated recurrent unit that reads each series a step at a time, as PyTorch's <c>nn.GRU</c> does.</summary>
+    /// <param name="hidden">How many numbers the state it carries along a series holds.</param>
+    /// <param name="bothWays">Whether a second state reads each series back from its own end, the two laid side by side; one direction, unless said.</param>
+    /// <param name="layers">How many layers are stacked, each reading the steps of the one below; one, unless said.</param>
+    /// <param name="sequences">Whether it makes its state at every step instead of the last; the last, unless said.</param>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Gru(int hidden, bool bothWays = false, int layers = 1, bool sequences = false) => Recurrent("gru", hidden, bothWays, layers, sequences);
+
+    // A recurrent layer: what is left at its default is left out of the layer, so a file that says nothing of it means the default.
+    private NetworkDeclaration Recurrent(string kind, int hidden, bool bothWays, int layers, bool sequences)
+    {
+        var layer = Kind(kind).Declared().With("units", PartValue.Of(hidden));
+
+        if (layers != 1)
+        {
+            layer = layer.With("layers", PartValue.Of(layers));
+        }
+
+        if (bothWays)
+        {
+            layer = layer.With("bothWays", PartValue.Of(true));
+        }
+
+        if (sequences)
+        {
+            layer = layer.With("sequences", PartValue.Of(true));
+        }
+
+        return Layer(layer);
+    }
+
     /// <summary>Moves the network's numbers against their gradients.</summary>
     /// <param name="rate">How far one step moves them; each library's own, unless said.</param>
     /// <param name="momentum">How much of the last step's velocity carries on; none, unless said.</param>
