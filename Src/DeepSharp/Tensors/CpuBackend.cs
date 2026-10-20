@@ -19,7 +19,7 @@ namespace DeepSharp.Tensors;
 /// values in once it is large, and ten million tenths came to a mean of 0.1087937 rather than a tenth.
 /// </para>
 /// </remarks>
-public sealed class CpuBackend : INamesItsVersionAndDevice
+public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLeft
 {
     // The version the release is handed, as its package names it: what the assembly says of itself, less the commit Source
     // Link adds after a '+', so every build of one release names the same one.
@@ -54,34 +54,31 @@ public sealed class CpuBackend : INamesItsVersionAndDevice
         left.RequireMatrixProduct(right);
 
         var rows = left.Shape[0];
-        var inner = left.Shape[1];
         var columns = right.Shape[1];
-        var a = left.Values;
-        var b = right.Values;
         var result = new float[rows * columns];
-        var totals = new double[columns];
 
-        for (var row = 0; row < rows; row++)
+        new ProductRows(left.Values, right.Values, new ProductShape(rows, left.Shape[1], columns)).Work(result, 0, rows);
+
+        return Tensor.Wrap(new Shape(rows, columns), result);
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="ArgumentException">Either is not a matrix, or the two have not as many rows as each other.</exception>
+    Tensor IMultipliesTurnedLeft.MatMulTurnedLeft(Tensor left, Tensor right)
+    {
+        ArgumentNullException.ThrowIfNull(left);
+        ArgumentNullException.ThrowIfNull(right);
+
+        if (left.Shape.Rank != 2 || right.Shape.Rank != 2 || left.Shape[0] != right.Shape[0])
         {
-            Array.Clear(totals);
-
-            // Row by row of the right, so both are read in the order they are laid out.
-            for (var step = 0; step < inner; step++)
-            {
-                var weight = (double)a[(row * inner) + step];
-                var across = b.Slice(step * columns, columns);
-
-                for (var column = 0; column < columns; column++)
-                {
-                    totals[column] += weight * across[column];
-                }
-            }
-
-            for (var column = 0; column < columns; column++)
-            {
-                result[(row * columns) + column] = (float)totals[column];
-            }
+            throw new ArgumentException($"A matrix turned on its side is multiplied by one with as many rows, and these are {left.Shape} and {right.Shape}.", nameof(right));
         }
+
+        var rows = left.Shape[1];
+        var columns = right.Shape[1];
+        var result = new float[rows * columns];
+
+        new ProductRows(left.Values, right.Values, new ProductShape(rows, left.Shape[0], columns), turnedLeft: true).Work(result, 0, rows);
 
         return Tensor.Wrap(new Shape(rows, columns), result);
     }

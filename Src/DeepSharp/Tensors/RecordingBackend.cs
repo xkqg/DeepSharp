@@ -258,7 +258,9 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend
     private sealed record MatrixProduct(Tensor Left, Tensor Right, Tensor Output) : Recorded(Output, [Left, Right])
     {
         public override Tensor Back(ITensorBackend backend, Tensor gradient, int input) =>
-            input == 0 ? backend.MatMul(gradient, backend.Transpose(Right)) : backend.MatMul(backend.Transpose(Left), gradient);
+            input == 0 ? backend.MatMul(gradient, backend.Transpose(Right))
+            : backend is IMultipliesTurnedLeft turning ? turning.MatMulTurnedLeft(Left, gradient)
+            : backend.MatMul(backend.Transpose(Left), gradient);
     }
 
     private sealed record Transposed(Tensor Matrix, Tensor Output) : Recorded(Output, [Matrix])
