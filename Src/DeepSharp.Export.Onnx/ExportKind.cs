@@ -1,15 +1,43 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Import.Onnx;
 using DeepSharp.Networks;
 using DeepSharp.Tensors;
 
 namespace DeepSharp.Export.Onnx;
 
-/// <summary>A value of the graph being written: the name it goes by, and the shape of one example of it as the network holds it.</summary>
+/// <summary>An image, a series or a volume as a flatten found it: so many rows, columns and channels.</summary>
+/// <param name="Rows">Its rows; the planes' rows one after another for a volume, one for a series.</param>
+/// <param name="Columns">Its columns.</param>
+/// <param name="Channels">Its channels.</param>
+internal readonly record struct Flattened(int Rows, int Columns, int Channels)
+{
+    /// <summary>The image a flatten finds in examples of the shape given, the channels last.</summary>
+    /// <param name="each">The shape of one example, without the batch's axis.</param>
+    public static Flattened Of(Shape each) => new(each.Axes[..^2].ToArray().Aggregate(1, (all, length) => all * length), each[each.Rank - 2], each[each.Rank - 1]);
+}
+
+/// <summary>
+/// A value of the graph being written: the name it goes by, and the shape of one example of it as the network holds it — the channels
+/// last. The graph holds an image, a series or a volume with its channels first, as ONNX's operators over them take it.
+/// </summary>
 /// <param name="Name">The value's name in the graph.</param>
 /// <param name="Each">The shape of one example, without the batch's axis.</param>
-internal readonly record struct Value(string Name, Shape Each);
+internal readonly record struct Value(string Name, Shape Each)
+{
+    /// <summary>The image a flatten made this row of, when it did: ONNX flattens it channel by channel and the network place by place.</summary>
+    public Flattened? Image { get; init; }
+
+    /// <summary>Whether it is a series, an image or a volume the graph holds with its channels first.</summary>
+    public bool Spatial => Image is null && Each.Rank > 1;
+
+    /// <summary>The numbers that lie along this value's row, in the order the graph's row has them.</summary>
+    /// <param name="numbers">The numbers in the order the network's row has them: a dense layer's weights by row, a normalisation's scale.</param>
+    /// <returns>The same numbers, channel by channel where the row is a flattened image.</returns>
+    public float[] Ordered(ReadOnlySpan<float> numbers) =>
+        Image is { } image ? OnnxLayouts.ChannelByChannel(numbers.ToArray(), image.Rows, image.Columns, image.Channels) : numbers.ToArray();
+}
 
 /// <summary>One step being written: the layer, where it stands, the values it takes, and what it makes.</summary>
 /// <param name="Graph">The graph being written.</param>
@@ -35,6 +63,10 @@ internal sealed record Writing(GraphDraft Graph, Layer Layer, string Path, IRead
     /// <summary>The value the step makes, given the name it goes by.</summary>
     /// <param name="name">The name of the graph's value.</param>
     public Value Giving(string name) => new(name, Made);
+
+    /// <summary>The value the step makes, given the name it goes by, as the row of the image the step it takes made one of, when it did.</summary>
+    /// <param name="name">The name of the graph's value.</param>
+    public Value Keeping(string name) => new(name, Made) { Image = Input.Image };
 }
 
 /// <summary>How one kind of layer is written as ONNX nodes, or left out of the graph where a trained network does nothing with it.</summary>
@@ -79,7 +111,7 @@ internal sealed class OperatorKind<TLayer>(string op, int since) : ExportKind<TL
 {
     /// <inheritdoc />
     protected override Value Write(TLayer layer, Writing at) =>
-        at.Giving(at.Graph.Node(at.Node(op, since), [at.Input.Name], at.Path));
+        at.Keeping(at.Graph.Node(at.Node(op, since), [at.Input.Name], at.Path));
 }
 
 /// <summary>A layer a trained network does nothing with: a dropout, or a variation of the rows made while training. It is left out of the graph.</summary>

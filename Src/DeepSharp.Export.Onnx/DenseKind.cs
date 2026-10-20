@@ -17,7 +17,7 @@ internal sealed class DenseKind : ExportKind<Dense>
     {
         var graph = at.Graph;
         var rows = at.Input.Name;
-        var weight = graph.Number(at.Number(dense.Weight.Name), [dense.Inputs, dense.Outputs], dense.Weight.Value.Values);
+        var weight = graph.Number(at.Number(dense.Weight.Name), [dense.Inputs, dense.Outputs], at.Input.Ordered(dense.Weight.Value.Values));
         var hasBias = dense.Bias is not null;
 
         if (dense.LowRank is not { } pair)
@@ -25,7 +25,7 @@ internal sealed class DenseKind : ExportKind<Dense>
             return at.Giving(Biased(at, dense, graph.Node(at.Node("MatMul", 1), [rows, weight], hasBias ? $"{at.Path}/MatMul" : at.Path)));
         }
 
-        var first = graph.Number(at.Number(dense.A!.Name), [dense.Inputs, pair.Rank], dense.A.Value.Values);
+        var first = graph.Number(at.Number(dense.A!.Name), [dense.Inputs, pair.Rank], at.Input.Ordered(dense.A.Value.Values));
         var second = graph.Number(at.Number(dense.B!.Name), [pair.Rank, dense.Outputs], dense.B.Value.Values);
         var scale = graph.Number(at.Number("scale"), [1], [(float)pair.Scale]);
         var kernel = graph.Node(at.Node("MatMul", 1), [rows, weight], $"{at.Path}/MatMul");

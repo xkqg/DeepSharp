@@ -27,6 +27,38 @@ internal static class Runtime
         return [.. results.Single().AsEnumerable<float>()];
     }
 
+    /// <summary>
+    /// A batch of series, images or volumes with their channels first, as the graph takes them, from the same batch with its channels last,
+    /// as the network takes them.
+    /// </summary>
+    /// <param name="batch">The batch, the channels last.</param>
+    public static Tensor ChannelsFirst(Tensor batch)
+    {
+        var axes = batch.Shape.Axes.ToArray();
+        var channels = axes[^1];
+        var places = batch.Shape.Count / (axes[0] * channels);
+        var moved = new float[batch.Shape.Count];
+
+        for (var example = 0; example < axes[0]; example++)
+        {
+            for (var place = 0; place < places; place++)
+            {
+                for (var channel = 0; channel < channels; channel++)
+                {
+                    moved[(((example * channels) + channel) * places) + place] = batch.Values[(((example * places) + place) * channels) + channel];
+                }
+            }
+        }
+
+        return Tensor.From(new Shape([axes[0], channels, .. axes[1..^1]]), moved);
+    }
+
+    /// <summary>A batch of examples of the shape given, numbers worked out from their places, the same on every machine.</summary>
+    /// <param name="count">How many examples.</param>
+    /// <param name="each">The shape of one example.</param>
+    public static Tensor Batch(int count, Shape each) =>
+        Tensor.From(new Shape([count, .. each.Axes.ToArray()]), [.. Enumerable.Range(0, count * each.Count).Select(at => (float)(Math.Sin((at * 0.37) + 0.3) * 0.8))]);
+
     /// <summary>A batch of rows of numbers worked out from their places, the same on every machine.</summary>
     /// <param name="count">How many rows.</param>
     /// <param name="width">How many values in a row.</param>

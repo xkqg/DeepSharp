@@ -64,6 +64,9 @@ public sealed class OnnxExport
     /// <exception cref="NotSupportedException">The network is written as code, or holds a layer that is written as no ONNX node here.</exception>
     public byte[] ToBytes(Network network, Loss loss) => Model(network, loss).ToByteArray();
 
+    // The lengths of an example as the graph holds it: a row as it is, a series, an image or a volume with its channels first.
+    private static int[] ChannelsFirst(Shape each) => each.Rank == 1 ? each.Axes.ToArray() : [each[each.Rank - 1], .. each.Axes[..^1].ToArray()];
+
     private ModelProto Model(Network network, Loss loss)
     {
         ArgumentNullException.ThrowIfNull(network);
@@ -77,9 +80,16 @@ public sealed class OnnxExport
 
         var graph = new GraphDraft();
 
-        graph.Takes("input", _each.Axes);
+        graph.Takes("input", ChannelsFirst(_each));
 
         var made = new StackWriting(graph).Write(stack, new Value("input", _each), string.Empty);
+
+        if (made.Image is not null)
+        {
+            throw new NotSupportedException(
+                "The network ends in a row a flatten made of an image: ONNX flattens it channel by channel and the network place by place, so the graph would give the values in another order than the network does.");
+        }
+
         var output = loss.Activation switch
         {
             OutputActivation.Sigmoid => graph.Node(new NodeOf("Sigmoid", 6, "output/Sigmoid"), [made.Name], "output"),
@@ -90,7 +100,7 @@ public sealed class OnnxExport
             _ => made.Name,
         };
 
-        graph.Gives(output, made.Each.Axes);
+        graph.Gives(output, ChannelsFirst(made.Each));
 
         var model = new ModelProto
         {

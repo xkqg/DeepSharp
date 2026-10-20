@@ -10,7 +10,7 @@ internal sealed class LeakyReluKind : ExportKind<LeakyRelu>
 {
     /// <inheritdoc />
     protected override Value Write(LeakyRelu layer, Writing at) =>
-        at.Giving(at.Graph.Node(at.Node("LeakyRelu", 6) with { Attributes = node => node.State("alpha", layer.NegativeSlope) }, [at.Input.Name], at.Path));
+        at.Keeping(at.Graph.Node(at.Node("LeakyRelu", 6) with { Attributes = node => node.State("alpha", layer.NegativeSlope) }, [at.Input.Name], at.Path));
 }
 
 /// <summary>An exponential rectifier: ONNX's Elu with the alpha it bends towards.</summary>
@@ -18,7 +18,7 @@ internal sealed class EluKind : ExportKind<Elu>
 {
     /// <inheritdoc />
     protected override Value Write(Elu layer, Writing at) =>
-        at.Giving(at.Graph.Node(at.Node("Elu", 6) with { Attributes = node => node.State("alpha", layer.Alpha) }, [at.Input.Name], at.Path));
+        at.Keeping(at.Graph.Node(at.Node("Elu", 6) with { Attributes = node => node.State("alpha", layer.Alpha) }, [at.Input.Name], at.Path));
 }
 
 /// <summary>A Gaussian error linear unit: ONNX's Gelu, which first appeared in the twentieth operator set, exact or by the tanh approximation.</summary>
@@ -26,7 +26,7 @@ internal sealed class GeluKind : ExportKind<Gelu>
 {
     /// <inheritdoc />
     protected override Value Write(Gelu layer, Writing at) =>
-        at.Giving(at.Graph.Node(
+        at.Keeping(at.Graph.Node(
             at.Node("Gelu", 20) with { Attributes = node => node.State("approximate", layer.Approximate ? "tanh" : "none") },
             [at.Input.Name],
             at.Path));
@@ -40,7 +40,7 @@ internal sealed class SiluKind : ExportKind<Silu>
     {
         var sigmoid = at.Graph.Node(at.Node("Sigmoid", 6), [at.Input.Name], $"{at.Path}/Sigmoid");
 
-        return at.Giving(at.Graph.Node(at.Node("Mul", 7), [at.Input.Name, sigmoid], at.Path));
+        return at.Keeping(at.Graph.Node(at.Node("Mul", 7), [at.Input.Name, sigmoid], at.Path));
     }
 }
 
@@ -50,9 +50,12 @@ internal sealed class PReluKind : ExportKind<PRelu>
     /// <inheritdoc />
     protected override Value Write(PRelu layer, Writing at)
     {
-        var slopes = at.Graph.Number(at.Number(layer.Weight.Name), [layer.Count], layer.Weight.Value.Values);
+        // One share for each channel of a series, an image or a volume stands along the channels' axis, the others of one place each, as
+        // ONNX broadcasts a share to the values it scales.
+        int[] lengths = at.Input.Spatial && layer.Count > 1 ? [layer.Count, .. Enumerable.Repeat(1, at.Input.Each.Rank - 1)] : [layer.Count];
+        var slopes = at.Graph.Number(at.Number(layer.Weight.Name), lengths, at.Input.Ordered(layer.Weight.Value.Values));
 
-        return at.Giving(at.Graph.Node(at.Node("PRelu", 9), [at.Input.Name, slopes], at.Path));
+        return at.Keeping(at.Graph.Node(at.Node("PRelu", 9), [at.Input.Name, slopes], at.Path));
     }
 }
 
@@ -66,6 +69,6 @@ internal sealed class SoftmaxKind : ExportKind<Softmax>
         // and no more: over the channels of a series, an image or a volume the meaning is the thirteenth's.
         var since = at.Input.Each.Rank == 1 ? 1 : 13;
 
-        return at.Giving(at.Graph.Node(at.Node("Softmax", since) with { Attributes = node => node.State("axis", 1L) }, [at.Input.Name], at.Path));
+        return at.Keeping(at.Graph.Node(at.Node("Softmax", since) with { Attributes = node => node.State("axis", 1L) }, [at.Input.Name], at.Path));
     }
 }
