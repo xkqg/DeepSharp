@@ -126,7 +126,7 @@ public abstract class Layer
 
         foreach (var parameter in Parameters())
         {
-            parameter.Rules = parameter.Rules with { RateShare = share == 1 ? null : rules.RateShare };
+            parameter.Rules = parameter.Rules with { RateShare = share is 1 ? null : rules.RateShare };
         }
     }
 

@@ -122,7 +122,7 @@ public static class MeasureCharts
         }
 
         string[] parts = [.. whole.Parts.Select(part => part.Part.Word())];
-        var builder = new FigureBuilder().WithSize(Side * count, Side);
+        var builder = new FigureBuilder().WithSize(Side * (double)count, Side);
 
         for (var metric = 0; metric < count; metric++)
         {
@@ -162,7 +162,7 @@ public static class MeasureCharts
 
         string[] parts = [.. across.Parts.Select(part => part.Part.Word())];
         double[] places = [.. Enumerable.Range(0, parts.Length).Select(place => (double)place)];
-        var builder = new FigureBuilder().WithSize(Side * count, Side);
+        var builder = new FigureBuilder().WithSize(Side * (double)count, Side);
 
         for (var metric = 0; metric < count; metric++)
         {
@@ -299,7 +299,7 @@ public static class MeasureCharts
         }
 
         string[] parts = [.. measures.Parts.Select(part => part.Part.Word())];
-        var builder = new FigureBuilder().WithSize(Side * count, Side);
+        var builder = new FigureBuilder().WithSize(Side * (double)count, Side);
 
         for (var metric = 0; metric < count; metric++)
         {

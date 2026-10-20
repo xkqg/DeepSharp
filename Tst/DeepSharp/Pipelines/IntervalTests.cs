@@ -23,8 +23,7 @@ public class IntervalTests
             .Read(
                 new InMemoryRowSource(
                     ["Date", "x", "y"],
-                    [.. Enumerable.Range(0, 100).Select(day => (IReadOnlyList<string?>)
-                        [new DateTime(2024, 1, 1).AddDays(day).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), (day % 7).ToString(CultureInfo.InvariantCulture), (10 + (day * 7 % 13)).ToString(CultureInfo.InvariantCulture)])]),
+                    [.. Enumerable.Range(0, 100).Select(day => new string?[] { new DateTime(2024, 1, 1).AddDays(day).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), (day % 7).ToString(CultureInfo.InvariantCulture), (10 + (day * 7 % 13)).ToString(CultureInfo.InvariantCulture) })]),
                 "a hundred days")
             .Declare(schema => schema.Timestamp("Date").Number("x", "y"))
             .Reshape("y", Maths.Log)
@@ -113,7 +112,7 @@ public class IntervalTests
     public void ASplitThatSetsNoRowsAside_HasNothingToCalibrateOn()
     {
         var prepared = Pdd.Create()
-            .Read(new InMemoryRowSource(["t", "x", "y"], [.. Enumerable.Range(1, 40).Select(t => (IReadOnlyList<string?>)[$"{t}", $"{t % 5}", $"{t % 7}"])]), "forty")
+            .Read(new InMemoryRowSource(["t", "x", "y"], [.. Enumerable.Range(1, 40).Select(t => new string?[] { $"{t}", $"{t % 5}", $"{t % 7}" })]), "forty")
             .Declare(schema => schema.Integer("t").Number("x", "y"))
             .SplitByTime("t", 0.50, 0.10)
             .Target("y")
@@ -149,7 +148,7 @@ public class IntervalTests
             .Read(
                 new InMemoryRowSource(
                     ["t", "c1", "c2", "c3"],
-                    [.. Enumerable.Range(1, 100).Select(t => (IReadOnlyList<string?>)[$"{t}", $"{1 + (t % 3)}", $"{2 + (t % 4)}", $"{1 + (t % 2)}"])]),
+                    [.. Enumerable.Range(1, 100).Select(t => new string?[] { $"{t}", $"{1 + (t % 3)}", $"{2 + (t % 4)}", $"{1 + (t % 2)}" })]),
                 "a hundred flocks")
             .Declare(schema => schema.Integer("t").Number("c1", "c2", "c3"))
             .Calibrate(0.20)
@@ -301,7 +300,7 @@ public class IntervalTests
             var x = noise.NextDouble() * 100;
             var y = x + ((noise.NextDouble() + noise.NextDouble() + noise.NextDouble() - 1.5) * 4);
 
-            return (IReadOnlyList<string?>)[$"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture)];
+            return new string?[] { $"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture) };
         }).ToList();
         var prepared = Pdd.Create()
             .Read(new InMemoryRowSource(["t", "x", "y"], rows), "six thousand")
@@ -335,7 +334,7 @@ public class IntervalTests
     private sealed class IntervalComparer : IEqualityComparer<ConformalInterval>
     {
         public bool Equals(ConformalInterval? left, ConformalInterval? right) =>
-            left is not null && right is not null && left.Alpha == right.Alpha && left.Rows == right.Rows && left.Margins.SequenceEqual(right.Margins);
+            left is not null && right is not null && left.Alpha.Equals(right.Alpha) && left.Rows == right.Rows && left.Margins.SequenceEqual(right.Margins);
 
         public int GetHashCode(ConformalInterval value) => value.Rows;
     }

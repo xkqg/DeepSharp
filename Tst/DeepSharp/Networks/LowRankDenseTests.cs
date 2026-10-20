@@ -73,7 +73,7 @@ public class LowRankDenseTests
         var plain = Dense(3, 4);
 
         Assert.All(dense.B!.Value.Values.ToArray(), value => Assert.Equal(0f, value));
-        Assert.Contains(dense.A!.Value.Values.ToArray(), value => value != 0f);
+        Assert.Contains(dense.A!.Value.Values.ToArray(), value => value is not 0f);
         Assert.All(dense.A.Value.Values.ToArray(), value => Assert.InRange(value, -Math.Sqrt(6.0 / 3), Math.Sqrt(6.0 / 3)));
 
         var rows = Tensor.From(new Shape(2, 3), [0.5f, -1f, 2f, 1f, 0.25f, -0.5f]);
@@ -116,7 +116,7 @@ public class LowRankDenseTests
         var history = new LayerStack(dense).Compile(new Adam(0.05), new MeanSquaredError()).Fit(rows, validation: null, new FitOptions(seed: 1) { Epochs = 60, BatchSize = 4 });
 
         Assert.Equal(kernel, dense.Weight.Value.Values.ToArray());
-        Assert.Contains(dense.B!.Value.Values.ToArray(), value => value != 0f);
+        Assert.Contains(dense.B!.Value.Values.ToArray(), value => value is not 0f);
         Assert.True(history.Epochs[^1].Loss < history.Epochs[0].Loss);
     }
 

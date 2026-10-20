@@ -30,7 +30,7 @@ public class NetworkIntervalTests
             var x = noise.NextDouble();
             var y = (3 * x) + ((noise.NextDouble() + noise.NextDouble() - 1) * 0.1);
 
-            return (IReadOnlyList<string?>)[$"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture)];
+            return new string?[] { $"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture) };
         }).ToList();
         var fitted = Pdd.Create()
             .Read(new InMemoryRowSource(["t", "x", "y"], rows), "fifteen hundred")
@@ -51,7 +51,7 @@ public class NetworkIntervalTests
         prepared.Train(((LearnNetworkStep)prepared.Declaration.Learner!) with { Seed = seed }, cancellation: TestContext.Current.CancellationToken);
 
     private static InMemoryRowSource Served(int count = 5, int from = 0) =>
-        new(["t", "x"], [.. Enumerable.Range(from, count).Select(at => (IReadOnlyList<string?>)[$"{9000 + at}", (at / 10.0).ToString("R", CultureInfo.InvariantCulture)])]);
+        new(["t", "x"], [.. Enumerable.Range(from, count).Select(at => new string?[] { $"{9000 + at}", (at / 10.0).ToString("R", CultureInfo.InvariantCulture) })]);
 
     [Fact]
     public void ANetworkGivenAnInterval_WorksItOutFromTheCalibrationRows_AndLeavesTheNetworkWithoutOneAsItWas()

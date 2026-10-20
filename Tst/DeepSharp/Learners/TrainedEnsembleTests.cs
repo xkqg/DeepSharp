@@ -50,7 +50,7 @@ public class TrainedEnsembleTests
         prepared.Train(step, cancellation: TestContext.Current.CancellationToken);
 
     private static CsvRowSource Served(int rows = 12) =>
-        CsvRowSource.FromText(string.Join('\n', File.ReadLines(Repository.Data("titanic.csv")).Take(rows + 1).Select(line => line)) + "\n");
+        CsvRowSource.FromText(string.Join('\n', File.ReadLines(Repository.Data("titanic.csv")).Take(rows + 1)) + "\n");
 
     [Fact]
     public void TheMembers_AreTrainedBehindOneFit_EachMeasuredAloneAndTheEnsembleBesideThem()

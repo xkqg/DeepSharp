@@ -17,8 +17,7 @@ public class CalibrationPartTests
 {
     private static PreparedData Flocks(Func<PipelineBuilder, FittingBuilder> split)
     {
-        var rows = Enumerable.Range(0, 100).Select(day => (IReadOnlyList<string?>)
-            [new DateTime(2024, 1, 1).AddDays(day).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), (day % 7).ToString(CultureInfo.InvariantCulture), (100 + (day * 3 % 17)).ToString(CultureInfo.InvariantCulture)]).ToList();
+        var rows = Enumerable.Range(0, 100).Select(day => new string?[] { new DateTime(2024, 1, 1).AddDays(day).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), (day % 7).ToString(CultureInfo.InvariantCulture), (100 + (day * 3 % 17)).ToString(CultureInfo.InvariantCulture) }).ToList();
 
         return split(Pdd.Create()
                 .Read(new InMemoryRowSource(["Date", "x", "y"], rows), "a hundred days")
@@ -49,8 +48,7 @@ public class CalibrationPartTests
     {
         // The same hundred days, but for one: x is a thousand on a day that lands in the calibration rows. A scale learned from the
         // training rows alone cannot have seen it.
-        var rows = Enumerable.Range(0, 100).Select(day => (IReadOnlyList<string?>)
-            [new DateTime(2024, 1, 1).AddDays(day).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), (day == 75 ? 1000 : day % 7).ToString(CultureInfo.InvariantCulture), "1"]).ToList();
+        var rows = Enumerable.Range(0, 100).Select(day => new string?[] { new DateTime(2024, 1, 1).AddDays(day).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), (day == 75 ? 1000 : day % 7).ToString(CultureInfo.InvariantCulture), "1" }).ToList();
 
         var prepared = Pdd.Create()
             .Read(new InMemoryRowSource(["Date", "x", "y"], rows), "a hundred days")

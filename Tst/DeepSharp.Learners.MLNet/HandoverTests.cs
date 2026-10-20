@@ -77,7 +77,7 @@ public class HandoverTests
                         pixels[at] = (byte)((((at % 6) < 3) == leftBright ? 170 : 60) + random.Next(40));
                     }
 
-                    return (IReadOnlyList<string?>)[MediaCell.Pixels([6, 6, 1], pixels), leftBright ? "1" : "0"];
+                    return new string?[] { MediaCell.Pixels([6, 6, 1], pixels), leftBright ? "1" : "0" };
                 })]);
         }
 

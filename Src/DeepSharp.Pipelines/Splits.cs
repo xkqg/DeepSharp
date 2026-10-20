@@ -206,7 +206,7 @@ public readonly record struct SplitShares(double Train, double Validation, doubl
             parts[at] = at < train ? Part.Train
                 : at < train + validation ? Part.Validation
                 : at < train + validation + calibration ? Part.Calibration
-                : at < train + validation + calibration + test || Predict == 0 ? Part.Test
+                : at < train + validation + calibration + test || Predict is 0 ? Part.Test
                 : Part.Predict;
         }
 

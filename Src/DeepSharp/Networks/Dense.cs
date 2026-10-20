@@ -178,7 +178,7 @@ public sealed class Dense : Layer, ISaved<Dense>
             // x W + (x A B) · alpha / rank: what Keras's Dense answers once enable_lora has been called.
             var beside = pass.Backend.MatMul(pass.Backend.MatMul(input, A!.Value), B!.Value);
 
-            product = pass.Backend.Add(product, pair.Scale == 1 ? beside : pass.Backend.Scale(beside, pass.Backend.Fill(new Shape(), (float)pair.Scale)));
+            product = pass.Backend.Add(product, pair.Scale is 1 ? beside : pass.Backend.Scale(beside, pass.Backend.Fill(new Shape(), (float)pair.Scale)));
         }
 
         return Bias is null ? product : pass.Backend.AddRow(product, Bias.Value);

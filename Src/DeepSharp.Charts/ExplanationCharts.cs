@@ -112,7 +112,7 @@ public static class ExplanationCharts
 
         var count = makeUp.AnswerNames.Count;
         string[] columns = [.. makeUp.Columns.Select(column => column.Column)];
-        var builder = new FigureBuilder().WithSize(Side * 2, Side * count);
+        var builder = new FigureBuilder().WithSize(Side * 2, Side * (double)count);
 
         for (var answer = 0; answer < count; answer++)
         {

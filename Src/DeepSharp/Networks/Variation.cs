@@ -236,7 +236,7 @@ public sealed class GaussianNoise : Variation, ISaved<GaussianNoise>
     public GaussianNoise(double spread, long seed)
         : base("gaussianNoise", seed)
     {
-        if (!(spread >= 0) || !double.IsFinite(spread))
+        if (spread < 0 || !double.IsFinite(spread))
         {
             throw new ArgumentOutOfRangeException(nameof(spread), spread, "The spread of a noise is a number of nought or more.");
         }
@@ -270,7 +270,7 @@ public sealed class GaussianNoise : Variation, ISaved<GaussianNoise>
     /// <inheritdoc />
     private protected override Tensor Varied(Tensor input, Draws draws)
     {
-        if (Spread == 0)
+        if (Spread is 0)
         {
             return input;
         }

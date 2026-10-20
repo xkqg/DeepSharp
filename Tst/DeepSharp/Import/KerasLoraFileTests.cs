@@ -46,7 +46,7 @@ public class KerasLoraFileTests
         Near(Values(Keras.GetProperty("merged")), dense.Weight.Value.Values.ToArray());
         Near(Values(Keras.GetProperty("bias")), dense.Bias.Value.Values.ToArray());
         Assert.All(dense.B!.Value.Values.ToArray(), value => Assert.Equal(0f, value));
-        Assert.Contains(dense.A!.Value.Values.ToArray(), value => value != 0f);
+        Assert.Contains(dense.A!.Value.Values.ToArray(), value => value is not 0f);
     }
 
     [Fact]

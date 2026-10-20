@@ -113,7 +113,7 @@ public class TokenizeTests
     {
         var rows = new InMemoryRowSource(
             ["review", "good"],
-            [.. Enumerable.Range(0, 60).Select(at => (IReadOnlyList<string?>)[at % 2 == 0 ? $"good film number{at}" : $"bad film number{at}", at % 2 == 0 ? "1" : "0"])]);
+            [.. Enumerable.Range(0, 60).Select(at => new string?[] { at % 2 == 0 ? $"good film number{at}" : $"bad film number{at}", at % 2 == 0 ? "1" : "0" })]);
         var prepared = Pdd.Create()
             .Read(rows, "sixty reviews")
             .Declare(schema => schema.Text("review").Integer("good"))

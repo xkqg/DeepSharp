@@ -229,7 +229,7 @@ public class WhyTests
 
     private static InMemoryRowSource OtherSource(Func<int, string?> x) => new(
         OtherColumns,
-        [.. Enumerable.Range(1, 60).Select(t => (IReadOnlyList<string?>)[t % 2 == 0 ? "true" : "false", t % 3 == 0 ? "b" : "a", x(t), "0"])]);
+        [.. Enumerable.Range(1, 60).Select(t => new string?[] { t % 2 == 0 ? "true" : "false", t % 3 == 0 ? "b" : "a", x(t), "0" })]);
 
     private static PreparedData OtherPrepared() =>
         Pdd.Create()
@@ -257,7 +257,7 @@ public class WhyTests
     public void AColumnThePipelineNeverDeclared_HasNoRangeToMoveThrough_SayingSo()
     {
         var rows = OtherSource(t => (t / 10.0).ToString("R", CultureInfo.InvariantCulture));
-        var withExtra = new InMemoryRowSource([.. OtherColumns, "extra"], rows.Rows.Select(row => (IReadOnlyList<string?>)[.. row, "?"]));
+        var withExtra = new InMemoryRowSource([.. OtherColumns, "extra"], rows.Rows.Select(row => row.Append("?").ToArray()));
 
         var refused = Assert.Throws<ArgumentException>(() => OtherPrepared().DependenceOn(new RowsAnswered(withExtra, SaidOfX), new Moving("extra", 3)));
 

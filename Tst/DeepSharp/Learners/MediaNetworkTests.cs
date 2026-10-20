@@ -40,7 +40,7 @@ public class MediaNetworkTests
                     }
                 }
 
-                return (IReadOnlyList<string?>)[MediaCell.Pixels([Side, Side, 1], pixels), leftBright ? "1" : "0"];
+                return new string?[] { MediaCell.Pixels([Side, Side, 1], pixels), leftBright ? "1" : "0" };
             })]);
     }
 
@@ -80,7 +80,7 @@ public class MediaNetworkTests
             .Fit(prepared, new FitOptions(seed: 1) { Epochs = 25 });
         var predicted = trained.Predict(Images(40, offset: 5));
         var held = Images(40, offset: 5).Rows.Select(row => row[1] == "1" ? 1.0 : 0.0).ToArray();
-        var right = Enumerable.Range(0, 40).Count(at => (predicted.Answers[at][0] >= 0.5 ? 1.0 : 0.0) == held[at]);
+        var right = Enumerable.Range(0, 40).Count(at => (predicted.Answers[at][0] >= 0.5 ? 1.0 : 0.0).Equals(held[at]));
 
         Assert.Equal(40, predicted.Answers.Count);
         Assert.True(right >= 34, $"{right} of 40");
@@ -142,7 +142,7 @@ public class MediaNetworkTests
                 pixels[pixel] = (byte)(random.Next(80) + (kind * 60));
             }
 
-            return (IReadOnlyList<string?>)[MediaCell.Pixels([9, 8, 2], pixels), kind == 0 ? "1" : "0", kind == 1 ? "1" : "0", kind == 2 ? "1" : "0"];
+            return new string?[] { MediaCell.Pixels([9, 8, 2], pixels), kind == 0 ? "1" : "0", kind == 1 ? "1" : "0", kind == 2 ? "1" : "0" };
         });
         var prepared = Pdd.Create()
             .Read(new InMemoryRowSource(["image", "a", "b", "c"], rows), "ninety images")

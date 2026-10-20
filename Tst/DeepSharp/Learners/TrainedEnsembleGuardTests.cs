@@ -24,7 +24,7 @@ public class TrainedEnsembleGuardTests
             var x = noise.NextDouble();
             var y = (3 * x) + ((noise.NextDouble() + noise.NextDouble() - 1) * 0.1);
 
-            return (IReadOnlyList<string?>)[$"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture)];
+            return new string?[] { $"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture) };
         }).ToList();
         var fitted = Pdd.Create()
             .Read(new InMemoryRowSource(["t", "x", "y"], rows), "six hundred")

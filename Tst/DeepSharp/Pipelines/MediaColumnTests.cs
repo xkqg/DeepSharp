@@ -119,7 +119,7 @@ public class MediaColumnTests
     private static InMemoryRowSource Digits(int count = 40) =>
         new(
             ["pixels", "digit"],
-            [.. Enumerable.Range(0, count).Select(at => (IReadOnlyList<string?>)[Pixels(4, 4, pixel => (byte)((at * 7) + (pixel * 11) % 256)), (at % 3).ToString(CultureInfo.InvariantCulture)])]);
+            [.. Enumerable.Range(0, count).Select(at => new string?[] { Pixels(4, 4, pixel => (byte)((at * 7) + (pixel * 11) % 256)), (at % 3).ToString(CultureInfo.InvariantCulture) })]);
 
     private static PreparedData Prepared() =>
         Pdd.Create()
@@ -185,7 +185,7 @@ public class MediaColumnTests
     {
         var rows = new InMemoryRowSource(
             ["pixels", "age", "digit"],
-            [.. Enumerable.Range(0, 20).Select(at => (IReadOnlyList<string?>)[Pixels(2, 2, pixel => (byte)(at + pixel)), at.ToString(CultureInfo.InvariantCulture), (at % 2).ToString(CultureInfo.InvariantCulture)])]);
+            [.. Enumerable.Range(0, 20).Select(at => new string?[] { Pixels(2, 2, pixel => (byte)(at + pixel)), at.ToString(CultureInfo.InvariantCulture), (at % 2).ToString(CultureInfo.InvariantCulture) })]);
         var prepared = Pdd.Create()
             .Read(rows, "twenty")
             .Declare(schema => schema.Media("pixels").Number("age").Integer("digit"))

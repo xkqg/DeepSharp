@@ -26,7 +26,7 @@ public class IntervalTests
             var x = noise.NextDouble();
             var y = (3 * x) + ((noise.NextDouble() + noise.NextDouble() - 1) * 0.1);
 
-            return (IReadOnlyList<string?>)[$"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture)];
+            return new string?[] { $"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture) };
         }).ToList();
 
         return Pdd.Create()

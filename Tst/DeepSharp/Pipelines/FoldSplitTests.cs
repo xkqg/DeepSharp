@@ -105,7 +105,7 @@ public class FoldSplitTests
     {
         // Eight records, each four times over, dealt into five slices of about five rows: a boundary falls inside a record's copies,
         // and the copies all stay on one side of it.
-        var rows = Enumerable.Range(0, 32).Select(row => (IReadOnlyList<string?>)[(row % 8).ToString(CultureInfo.InvariantCulture), ((row % 8) * 7).ToString(CultureInfo.InvariantCulture)]).ToList();
+        var rows = Enumerable.Range(0, 32).Select(row => new string?[] { (row % 8).ToString(CultureInfo.InvariantCulture), ((row % 8) * 7).ToString(CultureInfo.InvariantCulture) }).ToList();
 
         for (var index = 0; index < Folds; index++)
         {
@@ -234,8 +234,7 @@ public class FoldSplitTests
 
     private static PreparedData Rolled(int origin, int gap = 0, int origins = 3)
     {
-        var rows = Enumerable.Range(0, 60).Select(day => (IReadOnlyList<string?>)
-            [new DateTime(2024, 1, 1).AddDays(day).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), (100 + (day * 3 % 17)).ToString(CultureInfo.InvariantCulture)]).ToList();
+        var rows = Enumerable.Range(0, 60).Select(day => new string?[] { new DateTime(2024, 1, 1).AddDays(day).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), (100 + (day * 3 % 17)).ToString(CultureInfo.InvariantCulture) }).ToList();
 
         return Pdd.Create()
             .Read(new InMemoryRowSource(["Date", "close"], rows), "sixty days")

@@ -127,7 +127,7 @@ public sealed class TokenEmbedding : Layer, ISaved<TokenEmbedding>
     {
         var id = (int)value;
 
-        return id == value && id >= 0 && id < Vocabulary
+        return value.Equals(id) && id >= 0 && id < Vocabulary
             ? id
             : throw new ArgumentException(
                 string.Create(CultureInfo.InvariantCulture, $"Row {row + 1}, place {at + 1} holds {value}, which is no id of a vocabulary of {Vocabulary}: an id is a whole number from nought to {Vocabulary - 1}."),

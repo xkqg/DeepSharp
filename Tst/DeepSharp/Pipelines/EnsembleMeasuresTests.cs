@@ -45,7 +45,7 @@ public class EnsembleMeasuresTests
             .Read(
                 new InMemoryRowSource(
                     ["t", "a", "b", "c"],
-                    [.. Enumerable.Range(1, 20).Select(t => (IReadOnlyList<string?>)[$"{t}", t % 3 == 0 ? "1" : "0", t % 3 == 1 ? "1" : "0", t % 3 == 2 ? "1" : "0"])]),
+                    [.. Enumerable.Range(1, 20).Select(t => new string?[] { $"{t}", t % 3 == 0 ? "1" : "0", t % 3 == 1 ? "1" : "0", t % 3 == 2 ? "1" : "0" })]),
                 "twenty rows")
             .Declare(schema => schema.Integer("t", "a", "b", "c"))
             .SplitByTime("t", 0.50, 0.25)
@@ -196,7 +196,7 @@ public class EnsembleMeasuresTests
     public void MembersCombined_ForServedRows_ComeBackThroughOneWalkAndAreCombinedInTheAnswersUnits()
     {
         var prepared = Priced();
-        var handedIn = new InMemoryRowSource(["t", "x"], [.. Enumerable.Range(30, 3).Select(t => (IReadOnlyList<string?>)[$"{t}", "1"])]);
+        var handedIn = new InMemoryRowSource(["t", "x"], [.. Enumerable.Range(30, 3).Select(t => new string?[] { $"{t}", "1" })]);
         var served = prepared.Served(handedIn);
         IReadOnlyList<double[]>[] members = [[[2.0], [2.5], [3.0]], [[2.2], [2.3], [2.6]]];
 

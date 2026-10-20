@@ -39,7 +39,7 @@ public class TokenNetworkTests
                     words.Add(Filler[random.Next(6)]);
                 }
 
-                return (IReadOnlyList<string?>)[string.Join(' ', words.OrderBy(_ => random.Next())), good ? "1" : "0"];
+                return new string?[] { string.Join(' ', words.OrderBy(_ => random.Next())), good ? "1" : "0" };
             })]);
     }
 

@@ -276,7 +276,7 @@ public sealed class TrainedEnsemble
         var parts = report.Parts.Distinct().ToArray();
         IReadOnlyList<IReadOnlyList<PartPredictions>> said =
         [
-            .. Members.Select(member => (IReadOnlyList<PartPredictions>)[.. parts.Select(part => member.Predicted(Prepared.Batch(part, TrainedNetwork.FeatureNeeds), chunking))]),
+            .. Members.Select(member => parts.Select(part => member.Predicted(Prepared.Batch(part, TrainedNetwork.FeatureNeeds), chunking)).ToArray()),
         ];
 
         return Prepared.MeasureEnsemble(said, Blend, interval);
@@ -401,7 +401,7 @@ public static class EnsembleExtensions
                 {
                     var chunking = new Chunking((engines ?? new Engines()).Named(members[at].Engine), members[at].Batch);
 
-                    return (IReadOnlyList<PartPredictions>)[.. named.Select(part => network.Predicted(prepared.Batch(part, TrainedNetwork.FeatureNeeds), chunking))];
+                    return named.Select(part => network.Predicted(prepared.Batch(part, TrainedNetwork.FeatureNeeds), chunking)).ToArray();
                 }),
             ];
 

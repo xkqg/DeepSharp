@@ -29,12 +29,12 @@ public class EnsembleChartsTests
             .Build()
             .Run();
 
-        return prepared.MeasureEnsemble([.. chances.Select(chance => (IReadOnlyList<PartPredictions>)[.. ThreeParts.Select(part =>
+        return prepared.MeasureEnsemble([.. chances.Select(chance => ThreeParts.Select(part =>
         {
             var batch = prepared.Batch(part);
 
             return new PartPredictions(batch, [.. batch.Features.Select(_ => new[] { chance })]);
-        })])]);
+        }).ToArray())]);
     }
 
     [Fact]
