@@ -1,0 +1,181 @@
+{
+  "layers": {
+    "dense": [
+      "alpha",
+      "bias",
+      "biasStart",
+      "l1",
+      "l2",
+      "learns",
+      "maxNorm",
+      "rank",
+      "rateShare",
+      "units",
+      "weights"
+    ],
+    "relu": [],
+    "tanh": [],
+    "sigmoid": [],
+    "dropout": [
+      "rate"
+    ],
+    "batchNorm": [
+      "epsilon",
+      "learns",
+      "momentum",
+      "rateShare",
+      "scale",
+      "shift"
+    ],
+    "layerNorm": [
+      "epsilon",
+      "learns",
+      "rateShare",
+      "scale",
+      "shift"
+    ],
+    "gelu": [
+      "approximate"
+    ],
+    "silu": [],
+    "mish": [],
+    "leakyRelu": [
+      "negativeSlope"
+    ],
+    "prelu": [
+      "eachFeature"
+    ],
+    "elu": [
+      "alpha"
+    ],
+    "selu": [],
+    "softmax": [],
+    "rmsNorm": [
+      "epsilon",
+      "learns",
+      "rateShare",
+      "scale"
+    ],
+    "periodic": [
+      "frequencies",
+      "lite",
+      "sigma",
+      "width"
+    ],
+    "randomFlip": [
+      "horizontal",
+      "seed",
+      "vertical"
+    ],
+    "randomCrop": [
+      "pad",
+      "seed"
+    ],
+    "gaussianNoise": [
+      "seed",
+      "spread"
+    ],
+    "flatten": [],
+    "tokenEmbedding": [
+      "vocabulary",
+      "width"
+    ],
+    "embedding": [
+      "column",
+      "width"
+    ]
+  },
+  "optimizers": {
+    "sgd": [
+      "dampening",
+      "momentum",
+      "nesterov",
+      "rate",
+      "weightDecay"
+    ],
+    "adam": [
+      "amsgrad",
+      "epsilon",
+      "firstMoment",
+      "rate",
+      "secondMoment",
+      "weightDecay"
+    ],
+    "adamw": [
+      "amsgrad",
+      "epsilon",
+      "firstMoment",
+      "rate",
+      "secondMoment",
+      "weightDecay"
+    ],
+    "rmsprop": [
+      "alpha",
+      "centered",
+      "epsilon",
+      "momentum",
+      "rate",
+      "weightDecay"
+    ],
+    "nadam": [
+      "epsilon",
+      "firstMoment",
+      "momentumDecay",
+      "rate",
+      "secondMoment",
+      "weightDecay"
+    ]
+  },
+  "losses": {
+    "meanSquaredError": [],
+    "crossEntropy": [
+      "smoothing"
+    ],
+    "binaryCrossEntropy": [
+      "smoothing"
+    ],
+    "earthMoversDistance": [],
+    "meanAbsoluteError": [],
+    "huber": [
+      "delta"
+    ],
+    "quantile": [
+      "quantile"
+    ],
+    "focal": [
+      "alpha",
+      "gamma"
+    ],
+    "hinge": [],
+    "poisson": [
+      "epsilon",
+      "logInput"
+    ]
+  },
+  "schedules": {
+    "constant": [],
+    "stepDecay": [
+      "every",
+      "factor"
+    ],
+    "exponentialDecay": [
+      "factor"
+    ],
+    "cosineDecay": [
+      "epochs",
+      "minimum"
+    ],
+    "linearWarmup": [
+      "epochs",
+      "start"
+    ]
+  },
+  "stopping": {
+    "never": [],
+    "patience": [
+      "best",
+      "least",
+      "patience"
+    ]
+  }
+}

@@ -1,0 +1,292 @@
+{
+  "version": 2,
+  "network": {
+    "version": 2,
+    "layers": {
+      "kind": "stack",
+      "layers": [
+        {
+          "kind": "dense",
+          "inputs": 7,
+          "outputs": 8
+        },
+        {
+          "kind": "relu"
+        },
+        {
+          "kind": "dense",
+          "inputs": 8,
+          "outputs": 1
+        }
+      ]
+    },
+    "parameters": {
+      "0.weight": {
+        "shape": [
+          7,
+          8
+        ],
+        "values": [
+          -0.019336937,
+          -0.1805055,
+          -0.19118805,
+          -0.12724465,
+          -0.62273085,
+          -0.50948715,
+          -0.24602345,
+          0.27219328,
+          0.008024138,
+          -0.04129729,
+          -0.19578226,
+          0.508929,
+          -0.046795636,
+          -0.115005195,
+          -0.22828233,
+          0.08921792,
+          0.020633591,
+          -0.21766964,
+          -0.12143964,
+          0.12188907,
+          -0.041113734,
+          -0.100442715,
+          -0.12542194,
+          0.20563832,
+          -0.27018538,
+          -0.09342548,
+          -0.14092046,
+          0.17678085,
+          -0.06410102,
+          -0.08005031,
+          -0.03316005,
+          -0.19312358,
+          -0.33769158,
+          0.04625631,
+          0.023557147,
+          -0.24736844,
+          -0.25448126,
+          -0.2242049,
+          -0.16293348,
+          0.15398005,
+          -0.28683984,
+          0.14606673,
+          0.30967966,
+          -0.30413574,
+          -0.08464049,
+          -0.083641976,
+          -0.30622622,
+          -0.022788458,
+          0.14671129,
+          -0.3014021,
+          0.3353697,
+          0.2652268,
+          0.26496616,
+          0.3357258,
+          -0.29754254,
+          0.25321832
+        ]
+      },
+      "0.bias": {
+        "shape": [
+          8
+        ],
+        "values": [
+          0.048497014,
+          -0.10944879,
+          -0.17106815,
+          0.20202608,
+          -0.008322325,
+          -0.022566875,
+          -0.07937204,
+          -0.3545037
+        ]
+      },
+      "2.weight": {
+        "shape": [
+          8,
+          1
+        ],
+        "values": [
+          0.05603436,
+          -0.10247323,
+          -0.17567071,
+          0.3151335,
+          -0.07663482,
+          -0.12240527,
+          0.0067439205,
+          -0.22834425
+        ]
+      },
+      "2.bias": {
+        "shape": [
+          1
+        ],
+        "values": [
+          0.12592618
+        ]
+      }
+    },
+    "state": {},
+    "loss": {
+      "kind": "meanSquaredError"
+    },
+    "trainedOn": {
+      "features": [
+        "Animals",
+        "Farm_A",
+        "Farm_B",
+        "Farm_C",
+        "Farm_D",
+        "Farm_other",
+        "Farm_was_missing"
+      ],
+      "answers": [
+        "Age"
+      ],
+      "output": "target",
+      "trainedBehind": "926071bf6e3f0230b277d3e16132a9764fa7a055f1dae8d433d0ea475ca0b55d",
+      "seed": 20261017,
+      "epoch": 2,
+      "unvaried": {
+        "Farm_other": 0,
+        "Farm_was_missing": 0
+      }
+    }
+  },
+  "pipeline": {
+  "version": 12,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.13.0.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "Farm",
+          "kind": "category",
+          "optional": false
+        },
+        {
+          "name": "Animals",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Age",
+          "kind": "number",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "step": "scale.given",
+      "column": "Animals",
+      "lowest": 15000,
+      "highest": 25000,
+      "lands": "signed"
+    },
+    {
+      "step": "split.atRandom",
+      "train": 0.5,
+      "validation": 0.1,
+      "test": 0.2,
+      "predict": 0,
+      "calibration": 0.2,
+      "seed": 5,
+      "testSeed": 9
+    },
+    {
+      "step": "target",
+      "column": "Age"
+    },
+    {
+      "step": "encode.categories",
+      "as": "onehot",
+      "unseen": "reserve"
+    },
+    {
+      "step": "evidence.report",
+      "metrics": [
+        "mae",
+        "coverage",
+        "width"
+      ],
+      "parts": [
+        "validation",
+        "test"
+      ],
+      "shown": [
+        "numbers"
+      ]
+    },
+    {
+      "step": "learn.network",
+      "layers": [
+        {
+          "kind": "dense",
+          "units": 8
+        },
+        {
+          "kind": "relu"
+        },
+        {
+          "kind": "dense",
+          "units": 1
+        }
+      ],
+      "optimizer": {
+        "kind": "adam",
+        "rate": 0.01,
+        "firstMoment": 0.9,
+        "secondMoment": 0.999,
+        "epsilon": 1E-08
+      },
+      "loss": {
+        "kind": "meanSquaredError"
+      },
+      "stopping": {
+        "kind": "never"
+      },
+      "engine": "light",
+      "seed": 20261017,
+      "epochs": 3,
+      "batch": 16
+    }
+  ],
+  "fitted": [
+    {
+      "step": "split.atRandom",
+      "prefix": "620667e9a13eaa33e59dca4b8e9aa6c62df8a9bb2fb6c2263740fee5af86a9a9",
+      "learned": {
+        "rows.calibration": 72,
+        "rows.predict": 0,
+        "rows.test": 72,
+        "rows.train": 180,
+        "rows.validation": 36,
+        "digest": "769e6c6b81a2d0a85bb3ad62a52139bcc7368a8666a2bb550aead4d05278a2de"
+      }
+    },
+    {
+      "step": "encode.categories",
+      "prefix": "dee530b786e0e10db72a42720a7a50b2687b8d39bb8e47f558b056c6c333d9bd",
+      "learned": {
+        "Farm": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ]
+      }
+    }
+  ]
+},
+  "interval": {
+    "alpha": 0.1,
+    "rows": 72,
+    "margins": [
+      39.65265941619873
+    ]
+  }
+}
