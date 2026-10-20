@@ -76,7 +76,7 @@ public class OnnxRefusalTests
 
     private const string LastConv = "/0/0.7/Conv";
 
-    private const string Operators = "an ONNX graph is read here when each of its nodes is a Gemm, MatMul, Add, Conv, ConvTranspose, Pad, MaxPool, AveragePool, GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape, Relu, Tanh, Sigmoid, Gelu, LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization, RMSNormalization or Softmax, or an Identity, a Cast, a Transpose or a Constant that hands a value on.";
+    private const string Operators = "an ONNX graph is read here when each of its nodes is a Gemm, MatMul, Add, Conv, ConvTranspose, Pad, MaxPool, AveragePool, GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape, Relu, Tanh, Sigmoid, Gelu, LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization, RMSNormalization or Softmax, or an Identity, a Cast, a Transpose or a Constant that hands a value on, or a Concat, a Split or a Slice that joins or cuts columns.";
 
     private const string Pads = "and a window here pads every side alike, or as SAME_UPPER, TensorFlow's 'same'.";
 
@@ -90,7 +90,9 @@ public class OnnxRefusalTests
 
     private const string Largest = "and a max pooling here gives the largest values alone.";
 
-    private const string Stack = "and a network here is a stack: each layer takes the value the layer before it made";
+    private const string Unmade = "which is neither the input nor a value a node before it made.";
+
+    private const string Several = "and a Reshape here works on one: an Add takes two, to add them up, and a Concat any number, to lay them side by side.";
 
     private const string Unsqueezed = $"node 'node_unsqueeze' (Unsqueeze): 'Unsqueeze' is no operator a network here is built of: {Operators}";
 
@@ -109,13 +111,13 @@ public class OnnxRefusalTests
         $"node '{Batches}batch_normalization_1/batchnorm/add_1' (Add): it adds 'const_fold_opt__54' to what the node before it made, and an Add is read here as the bias of the MatMul before it.",
         $"node '{Batches}batch_normalization_1_2/batchnorm/mul_1' (Mul): 'Mul' is no operator a network here is built of: {Operators}",
         $"node '{Batches}batch_normalization_1_2/batchnorm/add_1' (Add): it adds 'const_fold_opt__56' to what the node before it made, and an Add is read here as the bias of the MatMul before it.",
-        $"node 'Shape__46' (Shape): it takes '{Batches}batch_normalization_1_2/batchnorm/add_1:0', {Stack}, 'Transpose__40:0'.",
+        $"node 'Shape__46' (Shape): 'Shape' is no operator a network here is built of: {Operators}",
         $"node 'Gather__49' (Gather): 'Gather' is no operator a network here is built of: {Operators}",
         $"node '{Batches}flatten_1_1/Shape__14' (Cast): it turns what the node before it made into INT32, and a network here works in single-precision numbers throughout.",
-        $"node '{Batches}flatten_1_1/strided_slice' (Slice): 'Slice' is no operator a network here is built of: {Operators}",
-        $"node '{Batches}flatten_1_1/Reshape/shape_Concat__24' (Concat): 'Concat' is no operator a network here is built of: {Operators}",
+        $"node '{Batches}flatten_1_1/strided_slice' (Slice): it cuts axis 0, and a network here cuts columns out of what it is handed: the last axis, a row's second or an image's channels.",
+        $"node '{Batches}flatten_1_1/Reshape/shape_Concat__24' (Concat): it lays side by side two values or more that nodes made, and no value the graph holds.",
         $"node '{Batches}flatten_1_1/Reshape__25' (Cast): it turns what the node before it made into INT64, and a network here works in single-precision numbers throughout.",
-        $"node '{Batches}flatten_1_1/Reshape' (Reshape): it takes 'Transpose__40:0' and '{Batches}flatten_1_1/Reshape__25:0', 2 values the graph works out, {Stack}, '{Batches}flatten_1_1/Reshape__25:0'.",
+        $"node '{Batches}flatten_1_1/Reshape' (Reshape): it takes 'Transpose__40:0' and '{Batches}flatten_1_1/Reshape__25:0', 2 values the graph works out, {Several}",
         $"node '{Batches}batch_normalization_2_1/batchnorm/mul_1' (Mul): 'Mul' is no operator a network here is built of: {Operators}",
         $"node '{Batches}batch_normalization_2_1/batchnorm/add_1' (Add): it adds '{Batches}batch_normalization_2_1/batchnorm/sub:0' to what the node before it made, and an Add is read here as the bias of the MatMul before it.",
     ];
@@ -124,7 +126,7 @@ public class OnnxRefusalTests
     {
         // What the graph takes and gives.
         ["two inputs"] = new(Titanic, model => model.Graph.Input.Add(new ValueInfoProto { Name = "extra", Type = model.Graph.Input[0].Type }), $"graph 'main_graph': it takes 2 values, {NoInput}"),
-        ["no input"] = new(Titanic, model => model.Graph.Input.Clear(), $"graph 'main_graph': it takes 0 values, {NoInput}{Environment.NewLine}node '/0/Gemm' (Gemm): it takes 'passengers', {Stack}, ''."),
+        ["no input"] = new(Titanic, model => model.Graph.Input.Clear(), $"graph 'main_graph': it takes 0 values, {NoInput}{Environment.NewLine}node '/0/Gemm' (Gemm): it takes 'passengers', {Unmade}"),
         ["an input of doubles"] = new(Titanic, model => model.Graph.Input[0].Type.TensorType.ElemType = 11, "input 'passengers': it takes DOUBLE values, and a network here takes single-precision numbers, FLOAT."),
         ["an input that is no tensor"] = new(Titanic, model => model.Graph.Input[0].Type = new TypeProto { SequenceType = new TypeProto.Types.Sequence() }, "input 'passengers': it takes UNDEFINED values, and a network here takes single-precision numbers, FLOAT."),
         ["an input of no type"] = new(Titanic, model => model.Graph.Input[0].Type = null, "input 'passengers': it takes UNDEFINED values, and a network here takes single-precision numbers, FLOAT."),
@@ -153,8 +155,8 @@ public class OnnxRefusalTests
         ["a value named twice"] = new(Titanic, model => model.Graph.Initializer.Add(OnnxFixtures.Floats("0.bias", [16], new float[16])), "initializer '0.bias': the graph holds a value of that name already."),
 
         // A branch, and what no network here is built of.
-        ["a value taken again"] = new(Titanic, model => model.Node("/2/Gemm").Input[0] = "passengers", $"node '/2/Gemm' (Gemm): it takes 'passengers', {Stack}, '/1/Relu_output_0'."),
-        ["no value taken"] = new(Titanic, model => model.Node("/1/Relu").Input[0] = "0.bias", $"node '/1/Relu' (Relu): it takes none of the values the graph works out, {Stack}, '/0/Gemm_output_0'."),
+        ["a value taken again"] = new(Titanic, model => model.Node("/2/Gemm").Input[0] = "passengers", "graph 'main_graph': The step '1' is taken by no later step, so its work would be made and never used: only the last step is what the network gives. (Parameter 'asked')"),
+        ["no value taken"] = new(Titanic, model => model.Node("/1/Relu").Input[0] = "0.bias", $"node '/1/Relu' (Relu): it takes none of the values the graph works out, which are its input and what a node before it made."),
         ["an operator not read"] = new(Titanic, model => model.Node("/1/Relu").OpType = "HardSigmoid", $"node '/1/Relu' (HardSigmoid): 'HardSigmoid' is no operator a network here is built of: {Operators}"),
         ["an operator of another domain"] = new(Titanic, model => model.Node("/1/Relu").Domain = "com.microsoft", $"node '/1/Relu' (com.microsoft.Relu): 'com.microsoft.Relu' is no operator a network here is built of: {Operators}"),
         ["an unnamed node"] = new(Titanic, model =>
@@ -185,7 +187,7 @@ public class OnnxRefusalTests
             node.Input[0] = node.Input[1];
             node.Input[1] = rows;
         }, "node '/MatMul' (MatMul): its right side, '/Cast_2_output_0', is no value the graph holds, and a dense layer here multiplies each row by weights it holds."),
-        ["a matmul of two values"] = new(Keras, model => model.Node("/MatMul").Input[1] = "keras_tensor", $"node '/MatMul' (MatMul): it takes '/Cast_2_output_0' and 'keras_tensor', 2 values the graph works out, {Stack}, '/Cast_2_output_0'."),
+        ["a matmul of two values"] = new(Keras, model => model.Node("/MatMul").Input[1] = "keras_tensor", $"node '/MatMul' (MatMul): it takes 'keras_tensor', {Unmade}"),
         ["a matmul by weights that are no matrix"] = new(Keras, model =>
         {
             model.Initializer("onnx::MatMul_24").Dims.Clear();
@@ -202,7 +204,7 @@ public class OnnxRefusalTests
             model.Graph.Node.Insert(model.Graph.Node.IndexOf(model.Node("/Cast_6")), OnnxFixtures.NodeOf("Add", "extra", ["/Relu_output_0", "onnx::Add_25"], "shifted"));
             model.Node("/Cast_6").Input[0] = "shifted";
         }, "node 'extra' (Add): it adds 'onnx::Add_25' to what the node before it made, and an Add is read here as the bias of the MatMul before it."),
-        ["an add of two values"] = new(Keras, model => model.Node("/Add").Input[1] = "keras_tensor", $"node '/Add' (Add): it takes '/Cast_3_output_0' and 'keras_tensor', 2 values the graph works out, {Stack}, '/Cast_3_output_0'."),
+        ["an add of two values"] = new(Keras, model => model.Node("/Add").Input[1] = "keras_tensor", $"node '/Add' (Add): it takes 'keras_tensor', {Unmade}"),
 
         // A transpose, which is read only as moving an image's channels after the batch or last.
         ["a transpose of rows"] = new(Keras, model =>
@@ -366,8 +368,8 @@ public class OnnxRefusalTests
         }, string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed)),
         ["a pooling of a series between an unsqueeze and a squeeze that drops its axes"] = new(SeriesReduced, model => model.Node("node_mean").SetWhole("keepdims", 0), string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed)),
         ["an unsqueezed value the graph gives too"] = new(SeriesReduced, model => model.Graph.Output.Add(new ValueInfoProto { Name = "unsqueeze" }), string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed, "graph 'main_graph': it gives 2 values, and a network here gives one.")),
-        ["a reduce that takes another value than the unsqueeze made"] = new(SeriesReduced, model => model.Node("node_mean").Input[0] = "conv1d_1", string.Join(Environment.NewLine, Unsqueezed, $"node 'node_mean' (ReduceMean): it takes 'conv1d_1', {Stack}, 'unsqueeze'.", Squeezed)),
-        ["a squeeze that takes another value than the reduce made"] = new(SeriesReduced, model => model.Node("node_squeeze").Input[0] = "unsqueeze", string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), $"node 'node_squeeze' (Squeeze): it takes 'unsqueeze', {Stack}, 'mean'.")),
+        ["a reduce that takes another value than the unsqueeze made"] = new(SeriesReduced, model => model.Node("node_mean").Input[0] = "conv1d_1", string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed)),
+        ["a squeeze that takes another value than the reduce made"] = new(SeriesReduced, model => model.Node("node_squeeze").Input[0] = "unsqueeze", string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed)),
         ["a pooling of a series with no squeeze after it"] = new(SeriesReduced, model => model.Node("node_squeeze").OpType = "Relu", string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"))),
         ["a reduced value the graph gives too"] = new(SeriesReduced, model => model.Graph.Output.Add(new ValueInfoProto { Name = "mean" }), string.Join(Environment.NewLine, Unsqueezed, Reduces("node_mean", "ReduceMean", "[-1, -2]", 3, "2"), Squeezed, "graph 'main_graph': it gives 2 values, and a network here gives one.")),
         ["a pooling of a series cut off before its squeeze"] = new(SeriesReduced, model =>
@@ -463,7 +465,7 @@ public class OnnxRefusalTests
             node.OpType = "Reshape";
             node.Unset("axis");
             node.Input.Add("target");
-        }, $"node 'shape' (Constant): its 'value' is written as INTS, which is not what ONNX writes there.{Environment.NewLine}node '/4/Flatten' (Reshape): it takes '/3/Conv_output_0' and 'target', 2 values the graph works out, {Stack}, '/3/Conv_output_0'."),
+        }, $"node 'shape' (Constant): its 'value' is written as INTS, which is not what ONNX writes there.{Environment.NewLine}node '/4/Flatten' (Reshape): it takes 'target', {Unmade}"),
         ["a reshape into rows of another length"] = new(Images, model => Reshaped(model, OnnxFixtures.Wholes("target", -1, 30)), "node '/4/Flatten' (Reshape): it lays each example out as a row of 30 values, and each example reaching it holds 36."),
         ["a target of numbers"] = new(Images, model => Reshaped(model, OnnxFixtures.Floats("target", [2], -1, 36)), "node '/4/Flatten' (Reshape): its target, 'target', is written as FLOAT, and ONNX writes one as INT64."),
         ["a target cut short"] = new(Images, model =>
@@ -484,7 +486,7 @@ public class OnnxRefusalTests
             node.OpType = "Reshape";
             node.Unset("axis");
             node.Input.Add("target");
-        }, $"node 'shape' (Constant): it holds its value as 'value_ints', and a constant is read here when it holds a tensor, 'value'.{Environment.NewLine}node '/4/Flatten' (Reshape): it takes '/3/Conv_output_0' and 'target', 2 values the graph works out, {Stack}, '/3/Conv_output_0'."),
+        }, $"node 'shape' (Constant): it holds its value as 'value_ints', and a constant is read here when it holds a tensor, 'value'.{Environment.NewLine}node '/4/Flatten' (Reshape): it takes 'target', {Unmade}"),
 
         // A softmax.
         ["a softmax along another axis"] = new(Titanic, model => Softened(model, 0), "node 'softmax' (Softmax): it takes shares along axis 0, and a softmax here shares out the values of a row, or the channels of an image.") { Loss = () => new CrossEntropy() },
@@ -538,15 +540,6 @@ public class OnnxRefusalTests
                 "'5.weight' is a 48x5 slot here, and is written as 36x5.",
             ],
             refused.Faults.Select(fault => fault.Message));
-    }
-
-    [Fact]
-    public void ALayerWhoseInputIsAddedBackAfterIt_IsABranch_RefusedAtTheNodeWherePathsMeet()
-    {
-        using var graph = OnnxFixtures.Open("onnx-branch.onnx");
-        var refused = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(graph));
-
-        Assert.Equal($"node 'node_add_6' (Add): it takes 'relu' and 'passengers', 2 values the graph works out, {Stack}, 'relu'.", refused.Message);
     }
 
     [Theory]

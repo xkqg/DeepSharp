@@ -45,7 +45,8 @@ namespace DeepSharp.Import.Onnx;
 /// </para>
 /// <para>
 /// What is read: a graph taking one batch — of rows, of series, of images or of volumes — and giving one, each node
-/// taking the value the node before it made, of the operators Gemm, MatMul, Add, Conv, MaxPool, AveragePool,
+/// taking the value of the node that made what it names — the node before it, or an earlier one, so a value can be added back
+/// after the layers that worked on it — of the operators Gemm, MatMul, Add, Conv, MaxPool, AveragePool,
 /// GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape,
 /// Relu, Tanh, Sigmoid, Gelu, LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization as operator
 /// set 21 has it — a scale and a shift for each channel, not for each group as the sets 18 to 20 have them — RMSNormalization and Softmax, and the Identity, Cast, Transpose and Constant nodes that hand values on. The spellings
@@ -65,10 +66,17 @@ namespace DeepSharp.Import.Onnx;
 /// Softmax before a <see cref="CrossEntropy"/>, is lifted into that loss, which applies it itself.
 /// </para>
 /// <para>
-/// What is refused, at the node that says it and every such node at once: a branch — a node taking another value than the
-/// one the node before it made, or two — and any other operator, among them every other Reduce, any Unsqueeze and Squeeze
-/// but those round the pooling of a series, the Mul tf2onnx writes a batch normalisation as, and the Shape, Gather, Slice and
-/// Concat it works a flatten's target out with for batches of any length; a ReduceMean or ReduceMax over any other axes than
+/// Where paths meet, a node is a step that takes the steps that made its values: an Add of two values a sum of two steps, a
+/// Concat along the last axis of a row (an image's channels) the steps laid side by side, and a Split or a Slice along that axis
+/// the columns it cuts, each block of them a step of its own — with the width of what is cut stated by the graph's input or by a
+/// dense layer before it where the cut needs it. A step that nothing takes is refused, since its work would be made and never used.
+/// </para>
+/// <para>
+/// What is refused, at the node that says it and every such node at once: a node taking values no node made, or several that
+/// are no Add of two or Concat, and any other operator, among them every other Reduce, any Unsqueeze and Squeeze
+/// but those round the pooling of a series, the Mul tf2onnx writes a batch normalisation as, and the Shape and Gather it works a
+/// flatten's target out with for batches of any length; a Concat or a Split or a Slice along any axis but the last, or one that
+/// steps over columns; a ReduceMean or ReduceMax over any other axes than
 /// every place of each channel — the channels, the batch, some of the places only — or over none named, which would be every
 /// axis, the channels among them; a Gemm that scales or takes its input turned round; a MatMul by anything but weights the
 /// graph holds; an Add after anything but a MatMul, or of a bias of another width; a Cast

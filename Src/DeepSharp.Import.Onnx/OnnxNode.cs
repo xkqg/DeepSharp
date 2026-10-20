@@ -48,6 +48,9 @@ internal sealed class OnnxNode
     /// <summary>The value it gives: its first output, the only one a network here uses.</summary>
     public string Output => string.Concat(_node.Output.Take(1));
 
+    /// <summary>The names of the values it gives, in order; an output left out is empty.</summary>
+    public IReadOnlyList<string> Outputs => _node.Output;
+
     /// <summary>The name of the value it takes at a place; empty when it takes none there.</summary>
     public string Input(int at) => at < _node.Input.Count ? _node.Input[at] : string.Empty;
 

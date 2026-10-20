@@ -228,6 +228,27 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
     /// <summary>The steps, in the order they run, each with the name it goes by and the names of the steps it takes.</summary>
     public IReadOnlyList<PlacedStep> Steps => _steps;
 
+    /// <summary>The shape that reaches each step, a batch of one example: an example of nothing sent through the layers themselves.</summary>
+    /// <param name="each">The shape of one example, without the batch's axis.</param>
+    /// <returns>For each step in order, the shape of the work of the first step it takes — the one that reaches a layer that works on one, the first of those a join lays together.</returns>
+    /// <remarks>Worked out nowhere else than in the layers, on the light engine, so the shape each makes is the one it makes.</remarks>
+    public IReadOnlyList<Shape> ShapesReaching(Shape each)
+    {
+        var pass = Pass.Evaluation(new CpuBackend());
+        var made = new Dictionary<string, Tensor>(StringComparer.Ordinal) { [Step.Input] = Tensor.Zeros(new Shape([1, .. each.Axes])) };
+        var shapes = new List<Shape>(_steps.Length);
+
+        foreach (var step in _steps)
+        {
+            var taken = step.Takes.Select(name => made[name]).ToList();
+
+            shapes.Add(taken[0].Shape);
+            made[step.Name] = step.Layer.Taking(taken, pass);
+        }
+
+        return shapes;
+    }
+
     /// <inheritdoc />
     public static string Name => "stack";
 

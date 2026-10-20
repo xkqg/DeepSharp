@@ -35,6 +35,16 @@ internal enum Flow
 /// <param name="Lifted">Whether a series has one more axis of one place than it has, made by the Unsqueeze before the pooling that takes it.</param>
 internal readonly record struct Reaching(Flow Flow, long? Batch, int Axes, bool Lifted = false);
 
+/// <summary>How the values several nodes made become one step.</summary>
+internal enum Joining
+{
+    /// <summary>Added up, value by value.</summary>
+    Add,
+
+    /// <summary>Laid side by side along the last axis.</summary>
+    Concatenate,
+}
+
 /// <summary>A number a node holds for one slot of the layer it becomes, and how it is laid out for that slot.</summary>
 /// <param name="Slot">The slot's name in the layer: <c>weight</c>, <c>running_var</c>.</param>
 /// <param name="Held">The number, as the graph holds it.</param>
@@ -70,6 +80,12 @@ internal readonly record struct OnnxLayer(Action<Sequential>? Words, Flow After)
 
     /// <summary>The words a MatMul is written as when no Add comes after it: a dense layer that adds no bias; nothing for any other layer.</summary>
     public Action<Sequential>? Bare { get; init; }
+
+    /// <summary>How the values several nodes made become one step, when the node joins them; nothing for a node that works on one value.</summary>
+    public Joining? Join { get; init; }
+
+    /// <summary>How wide a row of the value it gives is, when the node states it: a dense layer's units.</summary>
+    public int? Width { get; init; }
 
     /// <summary>
     /// The border a convolution's or a pooling's pads write out, one side at a time, read as TensorFlow's 'same': held after
@@ -207,6 +223,7 @@ internal sealed class GemmKind : OnnxKind
 
         return new OnnxLayer(description => description.Dense(units, start), Flow.Rows)
         {
+            Width = units,
             Numbers = WithBias(
                 node,
                 numbers,
@@ -247,6 +264,7 @@ internal sealed class MatMulKind : OnnxKind
 
         return new OnnxLayer(description => description.Dense(units), Flow.Rows)
         {
+            Width = units,
             Numbers = [new LayerNumber("weight", weights, Laying.AsWritten) { AlongFlattenedImage = reaching.Flow == Flow.FlattenedImages }],
             Unbiased = units,
             Bare = description => description.Dense(units, new Beginning { WithoutBias = true }),
