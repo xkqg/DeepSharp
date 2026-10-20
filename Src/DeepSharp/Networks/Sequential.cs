@@ -371,7 +371,14 @@ public sealed partial class Sequential
     {
         ArgumentNullException.ThrowIfNull(inner);
 
-        return inner._words.Count == 0 ? throw new InvalidOperationException(NoLayers) : Append(new BlockWord(new Sequential(inner)));
+        if (inner._words.Count == 0)
+        {
+            throw new InvalidOperationException(NoLayers);
+        }
+
+        var held = new Sequential(inner);
+
+        return Append(new BlockWord(_ => held));
     }
 
     /// <summary>
@@ -390,23 +397,32 @@ public sealed partial class Sequential
     /// Every word is lowered, a last activation as well: it is <see cref="Compile"/> that leaves out one the loss applies
     /// itself, since only the loss says which that is.
     /// </remarks>
-    public LayerStack Lower(Shape input, RandomStream stream) => Lowered(input, stream, string.Empty);
+    public LayerStack Lower(Shape input, RandomStream stream) => Lowered(input, stream, string.Empty, null);
+
+    /// <summary>Lowers a description that is a block onto a stack of layers for examples of the given shape and the mask of their padding.</summary>
+    /// <param name="input">The shape of one example, without the batch's axis.</param>
+    /// <param name="mask">The shape of the mask of one example: a one for each step that takes part, a nought for each that is padding.</param>
+    /// <param name="stream">The stream the layers' starting values are drawn from: <c>initialise:</c> and the layer's place.</param>
+    /// <returns>The layers, a stack that takes the mask as its second take and whose steps name it <see cref="Step.Mask"/>.</returns>
+    /// <exception cref="ArgumentException">The shape holds no value, or an example of it, or the mask, cannot reach a layer.</exception>
+    /// <exception cref="InvalidOperationException">The description holds no layer.</exception>
+    public LayerStack Lower(Shape input, Shape mask, RandomStream stream) => Lowered(input, stream, string.Empty, mask);
 
     // The description lowered, each layer that learns starting from the draws of its place: the place alone, or the place of the block
     // it stands in and then its own, so a layer's start moves with nothing a name or another layer says.
-    private LayerStack Lowered(Shape input, RandomStream stream, string within)
+    private LayerStack Lowered(Shape input, RandomStream stream, string within, Shape? mask)
     {
         ArgumentNullException.ThrowIfNull(stream);
 
         var steps = new List<Step>(_words.Count);
 
-        foreach (var (place, visit) in Resolve(input).Select((visit, place) => (place, visit)))
+        foreach (var (place, visit) in Resolve(input, mask).Select((visit, place) => (place, visit)))
         {
             var purpose = string.Create(CultureInfo.InvariantCulture, $"initialise:{within}{place}");
             var layer = visit.Word switch
             {
-                BlockWord block => block.Inner.Lowered(visit.Inputs[0], stream, string.Create(CultureInfo.InvariantCulture, $"{within}{place}.")),
-                EveryStepWord every => new EveryStep(every.Inner.Lowered(every.EachStep(visit.Inputs[0]), stream, string.Create(CultureInfo.InvariantCulture, $"{within}{place}."))),
+                BlockWord block => block.Builds(visit.Inputs[0]).Lowered(visit.Inputs[0], stream, string.Create(CultureInfo.InvariantCulture, $"{within}{place}."), visit.Inputs.Length > 1 ? visit.Inputs[1] : null),
+                EveryStepWord every => new EveryStep(every.Inner.Lowered(every.EachStep(visit.Inputs[0]), stream, string.Create(CultureInfo.InvariantCulture, $"{within}{place}."), null)),
                 IJoinWord join => join.Make(visit.Inputs),
                 var word => word.Make(visit.Inputs[0], stream.Draw(purpose, 0, 0)),
             };
@@ -426,7 +442,7 @@ public sealed partial class Sequential
     /// <param name="schedule">How the optimizer's rate changes from epoch to epoch; it stays as it is, unless said.</param>
     /// <returns>
     /// The compiled network. Its layers are built at its first fit, from the shape of the rows it learns from — or the input
-    /// stated — and the run's seed, exactly as <see cref="Lower"/> builds them from a stream of that seed; a last word whose
+    /// stated — and the run's seed, exactly as <see cref="Lower(Shape, RandomStream)"/> builds them from a stream of that seed; a last word whose
     /// activation the loss applies itself is left out of them.
     /// </returns>
     /// <exception cref="InvalidOperationException">
@@ -462,7 +478,7 @@ public sealed partial class Sequential
             // built: lowered once under a stream of its own, which nothing keeps, so a mistake is found before a fit is asked for.
             if (Branches)
             {
-                _ = Lowered(stated, new RandomStream(0), string.Empty);
+                _ = Lowered(stated, new RandomStream(0), string.Empty, null);
             }
         }
 
@@ -471,11 +487,11 @@ public sealed partial class Sequential
 
     // Refuses a shape the description cannot be lowered at: one holding no value, another than its input says, or one an
     // example of which cannot reach one of its words.
-    private void Check(Shape input) => Resolve(input);
+    private void Check(Shape input, Shape? mask = null) => Resolve(input, mask);
 
     // What each word takes and hands on for an example of the given shape: the shape of what each step it takes made, and of what it
     // makes, worked out down the description and refused where an example cannot reach a word.
-    private List<Visited> Resolve(Shape input)
+    private List<Visited> Resolve(Shape input, Shape? mask = null)
     {
         global::DeepSharp.Networks.Reshape.RequireEach(input);
 
@@ -491,6 +507,11 @@ public sealed partial class Sequential
 
         var shapes = new Dictionary<string, Shape>(StringComparer.Ordinal) { [Step.Input] = input };
         var visits = new List<Visited>(_words.Count);
+
+        if (mask is { } maskShape)
+        {
+            shapes[Step.Mask] = maskShape;
+        }
 
         for (var place = 0; place < _words.Count; place++)
         {
@@ -520,7 +541,12 @@ public sealed partial class Sequential
                     string.Create(CultureInfo.InvariantCulture, $"This network cannot be lowered at {input}: word {place + 1}, {refusal}"), nameof(input));
             }
 
-            var after = word is IJoinWord joined ? joined.After(inputs) : word.After(inputs[0]);
+            var after = word switch
+            {
+                IJoinWord joined => joined.After(inputs),
+                IMaskedWord masks => masks.After(inputs),
+                _ => word.After(inputs[0]),
+            };
 
             shapes[name] = after;
             visits.Add(new Visited(name, said, word, inputs, after));
@@ -667,6 +693,9 @@ public sealed partial class Sequential
     {
         /// <summary>What is wrong with the work of the steps it takes — the series, and the mask when there is one; nothing when it can take them.</summary>
         string? Refusal(Shape[] inputs);
+
+        /// <summary>The shape of one example the word hands on, for the work of the steps it takes: that of the first, unless the word says otherwise.</summary>
+        Shape After(Shape[] inputs) => After(inputs[0]);
     }
 
     // A word that varies the rows while a network trains, and so stands before every other.
@@ -813,13 +842,20 @@ public sealed partial class Sequential
         public Layer Make(Shape each, Draws draws) => throw new InvalidOperationException("A layer run over every step is lowered with the stream of its description, at its own place.");
     }
 
-    private sealed record BlockWord(Sequential Inner) : IWord
+    private sealed record BlockWord(Func<Shape, Sequential> Builds) : IMaskedWord
     {
-        public string? Refusal(Shape each)
+        public string? Refusal(Shape each) => Refusal([each]);
+
+        public string? Refusal(Shape[] inputs)
         {
+            if (inputs.Length > 2)
+            {
+                return $"block, takes a series and, besides, the mask of its steps, and was given the work of {inputs.Length} steps.";
+            }
+
             try
             {
-                Inner.Check(each);
+                Builds(inputs[0]).Check(inputs[0], inputs.Length == 2 ? inputs[1] : null);
 
                 return null;
             }
@@ -829,7 +865,9 @@ public sealed partial class Sequential
             }
         }
 
-        public Shape After(Shape each) => Inner.Resolve(each)[^1].After;
+        public Shape After(Shape each) => Builds(each).Resolve(each)[^1].After;
+
+        public Shape After(Shape[] inputs) => Builds(inputs[0]).Resolve(inputs[0], inputs.Length == 2 ? inputs[1] : null)[^1].After;
 
         public Layer Make(Shape each, Draws draws) => throw new InvalidOperationException("A block is lowered with the stream of its description, at its own place.");
     }

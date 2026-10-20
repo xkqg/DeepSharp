@@ -26,6 +26,8 @@ public abstract class AttentionContract(ITensorBackend engine)
 
     public static TheoryData<string> MultiHeadCases { get; } = Named("multiHeadAttention");
 
+    public static TheoryData<string> EncoderCases { get; } = Named("encoder");
+
     public static TheoryData<string> Masked { get; } =
         [.. Fixture.GetProperty("cases").EnumerateArray().Where(each => each.GetProperty("kind").GetString() != "encoder" && each.GetProperty("mask").ValueKind != JsonValueKind.Null).Select(each => each.GetProperty("name").GetString()!)];
 
@@ -68,6 +70,46 @@ public abstract class AttentionContract(ITensorBackend engine)
         {
             AssertClose($"the gradient to {named.Path}", Values(made.GetProperty("slots").GetProperty(named.Path["attn.".Length..]).GetProperty("grad")), gradients[named.Slot.Value].Values);
         }
+    }
+
+    [Theory]
+    [MemberData(nameof(EncoderCases))]
+    public void AnEncoderBlockMadeOfWords_IsPyTorchsEncoderLayer_AndSoIsTheGradientToTheSeriesAndToEveryNumberItLearns(string name)
+    {
+        var made = Case(name);
+        var shape = new EncoderShape(made.GetProperty("heads").GetInt32(), made.GetProperty("feedForward").GetInt32())
+        {
+            NormFirst = made.GetProperty("normFirst").GetBoolean(),
+            Gelu = made.GetProperty("activation").GetString() == "gelu",
+            Masked = made.GetProperty("mask").ValueKind != JsonValueKind.Null,
+        };
+        var embed = made.GetProperty("embed").GetInt32();
+        var words = Sequential.EncoderWords(shape, embed);
+        var network = shape.Masked ? words.Lower(new Shape(5, embed), new Shape(5), new RandomStream(7)) : words.Lower(new Shape(5, embed), new RandomStream(7));
+        var block = network;
+
+        network.Load([.. made.GetProperty("slots").EnumerateObject().Select(slot => new SlotEntry(
+            slot.Name,
+            Tensor.From(Shape(slot.Value), Values(slot.Value.GetProperty("values"))),
+            "PyTorch"))]);
+
+        var recording = new RecordingBackend(_backend);
+        var x = Held(made, "x");
+        var pass = Pass.Evaluation(recording);
+        var output = Mask(made) is { } mask ? block.Forward(x, mask, pass) : block.Forward(x, pass);
+        var loss = recording.Mean(recording.Multiply(output, Coefficients(output.Shape)));
+        var gradients = recording.GradientsOf(loss, [x, .. network.Parameters().Select(parameter => parameter.Value)]);
+
+        Assert.Equal(Shape(made.GetProperty("output")), output.Shape);
+        AssertClose("the values", Values(made.GetProperty("output").GetProperty("values")), output.Values);
+        AssertClose("the gradient to the series", Values(made.GetProperty("gradInput").GetProperty("x")), gradients[x].Values);
+
+        foreach (var named in network.Slots())
+        {
+            AssertClose($"the gradient to {named.Path}", Values(made.GetProperty("slots").GetProperty(named.Path).GetProperty("grad")), gradients[named.Slot.Value].Values);
+        }
+
+        Assert.Equal(made.GetProperty("slots").EnumerateObject().Select(slot => slot.Name).Order(), network.Slots().Select(slot => slot.Path).Order());
     }
 
     [Theory]

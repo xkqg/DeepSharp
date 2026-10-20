@@ -13,7 +13,7 @@ namespace DeepSharp.Import.Keras;
 /// <para>
 /// The file describes its network as well as holding its numbers, so the network is built from that description: each
 /// layer it names is written in Keras's words and lowered onto a <see cref="LayerStack"/>, as
-/// <see cref="Sequential.Lower"/> lowers any description — a batch normalisation with Keras's epsilon and the complement
+/// <see cref="Sequential.Lower(DeepSharp.Tensors.Shape, RandomStream)"/> lowers any description — a batch normalisation with Keras's epsilon and the complement
 /// of its momentum, a window padded as TensorFlow's 'same' pads, the activation a Keras layer carries a layer of its own
 /// after it. The numbers need no turning round: a dense layer's weights are inputs by outputs, and a convolution's kernel,
 /// which Keras writes as a length for each side of its window — one along a series, rows and columns of an image, planes,

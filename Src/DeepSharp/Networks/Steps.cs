@@ -19,6 +19,12 @@ public readonly record struct Step(Layer Layer, string? Name = null, IReadOnlyLi
 {
     /// <summary>What a step calls the rows the network was handed.</summary>
     public const string Input = "input";
+
+    /// <summary>
+    /// What a step inside a block calls the mask the block was handed as its second take: a one for each step of a series that takes part, a
+    /// nought for each that is padding. It holds a dot, which no name a person gives can, so it is no step's name.
+    /// </summary>
+    public const string Mask = "input.mask";
 }
 
 /// <summary>A step of a stack with everything it says worked out: the name it goes by, its layer, and the names of the steps it takes.</summary>

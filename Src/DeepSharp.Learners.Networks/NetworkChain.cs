@@ -457,6 +457,26 @@ public sealed class NetworkDeclaration
     /// <remarks>It takes the ids the embedding reads, so it is written <c>.Unpadded().Takes("input")</c>; a recurrent layer takes it as its second step.</remarks>
     public NetworkDeclaration Unpadded() => Layer("unpadded");
 
+    /// <summary>Multi-head attention across the steps of a series, as PyTorch's <c>nn.MultiheadAttention</c> works it out.</summary>
+    /// <param name="heads">How many heads the width of a step is split into, each looking for itself; they divide the width.</param>
+    /// <param name="causal">Whether a step may look only at the steps up to its own; at every step, unless said.</param>
+    /// <param name="dropout">The share of the attention's weights left out while it trains; none, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>Given a mask as its second step — <c>.Takes("steps", "mask")</c> — a padding step is looked past. The network's file then names the eighth version of the network's part.</remarks>
+    public NetworkDeclaration MultiHeadAttention(int heads, bool causal = false, double dropout = 0) => Looking("multiHeadAttention", heads, causal, dropout);
+
+    /// <summary>Scaled dot-product attention with no number of its own, as PyTorch's <c>scaled_dot_product_attention</c> works it out.</summary>
+    /// <param name="heads">How many heads the width of a step is split into, each looking for itself; they divide the width.</param>
+    /// <param name="causal">Whether a step may look only at the steps up to its own; at every step, unless said.</param>
+    /// <param name="dropout">The share of the attention's weights left out while it trains; none, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>Given one step it looks across that series; given three — <c>.Takes("queries", "keys", "values")</c> — at keys and values apart from the queries; a mask of the steps that take part is the last step it is given.</remarks>
+    public NetworkDeclaration Attention(int heads, bool causal = false, double dropout = 0) => Looking("attention", heads, causal, dropout);
+
+    /// <summary>Adds to each step of a series the place it stands at, as the sine and cosine waves of 'Attention Is All You Need' write it.</summary>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration SinePositions() => Layer("sinePositions");
+
     /// <summary>A long short-term memory layer that reads each series a step at a time, as PyTorch's <c>nn.LSTM</c> does.</summary>
     /// <param name="hidden">How many numbers the state it carries along a series holds.</param>
     /// <param name="bothWays">Whether a second state reads each series back from its own end, the two laid side by side; one direction, unless said.</param>
@@ -476,6 +496,24 @@ public sealed class NetworkDeclaration
 
     // How a recurrent layer is stacked and what it gives: its directions, its layers, and every step or the last.
     private readonly record struct Stacking(bool BothWays, int Layers, bool Sequences);
+
+    // An attention layer: what is left at its default is left out of the layer, so a file that says nothing of it means the default.
+    private NetworkDeclaration Looking(string kind, int heads, bool causal, double dropout)
+    {
+        var layer = Kind(kind).Declared().With("heads", PartValue.Of(heads));
+
+        if (causal)
+        {
+            layer = layer.With("causal", PartValue.Of(true));
+        }
+
+        if (dropout > 0)
+        {
+            layer = layer.With("dropout", PartValue.Of(dropout));
+        }
+
+        return Layer(layer);
+    }
 
     // A recurrent layer: what is left at its default is left out of the layer, so a file that says nothing of it means the default.
     private NetworkDeclaration Recurrent(string kind, int hidden, Stacking stacking)

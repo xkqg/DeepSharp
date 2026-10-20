@@ -3167,6 +3167,136 @@
                 "additionalProperties": false
               },
               {
+                "description": "Attention across the steps of a series, as PyTorch's nn.MultiheadAttention works it out: each step made of the steps it looks at, in the shares their queries and keys give them; given a mask as its second step, a padding step is looked past.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "multiHeadAttention"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Mm][Uu][Ll][Tt][Ii][Hh][Ee][Aa][Dd][Aa][Tt][Tt][Ee][Nn][Tt][Ii][Oo][Nn])$"
+                      }
+                    ]
+                  },
+                  "heads": {
+                    "description": "How many heads the width of a step is split into, each looking for itself; they divide the width.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "causal": {
+                    "description": "Whether a step may look only at the steps up to its own; at every step, unless said.",
+                    "type": "boolean"
+                  },
+                  "dropout": {
+                    "description": "The share of the attention's weights left out at every pass while training, between nothing and one; none, unless said.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "heads"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Scaled dot-product attention with no number of its own, as PyTorch's scaled_dot_product_attention works it out: given one step it looks across that series; given three, at keys and values apart from the queries; a mask of the steps that take part is the last it is given.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "attention"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Aa][Tt][Tt][Ee][Nn][Tt][Ii][Oo][Nn])$"
+                      }
+                    ]
+                  },
+                  "heads": {
+                    "description": "How many heads the width of a step is split into, each looking for itself; they divide the width.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "causal": {
+                    "description": "Whether a step may look only at the steps up to its own; at every step, unless said.",
+                    "type": "boolean"
+                  },
+                  "dropout": {
+                    "description": "The share of the attention's weights left out at every pass while training, between nothing and one; none, unless said.",
+                    "type": "number",
+                    "minimum": 0,
+                    "maximum": 1.7976931348623157E+308
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "heads"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Adds to each step of a series the place it stands at, as the sine and cosine waves of 'Attention Is All You Need' write it, so attention can tell one step from another.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "sinePositions"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Ss][Ii][Nn][Ee][Pp][Oo][Ss][Ii][Tt][Ii][Oo][Nn][Ss])$"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
                 "description": "Adds up what the steps it takes made, value by value: a residual block's way of handing on what it was given beside what it made. It takes two steps or more, which must be of one shape.",
                 "properties": {
                   "kind": {

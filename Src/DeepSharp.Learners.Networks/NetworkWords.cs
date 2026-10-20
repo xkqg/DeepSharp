@@ -185,6 +185,14 @@ public static class NetworkWords
     private static readonly TrueOrFalseParameter SequencesKey =
         new("sequences", "Whether the layer makes its state at every step instead of at the last; the last, unless said.", false) { LeftOut = false };
 
+    private static readonly WholeNumberParameter HeadsKey = new("heads", "How many heads the width of a step is split into, each looking for itself; they divide the width.", 4) { AtLeast = 1 };
+
+    private static readonly TrueOrFalseParameter CausalKey =
+        new("causal", "Whether a step may look only at the steps up to its own; at every step, unless said.", false) { LeftOut = false };
+
+    private static readonly NumberParameter AttentionDropoutKey =
+        new("dropout", "The share of the attention's weights left out at every pass while training, between nothing and one; none, unless said.", 0) { AtLeast = 0, LeftOut = 0 };
+
     private static readonly TrueOrFalseParameter KeepStepsKey =
         new("keepSteps", "Whether each id keeps its own vector at its step, the padding nothing, instead of the average of the words'; the average, unless said.", false) { LeftOut = false };
 
@@ -253,6 +261,9 @@ public static class NetworkWords
         Step("unpadded", "The mask of a row of ids: a one where an id is a word, a nought where it is padding; a recurrent layer takes it as its second step, from the same ids the embedding reads.", []),
         Step("lstm", "A long short-term memory layer that reads each series a step at a time and carries a state along it, as PyTorch's nn.LSTM does; given a mask as its second step, a batch of series of unequal lengths is read each as it would be read alone.", [UnitsKey, RecurrentLayersKey, BothWaysKey, SequencesKey]),
         Step("gru", "A gated recurrent unit that reads each series a step at a time and carries a state along it, as PyTorch's nn.GRU does; given a mask as its second step, a batch of series of unequal lengths is read each as it would be read alone.", [UnitsKey, RecurrentLayersKey, BothWaysKey, SequencesKey]),
+        Step("multiHeadAttention", "Attention across the steps of a series, as PyTorch's nn.MultiheadAttention works it out: each step made of the steps it looks at, in the shares their queries and keys give them; given a mask as its second step, a padding step is looked past.", [HeadsKey, CausalKey, AttentionDropoutKey]),
+        Step("attention", "Scaled dot-product attention with no number of its own, as PyTorch's scaled_dot_product_attention works it out: given one step it looks across that series; given three, at keys and values apart from the queries; a mask of the steps that take part is the last it is given.", [HeadsKey, CausalKey, AttentionDropoutKey]),
+        Step("sinePositions", "Adds to each step of a series the place it stands at, as the sine and cosine waves of 'Attention Is All You Need' write it, so attention can tell one step from another.", []),
         Step("add", "Adds up what the steps it takes made, value by value: a residual block's way of handing on what it was given beside what it made. It takes two steps or more, which must be of one shape.", []),
         Step("concatenate", "Lays what the steps it takes made side by side along the last axis, in the order they are taken: a block that reads everything made before it. It takes two steps or more, alike in every axis but the last.", []),
         Step("columns", "Takes some of the columns of a row as a step of its own: how a network of two inputs reads each of them from the one row it is handed.", [ColumnFirstKey, ColumnCountKey]),
@@ -644,9 +655,16 @@ public static class NetworkWords
             ["unpadded"] = (described, _) => described.Unpadded(),
             ["lstm"] = (described, layer) => described.Lstm(layer.Whole(UnitsKey.Key), layer.YesOrNo(BothWaysKey.Key), layer.Whole(RecurrentLayersKey.Key), layer.YesOrNo(SequencesKey.Key)),
             ["gru"] = (described, layer) => described.Gru(layer.Whole(UnitsKey.Key), layer.YesOrNo(BothWaysKey.Key), layer.Whole(RecurrentLayersKey.Key), layer.YesOrNo(SequencesKey.Key)),
+            ["multiHeadAttention"] = (described, layer) => described.MultiHeadAttention(Looking(layer)),
+            ["attention"] = (described, layer) => described.Attention(Looking(layer)),
+            ["sinePositions"] = (described, _) => described.SinePositions(),
             [EmbeddingWord] = (_, layer) => throw new InvalidOperationException(
                 $"An embedding of '{layer.Text(EmbeddingColumnKey.Key)}' reads its block from the rows a pipeline hands over, so it is lowered where they are: train the network behind its pipeline."),
         };
+
+    // How a declared attention looks: its heads, whether it is causal, and the share of its weights it leaves out as it trains.
+    private static Attending Looking(PartDeclaration layer) =>
+        new(layer.Whole(HeadsKey.Key)) { Causal = layer.YesOrNo(CausalKey.Key), Dropout = layer.Number(AttentionDropoutKey.Key) };
 
     private static IReadOnlyDictionary<string, Func<PartDeclaration, Optimizer>> OptimizerWords { get; } =
         new Dictionary<string, Func<PartDeclaration, Optimizer>>(StringComparer.Ordinal)

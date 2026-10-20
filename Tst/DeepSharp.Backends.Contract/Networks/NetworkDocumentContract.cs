@@ -892,12 +892,12 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
 
         Assert.Equal(
             ["adam", "adamw", "adaptiveavgpool1d", "adaptiveavgpool2d", "adaptiveavgpool3d", "adaptivemaxpool1d", "adaptivemaxpool2d",
-             "adaptivemaxpool3d", "add", "avgpool1d", "avgpool2d", "avgpool3d", "batchNorm", "binaryCrossEntropy", "columns", "concatenate", "constant", "conv1d", "conv1dtranspose",
+             "adaptivemaxpool3d", "add", "attention", "avgpool1d", "avgpool2d", "avgpool3d", "batchNorm", "binaryCrossEntropy", "columns", "concatenate", "constant", "conv1d", "conv1dtranspose",
              "conv2d", "conv2dtranspose", "conv3d", "conv3dtranspose", "cosineDecay", "crossEntropy", "dense", "dropout", "earthMoversDistance",
              "elu", "embedding", "everyStep", "exponentialDecay", "flatten", "focal", "gaussianNoise", "gelu", "globalavgpool1d", "globalavgpool2d", "globalavgpool3d", "globalmaxpool1d",
              "globalmaxpool2d", "globalmaxpool3d", "groupNorm", "gru", "hinge", "huber", "instanceNorm", "layerNorm", "leakyRelu", "linearWarmup", "lstm",
-             "maxpool1d", "maxpool2d", "maxpool3d", "meanAbsoluteError", "meanSquaredError", "mish", "nadam", "pad1d", "pad2d", "pad3d", "periodic",
-             "poisson", "prelu", "quantile", "randomCrop", "randomFlip", "relu", "reshape", "rmsNorm", "rmsprop", "selu", "sgd", "sigmoid", "silu", "softmax", "spatialdropout1d",
+             "maxpool1d", "maxpool2d", "maxpool3d", "meanAbsoluteError", "meanSquaredError", "mish", "multiHeadAttention", "nadam", "pad1d", "pad2d", "pad3d", "periodic",
+             "poisson", "prelu", "quantile", "randomCrop", "randomFlip", "relu", "reshape", "rmsNorm", "rmsprop", "selu", "sgd", "sigmoid", "silu", "sinePositions", "softmax", "spatialdropout1d",
              "spatialdropout2d", "spatialdropout3d", "stack", "stepDecay", "tanh", "tokenEmbedding", "trainingPlateau", "unpadded"],
             catalog.Names.Order(StringComparer.Ordinal));
         Assert.Throws<ArgumentException>(() => catalog.Register<Dense>());

@@ -231,6 +231,30 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
     /// <summary>Whether a step takes the work of another step than the one before it: a stack that does is no line of layers.</summary>
     public bool Branches => _branches;
 
+    /// <summary>Whether a step takes the mask of the padding, <see cref="Step.Mask"/>: a stack that does is a block, handed the mask as its second take.</summary>
+    public bool TakesMask => _steps.Any(step => step.Takes.Contains(Step.Mask));
+
+    /// <summary>Runs a stack that takes a mask over a batch and the mask of its padding.</summary>
+    /// <param name="input">What the stack is handed.</param>
+    /// <param name="mask">A one for each step of each series that takes part, a nought for each that is padding.</param>
+    /// <param name="pass">The backend the arithmetic runs on, and whether this pass trains.</param>
+    /// <returns>What the last step makes.</returns>
+    /// <exception cref="InvalidOperationException">No step of the stack takes a mask.</exception>
+    public Tensor Forward(Tensor input, Tensor mask, Pass pass)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ArgumentNullException.ThrowIfNull(mask);
+        ArgumentNullException.ThrowIfNull(pass);
+
+        return TakesMask ? Run(input, mask, pass) : throw new InvalidOperationException("No step of this stack takes a mask, and it was handed one.");
+    }
+
+    /// <inheritdoc />
+    internal override bool Accepts(int steps) => steps == (TakesMask ? 2 : 1);
+
+    /// <inheritdoc />
+    internal override Tensor Taking(IReadOnlyList<Tensor> inputs, Pass pass) => inputs.Count == 2 ? Forward(inputs[0], inputs[1], pass) : Forward(inputs[0], pass);
+
     /// <summary>The shapes that reach and leave each step, a batch of one example: an example of nothing sent through the layers themselves.</summary>
     /// <param name="each">The shape of one example, without the batch's axis.</param>
     /// <returns>For each step in order, the shape of the work of the first step it takes — the one that reaches a layer that works on one, the first of those a join lays together — and the shape of what it makes.</returns>
@@ -238,6 +262,8 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
     public IReadOnlyList<StepShapes> Shapes(Shape each)
     {
         var pass = Pass.Evaluation(new CpuBackend());
+        RequireNoMask();
+
         var made = new Dictionary<string, Tensor>(StringComparer.Ordinal) { [Step.Input] = Tensor.Zeros(new Shape([1, .. each.Axes])) };
         var shapes = new List<StepShapes>(_steps.Length);
 
@@ -345,8 +371,21 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
     /// <inheritdoc />
     protected override Tensor Compute(Tensor input, Pass pass)
     {
+        RequireNoMask();
+
+        return Run(input, null, pass);
+    }
+
+    // The stack run over what it was handed, and the mask when it takes one.
+    private Tensor Run(Tensor input, Tensor? mask, Pass pass)
+    {
         var made = new Dictionary<string, Tensor>(StringComparer.Ordinal) { [Step.Input] = input };
         var last = input;
+
+        if (mask is not null)
+        {
+            made[Step.Mask] = mask;
+        }
 
         foreach (var step in _steps)
         {
@@ -355,6 +394,14 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
         }
 
         return last;
+    }
+
+    private void RequireNoMask()
+    {
+        if (TakesMask)
+        {
+            throw new InvalidOperationException($"A step of this stack takes the mask '{Step.Mask}', so it is a block, handed the mask of the padding as its second take, and it was run without one.");
+        }
     }
 
     private static IEnumerable<Step> Straight(IEnumerable<Layer> layers)
@@ -368,7 +415,7 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
     private static PlacedStep[] Placed(Step[] asked)
     {
         var placed = new PlacedStep[asked.Length];
-        var known = new HashSet<string>(StringComparer.Ordinal) { Step.Input };
+        var known = new HashSet<string>(StringComparer.Ordinal) { Step.Input, Step.Mask };
 
         for (var place = 0; place < asked.Length; place++)
         {

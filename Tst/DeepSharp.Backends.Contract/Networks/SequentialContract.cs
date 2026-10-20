@@ -289,11 +289,11 @@ public abstract class SequentialContract(ITensorBackend engine)
     [Fact]
     public void ADescriptionWhoseInputIsStated_IsCheckedWhereItIsCompiled()
     {
-        var images = new Sequential().Input(new Shape(6, 6, 1)).Dense(3);
+        var images = new Sequential().Input(new Shape(6, 6, 1)).Lstm(3);
 
         var wrong = Assert.Throws<ArgumentException>(() => images.Compile(new Sgd(), new MeanSquaredError()));
 
-        Assert.StartsWith("This network cannot be lowered at 6x6x1: word 1, dense,", wrong.Message, StringComparison.Ordinal);
+        Assert.StartsWith("This network cannot be lowered at 6x6x1: word 1, lstm,", wrong.Message, StringComparison.Ordinal);
         Assert.Contains("no layers", Assert.Throws<InvalidOperationException>(() => new Sequential().Compile(new Sgd(), new MeanSquaredError())).Message, StringComparison.Ordinal);
         Assert.Throws<ArgumentNullException>(() => new Sequential().Dense(1).Compile(null!, new MeanSquaredError()));
         Assert.Throws<ArgumentNullException>(() => new Sequential().Dense(1).Compile(new Sgd(), null!));
