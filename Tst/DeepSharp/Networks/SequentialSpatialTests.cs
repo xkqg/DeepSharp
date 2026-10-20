@@ -231,12 +231,11 @@ public class SequentialSpatialTests
     }
 
     [Fact]
-    public void ADenseLayerAfterAGlobalPoolingThatKeepsItsAxes_IsRefused_AsAfterAnyImage()
+    public void ADenseLayerAfterAGlobalPoolingThatKeepsItsAxes_MakesItsUnitsOfTheChannelsOfTheOnePlace_AsAfterAnyImage()
     {
-        var wrong = Assert.Throws<ArgumentException>(
-            () => new Sequential().GlobalAvgPool2D(keepsAxes: true).Dense(2).Lower(new Shape(4, 4, 3), new RandomStream(1)));
+        var kept = new Sequential().GlobalAvgPool2D(keepsAxes: true).Dense(2).Lower(new Shape(4, 4, 3), new RandomStream(1));
 
-        Assert.Contains("dense, takes each example as a row of numbers, and each reaching it is 1x1x3: flatten it first", wrong.Message, StringComparison.Ordinal);
+        Assert.Equal(new Shape(1, 1, 1, 2), kept.Forward(Tensor.Zeros(new Shape(1, 4, 4, 3)), Pass.Evaluation(new CpuBackend())).Shape);
     }
 
     [Fact]

@@ -81,7 +81,6 @@ public abstract class SequentialContract(ITensorBackend engine)
     }
 
     [Theory]
-    [InlineData("dense", "word 2, dense, takes each example as a row of numbers, and each reaching it is 6x6x1: flatten it first.")]
     [InlineData("conv2d", "word 1, conv2d, takes each example as an image of rows, columns and channels, and each reaching it is 36.")]
     [InlineData("reshape", "word 1, reshape, makes each example 5x7, which holds 35 values, and each reaching it holds 36.")]
     [InlineData("window", "word 2, conv2d, slides a window 7x7 (stride 1, padding 0) over each example, and an example 6x6x1 is smaller than it.")]
@@ -89,7 +88,6 @@ public abstract class SequentialContract(ITensorBackend engine)
     {
         var description = wrong switch
         {
-            "dense" => new Sequential().Reshape(new Shape(6, 6, 1)).Dense(3),
             "conv2d" => new Sequential().Conv2D(2, new Window(3, 3)),
             "reshape" => new Sequential().Reshape(new Shape(5, 7)),
             _ => new Sequential().Reshape(new Shape(6, 6, 1)).Conv2D(2, new Window(7, 7)),

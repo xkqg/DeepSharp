@@ -643,11 +643,12 @@ public sealed partial class Sequential
         // How the layer starts, without the draws: PyTorch's start when nothing is said.
         public Beginning Begins { get; }
 
-        public string? Refusal(Shape each) => each.Rank == 1 ? null : $"dense, takes each example as a row of numbers, and each reaching it is {each}: flatten it first.";
+        // It works on the last axis, so a series or an image keeps its places and makes Units of its channels at each of them.
+        public string? Refusal(Shape each) => null;
 
-        public Shape After(Shape each) => new(Units);
+        public Shape After(Shape each) => new([.. each.Axes[..^1].ToArray(), Units]);
 
-        public Layer Make(Shape each, Draws draws) => new Dense(each[0], Units, Begins with { Draws = draws });
+        public Layer Make(Shape each, Draws draws) => new Dense(each[each.Rank - 1], Units, Begins with { Draws = draws });
     }
 
     // A word that varies the rows while a network trains, and so stands before every other.

@@ -69,7 +69,6 @@ public class KerasRefusalTests
     [InlineData(Titanic, new[] { "config.layers.0.config.batch_shape=-" }, "config.json, layer 'input_layer' (InputLayer): it says no 'batch_shape'.")]
     [InlineData(Titanic, new[] { "config.layers.2=-", "config.layers.1=-" }, "config.json: the model holds no layer a network here is built of.")]
     [InlineData(Titanic, new[] { "config.layers=-" }, "config.json: the model holds no layer a network here is built of.")]
-    [InlineData(Images, new[] { "config.layers.6=-" }, "config.json: This network cannot be lowered at 84: word 8, dense, takes each example as a row of numbers, and each reaching it is 2x3x3: flatten it first. (Parameter 'input')")]
     // The loss it was trained with.
     [InlineData(Titanic, new[] { "compile_config=-" }, "config.json, compile_config: the model was saved without the loss it was trained with, and a network here answers through its loss.")]
     [InlineData(Titanic, new[] { "compile_config=null" }, "config.json, compile_config: the model was saved without the loss it was trained with, and a network here answers through its loss.")]

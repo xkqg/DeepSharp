@@ -19,7 +19,8 @@ public class OnnxSpatialExportTests
 {
     private static readonly ITensorBackend Engine = new CpuBackend();
 
-    private sealed record Walk(Func<LayerStack> Network, Shape Each);
+    // ReadBack: whether the reader reads the graph back; a dense layer over channels first is turned round in the graph by transposes it does not read.
+    private sealed record Walk(Func<LayerStack> Network, Shape Each, bool ReadBack = true);
 
     private static readonly Dictionary<string, Walk> Walks = new()
     {
@@ -41,10 +42,14 @@ public class OnnxSpatialExportTests
             .Lower(new Shape(5, 5, 2), new RandomStream(13)), new Shape(5, 5, 2)),
         ["columns of channels"] = new(() => new Sequential().Conv2D(4, new Window(2, 2)).Named("c").Columns(0, 2).Takes("c").Named("lo").Columns(2, 2).Takes("c").Named("hi").Concatenate("hi", "lo").Flatten().Dense(1)
             .Lower(new Shape(5, 5, 2), new RandomStream(14)), new Shape(5, 5, 2)),
+        ["a dense layer on the channels of every place"] = new(() => new Sequential().Conv2D(3, new Window(2, 2)).Dense(4).Relu().GlobalAvgPool2D().Dense(1).Lower(new Shape(5, 5, 2), new RandomStream(16)), new Shape(5, 5, 2), ReadBack: false),
+        ["a dense layer with a pair on a series"] = new(() => new Sequential().Conv1D(3, new Window1D(2)).Dense(4, new Beginning { LowRank = new LowRank(2, 4) }).GlobalMaxPool1D().Dense(1).Lower(new Shape(6, 2), new RandomStream(17)), new Shape(6, 2), ReadBack: false),
         ["a softmax over channels"] = new(() => new Sequential().Conv2D(3, new Window(2, 2)).Softmax().Flatten().Dense(1).Lower(new Shape(4, 4, 2), new RandomStream(15)), new Shape(4, 4, 2)),
     };
 
     public static TheoryData<string> EveryWalk => [.. Walks.Keys];
+
+    public static TheoryData<string> EveryWalkTheReaderReads => [.. Walks.Where(walk => walk.Value.ReadBack).Select(walk => walk.Key)];
 
     private static LayerStack Filled(string name) => Runtime.Filled(Walks[name].Network());
 
@@ -66,7 +71,7 @@ public class OnnxSpatialExportTests
     }
 
     [Theory]
-    [MemberData(nameof(EveryWalk))]
+    [MemberData(nameof(EveryWalkTheReaderReads))]
     public void AWrittenGraph_IsReadBackByTheReader_AnsweringAsTheNetworkDoes(string name)
     {
         var network = Filled(name);

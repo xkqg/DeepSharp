@@ -171,16 +171,23 @@ public sealed class Dense : Layer, ISaved<Dense>
     /// <inheritdoc />
     protected override Tensor Compute(Tensor input, Pass pass)
     {
-        var product = pass.Backend.MatMul(input, Weight.Value);
+        var backend = pass.Backend;
+
+        // Over a batch of series, images or volumes it is the same layer applied to the channels of every place, as Keras's and PyTorch's are.
+        var places = input.Shape.Rank > 2;
+        var rows = places ? backend.Reshape(input, new Shape(input.Shape.Count / Inputs, Inputs)) : input;
+        var product = backend.MatMul(rows, Weight.Value);
 
         if (LowRank is { } pair)
         {
             // x W + (x A B) · alpha / rank: what Keras's Dense answers once enable_lora has been called.
-            var beside = pass.Backend.MatMul(pass.Backend.MatMul(input, A!.Value), B!.Value);
+            var beside = backend.MatMul(backend.MatMul(rows, A!.Value), B!.Value);
 
-            product = pass.Backend.Add(product, pair.Scale is 1 ? beside : pass.Backend.Scale(beside, pass.Backend.Fill(new Shape(), (float)pair.Scale)));
+            product = backend.Add(product, pair.Scale is 1 ? beside : backend.Scale(beside, backend.Fill(new Shape(), (float)pair.Scale)));
         }
 
-        return Bias is null ? product : pass.Backend.AddRow(product, Bias.Value);
+        var made = Bias is null ? product : backend.AddRow(product, Bias.Value);
+
+        return places ? backend.Reshape(made, new Shape([.. input.Shape.Axes[..^1].ToArray(), Outputs])) : made;
     }
 }
