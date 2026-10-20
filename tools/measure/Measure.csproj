@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- What the light engine costs, measured and never claimed: tools/measure times the arithmetic 0.13.0 released against the
+       arithmetic this build ships — back to back, on one machine, in one process — and counts what each allocates, so a
+       change made for speed has a number before it and the same number after. Run by hand, outside every gate: a time is
+       the machine's as much as the code's, so no suite asserts one. Not a package, and not a suite. -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DeepSharp.Measure</RootNamespace>
+    <!-- Server GC off, tiered compilation as an application has it: the numbers are the ones a person's own program gets. -->
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DeepSharp\DeepSharp.csproj" />
+    <!-- The released arithmetic, written out once in the core's suite and linked here, so the oracle and the thing every
+         kernel is timed against are one file. -->
+    <Compile Include="..\..\Tst\DeepSharp\Tensors\ReleasedCpuArithmetic.cs" Link="ReleasedCpuArithmetic.cs" />
+  </ItemGroup>
+
+</Project>
