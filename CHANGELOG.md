@@ -3,6 +3,10 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.14.0]
+
+Where the light engine can be made faster without a bit of any answer changing, and a network that is not a straight line. The sections below say what each brought, what it refuses and why, and what changes for you.
+
 ## [0.13.0]
 
 What a model is worth, and more ways to train it: data that is not a table, several networks answering as one, an interval and a reason with every answer, and a rate of its own for a part of a network. The sections below say what each brought.

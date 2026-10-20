@@ -392,8 +392,8 @@ public class ReleaseContractTests
             "DeepSharp.Import.Onnx", "DeepSharp.Import.PyTorch", "DeepSharp.Learners.ML", "DeepSharp.Learners.MLNet",
             "DeepSharp.Learners.Networks", "DeepSharp.Pipelines", "DeepSharp.Pipelines.Binance",
             "DeepSharp.Pipelines.DataFrame", "DeepSharp.Pipelines.Excel", "DeepSharp.Pipelines.Indicators",
-            "DeepSharp.Pipelines.Json", "DeepSharp.Pipelines.Parquet", "DeepSharp.Verso.Api", "DeepSharp.Verso.Notebooks",
-            "DeepSharp.Verso.Serve",
+            "DeepSharp.Pipelines.Images", "DeepSharp.Pipelines.Json", "DeepSharp.Pipelines.Parquet", "DeepSharp.Pipelines.Sound",
+            "DeepSharp.Verso.Api", "DeepSharp.Verso.Notebooks", "DeepSharp.Verso.Serve",
         ];
         var props = Read("Directory.Build.props");
         var listed = Regex.Match(props, @"<PublishedBefore>(?<list>[^<]*)</PublishedBefore>").Groups["list"].Value
@@ -408,14 +408,14 @@ public class ReleaseContractTests
         // A package new this release is in neither list above: it is packed, and nothing is asked of a baseline it never
         // had. Naming them here is what keeps "new" from becoming a word anybody can use for a package that simply
         // dropped out of the published list by accident.
-        string[] newThisRelease = ["DeepSharp.Pipelines.Images", "DeepSharp.Pipelines.Sound"];
+        string[] newThisRelease = [];
 
         Assert.All(newThisRelease, package => Assert.DoesNotContain($";{package};", props, StringComparison.Ordinal));
         Assert.Equal(packable.Order(StringComparer.Ordinal), publishedBefore.Concat(newThisRelease).Order(StringComparer.Ordinal));
 
         // The baseline is the release nuget.org carries, which is the one before this build's. Left behind it, a surface
         // the last release added could be removed with nothing to say so.
-        Assert.Equal("0.12.0", baseline);
+        Assert.Equal("0.13.0", baseline);
         Assert.True(Version.Parse(baseline) < Version.Parse(DeclaredVersion()), "The baseline is the release before this one, never this one.");
     }
 
