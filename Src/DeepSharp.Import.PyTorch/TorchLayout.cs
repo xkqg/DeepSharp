@@ -216,6 +216,22 @@ internal sealed class TorchLayout
                     afterSteps = recurrent.Recurrence.Sequences;
                     break;
 
+                case MultiHeadAttention:
+                    // The projections PyTorch keeps outputs by inputs, the three blocks of in_proj_weight one after another along the outputs; the held
+                    // linear layer is named out_proj as PyTorch names it. What it makes is a series of the steps it was handed.
+                    foreach (var named in slots)
+                    {
+                        var kept = named.Slot.Value.Shape;
+
+                        Lay(kept.Rank == 2 ? new GatesSlot(named.Path, kept[0], kept[1]) : new VectorSlot(named.Path, kept[0], null));
+                    }
+
+                    producers = [.. slots.Select(named => named.Path)];
+                    (flattened, untold) = (null, null);
+                    afterASeries = false;
+                    afterSteps = true;
+                    break;
+
                 case var _ when placed.Flattens && afterSteps:
                     // Steps by the state's numbers, row-major, as PyTorch's flatten leaves them: no order to turn.
                     _statable.Add(path);
@@ -354,6 +370,17 @@ internal sealed class TorchLayout
                     foreach (var named in own)
                     {
                         Lay(new VectorsSlot(named.Path, embedding));
+                    }
+
+                    break;
+
+                case MultiHeadAttention:
+                    // Its linear layer out_proj is held by it, and laid as any linear layer is, at its own path.
+                    foreach (var named in own)
+                    {
+                        var kept = named.Slot.Value.Shape;
+
+                        Lay(kept.Rank == 2 ? new GatesSlot(named.Path, kept[0], kept[1]) : new VectorSlot(named.Path, kept[0], null));
                     }
 
                     break;

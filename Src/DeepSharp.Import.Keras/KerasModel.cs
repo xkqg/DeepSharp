@@ -243,22 +243,32 @@ internal sealed class KerasModel
             return layer;
         }
 
+        var attends = layer.Class == "MultiHeadAttention";
+        var causal = false;
+
         if (node.ValueKind == JsonValueKind.Object && node.TryGetProperty("kwargs", out var kwargs) && kwargs.ValueKind == JsonValueKind.Object
-            && kwargs.EnumerateObject().Select(each => each.Name).FirstOrDefault() is { } called)
+            && kwargs.EnumerateObject().Where(each => each.Value.ValueKind != JsonValueKind.Null && !(attends && each.Name == "use_causal_mask")).Select(each => each.Name).FirstOrDefault() is { } called)
         {
             at.Refuse($"it is called with '{called.Quoted()}', and a layer is read here when it is called with the tensors it takes alone.");
 
             return layer;
         }
 
-        if (node.ValueKind != JsonValueKind.Object || !node.TryGetProperty("args", out var args) || args.ValueKind != JsonValueKind.Array || args.GetArrayLength() != 1)
+        if (attends && node.ValueKind == JsonValueKind.Object && node.TryGetProperty("kwargs", out var causalKwargs) && causalKwargs.ValueKind == JsonValueKind.Object
+            && causalKwargs.TryGetProperty("use_causal_mask", out var asked))
+        {
+            causal = asked.ValueKind == JsonValueKind.True;
+        }
+
+        if (node.ValueKind != JsonValueKind.Object || !node.TryGetProperty("args", out var args) || args.ValueKind != JsonValueKind.Array
+            || (attends ? args.GetArrayLength() is < 2 or > 3 : args.GetArrayLength() != 1))
         {
             at.Refuse("it is called with other than the tensors of layers, and a layer of a functional model is called with the tensors it takes.");
 
             return layer;
         }
 
-        var tensors = args[0].ValueKind == JsonValueKind.Array ? args[0].EnumerateArray().ToList() : [args[0]];
+        var tensors = attends ? args.EnumerateArray().ToList() : args[0].ValueKind == JsonValueKind.Array ? args[0].EnumerateArray().ToList() : [args[0]];
         var sources = new List<string>();
 
         foreach (var tensor in tensors)
@@ -284,7 +294,14 @@ internal sealed class KerasModel
 
         var rank = tensors[0].TryGetProperty("config", out var config) && config.TryGetProperty("shape", out var shape) && shape.ValueKind == JsonValueKind.Array ? shape.GetArrayLength() : 0;
 
-        return layer with { Sources = sources, Rank = rank };
+        if (attends && sources.Distinct(StringComparer.Ordinal).Count() > 1)
+        {
+            at.Refuse($"its queries and its values are two different tensors, {string.Join(" and ", sources.Distinct(StringComparer.Ordinal).Select(source => $"'{source.Quoted()}'"))}, and attention here looks across one series: self-attention.");
+
+            return layer;
+        }
+
+        return layer with { Sources = attends ? [sources[0]] : sources, Rank = rank, Causal = causal };
     }
 
     // Where a tensor of a functional model comes from: the layer, and the node and tensor of it, as Keras 3 writes them.
@@ -504,7 +521,7 @@ internal sealed class KerasModel
         var before = _faults.Count;
         KerasKind.RequireSinglePrecision(layer.Settings);
 
-        var read = KerasKind.ByName.TryGetValue(layer.Class, out var kind) ? kind.Read(layer.Settings) : Merged(layer) ?? Unknown(layer);
+        var read = KerasKind.ByName.TryGetValue(layer.Class, out var kind) ? kind.Read(layer.Settings, new Called(layer.Causal)) : Merged(layer) ?? Unknown(layer);
 
         return new Built(layer, read, _faults.Count > before);
     }
@@ -700,6 +717,9 @@ internal sealed class KerasModel
 
         /// <summary>The rank of what it takes, the batch's axis included, as its first argument says.</summary>
         public int Rank { get; init; }
+
+        /// <summary>Whether it is called with <c>use_causal_mask</c>.</summary>
+        public bool Causal { get; init; }
     }
 
     /// <summary>An input of a functional model, where its columns stand in the row the network is handed, and how wide it is.</summary>

@@ -44,7 +44,7 @@ public class KerasRefusalTests
         "a Keras model is read here when each of its layers is a Dense, Conv1D, Conv2D, Conv3D, Conv1DTranspose, Conv2DTranspose, Conv3DTranspose, DepthwiseConv1D, DepthwiseConv2D, "
         + "SeparableConv1D, SeparableConv2D, ZeroPadding1D, ZeroPadding2D, ZeroPadding3D, MaxPooling1D, MaxPooling2D, MaxPooling3D, AveragePooling1D, AveragePooling2D, AveragePooling3D, "
         + "GlobalMaxPooling1D, GlobalMaxPooling2D, GlobalMaxPooling3D, GlobalAveragePooling1D, GlobalAveragePooling2D, GlobalAveragePooling3D, BatchNormalization, LayerNormalization, Dropout, "
-        + "SpatialDropout1D, SpatialDropout2D, SpatialDropout3D, GroupNormalization, RMSNormalization, Embedding, LSTM, GRU, Bidirectional, Flatten, Reshape, Activation, ReLU, LeakyReLU, PReLU, ELU or Softmax, or, in a Functional model, an Add or a Concatenate.";
+        + "SpatialDropout1D, SpatialDropout2D, SpatialDropout3D, GroupNormalization, RMSNormalization, Embedding, LSTM, GRU, Bidirectional, MultiHeadAttention, Flatten, Reshape, Activation, ReLU, LeakyReLU, PReLU, ELU or Softmax, or, in a Functional model, an Add or a Concatenate.";
 
     private const string Activations = "linear, relu, tanh, sigmoid, gelu, silu, swish, mish, leaky_relu, elu, selu and softmax.";
 

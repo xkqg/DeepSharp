@@ -212,7 +212,7 @@ internal abstract class KerasKind
         new SpatialDropoutKind("SpatialDropout2D", 2, rate => description => description.SpatialDropout2D(rate)),
         new SpatialDropoutKind("SpatialDropout3D", 3, rate => description => description.SpatialDropout3D(rate)),
         new GroupNormalizationKind(), new RmsNormalizationKind(), new EmbeddingKind(),
-        new RecurrentKind("LSTM"), new RecurrentKind("GRU"), new BidirectionalKind(),
+        new RecurrentKind("LSTM"), new RecurrentKind("GRU"), new BidirectionalKind(), new MultiHeadAttentionKind(),
         new FlattenKind(), new ReshapeKind(), new ActivationKind(), new ReluKind(),
         new LeakyReluKind(), new PReluKind(), new EluKind(), new SoftmaxKind(),
     ];
@@ -241,6 +241,11 @@ internal abstract class KerasKind
 
     /// <summary>A layer of this kind, read from its settings; each fault of them noted there.</summary>
     public abstract KerasLayer Read(KerasSettings layer);
+
+    /// <summary>A layer of this kind, read from its settings and from what it is called with in a functional model; a kind that is called with nothing but tensors reads as it does from its settings.</summary>
+    /// <param name="layer">The layer's settings.</param>
+    /// <param name="call">What the layer is called with besides the tensors it takes.</param>
+    public virtual KerasLayer Read(KerasSettings layer, Called call) => Read(layer);
 
     /// <summary>The activation a layer carries, by Keras's name for it: <c>linear</c>, unless it says another.</summary>
     protected static string ActivationOf(KerasSettings layer) => layer.Setting("activation", "linear");
