@@ -55,3 +55,5 @@ public sealed class LoopTests() : LoopContract(new CpuBackend());
 public sealed class NetworkDocumentTests() : NetworkDocumentContract(new CpuBackend());
 
 public sealed class BranchTests() : BranchContract(new CpuBackend());
+
+public sealed class RecurrentTests() : RecurrentContract(new CpuBackend());

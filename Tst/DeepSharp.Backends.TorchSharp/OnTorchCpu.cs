@@ -55,3 +55,5 @@ public sealed class LoopTests() : LoopContract(TorchBackend.OnCpu());
 public sealed class NetworkDocumentTests() : NetworkDocumentContract(TorchBackend.OnCpu());
 
 public sealed class BranchTests() : BranchContract(TorchBackend.OnCpu());
+
+public sealed class RecurrentTests() : RecurrentContract(TorchBackend.OnCpu());

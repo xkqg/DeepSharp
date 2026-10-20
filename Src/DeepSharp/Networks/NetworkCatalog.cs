@@ -87,6 +87,8 @@ public sealed class NetworkCatalog
         .Register<Sum>()
         .Register<Concatenation>()
         .Register<Columns>()
+        .Register<Lstm>()
+        .Register<Gru>()
         .Register<Reshape>()
         .Register<MeanSquaredError>()
         .Register<CrossEntropy>()
