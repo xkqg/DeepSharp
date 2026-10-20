@@ -118,6 +118,16 @@ public static class NetworkWords
 
     private static readonly NumberParameter StartKey = new("start", "The share of the rate the first epoch takes: above nought, and at most one.", 1.0 / 3) { Above = 0 };
 
+    private static readonly WholeNumberParameter PlateauWaitKey = new("patience", "How many epochs without a fall of the training loss are waited out before the rate is lowered.", 10) { AtLeast = 0 };
+
+    private static readonly NumberParameter PlateauFactorKey = new("factor", "What the rate is multiplied by when it is lowered: above nought and below one.", 0.1) { Above = 0 };
+
+    private static readonly NumberParameter PlateauThresholdKey = new("threshold", "How far below the best a training loss has to be, as a share of the best, to count as a fall.", 1e-4) { AtLeast = 0 };
+
+    private static readonly WholeNumberParameter PlateauCooldownKey = new("cooldown", "How many epochs after a lowering the epochs without a fall are not counted.", 0) { AtLeast = 0 };
+
+    private static readonly NumberParameter PlateauLeastKey = new("minimum", "The least rate the rate is lowered to.", 0) { AtLeast = 0 };
+
     private static readonly WholeNumberParameter PatienceKey = new("patience", "How many passes without a better one the run waits before it stops.", 10) { AtLeast = 0 };
 
     private static readonly NumberParameter LeastKey = new("least", "How far the validation loss has to fall below the best for a pass to count as better.", 0) { AtLeast = 0 };
@@ -246,7 +256,7 @@ public static class NetworkWords
 
     /// <summary>How the rate a declared network is moved at changes from epoch to epoch, in the words a network's file writes it in.</summary>
     /// <remarks>
-    /// Each is worked out from the epoch alone, so none listens to the validation loss. A warm-up declared here hands over to
+    /// Each is worked out from the epoch, or from the training losses of the epochs before it, so none listens to the validation loss. A warm-up declared here hands over to
     /// the optimizer's own rate; one that hands over to a decay is written as code, where a <see cref="LinearWarmup"/> holds
     /// the schedule that follows it.
     /// </remarks>
@@ -257,6 +267,7 @@ public static class NetworkWords
         new("exponentialDecay", "The rate multiplied by a factor every epoch.", [EpochFactorKey]),
         new("cosineDecay", "The rate falling along half a cosine to its least over so many epochs.", [CosineKey, LeastRateKey]),
         new("linearWarmup", "The rate rising in a straight line from a share of itself to the whole of it over so many epochs, then held.", [WarmupKey, StartKey]),
+        new("trainingPlateau", "The rate lowered by a factor once the training loss has stopped falling for so many epochs.", [PlateauWaitKey, PlateauFactorKey, PlateauThresholdKey, PlateauCooldownKey, PlateauLeastKey]),
     ];
 
     /// <summary>When a run stops: at its last pass, or once the validation loss stops falling.</summary>
@@ -590,6 +601,12 @@ public static class NetworkWords
             ["exponentialDecay"] = schedule => new ExponentialDecay(schedule.Number(EpochFactorKey.Key)),
             ["cosineDecay"] = schedule => new CosineDecay(schedule.Whole(CosineKey.Key), schedule.Number(LeastRateKey.Key)),
             ["linearWarmup"] = schedule => new LinearWarmup(schedule.Whole(WarmupKey.Key), schedule.Number(StartKey.Key)),
+            ["trainingPlateau"] = schedule => new TrainingPlateau(schedule.Whole(PlateauWaitKey.Key), schedule.Number(PlateauFactorKey.Key))
+            {
+                Threshold = schedule.Number(PlateauThresholdKey.Key),
+                Cooldown = schedule.Whole(PlateauCooldownKey.Key),
+                Minimum = schedule.Number(PlateauLeastKey.Key),
+            },
         };
 
     private static IReadOnlyDictionary<string, Func<PartDeclaration, EarlyStopping?>> StoppingWords { get; } =

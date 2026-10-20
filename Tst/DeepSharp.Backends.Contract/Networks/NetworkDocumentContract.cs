@@ -511,7 +511,7 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
         });
         var first = text.Replace("\"version\": 2", "\"version\": 1", StringComparison.Ordinal);
 
-        Assert.Equal(7, NetworkDocument.Version);
+        Assert.Equal(8, NetworkDocument.Version);
         Assert.Contains("\"version\": 2", text, StringComparison.Ordinal);
         Assert.Null(NetworkDocument.ReadNetwork(first, "network", NetworkCatalog.BuiltIn()).TrainedOn!.Unvaried);
     }
@@ -898,7 +898,7 @@ public abstract class NetworkDocumentContract(ITensorBackend engine)
              "globalmaxpool2d", "globalmaxpool3d", "groupNorm", "hinge", "huber", "instanceNorm", "layerNorm", "leakyRelu", "linearWarmup",
              "maxpool1d", "maxpool2d", "maxpool3d", "meanAbsoluteError", "meanSquaredError", "mish", "nadam", "pad1d", "pad2d", "pad3d", "periodic",
              "poisson", "prelu", "quantile", "randomCrop", "randomFlip", "relu", "reshape", "rmsNorm", "rmsprop", "selu", "sgd", "sigmoid", "silu", "softmax", "spatialdropout1d",
-             "spatialdropout2d", "spatialdropout3d", "stack", "stepDecay", "tanh", "tokenEmbedding"],
+             "spatialdropout2d", "spatialdropout3d", "stack", "stepDecay", "tanh", "tokenEmbedding", "trainingPlateau"],
             catalog.Names.Order(StringComparer.Ordinal));
         Assert.Throws<ArgumentException>(() => catalog.Register<Dense>());
     }

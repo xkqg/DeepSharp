@@ -707,6 +707,28 @@ public sealed class NetworkDeclaration
         Scheduled("linearWarmup", new PartSetting("epochs", PartValue.Of(epochs)), new PartSetting("start", PartValue.Of(start)));
 
     /// <summary>
+    /// Lowers the rate by a factor once the training loss has stopped falling for as many epochs as it waits: PyTorch's
+    /// ReduceLROnPlateau, watching the training loss and never the validation loss.
+    /// </summary>
+    /// <param name="patience">How many epochs without a fall are waited out; ten, unless said, as PyTorch leaves it.</param>
+    /// <param name="factor">What the rate is multiplied by when it is lowered, above nought and below one; a tenth, unless said.</param>
+    /// <param name="minimum">The least rate it is lowered to; nought, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <remarks>
+    /// One schedule a declaration: the last that is said is the one written. A fall counts when the loss is a ten-thousandth below
+    /// the best, and no epochs are left uncounted after a lowering; a file says other numbers, and code says them as a
+    /// <c>TrainingPlateau</c> with a threshold and a cooldown.
+    /// </remarks>
+    public NetworkDeclaration Plateau(int patience = 10, double factor = 0.1, double minimum = 0) =>
+        Scheduled(
+            "trainingPlateau",
+            new PartSetting("patience", PartValue.Of(patience)),
+            new PartSetting("factor", PartValue.Of(factor)),
+            new PartSetting("threshold", PartValue.Of(1e-4)),
+            new PartSetting("cooldown", PartValue.Of(0)),
+            new PartSetting("minimum", PartValue.Of(minimum)));
+
+    /// <summary>
     /// Clips every step's gradients to the given norm together before they move the network, as PyTorch's
     /// <c>clip_grad_norm_</c> clips them.
     /// </summary>

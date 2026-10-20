@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 12
+      "maximum": 13
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -3298,6 +3298,63 @@
                 "kind",
                 "epochs",
                 "start"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "description": "The rate lowered by a factor once the training loss has stopped falling for so many epochs.",
+              "properties": {
+                "kind": {
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "trainingPlateau"
+                      ]
+                    },
+                    {
+                      "type": "string",
+                      "pattern": "^(?:[Tt][Rr][Aa][Ii][Nn][Ii][Nn][Gg][Pp][Ll][Aa][Tt][Ee][Aa][Uu])$"
+                    }
+                  ]
+                },
+                "patience": {
+                  "description": "How many epochs without a fall of the training loss are waited out before the rate is lowered.",
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "factor": {
+                  "description": "What the rate is multiplied by when it is lowered: above nought and below one.",
+                  "type": "number",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "threshold": {
+                  "description": "How far below the best a training loss has to be, as a share of the best, to count as a fall.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                },
+                "cooldown": {
+                  "description": "How many epochs after a lowering the epochs without a fall are not counted.",
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 2147483647
+                },
+                "minimum": {
+                  "description": "The least rate the rate is lowered to.",
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1.7976931348623157E+308
+                }
+              },
+              "required": [
+                "kind",
+                "patience",
+                "factor",
+                "threshold",
+                "cooldown",
+                "minimum"
               ],
               "additionalProperties": false
             }

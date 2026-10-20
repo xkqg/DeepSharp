@@ -104,7 +104,8 @@ public sealed class NetworkCatalog
         .Register<StepDecay>()
         .Register<ExponentialDecay>()
         .Register<CosineDecay>()
-        .Register<LinearWarmup>();
+        .Register<LinearWarmup>()
+        .Register<TrainingPlateau>();
 
     /// <summary>Registers a kind: a layer, a network written as code, a loss, an optimizer or a learning-rate schedule.</summary>
     /// <typeparam name="TKind">The kind.</typeparam>

@@ -96,7 +96,7 @@ public class WatchReferenceTests
 
         Assert.Equal("watch.reference", WatchStep.Name);
         Assert.Equal(11, WatchStep.Since);
-        Assert.Equal(12, PipelineDeclaration.Version);
+        Assert.Equal(13, PipelineDeclaration.Version);
         Assert.Contains("warnAbove", description.Parameters.SelectMany(parameter => parameter.RequiredKeys));
         Assert.DoesNotContain("columns", description.Parameters.SelectMany(parameter => parameter.RequiredKeys));
         Assert.Equal(prepared.ToJson(), PreparedData.FromJson(prepared.ToJson(), StepCatalog.BuiltIn()).ToJson());

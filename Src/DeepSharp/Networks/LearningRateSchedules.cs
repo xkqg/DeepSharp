@@ -10,11 +10,11 @@ namespace DeepSharp.Networks;
 /// the next.
 /// </summary>
 /// <remarks>
-/// A schedule is asked once an epoch, and its answer is worked out from the epoch alone — a closed form, as PyTorch's own
-/// schedulers can be written — so a run resumed at an epoch takes the rate it would have taken, with nothing carried from
-/// the epochs before it. Every schedule here falls with the epochs, and none listens to the validation loss: a schedule
-/// that lowered the rate when the validation rows stopped improving would let those rows shape the weights, where they
-/// are only there to choose between them.
+/// A schedule is asked once an epoch, and its answer is worked out from the epoch — a closed form, as PyTorch's own
+/// schedulers can be written — or from the training losses of the epochs before it, which a checkpoint holds, so a run resumed
+/// at an epoch takes the rate it would have taken, with nothing carried that the checkpoint does not keep. None listens to the
+/// validation loss: a schedule that lowered the rate when the validation rows stopped improving would let those rows shape
+/// the weights, where they are only there to choose between them.
 /// </remarks>
 public abstract class LearningRateSchedule
 {
@@ -34,6 +34,36 @@ public abstract class LearningRateSchedule
 
         return Rate(epoch, initial);
     }
+
+    /// <summary>The rate the steps of the next epoch take, given the training loss of each epoch so far.</summary>
+    /// <param name="trainingLosses">The loss of each epoch the run has trained, in order; none before the first. Never the validation loss.</param>
+    /// <param name="initial">The rate the optimizer starts at.</param>
+    /// <returns>The rate for the epoch after the last of them.</returns>
+    /// <exception cref="ArgumentException">A loss is not a finite number.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The rate is not a number above nothing.</exception>
+    /// <remarks>For a schedule of a closed form it is the rate of the epoch that stands as far along as there are losses.</remarks>
+    public double RateAfter(IReadOnlyList<double> trainingLosses, double initial)
+    {
+        ArgumentNullException.ThrowIfNull(trainingLosses);
+
+        if (!double.IsFinite(initial) || initial <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(initial), initial, "A learning rate is a number above nothing.");
+        }
+
+        if (trainingLosses.Any(loss => !double.IsFinite(loss)))
+        {
+            throw new ArgumentException("A rate cannot follow a loss that is not a finite number.", nameof(trainingLosses));
+        }
+
+        return Rate(trainingLosses, initial);
+    }
+
+    /// <summary>The rate for the epoch after the given losses, from a rate that is one: the closed form of the epoch they count, unless a schedule follows them.</summary>
+    /// <param name="trainingLosses">The training loss of each epoch so far, every one a finite number.</param>
+    /// <param name="initial">The rate the optimizer starts at, above nothing.</param>
+    /// <returns>The rate.</returns>
+    protected virtual double Rate(IReadOnlyList<double> trainingLosses, double initial) => Rate(trainingLosses.Count, initial);
 
     /// <summary>The rate for an epoch that is one, from a rate that is one.</summary>
     /// <param name="epoch">The epoch, counted from nought.</param>
@@ -276,6 +306,15 @@ public sealed class LinearWarmup : LearningRateSchedule, ISaved<LinearWarmup>
     }
 
     /// <inheritdoc />
+    /// <remarks>The version of the schedule it hands over to, which the warm-up in front of it does not lower: a file that holds both says what the later one says.</remarks>
+    public int FileVersion => Then is ISaved saved ? saved.FileVersion : NetworkDocument.SecondVersion;
+
+    /// <inheritdoc />
     protected override double Rate(int epoch, double initial) =>
         epoch < Epochs ? initial * (Start + ((1 - Start) * epoch / Epochs)) : Then?.RateAt(epoch - Epochs, initial) ?? initial;
+
+    /// <inheritdoc />
+    /// <remarks>A schedule that follows the losses is handed those of the epochs after the warm-up, as it counts its epochs from the end of it.</remarks>
+    protected override double Rate(IReadOnlyList<double> trainingLosses, double initial) =>
+        trainingLosses.Count < Epochs || Then is null ? Rate(trainingLosses.Count, initial) : Then.RateAfter([.. trainingLosses.Skip(Epochs)], initial);
 }

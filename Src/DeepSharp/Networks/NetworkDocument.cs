@@ -43,7 +43,7 @@ public static class NetworkDocument
     /// says nothing of them, every window's padding a number. In the seventh, a parameter says a share of the run's rate its
     /// numbers move at, and the part is the first that 0.12.0 refuses by its number; the training part is not raised by it.
     /// </remarks>
-    public const int Version = 7;
+    public const int Version = 8;
 
     /// <summary>
     /// The version 0.4.0 wrote, whose training part records neither the batch size nor the early stopping of its run: the one
@@ -82,6 +82,12 @@ public static class NetworkDocument
     /// refuses by its number rather than by the key it does not know.
     /// </summary>
     internal const int SeventhVersion = 7;
+
+    /// <summary>
+    /// The version a part is written as once a schedule in it follows the training loss: the first version 0.13.0 refuses by its
+    /// number rather than by the kind it does not know.
+    /// </summary>
+    internal const int EighthVersion = 8;
 
     /// <summary>The key a file that holds several networks keeps them in, as a list.</summary>
     public const string NetworksKey = "networks";

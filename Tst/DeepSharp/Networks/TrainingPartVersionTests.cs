@@ -55,11 +55,11 @@ public class TrainingPartVersionTests
         Assert.IsType<SaysMore>(read.Run.Compiled.Optimizer);
         Assert.Equal(written, Written(read.Run.Compiled, read.Run.Checkpoint));
 
-        var later = written.Replace("\"version\":5", "\"version\":8", StringComparison.Ordinal);
+        var later = written.Replace("\"version\":5", "\"version\":9", StringComparison.Ordinal);
         var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(later, "network", "training", catalog));
 
-        Assert.Contains("version 8", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("up to version 7", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("version 9", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("up to version 8", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -97,7 +97,34 @@ public class TrainingPartVersionTests
     }
 
     [Fact]
-    public void TheVersionAFileOfThisLibraryCanBe_IsTheSeventh() => Assert.Equal(7, NetworkDocument.Version);
+    public void TheVersionAFileOfThisLibraryCanBe_IsTheEighth() => Assert.Equal(8, NetworkDocument.Version);
+
+    [Fact]
+    public void ARunWhoseScheduleFollowsTheTrainingLoss_IsWrittenAsTheEighthVersion_AndAnOlderLibraryRefusesItByItsNumber()
+    {
+        var compiled = new LayerStack(new Dense(1, 1, Draws())).Compile(new Sgd(0.1), new MeanSquaredError(), new TrainingPlateau(2, 0.5));
+        var written = Written(compiled, Checkpoint(compiled, clip: null));
+
+        Assert.Equal(8, VersionOf(written, "training"));
+
+        var read = NetworkDocument.ReadCheckpoint(written, "network", "training", NetworkCatalog.BuiltIn());
+
+        Assert.IsType<TrainingPlateau>(read.Run.Compiled.Schedule);
+        Assert.Equal(written, Written(read.Run.Compiled, read.Run.Checkpoint));
+        Assert.Contains(
+            "version 8",
+            Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(written.Replace("\"version\":8", "\"version\":9", StringComparison.Ordinal), "network", "training", NetworkCatalog.BuiltIn())).Message,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AWarmUpThatHandsOverToAScheduleThatSaysMore_IsWrittenAsTheVersionTheLaterOneNames()
+    {
+        var compiled = new LayerStack(new Dense(1, 1, Draws())).Compile(new Sgd(0.1), new MeanSquaredError(), new LinearWarmup(2, 0.5, new SaysMoreSchedule()));
+
+        Assert.Equal(5, VersionOf(Written(compiled, Checkpoint(compiled, clip: null)), "training"));
+        Assert.Equal(2, new LinearWarmup(2).FileVersion);
+    }
 
     private static int TrainingVersion(Optimizer optimizer, GradientClip? clip)
     {

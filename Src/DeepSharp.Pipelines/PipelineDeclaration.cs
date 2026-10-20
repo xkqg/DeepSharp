@@ -133,10 +133,12 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// the step that keeps the training rows a served model is watched against, which a library that has not heard of it
     /// refuses by the number rather than by the verb. The twelfth is the same rule once more, for what the release after 0.12.0
     /// adds: rows that are not a table, a split that cuts more than once and one that sets rows aside to calibrate an interval.
+    /// The thirteenth is the same rule for what the release after 0.13.0 adds: a rate that follows the training loss, and a history
+    /// over the last few rows of a key.
     /// A property rather than a constant, so a package compiled against this version reads the number the running
     /// library has.
     /// </remarks>
-    public static int Version => 12;
+    public static int Version => 13;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;

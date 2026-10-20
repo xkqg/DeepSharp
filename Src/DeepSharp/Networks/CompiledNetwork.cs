@@ -149,11 +149,12 @@ public sealed class CompiledNetwork
         if (options.ResumeFrom is { } resume)
         {
             judgement = loop.Resume(resume.State, epochs, watched);
+            RequireTheRatesTheEpochsRanAt(epochs);
         }
 
         for (var number = epochs.Count; number < options.Epochs && judgement is not { Stops: true }; number++)
         {
-            var rate = Schedule.RateAt(number, Optimizer.Rate);
+            var rate = Schedule.RateAfter([.. epochs.Select(each => each.Loss)], Optimizer.Rate);
             var loss = loop.Train(train, number, rate);
             var validationLoss = watched ? loop.Evaluate(validation!, number) : (double?)null;
 
@@ -192,6 +193,29 @@ public sealed class CompiledNetwork
         }
 
         return new History(options.Seed, epochs, judgement?.BestEpoch, judgement is { Stops: true } ? Stopping.NoLongerImproving : Stopping.AllEpochsRan);
+    }
+
+    // The epochs a checkpoint holds ran at rates, and a run that goes on under another schedule or another rate would take rates they
+    // did not: each epoch's rate is the schedule's for the losses before it, bit for bit, or the run is refused naming the epoch.
+    private void RequireTheRatesTheEpochsRanAt(IReadOnlyList<Epoch> epochs)
+    {
+        var losses = new List<double>();
+
+        foreach (var epoch in epochs)
+        {
+            var rate = Schedule.RateAfter(losses, Optimizer.Rate);
+
+            if (rate != epoch.LearningRate)
+            {
+                throw new ArgumentException(
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"The checkpoint's epoch {epoch.Number + 1} ran at the rate {epoch.LearningRate}, and this run's schedule and rate would have given {rate}: a run goes on under the schedule and the rate it began with."),
+                    "options");
+            }
+
+            losses.Add(epoch.Loss);
+        }
     }
 
     /// <summary>What the network predicts for the given rows: an evaluation pass, through the loss's output activation.</summary>
