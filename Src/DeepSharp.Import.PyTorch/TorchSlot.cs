@@ -82,6 +82,39 @@ internal sealed class VectorSlot(string path, int length, ChannelOrder? order) :
 }
 
 /// <summary>
+/// A recurrent layer's weights: PyTorch keeps them outputs by inputs, the gates one block after another along the outputs, and here they are
+/// inputs by outputs, the gates in the same order. The numbers a recurrent layer reads are the steps' channels and its own state, which no
+/// flatten orders channel by channel, so they are turned and nothing more.
+/// </summary>
+/// <param name="path">The slot's path.</param>
+/// <param name="inputs">What the weights read: the step's channels, or the state.</param>
+/// <param name="outputs">What the weights make: the gates' numbers.</param>
+internal sealed class GatesSlot(string path, int inputs, int outputs) : TurnedSlot(path)
+{
+    /// <inheritdoc />
+    protected override Shape Kept => new(outputs, inputs);
+
+    /// <inheritdoc />
+    protected override Shape Slot => new(inputs, outputs);
+
+    /// <inheritdoc />
+    protected override float[] Turned(float[] kept)
+    {
+        var turned = new float[kept.Length];
+
+        for (var output = 0; output < outputs; output++)
+        {
+            for (var input = 0; input < inputs; input++)
+            {
+                turned[(input * outputs) + output] = kept[(output * inputs) + input];
+            }
+        }
+
+        return turned;
+    }
+}
+
+/// <summary>
 /// An embedding's vectors: a row for each category, in the order of its places, by the numbers of a vector — PyTorch's
 /// <c>Embedding.weight</c> as it is kept, since the row a place looks up is the row the category's one picks here.
 /// </summary>

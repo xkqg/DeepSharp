@@ -125,6 +125,10 @@ internal sealed class TorchLayout
         // what a flatten is handed in two axes is steps and channels only then.
         var afterASeries = false;
 
+        // Whether the layer before made a series of its state at every step: steps first and then its numbers, a flatten of which is the
+        // row PyTorch's own flatten makes, in the order it is made here.
+        var afterSteps = false;
+
         foreach (var placed in layers)
         {
             var (path, layer) = placed;
@@ -195,6 +199,28 @@ internal sealed class TorchLayout
 
                     producers = [.. slots.Select(named => named.Path)];
                     (flattened, untold) = (null, null);
+                    afterASeries = false;
+                    break;
+
+                case Recurrent recurrent:
+                    foreach (var named in slots)
+                    {
+                        var kept = named.Slot.Value.Shape;
+
+                        Lay(kept.Rank == 2 ? new GatesSlot(named.Path, kept[0], kept[1]) : new VectorSlot(named.Path, kept[0], null));
+                    }
+
+                    producers = [.. slots.Select(named => named.Path)];
+                    (flattened, untold) = (null, null);
+                    afterASeries = false;
+                    afterSteps = recurrent.Recurrence.Sequences;
+                    break;
+
+                case var _ when placed.Flattens && afterSteps:
+                    // Steps by the state's numbers, row-major, as PyTorch's flatten leaves them: no order to turn.
+                    _statable.Add(path);
+                    (flattened, untold) = (null, null);
+                    afterSteps = false;
                     afterASeries = false;
                     break;
 
