@@ -288,7 +288,8 @@ internal sealed class MatMulKind : OnnxKind
             return new OnnxLayer(null, Flow.Rows);
         }
 
-        return new OnnxLayer(description => description.Dense(units), Flow.Rows)
+        // Over a series laid out batch by step by channel it is the same layer applied to the channels of every step, and a series stays one.
+        return new OnnxLayer(description => description.Dense(units), reaching.Flow == Flow.ImagesLast ? Flow.ImagesLast : Flow.Rows)
         {
             Width = units,
             Numbers = [new LayerNumber("weight", weights, Laying.AsWritten) { AlongFlattenedImage = reaching.Flow == Flow.FlattenedImages }],

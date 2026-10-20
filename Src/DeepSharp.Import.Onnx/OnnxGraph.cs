@@ -268,6 +268,10 @@ internal sealed partial class OnnxGraph
                 node.Refuse("it takes none of the values the graph works out, which are its input and what a node before it made.");
                 _previous = node.Operator;
             }
+            else if (node.Operator == "Attention")
+            {
+                Attended(node);
+            }
             else if (node.Operator == "Add" && data.Count == 2)
             {
                 Joined(node, data, Joining.Add);
@@ -308,7 +312,7 @@ internal sealed partial class OnnxGraph
     // A node that works on the one value it takes: one the graph follows without a step, or the layer it is.
     private void Single(OnnxNode node, int place, string taken)
     {
-        var made = _values[taken];
+        var made = node.Operator == "MatMul" ? Declared(_values[taken]) : _values[taken];
         var reaching = made.Reaching;
 
         if (node.Operator == "Transpose")
