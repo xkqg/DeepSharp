@@ -21,6 +21,7 @@ public sealed partial class Sequential
     private const string NoLayers = "This network has no layers yet: write them in before it is lowered.";
 
     private readonly List<IWord> _words = [];
+    private readonly List<Said> _said = [];
 
     /// <summary>A description that holds no word yet.</summary>
     public Sequential()
@@ -31,6 +32,7 @@ public sealed partial class Sequential
     private Sequential(Sequential description)
     {
         _words = [.. description._words];
+        _said = [.. description._said];
         InputShape = description.InputShape;
     }
 
@@ -97,16 +99,16 @@ public sealed partial class Sequential
     {
         RequireUnseeded(beginning);
 
-        return Add(new DenseWord(units, beginning));
+        return Append(new DenseWord(units, beginning));
     }
 
     /// <summary>Keeps each value above nothing, and nothing otherwise.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential Relu() => Add(new PlainWord(() => new Relu()));
+    public Sequential Relu() => Append(new PlainWord(() => new Relu()));
 
     /// <summary>Bends each value into the span between minus one and one.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential Tanh() => Add(new PlainWord(() => new Tanh()));
+    public Sequential Tanh() => Append(new PlainWord(() => new Tanh()));
 
     /// <summary>Bends each value into the span between nothing and one.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
@@ -115,13 +117,13 @@ public sealed partial class Sequential
     /// activation on the network and a loss that takes what it gives, and compiling the description lifts it into the loss:
     /// the network ends before it, and every prediction goes through one sigmoid, the loss's.
     /// </remarks>
-    public Sequential Sigmoid() => Add(new PlainWord(() => new Sigmoid()));
+    public Sequential Sigmoid() => Append(new PlainWord(() => new Sigmoid()));
 
     /// <summary>Leaves out a share of the values while training, each afresh on every pass.</summary>
     /// <param name="rate">The share left out, from nothing to below one.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The rate is not a share below one.</exception>
-    public Sequential Dropout(double rate) => Add(new DropoutWord(global::DeepSharp.Networks.Dropout.RequireRate(rate)));
+    public Sequential Dropout(double rate) => Append(new DropoutWord(global::DeepSharp.Networks.Dropout.RequireRate(rate)));
 
     /// <summary>Mirrors images at random while training, each by a coin of its own across the axes it is told to.</summary>
     /// <param name="horizontal">Whether an image is mirrored across its columns.</param>
@@ -129,7 +131,7 @@ public sealed partial class Sequential
     /// <param name="seed">The number the flips are drawn from: the layer's own, which the run's seed moves nothing of.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="InvalidOperationException">A layer that is no variation is written already: a variation stands first.</exception>
-    public Sequential RandomFlip(bool horizontal, bool vertical, long seed) => Add(new FlipWord(horizontal, vertical, seed));
+    public Sequential RandomFlip(bool horizontal, bool vertical, long seed) => Append(new FlipWord(horizontal, vertical, seed));
 
     /// <summary>Shifts images at random while training, by padding each and cutting a window of its own size out at a place drawn for it.</summary>
     /// <param name="pad">How many places an image is padded by on every side, and so how far it can move.</param>
@@ -141,7 +143,7 @@ public sealed partial class Sequential
     {
         ArgumentOutOfRangeException.ThrowIfNegative(pad);
 
-        return Add(new CropWord(pad, seed));
+        return Append(new CropWord(pad, seed));
     }
 
     /// <summary>Adds noise to every value while training: normal, of the spread it is told.</summary>
@@ -150,7 +152,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The spread is not a number of nought or more.</exception>
     /// <exception cref="InvalidOperationException">A layer that is no variation is written already: a variation stands first.</exception>
-    public Sequential GaussianNoise(double spread, long seed) => Add(new NoiseWord(new GaussianNoise(spread, seed).Spread, seed));
+    public Sequential GaussianNoise(double spread, long seed) => Append(new NoiseWord(new GaussianNoise(spread, seed).Spread, seed));
 
     /// <summary>Normalises each feature — the last axis of an example — over the batch.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
@@ -160,7 +162,7 @@ public sealed partial class Sequential
     /// <summary>Normalises each feature — the last axis of an example — over the batch, keeping the scale and the shift it is told to.</summary>
     /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one — Keras's <c>scale</c> and <c>center</c>.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential BatchNorm(Affine affine) => Add(new NormalisationWord(features => new BatchNorm(features, affine)));
+    public Sequential BatchNorm(Affine affine) => Append(new NormalisationWord(features => new BatchNorm(features, affine)));
 
     /// <summary>Normalises each feature — the last axis of an example — over the batch, with Keras's momentum and epsilon.</summary>
     /// <param name="momentum">
@@ -192,7 +194,7 @@ public sealed partial class Sequential
 
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Add(new NormalisationWord(features => new BatchNorm(features, affine) { Momentum = 1 - momentum, Epsilon = epsilon }));
+        return Append(new NormalisationWord(features => new BatchNorm(features, affine) { Momentum = 1 - momentum, Epsilon = epsilon }));
     }
 
     /// <summary>Normalises each example over its features — the last axis.</summary>
@@ -203,7 +205,7 @@ public sealed partial class Sequential
     /// <summary>Normalises each example over its features — the last axis — keeping the scale and the shift it is told to.</summary>
     /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one — Keras's <c>scale</c> and <c>center</c>.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential LayerNorm(Affine affine) => Add(new NormalisationWord(features => new LayerNorm(features, affine)));
+    public Sequential LayerNorm(Affine affine) => Append(new NormalisationWord(features => new LayerNorm(features, affine)));
 
     /// <summary>Normalises each example over its features — the last axis — with Keras's epsilon.</summary>
     /// <param name="epsilon">What is added to each variance before its root is taken, above nothing — 0.001 in Keras.</param>
@@ -220,14 +222,14 @@ public sealed partial class Sequential
     {
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Add(new NormalisationWord(features => new LayerNorm(features, affine) { Epsilon = epsilon }));
+        return Append(new NormalisationWord(features => new LayerNorm(features, affine) { Epsilon = epsilon }));
     }
 
     /// <summary>Lays each example out in another shape holding as many values: a row of pixels as an image, say.</summary>
     /// <param name="shape">The shape of one example, without the batch's axis.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">The shape holds no value.</exception>
-    public Sequential Reshape(Shape shape) => Add(new ReshapeWord(global::DeepSharp.Networks.Reshape.RequireEach(shape)));
+    public Sequential Reshape(Shape shape) => Append(new ReshapeWord(global::DeepSharp.Networks.Reshape.RequireEach(shape)));
 
     /// <summary>A convolution: a window slid over each image, making so many channels at every place it stands.</summary>
     /// <param name="filters">How many channels it makes.</param>
@@ -269,7 +271,7 @@ public sealed partial class Sequential
         ArgumentOutOfRangeException.ThrowIfLessThan(groups, 1);
         RequireUnseeded(beginning);
 
-        return Add(new ConvolutionWord(
+        return Append(new ConvolutionWord(
             "conv2d",
             "an image of rows, columns and channels",
             filters,
@@ -279,7 +281,89 @@ public sealed partial class Sequential
 
     /// <summary>Lays each example out as one row of its values.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential Flatten() => Add(new FlattenWord());
+    public Sequential Flatten() => Append(new FlattenWord());
+
+    /// <summary>Gives the last word's step a name, so a later word can take what it made, and the numbers it learns are found under it.</summary>
+    /// <param name="name">The name: some text with no dot or comma in it, which is no whole number and is not <c>input</c>.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="InvalidOperationException">No word is written yet.</exception>
+    /// <exception cref="ArgumentException">The name cannot stand in a path, or is a place, or is the input's.</exception>
+    /// <remarks>A step called second holds second.weight, as the module a network written as code calls second does.</remarks>
+    public Sequential Named(string name)
+    {
+        RequireStep();
+        LayerStack.RequireName(name);
+
+        _said[^1] = _said[^1] with { Name = name };
+
+        return this;
+    }
+
+    /// <summary>Has the last word's step take the work of the named steps instead of the one before it.</summary>
+    /// <param name="steps">The names of the steps — <c>input</c> for the rows the network is handed; the place of a step nobody named.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="InvalidOperationException">No word is written yet.</exception>
+    /// <exception cref="ArgumentException">No step is named, or one has no name.</exception>
+    public Sequential Takes(params string[] steps)
+    {
+        RequireStep();
+        RequireNames(steps);
+
+        _said[^1] = _said[^1] with { Takes = [.. steps] };
+
+        return this;
+    }
+
+    /// <summary>Adds up what the named steps made, value by value: a residual block's way of handing on what it was given beside what it made.</summary>
+    /// <param name="steps">The names of the steps added up: two or more, <c>input</c> for the rows the network is handed.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentException">No step is named.</exception>
+    public Sequential Add(params string[] steps)
+    {
+        RequireNames(steps);
+
+        return Append(new JoinWord("add", shapes => shapes.Distinct().Count() == 1 ? null : $"takes steps of one shape, and these are {string.Join(" and ", shapes)}.", shapes => shapes[0], () => new Sum())).Takes(steps);
+    }
+
+    /// <summary>Lays what the named steps made side by side, along the last axis, in the order they are named.</summary>
+    /// <param name="steps">The names of the steps laid side by side: two or more, <c>input</c> for the rows the network is handed.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentException">No step is named.</exception>
+    public Sequential Concatenate(params string[] steps)
+    {
+        RequireNames(steps);
+
+        return Append(new JoinWord("concatenate", AlikeButTheLast, Wider, () => new Concatenation())).Takes(steps);
+    }
+
+    /// <summary>Takes some of the columns of the last axis, as a step of its own: how a network of two inputs reads each from the row it is handed.</summary>
+    /// <param name="first">The first column taken, counted from nought.</param>
+    /// <param name="count">How many columns: one at least.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The first column is below nought, or no column is taken.</exception>
+    public Sequential Columns(int first, int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(first);
+        ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
+
+        return Append(new ColumnsWord(first, count));
+    }
+
+    /// <summary>A description inside this one, as one step: its words lowered at the shape the step is handed, under the step's name.</summary>
+    /// <param name="inner">The words of the block; held by this description as they stand, a word written after this changes nothing.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentNullException">There is no block.</exception>
+    /// <exception cref="InvalidOperationException">The block holds no word.</exception>
+    /// <remarks>
+    /// A block's layers start from the draws of the block's place and then their own, so naming or moving a block moves no layer's start.
+    /// Its numbers are found under the block's name and then the names inside it: <c>block.0.weight</c>.
+    /// </remarks>
+    public Sequential Block(Sequential inner)
+    {
+        ArgumentNullException.ThrowIfNull(inner);
+
+        return inner._words.Count == 0 ? throw new InvalidOperationException(NoLayers) : Append(new BlockWord(new Sequential(inner)));
+    }
 
     /// <summary>
     /// Lowers the description onto a stack of layers for examples of the given shape, each layer that learns starting from
@@ -297,21 +381,30 @@ public sealed partial class Sequential
     /// Every word is lowered, a last activation as well: it is <see cref="Compile"/> that leaves out one the loss applies
     /// itself, since only the loss says which that is.
     /// </remarks>
-    public LayerStack Lower(Shape input, RandomStream stream)
+    public LayerStack Lower(Shape input, RandomStream stream) => Lowered(input, stream, string.Empty);
+
+    // The description lowered, each layer that learns starting from the draws of its place: the place alone, or the place of the block
+    // it stands in and then its own, so a layer's start moves with nothing a name or another layer says.
+    private LayerStack Lowered(Shape input, RandomStream stream, string within)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        Check(input);
 
-        var layers = new List<Layer>(_words.Count);
-        var each = input;
+        var steps = new List<Step>(_words.Count);
 
-        for (var place = 0; place < _words.Count; place++)
+        foreach (var (place, visit) in Resolve(input).Select((visit, place) => (place, visit)))
         {
-            layers.Add(_words[place].Make(each, stream.Draw(string.Create(CultureInfo.InvariantCulture, $"initialise:{place}"), 0, 0)));
-            each = _words[place].After(each);
+            var purpose = string.Create(CultureInfo.InvariantCulture, $"initialise:{within}{place}");
+            var layer = visit.Word switch
+            {
+                BlockWord block => block.Inner.Lowered(visit.Inputs[0], stream, string.Create(CultureInfo.InvariantCulture, $"{within}{place}.")),
+                IJoinWord join => join.Make(visit.Inputs),
+                var word => word.Make(visit.Inputs[0], stream.Draw(purpose, 0, 0)),
+            };
+
+            steps.Add(new Step(layer, visit.Said.Name, visit.Said.Takes));
         }
 
-        return new LayerStack(layers);
+        return new LayerStack(steps);
     }
 
     /// <summary>
@@ -354,6 +447,13 @@ public sealed partial class Sequential
         if (InputShape is { } stated)
         {
             Check(stated);
+
+            // A description that names its steps or joins them is held to the rules of steps where it is compiled, as a stack is where it is
+            // built: lowered once under a stream of its own, which nothing keeps, so a mistake is found before a fit is asked for.
+            if (Branches)
+            {
+                _ = Lowered(stated, new RandomStream(0), string.Empty);
+            }
         }
 
         return new CompiledNetwork(Lifted(loss), optimizer, loss, schedule);
@@ -361,7 +461,11 @@ public sealed partial class Sequential
 
     // Refuses a shape the description cannot be lowered at: one holding no value, another than its input says, or one an
     // example of which cannot reach one of its words.
-    private void Check(Shape input)
+    private void Check(Shape input) => Resolve(input);
+
+    // What each word takes and hands on for an example of the given shape: the shape of what each step it takes made, and of what it
+    // makes, worked out down the description and refused where an example cannot reach a word.
+    private List<Visited> Resolve(Shape input)
     {
         global::DeepSharp.Networks.Reshape.RequireEach(input);
 
@@ -375,20 +479,43 @@ public sealed partial class Sequential
             throw new InvalidOperationException(NoLayers);
         }
 
-        var each = input;
+        var shapes = new Dictionary<string, Shape>(StringComparer.Ordinal) { [Step.Input] = input };
+        var visits = new List<Visited>(_words.Count);
 
         for (var place = 0; place < _words.Count; place++)
         {
             var word = _words[place];
+            var said = _said[place];
+            var name = said.Name ?? place.ToString(CultureInfo.InvariantCulture);
+            IReadOnlyList<string> takes = said.Takes ?? [place == 0 ? Step.Input : visits[place - 1].Name];
 
-            if (word.Refusal(each) is { } refusal)
+            if (takes.FirstOrDefault(taken => !shapes.ContainsKey(taken)) is { } unknown)
+            {
+                throw new ArgumentException(
+                    string.Create(CultureInfo.InvariantCulture, $"This network cannot be lowered at {input}: word {place + 1} takes '{unknown}', which is not the input or a word before it."), nameof(input));
+            }
+
+            Shape[] inputs = [.. takes.Select(taken => shapes[taken])];
+            var refusal = word switch
+            {
+                IJoinWord join => join.Refusal(inputs),
+                _ when inputs.Length != 1 => string.Create(CultureInfo.InvariantCulture, $"takes the work of one step, and was given {inputs.Length}."),
+                _ => word.Refusal(inputs[0]),
+            };
+
+            if (refusal is not null)
             {
                 throw new ArgumentException(
                     string.Create(CultureInfo.InvariantCulture, $"This network cannot be lowered at {input}: word {place + 1}, {refusal}"), nameof(input));
             }
 
-            each = word.After(each);
+            var after = word is IJoinWord joined ? joined.After(inputs) : word.After(inputs[0]);
+
+            shapes[name] = after;
+            visits.Add(new Visited(name, said, word, inputs, after));
         }
+
+        return visits;
     }
 
     // How a described network's layers start is told without the draws: they are the run's, at the place of each layer. A
@@ -408,7 +535,39 @@ public sealed partial class Sequential
         }
     }
 
-    private Sequential Add(IWord word)
+    // Whether any word names its step, takes other than the step before it, or is a join or a block: a description that is not a straight line.
+    private bool Branches => _said.Any(said => said != default) || _words.Any(word => word is IJoinWord or BlockWord);
+
+    private void RequireStep()
+    {
+        if (_words.Count == 0)
+        {
+            throw new InvalidOperationException("Write the word first: a name, or the steps taken, go to the step the last word makes.");
+        }
+    }
+
+    private static void RequireNames(string[] steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+
+        if (steps.Length == 0 || steps.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new ArgumentException("Name the steps whose work is taken: one or more, each with a name.", nameof(steps));
+        }
+    }
+
+    // How steps laid side by side must be alike, and how wide they are together.
+    private static string? AlikeButTheLast(IReadOnlyList<Shape> shapes) =>
+        shapes.Select(shape => shape.Rank).Distinct().Count() == 1
+        && shapes[0].Rank >= 1
+        && shapes.All(shape => shape.Axes[..^1].SequenceEqual(shapes[0].Axes[..^1]))
+            ? null
+            : $"lays steps side by side along the last axis, and they must be alike in every other: these are {string.Join(" and ", shapes)}.";
+
+    private static Shape Wider(IReadOnlyList<Shape> shapes) =>
+        new([.. shapes[0].Axes[..^1], shapes.Sum(shape => shape.Axes[^1])]);
+
+    private Sequential Append(IWord word)
     {
         if (word is IVariationWord && _words.Exists(each => each is not IVariationWord))
         {
@@ -417,6 +576,7 @@ public sealed partial class Sequential
         }
 
         _words.Add(word);
+        _said.Add(default);
 
         return this;
     }
@@ -431,6 +591,7 @@ public sealed partial class Sequential
         if (lifted._words[^1].IsAppliedBy(loss))
         {
             lifted._words.RemoveAt(lifted._words.Count - 1);
+            lifted._said.RemoveAt(lifted._said.Count - 1);
         }
 
         return lifted._words.Count > 0
@@ -559,5 +720,69 @@ public sealed partial class Sequential
         public Shape After(Shape each) => new(each.Count);
 
         public Layer Make(Shape each, Draws draws) => new Flatten();
+    }
+
+    /// <summary>What the description says of a word's step: the name it goes by and the steps it takes, when it says either.</summary>
+    private readonly record struct Said(string? Name, IReadOnlyList<string>? Takes);
+
+    /// <summary>A word with what it takes and hands on, worked out for one shape of example.</summary>
+    private readonly record struct Visited(string Name, Said Said, IWord Word, Shape[] Inputs, Shape After);
+
+    /// <summary>A word that takes the work of several steps: what it cannot take, what it hands on, and the layer it becomes.</summary>
+    private interface IJoinWord : IWord
+    {
+        string? Refusal(IReadOnlyList<Shape> inputs);
+
+        Shape After(IReadOnlyList<Shape> inputs);
+
+        Layer Make(IReadOnlyList<Shape> inputs);
+    }
+
+    private sealed record JoinWord(string Word, Func<IReadOnlyList<Shape>, string?> Refuses, Func<IReadOnlyList<Shape>, Shape> Hands, Func<Layer> Build) : IJoinWord
+    {
+        public string? Refusal(IReadOnlyList<Shape> inputs) => inputs.Count >= 2 ? Refuses(inputs) is { } refusal ? $"{Word}, {refusal}" : null : $"{Word}, takes the work of two steps or more, and was given {inputs.Count}.";
+
+        public Shape After(IReadOnlyList<Shape> inputs) => Hands(inputs);
+
+        public Layer Make(IReadOnlyList<Shape> inputs) => Build();
+
+        string? IWord.Refusal(Shape each) => throw new InvalidOperationException("A join takes the work of several steps.");
+
+        Shape IWord.After(Shape each) => throw new InvalidOperationException("A join takes the work of several steps.");
+
+        Layer IWord.Make(Shape each, Draws draws) => throw new InvalidOperationException("A join takes the work of several steps.");
+    }
+
+    private sealed record ColumnsWord(int First, int Count) : IWord
+    {
+        public string? Refusal(Shape each) =>
+            each.Rank >= 1 && each[each.Rank - 1] >= First + Count
+                ? null
+                : string.Create(CultureInfo.InvariantCulture, $"columns, takes {Count} columns from column {First}, and each example reaching it is {each}, whose last axis is not as long as {First + Count}.");
+
+        public Shape After(Shape each) => new([.. each.Axes[..^1], Count]);
+
+        public Layer Make(Shape each, Draws draws) => new Columns(First, Count);
+    }
+
+    private sealed record BlockWord(Sequential Inner) : IWord
+    {
+        public string? Refusal(Shape each)
+        {
+            try
+            {
+                Inner.Check(each);
+
+                return null;
+            }
+            catch (ArgumentException refused)
+            {
+                return $"block, {refused.Message}";
+            }
+        }
+
+        public Shape After(Shape each) => Inner.Resolve(each)[^1].After;
+
+        public Layer Make(Shape each, Draws draws) => throw new InvalidOperationException("A block is lowered with the stream of its description, at its own place.");
     }
 }

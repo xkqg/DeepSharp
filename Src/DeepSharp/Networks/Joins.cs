@@ -18,7 +18,7 @@ namespace DeepSharp.Networks;
 public sealed class Sum : Layer, ISaved<Sum>
 {
     /// <inheritdoc />
-    public static string Name => "sum";
+    public static string Name => "add";
 
     /// <inheritdoc />
     public int FileVersion => NetworkDocument.EighthVersion;
@@ -54,7 +54,7 @@ public sealed class Sum : Layer, ISaved<Sum>
 public sealed class Concatenation : Layer, ISaved<Concatenation>
 {
     /// <inheritdoc />
-    public static string Name => "concatenation";
+    public static string Name => "concatenate";
 
     /// <inheritdoc />
     public int FileVersion => NetworkDocument.EighthVersion;

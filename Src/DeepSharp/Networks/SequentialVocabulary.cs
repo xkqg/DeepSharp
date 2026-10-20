@@ -20,15 +20,15 @@ public sealed partial class Sequential
     /// <summary>The GELU, exactly or by the hyperbolic tangent's approximation: Keras's <c>approximate</c>, PyTorch's <c>approximate='tanh'</c>.</summary>
     /// <param name="approximate">Whether it is the hyperbolic tangent's approximation.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential Gelu(bool approximate) => Add(new PlainWord(() => new Gelu(approximate)));
+    public Sequential Gelu(bool approximate) => Append(new PlainWord(() => new Gelu(approximate)));
 
     /// <summary>Weighs each value by its own logistic curve: the SiLU, also called swish.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential Silu() => Add(new PlainWord(() => new Silu()));
+    public Sequential Silu() => Append(new PlainWord(() => new Silu()));
 
     /// <summary>Weighs each value by the hyperbolic tangent of its softplus: mish.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential Mish() => Add(new PlainWord(() => new Mish()));
+    public Sequential Mish() => Append(new PlainWord(() => new Mish()));
 
     /// <summary>Keeps each value above nothing and lets a hundredth of every other through, as PyTorch leaves the leaky rectifier.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
@@ -43,7 +43,7 @@ public sealed partial class Sequential
     {
         var layer = new LeakyRelu(negativeSlope);
 
-        return Add(new PlainWord(() => new LeakyRelu(layer.NegativeSlope)));
+        return Append(new PlainWord(() => new LeakyRelu(layer.NegativeSlope)));
     }
 
     /// <summary>Keeps each value above nothing and lets a share of every other through that it learns, one share for every value, as PyTorch leaves it.</summary>
@@ -57,7 +57,7 @@ public sealed partial class Sequential
     /// </param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <remarks>Each share starts at a quarter, as PyTorch starts it; Keras starts it at nothing.</remarks>
-    public Sequential PRelu(bool eachChannel) => Add(new ParametricWord(eachChannel));
+    public Sequential PRelu(bool eachChannel) => Append(new ParametricWord(eachChannel));
 
     /// <summary>Keeps each value above nothing and bends every other towards minus one along an exponential: the ELU.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
@@ -71,12 +71,12 @@ public sealed partial class Sequential
     {
         var layer = new Elu(alpha);
 
-        return Add(new PlainWord(() => new Elu(layer.Alpha)));
+        return Append(new PlainWord(() => new Elu(layer.Alpha)));
     }
 
     /// <summary>The self-normalising ELU, at Klambauer et al.'s alpha and scale.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential Selu() => Add(new PlainWord(() => new Selu()));
+    public Sequential Selu() => Append(new PlainWord(() => new Selu()));
 
     /// <summary>Turns the last axis of each example into shares of one whole.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
@@ -85,7 +85,7 @@ public sealed partial class Sequential
     /// loss, as it lifts a sigmoid before a binary cross-entropy: the network ends before it, and every prediction goes through one
     /// softmax, the loss's.
     /// </remarks>
-    public Sequential Softmax() => Add(new PlainWord(() => new Softmax()));
+    public Sequential Softmax() => Append(new PlainWord(() => new Softmax()));
 
     /// <summary>Normalises each example over every place it holds, its channels — the last axis — in so many groups.</summary>
     /// <param name="groups">How many groups the channels stand in; a number that divides them.</param>
@@ -105,7 +105,7 @@ public sealed partial class Sequential
         ArgumentOutOfRangeException.ThrowIfLessThan(groups, 1);
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Add(new GroupWord(groups, channels => new GroupNorm(channels, groups, affine) { Epsilon = epsilon }));
+        return Append(new GroupWord(groups, channels => new GroupNorm(channels, groups, affine) { Epsilon = epsilon }));
     }
 
     /// <summary>Normalises each channel of each example — the last axis — over every place the example holds.</summary>
@@ -122,7 +122,7 @@ public sealed partial class Sequential
     {
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Add(new NormalisationWord(channels => new InstanceNorm(channels, affine) { Epsilon = epsilon }));
+        return Append(new NormalisationWord(channels => new InstanceNorm(channels, affine) { Epsilon = epsilon }));
     }
 
     /// <summary>Divides each row of the last axis by the root of the mean of its squares, and scales it, as PyTorch leaves it.</summary>
@@ -144,7 +144,7 @@ public sealed partial class Sequential
     {
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Add(new NormalisationWord(features => new RmsNorm(features, scale) { Epsilon = epsilon }));
+        return Append(new NormalisationWord(features => new RmsNorm(features, scale) { Epsilon = epsilon }));
     }
 
     /// <summary>
@@ -159,7 +159,7 @@ public sealed partial class Sequential
         // Built once, so a periodicity it cannot hold is refused where it is written rather than where it is lowered.
         _ = new Periodic(1, periodicity, new RandomStream(0).Draw("periodicity", 0, 0));
 
-        return Add(new PeriodicWord(periodicity));
+        return Append(new PeriodicWord(periodicity));
     }
 
     /// <summary>
@@ -185,7 +185,7 @@ public sealed partial class Sequential
             throw new ArgumentException($"An embedding reads a category from two columns of the row at least, each once, and was told [{string.Join(", ", block)}].", nameof(block));
         }
 
-        return Add(new EmbeddingWord([.. block], width));
+        return Append(new EmbeddingWord([.. block], width));
     }
 
     /// <summary>A text as one small vector: the ids of a row looked up in vectors it learns, and the vectors of the words averaged.</summary>
@@ -202,7 +202,7 @@ public sealed partial class Sequential
         ArgumentOutOfRangeException.ThrowIfLessThan(vocabulary, 3);
         ArgumentOutOfRangeException.ThrowIfLessThan(width, 1);
 
-        return Add(new TokenEmbeddingWord(vocabulary, width));
+        return Append(new TokenEmbeddingWord(vocabulary, width));
     }
 
     /// <summary>A parametric rectifier, of one share or of one for each channel of the last axis.</summary>

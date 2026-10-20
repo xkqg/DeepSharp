@@ -28,6 +28,18 @@ public static class NetworkWords
     // The word of a layer that reads a category from its block of columns: lowered only where a pipeline hands its rows over.
     private const string EmbeddingWord = "embedding";
 
+    // What every layer but the embedding may say of its step: a name, so a later step can take what it made and its numbers are found
+    // under it, and the names of the steps it takes instead of the one before it, written with a comma between them.
+    private static readonly TextParameter NameKey =
+        new("name", "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said.", "hidden", optional: true);
+
+    private static readonly TextParameter TakesKey =
+        new("takes", "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said.", "input", optional: true);
+
+    private static readonly WholeNumberParameter ColumnFirstKey = new("first", "The first column of the row taken, counted from nought.", 0) { AtLeast = 0 };
+
+    private static readonly WholeNumberParameter ColumnCountKey = new("count", "How many columns are taken.", 1) { AtLeast = 1 };
+
     private static readonly WholeNumberParameter UnitsKey = new("units", "How many numbers the layer answers with.", 16) { AtLeast = 1 };
 
     private static readonly TrueOrFalseParameter BiasKey = new("bias", "Whether the layer adds a bias of its own to every sum; it does, unless it says it does not.", true) { LeftOut = true };
@@ -204,28 +216,31 @@ public static class NetworkWords
     /// <summary>The layers a declared network is built from, in the words a saved network writes them under.</summary>
     public static IReadOnlyList<PartKind> Layers { get; } =
     [
-        new("dense", "A layer that answers with as many numbers as it is given, each a weighted sum of the ones below it.", [UnitsKey, BiasKey, WeightsKey, BiasStartKey, L1Key, L2Key, MaxNormKey, LearnsKey, RateShareKey, RankKey, PairAlphaKey]),
-        new("relu", "Leaves what is below nought at nought.", []),
-        new("tanh", "Squashes every number between minus one and one.", []),
-        new("sigmoid", "Squashes every number between nought and one.", []),
-        new("dropout", "Leaves a share of the numbers out at every pass while training, and none while serving.", [RateKey]),
-        new("batchNorm", "Brings every number to the mean and spread of the rows it was trained on.", [MomentumKey, EpsilonKey, ScaleKey, ShiftKey, LearnsKey, RateShareKey]),
-        new("layerNorm", "Brings every number of one row to that row's own mean and spread.", [EpsilonKey, ScaleKey, ShiftKey, LearnsKey, RateShareKey]),
-        new("gelu", "Weighs every number by the share of a normal curve below it: smooth where relu bends.", [ApproximateKey]),
-        new("silu", "Weighs every number by its own sigmoid; also called swish.", []),
-        new("mish", "Weighs every number by the hyperbolic tangent of its softplus.", []),
-        new("leakyRelu", "Leaves what is above nought, and lets a share of what is below it through.", [SlopeKey]),
-        new("prelu", "Leaves what is above nought, and lets a share of what is below it through that it learns.", [EachFeatureKey]),
-        new("elu", "Leaves what is above nought, and bends what is below it towards minus alpha.", [BendKey]),
-        new("selu", "Bends as elu does, at the alpha and the scale that keep a network's numbers normalised.", []),
-        new("softmax", "Turns the numbers of a row into shares of one whole.", []),
-        new("rmsNorm", "Divides every number of one row by the root of the mean of the row's squares, and scales it.", [RootEpsilonKey, ScaleKey, LearnsKey, RateShareKey]),
-        new("periodic", "Turns every number of the row into its cosines and sines at frequencies it learns, through a linear layer: a relu after it makes it PLR.", [FrequenciesKey, SigmaKey, WidthKey, LiteKey]),
-        new("randomFlip", "Mirrors images at random while training and not while serving; it varies the rows themselves, so it stands first.", [FlipAcrossKey, FlipDownKey, VariationSeedKey]),
-        new("randomCrop", "Shifts images at random while training and not while serving, padding each and cutting a window of its own size out; it stands first.", [PadKey, VariationSeedKey]),
-        new("gaussianNoise", "Adds normal noise to every number while training and not while serving; it stands first.", [SpreadKey, VariationSeedKey]),
-        new("flatten", "Lays an example out as one row of numbers: an image as the row of its pixels.", []),
-        new("tokenEmbedding", "Turns the ids a pipeline cut a text into to one small vector: each id looked up in vectors it learns, the vectors of the words averaged and the padding left out; it reads the rows as the pipeline hands them over, so it stands first.", [TokenVocabularyKey, TokenWidthKey]),
+        Step("dense", "A layer that answers with as many numbers as it is given, each a weighted sum of the ones below it.", [UnitsKey, BiasKey, WeightsKey, BiasStartKey, L1Key, L2Key, MaxNormKey, LearnsKey, RateShareKey, RankKey, PairAlphaKey]),
+        Step("relu", "Leaves what is below nought at nought.", []),
+        Step("tanh", "Squashes every number between minus one and one.", []),
+        Step("sigmoid", "Squashes every number between nought and one.", []),
+        Step("dropout", "Leaves a share of the numbers out at every pass while training, and none while serving.", [RateKey]),
+        Step("batchNorm", "Brings every number to the mean and spread of the rows it was trained on.", [MomentumKey, EpsilonKey, ScaleKey, ShiftKey, LearnsKey, RateShareKey]),
+        Step("layerNorm", "Brings every number of one row to that row's own mean and spread.", [EpsilonKey, ScaleKey, ShiftKey, LearnsKey, RateShareKey]),
+        Step("gelu", "Weighs every number by the share of a normal curve below it: smooth where relu bends.", [ApproximateKey]),
+        Step("silu", "Weighs every number by its own sigmoid; also called swish.", []),
+        Step("mish", "Weighs every number by the hyperbolic tangent of its softplus.", []),
+        Step("leakyRelu", "Leaves what is above nought, and lets a share of what is below it through.", [SlopeKey]),
+        Step("prelu", "Leaves what is above nought, and lets a share of what is below it through that it learns.", [EachFeatureKey]),
+        Step("elu", "Leaves what is above nought, and bends what is below it towards minus alpha.", [BendKey]),
+        Step("selu", "Bends as elu does, at the alpha and the scale that keep a network's numbers normalised.", []),
+        Step("softmax", "Turns the numbers of a row into shares of one whole.", []),
+        Step("rmsNorm", "Divides every number of one row by the root of the mean of the row's squares, and scales it.", [RootEpsilonKey, ScaleKey, LearnsKey, RateShareKey]),
+        Step("periodic", "Turns every number of the row into its cosines and sines at frequencies it learns, through a linear layer: a relu after it makes it PLR.", [FrequenciesKey, SigmaKey, WidthKey, LiteKey]),
+        Step("randomFlip", "Mirrors images at random while training and not while serving; it varies the rows themselves, so it stands first.", [FlipAcrossKey, FlipDownKey, VariationSeedKey]),
+        Step("randomCrop", "Shifts images at random while training and not while serving, padding each and cutting a window of its own size out; it stands first.", [PadKey, VariationSeedKey]),
+        Step("gaussianNoise", "Adds normal noise to every number while training and not while serving; it stands first.", [SpreadKey, VariationSeedKey]),
+        Step("flatten", "Lays an example out as one row of numbers: an image as the row of its pixels.", []),
+        Step("tokenEmbedding", "Turns the ids a pipeline cut a text into to one small vector: each id looked up in vectors it learns, the vectors of the words averaged and the padding left out; it reads the rows as the pipeline hands them over, so it stands first.", [TokenVocabularyKey, TokenWidthKey]),
+        Step("add", "Adds up what the steps it takes made, value by value: a residual block's way of handing on what it was given beside what it made. It takes two steps or more, which must be of one shape.", []),
+        Step("concatenate", "Lays what the steps it takes made side by side along the last axis, in the order they are taken: a block that reads everything made before it. It takes two steps or more, alike in every axis but the last.", []),
+        Step("columns", "Takes some of the columns of a row as a step of its own: how a network of two inputs reads each of them from the one row it is handed.", [ColumnFirstKey, ColumnCountKey]),
         new(EmbeddingWord, "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.", [EmbeddingColumnKey, EmbeddingWidthKey]),
     ];
 
@@ -292,9 +307,7 @@ public static class NetworkWords
             foreach (var layer in layers)
             {
                 // A layer written by hand may leave out what a file may leave out: it is lowered as the layer it means.
-                var made = Word(LayerWords, layer, Layers);
-
-                described = made(described, Layers.Single(kind => kind.Name == layer.Kind).Completed(layer));
+                described = Made(described, layer);
             }
 
             return described;
@@ -357,7 +370,7 @@ public static class NetworkWords
 
             foreach (var layer in layers.Skip(embeddings))
             {
-                described = Word(LayerWords, layer, Layers)(described, Layers.Single(kind => kind.Name == layer.Kind).Completed(layer));
+                described = Made(described, layer);
             }
 
             return described;
@@ -383,6 +396,21 @@ public static class NetworkWords
                         $"A '{layers[at].Kind}' varies the rows themselves, made on the values as the batch carries them: it stands first, before the '{layers[learned].Kind}' written ahead of it.",
                         nameof(layers));
                 }
+            }
+
+            foreach (var layer in layers.Where(each => each.Holds(NameKey.Key) && each.Text(NameKey.Key).Length > 0))
+            {
+                _ = StepName(layer.Text(NameKey.Key));
+            }
+
+            foreach (var layer in layers.Where(each => each.Holds(TakesKey.Key) && each.Text(TakesKey.Key).Length > 0))
+            {
+                _ = StepList(layer.Text(TakesKey.Key).Split(','));
+            }
+
+            foreach (var layer in layers.Where(each => each.Kind is "add" or "concatenate" && !(each.Holds(TakesKey.Key) && each.Text(TakesKey.Key).Length > 0)))
+            {
+                throw new ArgumentException($"An '{layer.Kind}' works on the steps it takes, and this one takes none: name them in '{TakesKey.Key}'.", nameof(layers));
             }
 
             foreach (var layer in layers.Where(each => each.Kind == "dense" && !each.YesOrNo(BiasKey.Key) && each.Text(BiasStartKey.Key) != BiasStartKey.LeftOut?.Word()))
@@ -454,6 +482,68 @@ public static class NetworkWords
         public EarlyStopping? Stops() => Word(StoppingWords, stopping, Stopping)(stopping);
     }
 
+    // A layer's kind, with the two things every step may say beside what its word takes: a name and the steps it takes.
+    private static PartKind Step(string name, string purpose, IReadOnlyList<StepParameter> settings) => new(name, purpose, [.. settings, NameKey, TakesKey]);
+
+    /// <summary>The name of a step, held to the rule a name written in a description is held to.</summary>
+    /// <param name="name">The name.</param>
+    /// <returns>The name.</returns>
+    /// <exception cref="ArgumentException">It cannot stand in a path, is a place, is the input's, or holds a comma.</exception>
+    internal static string StepName(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        if (name.Contains(',', StringComparison.Ordinal))
+        {
+            throw new ArgumentException($"A name is written in a list with a comma between the names, so '{name}' cannot hold one.", nameof(name));
+        }
+
+        // The rule lives where a description is lowered, and is held here by asking it: one rule, not a copy of it.
+        _ = new Sequential().Relu().Named(name);
+
+        return name;
+    }
+
+    /// <summary>The steps a layer takes, written as the one text a declaration holds them in.</summary>
+    /// <param name="steps">The names of the steps, <c>input</c> for the rows the network is handed.</param>
+    /// <returns>The names, with a comma between them.</returns>
+    /// <exception cref="ArgumentException">No step is named, or a name is empty or holds a comma.</exception>
+    internal static string StepList(IReadOnlyList<string> steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+
+        if (steps.Count == 0 || steps.Any(step => string.IsNullOrEmpty(step) || step.Contains(',', StringComparison.Ordinal)))
+        {
+            throw new ArgumentException("Steps are named one by one, each some text with no comma in it, and at least one is named.", nameof(steps));
+        }
+
+        return string.Join(',', steps);
+    }
+
+    // One declared layer put on the description: what its word makes, then the name and the steps it says of the step that word made.
+    private static Sequential Made(Sequential described, PartDeclaration layer)
+    {
+        var word = Word(LayerWords, layer, Layers);
+        var kind = Layers.Single(each => each.Name == layer.Kind);
+        var completed = kind.Completed(layer);
+        var made = word(described, completed);
+
+        if (kind.Setting(NameKey.Key) is not null && completed.Text(NameKey.Key) is { Length: > 0 } name)
+        {
+            made = made.Named(name);
+        }
+
+        return kind.Setting(TakesKey.Key) is not null && !IsJoin(layer.Kind) && completed.Text(TakesKey.Key) is { Length: > 0 } takes ? made.Takes(takes.Split(',')) : made;
+    }
+
+    private static bool IsJoin(string kind) => kind is "add" or "concatenate";
+
+    // The steps a join works on: the steps its word takes, and no join works on none.
+    private static string[] StepsOf(PartDeclaration layer) =>
+        layer.Text(TakesKey.Key) is { Length: > 0 } takes
+            ? takes.Split(',')
+            : throw new ArgumentException($"An '{layer.Kind}' works on the steps it takes, and this one takes none: name them in '{TakesKey.Key}'.");
+
     // How a declared dense layer starts: the weights and the bias by the word each is told, or no bias at all.
     private static Beginning StartOf(PartDeclaration layer) => new()
     {
@@ -519,6 +609,9 @@ public static class NetworkWords
             ["randomCrop"] = (described, layer) => described.RandomCrop(layer.Whole(PadKey.Key), layer.Whole(VariationSeedKey.Key)),
             ["gaussianNoise"] = (described, layer) => described.GaussianNoise(layer.Number(SpreadKey.Key), layer.Whole(VariationSeedKey.Key)),
             ["flatten"] = (described, _) => described.Flatten(),
+            ["add"] = (described, layer) => described.Add(StepsOf(layer)),
+            ["concatenate"] = (described, layer) => described.Concatenate(StepsOf(layer)),
+            ["columns"] = (described, layer) => described.Columns(layer.Whole(ColumnFirstKey.Key), layer.Whole(ColumnCountKey.Key)),
             ["batchNorm"] = (described, layer) => GovernedBy(layer, described.BatchNorm(layer.Number(MomentumKey.Key), layer.Number(EpsilonKey.Key), KeptBy(layer))),
             ["layerNorm"] = (described, layer) => GovernedBy(layer, described.LayerNorm(layer.Number(EpsilonKey.Key), KeptBy(layer))),
             ["gelu"] = (described, layer) => described.Gelu(layer.YesOrNo(ApproximateKey.Key)),

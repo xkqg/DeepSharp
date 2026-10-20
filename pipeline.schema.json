@@ -2140,6 +2140,16 @@
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1.7976931348623157E+308
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2163,6 +2173,16 @@
                         "pattern": "^(?:[Rr][Ee][Ll][Uu])$"
                       }
                     ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2185,6 +2205,16 @@
                         "pattern": "^(?:[Tt][Aa][Nn][Hh])$"
                       }
                     ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2207,6 +2237,16 @@
                         "pattern": "^(?:[Ss][Ii][Gg][Mm][Oo][Ii][Dd])$"
                       }
                     ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2235,6 +2275,16 @@
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "maximum": 1.7976931348623157E+308
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2288,6 +2338,16 @@
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "maximum": 1.7976931348623157E+308
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2336,6 +2396,16 @@
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "maximum": 1.7976931348623157E+308
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2363,6 +2433,16 @@
                   "approximate": {
                     "description": "Whether it is the hyperbolic tangent's approximation of the curve rather than the exact one, which PyTorch and Keras use unless told.",
                     "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2386,6 +2466,16 @@
                         "pattern": "^(?:[Ss][Ii][Ll][Uu])$"
                       }
                     ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2408,6 +2498,16 @@
                         "pattern": "^(?:[Mm][Ii][Ss][Hh])$"
                       }
                     ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2436,6 +2536,16 @@
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1.7976931348623157E+308
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2463,6 +2573,16 @@
                   "eachFeature": {
                     "description": "Whether every number of a row learns a share of its own, rather than one share for them all, as PyTorch starts it.",
                     "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2492,6 +2612,16 @@
                     "type": "number",
                     "minimum": 0,
                     "maximum": 1.7976931348623157E+308
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2515,6 +2645,16 @@
                         "pattern": "^(?:[Ss][Ee][Ll][Uu])$"
                       }
                     ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2537,6 +2677,16 @@
                         "pattern": "^(?:[Ss][Oo][Ff][Tt][Mm][Aa][Xx])$"
                       }
                     ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2579,6 +2729,16 @@
                     "type": "number",
                     "exclusiveMinimum": 0,
                     "maximum": 1.7976931348623157E+308
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2624,6 +2784,16 @@
                   "lite": {
                     "description": "Whether one linear layer is shared by every number of the row, rather than one of each number's own.",
                     "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2664,6 +2834,16 @@
                     "type": "integer",
                     "minimum": -2147483648,
                     "maximum": 2147483647
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2701,6 +2881,16 @@
                     "type": "integer",
                     "minimum": -2147483648,
                     "maximum": 2147483647
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2737,6 +2927,16 @@
                     "type": "integer",
                     "minimum": -2147483648,
                     "maximum": 2147483647
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2761,6 +2961,16 @@
                         "pattern": "^(?:[Ff][Ll][Aa][Tt][Tt][Ee][Nn])$"
                       }
                     ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
@@ -2795,12 +3005,132 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 2147483647
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
                   }
                 },
                 "required": [
                   "kind",
                   "vocabulary",
                   "width"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Adds up what the steps it takes made, value by value: a residual block's way of handing on what it was given beside what it made. It takes two steps or more, which must be of one shape.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "add"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Aa][Dd][Dd])$"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Lays what the steps it takes made side by side along the last axis, in the order they are taken: a block that reads everything made before it. It takes two steps or more, alike in every axis but the last.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "concatenate"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Cc][Oo][Nn][Cc][Aa][Tt][Ee][Nn][Aa][Tt][Ee])$"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "description": "Takes some of the columns of a row as a step of its own: how a network of two inputs reads each of them from the one row it is handed.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "columns"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Cc][Oo][Ll][Uu][Mm][Nn][Ss])$"
+                      }
+                    ]
+                  },
+                  "first": {
+                    "description": "The first column of the row taken, counted from nought.",
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  },
+                  "count": {
+                    "description": "How many columns are taken.",
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "first",
+                  "count"
                 ],
                 "additionalProperties": false
               },

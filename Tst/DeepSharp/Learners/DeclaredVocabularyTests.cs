@@ -116,7 +116,7 @@ public class DeclaredVocabularyTests
 
         Assert.All(NetworkWords.Layers, kind => Assert.Contains(kind.Name, catalog));
         Assert.Equal(
-            ["batchNorm", "dense", "dropout", "elu", "embedding", "flatten", "gaussianNoise", "gelu", "layerNorm", "leakyRelu", "mish", "periodic", "prelu", "randomCrop", "randomFlip", "relu", "rmsNorm", "selu", "sigmoid", "silu", "softmax", "tanh", "tokenEmbedding"],
+            ["add", "batchNorm", "columns", "concatenate", "dense", "dropout", "elu", "embedding", "flatten", "gaussianNoise", "gelu", "layerNorm", "leakyRelu", "mish", "periodic", "prelu", "randomCrop", "randomFlip", "relu", "rmsNorm", "selu", "sigmoid", "silu", "softmax", "tanh", "tokenEmbedding"],
             NetworkWords.Layers.Select(kind => kind.Name).Order(StringComparer.Ordinal));
     }
 

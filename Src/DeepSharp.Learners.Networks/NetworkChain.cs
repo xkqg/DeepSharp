@@ -204,6 +204,50 @@ public sealed class NetworkDeclaration
         return alpha is { } scaled ? ranked.OnTheLastLayer("LowRank", "alpha", scaled) : ranked;
     }
 
+    /// <summary>Gives the layer written last a name, so a later layer can take what it made and its numbers are found under it.</summary>
+    /// <param name="name">The name: some text with no dot or comma in it, which is no whole number and is not <c>input</c>.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentException">The name cannot stand in a path, is a place, is the input's, or holds a comma.</exception>
+    /// <exception cref="InvalidOperationException">No layer is written yet.</exception>
+    /// <exception cref="NotSupportedException">The layer written last reads the rows as the pipeline hands them over, and is no step to name.</exception>
+    /// <remarks>A layer called second holds second.weight, as the module a network written as code calls second does. The network's file then names the eighth version of the network's part.</remarks>
+    public NetworkDeclaration Named(string name) => OnTheLastLayer("Named", "name", PartValue.Of(NetworkWords.StepName(name)));
+
+    /// <summary>Has the layer written last work on the named steps instead of the one before it.</summary>
+    /// <param name="steps">The names of the steps — <c>input</c> for the rows the network is handed; the place of a layer nobody named.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentException">No step is named, or a name is empty or holds a comma.</exception>
+    /// <exception cref="InvalidOperationException">No layer is written yet.</exception>
+    /// <exception cref="NotSupportedException">The layer written last reads the rows as the pipeline hands them over, and takes no steps.</exception>
+    public NetworkDeclaration Takes(params string[] steps) => OnTheLastLayer("Takes", "takes", PartValue.Of(NetworkWords.StepList(steps)));
+
+    /// <summary>Adds up what the named steps made, value by value: a residual block's way of handing on what it was given beside what it made.</summary>
+    /// <param name="steps">The names of the steps added up: two or more, of one shape, <c>input</c> for the rows the network is handed.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentException">No step is named, or a name is empty or holds a comma.</exception>
+    /// <remarks>Said of the steps, the join is a layer of its own and may be given a name after it.</remarks>
+    public NetworkDeclaration Add(params string[] steps) => Layer("add", new PartSetting("takes", PartValue.Of(NetworkWords.StepList(steps))));
+
+    /// <summary>Lays what the named steps made side by side along the last axis, in the order they are named: a block that reads everything made before it.</summary>
+    /// <param name="steps">The names of the steps laid side by side: two or more, alike in every axis but the last, <c>input</c> for the rows the network is handed.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentException">No step is named, or a name is empty or holds a comma.</exception>
+    public NetworkDeclaration Concatenate(params string[] steps) => Layer("concatenate", new PartSetting("takes", PartValue.Of(NetworkWords.StepList(steps))));
+
+    /// <summary>Takes some of the columns of a row as a step of its own: how a network of two inputs reads each of them from the one row it is handed.</summary>
+    /// <param name="first">The first column taken, counted from nought.</param>
+    /// <param name="count">How many columns: one at least.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The first column is below nought, or no column is taken.</exception>
+    /// <remarks>It takes the step before it unless <see cref="Takes"/> says <c>input</c> after it, which is how each input of a network of two is cut from the row.</remarks>
+    public NetworkDeclaration Columns(int first, int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(first);
+        ArgumentOutOfRangeException.ThrowIfLessThan(count, 1);
+
+        return Layer("columns", new PartSetting("first", PartValue.Of(first)), new PartSetting("count", PartValue.Of(count)));
+    }
+
     /// <summary>A layer that leaves what is below nought at nought.</summary>
     /// <returns>The declaration.</returns>
     public NetworkDeclaration Relu() => Layer("relu");

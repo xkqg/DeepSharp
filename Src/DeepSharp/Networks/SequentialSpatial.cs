@@ -48,7 +48,7 @@ public sealed partial class Sequential
         ArgumentOutOfRangeException.ThrowIfLessThan(groups, 1);
         RequireUnseeded(beginning);
 
-        return Add(new ConvolutionWord(
+        return Append(new ConvolutionWord(
             "conv1d",
             "a series of steps and channels",
             filters,
@@ -96,7 +96,7 @@ public sealed partial class Sequential
         ArgumentOutOfRangeException.ThrowIfLessThan(groups, 1);
         RequireUnseeded(beginning);
 
-        return Add(new ConvolutionWord(
+        return Append(new ConvolutionWord(
             "conv3d",
             "a volume of planes, rows, columns and channels",
             filters,
@@ -109,21 +109,21 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
     public Sequential MaxPool1D(Window1D window) =>
-        Add(new PoolingWord("maxpool1d", "a series of steps and channels", new LineWalk(window), () => new MaxPool1D(window)));
+        Append(new PoolingWord("maxpool1d", "a series of steps and channels", new LineWalk(window), () => new MaxPool1D(window)));
 
     /// <summary>The largest value a window covers over an image, for each channel.</summary>
     /// <param name="window">The window, and how it walks.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
     public Sequential MaxPool2D(Window window) =>
-        Add(new PoolingWord("maxpool2d", "an image of rows, columns and channels", new PlaneWalk(window), () => new MaxPool2D(window)));
+        Append(new PoolingWord("maxpool2d", "an image of rows, columns and channels", new PlaneWalk(window), () => new MaxPool2D(window)));
 
     /// <summary>The largest value a window covers through a volume, for each channel.</summary>
     /// <param name="window">The window, and how it walks.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
     public Sequential MaxPool3D(Window3D window) =>
-        Add(new PoolingWord("maxpool3d", "a volume of planes, rows, columns and channels", new VolumeWalk(window), () => new MaxPool3D(window)));
+        Append(new PoolingWord("maxpool3d", "a volume of planes, rows, columns and channels", new VolumeWalk(window), () => new MaxPool3D(window)));
 
     /// <summary>The largest value of each run of so many steps of a series, for each channel, as Keras's <c>MaxPooling1D</c> takes it.</summary>
     /// <param name="size">How many steps each run holds, and how far the window moves: the runs do not overlap.</param>
@@ -149,7 +149,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
     public Sequential AvgPool1D(Window1D window, bool countsPadding = false) =>
-        Add(new PoolingWord("avgpool1d", "a series of steps and channels", new LineWalk(window), () => new AvgPool1D(window) { CountsPadding = countsPadding }));
+        Append(new PoolingWord("avgpool1d", "a series of steps and channels", new LineWalk(window), () => new AvgPool1D(window) { CountsPadding = countsPadding }));
 
     /// <summary>The average of the values a window covers over an image, for each channel.</summary>
     /// <param name="window">The window, and how it walks.</param>
@@ -157,7 +157,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
     public Sequential AvgPool2D(Window window, bool countsPadding = false) =>
-        Add(new PoolingWord("avgpool2d", "an image of rows, columns and channels", new PlaneWalk(window), () => new AvgPool2D(window) { CountsPadding = countsPadding }));
+        Append(new PoolingWord("avgpool2d", "an image of rows, columns and channels", new PlaneWalk(window), () => new AvgPool2D(window) { CountsPadding = countsPadding }));
 
     /// <summary>The average of the values a window covers through a volume, for each channel.</summary>
     /// <param name="window">The window, and how it walks.</param>
@@ -165,7 +165,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">The window cannot stand anywhere.</exception>
     public Sequential AvgPool3D(Window3D window, bool countsPadding = false) =>
-        Add(new PoolingWord("avgpool3d", "a volume of planes, rows, columns and channels", new VolumeWalk(window), () => new AvgPool3D(window) { CountsPadding = countsPadding }));
+        Append(new PoolingWord("avgpool3d", "a volume of planes, rows, columns and channels", new VolumeWalk(window), () => new AvgPool3D(window) { CountsPadding = countsPadding }));
 
     /// <summary>The average of each run of so many steps of a series, for each channel, as Keras's <c>AveragePooling1D</c> takes it.</summary>
     /// <param name="size">How many steps each run holds, and how far the window moves: the runs do not overlap.</param>
@@ -189,58 +189,58 @@ public sealed partial class Sequential
     /// <param name="keepsAxes">Whether the axis pooled is kept, as an axis of one place; dropped, unless said.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     public Sequential GlobalMaxPool1D(bool keepsAxes = false) =>
-        Add(new GlobalPoolingWord("globalmaxpool1d", "a series of steps and channels", 1, keepsAxes, () => new GlobalMaxPool1D { KeepsAxes = keepsAxes }));
+        Append(new GlobalPoolingWord("globalmaxpool1d", "a series of steps and channels", 1, keepsAxes, () => new GlobalMaxPool1D { KeepsAxes = keepsAxes }));
 
     /// <summary>The largest value of each channel of an image, all its places pooled: a row of channels for each image.</summary>
     /// <param name="keepsAxes">Whether the axes pooled are kept, as axes of one place; dropped, unless said.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     public Sequential GlobalMaxPool2D(bool keepsAxes = false) =>
-        Add(new GlobalPoolingWord("globalmaxpool2d", "an image of rows, columns and channels", 2, keepsAxes, () => new GlobalMaxPool2D { KeepsAxes = keepsAxes }));
+        Append(new GlobalPoolingWord("globalmaxpool2d", "an image of rows, columns and channels", 2, keepsAxes, () => new GlobalMaxPool2D { KeepsAxes = keepsAxes }));
 
     /// <summary>The largest value of each channel of a volume, all its places pooled: a row of channels for each volume.</summary>
     /// <param name="keepsAxes">Whether the axes pooled are kept, as axes of one place; dropped, unless said.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     public Sequential GlobalMaxPool3D(bool keepsAxes = false) =>
-        Add(new GlobalPoolingWord("globalmaxpool3d", "a volume of planes, rows, columns and channels", 3, keepsAxes, () => new GlobalMaxPool3D { KeepsAxes = keepsAxes }));
+        Append(new GlobalPoolingWord("globalmaxpool3d", "a volume of planes, rows, columns and channels", 3, keepsAxes, () => new GlobalMaxPool3D { KeepsAxes = keepsAxes }));
 
     /// <summary>The average of each channel of a series, all its steps pooled: a row of channels for each series.</summary>
     /// <param name="keepsAxes">Whether the axis pooled is kept, as an axis of one place; dropped, unless said.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     public Sequential GlobalAvgPool1D(bool keepsAxes = false) =>
-        Add(new GlobalPoolingWord("globalavgpool1d", "a series of steps and channels", 1, keepsAxes, () => new GlobalAvgPool1D { KeepsAxes = keepsAxes }));
+        Append(new GlobalPoolingWord("globalavgpool1d", "a series of steps and channels", 1, keepsAxes, () => new GlobalAvgPool1D { KeepsAxes = keepsAxes }));
 
     /// <summary>The average of each channel of an image, all its places pooled: a row of channels for each image.</summary>
     /// <param name="keepsAxes">Whether the axes pooled are kept, as axes of one place; dropped, unless said.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     public Sequential GlobalAvgPool2D(bool keepsAxes = false) =>
-        Add(new GlobalPoolingWord("globalavgpool2d", "an image of rows, columns and channels", 2, keepsAxes, () => new GlobalAvgPool2D { KeepsAxes = keepsAxes }));
+        Append(new GlobalPoolingWord("globalavgpool2d", "an image of rows, columns and channels", 2, keepsAxes, () => new GlobalAvgPool2D { KeepsAxes = keepsAxes }));
 
     /// <summary>The average of each channel of a volume, all its places pooled: a row of channels for each volume.</summary>
     /// <param name="keepsAxes">Whether the axes pooled are kept, as axes of one place; dropped, unless said.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     public Sequential GlobalAvgPool3D(bool keepsAxes = false) =>
-        Add(new GlobalPoolingWord("globalavgpool3d", "a volume of planes, rows, columns and channels", 3, keepsAxes, () => new GlobalAvgPool3D { KeepsAxes = keepsAxes }));
+        Append(new GlobalPoolingWord("globalavgpool3d", "a volume of planes, rows, columns and channels", 3, keepsAxes, () => new GlobalAvgPool3D { KeepsAxes = keepsAxes }));
 
     /// <summary>Leaves whole channels of each series out while training, each afresh on every pass.</summary>
     /// <param name="rate">The share of the channels left out, from nothing to below one.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The rate is not a share below one.</exception>
     public Sequential SpatialDropout1D(double rate) =>
-        Add(new SpatialDropoutWord("spatialdropout1d", "a series of steps and channels", 1, global::DeepSharp.Networks.Dropout.RequireRate(rate), () => new SpatialDropout1D(rate)));
+        Append(new SpatialDropoutWord("spatialdropout1d", "a series of steps and channels", 1, global::DeepSharp.Networks.Dropout.RequireRate(rate), () => new SpatialDropout1D(rate)));
 
     /// <summary>Leaves whole channels of each image out while training, each afresh on every pass.</summary>
     /// <param name="rate">The share of the channels left out, from nothing to below one.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The rate is not a share below one.</exception>
     public Sequential SpatialDropout2D(double rate) =>
-        Add(new SpatialDropoutWord("spatialdropout2d", "an image of rows, columns and channels", 2, global::DeepSharp.Networks.Dropout.RequireRate(rate), () => new SpatialDropout2D(rate)));
+        Append(new SpatialDropoutWord("spatialdropout2d", "an image of rows, columns and channels", 2, global::DeepSharp.Networks.Dropout.RequireRate(rate), () => new SpatialDropout2D(rate)));
 
     /// <summary>Leaves whole channels of each volume out while training, each afresh on every pass.</summary>
     /// <param name="rate">The share of the channels left out, from nothing to below one.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The rate is not a share below one.</exception>
     public Sequential SpatialDropout3D(double rate) =>
-        Add(new SpatialDropoutWord("spatialdropout3d", "a volume of planes, rows, columns and channels", 3, global::DeepSharp.Networks.Dropout.RequireRate(rate), () => new SpatialDropout3D(rate)));
+        Append(new SpatialDropoutWord("spatialdropout3d", "a volume of planes, rows, columns and channels", 3, global::DeepSharp.Networks.Dropout.RequireRate(rate), () => new SpatialDropout3D(rate)));
 
     /// <summary>A convolution with a group for every channel of a series: each channel convolved by a kernel of its own.</summary>
     /// <param name="multiplier">How many channels it makes of each channel it is handed.</param>
@@ -262,7 +262,7 @@ public sealed partial class Sequential
         ArgumentOutOfRangeException.ThrowIfLessThan(multiplier, 1);
         RequireUnseeded(beginning);
 
-        return Add(new DepthwiseWord(
+        return Append(new DepthwiseWord(
             "conv1d",
             "a series of steps and channels",
             multiplier,
@@ -290,7 +290,7 @@ public sealed partial class Sequential
         ArgumentOutOfRangeException.ThrowIfLessThan(multiplier, 1);
         RequireUnseeded(beginning);
 
-        return Add(new DepthwiseWord(
+        return Append(new DepthwiseWord(
             "conv2d",
             "an image of rows, columns and channels",
             multiplier,
@@ -318,7 +318,7 @@ public sealed partial class Sequential
         ArgumentOutOfRangeException.ThrowIfLessThan(multiplier, 1);
         RequireUnseeded(beginning);
 
-        return Add(new DepthwiseWord(
+        return Append(new DepthwiseWord(
             "conv3d",
             "a volume of planes, rows, columns and channels",
             multiplier,
@@ -351,7 +351,7 @@ public sealed partial class Sequential
         var stated = window.Border ?? new Sides(window.Padding, window.Padding);
         var settled = TransposedConvolution.Settling(stated, outputPadding);
 
-        return Add(new TransposedWord(
+        return Append(new TransposedWord(
             "conv1dtranspose",
             "a series of steps and channels",
             1,
@@ -389,7 +389,7 @@ public sealed partial class Sequential
         var down = TransposedConvolution.Settling(window.Border is { } sides ? sides.Down : even, outputPadding.Down);
         var across = TransposedConvolution.Settling(window.Border is { } also ? also.Across : even, outputPadding.Across);
 
-        return Add(new TransposedWord(
+        return Append(new TransposedWord(
             "conv2dtranspose",
             "an image of rows, columns and channels",
             2,
@@ -430,7 +430,7 @@ public sealed partial class Sequential
         var down = TransposedConvolution.Settling(stated.Down, outputPadding.Down);
         var across = TransposedConvolution.Settling(stated.Across, outputPadding.Across);
 
-        return Add(new TransposedWord(
+        return Append(new TransposedWord(
             "conv3dtranspose",
             "a volume of planes, rows, columns and channels",
             3,
@@ -450,7 +450,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">A number of steps is below nothing.</exception>
     public Sequential Pad1D(Sides border, float value = 0f) =>
-        Add(new PaddingWord("pad1d", "a series of steps and channels", 1, [border], () => new Pad1D(border, value)));
+        Append(new PaddingWord("pad1d", "a series of steps and channels", 1, [border], () => new Pad1D(border, value)));
 
     /// <summary>Adds steps at each end of every series, filled from the series itself, and nothing else.</summary>
     /// <param name="border">The steps before the series and after it.</param>
@@ -458,7 +458,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">A number of steps is below nothing.</exception>
     public Sequential Pad1D(Sides border, Filling filling) =>
-        Add(new PaddingWord("pad1d", "a series of steps and channels", 1, [border], () => new Pad1D(border, filling)));
+        Append(new PaddingWord("pad1d", "a series of steps and channels", 1, [border], () => new Pad1D(border, filling)));
 
     /// <summary>Adds rows and columns of nothing around every image, and nothing else.</summary>
     /// <param name="border">The rows above each image and below it, and the columns before it and after it.</param>
@@ -466,7 +466,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">A number of rows or columns is below nothing.</exception>
     public Sequential Pad2D(Margins border, float value = 0f) =>
-        Add(new PaddingWord("pad2d", "an image of rows, columns and channels", 2, [border.Down, border.Across], () => new Pad2D(border, value)));
+        Append(new PaddingWord("pad2d", "an image of rows, columns and channels", 2, [border.Down, border.Across], () => new Pad2D(border, value)));
 
     /// <summary>Adds rows and columns around every image, filled from the image itself, and nothing else.</summary>
     /// <param name="border">The rows above each image and below it, and the columns before it and after it.</param>
@@ -474,7 +474,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">A number of rows or columns is below nothing.</exception>
     public Sequential Pad2D(Margins border, Filling filling) =>
-        Add(new PaddingWord("pad2d", "an image of rows, columns and channels", 2, [border.Down, border.Across], () => new Pad2D(border, filling)));
+        Append(new PaddingWord("pad2d", "an image of rows, columns and channels", 2, [border.Down, border.Across], () => new Pad2D(border, filling)));
 
     /// <summary>Adds planes, rows and columns of nothing around every volume, and nothing else.</summary>
     /// <param name="border">The places at each end of each axis.</param>
@@ -482,7 +482,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">A number of places is below nothing.</exception>
     public Sequential Pad3D(Margins3D border, float value = 0f) =>
-        Add(new PaddingWord(
+        Append(new PaddingWord(
             "pad3d",
             "a volume of planes, rows, columns and channels",
             3,
@@ -495,7 +495,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">A number of places is below nothing.</exception>
     public Sequential Pad3D(Margins3D border, Filling filling) =>
-        Add(new PaddingWord(
+        Append(new PaddingWord(
             "pad3d",
             "a volume of planes, rows, columns and channels",
             3,
@@ -507,7 +507,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">The places are fewer than one.</exception>
     public Sequential AdaptiveAvgPool1D(int places) =>
-        Add(new AdaptiveWord("adaptiveavgpool1d", "a series of steps and channels", new Shape(places), () => new AdaptiveAvgPool1D(new Shape(places))));
+        Append(new AdaptiveWord("adaptiveavgpool1d", "a series of steps and channels", new Shape(places), () => new AdaptiveAvgPool1D(new Shape(places))));
 
     /// <summary>Pools every image to so many rows and columns, each the average of the places it is made of.</summary>
     /// <param name="rows">How many rows each image is pooled to.</param>
@@ -515,7 +515,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">A number of places is fewer than one.</exception>
     public Sequential AdaptiveAvgPool2D(int rows, int columns) =>
-        Add(new AdaptiveWord(
+        Append(new AdaptiveWord(
             "adaptiveavgpool2d",
             "an image of rows, columns and channels",
             new Shape(rows, columns),
@@ -528,7 +528,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">A number of places is fewer than one.</exception>
     public Sequential AdaptiveAvgPool3D(int planes, int rows, int columns) =>
-        Add(new AdaptiveWord(
+        Append(new AdaptiveWord(
             "adaptiveavgpool3d",
             "a volume of planes, rows, columns and channels",
             new Shape(planes, rows, columns),
@@ -539,7 +539,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">The places are fewer than one.</exception>
     public Sequential AdaptiveMaxPool1D(int places) =>
-        Add(new AdaptiveWord("adaptivemaxpool1d", "a series of steps and channels", new Shape(places), () => new AdaptiveMaxPool1D(new Shape(places))));
+        Append(new AdaptiveWord("adaptivemaxpool1d", "a series of steps and channels", new Shape(places), () => new AdaptiveMaxPool1D(new Shape(places))));
 
     /// <summary>Pools every image to so many rows and columns, each the largest of the places it is made of.</summary>
     /// <param name="rows">How many rows each image is pooled to.</param>
@@ -547,7 +547,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">A number of places is fewer than one.</exception>
     public Sequential AdaptiveMaxPool2D(int rows, int columns) =>
-        Add(new AdaptiveWord(
+        Append(new AdaptiveWord(
             "adaptivemaxpool2d",
             "an image of rows, columns and channels",
             new Shape(rows, columns),
@@ -560,7 +560,7 @@ public sealed partial class Sequential
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentException">A number of places is fewer than one.</exception>
     public Sequential AdaptiveMaxPool3D(int planes, int rows, int columns) =>
-        Add(new AdaptiveWord(
+        Append(new AdaptiveWord(
             "adaptivemaxpool3d",
             "a volume of planes, rows, columns and channels",
             new Shape(planes, rows, columns),

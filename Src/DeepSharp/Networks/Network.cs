@@ -390,7 +390,7 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
         return placed;
     }
 
-    private static string RequireName(string name)
+    internal static string RequireName(string name)
     {
         if (string.IsNullOrWhiteSpace(name)
             || name.Contains('.', StringComparison.Ordinal)
