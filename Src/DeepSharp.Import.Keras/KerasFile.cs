@@ -32,7 +32,7 @@ namespace DeepSharp.Import.Keras;
 /// model trained on its logits is read as it stands.
 /// </para>
 /// <para>
-/// What is read: a Sequential model working in single precision, of Dense layers — one that has a low-rank pair beside its held
+/// What is read: a Sequential model, or a Functional one, working in single precision, of Dense layers — one that has a low-rank pair beside its held
 /// kernel (<c>enable_lora</c>) too, from the archive Keras 3 saves, which holds the kernel merged with the pair and so begins a
 /// pair of its own, and from the HDF5 file, which holds the kernel and both matrices as they are; Conv1D, Conv2D and Conv3D convolutions,
 /// their transposed, depthwise and separable forms, and ZeroPadding layers; MaxPooling and AveragePooling layers and
@@ -53,10 +53,20 @@ namespace DeepSharp.Import.Keras;
 /// series; any layer of series, images or volumes with its channels first; a normalisation over another axis than the last,
 /// or a layer normalisation scaled by <c>rms_scaling</c>, which Keras works out from the variance; an embedding anywhere but
 /// first, over more than one place, masking the place nought or of low-rank factors; a dropout by a noise shape; a reshape that leaves a length to be
-/// worked out; a relu with a cap, a slope or a threshold; a model of another kind than a Sequential, of another precision,
+/// worked out; a relu with a cap, a slope or a threshold; a model of another kind than a Sequential or a Functional one, of another precision,
 /// of an input whose lengths are not all stated, or saved without its loss; and a focal loss that smooths its labels, or a
 /// loss that adds a batch's losses up rather than taking their mean. A description that says a layer keeps less than the file's numbers
 /// hold is refused at the number the network has no slot for, and one that says it keeps more at the slot left empty.
+/// </para>
+/// <para>
+/// A Functional model is read as steps: each layer takes the layers it names — an Add of two or more, a Concatenate along the last
+/// axis, or any other layer of one layer — and a layer that takes other than the one listed before it says which, so a value
+/// added back after the layers that worked on it, or everything made before it laid beside the input, is the network it is. A
+/// model of several inputs is handed to the network as the columns of one row, each input a block of columns in the order the
+/// model lists its inputs, so each must be a row of numbers. Refused at the layer that says it: a layer called more than once
+/// (a shared layer) or with anything but the tensors it takes, layers stated in the form Keras 2 wrote, a Concatenate along
+/// another axis than the last, a model that gives more than one tensor or one that is not its last layer's, and a separable
+/// convolution that does not take the layer listed before it.
 /// </para>
 /// </remarks>
 public sealed class KerasFile : IImporter

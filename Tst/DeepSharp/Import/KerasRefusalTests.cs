@@ -44,7 +44,7 @@ public class KerasRefusalTests
         "a Keras model is read here when each of its layers is a Dense, Conv1D, Conv2D, Conv3D, Conv1DTranspose, Conv2DTranspose, Conv3DTranspose, DepthwiseConv1D, DepthwiseConv2D, "
         + "SeparableConv1D, SeparableConv2D, ZeroPadding1D, ZeroPadding2D, ZeroPadding3D, MaxPooling1D, MaxPooling2D, MaxPooling3D, AveragePooling1D, AveragePooling2D, AveragePooling3D, "
         + "GlobalMaxPooling1D, GlobalMaxPooling2D, GlobalMaxPooling3D, GlobalAveragePooling1D, GlobalAveragePooling2D, GlobalAveragePooling3D, BatchNormalization, LayerNormalization, Dropout, "
-        + "SpatialDropout1D, SpatialDropout2D, SpatialDropout3D, GroupNormalization, RMSNormalization, Embedding, Flatten, Reshape, Activation, ReLU, LeakyReLU, PReLU, ELU or Softmax.";
+        + "SpatialDropout1D, SpatialDropout2D, SpatialDropout3D, GroupNormalization, RMSNormalization, Embedding, Flatten, Reshape, Activation, ReLU, LeakyReLU, PReLU, ELU or Softmax, or, in a Functional model, an Add or a Concatenate.";
 
     private const string Activations = "linear, relu, tanh, sigmoid, gelu, silu, swish, mish, leaky_relu, elu, selu and softmax.";
 
@@ -62,8 +62,8 @@ public class KerasRefusalTests
 
     [Theory]
     // What the model is, what it takes, and what it holds.
-    [InlineData(Titanic, new[] { "class_name=\"Functional\"" }, "config.json: the model is a Functional, and a Keras model is read here when it is a Sequential: a stack of layers, each handed what the one before it made.")]
-    [InlineData(Titanic, new[] { "class_name=\"Functional\\r\\nFAKE LINE\"" }, "config.json: the model is a Functional\\r\\nFAKE LINE, and a Keras model is read here when it is a Sequential: a stack of layers, each handed what the one before it made.")]
+    [InlineData(Titanic, new[] { "class_name=\"Subclassed\"" }, "config.json: the model is a Subclassed, and a Keras model is read here when it is a Sequential — layers each handed what the one before it made — or a Functional one, whose layers each take the layers they name.")]
+    [InlineData(Titanic, new[] { "class_name=\"Functional\\r\\nFAKE LINE\"" }, "config.json: the model is a Functional\\r\\nFAKE LINE, and a Keras model is read here when it is a Sequential — layers each handed what the one before it made — or a Functional one, whose layers each take the layers they name.")]
     [InlineData(Titanic, new[] { "config.layers.0=-", "config.build_input_shape=-" }, "config.json: the model states no shape for its input — it begins with no InputLayer and says no build_input_shape — and every width its layers take is worked out from that shape.")]
     [InlineData(Titanic, new[] { "config.layers.0.config.batch_shape=[null, 14, null]" }, "config.json: the model's input, [null, 14, null], does not state every length of an example, and a network here is built for examples of one shape.")]
     [InlineData(Titanic, new[] { "config.layers.0.config.batch_shape=-" }, "config.json, layer 'input_layer' (InputLayer): it says no 'batch_shape'.")]
