@@ -165,6 +165,60 @@ internal static class OnnxLayouts
         return turned;
     }
 
+    /// <summary>
+    /// The weights of a recurrent operator for one direction, written gates' outputs by inputs with the gates one block of rows after another
+    /// in ONNX's order, as the weights a layer here keeps: inputs by gates' outputs, the gates in the library's order. A vector is the
+    /// weights of one input.
+    /// </summary>
+    /// <param name="written">The numbers as ONNX writes them.</param>
+    /// <param name="inputs">What the weights read.</param>
+    /// <param name="hidden">How many numbers each gate makes.</param>
+    /// <param name="order">For each gate in ONNX's order, which gate of the library's order it is.</param>
+    /// <returns>The numbers in the slot's order.</returns>
+    public static float[] GatesToSlot(float[] written, int inputs, int hidden, int[] order)
+    {
+        var wide = order.Length * hidden;
+        var kept = new float[written.Length];
+
+        for (var gate = 0; gate < order.Length; gate++)
+        {
+            for (var unit = 0; unit < hidden; unit++)
+            {
+                for (var input = 0; input < inputs; input++)
+                {
+                    kept[(input * wide) + (order[gate] * hidden) + unit] = written[((((gate * hidden) + unit) * inputs)) + input];
+                }
+            }
+        }
+
+        return kept;
+    }
+
+    /// <summary>The move back of <see cref="GatesToSlot"/>: a layer's weights as ONNX writes those of a recurrent operator.</summary>
+    /// <param name="kept">The numbers in the slot's order.</param>
+    /// <param name="inputs">What the weights read.</param>
+    /// <param name="hidden">How many numbers each gate makes.</param>
+    /// <param name="order">For each gate in ONNX's order, which gate of the library's order it is.</param>
+    /// <returns>The numbers as ONNX writes them.</returns>
+    public static float[] SlotToGates(float[] kept, int inputs, int hidden, int[] order)
+    {
+        var wide = order.Length * hidden;
+        var written = new float[kept.Length];
+
+        for (var gate = 0; gate < order.Length; gate++)
+        {
+            for (var unit = 0; unit < hidden; unit++)
+            {
+                for (var input = 0; input < inputs; input++)
+                {
+                    written[((((gate * hidden) + unit) * inputs)) + input] = kept[(input * wide) + (order[gate] * hidden) + unit];
+                }
+            }
+        }
+
+        return written;
+    }
+
     /// <summary>The move back of <see cref="PlaceByPlace"/>: the first axis from the order here to ONNX's, channel by channel.</summary>
     /// <param name="values">The numbers, with the flattened image's axis first.</param>
     /// <param name="rows">The image's rows.</param>

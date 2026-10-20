@@ -464,7 +464,7 @@ public sealed class NetworkDeclaration
     /// <param name="sequences">Whether it makes its state at every step instead of the last; the last, unless said.</param>
     /// <returns>The declaration.</returns>
     /// <remarks>Given a mask as its second step — <c>.Takes("steps", "mask")</c> — a batch of series of unequal lengths is read each as it would be read alone.</remarks>
-    public NetworkDeclaration Lstm(int hidden, bool bothWays = false, int layers = 1, bool sequences = false) => Recurrent("lstm", hidden, bothWays, layers, sequences);
+    public NetworkDeclaration Lstm(int hidden, bool bothWays = false, int layers = 1, bool sequences = false) => Recurrent("lstm", hidden, new Stacking(bothWays, layers, sequences));
 
     /// <summary>A gated recurrent unit that reads each series a step at a time, as PyTorch's <c>nn.GRU</c> does.</summary>
     /// <param name="hidden">How many numbers the state it carries along a series holds.</param>
@@ -472,24 +472,27 @@ public sealed class NetworkDeclaration
     /// <param name="layers">How many layers are stacked, each reading the steps of the one below; one, unless said.</param>
     /// <param name="sequences">Whether it makes its state at every step instead of the last; the last, unless said.</param>
     /// <returns>The declaration.</returns>
-    public NetworkDeclaration Gru(int hidden, bool bothWays = false, int layers = 1, bool sequences = false) => Recurrent("gru", hidden, bothWays, layers, sequences);
+    public NetworkDeclaration Gru(int hidden, bool bothWays = false, int layers = 1, bool sequences = false) => Recurrent("gru", hidden, new Stacking(bothWays, layers, sequences));
+
+    // How a recurrent layer is stacked and what it gives: its directions, its layers, and every step or the last.
+    private readonly record struct Stacking(bool BothWays, int Layers, bool Sequences);
 
     // A recurrent layer: what is left at its default is left out of the layer, so a file that says nothing of it means the default.
-    private NetworkDeclaration Recurrent(string kind, int hidden, bool bothWays, int layers, bool sequences)
+    private NetworkDeclaration Recurrent(string kind, int hidden, Stacking stacking)
     {
         var layer = Kind(kind).Declared().With("units", PartValue.Of(hidden));
 
-        if (layers != 1)
+        if (stacking.Layers != 1)
         {
-            layer = layer.With("layers", PartValue.Of(layers));
+            layer = layer.With("layers", PartValue.Of(stacking.Layers));
         }
 
-        if (bothWays)
+        if (stacking.BothWays)
         {
             layer = layer.With("bothWays", PartValue.Of(true));
         }
 
-        if (sequences)
+        if (stacking.Sequences)
         {
             layer = layer.With("sequences", PartValue.Of(true));
         }

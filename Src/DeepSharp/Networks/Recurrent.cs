@@ -203,8 +203,8 @@ public abstract class Recurrent : Layer
         {
             var top = layer == Recurrence.Layers - 1;
             var collect = !top || Recurrence.Sequences;
-            var forward = Walk(backend, current, layer * Directions, new Direction(Reverse: false, collect), markers);
-            var backward = Recurrence.BothWays ? Walk(backend, current, (layer * Directions) + 1, new Direction(Reverse: true, collect), markers) : default;
+            var forward = Walk(backend, current, new Direction(layer * Directions, Reverse: false, collect), markers);
+            var backward = Recurrence.BothWays ? Walk(backend, current, new Direction((layer * Directions) + 1, Reverse: true, collect), markers) : default;
 
             if (top && !Recurrence.Sequences)
             {
@@ -219,8 +219,9 @@ public abstract class Recurrent : Layer
 
     // One direction of one layer over a batch of series: the state carried along them, a step at a time, in the layout of the hidden numbers
     // by the series, so a gate is a block of rows and the products are weights times states.
-    private Walked Walk(ITensorBackend backend, Tensor series, int at, Direction direction, Tensor? markers)
+    private Walked Walk(ITensorBackend backend, Tensor series, Direction direction, Tensor? markers)
     {
+        var at = direction.At;
         var count = series.Shape[0];
         var steps = series.Shape[1];
         var reads = series.Shape[2];
@@ -313,7 +314,7 @@ public abstract class Recurrent : Layer
     /// <param name="Cell">The cell state, by the series; nothing for a layer that has none.</param>
     private protected readonly record struct State(Tensor Hidden, Tensor? Cell);
 
-    private readonly record struct Direction(bool Reverse, bool Collect);
+    private readonly record struct Direction(int At, bool Reverse, bool Collect);
 
     private readonly record struct Walked(Tensor? Sequence, Tensor Last);
 }

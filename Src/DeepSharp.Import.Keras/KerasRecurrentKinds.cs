@@ -128,13 +128,13 @@ internal sealed class RecurrentKind(string name) : KerasKind
 
             if (gru && own[2].Lengths is [2, var wide])
             {
-                made.Add(Vector($"bias_ih{suffix}", own[2].Values!.AsSpan(0, (int)wide), own[2], gru, gates));
-                made.Add(Vector($"bias_hh{suffix}", own[2].Values!.AsSpan((int)wide, (int)wide), own[2], gru, gates));
+                made.Add(Vector($"bias_ih{suffix}", own[2].Values!.AsSpan(0, (int)wide), own[2], new Gating(gru, gates)));
+                made.Add(Vector($"bias_hh{suffix}", own[2].Values!.AsSpan((int)wide, (int)wide), own[2], new Gating(gru, gates)));
             }
             else
             {
-                made.Add(Vector($"bias_ih{suffix}", own[2].Values!, own[2], gru: false, gates));
-                made.Add(Vector($"bias_hh{suffix}", new float[own[2].Values!.Length], own[2], gru: false, gates));
+                made.Add(Vector($"bias_ih{suffix}", own[2].Values!, own[2], new Gating(false, gates)));
+                made.Add(Vector($"bias_hh{suffix}", new float[own[2].Values!.Length], own[2], new Gating(false, gates)));
             }
         }
 
@@ -165,13 +165,16 @@ internal sealed class RecurrentKind(string name) : KerasKind
         return new RemadeNumber(slot, new Shape(lengths), values, number.Source);
     }
 
+    // Whether the gates are a GRU's, which Keras orders otherwise than here, and how many gates there are.
+    private readonly record struct Gating(bool Gru, int Count);
+
     // A bias, the gates one after another: put in the order a GRU's gates stand in here.
-    private static RemadeNumber Vector(string slot, ReadOnlySpan<float> values, HeldNumber number, bool gru, int gates)
+    private static RemadeNumber Vector(string slot, ReadOnlySpan<float> values, HeldNumber number, Gating gating)
     {
-        var one = values.Length / gates;
+        var one = values.Length / gating.Count;
         var made = values.ToArray();
 
-        if (gru && values.Length % gates == 0)
+        if (gating.Gru && values.Length % gating.Count == 0)
         {
             values[..one].CopyTo(made.AsSpan(one, one));
             values[one..(2 * one)].CopyTo(made.AsSpan(0, one));

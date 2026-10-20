@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using DeepSharp.Export.Onnx;
+using DeepSharp.Import.Onnx;
 using DeepSharp.Networks;
 using DeepSharp.Tensors;
 using Onnx;
@@ -26,6 +27,7 @@ public class OnnxRecurrentExportTests
         ["gru at every step"] = new(() => new Sequential().Gru(4, sequences: true).Flatten().Dense(2).Lower(new Shape(5, 3), new RandomStream(2)), new Shape(5, 3)),
         ["lstm of two layers in both directions"] = new(() => new Sequential().Lstm(3, bothWays: true, layers: 2).Dense(1).Lower(new Shape(5, 3), new RandomStream(3)), new Shape(5, 3)),
         ["gru in both directions at every step"] = new(() => new Sequential().Gru(3, bothWays: true, sequences: true).Dense(2).GlobalMaxPool1D().Dense(1).Lower(new Shape(5, 3), new RandomStream(4)), new Shape(5, 3)),
+        ["gru in both directions pooled"] = new(() => new Sequential().Gru(3, bothWays: true, sequences: true).GlobalMaxPool1D().Dense(1).Lower(new Shape(5, 3), new RandomStream(10)), new Shape(5, 3)),
         ["a stack of an lstm and a gru"] = new(() => new Sequential().Lstm(4, sequences: true).Gru(3).Dense(1).Lower(new Shape(6, 2), new RandomStream(5)), new Shape(6, 2)),
         ["a layer run over every step"] = new(() => new Sequential().Gru(4, sequences: true).EveryStep(new Sequential().Dense(3).Relu()).GlobalAvgPool1D().Dense(1).Lower(new Shape(5, 3), new RandomStream(6)), new Shape(5, 3)),
     };
@@ -47,6 +49,29 @@ public class OnnxRecurrentExportTests
 
         Assert.Equal(here.Length, there.Length);
         Assert.InRange(here.Zip(there, (one, other) => Math.Abs(one - other)).Max(), 0, 1e-5);
+    }
+
+    // A dense layer over the steps of a series, and a layer run over every step, are written with turns of the series the reader does not read:
+    // it refuses them at the Transpose, by name.
+    private static readonly string[] NotReadBack = ["gru in both directions at every step", "a layer run over every step"];
+
+    public static TheoryData<string> EveryReadableReading => [.. Readings.Keys.Except(NotReadBack)];
+
+    [Theory]
+    [MemberData(nameof(EveryReadableReading))]
+    public void AWrittenGraph_IsReadBackByTheReader_AnsweringAsTheNetworkDoes(string name)
+    {
+        var network = Runtime.Filled(Readings[name].Network());
+        var loss = new MeanSquaredError();
+        var each = Readings[name].Each;
+        var rows = Runtime.Batch(4, each);
+        var read = new OnnxFile(loss).Read(new MemoryStream(new OnnxExport(each).ToBytes(network, loss)));
+
+        var here = network.Predict(rows, loss, Engine).Values.ToArray();
+        var back = read.Network.Predict(rows, read.Loss, Engine).Values.ToArray();
+
+        Assert.Equal(here.Length, back.Length);
+        Assert.InRange(here.Zip(back, (one, other) => Math.Abs(one - other)).Max(), 0, 1e-5);
     }
 
     [Fact]

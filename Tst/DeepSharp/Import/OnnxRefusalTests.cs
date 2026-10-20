@@ -76,7 +76,7 @@ public class OnnxRefusalTests
 
     private const string LastConv = "/0/0.7/Conv";
 
-    private const string Operators = "an ONNX graph is read here when each of its nodes is a Gemm, MatMul, Add, Conv, ConvTranspose, Pad, MaxPool, AveragePool, GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape, Relu, Tanh, Sigmoid, Gelu, LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization, RMSNormalization or Softmax, or an Identity, a Cast, a Transpose or a Constant that hands a value on, or a Concat, a Split or a Slice that joins or cuts columns.";
+    private const string Operators = "an ONNX graph is read here when each of its nodes is a Gemm, MatMul, Add, Conv, ConvTranspose, Pad, MaxPool, AveragePool, GlobalAveragePool, GlobalMaxPool, ReduceMean, ReduceMax, BatchNormalization, LayerNormalization, Flatten, Reshape, Relu, Tanh, Sigmoid, Gelu, LeakyRelu, PRelu, Elu, Selu, Mish, InstanceNormalization, GroupNormalization, RMSNormalization, Softmax, LSTM or GRU, or an Identity, a Cast, a Transpose or a Constant that hands a value on, or a Concat, a Split or a Slice that joins or cuts columns.";
 
     private const string Pads = "and a window here pads every side alike, or as SAME_UPPER, TensorFlow's 'same'.";
 
@@ -574,7 +574,7 @@ public class OnnxRefusalTests
         var refused = Assert.Throws<FormatException>(() => new OnnxFile(new BinaryCrossEntropy()).Read(
             OnnxFixtures.Edited(Titanic, model => model.Node("/1/Relu").OpType = huge)));
 
-        Assert.True(refused.Message.Length < 1000, $"The message is {refused.Message.Length} characters long.");
+        Assert.True(refused.Message.Length < 1200, $"The message is {refused.Message.Length} characters long.");
         Assert.Contains("(10000 characters)", refused.Message, StringComparison.Ordinal);
     }
 

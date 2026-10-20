@@ -26,6 +26,24 @@ internal enum Flow
     /// lays them out and as images are here: what a Transpose moving an image's channels last hands on.
     /// </summary>
     ImagesLast,
+
+    /// <summary>
+    /// A batch of series with the steps first, as ONNX's recurrent operators take them: step by batch by channel. What a Transpose of
+    /// a series hands on; the layer that reads it reads each series a step at a time.
+    /// </summary>
+    TimeMajor,
+
+    /// <summary>What a recurrent operator makes at every step: step by direction by batch by the numbers of one direction's state.</summary>
+    Directed,
+
+    /// <summary>The steps a recurrent operator made with the batch moved before the directions: step by batch by direction by state.</summary>
+    DirectedByBatch,
+
+    /// <summary>The last states a recurrent operator makes: direction by batch by state.</summary>
+    States,
+
+    /// <summary>The last states with the batch moved before the directions: batch by direction by state.</summary>
+    StatesByBatch,
 }
 
 /// <summary>What reaches a node: the value's layout, the batch's length when the graph states one, and along how many axes it walks.</summary>
@@ -33,7 +51,8 @@ internal enum Flow
 /// <param name="Batch">The batch's length the graph's input states; nothing when it leaves it open.</param>
 /// <param name="Axes">How many axes a series, an image or a volume has beside its batch and its channels: one, two or three; none for rows.</param>
 /// <param name="Lifted">Whether a series has one more axis of one place than it has, made by the Unsqueeze before the pooling that takes it.</param>
-internal readonly record struct Reaching(Flow Flow, long? Batch, int Axes, bool Lifted = false);
+/// <param name="Directions">How many directions the states of a recurrent operator's result are made in: one, or two when it reads each series both ways.</param>
+internal readonly record struct Reaching(Flow Flow, long? Batch, int Axes, bool Lifted = false, int Directions = 1);
 
 /// <summary>How the values several nodes made become one step.</summary>
 internal enum Joining
@@ -87,6 +106,12 @@ internal readonly record struct OnnxLayer(Action<Sequential>? Words, Flow After)
     /// <summary>How wide a row of the value it gives is, when the node states it: a dense layer's units.</summary>
     public int? Width { get; init; }
 
+    /// <summary>How many directions the states it gives are made in; nothing for any layer but a recurrent one, which leaves them as they were.</summary>
+    public int? Directions { get; init; }
+
+    /// <summary>Which of the values the node gives is the one the layer makes: its first, unless a node gives several and the layer makes a later one.</summary>
+    public int OutputAt { get; init; }
+
     /// <summary>
     /// The border a convolution's or a pooling's pads write out, one side at a time, read as TensorFlow's 'same': held after
     /// lowering to the border 'same' gives the images that reach it. Nothing for a border stated alike on every side, or
@@ -112,12 +137,13 @@ internal abstract class OnnxKind
         new ActivationKind("Relu", description => description.Relu(), null), new ActivationKind("Tanh", description => description.Tanh(), null),
         new ActivationKind("Sigmoid", description => description.Sigmoid(), OutputActivation.Sigmoid), new GeluKind(), new LeakyReluKind(), new PReluKind(),
         new EluKind(), new SeluKind(), new MishKind(), new InstanceNormalizationKind(), new GroupNormalizationKind(), new RmsNormalizationKind(), new SoftmaxKind(),
+        new LstmKind(), new GruKind(),
     ];
 
     /// <summary>Every operator read, by ONNX's name for it.</summary>
     public static IReadOnlyDictionary<string, OnnxKind> ByName { get; } = Covered.ToDictionary(kind => kind.Name, StringComparer.Ordinal);
 
-    /// <summary>The operators read, named as a refusal names them: <c>Gemm, Conv, … or Softmax</c>.</summary>
+    /// <summary>The operators read, named as a refusal names them: <c>Gemm, Conv, … or GRU</c>.</summary>
     public static string Listed { get; } = $"{string.Join(", ", Covered[..^1].Select(kind => kind.Name))} or {Covered[^1].Name}";
 
     /// <summary>ONNX's name for the operator.</summary>

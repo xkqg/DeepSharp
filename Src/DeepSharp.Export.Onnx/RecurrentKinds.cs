@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Import.Onnx;
 using DeepSharp.Networks;
 using DeepSharp.Tensors;
 
@@ -135,7 +136,7 @@ internal sealed class RecurrentKind<TLayer>(string op, int[] order) : ExportKind
 
         for (var direction = 0; direction < directions; direction++)
         {
-            values.AddRange(Gated(Slot(layer, $"{kind}_l{depth}{(direction == 1 ? "_reverse" : string.Empty)}"), inputs, hidden, order));
+            values.AddRange(OnnxLayouts.SlotToGates(Slot(layer, $"{kind}_l{depth}{(direction == 1 ? "_reverse" : string.Empty)}"), inputs, hidden, order));
         }
 
         return at.Graph.Number(at.Number($"{kind}_l{depth}.onnx"), [directions, wide, inputs], [.. values]);
@@ -152,34 +153,14 @@ internal sealed class RecurrentKind<TLayer>(string op, int[] order) : ExportKind
         {
             var suffix = $"_l{depth}{(direction == 1 ? "_reverse" : string.Empty)}";
 
-            values.AddRange(Gated(Slot(layer, $"bias_ih{suffix}"), 1, layer.Recurrence.Hidden, order));
-            values.AddRange(Gated(Slot(layer, $"bias_hh{suffix}"), 1, layer.Recurrence.Hidden, order));
+            values.AddRange(OnnxLayouts.SlotToGates(Slot(layer, $"bias_ih{suffix}"), 1, layer.Recurrence.Hidden, order));
+            values.AddRange(OnnxLayouts.SlotToGates(Slot(layer, $"bias_hh{suffix}"), 1, layer.Recurrence.Hidden, order));
         }
 
         return at.Graph.Number(at.Number($"bias_l{depth}.onnx"), [directions, 2 * wide], [.. values]);
     }
 
     private static float[] Slot(Recurrent layer, string name) => layer.Slots().Single(each => each.Path == name).Slot.Value.Values.ToArray();
-
-    // Weights kept inputs by gates' outputs, as ONNX keeps them: gates' outputs by inputs, the gates' blocks in ONNX's order.
-    private static float[] Gated(float[] kept, int inputs, int hidden, int[] order)
-    {
-        var wide = order.Length * hidden;
-        var made = new float[kept.Length];
-
-        for (var gate = 0; gate < order.Length; gate++)
-        {
-            for (var unit = 0; unit < hidden; unit++)
-            {
-                for (var input = 0; input < inputs; input++)
-                {
-                    made[((((gate * hidden) + unit) * inputs)) + input] = kept[(input * wide) + (order[gate] * hidden) + unit];
-                }
-            }
-        }
-
-        return made;
-    }
 }
 
 /// <summary>

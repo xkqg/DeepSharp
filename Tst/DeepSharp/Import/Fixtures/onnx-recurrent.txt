@@ -1,0 +1,5 @@
+lstm-last outputs of the first example [0.47270363569259644, 0.3285679817199707]
+lstm-every outputs of the first example [-0.014073904603719711, 0.13352958858013153]
+gru-every outputs of the first example [-0.10228694975376129, 0.0025523900985717773]
+gru-both outputs of the first example [0.14347051084041595, -0.23751993477344513]
+lstm-two outputs of the first example [-0.11101928353309631, 0.2402445673942566]

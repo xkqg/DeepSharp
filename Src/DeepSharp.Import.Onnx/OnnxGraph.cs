@@ -19,7 +19,7 @@ namespace DeepSharp.Import.Onnx;
 /// its output — and then, once its words are lowered and an example of nothing has been sent through the layers to find
 /// the shape reaching each, what can only be told with those shapes: a reshape's row, and the image each flattened row was.
 /// </remarks>
-internal sealed class OnnxGraph
+internal sealed partial class OnnxGraph
 {
     private readonly List<string> _faults = [];
     private readonly Sequential _description = new();
@@ -203,6 +203,7 @@ internal sealed class OnnxGraph
     private List<Built> Walked(Taken input)
     {
         _values[input.Value] = new Made(TheInput, input.Reaching, input.Reaching.Flow == Flow.Images, input.Lengths is [var width] ? width : null);
+        _started = Starting();
 
         var flowing = input.Value;
         var last = _values[flowing];
@@ -218,7 +219,13 @@ internal sealed class OnnxGraph
                 continue;
             }
 
-            var data = node.Inputs.Where(name => name.Length > 0 && !_numbers.Holds(name)).ToList();
+            if (_started.Contains(place))
+            {
+                continue;
+            }
+
+            // A recurrent node takes one value the graph works out, the series; its weights are held, and its states are read apart.
+            var data = (node.Operator is "LSTM" or "GRU" ? node.Inputs.Take(1) : node.Inputs).Where(name => name.Length > 0 && !_numbers.Holds(name)).ToList();
 
             if (node.Operator == "Identity" && data.Count == 0 && _numbers.Holds(node.Input(0)))
             {
@@ -325,9 +332,19 @@ internal sealed class OnnxGraph
         {
             _values[node.Output] = made;
         }
+        else if (Recurring(reaching.Flow) && Stepped(node, made, taken))
+        {
+            _previous = node.Operator;
+        }
         else
         {
             var before = _faults.Count;
+
+            if (node.Operator is "LSTM" or "GRU")
+            {
+                Started(node);
+            }
+
             var layer = OnnxKind.ByName.TryGetValue(node.Operator, out var kind) ? kind.Read(node, reaching, _numbers) : Unknown(node, reaching);
 
             if (layer.Adds is { } added)
@@ -338,7 +355,10 @@ internal sealed class OnnxGraph
             else
             {
                 _built.Add(new Built(node, layer, _faults.Count > before) { Sources = [made.Step] });
-                _values[node.Output] = new Made(_built.Count - 1, reaching with { Flow = layer.After }, false, WidthOf(node, layer, made));
+
+                var given = layer.OutputAt < node.Outputs.Count ? node.Outputs[layer.OutputAt] : node.Output;
+                _values[given] = new Made(_built.Count - 1, reaching with { Flow = layer.After, Directions = layer.Directions ?? reaching.Directions }, false, WidthOf(node, layer, made));
+                _values.TryAdd(node.Output, _values[given]);
             }
 
             _previous = node.Operator;
@@ -356,7 +376,7 @@ internal sealed class OnnxGraph
         {
             node.Refuse("it lays side by side two values or more that nodes made, and no value the graph holds.");
         }
-        else if (parts.Any(part => part.Reaching.Flow != first.Flow || part.Reaching.Axes != first.Axes || part.Reaching.Lifted))
+        else if (parts.Any(part => part.Reaching.Flow != first.Flow || part.Reaching.Axes != first.Axes || part.Reaching.Lifted || Stepwise(part.Reaching.Flow)))
         {
             node.Refuse("it takes values laid out otherwise, and a network here joins values laid out alike.");
         }
@@ -387,7 +407,7 @@ internal sealed class OnnxGraph
         var made = _values[data[0]];
         var axis = node.Operator == "Split" ? node.Whole("axis", 0) : Axis(node);
 
-        if (!IsLastAxis(made.Reaching, axis) || made.Reaching.Lifted)
+        if (!IsLastAxis(made.Reaching, axis) || made.Reaching.Lifted || Stepwise(made.Reaching.Flow))
         {
             node.Refuse(string.Create(
                 CultureInfo.InvariantCulture,
@@ -414,7 +434,7 @@ internal sealed class OnnxGraph
         {
             if (node.Taken(at) is { } name)
             {
-                Columned(node, name, made, first, sizes[at]);
+                Columned(node, name, made, new Run(first, sizes[at]));
             }
 
             first += sizes[at];
@@ -513,14 +533,14 @@ internal sealed class OnnxGraph
             return;
         }
 
-        Columned(node, node.Output, made, (int)from, (int)(to - from));
+        Columned(node, node.Output, made, new Run((int)from, (int)(to - from)));
     }
 
     // One block of columns as a step of its own.
-    private void Columned(OnnxNode node, string output, Made made, int first, int count)
+    private void Columned(OnnxNode node, string output, Made made, Run run)
     {
-        _built.Add(new Built(node, new OnnxLayer(description => description.Columns(first, count), made.Reaching.Flow), false) { Sources = [made.Step] });
-        _values[output] = new Made(_built.Count - 1, made.Reaching, false, count);
+        _built.Add(new Built(node, new OnnxLayer(description => description.Columns(run.First, run.Count), made.Reaching.Flow), false) { Sources = [made.Step] });
+        _values[output] = new Made(_built.Count - 1, made.Reaching, false, run.Count);
     }
 
     // What a Slice states at a place among its inputs, from ONNX 10, or as an attribute before; none when it states none.
@@ -575,6 +595,11 @@ internal sealed class OnnxGraph
         if (turn is [0, 2, 3, 1] && flow == Flow.Images && reaching.Axes == 2)
         {
             return Flow.ImagesLast;
+        }
+
+        if (Sequenced(turn, reaching, undeclared) is { } sequenced)
+        {
+            return sequenced;
         }
 
         if (turn is [0, 3, 1, 2] && (flow == Flow.ImagesLast || (undeclared && reaching.Axes == 2)))
@@ -660,6 +685,10 @@ internal sealed class OnnxGraph
         {
             _faults.Add(
                 $"output '{flowing.Quoted()}': it is an image flattened as ONNX lays an image out, channel by channel, and a network here flattens an image place by place, so its values would come out in another order.");
+        }
+        else if (Recurring(flow))
+        {
+            _faults.Add($"output '{flowing.Quoted()}': it is a series laid out as ONNX's recurrent operators give one, with the steps before the batch, and a network here gives the batch first.");
         }
     }
 
@@ -789,6 +818,9 @@ internal sealed class OnnxGraph
 
     /// <summary>A value of the graph: the node that made it, how it is laid out, whether an image has declared no layout yet, and how wide a row of it is when that is known.</summary>
     private readonly record struct Made(int Step, Reaching Reaching, bool Undeclared, int? Width);
+
+    /// <summary>A run of columns: where it starts and how many it holds.</summary>
+    private readonly record struct Run(int First, int Count);
 
     /// <summary>A layer written into the description, and its place in the stack it lowers onto.</summary>
     private readonly record struct Placed(int Place, OnnxNode Node, OnnxLayer Layer);

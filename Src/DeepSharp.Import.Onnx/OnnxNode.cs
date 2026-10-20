@@ -141,6 +141,9 @@ internal sealed class OnnxNode
     /// <summary>The names of its attributes, as a fault lists them: <c>'value_ints'</c>.</summary>
     public string Attributes => $"'{string.Join("', '", _node.Attribute.Select(attribute => attribute.Name.Quoted()))}'";
 
+    /// <summary>How many faults are noted among the graph's so far, the node's among them.</summary>
+    public int Faults => _faults.Count;
+
     /// <summary>Notes a fault at the node.</summary>
     public void Refuse(string fault) => _faults.Add($"{Address.Quoted()}: {fault}");
 

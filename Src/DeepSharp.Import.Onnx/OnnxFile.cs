@@ -72,6 +72,18 @@ namespace DeepSharp.Import.Onnx;
 /// dense layer before it where the cut needs it. A step that nothing takes is refused, since its work would be made and never used.
 /// </para>
 /// <para>
+/// A series is read through an LSTM or a GRU node when it is taken the way ONNX's recurrent operators take it, step by batch by
+/// channel — the Transpose that first takes the graph's input, or any Transpose of a series between the two orders — and the node
+/// starts from nought (the state a graph spells as an Expand of a constant nought, with the nodes that work out its shape),
+/// reads forward or both ways, and gives either its steps or its last states to what follows. The Squeeze, the Transpose, the Gather
+/// and the Reshape that put what it gave in order — one direction dropped, the two laid side by side, the last state picked — are
+/// followed without a layer of their own. Its weights are turned round and their gates put in this library's order, a node that
+/// leaves its biases out starts from biases of nought as ONNX says, and a GRU is read when it resets after the product, as
+/// PyTorch's does. A node given the lengths of its series, another starting state, peepholes, other activations, a clip, a coupled
+/// forget gate, a batch-first layout or a direction back alone is refused, and so is one whose steps and last states are both
+/// taken, and a stack's last states picked out of several layers by Gather and Concat.
+/// </para>
+/// <para>
 /// What is refused, at the node that says it and every such node at once: a node taking values no node made, or several that
 /// are no Add of two or Concat, and any other operator, among them every other Reduce, any Unsqueeze and Squeeze
 /// but those round the pooling of a series, the Mul tf2onnx writes a batch normalisation as, and the Shape and Gather it works a
