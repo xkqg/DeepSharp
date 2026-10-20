@@ -415,6 +415,7 @@ public static class EnsembleExtensions
         /// <param name="count">How many: at least one, and no more than the trials that finished.</param>
         /// <returns>The declarations, the trial judged lowest first, the earlier of two judged alike first.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The count is below one, or above the number of trials that finished.</exception>
+        /// <exception cref="InvalidOperationException">One of them declared several networks, judged together.</exception>
         /// <remarks>
         /// A study chooses by the validation rows alone, so the few it hands on are chosen by them alone; train them with
         /// <c>prepared.TrainEnsemble(result.Top(3))</c>. Trials that were pruned, or judged by a number that is none, are not among them.
@@ -431,6 +432,12 @@ public static class EnsembleExtensions
                     nameof(count),
                     count,
                     $"A study hands on the best of the trials that finished, and {finished.Length} did: ask for between one and {finished.Length}.");
+            }
+
+            if (finished.Take(count).FirstOrDefault(trial => trial.Members.Count > 1) is { } several)
+            {
+                throw new InvalidOperationException(
+                    $"Trial {several.Number} declared {several.Members.Count} networks, judged together: an ensemble blends networks that each answer the same rows, and these answer different ones. Train its networks from StudyResult.Members, or by their declarations in Trial.Members.");
             }
 
             return [.. finished.Take(count).Select(trial => trial.Declared)];
