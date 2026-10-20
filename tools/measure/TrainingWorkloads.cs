@@ -53,11 +53,34 @@ internal sealed class TrainingWorkloads
 
         foreach (var run in Runs)
         {
-            foreach (var (engine, plain) in new[] { ("light", false), ("light without its shortcuts", true) })
+            foreach (var threads in new[] { 1, 5 })
             {
-                foreach (var threads in new[] { 1, 5 })
+                // Both engines are warmed, and then trained in turn, one run of each after the other, so a slow patch of the machine and
+                // the tiering of the compiler fall on both alike.
+                Train(run, 1, plain: false);
+                Train(run, 1, plain: true);
+
+                var light = new List<Cost>();
+                var plain = new List<Cost>();
+
+                for (var repeat = 0; repeat < _repeats; repeat++)
                 {
-                    var cost = Median(run, threads, plain);
+                    // Alternating which comes first: the run that follows another has a machine the other warmed.
+                    if (repeat % 2 == 0)
+                    {
+                        light.Add(Train(run, threads, plain: false));
+                        plain.Add(Train(run, threads, plain: true));
+                    }
+                    else
+                    {
+                        plain.Add(Train(run, threads, plain: true));
+                        light.Add(Train(run, threads, plain: false));
+                    }
+                }
+
+                foreach (var (engine, costs) in new[] { ("light", light), ("light without its shortcuts", plain) })
+                {
+                    var cost = costs.OrderBy(each => each.Wall).ElementAt(costs.Count / 2);
 
                     table.AppendLine(string.Create(
                         CultureInfo.InvariantCulture,
@@ -67,20 +90,6 @@ internal sealed class TrainingWorkloads
         }
 
         return table.ToString();
-    }
-
-    private Cost Median(TrainingWorkload run, int threads, bool plain)
-    {
-        Train(run, 1, plain);
-
-        var costs = new List<Cost>();
-
-        for (var repeat = 0; repeat < _repeats; repeat++)
-        {
-            costs.Add(Train(run, threads, plain));
-        }
-
-        return costs.OrderBy(cost => cost.Wall).ElementAt(costs.Count / 2);
     }
 
     // Trains a workload on this many threads of its own at once — dedicated ones, since a thread pool starved by a run is a

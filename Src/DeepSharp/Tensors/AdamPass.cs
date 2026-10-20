@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Numerics;
 using DeepSharp.Networks;
 
 namespace DeepSharp.Tensors;
@@ -12,10 +13,11 @@ namespace DeepSharp.Tensors;
 /// </summary>
 /// <remarks>
 /// Every operation of the twenty is a single operation of single precision on each number, so the pass is: a float times a float,
-/// rounded to a float, and so on, with nothing fused and nothing kept in a wider width than the chain keeps it. The chain begins
-/// at a mean of nothing and a mean of the squares of nothing, so a first step is worked out from those, a negative nought
-/// included. A number that comes out as no number is left to the chain, because which of two not-a-numbers an operation keeps
-/// is the instruction's to say and the chain is what the bits were defined by.
+/// rounded to a float, and so on, with nothing fused and nothing kept in a wider width than the chain keeps it — a vector's width of
+/// numbers at a time, and the last few one at a time, which are the same operations. The chain begins at a mean of nothing and a mean
+/// of the squares of nothing, so a first step is worked out from those, a negative nought included. A number that comes out as no
+/// number is left to the chain, because which of two not-a-numbers an operation keeps is the instruction's to say and the chain is
+/// what the bits were defined by.
 /// </remarks>
 internal sealed class AdamPass(Tensor gradient, AdamMoments? before, AdamStepping stepping)
 {
@@ -26,14 +28,14 @@ internal sealed class AdamPass(Tensor gradient, AdamMoments? before, AdamSteppin
         var count = gradient.Shape.Count;
         var betas = stepping.Means.Betas;
         var steps = (before?.Steps ?? 0) + 1;
-        var keepFirst = (float)betas.First;
-        var takeFirst = (float)(1 - betas.First);
-        var keepSecond = (float)betas.Second;
-        var takeSecond = (float)(1 - betas.Second);
-        var correction = (float)(1 / Math.Sqrt(1 - Math.Pow(betas.Second, steps)));
-        var epsilon = (float)stepping.Terms.Epsilon;
-        var size = (float)(stepping.Rate / (1 - Math.Pow(betas.First, steps)));
-        var amsgrad = stepping.Means.AmsGrad;
+        var terms = new Terms(
+            (float)betas.First,
+            (float)(1 - betas.First),
+            (float)betas.Second,
+            (float)(1 - betas.Second),
+            (float)(1 / Math.Sqrt(1 - Math.Pow(betas.Second, steps))),
+            (float)stepping.Terms.Epsilon,
+            (float)(stepping.Rate / (1 - Math.Pow(betas.First, steps))));
 
         ReadOnlySpan<float> values = stepping.From.Values;
         ReadOnlySpan<float> gradients = gradient.Values;
@@ -43,20 +45,57 @@ internal sealed class AdamPass(Tensor gradient, AdamMoments? before, AdamSteppin
         var moved = new float[count];
         var average = new float[count];
         var squared = new float[count];
-        var biggest = amsgrad ? new float[count] : null;
+        var biggest = stepping.Means.AmsGrad ? new float[count] : null;
+        var at = 0;
         var noNumber = false;
 
-        for (var at = 0; at < count; at++)
+        if (Vector.IsHardwareAccelerated)
+        {
+            var width = Vector<float>.Count;
+            var keepFirst = new Vector<float>(terms.KeepFirst);
+            var takeFirst = new Vector<float>(terms.TakeFirst);
+            var keepSecond = new Vector<float>(terms.KeepSecond);
+            var takeSecond = new Vector<float>(terms.TakeSecond);
+            var correction = new Vector<float>(terms.Correction);
+            var epsilon = new Vector<float>(terms.Epsilon);
+            var size = new Vector<float>(terms.Size);
+
+            for (; at + width <= count; at += width)
+            {
+                var g = new Vector<float>(gradients.Slice(at, width));
+                var mean = ((lastAverage.IsEmpty ? Vector<float>.Zero : new Vector<float>(lastAverage.Slice(at, width))) * keepFirst) + (g * takeFirst);
+                var square = ((lastSquared.IsEmpty ? Vector<float>.Zero : new Vector<float>(lastSquared.Slice(at, width))) * keepSecond) + ((g * g) * takeSecond);
+                var rooted = square;
+
+                if (biggest is not null)
+                {
+                    // AMSGrad keeps the larger of the last largest and this square, chosen as the engine chooses: each multiplied by the one
+                    // or the nought that keeps it or leaves it out.
+                    var previous = lastLargest.IsEmpty ? Vector<float>.Zero : new Vector<float>(lastLargest.Slice(at, width));
+                    var takes = Vector.ConditionalSelect(Vector.GreaterThan(square - previous, Vector<float>.Zero), Vector<float>.One, Vector<float>.Zero);
+
+                    rooted = (previous * (Vector<float>.One - takes)) + (square * takes);
+                    rooted.CopyTo(biggest, at);
+                }
+
+                var after = new Vector<float>(values.Slice(at, width)) - ((mean / ((Vector.SquareRoot(rooted) * correction) + epsilon)) * size);
+
+                mean.CopyTo(average, at);
+                square.CopyTo(squared, at);
+                after.CopyTo(moved, at);
+                noNumber |= !(Vector.EqualsAll(after, after) & Vector.EqualsAll(mean, mean) & Vector.EqualsAll(square, square) & Vector.EqualsAll(rooted, rooted));
+            }
+        }
+
+        for (; at < count; at++)
         {
             var g = gradients[at];
-            var mean = (float)((lastAverage.IsEmpty ? 0f : lastAverage[at]) * keepFirst) + (float)(g * takeFirst);
-            var square = (float)((lastSquared.IsEmpty ? 0f : lastSquared[at]) * keepSecond) + (float)((float)(g * g) * takeSecond);
+            var mean = (float)((lastAverage.IsEmpty ? 0f : lastAverage[at]) * terms.KeepFirst) + (float)(g * terms.TakeFirst);
+            var square = (float)((lastSquared.IsEmpty ? 0f : lastSquared[at]) * terms.KeepSecond) + (float)((float)(g * g) * terms.TakeSecond);
             var rooted = square;
 
             if (biggest is not null)
             {
-                // AMSGrad keeps the larger of the last largest and this square, chosen as the engine chooses: each multiplied by the one
-                // or the nought that keeps it or leaves it out.
                 var previous = lastLargest.IsEmpty ? 0f : lastLargest[at];
                 var takes = (float)(square - previous) > 0f ? 1f : 0f;
 
@@ -64,8 +103,7 @@ internal sealed class AdamPass(Tensor gradient, AdamMoments? before, AdamSteppin
                 biggest[at] = rooted;
             }
 
-            var denominator = (float)((float)MathF.Sqrt(rooted) * correction) + epsilon;
-            var after = values[at] - (float)((float)(mean / denominator) * size);
+            var after = values[at] - (float)((float)(mean / ((float)((float)MathF.Sqrt(rooted) * terms.Correction) + terms.Epsilon)) * terms.Size);
 
             average[at] = mean;
             squared[at] = square;
@@ -84,4 +122,7 @@ internal sealed class AdamPass(Tensor gradient, AdamMoments? before, AdamSteppin
             Tensor.Wrap(shape, moved),
             new AdamMoments(steps, Tensor.Wrap(shape, average), Tensor.Wrap(shape, squared), biggest is null ? null : Tensor.Wrap(shape, biggest)));
     }
+
+    // The single-precision numbers a step is worked out with, each as the chain rounds it to a float.
+    private readonly record struct Terms(float KeepFirst, float TakeFirst, float KeepSecond, float TakeSecond, float Correction, float Epsilon, float Size);
 }

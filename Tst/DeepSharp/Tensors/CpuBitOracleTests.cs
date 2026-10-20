@@ -104,6 +104,8 @@ public class CpuBitOracleTests
 
         yield return new SoftmaxCase("of a row of one value", Tensor.From(new Shape(1, 3), [5f, 5f, 5f]));
         yield return new SoftmaxCase("of a row with an infinity", Tensor.From(new Shape(1, 3), [float.NegativeInfinity, 0f, 1f]));
+        yield return new SoftmaxCase("of a row whose largest is a nought of either sign", Tensor.From(new Shape(3, 4), [-3f, -0f, 0f, -1f, -0f, -0f, -5f, -2f, 0f, 0f, -0f, -7f]));
+        yield return new SoftmaxCase("of a row of one nought", Tensor.From(new Shape(2, 1), [-0f, 0f]));
     }
 
     private static string DigestOf(IEnumerable<Tensor> products)

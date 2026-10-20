@@ -342,13 +342,7 @@ public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLef
         for (var start = 0; start < values.Length; start += columns)
         {
             var row = values.Slice(start, columns);
-            var largest = double.NegativeInfinity;
-
-            foreach (var value in row)
-            {
-                largest = Math.Max(largest, value);
-            }
-
+            var largest = LargestOf(row);
             var total = 0d;
 
             foreach (var value in row)
@@ -365,6 +359,30 @@ public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLef
         }
 
         return Tensor.Wrap(matrix.Shape, result);
+    }
+
+    // The largest value of a row, found by the vector instructions; a row with a value that is no number is found again one value at a time,
+    // as which of two not-a-numbers a comparison keeps is the instruction's to say, and the one at a time is the one the bits were defined by.
+    private static double LargestOf(ReadOnlySpan<float> row)
+    {
+        var largest = double.NegativeInfinity;
+
+        if (!row.IsEmpty)
+        {
+            var found = TensorPrimitives.Max(row);
+
+            if (!float.IsNaN(found) && found != 0f)
+            {
+                return found;
+            }
+        }
+
+        foreach (var value in row)
+        {
+            largest = Math.Max(largest, value);
+        }
+
+        return largest;
     }
 
     /// <inheritdoc />

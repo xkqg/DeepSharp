@@ -6,7 +6,7 @@ using DeepSharp.Measure;
 using DeepSharp.Tensors;
 
 // What the light engine costs, written as Markdown: `dotnet run --project tools/measure -c Release -f net10.0 -- all`.
-// "products" times the matrix products only, "training" the runs, "all" both. Nothing here is a test: a time is the machine's.
+// "products" times the matrix products only, "others" the log-softmax and the spread product, "training" the runs, "all" every one. Nothing here is a test: a time is the machine's.
 var what = args.Length > 0 ? args[0] : "all";
 var named = new CpuBackend();
 
@@ -21,9 +21,23 @@ if (what is "products" or "all")
     Console.WriteLine();
 }
 
+if (what is "others" or "all")
+{
+    var others = new OtherWorkloads(new Measurement());
+
+    Console.WriteLine("## log-softmax, 0.13.0's arithmetic against this build's");
+    Console.WriteLine();
+    Console.Write(others.LogSoftmax());
+    Console.WriteLine();
+    Console.WriteLine("## a large product spread over threads, alone and five asked at once");
+    Console.WriteLine();
+    Console.Write(others.Spread());
+    Console.WriteLine();
+}
+
 if (what is "training" or "all")
 {
     Console.WriteLine("## training runs, alone and five at a time in one process");
     Console.WriteLine();
-    Console.Write(new TrainingWorkloads(repeats: 3).Table());
+    Console.Write(new TrainingWorkloads(repeats: 9).Table());
 }
