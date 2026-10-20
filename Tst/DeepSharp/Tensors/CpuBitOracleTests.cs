@@ -14,11 +14,17 @@ namespace DeepSharp.Tests.Tensors;
 /// negative nothing, a thousandth of a millionth, a number past the largest, infinities, and two not-a-numbers that differ
 /// only in their payload.
 /// </summary>
+/// <remarks>
+/// Every bit of every number is held. Of a result that is no number, only that it is none is: which of two not-a-numbers an addition
+/// keeps is the instruction's to say, and the code a coverage run instruments is compiled with the operands in another order than the
+/// same code run plainly (measured: 0xFFC00003 plain, 0x7FC00002 instrumented, in the very same cell), so a payload is not a contract
+/// any test can hold the engine to.
+/// </remarks>
 public class CpuBitOracleTests
 {
     // The digest of every answer the products below make, as the released arithmetic made them. A product that moved one bit of
     // one cell moves it.
-    private const string ProductsDigest = "0EB99D53E9AD87EC65D10D3EEFB3C7B0DE8F42861A99E58B6B593B9FE5630CAE";
+    private const string ProductsDigest = "72B38750AD067468AA0AAC9097F87BEAD9764330516D54495D421D7E17FB61D2";
 
     private static readonly float[] Specials =
     [
@@ -117,7 +123,7 @@ public class CpuBitOracleTests
         {
             foreach (var value in product.Values)
             {
-                BinaryPrimitives.WriteUInt32LittleEndian(word, BitConverter.SingleToUInt32Bits(value));
+                BinaryPrimitives.WriteUInt32LittleEndian(word, float.IsNaN(value) ? 0x7FC00000u : BitConverter.SingleToUInt32Bits(value));
                 hash.AppendData(word);
             }
         }
@@ -136,6 +142,11 @@ public class CpuBitOracleTests
         {
             var wantedBits = BitConverter.SingleToUInt32Bits(wanted[at]);
             var gotBits = BitConverter.SingleToUInt32Bits(got[at]);
+
+            if (float.IsNaN(wanted[at]) && float.IsNaN(got[at]))
+            {
+                continue;
+            }
 
             Assert.True(wantedBits == gotBits, $"{what}, cell {at}: 0.13.0 made 0x{wantedBits:X8}, this build makes 0x{gotBits:X8}.");
         }
