@@ -87,6 +87,8 @@ public sealed class NetworkCatalog
         .Register<Sum>()
         .Register<Concatenation>()
         .Register<Columns>()
+        .Register<Unpadded>()
+        .Register<EveryStep>()
         .Register<Lstm>()
         .Register<Gru>()
         .Register<Reshape>()

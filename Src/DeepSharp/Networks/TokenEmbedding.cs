@@ -30,6 +30,7 @@ public sealed class TokenEmbedding : Layer, ISaved<TokenEmbedding>
     private const string LengthKey = "length";
     private const string VocabularyKey = "vocabulary";
     private const string WidthKey = "width";
+    private const string KeepStepsKey = "keepSteps";
 
     /// <summary>An embedding of the ids of a text, its vectors starting from the given draws.</summary>
     /// <param name="length">How many ids a row holds: one at least.</param>
@@ -52,6 +53,16 @@ public sealed class TokenEmbedding : Layer, ISaved<TokenEmbedding>
     /// <summary>How many ids a row holds.</summary>
     public int Length { get; }
 
+    /// <summary>
+    /// Whether each id keeps its own vector at its step — a row of ids comes out as a series, steps by the width of a vector, the padding
+    /// nothing — instead of the average of the words'; the average, unless said.
+    /// </summary>
+    /// <remarks>What a recurrent layer reads, with the mask <see cref="Unpadded"/> makes of the same row.</remarks>
+    public bool KeepsSteps { get; init; }
+
+    /// <inheritdoc />
+    public int FileVersion => KeepsSteps ? NetworkDocument.EighthVersion : NetworkDocument.SecondVersion;
+
     /// <summary>How many ids there are: padding, the id of a word never seen, and the words.</summary>
     public int Vocabulary => Weight.Value.Shape[0];
 
@@ -69,7 +80,10 @@ public sealed class TokenEmbedding : Layer, ISaved<TokenEmbedding>
     {
         ArgumentNullException.ThrowIfNull(rebuilding);
 
-        return new(rebuilding.Whole(settings, LengthKey), rebuilding.Whole(settings, VocabularyKey), rebuilding.Whole(settings, WidthKey), rebuilding.Draws);
+        return new(rebuilding.Whole(settings, LengthKey), rebuilding.Whole(settings, VocabularyKey), rebuilding.Whole(settings, WidthKey), rebuilding.Draws)
+        {
+            KeepsSteps = rebuilding.Holds(settings, KeepStepsKey),
+        };
     }
 
     /// <inheritdoc />
@@ -80,6 +94,11 @@ public sealed class TokenEmbedding : Layer, ISaved<TokenEmbedding>
         writer.WriteNumber(LengthKey, Length);
         writer.WriteNumber(VocabularyKey, Vocabulary);
         writer.WriteNumber(WidthKey, Width);
+
+        if (KeepsSteps)
+        {
+            writer.WriteBoolean(KeepStepsKey, true);
+        }
     }
 
     /// <inheritdoc />
@@ -97,6 +116,12 @@ public sealed class TokenEmbedding : Layer, ISaved<TokenEmbedding>
         var rows = input.Shape[0];
         var vocabulary = Vocabulary;
         var ids = input.Values;
+
+        if (KeepsSteps)
+        {
+            return Kept(pass.Backend, ids, rows);
+        }
+
         var shares = new float[rows * vocabulary];
 
         for (var row = 0; row < rows; row++)
@@ -121,6 +146,24 @@ public sealed class TokenEmbedding : Layer, ISaved<TokenEmbedding>
         }
 
         return pass.Backend.MatMul(Tensor.From(new Shape(rows, vocabulary), shares), Weight.Value);
+    }
+
+    // Each id's vector at its step: a row of ones where an id is a word, picking the vector, and of noughts where it is padding.
+    private Tensor Kept(ITensorBackend backend, ReadOnlySpan<float> ids, int rows)
+    {
+        var picks = new float[rows * Length * Vocabulary];
+
+        for (var step = 0; step < rows * Length; step++)
+        {
+            var id = IdAt(ids[step], step / Length, step % Length);
+
+            if (id != 0)
+            {
+                picks[(step * Vocabulary) + id] = 1f;
+            }
+        }
+
+        return backend.Reshape(backend.MatMul(Tensor.From(new Shape(rows * Length, Vocabulary), picks), Weight.Value), new Shape(rows, Length, Width));
     }
 
     private int IdAt(float value, int row, int at)

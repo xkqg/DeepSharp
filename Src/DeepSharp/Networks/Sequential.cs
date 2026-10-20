@@ -349,15 +349,24 @@ public sealed partial class Sequential
         return Append(new ColumnsWord(first, count));
     }
 
+    /// <summary>A description run over every step of a series: the steps laid out as rows, the layers called once, the answers put back as the series.</summary>
+    /// <param name="inner">The words of the layers every step is run through; held by this description as they stand.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentNullException">There is no description.</exception>
+    /// <exception cref="InvalidOperationException">The description holds no word.</exception>
+    /// <remarks>Keras's <c>TimeDistributed</c>. A dense layer or a normalisation works on the last axis and needs no wrapper; this is for layers that take a row. The numbers are found under <c>layer</c>.</remarks>
+    public Sequential EveryStep(Sequential inner)
+    {
+        ArgumentNullException.ThrowIfNull(inner);
+
+        return inner._words.Count == 0 ? throw new InvalidOperationException(NoLayers) : Append(new EveryStepWord(new Sequential(inner)));
+    }
+
     /// <summary>A description inside this one, as one step: its words lowered at the shape the step is handed, under the step's name.</summary>
     /// <param name="inner">The words of the block; held by this description as they stand, a word written after this changes nothing.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <exception cref="ArgumentNullException">There is no block.</exception>
     /// <exception cref="InvalidOperationException">The block holds no word.</exception>
-    /// <remarks>
-    /// A block's layers start from the draws of the block's place and then their own, so naming or moving a block moves no layer's start.
-    /// Its numbers are found under the block's name and then the names inside it: <c>block.0.weight</c>.
-    /// </remarks>
     public Sequential Block(Sequential inner)
     {
         ArgumentNullException.ThrowIfNull(inner);
@@ -397,6 +406,7 @@ public sealed partial class Sequential
             var layer = visit.Word switch
             {
                 BlockWord block => block.Inner.Lowered(visit.Inputs[0], stream, string.Create(CultureInfo.InvariantCulture, $"{within}{place}.")),
+                EveryStepWord every => new EveryStep(every.Inner.Lowered(every.EachStep(visit.Inputs[0]), stream, string.Create(CultureInfo.InvariantCulture, $"{within}{place}."))),
                 IJoinWord join => join.Make(visit.Inputs),
                 var word => word.Make(visit.Inputs[0], stream.Draw(purpose, 0, 0)),
             };
@@ -499,6 +509,7 @@ public sealed partial class Sequential
             var refusal = word switch
             {
                 IJoinWord join => join.Refusal(inputs),
+                IMaskedWord masked => masked.Refusal(inputs),
                 _ when inputs.Length != 1 => string.Create(CultureInfo.InvariantCulture, $"takes the work of one step, and was given {inputs.Length}."),
                 _ => word.Refusal(inputs[0]),
             };
@@ -536,7 +547,7 @@ public sealed partial class Sequential
     }
 
     // Whether any word names its step, takes other than the step before it, or is a join or a block: a description that is not a straight line.
-    private bool Branches => _said.Any(said => said != default) || _words.Any(word => word is IJoinWord or BlockWord);
+    private bool Branches => _said.Any(said => said != default) || _words.Any(word => word is IJoinWord or BlockWord or EveryStepWord);
 
     private void RequireStep()
     {
@@ -649,6 +660,13 @@ public sealed partial class Sequential
         public Shape After(Shape each) => new([.. each.Axes[..^1].ToArray(), Units]);
 
         public Layer Make(Shape each, Draws draws) => new Dense(each[each.Rank - 1], Units, Begins with { Draws = draws });
+    }
+
+    // A word that reads a series and may be given, as a second take, the mask of which steps are steps of a series.
+    private interface IMaskedWord : IWord
+    {
+        /// <summary>What is wrong with the work of the steps it takes — the series, and the mask when there is one; nothing when it can take them.</summary>
+        string? Refusal(Shape[] inputs);
     }
 
     // A word that varies the rows while a network trains, and so stands before every other.
@@ -764,6 +782,35 @@ public sealed partial class Sequential
         public Shape After(Shape each) => new([.. each.Axes[..^1], Count]);
 
         public Layer Make(Shape each, Draws draws) => new Columns(First, Count);
+    }
+
+    /// <summary>A description run over every step of a series: whole examples laid out as rows, the description lowered at the shape of one step.</summary>
+    private sealed record EveryStepWord(Sequential Inner) : IWord
+    {
+        public Shape EachStep(Shape each) => new(each.Axes[1..].ToArray());
+
+        public string? Refusal(Shape each)
+        {
+            if (each.Rank < 2)
+            {
+                return $"everyStep, takes each example as a series of steps, and each reaching it is {each}.";
+            }
+
+            try
+            {
+                Inner.Check(EachStep(each));
+
+                return null;
+            }
+            catch (ArgumentException refused)
+            {
+                return $"everyStep, {refused.Message}";
+            }
+        }
+
+        public Shape After(Shape each) => new([each[0], .. Inner.Resolve(EachStep(each))[^1].After.Axes.ToArray()]);
+
+        public Layer Make(Shape each, Draws draws) => throw new InvalidOperationException("A layer run over every step is lowered with the stream of its description, at its own place.");
     }
 
     private sealed record BlockWord(Sequential Inner) : IWord
