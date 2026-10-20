@@ -889,6 +889,16 @@ public sealed class FittingBuilder
     public FittingBuilder History(string key, string value, double shrink, params string[] orderBy) =>
         Add(new HistoryStep(key, value, orderBy, shrink));
 
+    /// <summary>Writes beside each row the mean of a column over the last places of the order before it, among the training rows of its key.</summary>
+    /// <param name="key">The column whose value says which rows are of one kind.</param>
+    /// <param name="value">The column of numbers whose earlier mean is read.</param>
+    /// <param name="reach">How many of the last places are read, and how much the training rows' mean weighs beside them.</param>
+    /// <param name="orderBy">The columns that say which rows came before a row, the one that decides first first.</param>
+    /// <returns>The builder.</returns>
+    /// <remarks>Rows of one place count as one, and a window that holds none reads the mean of every training row; <see cref="HistoryStep"/> has the whole rule.</remarks>
+    public FittingBuilder History(string key, string value, HistoryReach reach, params string[] orderBy) =>
+        Add(new HistoryStep(key, value, orderBy, reach));
+
     /// <summary>Brings each row onto a comparable scale, learning nothing.</summary>
     /// <param name="norm">How the row's size is measured.</param>
     /// <param name="columns">The columns that make up the row.</param>

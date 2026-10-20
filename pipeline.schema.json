@@ -1879,6 +1879,12 @@
           "minimum": 0,
           "maximum": 1.7976931348623157E+308
         },
+        "window": {
+          "description": "How many of the last places of the order a row reads, rows of one place counting as one; left out, every earlier row. A window of nothing is read with a weight of nothing too.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
         "into": {
           "type": "string",
           "pattern": "\\S",

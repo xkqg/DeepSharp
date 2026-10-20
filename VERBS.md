@@ -404,7 +404,7 @@ Means what it says from version 1 of the file.
 Writes beside each row the mean of a column over the earlier training rows of its key, pulled towards the training rows' mean.
 
 ```json
-{"step":"history","key":"key","value":"value","orderBy":["when"],"shrink":3,"into":"value_history_key"}
+{"step":"history","key":"key","value":"value","orderBy":["when"],"shrink":3,"window":3,"into":"value_history_key"}
 ```
 
 | key | holds | an example |
@@ -413,12 +413,14 @@ Writes beside each row the mean of a column over the earlier training rows of it
 | `value` | the name of a column holding a number, a whole number or true or false | `"value"` |
 | `orderBy` | a list of the names of columns holding a moment in time, a whole number or a number, each named once | `["when"]` |
 | `shrink` | a number, 0 or more | `3` |
+| `window` | a whole number, at least 1; left out, 0 | `3` |
 | `into` | the name of the column it makes; left out, the step decides | `"value_history_key"` |
 
 - **`key`**: The column whose value says which rows are of one kind: a farm, a type.
 - **`value`**: The column of numbers whose mean over the earlier rows of the same kind is read.
 - **`orderBy`**: The columns that say which rows came before a row: the first decides, each next one decides between rows the ones before call equal.
 - **`shrink`**: How many rows' worth of weight the mean of every training row has beside a key's own rows, above nothing: the larger, the more a key with few rows is pulled towards it.
+- **`window`**: How many of the last places of the order a row reads, rows of one place counting as one; left out, every earlier row. A window of nothing is read with a weight of nothing too.
 - **`into`**: The name of the column it makes; left out, the value's name, 'history' and the key's name.
 
 Means what it says from version 10 of the file.
