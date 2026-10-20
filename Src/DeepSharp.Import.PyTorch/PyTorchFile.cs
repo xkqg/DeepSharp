@@ -15,7 +15,7 @@ namespace DeepSharp.Import.PyTorch;
 /// <para>
 /// The file holds numbers alone, so the reader is handed the network they belong to — a <see cref="LayerStack"/>, as the
 /// Keras words build one or as it is written by hand, its layers numbered as PyTorch's <c>Sequential</c> numbers its modules,
-/// or a network written as code, its layers named as the PyTorch module named them — and the loss it answers through, and
+/// a network of steps whose paths meet, each step called as the PyTorch module is called, or a network written as code, its layers named as the PyTorch module named them — and the loss it answers through, and
 /// hands both back once the numbers are in. How PyTorch lays out each number is read off the layer that holds its slot,
 /// never off the numbers' shape: a linear layer's weights are kept outputs by inputs there and inputs by outputs here, so
 /// they are turned round; a convolution's kernel, along one, two or three axes, is kept channels out, channels in, then the

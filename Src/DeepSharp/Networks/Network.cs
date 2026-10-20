@@ -228,6 +228,9 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
     /// <summary>The steps, in the order they run, each with the name it goes by and the names of the steps it takes.</summary>
     public IReadOnlyList<PlacedStep> Steps => _steps;
 
+    /// <summary>Whether a step takes the work of another step than the one before it: a stack that does is no line of layers.</summary>
+    public bool Branches => _branches;
+
     /// <summary>The shape that reaches each step, a batch of one example: an example of nothing sent through the layers themselves.</summary>
     /// <param name="each">The shape of one example, without the batch's axis.</param>
     /// <returns>For each step in order, the shape of the work of the first step it takes — the one that reaches a layer that works on one, the first of those a join lays together.</returns>

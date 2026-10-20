@@ -1,0 +1,3 @@
+residual keys ['inner.weight', 'inner.bias', 'outer.weight', 'outer.bias'] outputs of the first example [-0.26028376817703247, -0.9338096380233765]
+dense keys ['a.weight', 'a.bias', 'b.weight', 'b.bias', 'out.weight', 'out.bias'] outputs of the first example [-0.5340299606323242, 0.5804684162139893]
+halves keys ['left.weight', 'left.bias', 'right.weight', 'right.bias'] outputs of the first example [-0.6383118629455566, -0.033130764961242676]

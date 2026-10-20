@@ -366,10 +366,14 @@ internal readonly record struct PlacedLayer(string Path, Layer Layer)
     /// <summary>Whether it makes each example handed to it one row: a flatten, or a reshape into rows.</summary>
     public bool Flattens => Layer is Flatten or Reshape { Each.Rank: 1 };
 
-    /// <summary>The layers of a network in the order they run, a stack within it read down to its layers.</summary>
+    /// <summary>
+    /// The layers of a network in the order they run, a stack within it read down to its layers, each at the name of its step. A
+    /// stack whose steps take other than the step before them is one layer here: its order is not a line, so what a linear layer
+    /// in it reads is read as a network written as code is.
+    /// </summary>
     public static IEnumerable<PlacedLayer> Of(Layer layer, string path = "") =>
-        layer is LayerStack stack
-            ? stack.Layers.SelectMany((held, place) => Of(held, Joined(path, place.ToString(System.Globalization.CultureInfo.InvariantCulture))))
+        layer is LayerStack { Branches: false } stack
+            ? stack.Steps.SelectMany(step => Of(step.Layer, Joined(path, step.Name)))
             : [new PlacedLayer(path, layer)];
 
     /// <summary>A name under a path, dotted.</summary>

@@ -19,6 +19,14 @@ public class BranchStacksTests
     private static Dense Dense(int inputs, int outputs) => new(Tensor.Zeros(new Shape(inputs, outputs)), Tensor.Zeros(new Shape(outputs)));
 
     [Fact]
+    public void AStackOfLayersAlone_DoesNotBranch_AndOneWhoseStepTakesAnotherThanTheStepBeforeIt_Does()
+    {
+        Assert.False(new LayerStack(Dense(3, 3), new Relu(), Dense(3, 1)).Branches);
+        Assert.False(new LayerStack([new Step(Dense(3, 2), "hidden"), new Step(new Relu())]).Branches);
+        Assert.True(new LayerStack([new Step(Dense(3, 3), "a"), new Step(new Sum(), Takes: ["input", "a"])]).Branches);
+    }
+
+    [Fact]
     public void TheShapeReachingEachStep_IsThatOfTheFirstStepItTakes_AnExampleOfNothingSentThroughTheLayersThemselves()
     {
         var network = new LayerStack([new Step(Dense(6, 4), "a"), new Step(new Relu(), "ra"), new Step(new Concatenation(), Takes: ["input", "ra"]), new Step(Dense(10, 2))]);
