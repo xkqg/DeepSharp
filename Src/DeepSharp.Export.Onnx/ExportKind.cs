@@ -1,0 +1,92 @@
+// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+// Licensed under the MIT License. See LICENSE file in the project root for full license information.
+
+using DeepSharp.Networks;
+using DeepSharp.Tensors;
+
+namespace DeepSharp.Export.Onnx;
+
+/// <summary>A value of the graph being written: the name it goes by, and the shape of one example of it as the network holds it.</summary>
+/// <param name="Name">The value's name in the graph.</param>
+/// <param name="Each">The shape of one example, without the batch's axis.</param>
+internal readonly record struct Value(string Name, Shape Each);
+
+/// <summary>One step being written: the layer, where it stands, the values it takes, and what it makes.</summary>
+/// <param name="Graph">The graph being written.</param>
+/// <param name="Layer">The layer.</param>
+/// <param name="Path">The path of its step: the name its slots' numbers go by in the graph.</param>
+/// <param name="Inputs">The values of the steps it takes, in the order it takes them.</param>
+/// <param name="Made">The shape of one example of what it makes.</param>
+internal sealed record Writing(GraphDraft Graph, Layer Layer, string Path, IReadOnlyList<Value> Inputs, Shape Made)
+{
+    /// <summary>The value of the one step it takes.</summary>
+    public Value Input => Inputs[0];
+
+    /// <summary>A node of the step, named under its path.</summary>
+    /// <param name="op">ONNX's name for the operator.</param>
+    /// <param name="since">The first operator set that carries it with the meaning written here.</param>
+    /// <param name="part">What tells it from the step's other nodes of the same operator; nothing for the only one.</param>
+    public NodeOf Node(string op, int since, string? part = null) => new(op, since, $"{Path}/{part ?? op}");
+
+    /// <summary>The name a number of the step goes by in the graph.</summary>
+    /// <param name="slot">The slot's name: <c>weight</c>.</param>
+    public string Number(string slot) => $"{Path}.{slot}";
+
+    /// <summary>The value the step makes, given the name it goes by.</summary>
+    /// <param name="name">The name of the graph's value.</param>
+    public Value Giving(string name) => new(name, Made);
+}
+
+/// <summary>How one kind of layer is written as ONNX nodes, or left out of the graph where a trained network does nothing with it.</summary>
+/// <remarks>
+/// A kind is added by writing a class and listing it in <see cref="ExportKinds"/>; nothing else decides which layers are written.
+/// A layer that is of no kind listed is refused by name, never written as something it is not.
+/// </remarks>
+internal abstract class ExportKind
+{
+    /// <summary>The layer this kind writes.</summary>
+    public abstract Type Layer { get; }
+
+    /// <summary>Writes the step.</summary>
+    /// <param name="at">The step.</param>
+    /// <returns>The value the step makes.</returns>
+    public abstract Value Write(Writing at);
+}
+
+/// <summary>A kind that writes one class of layer.</summary>
+/// <typeparam name="TLayer">The layer's class.</typeparam>
+internal abstract class ExportKind<TLayer> : ExportKind
+    where TLayer : Layer
+{
+    /// <inheritdoc />
+    public sealed override Type Layer => typeof(TLayer);
+
+    /// <inheritdoc />
+    public sealed override Value Write(Writing at) => Write((TLayer)at.Layer, at);
+
+    /// <summary>Writes the step.</summary>
+    /// <param name="layer">The layer.</param>
+    /// <param name="at">The step.</param>
+    protected abstract Value Write(TLayer layer, Writing at);
+}
+
+/// <summary>A layer that makes the value of one operator over what it takes, with nothing to state.</summary>
+/// <typeparam name="TLayer">The layer's class.</typeparam>
+/// <param name="op">ONNX's name for the operator.</param>
+/// <param name="since">The first operator set that carries it.</param>
+internal sealed class OperatorKind<TLayer>(string op, int since) : ExportKind<TLayer>
+    where TLayer : Layer
+{
+    /// <inheritdoc />
+    protected override Value Write(TLayer layer, Writing at) =>
+        at.Giving(at.Graph.Node(at.Node(op, since), [at.Input.Name], at.Path));
+}
+
+/// <summary>A layer a trained network does nothing with: a dropout, or a variation of the rows made while training. It is left out of the graph.</summary>
+/// <typeparam name="TLayer">The layer's class.</typeparam>
+internal sealed class OmittedKind<TLayer> : ExportKind<TLayer>
+    where TLayer : Layer
+{
+    /// <inheritdoc />
+    protected override Value Write(TLayer layer, Writing at) => at.Input;
+}

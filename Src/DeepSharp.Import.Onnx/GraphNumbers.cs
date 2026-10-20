@@ -396,44 +396,15 @@ internal readonly record struct HeldTensor(string Source, int[] Lengths)
     }
 
     // A matrix turned round: rows by columns to columns by rows.
-    private HeldTensor Transposed()
-    {
-        var rows = Lengths[0];
-        var columns = Lengths[1];
-        var turned = new float[Values!.Length];
-
-        for (var row = 0; row < rows; row++)
-        {
-            for (var column = 0; column < columns; column++)
-            {
-                turned[(column * rows) + row] = Values[(row * columns) + column];
-            }
-        }
-
-        return this with { Lengths = [columns, rows], Values = turned };
-    }
+    private HeldTensor Transposed() => this with { Lengths = [Lengths[1], Lengths[0]], Values = OnnxLayouts.Transposed(Values!, Lengths[0], Lengths[1]) };
 
     // A kernel channels out by channels in by the window's lengths, as the window's lengths by channels in by channels out,
     // the first of those one axis: the window's places, in the order it reads them, times the channels in.
     private HeldTensor Kernel()
     {
-        var outputs = Lengths[0];
-        var inputs = Lengths[1];
         var places = Lengths[2..].Aggregate(1, (total, length) => total * length);
-        var laid = new float[Values!.Length];
 
-        for (var output = 0; output < outputs; output++)
-        {
-            for (var input = 0; input < inputs; input++)
-            {
-                for (var place = 0; place < places; place++)
-                {
-                    laid[(((place * inputs) + input) * outputs) + output] = Values[(((output * inputs) + input) * places) + place];
-                }
-            }
-        }
-
-        return this with { Lengths = [places * inputs, outputs], Values = laid };
+        return this with { Lengths = [places * Lengths[1], Lengths[0]], Values = OnnxLayouts.KernelToSlot(Values!, Lengths[0], Lengths[1], places) };
     }
 
     // A transposed convolution's kernel, channels in by the channels out of one group by the window's lengths, as a row for
@@ -441,45 +412,12 @@ internal readonly record struct HeldTensor(string Source, int[] Lengths)
     // patches a folding puts back.
     private HeldTensor GivenBack()
     {
-        var inputs = Lengths[0];
-        var outputs = Lengths[1];
         var places = Lengths[2..].Aggregate(1, (total, length) => total * length);
-        var laid = new float[Values!.Length];
 
-        for (var input = 0; input < inputs; input++)
-        {
-            for (var output = 0; output < outputs; output++)
-            {
-                for (var place = 0; place < places; place++)
-                {
-                    laid[(((input * places) + place) * outputs) + output] = Values[(((input * outputs) + output) * places) + place];
-                }
-            }
-        }
-
-        return this with { Lengths = [inputs, places * outputs], Values = laid };
+        return this with { Lengths = [Lengths[0], places * Lengths[1]], Values = OnnxLayouts.GivenBackToSlot(Values!, Lengths[0], Lengths[1], places) };
     }
 
     // The value's first axis, a flattened image's row, from ONNX's order — channel, row, column — to this one's: row,
     // column, channel; whatever follows that axis moves with it.
-    private HeldTensor Turned(ImageRow image)
-    {
-        var each = Values!.Length / image.Count;
-        var turned = new float[Values.Length];
-
-        for (var row = 0; row < image.Rows; row++)
-        {
-            for (var column = 0; column < image.Columns; column++)
-            {
-                for (var channel = 0; channel < image.Channels; channel++)
-                {
-                    var here = (((row * image.Columns) + column) * image.Channels) + channel;
-                    var there = (((channel * image.Rows) + row) * image.Columns) + column;
-                    Values.AsSpan(there * each, each).CopyTo(turned.AsSpan(here * each, each));
-                }
-            }
-        }
-
-        return this with { Values = turned };
-    }
+    private HeldTensor Turned(ImageRow image) => this with { Values = OnnxLayouts.PlaceByPlace(Values!, image.Rows, image.Columns, image.Channels) };
 }

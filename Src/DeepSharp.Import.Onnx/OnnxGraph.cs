@@ -77,7 +77,7 @@ internal sealed class OnnxGraph
         var network = Lowered(example);
         var entries = new List<SlotEntry>();
         var unread = new List<SlotLoadFault>();
-        var reaching = network.ShapesReaching(example);
+        var reaching = network.Shapes(example).Select(shapes => shapes.Reaching).ToList();
         ImageRow? flattened = null;
 
         foreach (var (place, node, layer) in placed)

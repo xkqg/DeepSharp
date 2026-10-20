@@ -231,22 +231,23 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
     /// <summary>Whether a step takes the work of another step than the one before it: a stack that does is no line of layers.</summary>
     public bool Branches => _branches;
 
-    /// <summary>The shape that reaches each step, a batch of one example: an example of nothing sent through the layers themselves.</summary>
+    /// <summary>The shapes that reach and leave each step, a batch of one example: an example of nothing sent through the layers themselves.</summary>
     /// <param name="each">The shape of one example, without the batch's axis.</param>
-    /// <returns>For each step in order, the shape of the work of the first step it takes — the one that reaches a layer that works on one, the first of those a join lays together.</returns>
+    /// <returns>For each step in order, the shape of the work of the first step it takes — the one that reaches a layer that works on one, the first of those a join lays together — and the shape of what it makes.</returns>
     /// <remarks>Worked out nowhere else than in the layers, on the light engine, so the shape each makes is the one it makes.</remarks>
-    public IReadOnlyList<Shape> ShapesReaching(Shape each)
+    public IReadOnlyList<StepShapes> Shapes(Shape each)
     {
         var pass = Pass.Evaluation(new CpuBackend());
         var made = new Dictionary<string, Tensor>(StringComparer.Ordinal) { [Step.Input] = Tensor.Zeros(new Shape([1, .. each.Axes])) };
-        var shapes = new List<Shape>(_steps.Length);
+        var shapes = new List<StepShapes>(_steps.Length);
 
         foreach (var step in _steps)
         {
             var taken = step.Takes.Select(name => made[name]).ToList();
+            var output = step.Layer.Taking(taken, pass);
 
-            shapes.Add(taken[0].Shape);
-            made[step.Name] = step.Layer.Taking(taken, pass);
+            shapes.Add(new StepShapes(taken[0].Shape, output.Shape));
+            made[step.Name] = output;
         }
 
         return shapes;
@@ -430,6 +431,11 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
         return name;
     }
 }
+
+/// <summary>The shapes that reach and leave one step of a stack, for a batch of one example.</summary>
+/// <param name="Reaching">The shape of the work of the first step it takes.</param>
+/// <param name="Made">The shape of what it makes.</param>
+public readonly record struct StepShapes(Shape Reaching, Shape Made);
 
 /// <summary>A slot and the tensor it held when a snapshot was taken.</summary>
 internal readonly record struct SlotValue(Slot Slot, Tensor Value);

@@ -27,11 +27,14 @@ public class BranchStacksTests
     }
 
     [Fact]
-    public void TheShapeReachingEachStep_IsThatOfTheFirstStepItTakes_AnExampleOfNothingSentThroughTheLayersThemselves()
+    public void TheShapesOfEachStep_AreThoseOfTheFirstStepItTakesAndOfWhatItMakes_AnExampleOfNothingSentThroughTheLayersThemselves()
     {
         var network = new LayerStack([new Step(Dense(6, 4), "a"), new Step(new Relu(), "ra"), new Step(new Concatenation(), Takes: ["input", "ra"]), new Step(Dense(10, 2))]);
 
-        Assert.Equal([new Shape(1, 6), new Shape(1, 4), new Shape(1, 6), new Shape(1, 10)], network.ShapesReaching(new Shape(6)));
+        var shapes = network.Shapes(new Shape(6));
+
+        Assert.Equal([new Shape(1, 6), new Shape(1, 4), new Shape(1, 6), new Shape(1, 10)], shapes.Select(each => each.Reaching));
+        Assert.Equal([new Shape(1, 4), new Shape(1, 4), new Shape(1, 10), new Shape(1, 2)], shapes.Select(each => each.Made));
     }
 
     [Fact]

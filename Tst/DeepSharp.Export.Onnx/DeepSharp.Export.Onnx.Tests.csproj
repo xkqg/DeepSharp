@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- A suite of its own for the writer of ONNX graphs: it runs what it wrote through ONNX Runtime, a native library the core's
+       suite never carries, and holds the answers to the ones the network gives. -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net8.0;net10.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>DeepSharp.Tests.Export.Onnx</RootNamespace>
+    <!-- As in the other suites: the documentation file switches the unused-using analyser on, and a test's name is its
+         documentation. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+    <GenerateTestingPlatformEntryPoint>false</GenerateTestingPlatformEntryPoint>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="xunit.v3" Version="4.*" />
+    <!-- ONNX Runtime 1.31.0, MIT (github.com/microsoft/onnxruntime): the proof that what is written is a graph any runtime answers
+         through. It is this suite's, and the writer's package never carries it. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DeepSharp.Export.Onnx\DeepSharp.Export.Onnx.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Import.Onnx\DeepSharp.Import.Onnx.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- One way to find the repository, shared with the other suites. -->
+    <Compile Include="..\DeepSharp\Repository.cs" Link="Repository.cs" />
+    <!-- The parameter rule, read from the packages this suite references: each suite reads its own. -->
+    <Compile Include="..\DeepSharp\ParameterListTests.cs" Link="ParameterListTests.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

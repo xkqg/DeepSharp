@@ -38,6 +38,7 @@ public class ParameterListTests
         ["DeepSharp"] = "DeepSharp.Tests",
         ["DeepSharp.Backends.TorchSharp"] = "DeepSharp.Backends.TorchSharp.Tests",
         ["DeepSharp.Charts"] = "DeepSharp.Tests",
+        ["DeepSharp.Export.Onnx"] = "DeepSharp.Export.Onnx.Tests",
         ["DeepSharp.Import.Keras"] = "DeepSharp.Tests",
         ["DeepSharp.Import.Onnx"] = "DeepSharp.Tests",
         ["DeepSharp.Import.PyTorch"] = "DeepSharp.Tests",
