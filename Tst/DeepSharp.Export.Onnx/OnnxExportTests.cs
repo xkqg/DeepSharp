@@ -183,16 +183,6 @@ public class OnnxExportTests
     }
 
     [Fact]
-    public void ALayerWrittenAsNoNode_IsRefusedByName()
-    {
-        var network = new LayerStack([new Step(new Embedding(3, [0, 1, 2], 2, new RandomStream(1).Draw("e", 0, 0))), new Step(new Dense(2, 1, new RandomStream(1).Draw("a", 0, 0)))]);
-
-        var refused = Assert.Throws<NotSupportedException>(() => new OnnxExport(new Shape(3)).ToBytes(network, new MeanSquaredError()));
-
-        Assert.Contains("Embedding", refused.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void NothingIsWrittenWithoutANetworkALossOrAFile()
     {
         var exporter = new OnnxExport(new Shape(6));

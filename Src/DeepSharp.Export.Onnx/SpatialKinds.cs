@@ -66,7 +66,7 @@ internal sealed class TransposedConvolutionKind<TLayer>(Func<TLayer, Standing> s
                 {
                     window.State(node);
                     node.State("group", (long)layer.Groups);
-                    node.State("output_padding", layer.OutputPadding.Select(each => (long)each).ToArray());
+                    node.States("output_padding", layer.OutputPadding.Select(each => (long)each).ToArray());
                 },
             },
             Spatial.WithBias(at, layer, kernel),
@@ -143,12 +143,39 @@ internal sealed class GlobalPoolingKind<TLayer>(string kept, string reduced) : E
             {
                 Attributes = node =>
                 {
-                    node.State("axes", axes);
+                    node.States("axes", axes);
                     node.State("keepdims", 0L);
                 },
             },
             [at.Input.Name],
             at.Path));
+    }
+}
+
+/// <summary>
+/// A pooling to a number of places along each axis: where the axis divides evenly, the ordinary pooling whose window is as wide as its stride,
+/// ONNX's MaxPool or AveragePool; where it does not, the bins are of unequal sizes, which no ONNX operator pools, and it is refused by name.
+/// </summary>
+/// <typeparam name="TLayer">The pooling's class.</typeparam>
+/// <param name="op">ONNX's name for the operator.</param>
+internal sealed class AdaptivePoolingKind<TLayer>(string op) : ExportKind<TLayer>
+    where TLayer : AdaptivePooling
+{
+    /// <inheritdoc />
+    protected override Value Write(TLayer layer, Writing at)
+    {
+        var extents = Spatial.Extents(at);
+
+        if (extents.Where((length, axis) => length % layer.Sizes[axis] != 0).Any())
+        {
+            throw new NotSupportedException(
+                $"A pooling to {layer.Sizes} places of {string.Join('x', extents)} ones makes bins of unequal sizes, and ONNX has no operator that pools them; only an axis its size divides evenly is written, as the ordinary pooling it is.");
+        }
+
+        var kernels = extents.Select((length, axis) => length / layer.Sizes[axis]).ToArray();
+        var window = new Standing(kernels, kernels, [.. kernels.Select(_ => 1)], new int[2 * kernels.Length]);
+
+        return at.Giving(at.Graph.Node(at.Node(op, 1) with { Attributes = window.State }, [at.Input.Name], at.Path));
     }
 }
 

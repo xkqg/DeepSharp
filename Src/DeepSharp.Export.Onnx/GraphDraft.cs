@@ -154,7 +154,7 @@ internal static class NodeAttributes
             node.Attribute.Add(new AttributeProto { Name = name, Type = AttributeProto.Types.AttributeType.String, S = ByteString.CopyFromUtf8(value) });
 
         /// <summary>States a list of whole numbers.</summary>
-        public void State(string name, params long[] values)
+        public void States(string name, params long[] values)
         {
             var attribute = new AttributeProto { Name = name, Type = AttributeProto.Types.AttributeType.Ints };
 

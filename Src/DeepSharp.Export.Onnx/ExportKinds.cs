@@ -58,11 +58,24 @@ internal static class ExportKinds
         new PaddingKind<Pad1D>(layer => [layer.Border.Before, layer.Border.After]),
         new PaddingKind<Pad2D>(layer => [layer.Border.Down.Before, layer.Border.Across.Before, layer.Border.Down.After, layer.Border.Across.After]),
         new PaddingKind<Pad3D>(layer => [layer.Border.Deep.Before, layer.Border.Down.Before, layer.Border.Across.Before, layer.Border.Deep.After, layer.Border.Down.After, layer.Border.Across.After]),
+        new AdaptivePoolingKind<AdaptiveMaxPool1D>("MaxPool"),
+        new AdaptivePoolingKind<AdaptiveMaxPool2D>("MaxPool"),
+        new AdaptivePoolingKind<AdaptiveMaxPool3D>("MaxPool"),
+        new AdaptivePoolingKind<AdaptiveAvgPool1D>("AveragePool"),
+        new AdaptivePoolingKind<AdaptiveAvgPool2D>("AveragePool"),
+        new AdaptivePoolingKind<AdaptiveAvgPool3D>("AveragePool"),
+        new EmbeddingKind(),
+        new TokenEmbeddingKind(),
+        new PeriodicKind(),
         new InstanceNormKind(),
         new GroupNormKind(),
         new FlattenKind(),
         new ReshapeKind(),
     }.ToDictionary(kind => kind.Layer);
+
+    /// <summary>Whether a class of layer is written.</summary>
+    /// <param name="layer">The layer's class.</param>
+    public static bool Writes(Type layer) => Written.ContainsKey(layer);
 
     /// <summary>The kind that writes a layer.</summary>
     /// <param name="layer">The layer.</param>
@@ -71,5 +84,5 @@ internal static class ExportKinds
     public static ExportKind For(Layer layer) =>
         Written.TryGetValue(layer.GetType(), out var kind)
             ? kind
-            : throw new NotSupportedException($"A {layer.GetType().Name} is written as no ONNX node here.");
+            : throw new NotSupportedException($"A {layer.GetType().Name} is a layer that is written as no ONNX node here.");
 }

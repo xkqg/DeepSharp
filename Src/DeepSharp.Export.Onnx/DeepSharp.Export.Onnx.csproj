@@ -22,6 +22,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The suite that runs what is written reads which layers are written, so no layer added to the library goes unsaid here. -->
+    <InternalsVisibleTo Include="DeepSharp.Export.Onnx.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- How ONNX lays a number out and how a slot here keeps it, in both directions: the one home of every such rule, compiled
          into the package that reads a graph and into this one that writes it, so the two cannot come to disagree. -->
     <Compile Include="..\DeepSharp.Import.Onnx\OnnxLayouts.cs" Link="OnnxLayouts.cs" />

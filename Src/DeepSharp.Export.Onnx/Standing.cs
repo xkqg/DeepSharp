@@ -108,13 +108,13 @@ internal sealed record Standing(int[] Sizes, int[] Strides, int[] Dilations, int
     /// <param name="node">The node.</param>
     public void State(NodeProto node)
     {
-        node.State("kernel_shape", Sizes.Select(each => (long)each).ToArray());
-        node.State("strides", Strides.Select(each => (long)each).ToArray());
-        node.State("pads", Pads.Select(each => (long)each).ToArray());
+        node.States("kernel_shape", Sizes.Select(each => (long)each).ToArray());
+        node.States("strides", Strides.Select(each => (long)each).ToArray());
+        node.States("pads", Pads.Select(each => (long)each).ToArray());
 
         if (Dilated)
         {
-            node.State("dilations", Dilations.Select(each => (long)each).ToArray());
+            node.States("dilations", Dilations.Select(each => (long)each).ToArray());
         }
     }
 
