@@ -15,10 +15,9 @@ namespace DeepSharp.Tensors;
 internal interface IStepsAdam
 {
     /// <summary>One step of Adam, or of AdamW from the shrunk parameter, for one parameter.</summary>
-    /// <param name="value">The tensor the step is taken from.</param>
     /// <param name="gradient">The parameter's gradient.</param>
     /// <param name="before">What Adam remembered of the parameter before this step; nothing at its first.</param>
-    /// <param name="stepping">The rate, how the means are kept and the terms the step takes.</param>
+    /// <param name="stepping">The tensor the step is taken from, the rate, how the means are kept and the terms the step takes.</param>
     /// <returns>The tensor after the step and what Adam remembers now; nothing where the engine would not make the bits the operations make, which is wherever a number comes out as no number.</returns>
-    AdamStepped? Stepped(Tensor value, Tensor gradient, AdamMoments? before, AdamStepping stepping);
+    AdamStepped? Stepped(Tensor gradient, AdamMoments? before, AdamStepping stepping);
 }

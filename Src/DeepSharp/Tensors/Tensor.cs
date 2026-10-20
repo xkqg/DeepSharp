@@ -54,7 +54,10 @@ public sealed class Tensor
     /// time they are read, and that copy is kept: never a view of memory the engine owns, which could be let go of while it
     /// was being read.
     /// </remarks>
-    public ReadOnlySpan<float> Values => Volatile.Read(ref _values) ?? ReadBack();
+    public ReadOnlySpan<float> Values => Numbers;
+
+    /// <summary>The array the values are in, which no one writes to: what <see cref="Values"/> is a span over, for a reader that cannot hold a span.</summary>
+    internal float[] Numbers => Volatile.Read(ref _values) ?? ReadBack();
 
     /// <summary>A tensor of the given shape with every value at zero.</summary>
     /// <param name="shape">The axes to lay the values out along.</param>

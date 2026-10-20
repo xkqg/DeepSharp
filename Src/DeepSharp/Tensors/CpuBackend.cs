@@ -27,6 +27,41 @@ public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLef
     private static readonly string Release =
         typeof(CpuBackend).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split('+')[0];
 
+    private int _threads = 1;
+    private long _spreadFrom = 1L << 24;
+
+    /// <summary>
+    /// How many threads of the process a single product may be spread over: one, unless said, which starts none. A host that runs one
+    /// training at a time on a machine of many processors may say more; a host that runs several at once has threads enough already.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is below one.</exception>
+    /// <remarks>
+    /// Only a product of 2^24 multiply-adds or more is spread, since below that the threads cost more than they save. The arithmetic
+    /// is unchanged whatever the number: a row is added up by one thread, so every product is the very bits it is on one.
+    /// </remarks>
+    public int Threads
+    {
+        get => _threads;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1);
+
+            _threads = value;
+        }
+    }
+
+    /// <summary>How many multiply-adds make a product big enough to be spread over <see cref="Threads"/>.</summary>
+    internal long SpreadFrom
+    {
+        get => _spreadFrom;
+        init
+        {
+            ArgumentOutOfRangeException.ThrowIfLessThan(value, 1L);
+
+            _spreadFrom = value;
+        }
+    }
+
     /// <inheritdoc />
     public string Name => "cpu";
 
@@ -54,13 +89,9 @@ public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLef
     {
         left.RequireMatrixProduct(right);
 
-        var rows = left.Shape[0];
-        var columns = right.Shape[1];
-        var result = new float[rows * columns];
+        var shape = new ProductShape(left.Shape[0], left.Shape[1], right.Shape[1]);
 
-        new ProductRows(left.Values, right.Values, new ProductShape(rows, left.Shape[1], columns)).Work(result, 0, rows);
-
-        return Tensor.Wrap(new Shape(rows, columns), result);
+        return Tensor.Wrap(new Shape(shape.Rows, shape.Columns), Product(left, right, shape, turnedLeft: false));
     }
 
     /// <inheritdoc />
@@ -75,18 +106,31 @@ public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLef
             throw new ArgumentException($"A matrix turned on its side is multiplied by one with as many rows, and these are {left.Shape} and {right.Shape}.", nameof(right));
         }
 
-        var rows = left.Shape[1];
-        var columns = right.Shape[1];
-        var result = new float[rows * columns];
+        var shape = new ProductShape(left.Shape[1], left.Shape[0], right.Shape[1]);
 
-        new ProductRows(left.Values, right.Values, new ProductShape(rows, left.Shape[0], columns), turnedLeft: true).Work(result, 0, rows);
+        return Tensor.Wrap(new Shape(shape.Rows, shape.Columns), Product(left, right, shape, turnedLeft: true));
+    }
 
-        return Tensor.Wrap(new Shape(rows, columns), result);
+    // The rows of a product, by the one thread that asked or, for a product big enough and an engine told it may, by several.
+    private float[] Product(Tensor left, Tensor right, ProductShape shape, bool turnedLeft)
+    {
+        var result = new float[shape.Rows * shape.Columns];
+
+        if (_threads > 1 && shape.Rows > 1 && (long)shape.Rows * shape.Inner * shape.Columns >= _spreadFrom)
+        {
+            new SpreadProduct(left.Numbers, right.Numbers, shape, turnedLeft).Work(result, _threads);
+        }
+        else
+        {
+            new ProductRows(left.Values, right.Values, shape, turnedLeft).Work(result, 0, shape.Rows);
+        }
+
+        return result;
     }
 
     /// <inheritdoc />
-    AdamStepped? IStepsAdam.Stepped(Tensor value, Tensor gradient, AdamMoments? before, AdamStepping stepping) =>
-        new AdamPass(value, gradient, before, stepping).Take();
+    AdamStepped? IStepsAdam.Stepped(Tensor gradient, AdamMoments? before, AdamStepping stepping) =>
+        new AdamPass(gradient, before, stepping).Take();
 
     /// <inheritdoc />
     public Tensor Transpose(Tensor matrix)

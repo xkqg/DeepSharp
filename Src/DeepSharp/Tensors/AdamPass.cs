@@ -17,7 +17,7 @@ namespace DeepSharp.Tensors;
 /// included. A number that comes out as no number is left to the chain, because which of two not-a-numbers an operation keeps
 /// is the instruction's to say and the chain is what the bits were defined by.
 /// </remarks>
-internal sealed class AdamPass(Tensor value, Tensor gradient, AdamMoments? before, AdamStepping stepping)
+internal sealed class AdamPass(Tensor gradient, AdamMoments? before, AdamStepping stepping)
 {
     /// <summary>Takes the step.</summary>
     /// <returns>The tensor after it and what is remembered now; nothing where a number came out as no number.</returns>
@@ -35,7 +35,7 @@ internal sealed class AdamPass(Tensor value, Tensor gradient, AdamMoments? befor
         var size = (float)(stepping.Rate / (1 - Math.Pow(betas.First, steps)));
         var amsgrad = stepping.Means.AmsGrad;
 
-        ReadOnlySpan<float> values = value.Values;
+        ReadOnlySpan<float> values = stepping.From.Values;
         ReadOnlySpan<float> gradients = gradient.Values;
         ReadOnlySpan<float> lastAverage = before is { } had ? had.Average.Values : default;
         ReadOnlySpan<float> lastSquared = before is { } kept ? kept.SquaredAverage.Values : default;
