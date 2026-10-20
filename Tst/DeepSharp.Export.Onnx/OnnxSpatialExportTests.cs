@@ -44,6 +44,7 @@ public class OnnxSpatialExportTests
             .Lower(new Shape(5, 5, 2), new RandomStream(14)), new Shape(5, 5, 2)),
         ["a dense layer on the channels of every place"] = new(() => new Sequential().Conv2D(3, new Window(2, 2)).Dense(4).Relu().GlobalAvgPool2D().Dense(1).Lower(new Shape(5, 5, 2), new RandomStream(16)), new Shape(5, 5, 2), ReadBack: false),
         ["a dense layer with a pair on a series"] = new(() => new Sequential().Conv1D(3, new Window1D(2)).Dense(4, new Beginning { LowRank = new LowRank(2, 4) }).GlobalMaxPool1D().Dense(1).Lower(new Shape(6, 2), new RandomStream(17)), new Shape(6, 2), ReadBack: false),
+        ["a layer normalisation of the channels of every place"] = new(() => new Sequential().Conv2D(3, new Window(2, 2)).LayerNorm().Relu().GlobalAvgPool2D().Dense(1).Lower(new Shape(5, 5, 2), new RandomStream(18)), new Shape(5, 5, 2), ReadBack: false),
         ["a softmax over channels"] = new(() => new Sequential().Conv2D(3, new Window(2, 2)).Softmax().Flatten().Dense(1).Lower(new Shape(4, 4, 2), new RandomStream(15)), new Shape(4, 4, 2)),
     };
 
@@ -118,17 +119,14 @@ public class OnnxSpatialExportTests
         Assert.Contains("channel by channel", refused.Message, StringComparison.Ordinal);
     }
 
-    [Theory]
-    [InlineData("conv", "A layer normalisation")]
-    [InlineData("rms", "A root-mean-square normalisation")]
-    public void ANormalisationOfTheChannelsOfEveryPlace_IsRefusedByName_ForOnnxsOperatorsNormaliseToTheLastAxis(string kind, string message)
+    [Fact]
+    public void ARootMeanSquareNormalisationOfTheChannelsOfEveryPlace_IsRefusedByName_ForOnnxsOperatorNormalisesToTheLastAxis()
     {
-        var words = new Sequential().Conv2D(2, new Window(2, 2));
-        var network = Runtime.Filled((kind == "conv" ? words.LayerNorm() : words.RmsNorm(1e-6)).Flatten().Dense(1).Lower(new Shape(4, 4, 2), new RandomStream(1)));
+        var network = Runtime.Filled(new Sequential().Conv2D(2, new Window(2, 2)).RmsNorm(1e-6).Flatten().Dense(1).Lower(new Shape(4, 4, 2), new RandomStream(1)));
 
         var refused = Assert.Throws<NotSupportedException>(() => new OnnxExport(new Shape(4, 4, 2)).ToBytes(network, new MeanSquaredError()));
 
-        Assert.Contains(message, refused.Message, StringComparison.Ordinal);
+        Assert.Contains("A root-mean-square normalisation", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

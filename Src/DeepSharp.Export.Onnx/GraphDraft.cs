@@ -23,8 +23,29 @@ internal sealed class GraphDraft
     private readonly GraphProto _graph = new() { Name = "network" };
     private int _opset = 1;
 
+    // The operators that took their axes as an attribute in the older sets and take them as an input from a later one.
+    private static readonly AxesInput[] AxesAsInput =
+        [new("Squeeze", 13), new("Unsqueeze", 13), new("ReduceSum", 13), new("ReduceMean", 18), new("ReduceMax", 18), new("ReduceMin", 18)];
+
     /// <summary>The operator set the nodes written so far need.</summary>
     public int Opset => _opset;
+
+    /// <summary>
+    /// Settles the nodes to the operator set the whole graph needs. A node that states its axes as an attribute, as the operator set it first
+    /// appeared in has them, states them as an input where another node of the graph asks for a later set that has them so.
+    /// </summary>
+    /// <remarks>Called once the last node is written: the set a graph needs is the greatest of its nodes', which a node written first cannot know.</remarks>
+    public void Settle()
+    {
+        foreach (var node in _graph.Node)
+        {
+            if (AxesAsInput.Any(each => each.Operator == node.OpType && _opset >= each.From) && node.Attribute.FirstOrDefault(attribute => attribute.Name == "axes") is { } axes)
+            {
+                node.Attribute.Remove(axes);
+                node.Input.Add(Wholes($"{node.Name}.axes", [.. axes.Ints]));
+            }
+        }
+    }
 
     /// <summary>The IR version ONNX pairs with <see cref="Opset"/>.</summary>
     public long IrVersion => IrByOpset.Last(each => each.Opset <= _opset).Ir;
@@ -138,6 +159,11 @@ internal sealed class GraphDraft
         };
     }
 }
+
+/// <summary>An operator that states its axes as an input from an operator set on, and as an attribute before it.</summary>
+/// <param name="Operator">ONNX's name for the operator.</param>
+/// <param name="From">The first operator set that takes the axes as an input.</param>
+internal readonly record struct AxesInput(string Operator, int From);
 
 /// <summary>The first operator set an IR version of ONNX carries.</summary>
 /// <param name="Opset">The operator set.</param>

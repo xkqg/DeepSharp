@@ -14,14 +14,14 @@ internal sealed class LayerNormKind : ExportKind<LayerNorm>
     /// <inheritdoc />
     protected override Value Write(LayerNorm layer, Writing at)
     {
-        RequireRow(at, "A layer normalisation");
-
+        // Over a series, an image or a volume the channels are the last axis here: the graph holds them first, so they are turned last and back.
+        var spatial = at.Input.Spatial;
+        var rows = spatial ? at.ChannelsLast(at.Input.Name, "Transpose.in") : at.Input.Name;
         var scale = Scale(at, layer);
         string[] inputs = layer.Bias is { } shift
-            ? [at.Input.Name, scale, at.Graph.Number(at.Number(shift.Name), [layer.Features], at.Input.Ordered(shift.Value.Values))]
-            : [at.Input.Name, scale];
-
-        return at.Keeping(at.Graph.Node(
+            ? [rows, scale, at.Graph.Number(at.Number(shift.Name), [layer.Features], at.Input.Ordered(shift.Value.Values))]
+            : [rows, scale];
+        var made = at.Graph.Node(
             at.Node("LayerNormalization", 17) with
             {
                 Attributes = node =>
@@ -31,7 +31,9 @@ internal sealed class LayerNormKind : ExportKind<LayerNorm>
                 },
             },
             inputs,
-            at.Path));
+            spatial ? $"{at.Path}/LayerNormalization" : at.Path);
+
+        return spatial ? at.ChannelsFirst(made) : at.Keeping(made);
     }
 
     // The scale it keeps, or ones where it keeps none, in the order the graph's row has them.

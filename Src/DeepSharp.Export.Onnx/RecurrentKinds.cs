@@ -200,7 +200,7 @@ internal sealed class EveryStepKind : ExportKind<EveryStep>
 
         var inside = $"{at.Path}.layer";
         var made = layer.Layer is LayerStack stack
-            ? new StackWriting(graph).Write(stack, new Value(rows, new Shape(channels)), inside)
+            ? new StackWriting(graph).Write(stack, [new Value(rows, new Shape(channels))], inside)
             : ExportKinds.For(layer.Layer).Write(new Writing(graph, layer.Layer, inside, [new Value(rows, new Shape(channels))], each));
         var back = graph.Node(at.Node("Reshape", 5, "Reshape.out"), [made.Name, graph.Wholes(at.Number("series"), -1, steps, each[0])], $"{at.Path}/Reshape.out");
 

@@ -261,11 +261,29 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
     /// <remarks>Worked out nowhere else than in the layers, on the light engine, so the shape each makes is the one it makes.</remarks>
     public IReadOnlyList<StepShapes> Shapes(Shape each)
     {
-        var pass = Pass.Evaluation(new CpuBackend());
         RequireNoMask();
 
+        return Shaped(each, null);
+    }
+
+    /// <summary>The shapes that reach and leave each step of a stack that takes a mask, for a batch of one example.</summary>
+    /// <param name="each">The shape of one example, without the batch's axis.</param>
+    /// <param name="mask">The shape of the mask of one example, without the batch's axis.</param>
+    /// <returns>For each step in order, the shape of the work of the first step it takes and the shape of what it makes.</returns>
+    /// <exception cref="InvalidOperationException">No step of the stack takes a mask.</exception>
+    public IReadOnlyList<StepShapes> Shapes(Shape each, Shape mask) =>
+        TakesMask ? Shaped(each, mask) : throw new InvalidOperationException("No step of this stack takes a mask, and it was handed one.");
+
+    private List<StepShapes> Shaped(Shape each, Shape? mask)
+    {
+        var pass = Pass.Evaluation(new CpuBackend());
         var made = new Dictionary<string, Tensor>(StringComparer.Ordinal) { [Step.Input] = Tensor.Zeros(new Shape([1, .. each.Axes])) };
         var shapes = new List<StepShapes>(_steps.Length);
+
+        if (mask is { } masked)
+        {
+            made[Step.Mask] = Tensor.Zeros(new Shape([1, .. masked.Axes]));
+        }
 
         foreach (var step in _steps)
         {

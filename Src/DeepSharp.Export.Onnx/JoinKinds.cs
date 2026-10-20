@@ -75,5 +75,5 @@ internal sealed class ColumnsKind : ExportKind<Columns>
 internal sealed class StackKind : ExportKind<LayerStack>
 {
     /// <inheritdoc />
-    protected override Value Write(LayerStack layer, Writing at) => new StackWriting(at.Graph).Write(layer, at.Input, at.Path);
+    protected override Value Write(LayerStack layer, Writing at) => new StackWriting(at.Graph).Write(layer, at.Inputs, at.Path);
 }

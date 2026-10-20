@@ -64,6 +64,19 @@ internal sealed record Writing(GraphDraft Graph, Layer Layer, string Path, IRead
     /// <param name="name">The name of the graph's value.</param>
     public Value Giving(string name) => new(name, Made);
 
+    /// <summary>A series, an image or a volume the graph holds with its channels first, turned so its channels are last, which is where ONNX's operators over the last axis take them.</summary>
+    /// <param name="value">The value's name.</param>
+    /// <param name="part">What tells the node from the step's others.</param>
+    /// <returns>The turned value's name.</returns>
+    public string ChannelsLast(string value, string part) =>
+        Graph.Node(Node("Transpose", 1, part) with { Attributes = node => node.States("perm", [0L, .. Enumerable.Range(2, Input.Each.Rank - 1).Select(axis => (long)axis), 1L]) }, [value], $"{Path}/{part}");
+
+    /// <summary>A value turned with its channels last, turned back so its channels come first; the step's own value, given the name the step goes by.</summary>
+    /// <param name="value">The value's name.</param>
+    /// <returns>The step's value.</returns>
+    public Value ChannelsFirst(string value) =>
+        Giving(Graph.Node(Node("Transpose", 1, "Transpose.out") with { Attributes = node => node.States("perm", [0L, Made.Rank, .. Enumerable.Range(1, Made.Rank - 1).Select(axis => (long)axis)]) }, [value], Path));
+
     /// <summary>The value the step makes, given the name it goes by, as the row of the image the step it takes made one of, when it did.</summary>
     /// <param name="name">The name of the graph's value.</param>
     public Value Keeping(string name) => new(name, Made) { Image = Input.Image };

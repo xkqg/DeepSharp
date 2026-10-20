@@ -82,7 +82,7 @@ public sealed class OnnxExport
 
         graph.Takes("input", ChannelsFirst(_each));
 
-        var made = new StackWriting(graph).Write(stack, new Value("input", _each), string.Empty);
+        var made = new StackWriting(graph).Write(stack, [new Value("input", _each)], string.Empty);
 
         if (made.Image is not null)
         {
@@ -101,6 +101,7 @@ public sealed class OnnxExport
         };
 
         graph.Gives(output, ChannelsFirst(made.Each));
+        graph.Settle();
 
         var model = new ModelProto
         {

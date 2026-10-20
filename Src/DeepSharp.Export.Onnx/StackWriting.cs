@@ -12,15 +12,21 @@ internal sealed class StackWriting(GraphDraft graph)
 {
     /// <summary>Writes the stack's steps.</summary>
     /// <param name="stack">The stack.</param>
-    /// <param name="input">The value the stack is handed.</param>
+    /// <param name="inputs">The value the stack is handed, and, where its steps take the mask of the padding, that mask besides.</param>
     /// <param name="inside">The path of the step the stack stands in; nothing for the network's own stack.</param>
     /// <returns>The value of the last step.</returns>
     /// <exception cref="NotSupportedException">A layer is of no kind written.</exception>
-    public Value Write(LayerStack stack, Value input, string inside)
+    public Value Write(LayerStack stack, IReadOnlyList<Value> inputs, string inside)
     {
-        var shapes = stack.Shapes(input.Each);
+        var input = inputs[0];
+        var shapes = inputs.Count > 1 ? stack.Shapes(input.Each, inputs[1].Each) : stack.Shapes(input.Each);
         var made = new Dictionary<string, Value>(StringComparer.Ordinal) { [Step.Input] = input };
         var last = input;
+
+        if (inputs.Count > 1)
+        {
+            made[Step.Mask] = inputs[1];
+        }
 
         for (var at = 0; at < stack.Steps.Count; at++)
         {

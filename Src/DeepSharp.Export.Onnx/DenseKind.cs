@@ -18,15 +18,14 @@ internal sealed class DenseKind : ExportKind<Dense>
     {
         var graph = at.Graph;
         var spatial = at.Input.Spatial;
-        var rank = at.Input.Each.Rank;
-        var rows = spatial ? graph.Node(at.Node("Transpose", 1, "Transpose.in") with { Attributes = node => node.States("perm", ChannelsLast(rank)) }, [at.Input.Name], $"{at.Path}/Transpose.in") : at.Input.Name;
+        var rows = spatial ? at.ChannelsLast(at.Input.Name, "Transpose.in") : at.Input.Name;
         var result = spatial ? $"{at.Path}/Dense" : at.Path;
         var weight = graph.Number(at.Number(dense.Weight.Name), [dense.Inputs, dense.Outputs], at.Input.Ordered(dense.Weight.Value.Values));
         var hasBias = dense.Bias is not null;
 
         if (dense.LowRank is not { } pair)
         {
-            return Returned(at, spatial, rank, Biased(at, dense, graph.Node(at.Node("MatMul", 1), [rows, weight], hasBias ? $"{at.Path}/MatMul" : result), result));
+            return Returned(at, spatial, Biased(at, dense, graph.Node(at.Node("MatMul", 1), [rows, weight], hasBias ? $"{at.Path}/MatMul" : result), result));
         }
 
         var first = graph.Number(at.Number(dense.A!.Name), [dense.Inputs, pair.Rank], at.Input.Ordered(dense.A.Value.Values));
@@ -38,7 +37,7 @@ internal sealed class DenseKind : ExportKind<Dense>
         var scaled = graph.Node(at.Node("Mul", 7), [back, scale], $"{at.Path}/Mul");
         var sum = graph.Node(at.Node("Add", 7, "Add.pair"), [kernel, scaled], hasBias ? $"{at.Path}/Add.pair" : result);
 
-        return Returned(at, spatial, rank, Biased(at, dense, sum, result));
+        return Returned(at, spatial, Biased(at, dense, sum, result));
     }
 
     // The Add of the bias, when the layer has one: the value it gives is the step's.
@@ -48,13 +47,5 @@ internal sealed class DenseKind : ExportKind<Dense>
             : at.Graph.Node(at.Node("Add", 7), [product, at.Graph.Number(at.Number(dense.Bias.Name), [dense.Outputs], dense.Bias.Value.Values)], result);
 
     // The value the step makes: the channels turned back first where they were turned last.
-    private static Value Returned(Writing at, bool spatial, int rank, string made) =>
-        at.Giving(spatial
-            ? at.Graph.Node(at.Node("Transpose", 1, "Transpose.out") with { Attributes = node => node.States("perm", ChannelsFirst(rank)) }, [made], at.Path)
-            : made);
-
-    // The permutations that turn the channels of a batch of an example of this rank (the channels and the places) last, and first again.
-    private static long[] ChannelsLast(int rank) => [0, .. Enumerable.Range(2, rank - 1).Select(axis => (long)axis), 1];
-
-    private static long[] ChannelsFirst(int rank) => [0, rank, .. Enumerable.Range(1, rank - 1).Select(axis => (long)axis)];
+    private static Value Returned(Writing at, bool spatial, string made) => spatial ? at.ChannelsFirst(made) : at.Giving(made);
 }
