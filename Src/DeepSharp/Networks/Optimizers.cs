@@ -486,7 +486,7 @@ public sealed class Adam : Optimizer, ISaved<Adam>
 
     /// <inheritdoc />
     protected override Tensor Moved(Parameter parameter, Tensor gradient, double rate, ITensorBackend backend) =>
-        _moments.After(parameter, gradient, new MeansKept(Betas, AmsGrad), backend).Step(parameter.Value, rate, new AdamTerms(Betas, Epsilon), backend);
+        _moments.Stepped(parameter, gradient, parameter.Value, new AdamStepping(rate, new MeansKept(Betas, AmsGrad), new AdamTerms(Betas, Epsilon)), backend);
 }
 
 /// <summary>
@@ -594,7 +594,7 @@ public sealed class AdamW : Optimizer, ISaved<AdamW>
         // PyTorch's order: the parameter shrunk first — not at all without a decay, as PyTorch skips it — then Adam's step.
         var decayed = WeightDecay is 0 ? parameter.Value : backend.Scale(parameter.Value, Scalar(backend, 1 - (rate * WeightDecay)));
 
-        return _moments.After(parameter, gradient, new MeansKept(Betas, AmsGrad), backend).Step(decayed, rate, new AdamTerms(Betas, Epsilon), backend);
+        return _moments.Stepped(parameter, gradient, decayed, new AdamStepping(rate, new MeansKept(Betas, AmsGrad), new AdamTerms(Betas, Epsilon)), backend);
     }
 }
 
@@ -953,6 +953,17 @@ internal readonly record struct AdamMoments(int Steps, Tensor Average, Tensor Sq
 /// <param name="Epsilon">What is added to the root of the mean of the squares.</param>
 internal readonly record struct AdamTerms(Betas Betas, double Epsilon);
 
+/// <summary>How one step of Adam is taken: how far it moves, how the means are kept and what the step takes.</summary>
+/// <param name="Rate">How far the step moves the parameter.</param>
+/// <param name="Means">How the running means are kept.</param>
+/// <param name="Terms">The betas and the epsilon.</param>
+internal readonly record struct AdamStepping(double Rate, MeansKept Means, AdamTerms Terms);
+
+/// <summary>A parameter after one step of Adam: the tensor moved, and what Adam remembers of it now.</summary>
+/// <param name="Value">The tensor after the step.</param>
+/// <param name="After">The steps and the means after it.</param>
+internal readonly record struct AdamStepped(Tensor Value, AdamMoments After);
+
 /// <summary>How the running means of an optimizer of Adam's family are kept.</summary>
 /// <param name="Betas">The two rates the means forget at.</param>
 /// <param name="AmsGrad">Whether the largest mean of the squares there has been is kept too.</param>
@@ -994,6 +1005,28 @@ internal sealed class RunningMoments
 
         // AMSGrad: the largest of the means of the squares there has been, from nothing, as torch.maximum keeps it.
         return _kept[parameter] = new AdamMoments(before.Steps + 1, average, squared, amsgrad ? backend.Larger(before.Largest ?? backend.Fill(gradient.Shape, 0f), squared) : null);
+    }
+
+    /// <summary>
+    /// One step of Adam for a parameter, from the tensor given: the means after it kept, and the tensor after it handed back. An
+    /// engine that takes the step in one pass does; any other makes the twenty operations the step is made of.
+    /// </summary>
+    /// <param name="parameter">The parameter.</param>
+    /// <param name="gradient">Its gradient.</param>
+    /// <param name="from">The tensor the step is taken from: the parameter's own, or for AdamW the parameter shrunk first.</param>
+    /// <param name="how">The rate, how the means are kept and the terms.</param>
+    /// <param name="backend">The backend the arithmetic runs on.</param>
+    /// <returns>The tensor after the step.</returns>
+    public Tensor Stepped(Parameter parameter, Tensor gradient, Tensor from, AdamStepping how, ITensorBackend backend)
+    {
+        if (backend is IStepsAdam fused && fused.Stepped(from, gradient, _kept.TryGetValue(parameter, out var last) ? last : null, how) is { } stepped)
+        {
+            _kept[parameter] = stepped.After;
+
+            return stepped.Value;
+        }
+
+        return After(parameter, gradient, how.Means, backend).Step(from, how.Rate, how.Terms, backend);
     }
 
     /// <summary>What is remembered of a parameter, under PyTorch's names; nothing before its first step.</summary>

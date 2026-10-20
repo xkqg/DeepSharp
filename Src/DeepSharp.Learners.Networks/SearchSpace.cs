@@ -49,6 +49,17 @@ public abstract class Dimension
     /// <returns>The value, under this dimension's name.</returns>
     public abstract Setting Draw(Draws draws);
 
+    /// <summary>Why the dimension cannot take a setting a sampler gave it; nothing when it can.</summary>
+    /// <param name="setting">The setting, which is for this dimension.</param>
+    /// <returns>The reason, as the words that follow the dimension's name; nothing for a value it takes.</returns>
+    internal abstract string? Refusal(Setting setting);
+
+    private protected static string? RefusalOfANumber(Setting setting, double low, double high) =>
+        setting.Choice is not null ? $"is a number, and was given the word {setting.Choice}"
+        : !double.IsFinite(setting.Number) ? string.Create(CultureInfo.InvariantCulture, $"is a number between {low} and {high}, and was given {setting.Number}")
+        : setting.Number < low || setting.Number > high ? string.Create(CultureInfo.InvariantCulture, $"is a number between {low} and {high}, and was given {setting.Number}")
+        : null;
+
     private protected static void ThrowIfNotARange(string name, double low, double high)
     {
         if (!double.IsFinite(low) || !double.IsFinite(high) || low >= high)
@@ -91,6 +102,9 @@ public sealed class NumberRange : Dimension
 
         return new Setting(Name, Low + (draws.NextDouble() * (High - Low)), null);
     }
+
+    /// <inheritdoc />
+    internal override string? Refusal(Setting setting) => RefusalOfANumber(setting, Low, High);
 }
 
 /// <summary>A number between two bounds above nought, every decade of the range as likely as another: a learning rate.</summary>
@@ -132,6 +146,9 @@ public sealed class LogRange : Dimension
 
         return new Setting(Name, Math.Clamp(value, Low, High), null);
     }
+
+    /// <inheritdoc />
+    internal override string? Refusal(Setting setting) => RefusalOfANumber(setting, Low, High);
 }
 
 /// <summary>A whole number between two bounds, both of them included.</summary>
@@ -167,6 +184,12 @@ public sealed class WholeRange : Dimension
 
         return new Setting(Name, Low + draws.NextInt(count), null);
     }
+
+    /// <inheritdoc />
+    internal override string? Refusal(Setting setting) =>
+        RefusalOfANumber(setting, Low, High) is { } refused ? refused
+        : setting.Number != Math.Floor(setting.Number) ? string.Create(CultureInfo.InvariantCulture, $"is a whole number between {Low} and {High}, and was given {setting.Number}")
+        : null;
 }
 
 /// <summary>One of a few words: an optimizer, an activation.</summary>
@@ -200,6 +223,16 @@ public sealed class Choices : Dimension
         var at = draws.NextInt(Options.Count);
 
         return new Setting(Name, at, Options[at]);
+    }
+
+    /// <inheritdoc />
+    internal override string? Refusal(Setting setting)
+    {
+        var at = setting.Choice is null ? -1 : Options.ToList().IndexOf(setting.Choice);
+
+        return at < 0 ? $"is one of {string.Join(", ", Options)}, and was given {(setting.Choice is null ? "a number" : setting.Choice)}"
+            : setting.Number != at ? string.Create(CultureInfo.InvariantCulture, $"is one of {string.Join(", ", Options)}, and was given the word {setting.Choice} as the place {setting.Number}, which is place {at}")
+            : null;
     }
 }
 

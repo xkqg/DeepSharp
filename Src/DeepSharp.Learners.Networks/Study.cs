@@ -404,6 +404,15 @@ public sealed class Study
                 $"The sampler gave a candidate of other dimensions than the space has for it: the space has {string.Join(", ", there.Select(name => $"'{name}'"))}, "
                 + $"and the candidate {string.Join(", ", candidate.Settings.Select(each => $"'{each.Name}'"))}.");
         }
+
+        // A value is held to the dimension it is for: a sampler is the caller's, and a network is not to learn from what it gave by mistake.
+        foreach (var setting in candidate.Settings)
+        {
+            if (Space.Single(dimension => dimension.Name == setting.Name).Refusal(setting) is { } refusal)
+            {
+                throw new InvalidOperationException($"The sampler gave a setting the space cannot take: '{setting.Name}' {refusal}.");
+            }
+        }
     }
 
     // A trial and the networks it trained, which only the best trial's are kept of.

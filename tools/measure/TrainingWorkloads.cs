@@ -48,33 +48,36 @@ internal sealed class TrainingWorkloads
     {
         var table = new StringBuilder();
 
-        table.AppendLine("| run | threads | epochs | ms per epoch | bytes per epoch | gen-0 collections | wall ms of the whole |");
-        table.AppendLine("|---|---:|---:|---:|---:|---:|---:|");
+        table.AppendLine("| run | engine | threads | epochs | ms per epoch | bytes per epoch | gen-0 collections | wall ms of the whole |");
+        table.AppendLine("|---|---|---:|---:|---:|---:|---:|---:|");
 
         foreach (var run in Runs)
         {
-            foreach (var threads in new[] { 1, 5 })
+            foreach (var (engine, plain) in new[] { ("light", false), ("light without its shortcuts", true) })
             {
-                var cost = Median(run, threads);
+                foreach (var threads in new[] { 1, 5 })
+                {
+                    var cost = Median(run, threads, plain);
 
-                table.AppendLine(string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"| {run.Name} | {threads} | {run.Epochs} | {cost.Wall / run.Epochs:F2} | {cost.Bytes / (run.Epochs * threads)} | {cost.Collections} | {cost.Wall:F0} |"));
+                    table.AppendLine(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"| {run.Name} | {engine} | {threads} | {run.Epochs} | {cost.Wall / run.Epochs:F2} | {cost.Bytes / (run.Epochs * threads)} | {cost.Collections} | {cost.Wall:F0} |"));
+                }
             }
         }
 
         return table.ToString();
     }
 
-    private Cost Median(TrainingWorkload run, int threads)
+    private Cost Median(TrainingWorkload run, int threads, bool plain)
     {
-        Train(run, 1);
+        Train(run, 1, plain);
 
         var costs = new List<Cost>();
 
         for (var repeat = 0; repeat < _repeats; repeat++)
         {
-            costs.Add(Train(run, threads));
+            costs.Add(Train(run, threads, plain));
         }
 
         return costs.OrderBy(cost => cost.Wall).ElementAt(costs.Count / 2);
@@ -82,12 +85,12 @@ internal sealed class TrainingWorkloads
 
     // Trains a workload on this many threads of its own at once — dedicated ones, since a thread pool starved by a run is a
     // measurement of the pool — and says what it cost: the wall time of all, what was allocated, how often the collector ran.
-    private static Cost Train(TrainingWorkload run, int threads)
+    private static Cost Train(TrainingWorkload run, int threads, bool plain)
     {
         var bytes = GC.GetTotalAllocatedBytes(precise: true);
         var collections = GC.CollectionCount(0);
         var watch = Stopwatch.StartNew();
-        var workers = Enumerable.Range(0, threads).Select(_ => new Thread(() => run.Make().Fit(run.Rows(), null, new FitOptions(seed: 7) { Epochs = run.Epochs }))).ToArray();
+        var workers = Enumerable.Range(0, threads).Select(_ => new Thread(() => run.Make().Fit(run.Rows(), null, new FitOptions(seed: 7) { Epochs = run.Epochs, Backend = plain ? new PlainBackend(new CpuBackend()) : new CpuBackend() }))).ToArray();
 
         foreach (var worker in workers)
         {

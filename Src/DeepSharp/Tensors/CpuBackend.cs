@@ -3,6 +3,7 @@
 
 using System.Numerics.Tensors;
 using System.Reflection;
+using DeepSharp.Networks;
 
 namespace DeepSharp.Tensors;
 
@@ -19,7 +20,7 @@ namespace DeepSharp.Tensors;
 /// values in once it is large, and ten million tenths came to a mean of 0.1087937 rather than a tenth.
 /// </para>
 /// </remarks>
-public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLeft
+public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLeft, IStepsAdam
 {
     // The version the release is handed, as its package names it: what the assembly says of itself, less the commit Source
     // Link adds after a '+', so every build of one release names the same one.
@@ -82,6 +83,10 @@ public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLef
 
         return Tensor.Wrap(new Shape(rows, columns), result);
     }
+
+    /// <inheritdoc />
+    AdamStepped? IStepsAdam.Stepped(Tensor value, Tensor gradient, AdamMoments? before, AdamStepping stepping) =>
+        new AdamPass(value, gradient, before, stepping).Take();
 
     /// <inheritdoc />
     public Tensor Transpose(Tensor matrix)
