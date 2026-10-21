@@ -388,6 +388,10 @@ public sealed class Browsers : IAsyncLifetime
 
     public async ValueTask InitializeAsync()
     {
+        // What a page shows after a gesture waits for the server, which waits out a settle time of its own and then works: measured on a machine
+        // under load, a box ticked and written into the blocks 3.2 seconds later, past the five seconds an assertion waits by default. An assertion
+        // returns the moment it holds, so a longer wait costs a passing test nothing and a test that never holds still fails.
+        Assertions.SetDefaultExpectTimeout(30_000);
         _playwright = await Playwright.CreateAsync();
         Browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true, Channel = OperatingSystem.IsWindows() ? "msedge" : null });
     }

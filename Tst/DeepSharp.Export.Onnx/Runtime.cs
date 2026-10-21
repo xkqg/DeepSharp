@@ -18,7 +18,7 @@ internal static class Runtime
     /// <returns>The answers, row-major.</returns>
     public static float[] Answers(byte[] graph, Tensor rows)
     {
-        using var options = new SessionOptions { IntraOpNumThreads = 1, InterOpNumThreads = 1 };
+        using var options = new SessionOptions { IntraOpNumThreads = 1, InterOpNumThreads = 1, LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR };
         using var session = new InferenceSession(graph, options);
         var given = new DenseTensor<float>(rows.Values.ToArray(), [.. rows.Shape.Axes.ToArray()]);
 
