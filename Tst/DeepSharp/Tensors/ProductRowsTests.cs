@@ -51,11 +51,18 @@ public class ProductRowsTests
 
         backend.MatMul(product, other);
 
-        var before = GC.GetAllocatedBytesForCurrentThread();
+        // The least of several products: a product the runtime compiles again, or a probe a coverage run puts in its code for the first time, allocates
+        // for itself on the thread that asks, and that is the runtime's allocation and not the product's: under coverage one run allocated 73,880 bytes where the bound is 68,096.
+        var allocated = long.MaxValue;
 
-        backend.MatMul(product, other);
+        for (var repeat = 0; repeat < 5; repeat++)
+        {
+            var before = GC.GetAllocatedBytesForCurrentThread();
 
-        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            backend.MatMul(product, other);
+
+            allocated = Math.Min(allocated, GC.GetAllocatedBytesForCurrentThread() - before);
+        }
 
         // The result, one total for each column, and what a tensor and its shape cost: a few hundred bytes, never a row more.
         Assert.InRange(allocated, 64 * 256 * 4, (64 * 256 * 4) + (256 * 8) + 512);
