@@ -65,7 +65,8 @@ public class OnnxRecurrentExportTests
         var loss = new MeanSquaredError();
         var each = Readings[name].Each;
         var rows = Runtime.Batch(4, each);
-        var read = new OnnxFile(loss).Read(new MemoryStream(new OnnxExport(each).ToBytes(network, loss)));
+        using var file = new MemoryStream(new OnnxExport(each).ToBytes(network, loss));
+        var read = new OnnxFile(loss).Read(file);
 
         var here = network.Predict(rows, loss, Engine).Values.ToArray();
         var back = read.Network.Predict(rows, read.Loss, Engine).Values.ToArray();

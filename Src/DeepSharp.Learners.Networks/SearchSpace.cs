@@ -188,7 +188,7 @@ public sealed class WholeRange : Dimension
     /// <inheritdoc />
     internal override string? Refusal(Setting setting) =>
         RefusalOfANumber(setting, Low, High) is { } refused ? refused
-        : setting.Number != Math.Floor(setting.Number) ? string.Create(CultureInfo.InvariantCulture, $"is a whole number between {Low} and {High}, and was given {setting.Number}")
+        : !double.IsInteger(setting.Number) ? string.Create(CultureInfo.InvariantCulture, $"is a whole number between {Low} and {High}, and was given {setting.Number}")
         : null;
 }
 
@@ -231,7 +231,7 @@ public sealed class Choices : Dimension
         var at = setting.Choice is null ? -1 : Options.ToList().IndexOf(setting.Choice);
 
         return at < 0 ? $"is one of {string.Join(", ", Options)}, and was given {(setting.Choice is null ? "a number" : setting.Choice)}"
-            : setting.Number != at ? string.Create(CultureInfo.InvariantCulture, $"is one of {string.Join(", ", Options)}, and was given the word {setting.Choice} as the place {setting.Number}, which is place {at}")
+            : setting.Number.CompareTo(at) != 0 ? string.Create(CultureInfo.InvariantCulture, $"is one of {string.Join(", ", Options)}, and was given the word {setting.Choice} as the place {setting.Number}, which is place {at}")
             : null;
     }
 }

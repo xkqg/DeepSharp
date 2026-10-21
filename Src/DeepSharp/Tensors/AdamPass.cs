@@ -83,32 +83,47 @@ internal sealed class AdamPass(Tensor gradient, AdamMoments? before, AdamSteppin
                 mean.CopyTo(average, at);
                 square.CopyTo(squared, at);
                 after.CopyTo(moved, at);
-                noNumber |= !(Vector.EqualsAll(after, after) & Vector.EqualsAll(mean, mean) & Vector.EqualsAll(square, square) & Vector.EqualsAll(rooted, rooted));
+                noNumber = noNumber || !Vector.EqualsAll(after, after) || !Vector.EqualsAll(mean, mean) || !Vector.EqualsAll(square, square) || !Vector.EqualsAll(rooted, rooted);
             }
         }
 
         for (; at < count; at++)
         {
+            // Every product and every sum is a single of its own, rounded where it stands, as the vector path rounds each of its operations.
             var g = gradients[at];
-            var mean = (float)((lastAverage.IsEmpty ? 0f : lastAverage[at]) * terms.KeepFirst) + (float)(g * terms.TakeFirst);
-            var square = (float)((lastSquared.IsEmpty ? 0f : lastSquared[at]) * terms.KeepSecond) + (float)((float)(g * g) * terms.TakeSecond);
+            float keptMean = (lastAverage.IsEmpty ? 0f : lastAverage[at]) * terms.KeepFirst;
+            float takenMean = g * terms.TakeFirst;
+            float mean = keptMean + takenMean;
+            float keptSquare = (lastSquared.IsEmpty ? 0f : lastSquared[at]) * terms.KeepSecond;
+            float gradientSquare = g * g;
+            float takenSquare = gradientSquare * terms.TakeSecond;
+            float square = keptSquare + takenSquare;
             var rooted = square;
 
             if (biggest is not null)
             {
                 var previous = lastLargest.IsEmpty ? 0f : lastLargest[at];
-                var takes = (float)(square - previous) > 0f ? 1f : 0f;
+                float difference = square - previous;
+                var takes = difference > 0f ? 1f : 0f;
+                float left = 1f - takes;
+                float keptLargest = previous * left;
+                float takenLargest = square * takes;
 
-                rooted = (float)(previous * (float)(1f - takes)) + (float)(square * takes);
+                rooted = keptLargest + takenLargest;
                 biggest[at] = rooted;
             }
 
-            var after = values[at] - (float)((float)(mean / ((float)((float)MathF.Sqrt(rooted) * terms.Correction) + terms.Epsilon)) * terms.Size);
+            float root = MathF.Sqrt(rooted);
+            float scaled = root * terms.Correction;
+            float denominator = scaled + terms.Epsilon;
+            float quotient = mean / denominator;
+            float step = quotient * terms.Size;
+            var after = values[at] - step;
 
             average[at] = mean;
             squared[at] = square;
             moved[at] = after;
-            noNumber |= float.IsNaN(after) | float.IsNaN(mean) | float.IsNaN(square) | float.IsNaN(rooted);
+            noNumber = noNumber || float.IsNaN(after) || float.IsNaN(mean) || float.IsNaN(square) || float.IsNaN(rooted);
         }
 
         if (noNumber)

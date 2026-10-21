@@ -63,7 +63,7 @@ public class KerasFunctionalFileTests
         Assert.Equal(["Dense", "Relu", "Dense", "Sum", "Concatenation", "Dense"], stack.Steps.Select(step => step.Layer.GetType().Name));
         Assert.Equal(
             [["input"], ["0"], ["1"], ["input", "2"], ["input", "3"], ["4"]],
-            stack.Steps.Select(step => (IReadOnlyList<string>)[.. step.Takes]));
+            stack.Steps.Select(step => step.Takes.ToArray()));
         Assert.Equal(["0.weight", "0.bias", "2.weight", "2.bias", "5.weight", "5.bias"], stack.Slots().Select(slot => slot.Path));
     }
 
@@ -89,7 +89,7 @@ public class KerasFunctionalFileTests
         Assert.Equal((3, 4), (Assert.IsType<Columns>(stack.Steps[1].Layer).First, Assert.IsType<Columns>(stack.Steps[1].Layer).Count));
         Assert.Equal(
             [["input"], ["input"], ["0"], ["2"], ["1"], ["3", "4"], ["5"]],
-            stack.Steps.Select(step => (IReadOnlyList<string>)[.. step.Takes]));
+            stack.Steps.Select(step => step.Takes.ToArray()));
     }
 
     [Fact]

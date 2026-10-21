@@ -40,6 +40,6 @@ public sealed class Unpadded : Layer, ISaved<Unpadded>
             throw new ArgumentException($"The mask of a batch of texts is made of rows of ids, a batch of rows, and was handed a {input.Shape} one.", nameof(input));
         }
 
-        return Tensor.From(input.Shape, [.. input.Values.ToArray().Select(id => id == 0f ? 0f : 1f)]);
+        return Tensor.From(input.Shape, [.. input.Values.ToArray().Select(id => id is 0f ? 0f : 1f)]);
     }
 }

@@ -56,7 +56,8 @@ public class OnnxExportTests
         var graph = new OnnxExport(new Shape(Width(name))).ToBytes(network, loss);
         var rows = Runtime.Rows(5, Width(name));
 
-        var read = new OnnxFile(loss).Read(new MemoryStream(graph));
+        using var file = new MemoryStream(graph);
+        var read = new OnnxFile(loss).Read(file);
 
         Assert.Equal(
             network.Predict(rows, loss, Engine).Values.ToArray(),

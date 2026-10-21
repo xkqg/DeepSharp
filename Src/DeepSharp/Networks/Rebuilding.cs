@@ -134,7 +134,7 @@ public sealed class Rebuilding
         settings.Member(key) is null
             ? whenAbsent
             : [.. Listed(settings, key, "a list of lists of words").Select(list => list.ValueKind == JsonValueKind.Array
-                ? (IReadOnlyList<string>)[.. list.EnumerateArray().Select(element => element.ValueKind == JsonValueKind.String ? element.GetString()! : throw Refusal(key, "a list of lists of words"))]
+                ? list.EnumerateArray().Select(element => element.ValueKind == JsonValueKind.String ? element.GetString()! : throw Refusal(key, "a list of lists of words")).ToArray()
                 : throw Refusal(key, "a list of lists of words"))];
 
     /// <summary>The layers a kind holds, written as a list under a setting, each rebuilt through the catalog.</summary>

@@ -37,9 +37,9 @@ internal sealed class GraphDraft
     /// <remarks>Called once the last node is written: the set a graph needs is the greatest of its nodes', which a node written first cannot know.</remarks>
     public void Settle()
     {
-        foreach (var node in _graph.Node)
+        foreach (var node in _graph.Node.Where(node => AxesAsInput.Any(each => each.Operator == node.OpType && _opset >= each.From)))
         {
-            if (AxesAsInput.Any(each => each.Operator == node.OpType && _opset >= each.From) && node.Attribute.FirstOrDefault(attribute => attribute.Name == "axes") is { } axes)
+            if (node.Attribute.FirstOrDefault(attribute => attribute.Name == "axes") is { } axes)
             {
                 node.Attribute.Remove(axes);
                 node.Input.Add(Wholes($"{node.Name}.axes", [.. axes.Ints]));

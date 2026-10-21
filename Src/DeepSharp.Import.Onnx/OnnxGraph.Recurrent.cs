@@ -88,27 +88,29 @@ internal sealed partial class OnnxGraph
         var cone = new HashSet<int>();
         var work = new Stack<int>();
 
-        foreach (var node in _graph.Node.Where(node => node.OpType is "LSTM" or "GRU"))
+        var states = _graph.Node
+            .Where(node => node.OpType is "LSTM" or "GRU")
+            .SelectMany(node => node.Input.Skip(5).Take(2))
+            .Where(name => name.Length > 0 && _makers.ContainsKey(name))
+            .Select(name => _makers[name])
+            .Where(maker => _graph.Node[maker].OpType == "Expand");
+
+        foreach (var maker in states.Where(cone.Add))
         {
-            foreach (var name in node.Input.Skip(5).Take(2).Where(name => name.Length > 0))
-            {
-                if (_makers.TryGetValue(name, out var maker) && _graph.Node[maker].OpType == "Expand" && cone.Add(maker))
-                {
-                    work.Push(maker);
-                }
-            }
+            work.Push(maker);
         }
 
         while (work.TryPop(out var place))
         {
-            foreach (var name in _graph.Node[place].Input.Where(name => name.Length > 0))
+            var only = _graph.Node[place].Input
+                .Where(name => name.Length > 0 && _makers.ContainsKey(name))
+                .Select(name => _makers[name])
+                .Where(maker => !cone.Contains(maker) && _graph.Node[maker].OpType != "Constant"
+                    && _graph.Node[maker].Output.All(output => !given.Contains(output) && takers.GetValueOrDefault(output, []).All(cone.Contains)));
+
+            foreach (var maker in only.Where(cone.Add))
             {
-                if (_makers.TryGetValue(name, out var maker) && !cone.Contains(maker) && _graph.Node[maker].OpType != "Constant"
-                    && _graph.Node[maker].Output.All(output => !given.Contains(output) && takers.GetValueOrDefault(output, []).All(cone.Contains))
-                    && cone.Add(maker))
-                {
-                    work.Push(maker);
-                }
+                work.Push(maker);
             }
         }
 
@@ -129,7 +131,7 @@ internal sealed partial class OnnxGraph
         }
     }
 
-    private bool Noughts(string name) => _numbers.Holds(name) && _numbers.Floats(name).Values is { } values && values.All(value => value == 0);
+    private bool Noughts(string name) => _numbers.Holds(name) && _numbers.Floats(name).Values is { } values && values.All(value => value is 0f);
 
     // A node that works on a value laid out as a recurrent operator gives or takes a series: the Squeeze, the Gather and the Reshape that put
     // the result of one in order, which are followed without a layer of their own; a recurrent operator or an activation, which is read as
@@ -227,6 +229,16 @@ internal sealed partial class OnnxGraph
         lengths is [var steps, var each, var states] && copies && steps == 0 && (each == 0 || each == batch) && (states == -1 || states == width);
 
     // [batch, states] likewise.
-    private static bool FoldsStates(long[] lengths, long? batch, bool copies, int? width) =>
-        lengths is [var each, var states] && ((copies && each == 0) || each == batch || each == -1) && (states == -1 || states == width) && (each != -1 || states != -1);
+    private static bool FoldsStates(long[] lengths, long? batch, bool copies, int? width)
+    {
+        if (lengths is not [var each, var states])
+        {
+            return false;
+        }
+
+        var batchKept = (copies && each == 0) || each == batch || each == -1;
+        var widthKept = states == -1 || states == width;
+
+        return batchKept && widthKept && (each != -1 || states != -1);
+    }
 }

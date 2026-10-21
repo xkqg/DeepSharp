@@ -44,10 +44,8 @@ public class FusedAdamStepTests
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
-        foreach (var variant in Variants())
+        foreach (var chain in Variants().Select(variant => new Walked(variant.Make(), new CopyCountingBackend())))
         {
-            var chain = new Walked(variant.Make(), new CopyCountingBackend());
-
             for (var step = 1; step <= 7; step++)
             {
                 chain.Step(step);

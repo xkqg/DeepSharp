@@ -70,12 +70,9 @@ internal sealed class RecurrentKind(string name) : KerasKind
             layer.Refuse("it carries its state from one batch to the next, stateful, and a recurrent layer here starts every series from nought.");
         }
 
-        foreach (var key in new[] { "dropout", "recurrent_dropout" })
+        foreach (var key in new[] { "dropout", "recurrent_dropout" }.Where(key => layer.Setting(key, 0.0) is not 0.0))
         {
-            if (layer.Setting(key, 0.0) is var rate and not 0.0)
-            {
-                layer.Refuse(string.Create(CultureInfo.InvariantCulture, $"it drops numbers out inside the layer, {key} {rate}, and a recurrent layer here has no dropout of its own: put a dropout layer between layers."));
-            }
+            layer.Refuse(string.Create(CultureInfo.InvariantCulture, $"it drops numbers out inside the layer, {key} {layer.Setting(key, 0.0)}, and a recurrent layer here has no dropout of its own: put a dropout layer between layers."));
         }
 
         if (layer.Setting("activation", "tanh") is var activation and not "tanh")

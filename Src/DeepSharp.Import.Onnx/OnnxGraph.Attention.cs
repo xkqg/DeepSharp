@@ -95,7 +95,7 @@ internal sealed partial class OnnxGraph
             node.Refuse("it scales its scores by a scale of its own, and a layer here scales them by one over the root of a head's width.");
         }
 
-        if (node.Number("softcap", 0) != 0)
+        if (node.Number("softcap", 0) is not 0d)
         {
             node.Refuse("it bounds its scores by a softcap, and a layer here does not.");
         }

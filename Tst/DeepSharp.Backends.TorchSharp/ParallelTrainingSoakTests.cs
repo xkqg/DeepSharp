@@ -17,7 +17,7 @@ namespace DeepSharp.Tests.Backends.Torch;
 public class ParallelTrainingSoakTests
 {
     [Fact(Explicit = true)]
-    public void WholeTrainingsOnLibtorch_FiveAtATimeInOneProcess_NeverRaiseWhatOneRaisedOnce()
+    public async Task WholeTrainingsOnLibtorch_FiveAtATimeInOneProcess_NeverRaiseWhatOneRaisedOnce()
     {
         var seconds = int.Parse(Environment.GetEnvironmentVariable("DEEPSHARP_SOAK_SECONDS") ?? "60", CultureInfo.InvariantCulture);
         var threads = int.Parse(Environment.GetEnvironmentVariable("DEEPSHARP_SOAK_THREADS") ?? "5", CultureInfo.InvariantCulture);
@@ -26,32 +26,29 @@ public class ParallelTrainingSoakTests
         var trainings = 0L;
         var faults = new ConcurrentQueue<string>();
         var clock = Stopwatch.StartNew();
-        var workers = Enumerable.Range(0, threads).Select(worker => new Thread(() =>
+        var workers = Enumerable.Range(0, threads).Select(worker => Task.Factory.StartNew(() =>
         {
             for (var seed = worker * 100_000L; clock.Elapsed.TotalSeconds < seconds; seed++)
             {
-                try
-                {
-                    new Sequential().Dense(16).Relu().Dense(8).Relu().Dense(1).Compile(new Adam(0.01), new BinaryCrossEntropy())
-                        .Fit(shared ? data : Rows(), null, new FitOptions(seed) { Epochs = 8, BatchSize = 32, Backend = TorchBackend.OnCpu() });
-                    Interlocked.Increment(ref trainings);
-                }
-                catch (Exception fault)
+                var at = seed;
+                var training = Task.Run(() => new Sequential().Dense(16).Relu().Dense(8).Relu().Dense(1).Compile(new Adam(0.01), new BinaryCrossEntropy())
+                    .Fit(shared ? data : Rows(), null, new FitOptions(at) { Epochs = 8, BatchSize = 32, Backend = TorchBackend.OnCpu() }));
+
+                // Waited for without being thrown at: a training that failed is read off the task.
+                ((IAsyncResult)training).AsyncWaitHandle.WaitOne();
+
+                if (training.Exception?.GetBaseException() is { } fault)
                 {
                     faults.Enqueue($"{fault.GetType().Name}: {fault.Message}");
                 }
+                else
+                {
+                    Interlocked.Increment(ref trainings);
+                }
             }
-        })).ToArray();
+        }, TaskCreationOptions.LongRunning)).ToArray();
 
-        foreach (var worker in workers)
-        {
-            worker.Start();
-        }
-
-        foreach (var worker in workers)
-        {
-            worker.Join();
-        }
+        await Task.WhenAll(workers);
 
         var report = $"{trainings} trainings on {threads} threads in {seconds} s, {faults.Count} faults{(faults.IsEmpty ? string.Empty : ": " + string.Join(" | ", faults.Distinct().Take(5)))}";
 

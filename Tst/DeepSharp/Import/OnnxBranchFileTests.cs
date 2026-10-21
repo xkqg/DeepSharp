@@ -166,7 +166,7 @@ public class OnnxBranchFileTests
             inner.Node("x", "h"), OnnxFixtures.NodeOf("Relu", "act", ["h"], "r"), Concat("join", ["x", "r"], "c"), outer.Node("c", "y"));
         var hidden = Relu(inner.Apply(RowsOf(rows)));
 
-        AnswersAs(graph, rows, outer.Apply([.. RowsOf(rows).Zip(hidden, (row, made) => (double[])[.. row, .. made])]));
+        AnswersAs(graph, rows, outer.Apply([.. RowsOf(rows).Zip(hidden, (row, made) => row.Concat(made).ToArray())]));
     }
 
     [Fact]

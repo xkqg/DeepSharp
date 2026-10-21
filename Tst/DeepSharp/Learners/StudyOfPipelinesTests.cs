@@ -46,12 +46,13 @@ public class StudyOfPipelinesTests
             Deals = deals,
         };
 
+    // The things a trial is made of, as the list the study asks for.
+    private static IReadOnlyList<T> Listed<T>(params T[] these) => these;
+
     private static Study StudiedTogether(int trials = 3, int deals = 1, Func<IReadOnlyList<TrainedNetwork>, double>? judge = null) =>
-        new(Space, candidate => (IReadOnlyList<LearnNetworkStep>)
-        [
+        new(Space, candidate => Listed(
             new NetworkDeclaration(Vocabularies.Torch).Dense(4).Relu().Dense(1).Adam(candidate.Number("rate")).BinaryCrossEntropy().Run(seed: 1, epochs: 2).Step(),
-            new NetworkDeclaration(Vocabularies.Torch).Dense(2).Relu().Dense(1).Adam(candidate.Number("rate")).BinaryCrossEntropy().Run(seed: 2, epochs: 2).Step(),
-        ])
+            new NetworkDeclaration(Vocabularies.Torch).Dense(2).Relu().Dense(1).Adam(candidate.Number("rate")).BinaryCrossEntropy().Run(seed: 2, epochs: 2).Step()))
         {
             Sampler = new RandomSampler(11),
             Trials = trials,
@@ -138,8 +139,8 @@ public class StudyOfPipelinesTests
     [Fact]
     public void AListOfPipelinesThatIsNothing_OrHoldsNone_IsRefused_NamingTheTrialAndTheDeal()
     {
-        var nothing = Assert.Throws<InvalidOperationException>(() => StudiedTogether(trials: 1).Run((candidate, deal) => (IReadOnlyList<Pipeline>)null!, TestContext.Current.CancellationToken));
-        var hole = Assert.Throws<InvalidOperationException>(() => StudiedTogether(trials: 1).Run((candidate, deal) => (IReadOnlyList<Pipeline>)[Passengers(candidate, deal), null!], TestContext.Current.CancellationToken));
+        var nothing = Assert.Throws<InvalidOperationException>(() => StudiedTogether(trials: 1).Run((candidate, deal) => default(IReadOnlyList<Pipeline>)!, TestContext.Current.CancellationToken));
+        var hole = Assert.Throws<InvalidOperationException>(() => StudiedTogether(trials: 1).Run((candidate, deal) => Listed(Passengers(candidate, deal), null!), TestContext.Current.CancellationToken));
 
         Assert.Contains("deal 0", nothing.Message, StringComparison.Ordinal);
         Assert.Contains("deal 0", hole.Message, StringComparison.Ordinal);
@@ -164,7 +165,7 @@ public class StudyOfPipelinesTests
             return networks.Sum(network => network.ValidationLoss());
         });
 
-        var result = together.Run((candidate, deal) => (IReadOnlyList<Pipeline>)[Passengers(candidate, deal), Passengers(candidate, deal)], TestContext.Current.CancellationToken);
+        var result = together.Run((candidate, deal) => Listed(Passengers(candidate, deal), Passengers(candidate, deal)), TestContext.Current.CancellationToken);
 
         Assert.All(judged, count => Assert.Equal(2, count));
         Assert.Equal(6, judged.Count);
@@ -178,42 +179,40 @@ public class StudyOfPipelinesTests
     [Fact]
     public void ATrialOfSeveralNetworks_NeedsAJudge_ForNoScoreOfOneNetworkSaysHowTheyDoTogether()
     {
-        var study = new Study(Space, candidate => (IReadOnlyList<LearnNetworkStep>)
-        [
+        var study = new Study(Space, candidate => Listed(
             new NetworkDeclaration(Vocabularies.Torch).Dense(1).Adam(0.01).BinaryCrossEntropy().Run(1, 1).Step(),
-            new NetworkDeclaration(Vocabularies.Torch).Dense(1).Adam(0.01).BinaryCrossEntropy().Run(2, 1).Step(),
-        ])
+            new NetworkDeclaration(Vocabularies.Torch).Dense(1).Adam(0.01).BinaryCrossEntropy().Run(2, 1).Step()))
         {
             Trials = 1,
         };
 
         Assert.Contains("Judge", Assert.Throws<InvalidOperationException>(
-            () => study.Run((candidate, deal) => (IReadOnlyList<Pipeline>)[Passengers(candidate, deal), Passengers(candidate, deal)], TestContext.Current.CancellationToken)).Message, StringComparison.Ordinal);
+            () => study.Run((candidate, deal) => Listed(Passengers(candidate, deal), Passengers(candidate, deal)), TestContext.Current.CancellationToken)).Message, StringComparison.Ordinal);
     }
 
     [Fact]
     public void AJudgeBesideAPrunerOrAScore_IsRefused_ForTheyWouldJudgeTheTrialByTwoNumbers()
     {
-        var pruned = new Study(Space, candidate => (IReadOnlyList<LearnNetworkStep>)[new NetworkDeclaration(Vocabularies.Torch).Dense(1).Adam(0.01).BinaryCrossEntropy().Run(1, 1).Step()])
+        var pruned = new Study(Space, candidate => Listed(new NetworkDeclaration(Vocabularies.Torch).Dense(1).Adam(0.01).BinaryCrossEntropy().Run(1, 1).Step()))
         {
             Judge = networks => 0,
             Pruner = _ => false,
         };
-        var scored = new Study(Space, candidate => (IReadOnlyList<LearnNetworkStep>)[new NetworkDeclaration(Vocabularies.Torch).Dense(1).Adam(0.01).BinaryCrossEntropy().Run(1, 1).Step()])
+        var scored = new Study(Space, candidate => Listed(new NetworkDeclaration(Vocabularies.Torch).Dense(1).Adam(0.01).BinaryCrossEntropy().Run(1, 1).Step()))
         {
             Judge = networks => 0,
             Score = network => 0,
         };
 
-        Assert.Throws<InvalidOperationException>(() => pruned.Run((candidate, deal) => (IReadOnlyList<Pipeline>)[Passengers(candidate, deal)], TestContext.Current.CancellationToken));
-        Assert.Throws<InvalidOperationException>(() => scored.Run((candidate, deal) => (IReadOnlyList<Pipeline>)[Passengers(candidate, deal)], TestContext.Current.CancellationToken));
+        Assert.Throws<InvalidOperationException>(() => pruned.Run((candidate, deal) => Listed(Passengers(candidate, deal)), TestContext.Current.CancellationToken));
+        Assert.Throws<InvalidOperationException>(() => scored.Run((candidate, deal) => Listed(Passengers(candidate, deal)), TestContext.Current.CancellationToken));
     }
 
     [Fact]
     public void ASeveralNetworkTrial_NeedsAsManyPipelinesAsItHasNetworks()
     {
         var refused = Assert.Throws<InvalidOperationException>(() => StudiedTogether(trials: 1).Run(
-            (candidate, deal) => (IReadOnlyList<Pipeline>)[Passengers(candidate, deal)],
+            (candidate, deal) => Listed(Passengers(candidate, deal)),
             TestContext.Current.CancellationToken));
 
         Assert.Contains("2", refused.Message, StringComparison.Ordinal);

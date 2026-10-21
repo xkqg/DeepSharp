@@ -44,7 +44,7 @@ public class EveryStepTests
         var weight = network.Slots().First().Slot.Value;
         var gradients = recording.GradientsOf(recording.Mean(made), [weight]);
 
-        Assert.Contains(gradients[weight].Values.ToArray(), value => value != 0f);
+        Assert.Contains(gradients[weight].Values.ToArray(), value => value is not 0f);
     }
 
     [Fact]

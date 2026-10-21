@@ -90,7 +90,7 @@ public sealed record HistoryStep : IFittedStep, IPipelineStep<HistoryStep>, IDes
     {
         ArgumentNullException.ThrowIfNull(orderBy);
 
-        if (!(reach.Shrink >= 0) || reach.Window < 0 || (reach.Shrink == 0 && reach.Window == 0))
+        if (double.IsNaN(reach.Shrink) || reach.Shrink < 0 || reach.Window < 0 || (reach.Shrink is 0d && reach.Window == 0))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(reach),
@@ -232,7 +232,7 @@ public sealed record HistoryStep : IFittedStep, IPipelineStep<HistoryStep>, IDes
             var (sum, count) = !keys.IsMissing(row) && earlier.TryGetValue(keys.TextAt(row)!, out var rows) ? rows.Before(order[row], Window) : default;
 
             // A window of nothing held, read with no weight, has no mean of its own to read: it reads the prior.
-            read[row] = count + Shrink == 0 ? prior : (sum + (Shrink * prior)) / (count + Shrink);
+            read[row] = (count + Shrink) is 0d ? prior : (sum + (Shrink * prior)) / (count + Shrink);
         }
 
         table.Put(new Column<double>(Into, ColumnKind.Number, read));

@@ -39,7 +39,8 @@ public class OnnxFromKerasTests
     [MemberData(nameof(EveryFile))]
     public void AKerasModelOfAttention_IsWrittenAsOnnx_AndAnsweredThroughAsKerasAnswers(string name, string kind)
     {
-        var read = new KerasFile().Read(new MemoryStream(File.ReadAllBytes(Path.Join(Folder, $"keras-{name}.{kind}"))));
+        using var file = new MemoryStream(File.ReadAllBytes(Path.Join(Folder, $"keras-{name}.{kind}")));
+        var read = new KerasFile().Read(file);
         var written = Keras.GetProperty(name).GetProperty("examples");
         var shape = new Shape([.. written.GetProperty("shape").EnumerateArray().Select(length => length.GetInt32())]);
         var rows = Tensor.From(shape, [.. written.GetProperty("values").EnumerateArray().Select(value => (float)value.GetDouble())]);

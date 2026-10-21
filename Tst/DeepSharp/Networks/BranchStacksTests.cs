@@ -48,7 +48,7 @@ public class BranchStacksTests
         Assert.DoesNotContain("takes", written, StringComparison.Ordinal);
         Assert.Equal(["0.weight", "0.bias", "2.weight", "2.bias"], network.Slots().Select(slot => slot.Path));
         Assert.Equal(["0", "1", "2"], network.Steps.Select(step => step.Name));
-        Assert.Equal([["input"], ["0"], ["1"]], network.Steps.Select(step => (IReadOnlyList<string>)[.. step.Takes]));
+        Assert.Equal([["input"], ["0"], ["1"]], network.Steps.Select(step => step.Takes.ToArray()));
     }
 
     [Fact]

@@ -415,7 +415,7 @@ public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLef
         {
             var found = TensorPrimitives.Max(row);
 
-            if (!float.IsNaN(found) && found != 0f)
+            if (!float.IsNaN(found) && found is not 0f)
             {
                 return found;
             }

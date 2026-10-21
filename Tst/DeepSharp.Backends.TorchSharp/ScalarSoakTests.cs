@@ -52,7 +52,7 @@ public class ScalarSoakTests
                 Thread.Sleep(Math.Max(pause, 0));
             }
         });
-        var workers = Enumerable.Range(0, 5).Select(_ => new Thread(() =>
+        var workers = Enumerable.Range(0, 5).Select(_ => Task.Factory.StartNew(() =>
         {
             using var keep = torch.NewDisposeScope();
             var matrix = torch.ones(Rows, Columns);
@@ -61,7 +61,8 @@ public class ScalarSoakTests
 
             while (deadline.Elapsed.TotalSeconds < seconds)
             {
-                try
+                // A batch of calls is a task of its own, waited for without being thrown at: one that failed is read off the task.
+                var batch = Task.Run(() =>
                 {
                     using (torch.NewDisposeScope())
                     {
@@ -79,27 +80,23 @@ public class ScalarSoakTests
                             Interlocked.Increment(ref wrong);
                         }
                     }
+                });
 
+                ((IAsyncResult)batch).AsyncWaitHandle.WaitOne();
+
+                if (batch.Exception is null)
+                {
                     Interlocked.Add(ref calls, Batch);
                 }
-                catch (Exception)
+                else
                 {
                     Interlocked.Increment(ref faults);
                 }
             }
-        })).ToArray();
+        }, TaskCreationOptions.LongRunning)).ToArray();
 
         hammer.Start();
-
-        foreach (var worker in workers)
-        {
-            worker.Start();
-        }
-
-        foreach (var worker in workers)
-        {
-            worker.Join();
-        }
+        Task.WaitAll(workers, TestContext.Current.CancellationToken);
 
         Volatile.Write(ref stop, true);
         hammer.Join();

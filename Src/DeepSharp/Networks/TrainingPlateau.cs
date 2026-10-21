@@ -90,7 +90,7 @@ public sealed class TrainingPlateau : LearningRateSchedule, ISaved<TrainingPlate
         get => _minimum;
         init
         {
-            if (!(value >= 0))
+            if (double.IsNaN(value) || value < 0)
             {
                 throw new ArgumentOutOfRangeException(nameof(value), value, "The least rate is nothing or more.");
             }

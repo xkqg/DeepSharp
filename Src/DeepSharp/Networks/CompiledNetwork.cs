@@ -205,7 +205,7 @@ public sealed class CompiledNetwork
         {
             var rate = Schedule.RateAfter(losses, Optimizer.Rate);
 
-            if (rate != epoch.LearningRate)
+            if (!rate.Equals(epoch.LearningRate))
             {
                 throw new ArgumentException(
                     string.Create(
