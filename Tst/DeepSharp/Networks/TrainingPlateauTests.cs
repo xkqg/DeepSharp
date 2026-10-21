@@ -196,7 +196,7 @@ public class TrainingPlateauTests
         {
             for (var column = 0; column < 3; column++)
             {
-                features[(row * 3) + column] = (float)Math.Sin((row * 3) + column + 1);
+                features[(row * 3) + column] = (float)Math.Sin((row * 3.0) + column + 1);
             }
 
             answers[row] = 2 * features[row * 3];
