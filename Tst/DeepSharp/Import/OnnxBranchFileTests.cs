@@ -304,4 +304,15 @@ public class OnnxBranchFileTests
 
         Assert.Contains(refusal, Assert.Throws<FormatException>(() => new OnnxFile(new MeanSquaredError()).Read(graph)).Message, StringComparison.Ordinal);
     }
+    [Fact]
+    public void ASliceCountedFromTheEndOfARowOfAKnownWidth_ReadsTheColumnsItSays()
+    {
+        var layer = new Linear("mid", 3, 2, 3);
+        var rows = Rows(3, 6);
+        var slice = OnnxFixtures.NodeOf("Slice", "mid", ["x", "starts", "ends", "axes"], "t");
+        var graph = Graph(6, "y", [.. layer.Initializers, OnnxFixtures.Wholes("starts", -5), OnnxFixtures.Wholes("ends", -2), OnnxFixtures.Wholes("axes", 1)], slice, layer.Node("t", "y"));
+
+        // Counted from the end of a row of six, minus five and minus two are the columns one to three.
+        AnswersAs(graph, rows, layer.Apply([.. RowsOf(rows).Select(row => row[1..4])]));
+    }
 }
