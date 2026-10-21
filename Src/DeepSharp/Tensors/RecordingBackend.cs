@@ -28,7 +28,7 @@ namespace DeepSharp.Tensors;
 /// bits it would if everything the pass read were asked for too.
 /// </para>
 /// </remarks>
-public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend
+public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend, IMultipliesInBlocks
 {
     private readonly ITensorBackend _inner = inner ?? throw new ArgumentNullException(nameof(inner));
     private readonly List<Recorded> _steps = [];
@@ -53,6 +53,11 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend
 
     /// <inheritdoc />
     public Tensor MatMul(Tensor left, Tensor right) => Kept(new MatrixProduct(left, right, _inner.MatMul(left, right)));
+
+    /// <inheritdoc />
+    /// <remarks>Written down as one product, whether the wrapped engine has it or the library works it out from the products the engine has.</remarks>
+    Tensor IMultipliesInBlocks.MatMulInBlocks(Tensor left, Tensor right, BlockProduct how) =>
+        Kept(new BlockedProduct(left, right, how, _inner.MatMulInBlocks(left, right, how)));
 
     /// <inheritdoc />
     public Tensor Transpose(Tensor matrix) => Kept(new Transposed(matrix, _inner.Transpose(matrix)));
@@ -261,6 +266,23 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend
             input == 0 ? backend.MatMul(gradient, backend.Transpose(Right))
             : backend is IMultipliesTurnedLeft turning ? turning.MatMulTurnedLeft(Left, gradient)
             : backend.MatMul(backend.Transpose(Left), gradient);
+    }
+
+    // The gradient of block i of the first is the answer's gradient times block i of the second turned the other way, and of the second the first
+    // turned the other way times the answer's gradient: a product of blocks again, asked of the wrapped engine as it was.
+    private sealed record BlockedProduct(Tensor Left, Tensor Right, BlockProduct How, Tensor Output) : Recorded(Output, [Left, Right])
+    {
+        public override Tensor Back(ITensorBackend backend, Tensor gradient, int input) => input == 0 ? ToLeft(backend, gradient) : ToRight(backend, gradient);
+
+        private Tensor ToLeft(ITensorBackend backend, Tensor gradient) =>
+            How.TurnLeft
+                ? backend.MatMulInBlocks(Right, gradient, new BlockProduct(How.Count) { TurnLeft = How.TurnRight, TurnRight = true })
+                : backend.MatMulInBlocks(gradient, Right, new BlockProduct(How.Count) { TurnRight = !How.TurnRight });
+
+        private Tensor ToRight(ITensorBackend backend, Tensor gradient) =>
+            How.TurnRight
+                ? backend.MatMulInBlocks(gradient, Left, new BlockProduct(How.Count) { TurnLeft = true, TurnRight = How.TurnLeft })
+                : backend.MatMulInBlocks(Left, gradient, new BlockProduct(How.Count) { TurnLeft = !How.TurnLeft });
     }
 
     private sealed record Transposed(Tensor Matrix, Tensor Output) : Recorded(Output, [Matrix])

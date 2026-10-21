@@ -34,7 +34,7 @@ namespace DeepSharp.Backends.TorchSharp;
 /// run makes is DeepSharp's own.
 /// </para>
 /// </remarks>
-public sealed class TorchBackend : INamesItsVersionAndDevice
+public sealed class TorchBackend : INamesItsVersionAndDevice, IMultipliesInBlocks
 {
     private readonly torch.Device _device;
     private readonly string _named;
@@ -126,6 +126,19 @@ public sealed class TorchBackend : INamesItsVersionAndDevice
         left.RequireMatrixProduct(right);
 
         return Both(left, right, new Shape(left.Shape[0], right.Shape[1]), static (a, b) => a.mm(b));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>One batched product of libtorch's, the blocks laid out as its batch.</remarks>
+    Tensor IMultipliesInBlocks.MatMulInBlocks(Tensor left, Tensor right, BlockProduct how)
+    {
+        var sizes = left.RequireBlockProduct(right, how);
+
+        return Both(
+            left,
+            right,
+            new Shape(how.Count * sizes.Rows, sizes.Columns),
+            (first, second) => OfBlocks(first, sizes.Left, how.Count, how.TurnLeft).bmm(OfBlocks(second, sizes.Right, how.Count, how.TurnRight)).reshape(how.Count * sizes.Rows, sizes.Columns));
     }
 
     /// <inheritdoc />
@@ -256,6 +269,14 @@ public sealed class TorchBackend : INamesItsVersionAndDevice
         patches.RequirePatchesOf(images, window);
 
         return One(patches, images, new WindowWalk(images, window).Folded);
+    }
+
+    // A stacked matrix as libtorch's batch of matrices, each turned on its side where it is to be.
+    private static torch.Tensor OfBlocks(torch.Tensor stack, BlockShape block, int count, bool turned)
+    {
+        var blocks = stack.reshape(count, block.Rows, block.Columns);
+
+        return turned ? blocks.transpose(1, 2) : blocks;
     }
 
     // A tensor's values where this engine works on them: its own storage on its own device as it is, any other taken in once.

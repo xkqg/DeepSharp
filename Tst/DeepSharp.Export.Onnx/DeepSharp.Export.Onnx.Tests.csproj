@@ -25,6 +25,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\Src\DeepSharp.Export.Onnx\DeepSharp.Export.Onnx.csproj" />
     <ProjectReference Include="..\..\Src\DeepSharp.Import.Onnx\DeepSharp.Import.Onnx.csproj" />
+    <ProjectReference Include="..\..\Src\DeepSharp.Import.Keras\DeepSharp.Import.Keras.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -56,6 +56,40 @@ public static class TensorOperandExtensions
                     nameof(right));
             }
         }
+
+        /// <summary>What <see cref="IMultipliesInBlocks.MatMulInBlocks"/> asks of its tensors: two matrices stacked of as many blocks, whose blocks meet in the middle.</summary>
+        /// <param name="right">The second matrix.</param>
+        /// <param name="how">How many blocks there are, and which operands' are turned.</param>
+        /// <returns>The size of a block of each, and of the answer's.</returns>
+        /// <exception cref="ArgumentNullException">Either is not handed.</exception>
+        /// <exception cref="ArgumentOutOfRangeException">There are fewer than one block.</exception>
+        /// <exception cref="ArgumentException">Either is not a matrix, the rows of either do not divide into the blocks, or the blocks do not meet in the middle.</exception>
+        public BlockSizes RequireBlockProduct(Tensor right, BlockProduct how)
+        {
+            const string operation = nameof(IMultipliesInBlocks.MatMulInBlocks);
+
+            Matrix(left, operation, nameof(left));
+            Matrix(right, operation, nameof(right));
+            ArgumentOutOfRangeException.ThrowIfLessThan(how.Count, 1);
+
+            if (left.Shape[0] % how.Count != 0 || right.Shape[0] % how.Count != 0)
+            {
+                throw new ArgumentException(
+                    $"{operation} stacks {how.Count.ToString(CultureInfo.InvariantCulture)} blocks on the rows of each matrix, and was given {left.Shape} and {right.Shape}, whose rows do not divide into so many.",
+                    nameof(right));
+            }
+
+            var sizes = new BlockSizes(new BlockShape(left.Shape[0] / how.Count, left.Shape[1]), new BlockShape(right.Shape[0] / how.Count, right.Shape[1]), how);
+
+            if (sizes.Inner != (how.TurnRight ? sizes.Right.Columns : sizes.Right.Rows))
+            {
+                throw new ArgumentException(
+                    $"{operation} multiplies a block of {new Shape(sizes.Left.Rows, sizes.Left.Columns)}{(how.TurnLeft ? " turned" : string.Empty)} by one of {new Shape(sizes.Right.Rows, sizes.Right.Columns)}{(how.TurnRight ? " turned" : string.Empty)}, and they do not meet in the middle.",
+                    nameof(right));
+            }
+
+            return sizes;
+        }
     }
 
     extension(Tensor matrix)

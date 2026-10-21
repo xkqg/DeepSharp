@@ -8,7 +8,7 @@ namespace DeepSharp.Tests.Backends.Torch;
 
 // An engine asked for everything, with the time of what it is asked for kept apart: a product with a vector, any other product, and the
 // turning and laying out of what it holds.
-internal sealed class TimedBackend(ITensorBackend inner) : ITensorBackend
+internal sealed class TimedBackend(ITensorBackend inner) : ITensorBackend, IMultipliesInBlocks
 {
     public string Name => inner.Name;
 
@@ -43,6 +43,20 @@ internal sealed class TimedBackend(ITensorBackend inner) : ITensorBackend
         {
             Products += took;
         }
+
+        return made;
+    }
+
+    // A product over blocks is passed on to the engine that has it, or worked out there from the products it has: wrapped, it would otherwise be
+    // asked for the products every engine has and cost the square of its blocks.
+    Tensor IMultipliesInBlocks.MatMulInBlocks(Tensor left, Tensor right, BlockProduct how)
+    {
+        Multiplications++;
+
+        var started = Stopwatch.GetTimestamp();
+        var made = inner.MatMulInBlocks(left, right, how);
+
+        Products += Stopwatch.GetElapsedTime(started).TotalMilliseconds;
 
         return made;
     }

@@ -36,8 +36,9 @@ public readonly record struct QueryKeyValue(Tensor Query, Tensor Key, Tensor Val
 /// nothing, as PyTorch makes it, and never a number that is not finite.
 /// </para>
 /// <para>
-/// It is made of the products the seam already has, one series and one head at a time, so the gradient of a loss through it is the one the
-/// tape works out and no engine learned anything for it.
+/// It is made, one head at a time, of the products the seam already has and of the product over blocks (<see cref="IMultipliesInBlocks"/>) that
+/// an engine may have — the series of a batch laid one beneath the other, one block each — so the gradient of a loss through it is the one the
+/// tape works out and what it costs grows in proportion to the batch.
 /// </para>
 /// </remarks>
 public abstract class Attentive : Layer
@@ -111,72 +112,57 @@ public abstract class Attentive : Layer
         var keys = key.Shape[1];
         var heads = Attending.Heads;
         var each = embed / heads;
-        var queries = backend.Reshape(query, new Shape(count, steps * embed));
-        var keyed = backend.Reshape(key, new Shape(count, keys * embed));
-        var valued = backend.Reshape(value, new Shape(count, keys * embed));
-        var chosen = Enumerable.Range(0, heads).Select(head => Selection.Of(embed, each, (row, column) => row == (head * each) + column)).ToArray();
-        var put = chosen.Select(backend.Transpose).ToArray();
+        var queries = backend.Reshape(query, new Shape(count * steps, embed));
+        var keyed = backend.Reshape(key, new Shape(count * keys, embed));
+        var valued = backend.Reshape(value, new Shape(count * keys, embed));
+        var blocks = new BlockProduct(count);
         var scale = backend.Scalar(1 / Math.Sqrt(each));
         var draws = pass.Mode == PassMode.Training && Attending.Dropout > 0 ? pass.Draws($"attention:{Path}") : null;
-        Tensor? gathered = null;
+        var allowed = Allowed(backend, mask, new Extent(count, steps, keys));
+        var penalty = allowed is null ? null : backend.Scale(backend.Subtract(allowed, backend.Fill(allowed.Shape, 1f)), backend.Scalar(Far));
+        var alive = allowed is null || mask is null ? null : backend.MatMul(backend.Positive(backend.MatMul(allowed, backend.Fill(new Shape(keys, 1), 1f))), backend.Fill(new Shape(1, keys), 1f));
+        Tensor? joined = null;
 
-        for (var series = 0; series < count; series++)
+        for (var head = 0; head < heads; head++)
         {
-            var pick = Pick(count, series);
-            var asked = backend.Reshape(backend.MatMul(pick, queries), new Shape(steps, embed));
-            var held = backend.Reshape(backend.MatMul(pick, keyed), new Shape(keys, embed));
-            var taken = backend.Reshape(backend.MatMul(pick, valued), new Shape(keys, embed));
-            var allowed = Allowed(backend, mask is null ? null : backend.Reshape(backend.MatMul(pick, mask), new Shape(1, keys)), steps, keys);
-            var penalty = allowed is null ? null : backend.Scale(backend.Subtract(allowed, backend.Fill(allowed.Shape, 1f)), backend.Scalar(Far));
-            var alive = allowed is null ? null : backend.MatMul(backend.Positive(backend.MatMul(allowed, backend.Fill(new Shape(keys, 1), 1f))), backend.Fill(new Shape(1, keys), 1f));
-            Tensor? joined = null;
+            var chosen = Selection.Of(embed, each, (row, column) => row == (head * each) + column);
+            var scores = backend.Scale(backend.MatMulInBlocks(backend.MatMul(queries, chosen), backend.MatMul(keyed, chosen), blocks with { TurnRight = true }), scale);
 
-            for (var head = 0; head < heads; head++)
+            if (penalty is not null)
             {
-                var scores = backend.Scale(backend.MatMul(backend.MatMul(asked, chosen[head]), backend.Transpose(backend.MatMul(held, chosen[head]))), scale);
-
-                if (penalty is not null)
-                {
-                    scores = backend.Add(scores, penalty);
-                }
-
-                var weights = backend.Exp(backend.LogSoftmax(scores));
-
-                if (alive is not null)
-                {
-                    weights = backend.Multiply(weights, alive);
-                }
-
-                if (draws is not null)
-                {
-                    weights = backend.Multiply(weights, Left(draws, steps, keys));
-                }
-
-                var placed = backend.MatMul(backend.MatMul(weights, backend.MatMul(taken, chosen[head])), put[head]);
-
-                joined = joined is null ? placed : backend.Add(joined, placed);
+                scores = backend.Add(scores, penalty);
             }
 
-            var spread = backend.MatMul(Pick(count, series, column: true), backend.Reshape(joined!, new Shape(1, steps * embed)));
+            var weights = backend.Exp(backend.LogSoftmax(scores));
 
-            gathered = gathered is null ? spread : backend.Add(gathered, spread);
+            if (alive is not null)
+            {
+                weights = backend.Multiply(weights, alive);
+            }
+
+            if (draws is not null)
+            {
+                weights = backend.Multiply(weights, Left(draws, new Shape(count * steps, keys)));
+            }
+
+            var placed = backend.MatMul(backend.MatMulInBlocks(weights, backend.MatMul(valued, chosen), blocks), backend.Transpose(chosen));
+
+            joined = joined is null ? placed : backend.Add(joined, placed);
         }
 
-        return backend.Reshape(gathered!, new Shape(count, steps, embed));
+        return backend.Reshape(joined!, new Shape(count, steps, embed));
     }
 
-    // The row of a matrix of so many rows that holds the one at a place — or the column of a matrix of so many columns: a one there, noughts elsewhere.
-    private static Tensor Pick(int count, int at, bool column = false) =>
-        Tensor.From(column ? new Shape(count, 1) : new Shape(1, count), [.. Enumerable.Range(0, count).Select(place => place == at ? 1f : 0f)]);
-
-    // Which keys a step may look at: a one where it may, as the mask of the series says and, for a causal layer, as the step's place does.
-    private Tensor? Allowed(ITensorBackend backend, Tensor? row, int steps, int keys)
+    // Which keys a step may look at, a series after a series with a row for each step: a one where it may, as the mask of the series says and, for a
+    // causal layer, as the step's place does; nothing where every key may be looked at.
+    private Tensor? Allowed(ITensorBackend backend, Tensor? mask, Extent extent)
     {
-        Tensor? allowed = row is null ? null : backend.MatMul(backend.Fill(new Shape(steps, 1), 1f), row);
+        var (count, steps, keys) = (extent.Count, extent.Steps, extent.Keys);
+        Tensor? allowed = mask is null ? null : backend.MatMulInBlocks(backend.Fill(new Shape(count * steps, 1), 1f), mask, new BlockProduct(count));
 
         if (Attending.Causal)
         {
-            var before = Selection.Of(steps, keys, (step, key) => key <= step);
+            var before = Tensor.From(new Shape(count * steps, keys), [.. Enumerable.Range(0, count * steps * keys).Select(place => (place % keys) <= ((place / keys) % steps) ? 1f : 0f)]);
 
             allowed = allowed is null ? before : backend.Multiply(allowed, before);
         }
@@ -184,13 +170,19 @@ public abstract class Attentive : Layer
         return allowed;
     }
 
+    /// <summary>How many series there are, how many steps ask in each, and how many keys they are held against.</summary>
+    /// <param name="Count">The series.</param>
+    /// <param name="Steps">The steps of the queries.</param>
+    /// <param name="Keys">The steps of the keys.</param>
+    private readonly record struct Extent(int Count, int Steps, int Keys);
+
     // The weights left out as a layer trains, and the ones kept scaled by one over the share kept: drawn in the order of the keys of each step.
-    private Tensor Left(Draws draws, int steps, int keys)
+    private Tensor Left(Draws draws, Shape weights)
     {
         var kept = 1 - Attending.Dropout;
         var scale = (float)(1 / kept);
 
-        return Tensor.From(new Shape(steps, keys), [.. Enumerable.Range(0, steps * keys).Select(_ => draws.NextDouble() < kept ? scale : 0f)]);
+        return Tensor.From(weights, [.. Enumerable.Range(0, weights.Count).Select(_ => draws.NextDouble() < kept ? scale : 0f)]);
     }
 
     private void Require(QueryKeyValue looked, Tensor? mask)

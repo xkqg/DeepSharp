@@ -3127,9 +3127,14 @@ written as it always was; one that names a step or takes another than the step b
 which an older library refuses by its number. The measurement that decided the seam stays shut is a number: the LSTM written as
 code, with a split and a join the seam has no member for, spent 97 per cent of a step on the light engine and 81 on libtorch in
 the products that pick a step out and place one in; built as a layer that takes its time-major view once, it spends 15 to 22
-and 22 to 37, and attention, made one series and one head at a time, 23 to 40 of a step in its products. A member for a product
-over a batch, or for cutting a row out of a matrix, would halve those and would break every engine outside this repository, so it
-waits for a release that breaks the seam anyway.
+and 22 to 37. A member for cutting a row out of a matrix, or for joining some, would halve those and would break every engine outside
+this repository, so it waits for a release that breaks the seam anyway. Attention was the other way: made one series at a time, with
+each series picked out of the batch by a product with a vector, it spent 23 to 40 per cent of a step in its products on a batch of 32
+and the square of the batch beyond it, so that one layer's training step over 128 series of 128 steps and 128 channels held ten
+gigabytes. That is a capability and not a member: `IMultipliesInBlocks` multiplies matrices stacked on their rows block by block, an
+engine that has it (the light engine, and libtorch's, which has a batched product) is asked for it, and one that has not is asked for
+the products it has, so an engine written before it compiles and answers as it did, slowly. The same step now allocates the same
+for each series whatever the batch is.
 
 A layer that carries a state from one step of a series to the next — `Lstm`, `Gru` — keeps its weights inputs by outputs, as a
 linear layer's are, with the gates in PyTorch's order, and runs its steps on the tape the engines already record, so the gradient
@@ -3137,7 +3142,7 @@ runs back through time with no rule of its own. A batch of series of unequal len
 mask taken as the layer's second step: a padding step leaves the state as it was and makes nothing, which is what PyTorch's packed
 batch gives. The mask is the ids themselves — a token embedding that keeps its steps and a layer that makes the mask of a row of ids
 — because the tokens already carry their padding, and a numeric series of unequal lengths would need a lengths column the pipeline
-has no carrier for, so it is refused by name. Attention is made one series and one head at a time of the same products, masks by
+has no carrier for, so it is refused by name. Attention is made one head at a time of the same products and of the product over blocks, masks by
 adding what is far below nothing to the scores, and makes a step with no key left to look at nothing, as PyTorch 2.14.1 makes it
 (measured, not assumed: zeros, not not-a-numbers). An encoder block is a description inside a description — `Block` — whose
 steps are named as the modules of PyTorch's `TransformerEncoderLayer` are, so a state dict goes in by name, and whose width is

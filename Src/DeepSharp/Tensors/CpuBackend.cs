@@ -20,7 +20,7 @@ namespace DeepSharp.Tensors;
 /// values in once it is large, and ten million tenths came to a mean of 0.1087937 rather than a tenth.
 /// </para>
 /// </remarks>
-public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLeft, IStepsAdam
+public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLeft, IMultipliesInBlocks, IStepsAdam
 {
     // The version the release is handed, as its package names it: what the assembly says of itself, less the commit Source
     // Link adds after a '+', so every build of one release names the same one.
@@ -109,6 +109,50 @@ public sealed class CpuBackend : INamesItsVersionAndDevice, IMultipliesTurnedLef
         var shape = new ProductShape(left.Shape[1], left.Shape[0], right.Shape[1]);
 
         return Tensor.Wrap(new Shape(shape.Rows, shape.Columns), Product(left, right, shape, turnedLeft: true));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Every block is multiplied by the product <see cref="MatMul"/> is, from its own copy of the numbers, so a block comes to the very bits it is as a matrix alone.</remarks>
+    Tensor IMultipliesInBlocks.MatMulInBlocks(Tensor left, Tensor right, BlockProduct how)
+    {
+        var sizes = left.RequireBlockProduct(right, how);
+        var shape = new ProductShape(sizes.Rows, sizes.Inner, sizes.Columns);
+        var made = new float[how.Count * sizes.Rows * sizes.Columns];
+
+        for (var block = 0; block < how.Count; block++)
+        {
+            var first = Block(left, sizes.Left, block, how.TurnLeft);
+            var second = Block(right, sizes.Right, block, how.TurnRight);
+
+            Product(first, second, shape, turnedLeft: false).CopyTo(made, block * sizes.Rows * sizes.Columns);
+        }
+
+        return Tensor.Wrap(new Shape(how.Count * sizes.Rows, sizes.Columns), made);
+    }
+
+    // One block of a stacked matrix, as a matrix of its own and turned on its side where it is to be.
+    private static Tensor Block(Tensor stack, BlockShape block, int at, bool turned)
+    {
+        var numbers = stack.Numbers;
+        var from = at * block.Rows * block.Columns;
+        var copy = new float[block.Rows * block.Columns];
+
+        if (!turned)
+        {
+            Array.Copy(numbers, from, copy, 0, copy.Length);
+
+            return Tensor.Wrap(new Shape(block.Rows, block.Columns), copy);
+        }
+
+        for (var row = 0; row < block.Rows; row++)
+        {
+            for (var column = 0; column < block.Columns; column++)
+            {
+                copy[(column * block.Rows) + row] = numbers[from + (row * block.Columns) + column];
+            }
+        }
+
+        return Tensor.Wrap(new Shape(block.Columns, block.Rows), copy);
     }
 
     // The rows of a product, by the one thread that asked or, for a product big enough and an engine told it may, by several.

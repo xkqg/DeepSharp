@@ -59,3 +59,5 @@ public sealed class BranchTests() : BranchContract(new NativeMemoryBackend());
 
 public sealed class RecurrentTests() : RecurrentContract(new NativeMemoryBackend());
 public sealed class AttentionTests() : AttentionContract(new NativeMemoryBackend());
+
+public sealed class BlockProductTests() : BlockProductContract(new NativeMemoryBackend());

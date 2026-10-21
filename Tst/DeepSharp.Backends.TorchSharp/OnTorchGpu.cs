@@ -58,3 +58,5 @@ public sealed class BranchTests() : BranchContract(Card.First());
 
 public sealed class RecurrentTests() : RecurrentContract(Card.First());
 public sealed class AttentionTests() : AttentionContract(Card.First());
+
+public sealed class BlockProductTests() : BlockProductContract(Card.First());

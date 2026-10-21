@@ -95,6 +95,18 @@ public class KerasAttentionFileTests
         Assert.Contains("two different tensors", refused.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("keras-attention-wide.keras")]
+    [InlineData("keras-attention-wide.h5")]
+    public void HeadsThatAskInMoreChannelsThanTheStepIsSplitInto_AreRefusedAtTheProjection_WithTheShapeItHolds(string file)
+    {
+        var refused = Assert.Throws<SlotLoadException>(() => new KerasFile().Read(KerasFixtures.Open(file)));
+        var fault = Assert.Single(refused.Faults, each => each.Slot == "0.in_proj_weight");
+
+        Assert.Contains("8x48", fault.ToString(), StringComparison.Ordinal);
+        Assert.Contains("8x24", fault.ToString(), StringComparison.Ordinal);
+    }
+
     [Fact]
     public void ANumberOfAnotherShapeThanTheLayerKeeps_IsRefusedAtTheSlot()
     {

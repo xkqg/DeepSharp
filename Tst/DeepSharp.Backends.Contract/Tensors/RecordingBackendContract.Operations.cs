@@ -29,6 +29,22 @@ public abstract partial class RecordingBackendContract
         AssertGradientsMatchTheLossNudged((backend, inputs) => backend.Multiply(inputs[0], backend.FirstLargest(inputs[0])), Random(3, 4));
 
     [Fact]
+    public void ProductsInBlocks_PassTheirGradientBackBlockByBlock() =>
+        AssertGradientsMatchTheLossNudged((backend, inputs) => backend.MatMulInBlocks(inputs[0], inputs[1], new BlockProduct(2)), Random(4, 3), Random(6, 4));
+
+    [Fact]
+    public void ProductsInBlocks_WithTheSecondTurned_PassTheirGradientBackBlockByBlock() =>
+        AssertGradientsMatchTheLossNudged((backend, inputs) => backend.MatMulInBlocks(inputs[0], inputs[1], new BlockProduct(2) { TurnRight = true }), Random(4, 3), Random(8, 3));
+
+    [Fact]
+    public void ProductsInBlocks_WithTheFirstTurned_PassTheirGradientBackBlockByBlock() =>
+        AssertGradientsMatchTheLossNudged((backend, inputs) => backend.MatMulInBlocks(inputs[0], inputs[1], new BlockProduct(2) { TurnLeft = true }), Random(6, 2), Random(6, 4));
+
+    [Fact]
+    public void ProductsInBlocks_WithBothTurned_PassTheirGradientBackBlockByBlock() =>
+        AssertGradientsMatchTheLossNudged((backend, inputs) => backend.MatMulInBlocks(inputs[0], inputs[1], new BlockProduct(2) { TurnLeft = true, TurnRight = true }), Random(6, 2), Random(8, 3));
+
+    [Fact]
     public void Tanh_PassesTheGradientTimesOneLessItsSquare() =>
         AssertGradientsMatchTheLossNudged((backend, inputs) => backend.Tanh(inputs[0]), Random(3, 4));
 
