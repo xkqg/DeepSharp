@@ -235,4 +235,73 @@ public class OnnxBranchFileTests
 
         Assert.Contains("taken by no later step", refused.Message, StringComparison.Ordinal);
     }
+    [Fact]
+    public void ASplitIntoEqualParts_OrBySizesTheNodeStatesAsAnAttribute_CutsTheColumnsAsItSays()
+    {
+        var rows = Rows(4, 6);
+        var all = RowsOf(rows);
+        var equal = OnnxFixtures.NodeOf("Split", "cut", ["x"], "a");
+        equal.Output.Add("b");
+        equal.SetWhole("axis", 1);
+        var left = new Linear("left", 3, 3, 2);
+        var right = new Linear("right", 3, 3, 5);
+        var evenly = Graph(6, "y", [.. left.Initializers, .. right.Initializers], equal, left.Node("a", "la"), right.Node("b", "lb"), OnnxFixtures.NodeOf("Add", "meet", ["la", "lb"], "y"));
+
+        AnswersAs(
+            evenly,
+            rows,
+            [.. left.Apply([.. all.Select(row => row[..3])]).Zip(right.Apply([.. all.Select(row => row[3..])]), (one, other) => one.Zip(other, (x, y) => x + y).ToArray())]);
+
+        var stated = OnnxFixtures.NodeOf("Split", "cut", ["x"], "a");
+        stated.Output.Add("b");
+        stated.SetWhole("axis", 1);
+        stated.SetWholes("split", 2, 4);
+        var narrow = new Linear("left", 2, 3, 2);
+        var wide = new Linear("right", 4, 3, 5);
+        var bySizes = Graph(6, "y", [.. narrow.Initializers, .. wide.Initializers], stated, narrow.Node("a", "la"), wide.Node("b", "lb"), OnnxFixtures.NodeOf("Add", "meet", ["la", "lb"], "y"));
+
+        AnswersAs(
+            bySizes,
+            rows,
+            [.. narrow.Apply([.. all.Select(row => row[..2])]).Zip(wide.Apply([.. all.Select(row => row[2..])]), (one, other) => one.Zip(other, (x, y) => x + y).ToArray())]);
+    }
+
+    [Fact]
+    public void ASliceThatStatesItsColumnsAsAttributes_ReadsTheColumnsItSays()
+    {
+        var layer = new Linear("mid", 3, 2, 3);
+        var rows = Rows(3, 6);
+        var slice = OnnxFixtures.NodeOf("Slice", "mid", ["x"], "t");
+        slice.SetWholes("starts", 1);
+        slice.SetWholes("ends", 4);
+        slice.SetWholes("axes", 1);
+        var graph = Graph(6, "y", layer.Initializers, slice, layer.Node("t", "y"));
+
+        AnswersAs(graph, rows, layer.Apply([.. RowsOf(rows).Select(row => row[1..4])]));
+    }
+
+    [Theory]
+    [InlineData("split sizes of 2 and 5", "node 'cut' (Split): it cuts into [2, 5]")]
+    [InlineData("split sizes with a nought", "node 'cut' (Split): its sizes")]
+    [InlineData("a slice of two runs", "node 'cut' (Slice): it cuts one run of columns")]
+    [InlineData("a slice of no column", "node 'cut' (Slice): it cuts columns 4 to 2, and that is no column")]
+    public void ACutThatNoNetworkHereMakes_IsRefusedAtItsNode(string cut, string refusal)
+    {
+        var layer = new Linear("tail", 2, 2, 3);
+        var slice = OnnxFixtures.NodeOf("Slice", "cut", ["x", "starts", "ends", "axes"], "t");
+        var split = OnnxFixtures.NodeOf("Split", "cut", ["x", "sizes"], "t");
+
+        split.Output.Add("u");
+        split.SetWhole("axis", 1);
+
+        var graph = cut switch
+        {
+            "split sizes of 2 and 5" => Graph(6, "y", [.. layer.Initializers, OnnxFixtures.Wholes("sizes", 2, 5)], split, layer.Node("t", "y")),
+            "split sizes with a nought" => Graph(6, "y", [.. layer.Initializers, OnnxFixtures.Wholes("sizes", 0, 6)], split, layer.Node("t", "y")),
+            "a slice of two runs" => Graph(6, "y", [.. layer.Initializers, OnnxFixtures.Wholes("starts", 0, 1), OnnxFixtures.Wholes("ends", 2, 3), OnnxFixtures.Wholes("axes", 1)], slice, layer.Node("t", "y")),
+            _ => Graph(6, "y", [.. layer.Initializers, OnnxFixtures.Wholes("starts", 4), OnnxFixtures.Wholes("ends", 2), OnnxFixtures.Wholes("axes", 1)], slice, layer.Node("t", "y")),
+        };
+
+        Assert.Contains(refusal, Assert.Throws<FormatException>(() => new OnnxFile(new MeanSquaredError()).Read(graph)).Message, StringComparison.Ordinal);
+    }
 }

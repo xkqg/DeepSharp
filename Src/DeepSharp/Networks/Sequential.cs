@@ -20,7 +20,7 @@ public sealed partial class Sequential
 {
     private const string NoLayers = "This network has no layers yet: write them in before it is lowered.";
 
-    private readonly List<IWord> _words = [];
+    private readonly List<IWordOfSteps> _words = [];
     private readonly List<Said> _said = [];
 
     /// <summary>A description that holds no word yet.</summary>
@@ -424,7 +424,7 @@ public sealed partial class Sequential
                 BlockWord block => block.Builds(visit.Inputs[0]).Lowered(visit.Inputs[0], stream, string.Create(CultureInfo.InvariantCulture, $"{within}{place}."), visit.Inputs.Length > 1 ? visit.Inputs[1] : null),
                 EveryStepWord every => new EveryStep(every.Inner.Lowered(every.EachStep(visit.Inputs[0]), stream, string.Create(CultureInfo.InvariantCulture, $"{within}{place}."), null)),
                 IJoinWord join => join.Make(visit.Inputs),
-                var word => word.Make(visit.Inputs[0], stream.Draw(purpose, 0, 0)),
+                _ => ((IWord)visit.Word).Make(visit.Inputs[0], stream.Draw(purpose, 0, 0)),
             };
 
             steps.Add(new Step(layer, visit.Said.Name, visit.Said.Takes));
@@ -527,13 +527,7 @@ public sealed partial class Sequential
             }
 
             Shape[] inputs = [.. takes.Select(taken => shapes[taken])];
-            var refusal = word switch
-            {
-                IJoinWord join => join.Refusal(inputs),
-                IMaskedWord masked => masked.Refusal(inputs),
-                _ when inputs.Length != 1 => string.Create(CultureInfo.InvariantCulture, $"takes the work of one step, and was given {inputs.Length}."),
-                _ => word.Refusal(inputs[0]),
-            };
+            var refusal = word.Refusal(inputs);
 
             if (refusal is not null)
             {
@@ -541,12 +535,7 @@ public sealed partial class Sequential
                     string.Create(CultureInfo.InvariantCulture, $"This network cannot be lowered at {input}: word {place + 1}, {refusal}"), nameof(input));
             }
 
-            var after = word switch
-            {
-                IJoinWord joined => joined.After(inputs),
-                IMaskedWord masks => masks.After(inputs),
-                _ => word.After(inputs[0]),
-            };
+            var after = word.After(inputs);
 
             shapes[name] = after;
             visits.Add(new Visited(name, said, word, inputs, after));
@@ -604,7 +593,7 @@ public sealed partial class Sequential
     private static Shape Wider(IReadOnlyList<Shape> shapes) =>
         new([.. shapes[0].Axes[..^1], shapes.Sum(shape => shape.Axes[^1])]);
 
-    private Sequential Append(IWord word)
+    private Sequential Append(IWordOfSteps word)
     {
         if (word is IVariationWord && _words.Exists(each => each is not IVariationWord))
         {
@@ -638,7 +627,20 @@ public sealed partial class Sequential
     }
 
     /// <summary>One word of a description: what it cannot take, what it hands on, and the layer it becomes for what it can take.</summary>
-    private interface IWord
+    private interface IWordOfSteps
+    {
+        /// <summary>What is wrong with the work of the steps the word takes; nothing when it can take them.</summary>
+        string? Refusal(Shape[] inputs);
+
+        /// <summary>The shape of one example the word hands on, for the work of the steps it takes.</summary>
+        Shape After(Shape[] inputs);
+
+        /// <summary>Whether the word is the activation the loss applies to a network's outputs itself; a word is not, unless it says so.</summary>
+        bool IsAppliedBy(Loss loss) => false;
+    }
+
+    /// <summary>A word that takes the work of one step, or a series and the mask of its steps, and becomes one layer made from the shape of an example.</summary>
+    private interface IWord : IWordOfSteps
     {
         /// <summary>The word, and what is wrong with an example of this shape reaching it; nothing when it can take it.</summary>
         string? Refusal(Shape each);
@@ -649,8 +651,10 @@ public sealed partial class Sequential
         /// <summary>The layer the word becomes for examples of this shape, starting from the given draws when it learns.</summary>
         Layer Make(Shape each, Draws draws);
 
-        /// <summary>Whether the word is the activation the loss applies to a network's outputs itself; a word is not, unless it says so.</summary>
-        bool IsAppliedBy(Loss loss) => false;
+        string? IWordOfSteps.Refusal(Shape[] inputs) =>
+            inputs.Length == 1 ? Refusal(inputs[0]) : string.Create(CultureInfo.InvariantCulture, $"takes the work of one step, and was given {inputs.Length}.");
+
+        Shape IWordOfSteps.After(Shape[] inputs) => After(inputs[0]);
     }
 
     /// <summary>A word whose layer takes any example and hands it on in the same shape, learning nothing.</summary>
@@ -686,16 +690,6 @@ public sealed partial class Sequential
         public Shape After(Shape each) => new([.. each.Axes[..^1].ToArray(), Units]);
 
         public Layer Make(Shape each, Draws draws) => new Dense(each[each.Rank - 1], Units, Begins with { Draws = draws });
-    }
-
-    // A word that reads a series and may be given, as a second take, the mask of which steps are steps of a series.
-    private interface IMaskedWord : IWord
-    {
-        /// <summary>What is wrong with the work of the steps it takes — the series, and the mask when there is one; nothing when it can take them.</summary>
-        string? Refusal(Shape[] inputs);
-
-        /// <summary>The shape of one example the word hands on, for the work of the steps it takes: that of the first, unless the word says otherwise.</summary>
-        Shape After(Shape[] inputs) => After(inputs[0]);
     }
 
     // A word that varies the rows while a network trains, and so stands before every other.
@@ -774,31 +768,21 @@ public sealed partial class Sequential
     private readonly record struct Said(string? Name, IReadOnlyList<string>? Takes);
 
     /// <summary>A word with what it takes and hands on, worked out for one shape of example.</summary>
-    private readonly record struct Visited(string Name, Said Said, IWord Word, Shape[] Inputs, Shape After);
+    private readonly record struct Visited(string Name, Said Said, IWordOfSteps Word, Shape[] Inputs, Shape After);
 
     /// <summary>A word that takes the work of several steps: what it cannot take, what it hands on, and the layer it becomes.</summary>
-    private interface IJoinWord : IWord
+    private interface IJoinWord : IWordOfSteps
     {
-        string? Refusal(IReadOnlyList<Shape> inputs);
-
-        Shape After(IReadOnlyList<Shape> inputs);
-
-        Layer Make(IReadOnlyList<Shape> inputs);
+        Layer Make(Shape[] inputs);
     }
 
     private sealed record JoinWord(string Word, Func<IReadOnlyList<Shape>, string?> Refuses, Func<IReadOnlyList<Shape>, Shape> Hands, Func<Layer> Build) : IJoinWord
     {
-        public string? Refusal(IReadOnlyList<Shape> inputs) => inputs.Count >= 2 ? Refuses(inputs) is { } refusal ? $"{Word}, {refusal}" : null : $"{Word}, takes the work of two steps or more, and was given {inputs.Count}.";
+        public string? Refusal(Shape[] inputs) => inputs.Length >= 2 ? Refuses(inputs) is { } refusal ? $"{Word}, {refusal}" : null : $"{Word}, takes the work of two steps or more, and was given {inputs.Length}.";
 
-        public Shape After(IReadOnlyList<Shape> inputs) => Hands(inputs);
+        public Shape After(Shape[] inputs) => Hands(inputs);
 
-        public Layer Make(IReadOnlyList<Shape> inputs) => Build();
-
-        string? IWord.Refusal(Shape each) => throw new InvalidOperationException("A join takes the work of several steps.");
-
-        Shape IWord.After(Shape each) => throw new InvalidOperationException("A join takes the work of several steps.");
-
-        Layer IWord.Make(Shape each, Draws draws) => throw new InvalidOperationException("A join takes the work of several steps.");
+        public Layer Make(Shape[] inputs) => Build();
     }
 
     private sealed record ColumnsWord(int First, int Count) : IWord
@@ -814,11 +798,16 @@ public sealed partial class Sequential
     }
 
     /// <summary>A description run over every step of a series: whole examples laid out as rows, the description lowered at the shape of one step.</summary>
-    private sealed record EveryStepWord(Sequential Inner) : IWord
+    private sealed record EveryStepWord(Sequential Inner) : IWordOfSteps
     {
         public Shape EachStep(Shape each) => new(each.Axes[1..].ToArray());
 
-        public string? Refusal(Shape each)
+        public string? Refusal(Shape[] inputs) =>
+            inputs.Length == 1 ? Refusal(inputs[0]) : string.Create(CultureInfo.InvariantCulture, $"takes the work of one step, and was given {inputs.Length}.");
+
+        public Shape After(Shape[] inputs) => After(inputs[0]);
+
+        private string? Refusal(Shape each)
         {
             if (each.Rank < 2)
             {
@@ -837,15 +826,11 @@ public sealed partial class Sequential
             }
         }
 
-        public Shape After(Shape each) => new([each[0], .. Inner.Resolve(EachStep(each))[^1].After.Axes.ToArray()]);
-
-        public Layer Make(Shape each, Draws draws) => throw new InvalidOperationException("A layer run over every step is lowered with the stream of its description, at its own place.");
+        private Shape After(Shape each) => new([each[0], .. Inner.Resolve(EachStep(each))[^1].After.Axes.ToArray()]);
     }
 
-    private sealed record BlockWord(Func<Shape, Sequential> Builds) : IMaskedWord
+    private sealed record BlockWord(Func<Shape, Sequential> Builds) : IWordOfSteps
     {
-        public string? Refusal(Shape each) => Refusal([each]);
-
         public string? Refusal(Shape[] inputs)
         {
             if (inputs.Length > 2)
@@ -865,10 +850,6 @@ public sealed partial class Sequential
             }
         }
 
-        public Shape After(Shape each) => Builds(each).Resolve(each)[^1].After;
-
         public Shape After(Shape[] inputs) => Builds(inputs[0]).Resolve(inputs[0], inputs.Length == 2 ? inputs[1] : null)[^1].After;
-
-        public Layer Make(Shape each, Draws draws) => throw new InvalidOperationException("A block is lowered with the stream of its description, at its own place.");
     }
 }

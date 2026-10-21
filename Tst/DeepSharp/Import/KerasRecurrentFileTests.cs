@@ -90,11 +90,23 @@ public class KerasRecurrentFileTests
     [InlineData("keras-lstm.keras", "config.layers.1.config.use_bias=false", "it keeps no bias, use_bias false")]
     [InlineData("keras-gru-old.keras", "config.layers.1.config.units=4", "its reset_after is false")]
     [InlineData("keras-both.keras", "config.layers.1.config.merge_mode=\"sum\"", "it merges the two directions by 'sum'")]
+    [InlineData("keras-both.keras", "config.layers.1.config.backward_layer.config.units=3", "it is given a backward layer of its own")]
+    [InlineData("keras-both.keras", "config.layers.1.config.backward_layer.config.go_backwards=false", "it is given a backward layer of its own")]
+    [InlineData("keras-both.keras", "config.layers.1.config.backward_layer.config.return_sequences=true", "it is given a backward layer of its own")]
+    [InlineData("keras-both.keras", "config.layers.1.config.backward_layer.class_name=\"GRU\"", "it is given a backward layer of its own")]
     public void ARecurrentLayerThatSaysWhatNoLayerHereDoes_IsRefusedAtTheLayer(string file, string edit, string refusal)
     {
         var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(KerasFixtures.Edited(file, edit)));
 
         Assert.Contains(refusal, refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABidirectionalLayerThatWrapsNeitherAnLstmNorAGru_IsRefusedAtTheLayer()
+    {
+        var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(KerasFixtures.Edited("keras-both.keras", "config.layers.1.config.backward_layer=-", "config.layers.1.config.layer.class_name=\"SimpleRNN\"")));
+
+        Assert.Contains("it wraps a SimpleRNN, and a bidirectional layer here wraps an LSTM or a GRU", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

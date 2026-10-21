@@ -123,6 +123,29 @@ public class StudyOfPipelinesTests
     }
 
     [Fact]
+    public void ACandidatesPipelineThatDealsTheValidationRowsAnotherWay_ButKeepsTheTestRows_IsRefused_NamingTheTrialAndTheDeal()
+    {
+        var study = Studied(trials: 3);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => study.Run(
+            (candidate, deal) => Passengers(candidate, deal + (candidate.Number("rate") > 0.02 ? 1 : 0)),
+            TestContext.Current.CancellationToken));
+
+        Assert.Contains("sets other rows aside as validation", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("deal 0", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AListOfPipelinesThatIsNothing_OrHoldsNone_IsRefused_NamingTheTrialAndTheDeal()
+    {
+        var nothing = Assert.Throws<InvalidOperationException>(() => StudiedTogether(trials: 1).Run((candidate, deal) => (IReadOnlyList<Pipeline>)null!, TestContext.Current.CancellationToken));
+        var hole = Assert.Throws<InvalidOperationException>(() => StudiedTogether(trials: 1).Run((candidate, deal) => (IReadOnlyList<Pipeline>)[Passengers(candidate, deal), null!], TestContext.Current.CancellationToken));
+
+        Assert.Contains("deal 0", nothing.Message, StringComparison.Ordinal);
+        Assert.Contains("deal 0", hole.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void APipelineForACandidateThatIsNothing_IsRefused_NamingTheTrialAndTheDeal()
     {
         var refused = Assert.Throws<InvalidOperationException>(() => Studied(trials: 1).Run((candidate, deal) => (Pipeline)null!, TestContext.Current.CancellationToken));

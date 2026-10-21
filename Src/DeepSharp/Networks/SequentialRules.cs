@@ -21,8 +21,7 @@ public sealed partial class Sequential
     /// </remarks>
     public Sequential Ruled(SlotRules weights, SlotRules bias = default)
     {
-        RequireWord();
-        _words[^1] = new RuledWord(_words[^1], weights, bias, Held: false, RateShare: null);
+        _words[^1] = new RuledWord(LastWord(), weights, bias, Held: false, RateShare: null);
 
         return this;
     }
@@ -33,8 +32,7 @@ public sealed partial class Sequential
     /// <remarks>A word whose layer holds no number — an activation, a pooling — has none to hold, and is made as it was.</remarks>
     public Sequential Held()
     {
-        RequireWord();
-        _words[^1] = new RuledWord(_words[^1], default, default, Held: true, RateShare: null);
+        _words[^1] = new RuledWord(LastWord(), default, default, Held: true, RateShare: null);
 
         return this;
     }
@@ -51,20 +49,19 @@ public sealed partial class Sequential
     /// </remarks>
     public Sequential RateShare(double share)
     {
-        RequireWord();
+        var last = LastWord();
+
         _ = new SlotRules { RateShare = share };
-        _words[^1] = new RuledWord(_words[^1], default, default, Held: false, RateShare: share);
+        _words[^1] = new RuledWord(last, default, default, Held: false, RateShare: share);
 
         return this;
     }
 
-    private void RequireWord()
-    {
-        if (_words.Count == 0)
-        {
-            throw new InvalidOperationException("Write the layer the rules are for first: a rule goes on the layer the last word makes.");
-        }
-    }
+    // The word the rules go on: the last, which must make a layer of its own.
+    private IWord LastWord() =>
+        _words.Count == 0
+            ? throw new InvalidOperationException("Write the layer the rules are for first: a rule goes on the layer the last word makes.")
+            : _words[^1] as IWord ?? throw new InvalidOperationException("The last word is a join, a block or a layer run over every step, which makes no layer of its own to put rules on.");
 
     /// <summary>A word whose layer is made as the word makes it, and then has rules put on its numbers.</summary>
     private sealed record RuledWord(IWord Inner, SlotRules Weights, SlotRules Bias, bool Held, double? RateShare) : IWord
@@ -72,6 +69,10 @@ public sealed partial class Sequential
         public string? Refusal(Shape each) => Inner.Refusal(each);
 
         public Shape After(Shape each) => Inner.After(each);
+
+        public string? Refusal(Shape[] inputs) => Inner.Refusal(inputs);
+
+        public Shape After(Shape[] inputs) => Inner.After(inputs);
 
         public bool IsAppliedBy(Loss loss) => Inner.IsAppliedBy(loss);
 

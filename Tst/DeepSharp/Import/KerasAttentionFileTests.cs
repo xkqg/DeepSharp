@@ -108,6 +108,14 @@ public class KerasAttentionFileTests
     }
 
     [Fact]
+    public void AFileThatLacksTheBiasOfAProjection_IsRefusedAtTheLayer_NamingTheNumbersItNeverFound()
+    {
+        var refused = Assert.Throws<SlotLoadException>(() => new KerasFile().Read(KerasFixtures.Open("keras-attention-missing.keras")));
+
+        Assert.Contains(refused.Faults, fault => fault.Slot.StartsWith("0.in_proj", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ANumberOfAnotherShapeThanTheLayerKeeps_IsRefusedAtTheSlot()
     {
         var refused = Assert.Throws<SlotLoadException>(() => new KerasFile().Read(KerasFixtures.Edited("keras-attention.keras", "config.layers.1.config.num_heads=4")));

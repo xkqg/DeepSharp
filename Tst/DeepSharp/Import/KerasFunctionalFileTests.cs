@@ -110,12 +110,27 @@ public class KerasFunctionalFileTests
     [InlineData("config.layers.2.inbound_nodes.0.args.0.config.keras_history.0=\"ghost\"", "layer 'second' (Dense): it takes 'ghost', which is no layer before it")]
     [InlineData("config.layers.2.inbound_nodes.0.args.0.config.keras_history.1=1", "layer 'second' (Dense): it takes the layer 'first' at its node 1, tensor 0, and a layer is read here when it is called once, giving one tensor")]
     [InlineData("config.layers.2.inbound_nodes.0.kwargs={\"training\": true}", "layer 'second' (Dense): it is called with 'training', and a layer is read here when it is called with the tensors it takes alone")]
+    [InlineData("config.layers.2.inbound_nodes=[1, 2]", "layer 'second' (Dense): it is called 2 times, and a layer is read here when it is called once")]
+    [InlineData("config.layers.2.inbound_nodes.0.args=[]", "layer 'second' (Dense): it is called with other than the tensors of layers, and a layer of a functional model is called with the tensors it takes")]
+    [InlineData("config.layers.2.inbound_nodes.0.args.0=5", "layer 'second' (Dense): it is called with other than the tensors of layers, and a layer of a functional model is called with the tensors it takes")]
+    [InlineData("config.input_layers=-", "the model lists no input layer under 'input_layers'")]
+    [InlineData("config.input_layers=[\"ghost\", 0, 0]", "the model lists the input 'ghost', and no input layer of that name")]
+    [InlineData("config.layers.0.config.batch_shape=[null, null]", "does not state every length of an example")]
+    [InlineData("config.layers.4.inbound_nodes.0.args.0=[{\"class_name\": \"__keras_tensor__\", \"config\": {\"shape\": [null, 6], \"dtype\": \"float32\", \"keras_history\": [\"rows\", 0, 0]}}]", "it joins 1 tensor, and a layer that adds or lays side by side is read here when it takes two or more")]
     [InlineData("config.layers.4.config.axis=0", "layer 'joined' (Concatenate): it lays its tensors side by side along axis 0, and a network here lays them side by side along their last axis, -1")]
     public void AFunctionalModelThatSaysWhatNoNetworkHereIsBuiltOf_IsRefusedAtTheLayerThatSaysIt(string edit, string refusal)
     {
         var refused = Assert.Throws<FormatException>(() => new KerasFile().Read(KerasFixtures.Edited("keras-residual.keras", edit)));
 
         Assert.Contains(refusal, refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ASwishActivation_IsReadAsTheSigmoidLinearUnit()
+    {
+        var read = new KerasFile().Read(KerasFixtures.Edited("keras-residual.keras", "config.layers.1.config.activation=\"swish\""));
+
+        Assert.Contains(((LayerStack)read.Network).Layers, layer => layer is Silu);
     }
 
     [Fact]

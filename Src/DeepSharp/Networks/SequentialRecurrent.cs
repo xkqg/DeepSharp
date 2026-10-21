@@ -46,7 +46,7 @@ public sealed partial class Sequential
     }
 
     /// <summary>A recurrent layer over each series.</summary>
-    private sealed record RecurrentWord(string Kind, int Hidden, int Layers, bool BothWays, bool Sequences) : IMaskedWord
+    private sealed record RecurrentWord(string Kind, int Hidden, int Layers, bool BothWays, bool Sequences) : IWord
     {
         public string? Refusal(Shape each) => each.Rank == 2 ? null : $"{Kind}, takes each example as a series of steps and channels, and each reaching it is {each}.";
 

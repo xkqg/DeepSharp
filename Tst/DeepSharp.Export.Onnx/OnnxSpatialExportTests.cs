@@ -45,6 +45,21 @@ public class OnnxSpatialExportTests
         ["a dense layer on the channels of every place"] = new(() => new Sequential().Conv2D(3, new Window(2, 2)).Dense(4).Relu().GlobalAvgPool2D().Dense(1).Lower(new Shape(5, 5, 2), new RandomStream(16)), new Shape(5, 5, 2), ReadBack: false),
         ["a dense layer with a pair on a series"] = new(() => new Sequential().Conv1D(3, new Window1D(2)).Dense(4, new Beginning { LowRank = new LowRank(2, 4) }).GlobalMaxPool1D().Dense(1).Lower(new Shape(6, 2), new RandomStream(17)), new Shape(6, 2), ReadBack: false),
         ["a layer normalisation of the channels of every place"] = new(() => new Sequential().Conv2D(3, new Window(2, 2)).LayerNorm().Relu().GlobalAvgPool2D().Dense(1).Lower(new Shape(5, 5, 2), new RandomStream(18)), new Shape(5, 5, 2), ReadBack: false),
+        ["a series with its border stated and no bias"] = new(() => new Sequential().Conv1D(3, new Window1D(3) { Border = new Sides(1, 2) }, new Beginning { WithoutBias = true }).MaxPool1D(new Window1D(2) { Dilation = 2, RoundsUp = true }).GlobalAvgPool1D().Dense(1)
+            .Lower(new Shape(9, 2), new RandomStream(20)), new Shape(9, 2)),
+        ["a volume with its border stated"] = new(() => new Sequential().Conv3D(2, new Window3D(2, 2, 2) { Border = new Margins3D(new Sides(1, 0), new Sides(0, 1), new Sides(1, 1)) }, new Beginning { WithoutBias = true })
+            .AvgPool3D(new Window3D(2, 2, 2) { Padding = 1 }, countsPadding: true).Flatten().Dense(1).Lower(new Shape(4, 4, 4, 2), new RandomStream(21)), new Shape(4, 4, 4, 2)),
+        ["pooling that is dilated, rounds up and counts its padding"] = new(() => new Sequential().Conv2D(2, new Window(2, 2)).MaxPool2D(new Window(2, 2) { Dilation = 2, RoundsUp = true })
+            .AvgPool2D(new Window(2, 2) { Dilation = 2, Padding = 1, RoundsUp = true }, countsPadding: true).Flatten().Dense(1).Lower(new Shape(11, 11, 2), new RandomStream(22)), new Shape(11, 11, 2)),
+        ["a transposed series with its border stated"] = new(() => new Sequential().Conv1DTranspose(2, new Window1D(3) { Stride = 2, Border = new Sides(1, 0) }).GlobalAvgPool1D().Dense(1).Lower(new Shape(4, 2), new RandomStream(23)), new Shape(4, 2)),
+        ["a transposed image with its border stated and no bias"] = new(() => new Sequential().Conv2DTranspose(2, new Window(2, 2) { Stride = 2, Border = new Margins(new Sides(0, 1), new Sides(1, 0)) }, new Beginning { WithoutBias = true })
+            .Flatten().Dense(1).Lower(new Shape(4, 4, 2), new RandomStream(29)), new Shape(4, 4, 2), ReadBack: false),
+        ["a transposed volume"] = new(() => new Sequential().Conv3DTranspose(2, new Window3D(2, 2, 2) { Stride = 2, Border = new Margins3D(new Sides(0, 1), new Sides(1, 0), new Sides(0, 0)) }).Flatten().Dense(1).Lower(new Shape(2, 2, 2, 2), new RandomStream(24)), new Shape(2, 2, 2, 2)),
+        ["a series wrapped round, and a volume padded"] = new(() => new Sequential().Pad1D(new Sides(1, 2), Filling.Wrap).Conv1D(2, new Window1D(2)).GlobalAvgPool1D().Dense(1).Lower(new Shape(6, 2), new RandomStream(25)), new Shape(6, 2)),
+        ["a volume padded"] = new(() => new Sequential().Pad3D(new Margins3D(new Sides(1, 0), new Sides(0, 1), new Sides(1, 1)), 0.25f).Conv3D(2, new Window3D(2, 2, 2)).Flatten().Dense(1).Lower(new Shape(3, 3, 3, 2), new RandomStream(26)), new Shape(3, 3, 3, 2)),
+        ["normalisations that keep no scale or no shift"] = new(() => new Sequential().Conv2D(4, new Window(3, 3)).GroupNorm(2, 1e-5, new Affine { WithoutShift = true }).InstanceNorm(1e-5, new Affine { WithoutScale = true }).BatchNorm(new Affine { WithoutShift = true })
+            .Flatten().Dense(2).Lower(new Shape(6, 6, 2), new RandomStream(27)), new Shape(6, 6, 2)),
+        ["a reshape and a flatten of a row"] = new(() => new Sequential().Dense(8).Reshape(new Shape(8)).Flatten().Dense(1).Lower(new Shape(5), new RandomStream(28)), new Shape(5)),
         ["a softmax over channels"] = new(() => new Sequential().Conv2D(3, new Window(2, 2)).Softmax().Flatten().Dense(1).Lower(new Shape(4, 4, 2), new RandomStream(15)), new Shape(4, 4, 2)),
     };
 

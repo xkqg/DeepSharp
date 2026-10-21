@@ -157,7 +157,7 @@ public sealed partial class Sequential
     }
 
     /// <summary>Attention over a series, with the projections of the heads or without.</summary>
-    private sealed record AttentionWord(Attending How, bool Projects) : IMaskedWord
+    private sealed record AttentionWord(Attending How, bool Projects) : IWord
     {
         private string Kind => Projects ? "multiHeadAttention" : "attention";
 

@@ -157,6 +157,75 @@ public abstract class AttentionContract(ITensorBackend engine)
     }
 
     [Fact]
+    public void ALayerThatIsCausalAndLeavesWeightsOut_IsWrittenDownAndReadBackWithBoth()
+    {
+        var layer = new MultiHeadAttention(8, new Attending(2) { Causal = true, Dropout = 0.25 }, new RandomStream(3).Draw("attention", 0, 0));
+        var written = Written(new LayerStack([new Step(layer, "attn")]));
+        var again = (MultiHeadAttention)((LayerStack)NetworkDocument.ReadNetwork(written, "network", NetworkCatalog.BuiltIn()).Network).Layers[0];
+
+        Assert.Equal(layer.Attending, again.Attending);
+        Assert.Equal(8, again.Embed);
+    }
+
+    [Fact]
+    public void ThePositions_AreWrittenDownAndReadBack()
+    {
+        var written = Written(new LayerStack([new Step(new SinePositions(), "positions")]));
+        var read = NetworkDocument.ReadNetwork(written, "network", NetworkCatalog.BuiltIn());
+
+        Assert.IsType<SinePositions>(((LayerStack)read.Network).Layers[0]);
+        Assert.Equal(written, Written(read.Network));
+    }
+
+    [Fact]
+    public void AttentionGivenTheMaskAsASecondTake_LooksAtNoPadding_AsASeriesOfItsOwnLengthDoes()
+    {
+        var made = Case("multi-head attention");
+        var series = Held(made, "x");
+        var steps = series.Shape[1];
+        var mask = Tensor.From(new Shape(series.Shape[0], steps), [.. Enumerable.Range(0, series.Shape[0] * steps).Select(at => at % steps < steps - 2 ? 1f : 0f)]);
+        var stack = new LayerStack([new Step(new Attention(new Attending(2)), "attn", [Step.Input, Step.Mask])]);
+        var pass = Pass.Evaluation(_backend);
+        var masked = stack.Forward(series, mask, pass);
+        var direct = new Attention(new Attending(2)).Forward(series, mask, pass);
+
+        Assert.Equal(direct.Values.ToArray(), masked.Values.ToArray());
+        Assert.NotEqual(new Attention(new Attending(2)).Forward(series, pass).Values.ToArray(), masked.Values.ToArray());
+    }
+
+    [Fact]
+    public void AttentionGivenQueriesKeysValuesAndAMask_LooksAtNoPadding_WhateverThePaddingHolds()
+    {
+        var description = new Sequential()
+            .Dense(4).Named("q")
+            .Dense(4).Named("k").Takes(Step.Input)
+            .Dense(4).Named("v").Takes(Step.Input)
+            .Attention(2).Takes("q", "k", "v", Step.Mask);
+        var stack = description.Lower(new Shape(5, 3), new Shape(5), new RandomStream(5));
+        var plain = Tensor.From(new Shape(2, 5, 3), [.. Enumerable.Range(0, 30).Select(at => (float)Math.Sin(at))]);
+        var changed = Tensor.From(new Shape(2, 5, 3), [.. plain.Values.ToArray().Select((value, at) => at % 15 >= 9 ? value + 5 : value)]);
+        var mask = Tensor.From(new Shape(2, 5), [.. Enumerable.Range(0, 10).Select(at => at % 5 < 3 ? 1f : 0f)]);
+        var pass = Pass.Evaluation(_backend);
+
+        var one = stack.Forward(plain, mask, pass).Values.ToArray();
+        var other = stack.Forward(changed, mask, pass).Values.ToArray();
+
+        // The first three steps of each series are real; what the last two hold is looked at by nobody.
+        for (var series = 0; series < 2; series++)
+        {
+            for (var step = 0; step < 3; step++)
+            {
+                for (var channel = 0; channel < 4; channel++)
+                {
+                    var at = (((series * 5) + step) * 4) + channel;
+
+                    Assert.InRange(Math.Abs(one[at] - other[at]), 0, 1e-5);
+                }
+            }
+        }
+    }
+
+    [Fact]
     public void ADropoutOfTheWeights_DrawsTheSameOnEveryEngine_AndOnlyWhileTheLayerTrains()
     {
         var made = Case("multi-head attention");
@@ -188,6 +257,10 @@ public abstract class AttentionContract(ITensorBackend engine)
         Assert.Throws<ArgumentException>(() => new MultiHeadAttention(8, new Attending(3), new RandomStream(1).Draw("a", 0, 0)));
         Assert.Throws<ArgumentException>(() => new Attention(new Attending(3)).Forward(new QueryKeyValue(Tensor.Zeros(new Shape(2, 5, 8)), Tensor.Zeros(new Shape(2, 5, 8)), Tensor.Zeros(new Shape(2, 5, 8))), null, pass));
         Assert.Throws<ArgumentException>(() => new Attention(new Attending(2)).Forward(new QueryKeyValue(Tensor.Zeros(new Shape(2, 5, 8)), Tensor.Zeros(new Shape(2, 4, 8)), Tensor.Zeros(new Shape(2, 5, 8))), null, pass));
+        Assert.Throws<ArgumentException>(() => new Attention(new Attending(2)).Forward(new QueryKeyValue(Tensor.Zeros(new Shape(5, 8)), Tensor.Zeros(new Shape(5, 8)), Tensor.Zeros(new Shape(5, 8))), null, pass));
+        Assert.Throws<ArgumentException>(() => new Attention(new Attending(2)).Forward(new QueryKeyValue(Tensor.Zeros(new Shape(2, 0, 8)), Tensor.Zeros(new Shape(2, 5, 8)), Tensor.Zeros(new Shape(2, 5, 8))), null, pass));
+        Assert.Throws<ArgumentException>(() => new Attention(new Attending(2)).Forward(new QueryKeyValue(Tensor.Zeros(new Shape(2, 5, 8)), Tensor.Zeros(new Shape(2, 0, 8)), Tensor.Zeros(new Shape(2, 0, 8))), null, pass));
+        Assert.Throws<ArgumentException>(() => new Attention(new Attending(2)).Forward(new QueryKeyValue(Tensor.Zeros(new Shape(2, 5, 8)), Tensor.Zeros(new Shape(2, 5, 8)), Tensor.Zeros(new Shape(2, 5, 4))), null, pass));
     }
 
     [Fact]

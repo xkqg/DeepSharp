@@ -107,7 +107,7 @@ public sealed class OnnxExport
         {
             IrVersion = graph.IrVersion,
             ProducerName = "DeepSharp",
-            ProducerVersion = typeof(OnnxExport).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion?.Split('+')[0] ?? string.Empty,
+            ProducerVersion = typeof(OnnxExport).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()!.InformationalVersion.Split('+')[0],
             Graph = graph.Graph,
         };
 
