@@ -107,12 +107,15 @@ public class KerasAttentionFileTests
         Assert.Contains("8x24", fault.ToString(), StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void AFileThatLacksTheBiasOfAProjection_IsRefusedAtTheLayer_NamingTheNumbersItNeverFound()
+    [Theory]
+    [InlineData("keras-attention-missing.keras")]
+    [InlineData("keras-attention-bare.keras")]
+    public void AFileThatLacksANumberOfAProjection_IsRefused_NamingTheFourNumbersTheLayerKeepsInItsPlace(string file)
     {
-        var refused = Assert.Throws<SlotLoadException>(() => new KerasFile().Read(KerasFixtures.Open("keras-attention-missing.keras")));
+        var refused = Assert.Throws<SlotLoadException>(() => new KerasFile().Read(KerasFixtures.Open(file)));
 
-        Assert.Contains(refused.Faults, fault => fault.Slot.StartsWith("0.in_proj", StringComparison.Ordinal));
+        Assert.Equal(["0.in_proj_weight", "0.in_proj_bias", "0.out_proj.weight", "0.out_proj.bias"], refused.Faults.Select(fault => fault.Slot));
+        Assert.All(refused.Faults, fault => Assert.Contains("is missing", fault.ToString(), StringComparison.Ordinal));
     }
 
     [Fact]
