@@ -39,8 +39,14 @@ public class ShuffleTests
     [Fact]
     public void TheSameSeed_ShufflesTheSameWay_AndAnotherSeedAnother()
     {
-        static int[] Order(int seed) =>
-            [.. Enumerable.Range(0, 891).Select(row => Passengers(shuffled: true, seed: seed).Table.Identities[row].ReadAt)];
+        // The pipeline is run once for a seed and the order read off its table: running it again for every row, as this once did, was
+        // thousands of runs of a whole pipeline for one answer.
+        static int[] Order(int seed)
+        {
+            var table = Passengers(shuffled: true, seed: seed).Table;
+
+            return [.. Enumerable.Range(0, table.RowCount).Select(row => table.Identities[row].ReadAt)];
+        }
 
         Assert.Equal(Order(20260929), Order(20260929));
         Assert.NotEqual(Order(20260929), Order(7));
