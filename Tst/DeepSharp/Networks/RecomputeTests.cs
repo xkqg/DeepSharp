@@ -54,7 +54,7 @@ public class RecomputeTests
         var again = Gradients(dense, recompute: Recompute.Layers("0"));
 
         Assert.Equal(plain.Select(each => each.Select(BitConverter.SingleToInt32Bits)), again.Select(each => each.Select(BitConverter.SingleToInt32Bits)));
-        Assert.Contains(again, each => each.Any(value => value != 0f));
+        Assert.Contains(again, each => each.Any(value => value is not 0f));
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class RecomputeTests
         var gradients = recording.GradientsOf(recording.Mean(recording.Multiply(made, made)), [layer.Weight.Value, layer.Spare.Value]);
 
         Assert.All(gradients[layer.Spare.Value].Values.ToArray(), value => Assert.Equal(0f, value));
-        Assert.Contains(gradients[layer.Weight.Value].Values.ToArray(), value => value != 0f);
+        Assert.Contains(gradients[layer.Weight.Value].Values.ToArray(), value => value is not 0f);
     }
 
     [Fact]
@@ -134,9 +134,9 @@ public class RecomputeTests
         var pass = Pass.Training(recording, new RandomStream(1), 0, 0).Recomputing(recompute);
         var made = network.Forward(rows, pass);
 
-        GC.Collect();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
-        GC.Collect();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
         GC.KeepAlive(made);
         GC.KeepAlive(recording);
 

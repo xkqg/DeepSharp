@@ -202,7 +202,7 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
     public double LossScaleStart
     {
         get;
-        init => field = value == 0 ? LossScaleKey.Require(value) : LossScaleKey.Require(global::DeepSharp.Networks.LossScale.Dynamic(value).Initial);
+        init => field = value is 0 ? LossScaleKey.Require(value) : LossScaleKey.Require(global::DeepSharp.Networks.LossScale.Dynamic(value).Initial);
     }
 
     /// <summary>Whether the workings of every layer are worked out again rather than kept; kept, unless said.</summary>

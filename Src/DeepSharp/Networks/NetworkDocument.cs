@@ -465,9 +465,7 @@ public static class NetworkDocument
         var optimizer = reader.Rebuilt<Optimizer>(OptimizerKey, NetworkCatalog.Role.Optimizer, rebuilding, "optimizer");
         var schedule = reader.Rebuilt<LearningRateSchedule>(ScheduleKey, NetworkCatalog.Role.Schedule, rebuilding, "learning-rate schedule");
         var slots = network.Network.Slots().ToDictionary(named => named.Path, named => named.Slot);
-        var seed = reader.Seed();
-        var pace = reader.PaceOf();
-        var engine = reader.EngineOf();
+        var (seed, pace, engine) = reader.MadeWith();
         var memory = reader.MemoryOf(slots);
         var averaged = reader.AveragedOf(slots, pace);
         var history = reader.HistoryOf();

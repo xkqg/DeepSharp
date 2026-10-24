@@ -35,7 +35,7 @@ public sealed record LossScale
     public int Interval { get; private init; } = 1;
 
     /// <summary>Whether the scale changes as the run goes: lowered after a step that was skipped, raised after clean ones.</summary>
-    public bool Changes => Growth != 1 || Backoff != 1;
+    public bool Changes => Growth is not 1 || Backoff is not 1;
 
     /// <summary>A scale that stays where it is for the whole run.</summary>
     /// <param name="scale">The scale: a power of two.</param>
@@ -79,7 +79,7 @@ public sealed record LossScale
     /// <returns>The scale.</returns>
     /// <exception cref="ArgumentOutOfRangeException">A number is not what a scale's is.</exception>
     internal static LossScale Read(double initial, double growth, int interval, double backoff) =>
-        growth == 1 && backoff == 1 ? Fixed(initial) : Dynamic(initial, growth, interval, backoff);
+        growth is 1 && backoff is 1 ? Fixed(initial) : Dynamic(initial, growth, interval, backoff);
 
     /// <inheritdoc />
     public override string ToString() =>
@@ -88,7 +88,7 @@ public sealed record LossScale
             : string.Create(CultureInfo.InvariantCulture, $"a fixed loss scale of {Initial}");
 
     private static double RequirePowerOfTwo(double scale, string name) =>
-        double.IsFinite(scale) && scale > 0 && double.Log2(scale) is var exponent && exponent == Math.Floor(exponent)
+        double.IsFinite(scale) && scale > 0 && double.IsInteger(double.Log2(scale))
             ? scale
             : throw new ArgumentOutOfRangeException(name, scale, "A scale is a power of two, so that scaling and scaling down again costs no digit.");
 }

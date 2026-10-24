@@ -90,8 +90,12 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
         }
     }
 
+    /// <summary>What the part says the run was made with: the seed it was worked out from, the pace it went at and the engine it was on.</summary>
+    /// <returns>The three, read in that order, so that a file with a fault in more than one is refused with them in that order.</returns>
+    public RunMade MadeWith() => new(Seed(), PaceOf(), EngineOf());
+
     /// <summary>The seed the run was worked out from.</summary>
-    public long Seed()
+    private long Seed()
     {
         if (part.Member(SeedKey)?.AsLong() is { } seed)
         {
@@ -112,7 +116,7 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
     /// run's gradients were clipped to is read where the part holds it, from the third version on; a part that holds none says
     /// they were never clipped.
     /// </remarks>
-    public Pace? PaceOf()
+    private Pace? PaceOf()
     {
         var batchSize = part.Member(BatchSizeKey);
         var earlyStopping = part.Member(EarlyStoppingKey);
@@ -202,7 +206,7 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
         {
             var options = LossScale.Read(initial, growth, interval, backoff);
 
-            if (!double.IsFinite(current) || current <= 0 || double.Log2(current) is var exponent && exponent != Math.Floor(exponent))
+            if (!double.IsFinite(current) || current <= 0 || !double.IsInteger(double.Log2(current)))
             {
                 throw new ArgumentOutOfRangeException(ScaleKey, current, "A scale is a power of two, so that scaling and scaling down again costs no digit.");
             }
@@ -259,6 +263,12 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
 
     // The loss scale a part names: what the run was told, and where the scale stood.
     private readonly record struct ScaleRead(LossScale Options, ScalerState State);
+
+    /// <summary>The seed, the pace and the engine a run was made with, as its part says them.</summary>
+    /// <param name="Seed">The seed the run was worked out from.</param>
+    /// <param name="Pace">The batch size, the early stopping and the rest of the pace the run went at; nothing where the part says none.</param>
+    /// <param name="Engine">The engine the run was on; nothing where the part names none.</param>
+    internal readonly record struct RunMade(long Seed, Pace? Pace, Engine? Engine);
 
     private static string Capitalised(string words) => char.ToUpperInvariant(words[0]) + words[1..];
 
@@ -338,7 +348,7 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
     /// so says nothing of it; nothing too, with its fault noted, when it is written as anything but its name and, where the
     /// engine named them, its version and its device, each as text.
     /// </summary>
-    public Engine? EngineOf()
+    private Engine? EngineOf()
     {
         if (part.Member(EngineKey) is not { } written)
         {

@@ -52,12 +52,12 @@ public class StepProfileTests
     // What one engine profiled, with the garbage of the runs before it let go of first and its own after, so that no engine is timed while libtorch frees another's.
     private static Dictionary<string, Spent> Collected(Func<Dictionary<string, Spent>> profile)
     {
-        GC.Collect();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
 
         var spent = profile();
 
-        GC.Collect();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
         GC.WaitForPendingFinalizers();
 
         return spent;

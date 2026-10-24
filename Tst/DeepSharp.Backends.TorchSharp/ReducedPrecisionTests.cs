@@ -29,7 +29,7 @@ public class ReducedPrecisionTests
 
         Assert.All(reduced.Values.ToArray(), value => Assert.Equal(0, BitConverter.SingleToInt32Bits(value) & 0xFFFF));
         Assert.True(reduced.Values.ToArray().Zip(full.Values.ToArray()).All(pair => Math.Abs(pair.First - pair.Second) <= 0.01 * (Math.Abs(pair.Second) + 1)));
-        Assert.Contains(reduced.Values.ToArray().Zip(full.Values.ToArray()), pair => pair.First != pair.Second);
+        Assert.Contains(reduced.Values.ToArray().Zip(full.Values.ToArray()), pair => BitConverter.SingleToInt32Bits(pair.First) != BitConverter.SingleToInt32Bits(pair.Second));
     }
 
     [Fact]

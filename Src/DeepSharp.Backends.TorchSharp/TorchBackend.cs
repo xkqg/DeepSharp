@@ -388,7 +388,7 @@ public sealed class TorchBackend : INamesItsVersionAndDevice, INamesItsPrecision
         }
         catch (Exception fault) when (fault.Message.Contains("out of memory", StringComparison.OrdinalIgnoreCase))
         {
-            GC.Collect();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, blocking: true);
             GC.WaitForPendingFinalizers();
 
             return allocate();

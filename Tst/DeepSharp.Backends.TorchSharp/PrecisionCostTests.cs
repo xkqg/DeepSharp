@@ -444,6 +444,7 @@ public class PrecisionCostTests
 
                     while ((seen = Volatile.Read(ref _peak)) < used && Interlocked.CompareExchange(ref _peak, used, seen) != seen)
                     {
+                        // The compare-exchange is the whole of the work: another thread raised the peak first, so it is read again.
                     }
                 }
             })

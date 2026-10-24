@@ -37,7 +37,7 @@ internal sealed class TorchStorage : TensorStorage
         _laidOut = new Shape([.. native.shape.Select(length => checked((int)length))]);
 
         // At least one value's worth: a storage of none still holds a tensor of libtorch's.
-        _bytes = Math.Max(_laidOut.Count, 1) * (long)native.element_size();
+        _bytes = Math.Max(_laidOut.Count, 1) * native.element_size();
         GC.AddMemoryPressure(_bytes);
     }
 
