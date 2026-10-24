@@ -80,6 +80,23 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         LeftOut = false,
     };
 
+    private static readonly NumberParameter LossScaleKey = new(
+        "lossScale",
+        "The scale the loss is multiplied by before the gradients are worked back from it, a power of two, so that small gradients survive an engine that keeps its work in a narrow width: lowered when a step's gradients are not numbers, raised after a run of clean steps, as PyTorch's gradient scaler does; left out, or nought, the loss is not scaled.",
+        0)
+    {
+        AtLeast = 0,
+        LeftOut = 0,
+    };
+
+    private static readonly TrueOrFalseParameter RecomputeKey = new(
+        "recompute",
+        "Whether the workings of every layer are thrown away after its forward pass and worked out again when the way back reaches it, so that a larger batch fits in the same memory, at the price of one more forward pass and with no number of the run changed; left out, every layer keeps its workings.",
+        false)
+    {
+        LeftOut = false,
+    };
+
     private static readonly PartsParameter LossKey = new(
         "loss", "What the network's answers are judged by while it trains.", [NetworkWords.Losses[0].Declared()], NetworkWords.Losses)
     {
@@ -179,6 +196,23 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         init => field = !value || Average > 0 ? JudgedByAverageKey.Require(value) : throw NothingToJudgeBy();
     }
 
+    /// <summary>The scale a dynamic loss scale begins at, a power of two; nought, unless said, for a loss that is not scaled.</summary>
+    /// <remarks>A file written before the key was known says nothing of it, and is read as a run whose loss is not scaled, as it ran.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException">It is below nothing, or not a power of two.</exception>
+    public double LossScaleStart
+    {
+        get;
+        init => field = value == 0 ? LossScaleKey.Require(value) : LossScaleKey.Require(global::DeepSharp.Networks.LossScale.Dynamic(value).Initial);
+    }
+
+    /// <summary>Whether the workings of every layer are worked out again rather than kept; kept, unless said.</summary>
+    /// <remarks>A file written before the key was known says nothing of it, and is read as a run whose layers keep their workings, as it ran.</remarks>
+    public bool Recompute
+    {
+        get;
+        init => field = RecomputeKey.Require(value);
+    }
+
     /// <summary>When the run stops; at its last pass, unless said.</summary>
     public PartDeclaration Stopping
     {
@@ -234,6 +268,8 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         .With(StepEveryKey, step => step.StepEvery)
         .With(AverageKey, step => step.Average)
         .With(JudgedByAverageKey, step => step.JudgedByAverage)
+        .With(LossScaleKey, step => step.LossScaleStart)
+        .With(RecomputeKey, step => step.Recompute)
         .With(LossKey, step => One(step.Loss))
         .With(StoppingKey, step => One(step.Stopping))
         .With(EngineKey, step => step.Engine)
@@ -266,6 +302,8 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
             StepEvery = StepEveryKey.Read(element),
             Average = AverageKey.Read(element),
             JudgedByAverage = JudgedByAverageKey.Read(element),
+            LossScaleStart = LossScaleKey.Read(element),
+            Recompute = RecomputeKey.Read(element),
             Stopping = StoppingKey.Read(element)[0],
             Engine = EngineKey.Read(element),
             Seed = SeedKey.Read(element),
@@ -289,6 +327,8 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         && StepEvery == other.StepEvery
         && Average.Equals(other.Average)
         && JudgedByAverage == other.JudgedByAverage
+        && LossScaleStart.Equals(other.LossScaleStart)
+        && Recompute == other.Recompute
         && Stopping == other.Stopping
         && Engine == other.Engine
         && Seed == other.Seed
@@ -313,6 +353,8 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
         hash.Add(StepEvery);
         hash.Add(Average);
         hash.Add(JudgedByAverage);
+        hash.Add(LossScaleStart);
+        hash.Add(Recompute);
         hash.Add(Stopping);
         hash.Add(Engine);
         hash.Add(Seed);

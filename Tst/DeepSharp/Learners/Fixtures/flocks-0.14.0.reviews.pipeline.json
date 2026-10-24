@@ -1,0 +1,87 @@
+{
+  "version": 13,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.14.0.reviews.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "review",
+          "kind": "text",
+          "optional": false
+        },
+        {
+          "name": "good",
+          "kind": "integer",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "step": "split.atRandom",
+      "train": 0.6,
+      "validation": 0.2,
+      "test": 0.2,
+      "predict": 0,
+      "seed": 3
+    },
+    {
+      "step": "tokenize",
+      "column": "review",
+      "length": 8,
+      "vocabulary": 24
+    },
+    {
+      "step": "target",
+      "column": "good"
+    },
+    {
+      "step": "evidence.report",
+      "metrics": [
+        "accuracy"
+      ],
+      "parts": [
+        "validation",
+        "test"
+      ],
+      "shown": [
+        "numbers"
+      ]
+    },
+    {
+      "step": "learn.network",
+      "layers": [
+        {
+          "kind": "tokenEmbedding",
+          "vocabulary": 24,
+          "width": 4
+        },
+        {
+          "kind": "dense",
+          "units": 1
+        }
+      ],
+      "optimizer": {
+        "kind": "adam",
+        "rate": 0.05,
+        "firstMoment": 0.9,
+        "secondMoment": 0.999,
+        "epsilon": 1E-08
+      },
+      "loss": {
+        "kind": "binaryCrossEntropy"
+      },
+      "stopping": {
+        "kind": "never"
+      },
+      "engine": "light",
+      "seed": 20261017,
+      "epochs": 3,
+      "batch": 16
+    }
+  ]
+}

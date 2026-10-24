@@ -27,12 +27,14 @@ public enum PassMode
 public sealed class Pass
 {
     private readonly RandomStream? _random;
+    private readonly Recompute? _recompute;
 
-    private Pass(ITensorBackend backend, PassMode mode, RandomStream? random)
+    private Pass(ITensorBackend backend, PassMode mode, RandomStream? random, Recompute? recompute = null)
     {
         Backend = backend;
         Mode = mode;
         _random = random;
+        _recompute = recompute;
     }
 
     /// <summary>The backend the pass's arithmetic runs on: a recording one, for a pass whose gradients are wanted.</summary>
@@ -46,6 +48,37 @@ public sealed class Pass
 
     /// <summary>The step of its epoch a training pass is, counted from nought; nought for an evaluation pass.</summary>
     public int Step { get; private init; }
+
+    /// <summary>Whether a layer that measures while it trains moves what it measured: a pass that runs a layer again moves nothing, since the pass it repeats moved it.</summary>
+    internal bool MovesStatistics { get; private init; } = true;
+
+    /// <summary>The same pass told which layers to throw the workings of away and work out again.</summary>
+    /// <param name="layers">The layers; nothing for none.</param>
+    /// <returns>The pass; this one, when none is asked for.</returns>
+    internal Pass Recomputing(Recompute? layers) =>
+        layers is null ? this : new Pass(Backend, Mode, _random, layers) { Epoch = Epoch, Step = Step, MovesStatistics = MovesStatistics };
+
+    /// <summary>The same place in the same run, on another backend, that records nothing and recomputes nothing.</summary>
+    /// <param name="backend">Where its arithmetic runs.</param>
+    /// <returns>The pass.</returns>
+    internal Pass On(ITensorBackend backend) => new(backend, Mode, _random) { Epoch = Epoch, Step = Step, MovesStatistics = MovesStatistics };
+
+    /// <summary>The same place in the same run, on a backend that records it again: it draws what the first pass drew and moves no statistic.</summary>
+    /// <param name="backend">The recording the layer is worked out again on.</param>
+    /// <returns>The pass.</returns>
+    internal Pass Replaying(ITensorBackend backend) => new(backend, Mode, _random) { Epoch = Epoch, Step = Step, MovesStatistics = false };
+
+    /// <summary>Whether a layer is to be thrown away and worked out again: this pass is recorded, and the layer's path is among those asked for.</summary>
+    /// <param name="layer">The layer.</param>
+    /// <returns>Whether it is.</returns>
+    internal bool Recomputes(Layer layer) => _recompute is not null && Backend is RecordingBackend && _recompute.Includes(layer.Path);
+
+    /// <summary>Runs a layer over what its steps made: kept as it is run, or thrown away and worked out again when the way back reaches it.</summary>
+    /// <param name="layer">The layer.</param>
+    /// <param name="inputs">What the steps it takes made, in order.</param>
+    /// <returns>What it makes.</returns>
+    internal Tensor Running(Layer layer, IReadOnlyList<Tensor> inputs) =>
+        Recomputes(layer) ? ((RecordingBackend)Backend).Recomputed(layer, inputs, this) : layer.Taking(inputs, this);
 
     /// <summary>A pass that trains.</summary>
     /// <param name="backend">The backend the arithmetic runs on.</param>

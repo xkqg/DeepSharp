@@ -1,0 +1,134 @@
+{
+  "version": 13,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.14.0.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "Farm",
+          "kind": "category",
+          "optional": false
+        },
+        {
+          "name": "Heavy",
+          "kind": "boolean",
+          "optional": false
+        },
+        {
+          "name": "Animals",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Age",
+          "kind": "number",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "step": "scale.given",
+      "column": "Animals",
+      "lowest": 15000,
+      "highest": 25000,
+      "lands": "signed"
+    },
+    {
+      "step": "split.atRandom",
+      "train": 0.8,
+      "validation": 0,
+      "test": 0.2,
+      "predict": 0,
+      "seed": 42,
+      "testSeed": 99,
+      "folds": 3,
+      "fold": 1
+    },
+    {
+      "step": "target",
+      "column": "Heavy"
+    },
+    {
+      "step": "encode.categories",
+      "as": "onehot",
+      "unseen": "reserve"
+    },
+    {
+      "step": "normalise",
+      "column": "Age",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "learn.network",
+      "layers": [
+        {
+          "kind": "dense",
+          "units": 4
+        },
+        {
+          "kind": "relu"
+        },
+        {
+          "kind": "dense",
+          "units": 1
+        }
+      ],
+      "optimizer": {
+        "kind": "adam",
+        "rate": 0.01,
+        "firstMoment": 0.9,
+        "secondMoment": 0.999,
+        "epsilon": 1E-08
+      },
+      "loss": {
+        "kind": "binaryCrossEntropy"
+      },
+      "stopping": {
+        "kind": "never"
+      },
+      "engine": "light",
+      "seed": 20261017,
+      "epochs": 3,
+      "batch": 16
+    }
+  ],
+  "fitted": [
+    {
+      "step": "split.atRandom",
+      "prefix": "412e7e585910d5990e5faada50555492f30d0ce7868c7deabe05e9fa35c21fff",
+      "learned": {
+        "rows.predict": 0,
+        "rows.test": 72,
+        "rows.train": 192,
+        "rows.validation": 96,
+        "digest": "769e6c6b81a2d0a85bb3ad62a52139bcc7368a8666a2bb550aead4d05278a2de"
+      }
+    },
+    {
+      "step": "encode.categories",
+      "prefix": "5f94473ab75cd0124c53f072432a9bc24f99cc147e0d186d1310f41d64c0b1a9",
+      "learned": {
+        "Farm": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ]
+      }
+    },
+    {
+      "step": "normalise",
+      "prefix": "10231d37148cda7baf2bfd34e82608e4f44563be181cef56f3a92a97b2ec90f7",
+      "learned": {
+        "centre": 34.5,
+        "spread": 6.5
+      }
+    }
+  ]
+}

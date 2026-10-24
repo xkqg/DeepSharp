@@ -76,7 +76,7 @@ public class NetworkFileRefusalTests
         StringComparison.Ordinal);
 
     private const string EngineFault =
-        "The engine the run was on is written under 'engine' as its 'name' and, where the engine names them, its 'version' and its 'device', each as text.";
+        "The engine the run was on is written under 'engine' as its 'name' and, where the engine names them, its 'version', its 'device' and the width it kept its work in, 'precision', each as text.";
 
     private const string BatchSizeFault = "The batch size is the whole number of rows a batch of the run held, from one, under 'batchSize'.";
 
@@ -407,7 +407,7 @@ public class NetworkFileRefusalTests
     [InlineData("\"name\": \"cpu\", ", "", "\"engine\"", EngineFault)]
     [InlineData("\"name\": \"cpu\"", "\"name\": 3", "\"engine\"", EngineFault)]
     [InlineData("\"device\": \"cpu\"", "\"device\": null", "\"engine\"", EngineFault)]
-    [InlineData("\"device\": \"cpu\"", "\"device\": \"cpu\", \"threads\": 16", "\"threads\"", "'threads' is not written here: this holds 'name', 'version', 'device'.")]
+    [InlineData("\"device\": \"cpu\"", "\"device\": \"cpu\", \"threads\": 16", "\"threads\"", "'threads' is not written here: this holds 'name', 'version', 'device', 'precision'.")]
     public void TheEngineARunWasOn_WrittenAsAnythingElse_IsRefusedWhereItStands(string find, string replace, string at, string message)
     {
         var broken = Broken(Engined, find, replace);
@@ -857,7 +857,7 @@ public class NetworkFileRefusalTests
         Assert.Equal(
             [
                 Place(broken, "\"training\"", message),
-                Place(broken, $"\"{written}\"", $"The 'training' part has no '{written}'. It holds: version, seed, batchSize, earlyStopping, clipNorm, clipValue, stepEvery, average, judgedByAverage, engine, optimizer, schedule, memory, averaged, judgement, history."),
+                Place(broken, $"\"{written}\"", $"The 'training' part has no '{written}'. It holds: version, seed, batchSize, earlyStopping, clipNorm, clipValue, stepEvery, average, judgedByAverage, lossScale, engine, optimizer, schedule, memory, averaged, judgement, history."),
             ],
             TrainingRefused(broken).Faults);
     }
@@ -866,7 +866,7 @@ public class NetworkFileRefusalTests
     [InlineData("\"stops\": false,", "\"stops\": false, \"patience\": 3,", "\"patience\"",
         "'patience' is not written here: this holds 'wait', 'best', 'bestEpoch', 'stops', 'bestSlots'.")]
     [InlineData("{\"number\": 1, \"loss\": 0.5,", "{\"number\": 1, \"loss\": 0.5, \"rows\": 16,", "\"rows\"",
-        "'rows' is not written here: this holds 'number', 'loss', 'validationLoss', 'learningRate'.")]
+        "'rows' is not written here: this holds 'number', 'loss', 'validationLoss', 'learningRate', 'skipped'.")]
     [InlineData("\"0.bias\": {\"steps\": 0,", "\"0.bias\": {\"steps\": 0, \"step\": 1,", "\"step\"", "'step' is not written here: this holds 'steps', 'tensors'.")]
     [InlineData("\"shape\": [1], \"values\": [0.125]", "\"shape\": [1], \"values\": [0.125], \"dtype\": \"float\"", "\"dtype\"",
         "'dtype' is not written here: this holds 'shape', 'values'.")]

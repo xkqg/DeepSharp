@@ -21,6 +21,10 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
     // What the file says of the learning of each parameter beside its numbers, by path: only what it says.
     private readonly Dictionary<string, SlotRules> _rules = new(StringComparer.Ordinal);
 
+    // The loss scale the part names, read once, and whether it has been.
+    private ScaleRead? _scale;
+    private bool _scaleRead;
+
     /// <summary>
     /// Whether a list of a file is a tensor's values this reader reads — a slot's, under its part's parameters or running
     /// statistics, what the optimizer remembers of a parameter, or a slot of the best epoch's — whose numbers are read from
@@ -141,9 +145,76 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
             new RunOption(JudgedByAverageKey, "that the run's epochs were judged by the average of its weights", "true") { From = SixthVersion },
             value => value.ValueKind == JsonValueKind.True ? true : null);
 
+        var scale = ScaleOf();
+
         return rows is { } size
-            ? new Pace(size, stopping) { Clip = clip, ClipValue = clipValue, StepEvery = stepEvery ?? 1, Average = average, JudgedByAverage = judged ?? false }
+            ? new Pace(size, stopping) { Clip = clip, ClipValue = clipValue, StepEvery = stepEvery ?? 1, Average = average, JudgedByAverage = judged ?? false, LossScale = scale?.Options }
             : null;
+    }
+
+    /// <summary>Where the run's loss scale had got to; nothing when the part names none, or it cannot be read.</summary>
+    internal ScalerState? ScalerOf() => ScaleOf()?.State;
+
+    // The loss scale the part names — what the run was told and where the scale stood — read once, whoever asks first.
+    private ScaleRead? ScaleOf()
+    {
+        if (!_scaleRead)
+        {
+            _scale = ReadScale();
+            _scaleRead = true;
+        }
+
+        return _scale;
+    }
+
+    private ScaleRead? ReadScale()
+    {
+        if (part.Member(LossScaleKey) is not { } written)
+        {
+            return null;
+        }
+
+        string[] at = [.. _here, LossScaleKey];
+
+        if (version < NinthVersion)
+        {
+            text.Fault(at, $"The loss scale a run went under, under '{LossScaleKey}', is written from the {Ordinal(NinthVersion)} version of a training part on, and this one is of the {Ordinal(version)}.");
+
+            return null;
+        }
+
+        if (written.ValueKind != JsonValueKind.Object
+            || written.Member(ScaleKey)?.AsNumber() is not { } current
+            || written.Member(CleanKey)?.AsWhole() is not { } clean || clean < 0
+            || written.Member(InitialKey)?.AsNumber() is not { } initial
+            || written.Member(GrowthKey)?.AsNumber() is not { } growth
+            || written.Member(IntervalKey)?.AsWhole() is not { } interval
+            || written.Member(BackoffKey)?.AsNumber() is not { } backoff)
+        {
+            text.Fault(at, $"The loss scale is written as an object holding its '{ScaleKey}' and its '{CleanKey}' — where it had got to — and its '{InitialKey}', its '{GrowthKey}', its '{IntervalKey}' and its '{BackoffKey}', each a number.");
+
+            return null;
+        }
+
+        Only(written, at, ScaleKey, CleanKey, InitialKey, GrowthKey, IntervalKey, BackoffKey);
+
+        try
+        {
+            var options = LossScale.Read(initial, growth, interval, backoff);
+
+            if (!double.IsFinite(current) || current <= 0 || double.Log2(current) is var exponent && exponent != Math.Floor(exponent))
+            {
+                throw new ArgumentOutOfRangeException(ScaleKey, current, "A scale is a power of two, so that scaling and scaling down again costs no digit.");
+            }
+
+            return new ScaleRead(options, new ScalerState(current, clean));
+        }
+        catch (ArgumentOutOfRangeException refused)
+        {
+            text.Fault(at, $"The loss scale cannot be this: {refused.Message}");
+
+            return null;
+        }
     }
 
     // What a run did beside the pace the earlier versions could say: written from the version that first says it on, where it is
@@ -186,6 +257,9 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
         public int From { get; init; } = FifthVersion;
     }
 
+    // The loss scale a part names: what the run was told, and where the scale stood.
+    private readonly record struct ScaleRead(LossScale Options, ScalerState State);
+
     private static string Capitalised(string words) => char.ToUpperInvariant(words[0]) + words[1..];
 
     private static string Ordinal(int version) => version switch
@@ -196,7 +270,9 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
         FourthVersion => "fourth",
         FifthVersion => "fifth",
         SixthVersion => "sixth",
-        _ => "seventh",
+        SeventhVersion => "seventh",
+        EighthVersion => "eighth",
+        _ => "ninth",
     };
 
     /// <summary>
@@ -271,23 +347,32 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
 
         // Anything but an object holds no name, and is refused by that.
         string[] at = [.. _here, EngineKey];
-        var version = written.Member(VersionKey);
+        var engineVersion = written.Member(VersionKey);
         var device = written.Member(DeviceKey);
+        var precision = written.Member(PrecisionKey);
 
         if (written.Member(NameKey) is not { ValueKind: JsonValueKind.String } name
-            || version is { ValueKind: not JsonValueKind.String }
-            || device is { ValueKind: not JsonValueKind.String })
+            || engineVersion is { ValueKind: not JsonValueKind.String }
+            || device is { ValueKind: not JsonValueKind.String }
+            || precision is { ValueKind: not JsonValueKind.String })
         {
             text.Fault(
                 at,
-                $"The engine the run was on is written under '{EngineKey}' as its '{NameKey}' and, where the engine names them, its '{VersionKey}' and its '{DeviceKey}', each as text.");
+                $"The engine the run was on is written under '{EngineKey}' as its '{NameKey}' and, where the engine names them, its '{VersionKey}', its '{DeviceKey}' and the width it kept its work in, '{PrecisionKey}', each as text.");
 
             return null;
         }
 
-        Only(written, at, NameKey, VersionKey, DeviceKey);
+        Only(written, at, NameKey, VersionKey, DeviceKey, PrecisionKey);
 
-        return new Engine(name.GetString()!, version?.GetString(), device?.GetString());
+        if (precision is not null && version < NinthVersion)
+        {
+            text.Fault([.. at, PrecisionKey], $"The width an engine kept its work in, under '{PrecisionKey}', is written from the {Ordinal(NinthVersion)} version of a training part on, and this one is of the {Ordinal(version)}.");
+
+            return null;
+        }
+
+        return new Engine(name.GetString()!, engineVersion?.GetString(), device?.GetString()) { Precision = precision?.GetString() };
     }
 
     /// <summary>What the optimizer remembered of each parameter, by path: only what could be read whole.</summary>
@@ -365,13 +450,20 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
             string[] at = [.. under, place.ToString(CultureInfo.InvariantCulture)];
             var validation = epoch.Member(ValidationLossKey);
 
-            if (epoch.Member(NumberKey)?.AsWhole() == place
+            var skipped = epoch.Member(SkippedKey);
+
+            if (skipped is not null && version < NinthVersion)
+            {
+                text.Fault([.. at, SkippedKey], $"How many steps an epoch skipped, under '{SkippedKey}', is written from the {Ordinal(NinthVersion)} version of a training part on, and this one is of the {Ordinal(version)}.");
+            }
+            else if (epoch.Member(NumberKey)?.AsWhole() == place
                 && epoch.Member(EpochLossKey)?.AsNumber() is { } loss
                 && epoch.Member(LearningRateKey)?.AsNumber() is { } rate
-                && (validation is null || validation.Value.AsNumber() is not null))
+                && (validation is null || validation.Value.AsNumber() is not null)
+                && (skipped is null || skipped.Value.AsWhole() is >= 1))
             {
-                Only(epoch, at, NumberKey, EpochLossKey, ValidationLossKey, LearningRateKey);
-                history.Add(new Epoch(place, loss, validation?.AsNumber(), rate));
+                Only(epoch, at, NumberKey, EpochLossKey, ValidationLossKey, LearningRateKey, SkippedKey);
+                history.Add(new Epoch(place, loss, validation?.AsNumber(), rate) { Skipped = skipped?.AsWhole() ?? 0 });
             }
             else
             {

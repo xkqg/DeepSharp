@@ -306,12 +306,12 @@ The NuGet package Markdig, its Markdig.dll (github.com/xoofx/markdig), which dra
 Copyright (c) 2018-2019, Alexandre Mutel. BSD 2-Clause License.
 
 
-MatPlotLibNet 1.18.2
+MatPlotLibNet 1.21.0
 The NuGet package MatPlotLibNet, its MatPlotLibNet.dll (github.com/xkqg/MatPlotLibNet): the charts and colour maps.
 Copyright (c) 2026 H.P. Gansevoort (xkqg). MIT License.
 
 
-MatPlotLibNet.DataFrame 1.18.2
+MatPlotLibNet.DataFrame 1.21.0
 The NuGet package MatPlotLibNet.DataFrame, its MatPlotLibNet.DataFrame.dll (github.com/xkqg/MatPlotLibNet).
 Copyright (c) 2026 H.P. Gansevoort (xkqg). MIT License.
 

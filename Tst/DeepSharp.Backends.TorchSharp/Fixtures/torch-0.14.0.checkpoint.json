@@ -1,0 +1,463 @@
+{
+  "version": 1,
+  "network": {
+    "version": 2,
+    "layers": {
+      "kind": "stack",
+      "layers": [
+        {
+          "kind": "dense",
+          "inputs": 8,
+          "outputs": 4
+        },
+        {
+          "kind": "relu"
+        },
+        {
+          "kind": "dense",
+          "inputs": 4,
+          "outputs": 1
+        }
+      ]
+    },
+    "parameters": {
+      "0.weight": {
+        "shape": [
+          8,
+          4
+        ],
+        "values": [
+          0.30914453,
+          -0.05773239,
+          0.08013226,
+          -0.4159436,
+          -0.5544351,
+          -0.49239925,
+          -0.3946581,
+          0.13677938,
+          0.3452079,
+          0.10026486,
+          -0.089613274,
+          0.16869625,
+          0.27516907,
+          0.032724306,
+          -0.16151659,
+          0.026654739,
+          0.3409786,
+          -0.016807267,
+          -0.10189974,
+          -0.015548364,
+          0.30722073,
+          0.046906505,
+          -0.15247914,
+          0.09655496,
+          -0.106739886,
+          -0.08739153,
+          -0.13181902,
+          0.009301117,
+          0.16010755,
+          0.13012587,
+          0.03211721,
+          -0.18065056
+        ]
+      },
+      "0.bias": {
+        "shape": [
+          4
+        ],
+        "values": [
+          -0.08394402,
+          0.17553568,
+          0.29136017,
+          -0.34940034
+        ]
+      },
+      "2.weight": {
+        "shape": [
+          4,
+          1
+        ],
+        "values": [
+          -0.5099297,
+          -0.36290994,
+          -0.7079411,
+          0.048202526
+        ]
+      },
+      "2.bias": {
+        "shape": [
+          1
+        ],
+        "values": [
+          -0.27334815
+        ]
+      }
+    },
+    "state": {},
+    "loss": {
+      "kind": "binaryCrossEntropy"
+    },
+    "trainedOn": {
+      "features": [
+        "Animals",
+        "Age",
+        "Farm_A",
+        "Farm_B",
+        "Farm_C",
+        "Farm_D",
+        "Farm_other",
+        "Farm_was_missing"
+      ],
+      "answers": [
+        "Heavy"
+      ],
+      "output": "target",
+      "trainedBehind": "117838b809b794a17b42c77b54cda105babdaefa8a7c23ea574deb9c15a8f39a",
+      "seed": 20261017,
+      "epoch": 1,
+      "unvaried": {
+        "Farm_other": 0,
+        "Farm_was_missing": 0
+      }
+    }
+  },
+  "pipeline": {
+  "version": 13,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "torch-0.14.0.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "Farm",
+          "kind": "category",
+          "optional": false
+        },
+        {
+          "name": "Heavy",
+          "kind": "boolean",
+          "optional": false
+        },
+        {
+          "name": "Animals",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Age",
+          "kind": "number",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "step": "scale.given",
+      "column": "Animals",
+      "lowest": 15000,
+      "highest": 25000,
+      "lands": "signed"
+    },
+    {
+      "step": "split.stratified",
+      "column": "Heavy",
+      "train": 0.7,
+      "validation": 0.15,
+      "test": 0.15,
+      "predict": 0,
+      "seed": 7
+    },
+    {
+      "step": "target",
+      "column": "Heavy"
+    },
+    {
+      "step": "encode.categories",
+      "as": "onehot",
+      "unseen": "reserve"
+    },
+    {
+      "step": "normalise",
+      "column": "Age",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "learn.network",
+      "layers": [
+        {
+          "kind": "dense",
+          "units": 4
+        },
+        {
+          "kind": "relu"
+        },
+        {
+          "kind": "dense",
+          "units": 1
+        }
+      ],
+      "optimizer": {
+        "kind": "adam",
+        "rate": 0.01,
+        "firstMoment": 0.9,
+        "secondMoment": 0.999,
+        "epsilon": 1E-08
+      },
+      "loss": {
+        "kind": "binaryCrossEntropy"
+      },
+      "stopping": {
+        "kind": "never"
+      },
+      "engine": "light",
+      "seed": 20261017,
+      "epochs": 3,
+      "batch": 16
+    }
+  ],
+  "fitted": [
+    {
+      "step": "split.stratified",
+      "prefix": "8378a046de9cbdfdbe897eea3d0d04cc3a3159bae426a60a850ecc642ac40208",
+      "learned": {
+        "rows.predict": 0,
+        "rows.test": 36,
+        "rows.train": 168,
+        "rows.validation": 36,
+        "digest": "42ff2b1c492638439c99db30860633183d78a4679478bb35ec6ecdff2a19ed5f"
+      }
+    },
+    {
+      "step": "encode.categories",
+      "prefix": "771c6923d72b8e89044dc6c667cf664c6d7b72bacc332fc500d4bf1136c3debb",
+      "learned": {
+        "Farm": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ]
+      }
+    },
+    {
+      "step": "normalise",
+      "prefix": "26c0d00629a0530030a3f3ecf617e1fcdafd03aa53bf631601c1023d2fc1b3ce",
+      "learned": {
+        "centre": 34.5,
+        "spread": 6.5
+      }
+    }
+  ]
+},
+  "training": {
+    "version": 2,
+    "seed": 20261017,
+    "batchSize": 16,
+    "earlyStopping": null,
+    "engine": {
+      "name": "torch",
+      "version": "2.10.0.0",
+      "device": "cpu"
+    },
+    "optimizer": {
+      "kind": "adam",
+      "rate": 0.01,
+      "betas": [
+        0.9,
+        0.999
+      ],
+      "epsilon": 1E-08
+    },
+    "schedule": {
+      "kind": "constant"
+    },
+    "memory": {
+      "0.weight": {
+        "steps": 22,
+        "tensors": {
+          "exp_avg": {
+            "shape": [
+              8,
+              4
+            ],
+            "values": [
+              -0.00044348612,
+              -0.0004486022,
+              -0.0013641788,
+              5.3360716E-05,
+              0.041450225,
+              0.026996974,
+              0.060060963,
+              0.0003587236,
+              -0.0044546365,
+              -0.005547178,
+              -0.008077328,
+              0.0002711916,
+              0.002256125,
+              0.004404446,
+              -0.0032670056,
+              6.0773204E-05,
+              -0.0076958146,
+              -0.007815629,
+              -0.0057733497,
+              0,
+              -0.0021077825,
+              0.001523518,
+              -0.0018913085,
+              0.00020043722,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          "exp_avg_sq": {
+            "shape": [
+              8,
+              4
+            ],
+            "values": [
+              4.3222977E-07,
+              1.1943075E-07,
+              7.0735587E-07,
+              3.22428E-09,
+              4.1370895E-05,
+              1.7573522E-05,
+              0.00011417326,
+              1.3270041E-07,
+              9.963135E-06,
+              3.663515E-06,
+              2.2924034E-05,
+              6.67298E-08,
+              4.8917964E-06,
+              1.8137878E-06,
+              1.27435915E-05,
+              9.181321E-09,
+              8.1052785E-06,
+              2.5584504E-06,
+              1.6660428E-05,
+              0,
+              5.852561E-06,
+              2.3416583E-06,
+              1.2076088E-05,
+              7.5173844E-08,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          }
+        }
+      },
+      "0.bias": {
+        "steps": 22,
+        "tensors": {
+          "exp_avg": {
+            "shape": [
+              4
+            ],
+            "values": [
+              -0.012002109,
+              -0.007434844,
+              -0.019008992,
+              0.00053240196
+            ]
+          },
+          "exp_avg_sq": {
+            "shape": [
+              4
+            ],
+            "values": [
+              4.189627E-05,
+              9.374188E-06,
+              6.1077575E-05,
+              2.9288947E-07
+            ]
+          }
+        }
+      },
+      "2.weight": {
+        "steps": 22,
+        "tensors": {
+          "exp_avg": {
+            "shape": [
+              4,
+              1
+            ],
+            "values": [
+              0.048606392,
+              0.03955301,
+              0.033890653,
+              -0.001026537
+            ]
+          },
+          "exp_avg_sq": {
+            "shape": [
+              4,
+              1
+            ],
+            "values": [
+              6.3887885E-05,
+              4.0523308E-05,
+              3.1845557E-05,
+              1.157925E-06
+            ]
+          }
+        }
+      },
+      "2.bias": {
+        "steps": 22,
+        "tensors": {
+          "exp_avg": {
+            "shape": [
+              1
+            ],
+            "values": [
+              -0.121563345
+            ]
+          },
+          "exp_avg_sq": {
+            "shape": [
+              1
+            ],
+            "values": [
+              0.000630952
+            ]
+          }
+        }
+      }
+    },
+    "judgement": {
+      "wait": 0,
+      "best": 0.5919661323229471,
+      "bestEpoch": 1,
+      "stops": false
+    },
+    "history": [
+      {
+        "number": 0,
+        "loss": 0.669472214721498,
+        "validationLoss": 0.6429697672526041,
+        "learningRate": 0.01
+      },
+      {
+        "number": 1,
+        "loss": 0.6217515809195382,
+        "validationLoss": 0.5919661323229471,
+        "learningRate": 0.01
+      }
+    ]
+  }
+}

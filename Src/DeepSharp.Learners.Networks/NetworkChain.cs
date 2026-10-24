@@ -83,6 +83,8 @@ public sealed class NetworkDeclaration
     private int _stepEvery = 1;
     private double _average;
     private bool _judgedByAverage;
+    private double _lossScale;
+    private bool _recompute;
     private double? _decay;
     private double? _dampening;
     private bool _nesterov;
@@ -936,6 +938,35 @@ public sealed class NetworkDeclaration
         return this;
     }
 
+    /// <summary>
+    /// Scales the loss by a scale that begins at the given number, so that small gradients survive an engine that keeps its work in a
+    /// narrow width: lowered when a step's gradients are not numbers, raised after a run of clean steps, as PyTorch's gradient scaler
+    /// does. Another growth, interval or backoff is code: a <see cref="FitOptions"/> with its own <c>LossScale</c>.
+    /// </summary>
+    /// <param name="initial">The scale the run begins at: a power of two, such as 65536.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a power of two above nothing.</exception>
+    public NetworkDeclaration LossScale(double initial)
+    {
+        _lossScale = global::DeepSharp.Networks.LossScale.Dynamic(initial).Initial;
+
+        return this;
+    }
+
+    /// <summary>
+    /// Throws the workings of every layer away after its forward pass and works them out again when the way back reaches it, so that a
+    /// larger batch fits in the same memory: one more forward pass, and no number of the run changed. It pays for layers whose workings
+    /// are larger than what they make — attention, a recurrent layer, a block — and little for a stack of dense layers. Which layers, rather
+    /// than all of them, is code: a <c>FitOptions</c> with its own <c>Recompute</c>.
+    /// </summary>
+    /// <returns>The declaration.</returns>
+    public NetworkDeclaration Recompute()
+    {
+        _recompute = true;
+
+        return this;
+    }
+
     /// <summary>Runs on the engine that goes by this name.</summary>
     /// <param name="engine">The engine's name, as the application gives it — and with it, the device it works on.</param>
     /// <returns>The declaration.</returns>
@@ -955,6 +986,8 @@ public sealed class NetworkDeclaration
         StepEvery = _stepEvery,
         Average = _average,
         JudgedByAverage = _judgedByAverage,
+        LossScaleStart = _lossScale,
+        Recompute = _recompute,
         Stopping = _stopping,
         Engine = _engine,
         Seed = _seed,

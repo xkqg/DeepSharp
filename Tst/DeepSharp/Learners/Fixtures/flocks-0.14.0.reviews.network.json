@@ -1,0 +1,299 @@
+{
+  "version": 1,
+  "network": {
+    "version": 2,
+    "layers": {
+      "kind": "stack",
+      "layers": [
+        {
+          "kind": "tokenEmbedding",
+          "length": 8,
+          "vocabulary": 24,
+          "width": 4
+        },
+        {
+          "kind": "dense",
+          "inputs": 4,
+          "outputs": 1
+        }
+      ]
+    },
+    "parameters": {
+      "0.weight": {
+        "shape": [
+          24,
+          4
+        ],
+        "values": [
+          -0.11589604,
+          1.0762681,
+          0.18026298,
+          0.48386154,
+          -1.6665987,
+          0.63212126,
+          -1.231656,
+          -0.4898761,
+          0.1598849,
+          -1.1538725,
+          -0.9580498,
+          -0.13328685,
+          -0.55944425,
+          -0.7414401,
+          -0.8209503,
+          0.15157516,
+          -0.14856166,
+          1.2625495,
+          -0.7459816,
+          0.13637835,
+          0.39143163,
+          2.3131375,
+          -1.2895631,
+          0.118574865,
+          1.1227515,
+          1.2276359,
+          1.8899804,
+          0.109385855,
+          0.036699113,
+          0.036819,
+          -1.0274423,
+          2.359692,
+          1.1116254,
+          0.23910314,
+          -1.0783969,
+          0.54483473,
+          -2.3682277,
+          -2.310752,
+          1.1485301,
+          -2.3449752,
+          0.8472093,
+          0.9377325,
+          -0.50910705,
+          1.6671767,
+          1.5453988,
+          2.5009387,
+          -1.3194933,
+          -1.3035966,
+          -1.8752625,
+          -0.33814147,
+          2.2134953,
+          -0.8435873,
+          -3.0292623,
+          -0.8675698,
+          2.7331667,
+          -1.5930653,
+          -1.2040855,
+          -0.82851887,
+          1.6696557,
+          -0.45384932,
+          -1.5846196,
+          0.7624171,
+          0.8285362,
+          0.12979749,
+          2.4067633,
+          0.6438314,
+          -1.1719422,
+          -0.6581121,
+          -0.6004931,
+          0.032410078,
+          0.5670954,
+          1.234654,
+          0.711381,
+          -0.8410073,
+          -1.9053408,
+          -0.35388982,
+          -0.3584856,
+          0.72809845,
+          -2.1567793,
+          0.17236556,
+          -0.9051969,
+          1.4086654,
+          -0.6328122,
+          1.9259757,
+          1.3476266,
+          0.9906674,
+          0.29110986,
+          1.1506387,
+          -0.22325683,
+          -1.0298798,
+          -0.69031423,
+          0.418033,
+          0.16121107,
+          0.5615836,
+          1.416954,
+          -0.8655025
+        ]
+      },
+      "1.weight": {
+        "shape": [
+          4,
+          1
+        ],
+        "values": [
+          -1.0892211,
+          -0.8934235,
+          0.94464576,
+          -0.9184016
+        ]
+      },
+      "1.bias": {
+        "shape": [
+          1
+        ],
+        "values": [
+          -0.3316883
+        ]
+      }
+    },
+    "state": {},
+    "loss": {
+      "kind": "binaryCrossEntropy"
+    },
+    "trainedOn": {
+      "features": [
+        "review.0",
+        "review.1",
+        "review.2",
+        "review.3",
+        "review.4",
+        "review.5",
+        "review.6",
+        "review.7"
+      ],
+      "answers": [
+        "good"
+      ],
+      "output": "target",
+      "trainedBehind": "dcff59181cda14df374c6e499a68f9d961afa83676c299525dd606477555532d",
+      "seed": 20261017,
+      "epoch": 2,
+      "unvaried": {
+        "review.4": 0,
+        "review.5": 0,
+        "review.6": 0,
+        "review.7": 0
+      }
+    }
+  },
+  "pipeline": {
+  "version": 13,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.14.0.reviews.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "review",
+          "kind": "text",
+          "optional": false
+        },
+        {
+          "name": "good",
+          "kind": "integer",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "step": "split.atRandom",
+      "train": 0.6,
+      "validation": 0.2,
+      "test": 0.2,
+      "predict": 0,
+      "seed": 3
+    },
+    {
+      "step": "tokenize",
+      "column": "review",
+      "length": 8,
+      "vocabulary": 24
+    },
+    {
+      "step": "target",
+      "column": "good"
+    },
+    {
+      "step": "evidence.report",
+      "metrics": [
+        "accuracy"
+      ],
+      "parts": [
+        "validation",
+        "test"
+      ],
+      "shown": [
+        "numbers"
+      ]
+    },
+    {
+      "step": "learn.network",
+      "layers": [
+        {
+          "kind": "tokenEmbedding",
+          "vocabulary": 24,
+          "width": 4
+        },
+        {
+          "kind": "dense",
+          "units": 1
+        }
+      ],
+      "optimizer": {
+        "kind": "adam",
+        "rate": 0.05,
+        "firstMoment": 0.9,
+        "secondMoment": 0.999,
+        "epsilon": 1E-08
+      },
+      "loss": {
+        "kind": "binaryCrossEntropy"
+      },
+      "stopping": {
+        "kind": "never"
+      },
+      "engine": "light",
+      "seed": 20261017,
+      "epochs": 3,
+      "batch": 16
+    }
+  ],
+  "fitted": [
+    {
+      "step": "split.atRandom",
+      "prefix": "2a5647f3d8b7ce3afb09d6a6148e2674e8baa7d2cca11743202385272ee0fc45",
+      "learned": {
+        "rows.predict": 0,
+        "rows.test": 48,
+        "rows.train": 144,
+        "rows.validation": 48,
+        "digest": "22615261a4152b2d6d28ab1135d2773db6e6f6f12121ed982b90eeb2f7754e37"
+      }
+    },
+    {
+      "step": "tokenize",
+      "prefix": "16a3798127028f9c42aec9613a408485449490c81e692b5db1cdc0a1b2f0f267",
+      "learned": {
+        "tokens": [
+          "plot",
+          "music",
+          "ending",
+          "scene",
+          "actor",
+          "boring",
+          "film",
+          "lovely",
+          "awful",
+          "bad",
+          "fine",
+          "superb",
+          "great",
+          "dull"
+        ]
+      }
+    }
+  ]
+}
+}

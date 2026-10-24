@@ -65,4 +65,12 @@ internal static class Libtorch
             : new ArgumentOutOfRangeException(nameof(index), index, string.Create(
                 CultureInfo.InvariantCulture,
                 $"libtorch finds {cards} graphics {(cards == 1 ? "card" : "cards")} here, numbered from nought, so there is no card {index}."));
+
+    /// <summary>The refusal of half width on a processor: what libtorch needs for it, what a product costs without it, and the width to use instead.</summary>
+    /// <returns>The refusal, to be thrown.</returns>
+    internal static Exception NoHalfOnTheProcessor() =>
+        new ArgumentException(
+            "Half width is a graphics card's: libtorch works a half-width product on a processor only fast where the processor has AVX512-FP16 or AVX-NE-CONVERT, and without them it takes about six hundred times as long as a product at full width "
+            + "(measured here: 1.07 seconds against 1.85 milliseconds for a product of two 1024 by 1024 matrices, on a processor with neither). Keep the work in " + nameof(Precision.BFloat16) + " on a processor — its instructions (AVX512-BF16, or AVX512BW, AVX512VL and AVX512DQ) are those of every recent processor — or ask for half on a graphics card.",
+            "precision");
 }

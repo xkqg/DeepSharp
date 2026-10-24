@@ -145,13 +145,44 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend, IMu
         ArgumentNullException.ThrowIfNull(loss);
         ArgumentNullException.ThrowIfNull(parameters);
 
-        IReadOnlyList<Tensor> asked = [.. parameters];
-
         if (loss.Shape.Rank != 0)
         {
             throw new ArgumentException(
                 $"A gradient is taken of one value, a loss with no axes, and this loss is {loss.Shape}.", nameof(loss));
         }
+
+        return Worked(loss, parameters, _inner.Fill(new Shape(), 1f));
+    }
+
+    /// <summary>How much each of the given tensors moved a result this pass worked out, when each value of it is worth the share a seed says.</summary>
+    /// <param name="loss">The result: any shape, worked out in this pass.</param>
+    /// <param name="parameters">The tensors whose gradients are wanted — each one the pass read.</param>
+    /// <param name="seed">How much each value of the result is worth: shaped as the result is. A one-valued loss with a seed of two to the sixteenth is the loss scaled by it, and every gradient comes back scaled by it exactly.</param>
+    /// <returns>A gradient for each, of its own shape: the way back from the seed, so the sum over the result's values of the seed times how much each of them moved the tensor.</returns>
+    /// <exception cref="ArgumentException">The seed is not shaped as the result is, the result was not worked out in this pass, or a tensor asked for is one the pass never read.</exception>
+    /// <remarks>
+    /// The loss's own gradient is one, and this is the same pass with another number there: a seed of one is the loss, a seed of a power
+    /// of two is the loss scaled so that small gradients survive a format with little room, and a seed that is not a one-valued loss's is
+    /// the vector-Jacobian product a part of a pass is worked back through when the rest of it has been worked back to its result.
+    /// </remarks>
+    public Gradients GradientsOf(Tensor loss, IEnumerable<Tensor> parameters, Tensor seed)
+    {
+        ArgumentNullException.ThrowIfNull(loss);
+        ArgumentNullException.ThrowIfNull(parameters);
+        ArgumentNullException.ThrowIfNull(seed);
+
+        if (seed.Shape != loss.Shape)
+        {
+            throw new ArgumentException(
+                $"A seed says how much each value of the result is worth, so it is shaped as the result is: this result is {loss.Shape} and this seed {seed.Shape}.", nameof(seed));
+        }
+
+        return Worked(loss, parameters, seed);
+    }
+
+    private Gradients Worked(Tensor loss, IEnumerable<Tensor> parameters, Tensor seed)
+    {
+        IReadOnlyList<Tensor> asked = [.. parameters];
 
         var last = _steps.FindLastIndex(step => ReferenceEquals(step.Output, loss));
 
@@ -171,7 +202,9 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend, IMu
         }
 
         var towards = Towards(asked, last);
-        var received = new Dictionary<Tensor, Tensor>(ReferenceEqualityComparer.Instance) { [loss] = _inner.Fill(new Shape(), 1f) };
+        var widens = _inner as IWidens;
+        var asks = new HashSet<Tensor>(asked, ReferenceEqualityComparer.Instance);
+        var received = new Dictionary<Tensor, Tensor>(ReferenceEqualityComparer.Instance) { [loss] = seed };
 
         for (var at = last; at >= 0; at--)
         {
@@ -190,6 +223,13 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend, IMu
                 if (towards.Contains(to))
                 {
                     var share = step.Back(_inner, gradient, input);
+
+                    // A number a network learns gathers the shares sent back to it at full width, as an autograd leaf behind a cast does.
+                    if (widens is not null && asks.Contains(to))
+                    {
+                        share = widens.Widened(share);
+                    }
+
                     received[to] = received.TryGetValue(to, out var sofar) ? _inner.Add(sofar, share) : share;
                 }
             }
@@ -229,6 +269,32 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend, IMu
         return towards;
     }
 
+    /// <summary>
+    /// Runs a layer over what its steps made on the backend this records, writing nothing of it down, and writes down one step in its
+    /// place that works the layer out again, and only then, when the way back reaches it.
+    /// </summary>
+    /// <param name="layer">The layer.</param>
+    /// <param name="inputs">What the steps it takes made.</param>
+    /// <param name="pass">The pass it is run in.</param>
+    /// <returns>What the layer makes.</returns>
+    internal Tensor Recomputed(Layer layer, IReadOnlyList<Tensor> inputs, Pass pass)
+    {
+        var made = layer.Taking(inputs, pass.On(_inner));
+
+        // A layer that hands back what it was handed has no workings to throw away, and a step whose output is its own input is no step.
+        if (inputs.Any(input => ReferenceEquals(input, made)))
+        {
+            return made;
+        }
+
+        IReadOnlyList<Tensor> read = [.. inputs.Concat(layer.Parameters().Select(parameter => parameter.Value)).Distinct(ReferenceEqualityComparer.Instance as IEqualityComparer<Tensor>)];
+
+        return Kept(new Recomputation(layer, pass, inputs, read, made));
+    }
+
+    // Whether this pass read a tensor in any operation it wrote down.
+    private bool Reads(Tensor tensor) => _steps.Any(step => step.Inputs.Any(input => ReferenceEquals(input, tensor)));
+
     private Tensor Kept(Recorded step)
     {
         _steps.Add(step);
@@ -262,10 +328,14 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend, IMu
 
     private sealed record MatrixProduct(Tensor Left, Tensor Right, Tensor Output) : Recorded(Output, [Left, Right])
     {
+        // An engine that has the product over blocks and not the turned product of its own multiplies a matrix turned on its side as a single block
+        // with the matrix laid on its side, and makes no turned copy: a copy of a matrix that is not in single precision is a slow thing to make.
         public override Tensor Back(ITensorBackend backend, Tensor gradient, int input) =>
-            input == 0 ? backend.MatMul(gradient, backend.Transpose(Right))
-            : backend is IMultipliesTurnedLeft turning ? turning.MatMulTurnedLeft(Left, gradient)
-            : backend.MatMul(backend.Transpose(Left), gradient);
+            backend is IMultipliesInBlocks blocks and not IMultipliesTurnedLeft
+                ? input == 0 ? blocks.MatMulInBlocks(gradient, Right, new BlockProduct(1) { TurnRight = true }) : blocks.MatMulInBlocks(Left, gradient, new BlockProduct(1) { TurnLeft = true })
+                : input == 0 ? backend.MatMul(gradient, backend.Transpose(Right))
+                : backend is IMultipliesTurnedLeft turning ? turning.MatMulTurnedLeft(Left, gradient)
+                : backend.MatMul(backend.Transpose(Left), gradient);
     }
 
     // The gradient of block i of the first is the answer's gradient times block i of the second turned the other way, and of the second the first
@@ -423,6 +493,30 @@ public sealed class RecordingBackend(ITensorBackend inner) : ITensorBackend, IMu
         public override Tensor Back(ITensorBackend backend, Tensor gradient, int input) => backend.Fold(gradient, Images.Shape, Window);
     }
 
+    // A layer thrown away after its forward pass: when the way back reaches it, it is run again on a recording of its own, from the
+    // same draws and moving no statistic, and the gradient it was handed is worked back through that — once, whichever of the things it
+    // read is asked for first.
+    private sealed record Recomputation(Layer Layer, Pass Pass, IReadOnlyList<Tensor> Taken, IReadOnlyList<Tensor> Read, Tensor Output) : Recorded(Output, Read)
+    {
+        private Gradients? _worked;
+        private HashSet<Tensor>? _reached;
+
+        public override Tensor Back(ITensorBackend backend, Tensor gradient, int input)
+        {
+            if (_worked is null)
+            {
+                var again = new RecordingBackend(backend);
+                var remade = Layer.Taking(Taken, Pass.Replaying(again));
+                var reached = Read.Where(again.Reads).ToArray();
+
+                _reached = new HashSet<Tensor>(reached, ReferenceEqualityComparer.Instance);
+                _worked = again.GradientsOf(remade, reached, gradient);
+            }
+
+            return _reached!.Contains(Read[input]) ? _worked[Read[input]] : backend.Fill(Read[input].Shape, 0f);
+        }
+    }
+
     private sealed record Folded(Tensor Patches, Window Window, Tensor Output) : Recorded(Output, [Patches])
     {
         // Every patch value was added into one place, so each is sent that place's gradient: the gradient unfolded.
@@ -444,6 +538,35 @@ public sealed class Gradients
     /// <returns>The sums.</returns>
     internal Gradients Added(Gradients other, ITensorBackend backend) =>
         new(_of.ToDictionary(each => each.Key, each => backend.Add(each.Value, other[each.Key])));
+
+    /// <summary>The tensors these gradients are of, each once.</summary>
+    internal IEnumerable<Tensor> Tensors => _of.Keys;
+
+    /// <summary>These gradients, each multiplied by one number.</summary>
+    /// <param name="factor">The number: a power of two when the gradients are scaled down by the scale they were worked back from.</param>
+    /// <param name="backend">The engine that scales.</param>
+    /// <returns>The scaled gradients.</returns>
+    internal Gradients Scaled(double factor, ITensorBackend backend)
+    {
+        var by = backend.Fill(new Shape(), (float)factor);
+
+        return new(_of.ToDictionary(each => each.Key, each => backend.Scale(each.Value, by)));
+    }
+
+    /// <summary>The sum of the squares of every value of every gradient: not a number if any value of any of them is not a finite number.</summary>
+    /// <param name="backend">The engine that works it out.</param>
+    /// <returns>The sum, each tensor's mean square counted back up by the values it holds, and added in double.</returns>
+    internal double Squares(ITensorBackend backend)
+    {
+        var squares = 0d;
+
+        foreach (var gradient in _of.Values.Where(tensor => tensor.Shape.Count > 0))
+        {
+            squares += (double)backend.Mean(backend.Multiply(gradient, gradient)).Values[0] * gradient.Shape.Count;
+        }
+
+        return squares;
+    }
 
     /// <summary>These gradients, each divided by a count: the mean of that many added up.</summary>
     /// <param name="count">How many were added up.</param>

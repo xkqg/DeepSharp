@@ -388,7 +388,7 @@ public class ReleaseContractTests
         // package that was not fails this test until somebody says which of the two it is.
         string[] publishedBefore =
         [
-            "DeepSharp", "DeepSharp.Backends.TorchSharp", "DeepSharp.Charts", "DeepSharp.Import.Keras",
+            "DeepSharp", "DeepSharp.Backends.TorchSharp", "DeepSharp.Charts", "DeepSharp.Export.Onnx", "DeepSharp.Import.Keras",
             "DeepSharp.Import.Onnx", "DeepSharp.Import.PyTorch", "DeepSharp.Learners.ML", "DeepSharp.Learners.MLNet",
             "DeepSharp.Learners.Networks", "DeepSharp.Pipelines", "DeepSharp.Pipelines.Binance",
             "DeepSharp.Pipelines.DataFrame", "DeepSharp.Pipelines.Excel", "DeepSharp.Pipelines.Indicators",
@@ -408,14 +408,14 @@ public class ReleaseContractTests
         // A package new this release is in neither list above: it is packed, and nothing is asked of a baseline it never
         // had. Naming them here is what keeps "new" from becoming a word anybody can use for a package that simply
         // dropped out of the published list by accident.
-        string[] newThisRelease = ["DeepSharp.Export.Onnx"];
+        string[] newThisRelease = [];
 
         Assert.All(newThisRelease, package => Assert.DoesNotContain($";{package};", props, StringComparison.Ordinal));
         Assert.Equal(packable.Order(StringComparer.Ordinal), publishedBefore.Concat(newThisRelease).Order(StringComparer.Ordinal));
 
         // The baseline is the release nuget.org carries, which is the one before this build's. Left behind it, a surface
         // the last release added could be removed with nothing to say so.
-        Assert.Equal("0.13.0", baseline);
+        Assert.Equal("0.14.0", baseline);
         Assert.True(Version.Parse(baseline) < Version.Parse(DeclaredVersion()), "The baseline is the release before this one, never this one.");
     }
 

@@ -139,6 +139,8 @@ public sealed class CompiledNetwork
             RequireSlots(network, from.State);
         }
 
+        RequireRecomputable(network, options);
+
         _network = network;
         _takes = takes;
 
@@ -155,10 +157,10 @@ public sealed class CompiledNetwork
         for (var number = epochs.Count; number < options.Epochs && judgement is not { Stops: true }; number++)
         {
             var rate = Schedule.RateAfter([.. epochs.Select(each => each.Loss)], Optimizer.Rate);
-            var loss = loop.Train(train, number, rate);
+            var trained = loop.Train(train, number, rate);
             var validationLoss = watched ? loop.Evaluate(validation!, number) : (double?)null;
 
-            epochs.Add(new Epoch(number, loss, validationLoss, rate));
+            epochs.Add(new Epoch(number, trained.Loss, validationLoss, rate) { Skipped = trained.Skipped });
 
             var improved = false;
 
@@ -193,6 +195,25 @@ public sealed class CompiledNetwork
         }
 
         return new History(options.Seed, epochs, judgement?.BestEpoch, judgement is { Stops: true } ? Stopping.NoLongerImproving : Stopping.AllEpochsRan);
+    }
+
+    // The layers a run is asked to work out again are layers the network has, by the path each stands at: checked before anything is
+    // built, restored or trained.
+    private static void RequireRecomputable(Network network, FitOptions options)
+    {
+        if (options.Recompute is not { Paths: { } asked })
+        {
+            return;
+        }
+
+        var held = network.HeldLayers().Select(layer => layer.Path).ToArray();
+
+        if (asked.FirstOrDefault(path => !held.Contains(path)) is { } missing)
+        {
+            throw new ArgumentException(
+                $"The layer '{missing}' is asked to be worked out again, and this network has no layer at that path; it holds {string.Join(", ", held.Select(path => $"'{path}'"))}.",
+                nameof(options));
+        }
     }
 
     // The epochs a checkpoint holds ran at rates, and a run that goes on under another schedule or another rate would take rates they
@@ -344,6 +365,9 @@ public sealed class CompiledNetwork
     // Which parameters a refusal says are held still: the paths, or that none is.
     private static string Held(string[] paths) => paths.Length == 0 ? "parameters all learned" : $"parameters {string.Join(", ", paths.Select(path => $"'{path}'"))} were held still";
 
+    // What an epoch of the loop came to: its loss, and how many of its steps were skipped because their gradients were not numbers.
+    private readonly record struct Trained(double Loss, int Skipped);
+
     // One run of the loop: the backend, the stream and the parameters it moves, fixed for the run.
     private sealed class Loop(CompiledNetwork compiled, FitOptions options)
     {
@@ -358,12 +382,19 @@ public sealed class CompiledNetwork
         // the last average moved a share of the way to the parameter.
         private readonly Dictionary<Parameter, Tensor> _averages = [];
 
-        // One epoch over the training rows, shuffled afresh for it: its loss, every batch's weighted by the rows it held. A step is
-        // taken from the mean of the gradients of a window of batches, cut short where the epoch ends.
-        internal double Train(TrainingData train, int epoch, double rate)
+        // The loss scale of the step in hand, when the run scales its loss: the options' scale, or where a checkpoint left it.
+        private LossScaler? _scaler = options.LossScale is { } scale ? new LossScaler(scale, new ScalerState(scale.Initial, 0)) : null;
+
+        // One epoch over the training rows, shuffled afresh for it: its loss, every batch's weighted by the rows it held — the batches
+        // whose loss was a number, where the run scales its loss. A step is taken from the mean of the gradients of a window of batches,
+        // cut short where the epoch ends.
+        internal Trained Train(TrainingData train, int epoch, double rate)
         {
             var order = _stream.Draw("shuffle", epoch, 0).Permutation(train.Count);
             var total = 0d;
+            var seen = 0;
+            var skipped = 0;
+            var lost = false;
             Gradients? window = null;
             var counted = 0;
 
@@ -373,43 +404,91 @@ public sealed class CompiledNetwork
 
                 var batch = train.Rows(order.AsSpan(start, Math.Min(options.BatchSize, order.Length - start)));
                 var recording = new RecordingBackend(_backend);
-                var outputs = compiled.Network.Forward(batch.Features, Pass.Training(recording, _stream, epoch, step));
+                var outputs = compiled.Network.Forward(batch.Features, Pass.Training(recording, _stream, epoch, step).Recomputing(options.Recompute));
                 var loss = Penalised(compiled.Loss.Of(outputs, batch.Answers, recording), recording);
                 var value = loss.Values[0];
 
-                if (!float.IsFinite(value))
+                if (float.IsFinite(value))
+                {
+                    var gradients = WorkedBack(recording, loss);
+
+                    window = window is null ? gradients : window.Added(gradients, _backend);
+                    total += (double)value * batch.Count;
+                    seen += batch.Count;
+                }
+                else if (_scaler is null)
                 {
                     throw new InvalidOperationException(string.Create(
                         CultureInfo.InvariantCulture,
                         $"The loss of batch {step + 1} of epoch {epoch + 1} is {value}, not a finite number: the rows, the rate or the network's start have driven it past what a float holds, and training on it would learn nothing."));
                 }
+                else
+                {
+                    // A step whose loss is not a number is lost as one whose gradients are not.
+                    lost = true;
+                }
 
-                var gradients = recording.GradientsOf(loss, _parameters.Select(parameter => parameter.Value));
-
-                window = window is null ? gradients : window.Added(gradients, _backend);
                 counted++;
-                total += (double)value * batch.Count;
 
                 if (counted == options.StepEvery || start + options.BatchSize >= order.Length)
                 {
-                    Step(window.Averaged(counted, _backend), rate);
-                    (window, counted) = (null, 0);
+                    if (lost)
+                    {
+                        _scaler!.Overflowed();
+                        skipped++;
+                    }
+                    else if (!Step(window!.Averaged(counted, _backend), rate))
+                    {
+                        skipped++;
+                    }
+
+                    (window, counted, lost) = (null, 0, false);
                 }
             }
 
-            return total / train.Count;
+            if (seen == 0)
+            {
+                throw new InvalidOperationException(string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Every batch of epoch {epoch + 1} has a loss that is not a finite number, so the epoch has no loss to report: the rows, the rate or the network's start have driven it past what the width holds."));
+            }
+
+            return new Trained(total / seen, skipped);
         }
 
-        // One step from the gradients of a window: each value clipped first, then their whole norm, then the optimizer's step, then
-        // the averages moved on.
-        private void Step(Gradients gradients, double rate)
+        // The gradients of the parameters, worked back from the loss — from the loss scale where the run scales its loss.
+        private Gradients WorkedBack(RecordingBackend recording, Tensor loss) =>
+            _scaler is { } scaler
+                ? recording.GradientsOf(loss, _parameters.Select(parameter => parameter.Value), _backend.Fill(new Shape(), (float)scaler.Scale))
+                : recording.GradientsOf(loss, _parameters.Select(parameter => parameter.Value));
+
+        // One step from the gradients of a window: scaled down by the loss scale and held to be numbers, each value clipped first, then
+        // their whole norm, then the optimizer's step, then the averages moved on. A step whose gradients are not numbers is skipped:
+        // nothing moves, and nothing remembers it, but the scale.
+        private bool Step(Gradients gradients, double rate)
         {
+            double? squares = null;
+
+            if (_scaler is { } scaler)
+            {
+                gradients = gradients.Scaled(1d / scaler.Scale, _backend);
+                squares = gradients.Squares(_backend);
+
+                if (!double.IsFinite(squares.Value))
+                {
+                    scaler.Overflowed();
+
+                    return false;
+                }
+            }
+
             if (options.ClipValue is { } bound)
             {
                 gradients = gradients.Clamped(_parameters, bound, _backend);
+                squares = null;
             }
 
-            compiled.Optimizer.Step(_parameters, options.GradientClip?.Clipped(_parameters, gradients, _backend) ?? gradients, rate, _backend);
+            compiled.Optimizer.Step(_parameters, options.GradientClip?.Clipped(gradients, _backend, squares) ?? gradients, rate, _backend);
 
             if (options.Average is { } share)
             {
@@ -418,6 +497,10 @@ public sealed class CompiledNetwork
                     _averages[parameter] = _averages.TryGetValue(parameter, out var average) ? _backend.Lerped(average, parameter.Value, 1 - share) : parameter.Value;
                 }
             }
+
+            _scaler?.Stepped();
+
+            return true;
         }
 
         // The network holds its averages in place of its weights once the run is done, the running statistics aside.
@@ -529,6 +612,7 @@ public sealed class CompiledNetwork
                 Pace = Pace.Of(options),
                 Engine = Engine.Of(options.Backend),
                 Averaged = options.Average is null ? null : Averaged(),
+                Scaler = _scaler?.State,
                 Held = [.. compiled.Network.Slots().Where(named => named.Slot is Parameter { Learns: false }).Select(named => named.Path).Order(StringComparer.Ordinal)],
                 RateShares = Shared(compiled.Network),
             });
@@ -546,6 +630,11 @@ public sealed class CompiledNetwork
         internal Judgement? Resume(Resumable state, List<Epoch> epochs, bool watched)
         {
             Restore(state.Slots);
+
+            if (_scaler is not null && state.Scaler is { } scaler)
+            {
+                _scaler = new LossScaler(options.LossScale!, scaler);
+            }
 
             foreach (var slot in compiled.Network.Slots())
             {

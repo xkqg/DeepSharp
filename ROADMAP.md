@@ -1,7 +1,7 @@
 # Roadmap
 
 What DeepSharp has built and what it will build, in the order the work is done: what is done first, and below it what
-is still to come. The one rule behind the order is that nothing stands above a row it needs; among the rows that are free
+is still to come; at the moment nothing is queued, and a row stands here when it is asked for. The one rule behind the order is that nothing stands above a row it needs; among the rows that are free
 to move, the one a reader reaches for most often, and pays least for, comes first. There are no dates — a row moves when it
 is true, and the [changelog](CHANGELOG.md) is where it says so.
 
@@ -39,9 +39,9 @@ is true, and the [changelog](CHANGELOG.md) is where it says so.
 | **Done** | Attention, and what it attends over | Attention, its many-headed form, the positions of the steps, and one encoder block as PyTorch makes it. |
 | **Done** | Writing what others can read | `DeepSharp.Export.Onnx`: a trained network written as an ONNX graph and answered through by ONNX Runtime. |
 | **Done** | A table of its own | A model that reads a table a column at a time was built and measured against ML.NET's trees, and not kept. |
-| **Later** | The engine's own arithmetic | Half-width numbers, a scaled loss and larger batches in the same memory, behind the seam. |
-| **Later** | More than one graphics card | One run spread over several cards, by an engine behind the seam that already does it. |
-| **Later** | Smaller numbers to serve with | A trained model kept in whole numbers of eight bits, so it answers in less memory and time. |
+| **Done** | The engine's own arithmetic | Numbers kept in half the width with a full-width copy, a scaled loss, a sum of gradients kept wide, and layers worked out again to fit a larger batch. |
+| **Done** | More than one graphics card | One run spread over two cards was built and measured against one card taking two batches to a step, and not kept. |
+| **Done** | Smaller numbers to serve with | A trained model in whole numbers of eight bits was built and measured against the answers it gave before, and not kept. |
 
 Every row has a section of its own on the [roadmap in the wiki](https://github.com/xkqg/DeepSharp/wiki/Roadmap): what it
 takes, why it stands where it does, and what is left out on purpose. This table is the wiki's, and a test holds the two to

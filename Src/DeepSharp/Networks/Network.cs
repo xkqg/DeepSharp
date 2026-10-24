@@ -407,7 +407,7 @@ public sealed class LayerStack : Network, ISaved<LayerStack>
 
         foreach (var step in _steps)
         {
-            last = step.Layer.Taking([.. step.Takes.Select(taken => made[taken])], pass);
+            last = pass.Running(step.Layer, [.. step.Takes.Select(taken => made[taken])]);
             made[step.Name] = last;
         }
 

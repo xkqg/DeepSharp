@@ -43,7 +43,7 @@ public static class NetworkDocument
     /// says nothing of them, every window's padding a number. In the seventh, a parameter says a share of the run's rate its
     /// numbers move at, and the part is the first that 0.12.0 refuses by its number; the training part is not raised by it.
     /// </remarks>
-    public const int Version = 8;
+    public const int Version = 9;
 
     /// <summary>
     /// The version 0.4.0 wrote, whose training part records neither the batch size nor the early stopping of its run: the one
@@ -88,6 +88,12 @@ public static class NetworkDocument
     /// number rather than by the kind it does not know.
     /// </summary>
     internal const int EighthVersion = 8;
+
+    /// <summary>
+    /// The version a training part is written as once it says what 0.14.0 could not: the width an engine kept its work in, the loss
+    /// scale a run trained under, a step skipped for a gradient that was not a number. 0.14.0 refuses it by its number.
+    /// </summary>
+    internal const int NinthVersion = 9;
 
     /// <summary>The key a file that holds several networks keeps them in, as a list.</summary>
     public const string NetworksKey = "networks";
@@ -144,11 +150,20 @@ public static class NetworkDocument
     internal const string EngineKey = "engine";
     internal const string NameKey = "name";
     internal const string DeviceKey = "device";
+    internal const string PrecisionKey = "precision";
+    internal const string LossScaleKey = "lossScale";
+    internal const string SkippedKey = "skipped";
+    internal const string ScaleKey = "scale";
+    internal const string CleanKey = "clean";
+    internal const string InitialKey = "initial";
+    internal const string GrowthKey = "growth";
+    internal const string IntervalKey = "interval";
+    internal const string BackoffKey = "backoff";
 
     private static readonly string[] NetworkKeys = [VersionKey, LayersKey, ParametersKey, StateKey, LossKey, TrainedOnKey];
 
     private static readonly string[] TrainingKeys =
-        [VersionKey, SeedKey, BatchSizeKey, EarlyStoppingKey, ClipNormKey, ClipValueKey, StepEveryKey, AverageKey, JudgedByAverageKey, EngineKey, OptimizerKey, ScheduleKey, MemoryKey, AveragedKey, JudgementKey, HistoryKey];
+        [VersionKey, SeedKey, BatchSizeKey, EarlyStoppingKey, ClipNormKey, ClipValueKey, StepEveryKey, AverageKey, JudgedByAverageKey, LossScaleKey, EngineKey, OptimizerKey, ScheduleKey, MemoryKey, AveragedKey, JudgementKey, HistoryKey];
     private static readonly Assembly OwnAssembly = typeof(NetworkDocument).Assembly;
 
     /// <summary>Writes a network and its loss as one object, and what it was trained on when that is said.</summary>
@@ -218,12 +233,17 @@ public static class NetworkDocument
         }
 
         writer.WriteStartObject();
-        writer.WriteNumber(VersionKey, TrainingVersionOf(compiled, state.Pace));
+        writer.WriteNumber(VersionKey, TrainingVersionOf(compiled, state));
         writer.WriteNumber(SeedKey, state.Seed);
 
         if (state.Pace is { } pace)
         {
             WritePace(writer, pace);
+        }
+
+        if (state.Pace?.LossScale is { } scale && state.Scaler is { } scaler)
+        {
+            WriteLossScale(writer, scale, scaler);
         }
 
         if (state.Engine is { } engine)
@@ -286,6 +306,12 @@ public static class NetworkDocument
             }
 
             writer.WriteNumber(LearningRateKey, epoch.LearningRate);
+
+            if (epoch.Skipped > 0)
+            {
+                writer.WriteNumber(SkippedKey, epoch.Skipped);
+            }
+
             writer.WriteEndObject();
         }
 
@@ -445,6 +471,7 @@ public static class NetworkDocument
         var memory = reader.MemoryOf(slots);
         var averaged = reader.AveragedOf(slots, pace);
         var history = reader.HistoryOf();
+        var scaler = reader.ScalerOf();
         var judgement = reader.JudgementOf(network.Network, history?.Count);
 
         if (optimizer is not null)
@@ -464,6 +491,7 @@ public static class NetworkDocument
             Pace = pace,
             Engine = engine,
             Averaged = averaged,
+            Scaler = scaler,
         };
 
         return new ResumedRun(compiled, new Checkpoint(resumable));
@@ -508,13 +536,17 @@ public static class NetworkDocument
     /// run whose pace is unrecorded stays the first, and a run that clipped stays the third, as they were written before. A
     /// run whose epochs were judged by the average of its weights is the sixth.
     /// </remarks>
-    internal static int TrainingVersionOf(CompiledNetwork compiled, Pace? pace) =>
+    internal static int TrainingVersionOf(CompiledNetwork compiled, Resumable state) =>
         Math.Max(
-            pace is not { } recorded ? FirstVersion
+            state.Pace is not { } recorded ? FirstVersion
                 : recorded.JudgedByAverage ? SixthVersion
                 : recorded.SaysMore ? FifthVersion
                 : recorded.Clip is null ? SecondVersion : ThirdVersion,
-            Math.Max(NeededBy(compiled.Optimizer), NeededBy(compiled.Schedule)));
+            Math.Max(Math.Max(NeededBy(compiled.Optimizer), NeededBy(compiled.Schedule)), SaysTheNinth(state) ? NinthVersion : 0));
+
+    // Whether a run says what 0.14.0 could not: the width its engine kept its work in, a loss scale, a step skipped.
+    private static bool SaysTheNinth(Resumable state) =>
+        state.Engine is { Precision: not null } || state.Pace is { LossScale: not null } || state.History.Any(epoch => epoch.Skipped > 0);
 
     // The version a kind needs of the part it is written into when it says more than the second could; nothing otherwise.
     private static int NeededBy(object thing) => thing is ISaved { FileVersion: > SecondVersion } saved ? saved.FileVersion : 0;
@@ -750,6 +782,19 @@ public static class NetworkDocument
         }
     }
 
+    // The loss scale a run went under — what it was told, and where the scale had got to — as one object.
+    private static void WriteLossScale(Utf8JsonWriter writer, LossScale scale, ScalerState state)
+    {
+        writer.WriteStartObject(LossScaleKey);
+        writer.WriteNumber(ScaleKey, state.Scale);
+        writer.WriteNumber(CleanKey, state.Clean);
+        writer.WriteNumber(InitialKey, scale.Initial);
+        writer.WriteNumber(GrowthKey, scale.Growth);
+        writer.WriteNumber(IntervalKey, scale.Interval);
+        writer.WriteNumber(BackoffKey, scale.Backoff);
+        writer.WriteEndObject();
+    }
+
     // The engine the run was on, as it names itself: its name, and its version and its device where it names them.
     private static void WriteEngine(Utf8JsonWriter writer, Engine engine)
     {
@@ -764,6 +809,11 @@ public static class NetworkDocument
         if (engine.Device is { } device)
         {
             writer.WriteString(DeviceKey, device);
+        }
+
+        if (engine.Precision is { } precision)
+        {
+            writer.WriteString(PrecisionKey, precision);
         }
 
         writer.WriteEndObject();

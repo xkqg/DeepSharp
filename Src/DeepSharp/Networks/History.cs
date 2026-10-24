@@ -37,7 +37,11 @@ public sealed class History
 /// <param name="Loss">The training loss: every batch's loss, weighted by the rows it held.</param>
 /// <param name="ValidationLoss">The loss on the validation rows at the end of the epoch; nothing without them.</param>
 /// <param name="LearningRate">The rate the epoch's steps took.</param>
-public readonly record struct Epoch(int Number, double Loss, double? ValidationLoss, double LearningRate);
+public readonly record struct Epoch(int Number, double Loss, double? ValidationLoss, double LearningRate)
+{
+    /// <summary>How many steps the epoch skipped because their gradients, or the loss they were worked back from, were not numbers; none, unless the run scales its loss.</summary>
+    public int Skipped { get; init; }
+}
 
 /// <summary>Why a run stopped.</summary>
 public enum Stopping

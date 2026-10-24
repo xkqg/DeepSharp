@@ -125,6 +125,30 @@ public sealed class FitOptions
     public bool JudgedByAverage { get; init; }
 
     /// <summary>
+    /// The layers whose workings are thrown away after their forward pass and worked out again when the way back reaches them; none,
+    /// unless said.
+    /// </summary>
+    /// <remarks>
+    /// What a recomputed layer held while the rest of the pass went on is not held, so a larger batch fits in the same memory, at the
+    /// price of one more forward pass of those layers. It is the same run to the bit, so it is no part of what a checkpoint records. A
+    /// path the network has no layer at is refused. It pays for layers whose workings are larger than what they make — attention, a
+    /// recurrent layer, a block — and little for a stack of dense layers.
+    /// </remarks>
+    public Recompute? Recompute { get; init; }
+
+    /// <summary>
+    /// How the loss is scaled so that small gradients survive an engine that keeps its work in a narrow width, with a step skipped and
+    /// the scale lowered when its gradients are not numbers; no scaling, unless said. PyTorch's <c>GradScaler</c>.
+    /// </summary>
+    /// <remarks>
+    /// A scale that is a power of two scales and scales down again without losing a digit, so a run that scales is the run that does not,
+    /// to the bit, wherever nothing overflows. It is part of what a run is: a checkpoint records it and where it had got to, and a run
+    /// going on from the checkpoint under another, or under none, is refused. A run that scales and meets a loss that is not a number
+    /// skips the step it belongs to as it skips a step whose gradients are not numbers, where a run that does not stops.
+    /// </remarks>
+    public LossScale? LossScale { get; init; }
+
+    /// <summary>
     /// Where the arithmetic runs — the training passes, the looks at the validation rows and the report's measures; the light
     /// engine that ships with DeepSharp and needs nothing installed, unless said.
     /// </summary>
@@ -240,22 +264,14 @@ public sealed class GradientClip
     public double MaxNorm { get; }
 
     /// <summary>The gradients a step takes: scaled down to the most norm when their whole norm is above it, and those handed otherwise.</summary>
-    /// <param name="parameters">The parameters the step moves.</param>
-    /// <param name="gradients">Their gradients, as the pass worked them out.</param>
+    /// <param name="gradients">Their gradients, as the pass worked them out: each tensor once, as PyTorch's parameters are each counted once, however many places hold it.</param>
     /// <param name="backend">The backend the arithmetic runs on, which records nothing.</param>
+    /// <param name="squares">The sum of the squares of every value of the gradients when it has been worked out already, as a run that scales its loss does to know they are numbers; nothing to have it worked out here.</param>
     /// <returns>The gradients the optimizer takes.</returns>
-    internal Gradients Clipped(IReadOnlyList<Parameter> parameters, Gradients gradients, ITensorBackend backend)
+    internal Gradients Clipped(Gradients gradients, ITensorBackend backend, double? squares = null)
     {
-        // Each tensor once, as PyTorch's parameters are each counted once, however many places hold it.
-        var tensors = parameters.Select(parameter => parameter.Value).Distinct().ToArray();
-        var squares = 0d;
-
-        foreach (var gradient in tensors.Where(tensor => tensor.Shape.Count > 0).Select(tensor => gradients[tensor]))
-        {
-            squares += (double)backend.Mean(backend.Multiply(gradient, gradient)).Values[0] * gradient.Shape.Count;
-        }
-
-        var coefficient = MaxNorm / (Math.Sqrt(squares) + 1e-6);
+        var tensors = gradients.Tensors.ToArray();
+        var coefficient = MaxNorm / (Math.Sqrt(squares ?? gradients.Squares(backend)) + 1e-6);
 
         if (coefficient >= 1 || double.IsNaN(coefficient))
         {

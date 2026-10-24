@@ -81,9 +81,9 @@ public class BranchStacksTests
     public void ANetworkPartOfTheEighthVersion_IsRefusedByAnOlderLibrary_ByItsNumber()
     {
         var written = Written(new LayerStack([new Step(Dense(2, 2), "a"), new Step(new Sum(), "out", ["input", "a"])]));
-        var newer = written.Replace("\"version\": 8", "\"version\": 9", StringComparison.Ordinal);
+        var newer = written.Replace("\"version\": 8", "\"version\": 10", StringComparison.Ordinal);
 
-        Assert.Contains("version 9", Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadNetwork(newer, "network", NetworkCatalog.BuiltIn())).Message, StringComparison.Ordinal);
+        Assert.Contains("version 10", Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadNetwork(newer, "network", NetworkCatalog.BuiltIn())).Message, StringComparison.Ordinal);
     }
 
     [Fact]

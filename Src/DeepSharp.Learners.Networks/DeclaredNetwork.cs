@@ -199,6 +199,8 @@ public static class TrainExtensions
                 StepEvery = step.StepEvery,
                 Average = step.Average > 0 ? step.Average : null,
                 JudgedByAverage = step.JudgedByAverage,
+                LossScale = step.LossScaleStart > 0 ? LossScale.Dynamic(step.LossScaleStart) : null,
+                Recompute = step.Recompute ? Recompute.Everything : null,
                 Backend = (controls.Engines ?? new Engines()).Named(step.Engine),
                 Cancellation = controls.Cancellation,
                 OnEpoch = controls.OnEpoch,

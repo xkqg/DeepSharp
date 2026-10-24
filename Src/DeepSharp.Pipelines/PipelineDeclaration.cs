@@ -135,10 +135,12 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// adds: rows that are not a table, a split that cuts more than once and one that sets rows aside to calibrate an interval.
     /// The thirteenth is the same rule for what the release after 0.13.0 adds: a rate that follows the training loss, and a history
     /// over the last few rows of a key.
+    /// The fourteenth is the same rule for what the release after 0.14.0 adds: a loss that is scaled so that small gradients survive
+    /// an engine that keeps its work in a narrow width.
     /// A property rather than a constant, so a package compiled against this version reads the number the running
     /// library has.
     /// </remarks>
-    public static int Version => 13;
+    public static int Version => 14;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;

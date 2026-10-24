@@ -1,0 +1,293 @@
+{
+  "layers": {
+    "dense": [
+      "alpha",
+      "bias",
+      "biasStart",
+      "l1",
+      "l2",
+      "learns",
+      "maxNorm",
+      "name",
+      "rank",
+      "rateShare",
+      "takes",
+      "units",
+      "weights"
+    ],
+    "relu": [
+      "name",
+      "takes"
+    ],
+    "tanh": [
+      "name",
+      "takes"
+    ],
+    "sigmoid": [
+      "name",
+      "takes"
+    ],
+    "dropout": [
+      "name",
+      "rate",
+      "takes"
+    ],
+    "batchNorm": [
+      "epsilon",
+      "learns",
+      "momentum",
+      "name",
+      "rateShare",
+      "scale",
+      "shift",
+      "takes"
+    ],
+    "layerNorm": [
+      "epsilon",
+      "learns",
+      "name",
+      "rateShare",
+      "scale",
+      "shift",
+      "takes"
+    ],
+    "gelu": [
+      "approximate",
+      "name",
+      "takes"
+    ],
+    "silu": [
+      "name",
+      "takes"
+    ],
+    "mish": [
+      "name",
+      "takes"
+    ],
+    "leakyRelu": [
+      "name",
+      "negativeSlope",
+      "takes"
+    ],
+    "prelu": [
+      "eachFeature",
+      "name",
+      "takes"
+    ],
+    "elu": [
+      "alpha",
+      "name",
+      "takes"
+    ],
+    "selu": [
+      "name",
+      "takes"
+    ],
+    "softmax": [
+      "name",
+      "takes"
+    ],
+    "rmsNorm": [
+      "epsilon",
+      "learns",
+      "name",
+      "rateShare",
+      "scale",
+      "takes"
+    ],
+    "periodic": [
+      "frequencies",
+      "lite",
+      "name",
+      "sigma",
+      "takes",
+      "width"
+    ],
+    "randomFlip": [
+      "horizontal",
+      "name",
+      "seed",
+      "takes",
+      "vertical"
+    ],
+    "randomCrop": [
+      "name",
+      "pad",
+      "seed",
+      "takes"
+    ],
+    "gaussianNoise": [
+      "name",
+      "seed",
+      "spread",
+      "takes"
+    ],
+    "flatten": [
+      "name",
+      "takes"
+    ],
+    "tokenEmbedding": [
+      "keepSteps",
+      "name",
+      "takes",
+      "vocabulary",
+      "width"
+    ],
+    "unpadded": [
+      "name",
+      "takes"
+    ],
+    "lstm": [
+      "bothWays",
+      "layers",
+      "name",
+      "sequences",
+      "takes",
+      "units"
+    ],
+    "gru": [
+      "bothWays",
+      "layers",
+      "name",
+      "sequences",
+      "takes",
+      "units"
+    ],
+    "multiHeadAttention": [
+      "causal",
+      "dropout",
+      "heads",
+      "name",
+      "takes"
+    ],
+    "attention": [
+      "causal",
+      "dropout",
+      "heads",
+      "name",
+      "takes"
+    ],
+    "sinePositions": [
+      "name",
+      "takes"
+    ],
+    "add": [
+      "name",
+      "takes"
+    ],
+    "concatenate": [
+      "name",
+      "takes"
+    ],
+    "columns": [
+      "count",
+      "first",
+      "name",
+      "takes"
+    ],
+    "embedding": [
+      "column",
+      "width"
+    ]
+  },
+  "optimizers": {
+    "sgd": [
+      "dampening",
+      "momentum",
+      "nesterov",
+      "rate",
+      "weightDecay"
+    ],
+    "adam": [
+      "amsgrad",
+      "epsilon",
+      "firstMoment",
+      "rate",
+      "secondMoment",
+      "weightDecay"
+    ],
+    "adamw": [
+      "amsgrad",
+      "epsilon",
+      "firstMoment",
+      "rate",
+      "secondMoment",
+      "weightDecay"
+    ],
+    "rmsprop": [
+      "alpha",
+      "centered",
+      "epsilon",
+      "momentum",
+      "rate",
+      "weightDecay"
+    ],
+    "nadam": [
+      "epsilon",
+      "firstMoment",
+      "momentumDecay",
+      "rate",
+      "secondMoment",
+      "weightDecay"
+    ]
+  },
+  "losses": {
+    "meanSquaredError": [],
+    "crossEntropy": [
+      "smoothing"
+    ],
+    "binaryCrossEntropy": [
+      "smoothing"
+    ],
+    "earthMoversDistance": [],
+    "meanAbsoluteError": [],
+    "huber": [
+      "delta"
+    ],
+    "quantile": [
+      "quantile"
+    ],
+    "focal": [
+      "alpha",
+      "gamma"
+    ],
+    "hinge": [],
+    "poisson": [
+      "epsilon",
+      "logInput"
+    ]
+  },
+  "schedules": {
+    "constant": [],
+    "stepDecay": [
+      "every",
+      "factor"
+    ],
+    "exponentialDecay": [
+      "factor"
+    ],
+    "cosineDecay": [
+      "epochs",
+      "minimum"
+    ],
+    "linearWarmup": [
+      "epochs",
+      "start"
+    ],
+    "trainingPlateau": [
+      "cooldown",
+      "factor",
+      "minimum",
+      "patience",
+      "threshold"
+    ]
+  },
+  "stopping": {
+    "never": [],
+    "patience": [
+      "best",
+      "least",
+      "patience"
+    ]
+  }
+}

@@ -55,11 +55,11 @@ public class TrainingPartVersionTests
         Assert.IsType<SaysMore>(read.Run.Compiled.Optimizer);
         Assert.Equal(written, Written(read.Run.Compiled, read.Run.Checkpoint));
 
-        var later = written.Replace("\"version\":5", "\"version\":9", StringComparison.Ordinal);
+        var later = written.Replace("\"version\":5", "\"version\":10", StringComparison.Ordinal);
         var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(later, "network", "training", catalog));
 
-        Assert.Contains("version 9", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("up to version 8", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("version 10", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("up to version 9", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -97,7 +97,7 @@ public class TrainingPartVersionTests
     }
 
     [Fact]
-    public void TheVersionAFileOfThisLibraryCanBe_IsTheEighth() => Assert.Equal(8, NetworkDocument.Version);
+    public void TheVersionAFileOfThisLibraryCanBe_IsTheNinth() => Assert.Equal(9, NetworkDocument.Version);
 
     [Fact]
     public void ARunWhoseScheduleFollowsTheTrainingLoss_IsWrittenAsTheEighthVersion_AndAnOlderLibraryRefusesItByItsNumber()
@@ -112,8 +112,8 @@ public class TrainingPartVersionTests
         Assert.IsType<TrainingPlateau>(read.Run.Compiled.Schedule);
         Assert.Equal(written, Written(read.Run.Compiled, read.Run.Checkpoint));
         Assert.Contains(
-            "version 8",
-            Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(written.Replace("\"version\":8", "\"version\":9", StringComparison.Ordinal), "network", "training", NetworkCatalog.BuiltIn())).Message,
+            "version 9",
+            Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(written.Replace("\"version\":8", "\"version\":10", StringComparison.Ordinal), "network", "training", NetworkCatalog.BuiltIn())).Message,
             StringComparison.Ordinal);
     }
 

@@ -69,6 +69,9 @@ internal sealed record Resumable(long Seed, IReadOnlyList<Epoch> History, IReadO
     /// <summary>The average of the weights the run kept, by the path of the parameter each belongs to; nothing when it kept none.</summary>
     public IReadOnlyDictionary<string, Tensor>? Averaged { get; init; }
 
+    /// <summary>Where the run's loss scale had got to; nothing when it scaled none.</summary>
+    internal ScalerState? Scaler { get; init; }
+
     /// <summary>
     /// Why a run handed these options cannot go on from here as the run the checkpoint was taken of would have: each value it
     /// was taken under that they differ in — the seed, and whatever of its batch size, its early stopping, its clip and its
@@ -110,11 +113,15 @@ internal sealed record Resumable(long Seed, IReadOnlyList<Epoch> History, IReadO
 /// <param name="Device">Where it works it out; nothing when the engine does not name it.</param>
 internal readonly record struct Engine(string Name, string? Version, string? Device)
 {
+    /// <summary>The width it keeps what it works out in, where it names one through <see cref="INamesItsPrecision"/>; nothing for an engine at full width.</summary>
+    public string? Precision { get; init; }
+
     /// <summary>The engine as it names itself.</summary>
     /// <param name="backend">The engine.</param>
-    /// <returns>Its name, and its version and its device where it names them.</returns>
+    /// <returns>Its name, and its version, its device and its width where it names them.</returns>
     public static Engine Of(ITensorBackend backend) =>
-        backend is INamesItsVersionAndDevice named ? new(backend.Name, named.Version, named.Device) : new(backend.Name, null, null);
+        (backend is INamesItsVersionAndDevice named ? new Engine(backend.Name, named.Version, named.Device) : new Engine(backend.Name, null, null))
+        with { Precision = backend is INamesItsPrecision width ? width.Precision : null };
 
     /// <summary>
     /// Why a run on this engine cannot go on on the one handed as the run it was would have: the two named, when the handed one
@@ -127,10 +134,10 @@ internal readonly record struct Engine(string Name, string? Version, string? Dev
             ? $"The checkpoint was taken of a run on the engine {this}, and going on under the engine {handed} would round every step otherwise."
             : null;
 
-    /// <summary>The engine as a refusal names it: <c>'torch' 2.10.0.0 on cuda:0</c>, or its name alone.</summary>
-    /// <returns>Its name in quotes, its version and the device it works on, as far as it names them.</returns>
+    /// <summary>The engine as a refusal names it: <c>'torch' 2.10.0.0 on cuda:0 at bfloat16</c>, or its name alone.</summary>
+    /// <returns>Its name in quotes, its version, the device it works on and the width it keeps its work in, as far as it names them.</returns>
     public override string ToString() =>
-        $"'{Name}'{(Version is null ? string.Empty : $" {Version}")}{(Device is null ? string.Empty : $" on {Device}")}";
+        $"'{Name}'{(Version is null ? string.Empty : $" {Version}")}{(Device is null ? string.Empty : $" on {Device}")}{(Precision is null ? string.Empty : $" at {Precision}")}";
 }
 
 /// <summary>
@@ -156,6 +163,9 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
     /// <summary>Whether its epochs were judged by the average of its weights rather than by the weights as they stood.</summary>
     public bool JudgedByAverage { get; init; }
 
+    /// <summary>How it scaled its loss; nothing when it did not.</summary>
+    public LossScale? LossScale { get; init; }
+
     /// <summary>Whether it says anything an earlier version of a training part could not: a clipped value, a window of batches, an average.</summary>
     public bool SaysMore => ClipValue is not null || StepEvery != 1 || Average is not null;
 
@@ -170,6 +180,7 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
             StepEvery = options.StepEvery,
             Average = options.Average,
             JudgedByAverage = options.JudgedByAverage,
+            LossScale = options.LossScale,
         };
 
     /// <summary>
@@ -222,7 +233,15 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
                 ? "The checkpoint was taken of a run whose epochs were judged by the average of its weights, and going on judging them by the weights as they stand would stop it and keep its best otherwise."
                 : "The checkpoint was taken of a run whose epochs were judged by the weights as they stand, and going on judging them by the average of its weights would stop it and keep its best otherwise.";
         }
+
+        if (LossScale != options.LossScale)
+        {
+            yield return $"The checkpoint was taken of a run under {Described(LossScale)}, and going on under {Described(options.LossScale)} would scale every gradient otherwise.";
+        }
     }
+
+    // How a run scaled its loss, as a refusal says it.
+    private static string Described(LossScale? scale) => scale is null ? "no loss scale" : scale.ToString();
 
     // How often a step is taken, as a refusal says it.
     private static string Every(int batches) => batches == 1 ? "every batch" : string.Create(CultureInfo.InvariantCulture, $"once every {batches} batches");

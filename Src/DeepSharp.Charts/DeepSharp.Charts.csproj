@@ -9,7 +9,7 @@
 
   <ItemGroup>
     <!-- The drawing is borrowed, as the notebook's heatmap always was; nothing of it shows in what this package hands out. -->
-    <PackageReference Include="MatPlotLibNet" Version="1.18.2" />
+    <PackageReference Include="MatPlotLibNet" Version="1.21.0" />
   </ItemGroup>
 
   <ItemGroup>

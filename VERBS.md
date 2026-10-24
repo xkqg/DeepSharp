@@ -461,6 +461,8 @@ Names the network this pipeline is declared for: its layers, what moves them, wh
 | `stepEvery` | a whole number, at least 1; left out, 1 | left out |
 | `average` | a number, 0 or more; left out, 0 | left out |
 | `judgedByAverage` | `true` or `false`; left out, `false` | left out |
+| `lossScale` | a number, 0 or more; left out, 0 | left out |
+| `recompute` | `true` or `false`; left out, `false` | left out |
 | `loss` | a part, written as a name and its settings: `meanSquaredError`, which takes nothing, `crossEntropy`, which may leave out `smoothing`, `binaryCrossEntropy`, which may leave out `smoothing`, `earthMoversDistance`, which takes nothing, `meanAbsoluteError`, which takes nothing, `huber`, which takes `delta`, `quantile`, which takes `quantile`, `focal`, which takes `gamma` or `alpha`, `hinge`, which takes nothing or `poisson`, which takes `logInput` or `epsilon` | `{"kind":"meanSquaredError"}` |
 | `stopping` | a part, written as a name and its settings: `never`, which takes nothing or `patience`, which takes `patience`, `least` or `best` | `{"kind":"never"}` |
 | `engine` | words | `"light"` |
@@ -476,6 +478,8 @@ Names the network this pipeline is declared for: its layers, what moves them, wh
 - **`stepEvery`**: How many batches' gradients are averaged into one step; left out, a step every batch.
 - **`average`**: The share an average of the network's weights keeps of itself at every step, above nothing and below one, written over the weights when the run ends; left out, or nought, none is kept.
 - **`judgedByAverage`**: Whether every epoch is judged by the average of the weights rather than by the weights as they are, so early stopping watches, and restores, the weights the run ends holding; left out, by the weights as they are.
+- **`lossScale`**: The scale the loss is multiplied by before the gradients are worked back from it, a power of two, so that small gradients survive an engine that keeps its work in a narrow width: lowered when a step's gradients are not numbers, raised after a run of clean steps, as PyTorch's gradient scaler does; left out, or nought, the loss is not scaled.
+- **`recompute`**: Whether the workings of every layer are thrown away after its forward pass and worked out again when the way back reaches it, so that a larger batch fits in the same memory, at the price of one more forward pass and with no number of the run changed; left out, every layer keeps its workings.
 - **`loss`**: What the network's answers are judged by while it trains.
 - **`stopping`**: When the run stops: at its last pass, or once the validation loss stops falling.
 - **`engine`**: The name of the engine the run's arithmetic happens on; which engine it stands for — and which device it works on — is the application's to say.

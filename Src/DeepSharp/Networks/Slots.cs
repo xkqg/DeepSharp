@@ -165,6 +165,10 @@ public sealed class RunningStatistic : Slot
                 $"'{Name}' is measured on the rows a network trains on, and an evaluation pass only uses it.");
         }
 
-        Replace(value);
+        // A pass that runs a layer again repeats one that moved it already.
+        if (pass.MovesStatistics)
+        {
+            Replace(value);
+        }
     }
 }

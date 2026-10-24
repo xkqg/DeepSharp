@@ -18,6 +18,8 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.15.0 is about the engine's own arithmetic.** An engine on libtorch can keep its work in half the width — `Precision.BFloat16`, or `Precision.Half` with a scaled loss — with the numbers a network learns kept in full width beside it, so a stack of eight layers 2048 wide fitted 1.93 times the batch on the same card and a step of it took three quarters to a half of full width's; a layer's workings can be thrown away and worked out again to fit a larger batch. Running one network over more than one graphics card, and keeping a trained one in whole numbers of eight bits, were built, held to a rule written down first, and not kept: the numbers are in the changelog. The pipeline file is at version 14, and a file 0.14.0 wrote is read, written again and served as it was.
+
 **0.14.0 is about where the light engine can be made faster without a bit of any answer changing, and about a network that is not a straight line.** What it brings is listed in the changelog.
 
 **0.13.0 is about what a model is worth, and more ways to train it.** A number measured on one cut of the rows is partly luck, and a model could only be trained on a table. A fold or an origin cuts a small table or a series more than once and lays what each cut measured beside itself; rows set aside before anything is fitted give every answer an interval around it in its own units, for a network and for a tree; and a model says which column its answer leans on and what a single answer is made of. Networks trained apart answer together as an ensemble, kept as one file with the pipeline. A folder of pictures, recordings or texts is read as rows of arrays whose size the step says and never changes, varied while a network trains and never while it is measured, and text is cut into ids by a vocabulary learned from the training rows alone. A part of a network moves at a rate of its own, and a low-rank pair sits beside a held kernel. The pipeline file is at version 12, and a file 0.12.0 wrote is read, written again and served as it was.
@@ -212,6 +214,13 @@ up in another order drift apart over many steps: the networks sample's Titanic r
 processor and 2.4e−7 from them on the card. The network holds no engine and its file names none, so a network trained
 on one engine is served on another; `network.Predict(features, loss, engine)` is the one evaluation every door answers
 rows through.
+
+**Half the width.** `TorchBackend.OnGpu(0, Precision.BFloat16)` keeps the work of a run in sixteen bits and the numbers a network learns in
+thirty-two; `Precision.Half` goes with a scaled loss, `new FitOptions(seed: 42) { LossScale = LossScale.Dynamic() }`, and a processor's
+libtorch refuses it, naming what it costs. On this machine's RTX 5070 Ti a stack of eight layers 2048 wide fitted 41984 rows at full width
+and 80896 at either width, a step of it took 0.77 and 0.55 of full width's at batches of 2048 and 4096, and the passengers' network came to
+a validation loss within +0.19 and −1.20 per cent of full width's. `new FitOptions(seed: 42) { Recompute = Recompute.Layers("encoder") }`
+throws the workings of a layer away and works them out again when the way back reaches it: four encoder blocks fitted 3.5 times the batch.
 
 **Checkpoints** are taken every epoch, or only when the validation loss improves, and `CheckpointFile.Write(compiled,
 prepared, checkpoint)` writes one as the network's file with what its run needs to go on. It records what the run went

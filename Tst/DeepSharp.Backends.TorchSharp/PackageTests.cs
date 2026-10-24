@@ -49,7 +49,8 @@ public class PackageTests
         var published = typeof(TorchBackend).Assembly.GetExportedTypes();
         var named = published.SelectMany(Named).Where(type => type.Assembly == typeof(torch).Assembly).Select(type => type.FullName).Distinct();
 
-        Assert.Equal([typeof(TorchBackend)], published);
+        // The engine, and the width it keeps what it works out in: the enum an application names it by.
+        Assert.Equal([typeof(Precision), typeof(TorchBackend)], published.OrderBy(type => type.Name, StringComparer.Ordinal));
         Assert.Empty(named);
     }
 

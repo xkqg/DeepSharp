@@ -2563,6 +2563,95 @@ an engine could keep a storage of its own, came from copying every tensor an ope
 result back out, 256 copies a Titanic step; on a storage of its own, the native engine takes in two tensors a step — the
 batch's rows and their answers — and copies one out, the loss.
 
+### The width an engine keeps its work in is the engine's, and the numbers a network learns stay wide
+
+An engine on libtorch can keep what it works out in half the width: `TorchBackend.OnGpu(0, Precision.BFloat16)`, or `Precision.Half`
+where a loss scale is to go with it. The width is the engine's, given when it is made, and never the model's or the file's: a network
+trained at one width is read back and served at another, and only a checkpoint names it, since a run goes on from a checkpoint only as
+the same run. An engine at full width names itself byte for byte as it always did, so what 0.14.0 wrote under libtorch goes on under it;
+an engine at another width adds the width to the name the checkpoint records, and a training part says so only then, as its ninth
+version. A tensor is therefore an engine's by two things, its device and its width, and the name of the device is no longer the whole
+of it.
+
+One table decides what is kept narrow, an operation at a time, and nothing else does. A product, and everything that follows one — the
+row a layer adds to it, the rectified, the step of the rectified, the hyperbolic tangent, the sigmoid — reads, makes and keeps the
+narrow width. An operation of two tensors that meet works at the width they share and at full width when they do not. The exponent, the
+logarithm, a root, a quotient, a log-softmax, a mean and a total are worked out and made at full width, because each is where a digit
+is lost; and what only moves values — a transpose, a reshape, an unfolding and a folding — keeps the width it was handed. The numbers a
+network learns stay at full width, so the step of an optimizer moves a full-width copy, and are taken in at the narrow width where a
+product reads them, once for each tensor. A value read back is the float that holds the narrow value exactly. The engine never sets
+libtorch's flags for products at a lower width than the one asked for, and a card's TF32 stays as libtorch leaves it. `Half` on a
+processor is refused, naming what it costs: libtorch has no hardware for it there unless the processor has AVX512-FP16 or AVX-NE-CONVERT,
+and a product took about six hundred times as long as at full width.
+
+A gradient is a sum wherever a weight is read by more than one step, and a sum in sixteen bits loses what a sum is for. `IWidens` is a
+capability beside `IMultipliesInBlocks`, not a member of the seam: an engine that has it is asked for the full-width copy of every share
+before the shares are added, and every gradient asked for leaves the recorded pass at full width, so a window of batches is added at
+full width too. An engine that has not is asked for nothing it was not asked before. The recording is still the one rulebook that works
+every gradient out on every engine, libtorch's own history of operations is never switched on, and what is new is the seed:
+`GradientsOf(loss, parameters, seed)` is the vector-Jacobian product, which a loss scaled by a power of two needs.
+
+The contract is not loosened for a width. The engines are held to the light engine operation by operation by the one tolerance they
+always were — three roundings of 2⁻²⁴ — and that binds the libtorch engine at full width on the card as on the processor; a narrow width
+has an error of its own that belongs to the width and not to an operation, and a looser contract for it would be one anything passes. A
+width is judged by the run: the validation loss of the passengers' network after thirty epochs, from three seeds, against the same
+engine at full width, by a bound written down before the first run. It met it: +0.19 per cent at `BFloat16` and −1.20 at `Half`. A
+test engine of the core's suite rounds every value it makes to those widths by the same table (`RoundedBackend`), so the loop's half of
+the promise — a master at full width, a share widened before it is added, a gradient scaled and scaled down — is tested on every build
+with no card.
+
+It was held to a rule, too, for whether to keep it: that the largest batch it fits is at least one and a half times full width's, that
+its step takes no longer than full width's at the sizes it is for, and that its loss is within two in a hundred. The first grid failed
+the second — a step of three layers took up to 19 per cent longer — and a profile that waited for every operation to finish named why:
+the gradient of a weight is the activations turned on their side times the gradient above, the engine made the turned copy, and a copy
+of a matrix that is not in single precision took 0.3 to 1 ms where one in single precision took 0.09. An engine that has the product
+over blocks and no turned product of its own now multiplies the matrix as one block laid on its side and makes no copy, and the rule
+was applied again unchanged. In turns, the median of 11 runs against full width (41 at the first cell, whose runs ranged from 8.5 to
+15.2 ms), 2048 wide, three layers and eight, batches of 2048 and 4096, `BFloat16` took 1.08, 0.94, 0.77 and 0.55 of full width's time
+and `Half` 1.08, 0.90, 0.80 and 0.59.
+
+Two things in how the engine holds memory came out of that measurement, and the largest batch that fits is where they showed. The sum
+of the rows of a gradient — a bias's gradient — read its values as singles first, which for a gradient in sixteen bits was a copy of the
+whole of it, twice its size, held for as long as the gradient lived; it now accumulates in single precision from the values as they are
+held. And libtorch's memory is let go of by the collector, which runs when it is told of enough managed memory and not when the card is
+full, so how large a batch a step fitted depended on when the collector happened to run: a change that made fewer storages moved the
+largest batch at `BFloat16` from 37888 rows to 22528 while full width stayed at 21504. An allocation that fails for want of room is
+therefore asked for again, once, after a collection, each operation in a scope of its own so that what the failed try made is let go of
+first. With both, the largest batch of the deeper stack that fits is 41984 rows at full width and 80896 at `BFloat16` and at `Half`.
+
+### A loss can be scaled, and a step can be skipped
+
+A small gradient is lost in the width `Half` keeps, and a loss scaled before the way back begins keeps it. `FitOptions.LossScale`,
+`LossScale.Dynamic()` or `LossScale.Fixed(scale)`, is PyTorch's `GradScaler` and sits in the loop beside the clip and the window of
+batches, because no engine has one to be behind: libtorch through TorchSharp has none, and the one rulebook that works a gradient out is
+the recording's. Every gradient is worked back from a seed that is a power of two, so it is scaled and scaled down again without a digit
+lost, and a run that scales is the run that does not, to the bit, wherever nothing overflows. The step then has one verdict on whether
+its gradients are numbers — the sum of the squares of every one, which the clip by norm reuses — and a step that fails it is skipped:
+nothing moves, no optimizer's memory is stepped, the window of batches is dropped, the scale is multiplied by its backoff, and the
+epoch's `Skipped` counts it. A loss that is not a number under a scale is a skipped window rather than a refusal. After the interval's
+clean steps in a row the scale grows; and where a gradient is still not a number at a scale of one, or the scale is fixed, the run stops
+and names the scale. The scale and where it had got to are in the checkpoint, the training part's ninth version, and a run going on from
+it under another scale or none is refused. `BFloat16` has a single number's exponent: a run of it with a scale gave the same numbers to
+the digit as without one, and skipped no step.
+
+### A layer's workings can be thrown away and worked out again
+
+`FitOptions.Recompute` names layers by path, or all of them, whose forward pass keeps nothing for the way back but what it was given and
+what it made. The recording records the layer as one step: its inputs, its output, and a replay. When the way back reaches that step the
+layer is run again, once, on a recording of its own, and the gradient it was sent goes back through it as the vector-Jacobian product;
+a layer that reads several steps is run once however many of them it sends a gradient to, and a parameter read only inside it still
+gets its gradient. The draws of a dropout are counted rather than kept, and the replay draws the same ones; a normalisation's running
+statistics are moved by the pass that was kept and by no replay, because a pass that replays says so (`MovesStatistics`), and
+`RunningStatistic.Update` does nothing on one. So the run is the run that does not recompute, to the bit — a contract held on the light
+engine, the native one, libtorch on the processor and on the card, for dense layers, normalisation, dropout, an LSTM, attention and a
+whole network at once — and the price is one more forward pass of those layers.
+
+Whether it pays depends on the layer. Four encoder blocks of 128 channels over 128 steps fit 1344 series with it against 384 without,
+a peak memory of 7572 MiB against 15470 at 384 series, and a step 1.35 times as long at the batch where nothing needs it. A dense layer
+holds little beyond what it makes, and a stack of eight of them fits 48128 rows with it against 41984, at a step 1.2 to 1.3 times as
+long. The rule it was held to was written for the dense stack the other measures use, and it was measured again on the layers the
+feature exists for, which was written down before the second run.
+
 ### Every draw is counted, and none is kept
 
 What a layer starts at, the order an epoch takes its rows in and which values a dropout leaves out are all drawn from
@@ -3778,6 +3867,22 @@ all, and Keras is not a thing it has. What the reference says is the spec; what 
   answers.
 - **A seam member for a product over a batch, or for cutting a row out of a matrix.** The built layers spend a fifth to a third
   of a step in the products that stand for them; the member would halve that and break every engine outside this repository.
+- **One run spread over more than one graphics card.** It was built — a batch split by rows, each share worked forward and back on a
+  card of its own, the gradients added on the first with each weighted by the rows it came from, a dropout drawing its rows of the whole
+  batch's draws — and held to a rule written down before the first run: no more than 0.8 of the time of one card taking two batches to a
+  step at a batch of 4096, and no more than 1.0 at 256. Two cards took 1.26 to 1.64 times as long, and 1.21 to 1.80 with a thread to a card.
+  The copy between the cards is not the cost (18.6 GB/s); the host is, which gathers, slices and uploads the share of one card and then of
+  the next while the cards wait, and `StepEvery` gives the same effective batch on one card faster.
+- **A trained model kept in whole numbers of eight bits.** It was built — weights as numbers from minus 127 to 127 with a scale to each
+  column, each row held to eight bits by a scale of its own, the terms added as whole numbers by one managed kernel for every engine, the
+  same bits on all four — and held to a rule: at most 0.3 of the memory, no more time than the float network on the light engine, and at
+  most one in a hundred of the decisions flipped and a largest difference of one hundredth of how far the answers range. The passengers'
+  network met all three (0.294 of the memory, 0.91 of the time, no decision flipped); the bike-sharing network met the first two (0.272,
+  0.80) and not the third: its largest difference was 1.19, 2.10 and 1.28 per cent of the range on its three parts, the rounding of the
+  weights, which an eight-bit weight cannot be taken below without learning from rows.
+- **A looser contract for a narrow width, and a loss scale for `BFloat16`.** A width's error belongs to the width, not to an operation, so
+  the contract stays the one every engine is held to and a run is judged against the same engine at full width; a run of `BFloat16` with a
+  loss scale gave the same numbers to the digit as without one, and skipped no step, so none is asked of it.
 - **A random source the process shares.** Every draw is counted from a seed that is handed in, which is why a network
   described in Keras's words is built once the run's seed is known.
 - **A schedule that watches the validation loss.** It would let the rows a model is chosen on shape its weights; it was asked

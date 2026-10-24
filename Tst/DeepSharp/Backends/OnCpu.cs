@@ -60,3 +60,4 @@ public sealed class RecurrentTests() : RecurrentContract(new CpuBackend());
 public sealed class AttentionTests() : AttentionContract(new CpuBackend());
 
 public sealed class BlockProductTests() : BlockProductContract(new CpuBackend());
+public sealed class RecomputeTests() : RecomputeContract(new CpuBackend());

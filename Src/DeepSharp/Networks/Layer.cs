@@ -43,7 +43,7 @@ public abstract class Layer
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(pass);
 
-        return Compute(input, pass);
+        return pass.Recomputes(this) ? ((RecordingBackend)pass.Backend).Recomputed(this, [input], pass) : Compute(input, pass);
     }
 
     /// <summary>Every number this layer and the layers it holds learn, in the order they were added.</summary>

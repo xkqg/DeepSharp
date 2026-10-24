@@ -61,3 +61,4 @@ public sealed class RecurrentTests() : RecurrentContract(new NativeMemoryBackend
 public sealed class AttentionTests() : AttentionContract(new NativeMemoryBackend());
 
 public sealed class BlockProductTests() : BlockProductContract(new NativeMemoryBackend());
+public sealed class RecomputeTests() : RecomputeContract(new NativeMemoryBackend());

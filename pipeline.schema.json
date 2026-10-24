@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 13
+      "maximum": 14
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -3995,6 +3995,16 @@
         },
         "judgedByAverage": {
           "description": "Whether every epoch is judged by the average of the weights rather than by the weights as they are, so early stopping watches, and restores, the weights the run ends holding; left out, by the weights as they are.",
+          "type": "boolean"
+        },
+        "lossScale": {
+          "description": "The scale the loss is multiplied by before the gradients are worked back from it, a power of two, so that small gradients survive an engine that keeps its work in a narrow width: lowered when a step's gradients are not numbers, raised after a run of clean steps, as PyTorch's gradient scaler does; left out, or nought, the loss is not scaled.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.7976931348623157E+308
+        },
+        "recompute": {
+          "description": "Whether the workings of every layer are thrown away after its forward pass and worked out again when the way back reaches it, so that a larger batch fits in the same memory, at the price of one more forward pass and with no number of the run changed; left out, every layer keeps its workings.",
           "type": "boolean"
         },
         "loss": {

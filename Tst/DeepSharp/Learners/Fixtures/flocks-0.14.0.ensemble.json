@@ -1,0 +1,524 @@
+{
+  "version": 1,
+  "blend": "average",
+  "networks": [
+    {
+      "version": 2,
+      "layers": {
+        "kind": "stack",
+        "layers": [
+          {
+            "kind": "dense",
+            "inputs": 8,
+            "outputs": 4
+          },
+          {
+            "kind": "relu"
+          },
+          {
+            "kind": "dense",
+            "inputs": 4,
+            "outputs": 1
+          }
+        ]
+      },
+      "parameters": {
+        "0.weight": {
+          "shape": [
+            8,
+            4
+          ],
+          "values": [
+            0.38825125,
+            0.019632109,
+            0.13247098,
+            -0.1456841,
+            -0.73501986,
+            -0.7154475,
+            -0.56264794,
+            0.4746749,
+            0.39097062,
+            0.12652309,
+            -0.068472825,
+            0.538835,
+            0.46097836,
+            0.21673733,
+            0.007049167,
+            0.14816093,
+            0.36779433,
+            0.11829015,
+            -0.07222054,
+            0.080404684,
+            0.44542706,
+            0.21194845,
+            -0.007976472,
+            0.25789848,
+            -0.106739886,
+            -0.08739153,
+            -0.13181902,
+            0.009301117,
+            0.16010755,
+            0.13012587,
+            0.03211721,
+            -0.18065056
+          ]
+        },
+        "0.bias": {
+          "shape": [
+            4
+          ],
+          "values": [
+            0.012420639,
+            0.26956263,
+            0.36982098,
+            -0.021802962
+          ]
+        },
+        "2.weight": {
+          "shape": [
+            4,
+            1
+          ],
+          "values": [
+            -0.7333507,
+            -0.5616293,
+            -0.8839677,
+            0.36466312
+          ]
+        },
+        "2.bias": {
+          "shape": [
+            1
+          ],
+          "values": [
+            -0.35757202
+          ]
+        }
+      },
+      "state": {},
+      "loss": {
+        "kind": "focal",
+        "gamma": 2,
+        "alpha": 0.25
+      },
+      "trainedOn": {
+        "features": [
+          "Animals",
+          "Age",
+          "Farm_A",
+          "Farm_B",
+          "Farm_C",
+          "Farm_D",
+          "Farm_other",
+          "Farm_was_missing"
+        ],
+        "answers": [
+          "Heavy"
+        ],
+        "output": "target",
+        "trainedBehind": "2e3e80a75038b34f2a434ee93c7e6727841e57f5ca966693e73015393a9ee914",
+        "seed": 20261017,
+        "epoch": 2,
+        "unvaried": {
+          "Farm_other": 0,
+          "Farm_was_missing": 0
+        }
+      }
+    },
+    {
+      "version": 2,
+      "layers": {
+        "kind": "stack",
+        "layers": [
+          {
+            "kind": "dense",
+            "inputs": 8,
+            "outputs": 4
+          },
+          {
+            "kind": "relu"
+          },
+          {
+            "kind": "dense",
+            "inputs": 4,
+            "outputs": 1
+          }
+        ]
+      },
+      "parameters": {
+        "0.weight": {
+          "shape": [
+            8,
+            4
+          ],
+          "values": [
+            0.33752048,
+            -0.21397424,
+            -0.02026443,
+            0.4707151,
+            -0.13655332,
+            -0.081194565,
+            0.6629757,
+            -0.24029171,
+            -0.24891058,
+            -0.39175692,
+            0.0602629,
+            0.45071602,
+            -0.110181324,
+            -0.14483407,
+            -0.001738685,
+            0.3727879,
+            -0.033721987,
+            0.02988175,
+            0.00013355515,
+            0.4681126,
+            -0.14709342,
+            -0.22209576,
+            -0.23273946,
+            -0.23185882,
+            -0.021023164,
+            0.30701387,
+            0.3315842,
+            0.17604513,
+            -0.04299787,
+            -0.09243122,
+            -0.044131923,
+            -0.21748571
+          ]
+        },
+        "0.bias": {
+          "shape": [
+            4
+          ],
+          "values": [
+            -0.23458298,
+            -0.16578317,
+            0.3540286,
+            0.122559085
+          ]
+        },
+        "2.weight": {
+          "shape": [
+            4,
+            1
+          ],
+          "values": [
+            -0.47042963,
+            0.27349663,
+            0.4297953,
+            -0.6489251
+          ]
+        },
+        "2.bias": {
+          "shape": [
+            1
+          ],
+          "values": [
+            -0.52137345
+          ]
+        }
+      },
+      "state": {},
+      "loss": {
+        "kind": "focal",
+        "gamma": 2,
+        "alpha": 0.25
+      },
+      "trainedOn": {
+        "features": [
+          "Animals",
+          "Age",
+          "Farm_A",
+          "Farm_B",
+          "Farm_C",
+          "Farm_D",
+          "Farm_other",
+          "Farm_was_missing"
+        ],
+        "answers": [
+          "Heavy"
+        ],
+        "output": "target",
+        "trainedBehind": "2e3e80a75038b34f2a434ee93c7e6727841e57f5ca966693e73015393a9ee914",
+        "seed": 2,
+        "epoch": 2,
+        "unvaried": {
+          "Farm_other": 0,
+          "Farm_was_missing": 0
+        }
+      }
+    },
+    {
+      "version": 2,
+      "layers": {
+        "kind": "stack",
+        "layers": [
+          {
+            "kind": "dense",
+            "inputs": 8,
+            "outputs": 4
+          },
+          {
+            "kind": "relu"
+          },
+          {
+            "kind": "dense",
+            "inputs": 4,
+            "outputs": 1
+          }
+        ]
+      },
+      "parameters": {
+        "0.weight": {
+          "shape": [
+            8,
+            4
+          ],
+          "values": [
+            -0.10514209,
+            0.3944585,
+            -0.34883517,
+            -0.45993575,
+            -0.14135358,
+            -0.7322788,
+            -0.13314067,
+            -0.14229731,
+            -0.30828714,
+            0.28171256,
+            -0.31415108,
+            0.018736953,
+            -0.13323334,
+            0.18619126,
+            -0.06396726,
+            -0.32527205,
+            -0.2096199,
+            0.10866155,
+            -0.17980865,
+            0.1640115,
+            -0.16859458,
+            0.31560037,
+            -0.176461,
+            -0.056270447,
+            -0.10948291,
+            0.2708517,
+            -0.14092186,
+            0.24762958,
+            0.32679468,
+            0.26687384,
+            0.19710521,
+            -0.12607694
+          ]
+        },
+        "0.bias": {
+          "shape": [
+            4
+          ],
+          "values": [
+            -0.10965513,
+            0.37746644,
+            -0.31006628,
+            -0.3477428
+          ]
+        },
+        "2.weight": {
+          "shape": [
+            4,
+            1
+          ],
+          "values": [
+            0.43550995,
+            -0.58381426,
+            0.07629507,
+            0.00093413075
+          ]
+        },
+        "2.bias": {
+          "shape": [
+            1
+          ],
+          "values": [
+            -0.5157983
+          ]
+        }
+      },
+      "state": {},
+      "loss": {
+        "kind": "focal",
+        "gamma": 2,
+        "alpha": 0.25
+      },
+      "trainedOn": {
+        "features": [
+          "Animals",
+          "Age",
+          "Farm_A",
+          "Farm_B",
+          "Farm_C",
+          "Farm_D",
+          "Farm_other",
+          "Farm_was_missing"
+        ],
+        "answers": [
+          "Heavy"
+        ],
+        "output": "target",
+        "trainedBehind": "2e3e80a75038b34f2a434ee93c7e6727841e57f5ca966693e73015393a9ee914",
+        "seed": 3,
+        "epoch": 2,
+        "unvaried": {
+          "Farm_other": 0,
+          "Farm_was_missing": 0
+        }
+      }
+    }
+  ],
+  "pipeline": {
+  "version": 13,
+  "declaration": [
+    {
+      "step": "read.csv",
+      "path": "flocks-0.14.0.csv"
+    },
+    {
+      "step": "declare",
+      "remainder": "drop",
+      "columns": [
+        {
+          "name": "Farm",
+          "kind": "category",
+          "optional": false
+        },
+        {
+          "name": "Heavy",
+          "kind": "boolean",
+          "optional": false
+        },
+        {
+          "name": "Animals",
+          "kind": "number",
+          "optional": false
+        },
+        {
+          "name": "Age",
+          "kind": "number",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "step": "scale.given",
+      "column": "Animals",
+      "lowest": 15000,
+      "highest": 25000,
+      "lands": "signed"
+    },
+    {
+      "step": "split.stratified",
+      "column": "Heavy",
+      "train": 0.7,
+      "validation": 0.15,
+      "test": 0.15,
+      "predict": 0,
+      "seed": 7
+    },
+    {
+      "step": "target",
+      "column": "Heavy"
+    },
+    {
+      "step": "encode.categories",
+      "as": "onehot",
+      "unseen": "reserve"
+    },
+    {
+      "step": "normalise",
+      "column": "Age",
+      "scale": "midrange",
+      "outOfRange": "pass"
+    },
+    {
+      "step": "evidence.report",
+      "metrics": [
+        "f1",
+        "auc",
+        "brier"
+      ],
+      "parts": [
+        "validation",
+        "test"
+      ],
+      "shown": [
+        "numbers"
+      ]
+    },
+    {
+      "step": "learn.network",
+      "layers": [
+        {
+          "kind": "dense",
+          "units": 4
+        },
+        {
+          "kind": "relu"
+        },
+        {
+          "kind": "dense",
+          "units": 1
+        }
+      ],
+      "optimizer": {
+        "kind": "adam",
+        "rate": 0.01,
+        "firstMoment": 0.9,
+        "secondMoment": 0.999,
+        "epsilon": 1E-08
+      },
+      "loss": {
+        "kind": "focal",
+        "gamma": 2,
+        "alpha": 0.25
+      },
+      "stopping": {
+        "kind": "never"
+      },
+      "engine": "light",
+      "seed": 20261017,
+      "epochs": 3,
+      "batch": 16
+    }
+  ],
+  "fitted": [
+    {
+      "step": "split.stratified",
+      "prefix": "e8b925c6627ca164e4d01d0e9c2cbca738d805fdf261da8582e0e28fd95e43b7",
+      "learned": {
+        "rows.predict": 0,
+        "rows.test": 54,
+        "rows.train": 252,
+        "rows.validation": 54,
+        "digest": "769e6c6b81a2d0a85bb3ad62a52139bcc7368a8666a2bb550aead4d05278a2de"
+      }
+    },
+    {
+      "step": "encode.categories",
+      "prefix": "4e693e8e3df0698b1c0e7d65d92355ca10b05c58d10d3352e62b6873f41981b5",
+      "learned": {
+        "Farm": [
+          "A",
+          "B",
+          "C",
+          "D"
+        ]
+      }
+    },
+    {
+      "step": "normalise",
+      "prefix": "da8dd73a660853c5da0673ef716d0b3e4b1fc64799631fb08c25646a5af09fcf",
+      "learned": {
+        "centre": 34.5,
+        "spread": 6.5
+      }
+    }
+  ]
+}
+}
