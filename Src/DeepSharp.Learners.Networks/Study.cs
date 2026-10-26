@@ -13,15 +13,20 @@ namespace DeepSharp.Learners.Networks;
 /// <param name="Number">The place of the trial in its study, from nought.</param>
 /// <param name="Candidate">The values the sampler gave.</param>
 /// <param name="Declared">The network those values declared; a step a pipeline keeps, and trains again with <c>Train</c>. The first of the trial's networks, where it has several.</param>
-/// <param name="Scores">How the network was judged, once on each deal; lower is better. None, for a trial that was pruned.</param>
+/// <param name="Scores">
+/// How the network was judged, once on each deal that finished; lower is better. None, for a trial a <see cref="Study.Pruner"/>
+/// stopped mid-epoch, which has no deal it finished fairly; the real scores of however many deals did finish, for a trial a
+/// <see cref="Study.DealStopper"/> stopped between deals, which has nothing untrustworthy about the ones it kept.
+/// </param>
 public sealed record Trial(int Number, Candidate Candidate, LearnNetworkStep Declared, IReadOnlyList<double> Scores)
 {
-    /// <summary>Whether the study's pruner stopped the trial before its runs ended; it ran to their end, unless said.</summary>
+    /// <summary>Whether the study's pruner or deal stopper stopped the trial before its deals ran out; it ran to their end, unless said.</summary>
     public bool Pruned { get; init; }
 
     /// <summary>
     /// The validation loss of every epoch the trial's runs went through, one list for each deal it trained on — the last cut
-    /// short where it was pruned; nothing, unless said. Of the first network, where the trial has several.
+    /// short where a pruner stopped it mid-epoch; nothing, unless said. Of the first network, where the trial has several. A
+    /// deal stopper never cuts one of these short: it only ever stops a trial between two deals, each already whole.
     /// </summary>
     public IReadOnlyList<IReadOnlyList<double>> Heard { get; init; } = [];
 
@@ -257,6 +262,28 @@ public sealed class Study
     /// </remarks>
     public Func<Progress, bool>? Pruner { get; init; }
 
+    /// <summary>
+    /// What hears every deal a trial finishes, judged by the same number the trial itself is judged by, and says whether to stop
+    /// the trial there without running its remaining deals; nothing, unless said, and then every trial runs every deal.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It hears where the run stands — every deal's score so far, judged exactly as <see cref="Judge"/>, a <see cref="Score"/> of
+    /// the caller's, or the default validation loss already judges a finished deal, and the trials before this one — on the
+    /// thread the study runs on, once each deal has finished, except the last: nothing is saved by stopping once every deal has
+    /// already trained. Saying yes stops the trial before its next deal; it is then <see cref="Trial.Pruned"/> and never the
+    /// best, but keeps the real score of every deal that did finish, since each is as trustworthy as a trial that ran them all.
+    /// Saying no changes no number, so a deal stopper that never stops is the study without one.
+    /// </para>
+    /// <para>
+    /// Unlike a <see cref="Pruner"/>, which hears a single network's own raw validation loss mid-training and is refused beside
+    /// a <see cref="Judge"/> for that reason, a deal stopper hears the same number the trial is judged by and so never breaks
+    /// the rule that one number judges a trial: it may stand beside a <see cref="Judge"/>, a <see cref="Score"/>, or a
+    /// <see cref="Pruner"/> alike.
+    /// </para>
+    /// </remarks>
+    public Func<DealsJudged, bool>? DealStopper { get; init; }
+
     /// <summary>Runs the study.</summary>
     /// <param name="pipelineFor">
     /// The pipeline for a deal, given its place from nought: the same steps every time, the split dealing the training and
@@ -420,7 +447,8 @@ public sealed class Study
         return new StudyResult(trials, best, best.Number < earlier.Count ? TrainedAgain(best, prepare, cancellation) : winner);
     }
 
-    // One trial, numbered after the trials before it: its networks trained on every deal, each epoch handed to the pruner, which may stop it.
+    // One trial, numbered after the trials before it: its networks trained on every deal, each epoch handed to the pruner, and
+    // each finished deal's score handed to the deal stopper, either of which may stop it.
     private TriedTrial Tried(Candidate candidate, Preparation prepare, List<Trial> before, CancellationToken cancellation)
     {
         var steps = DeclaredBy(candidate);
@@ -432,10 +460,12 @@ public sealed class Study
 
         var networks = new List<IReadOnlyList<TrainedNetwork>>();
         var heard = new List<IReadOnlyList<double>>();
+        var dealScores = new List<double>();
         var pruned = false;
+        var stoppedBetweenDeals = false;
         var deals = Deals;
 
-        for (var deal = 0; deal < deals && !pruned; deal++)
+        for (var deal = 0; deal < deals && !pruned && !stoppedBetweenDeals; deal++)
         {
             using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
             var soFar = new List<double>();
@@ -459,6 +489,12 @@ public sealed class Study
                 if (!pruned)
                 {
                     networks.Add(trained);
+                    dealScores.Add(Judged(trained));
+
+                    if (deal < deals - 1 && DealStopper?.Invoke(new DealsJudged([.. dealScores], [.. before])) is true)
+                    {
+                        stoppedBetweenDeals = true;
+                    }
                 }
             }
             catch (OperationCanceledException) when (pruned && !cancellation.IsCancellationRequested)
@@ -469,7 +505,7 @@ public sealed class Study
             heard.Add(Pruner is null ? [.. networks[^1][0].History!.Epochs.Select(epoch => epoch.ValidationLoss!.Value)] : soFar);
         }
 
-        var trial = new Trial(before.Count, candidate, steps[0], pruned ? [] : [.. networks.Select(Judged)]) { Pruned = pruned, Heard = heard };
+        var trial = new Trial(before.Count, candidate, steps[0], pruned ? [] : dealScores) { Pruned = pruned || stoppedBetweenDeals, Heard = heard };
 
         return new TriedTrial(steps.Count > 1 ? trial with { Members = steps } : trial, networks);
     }

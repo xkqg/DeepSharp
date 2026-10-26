@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 14
+      "maximum": 15
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -5041,6 +5041,10 @@
           "type": "integer",
           "minimum": -2147483648,
           "maximum": 2147483647
+        },
+        "byId": {
+          "description": "Whether to rank by the declared id rather than the whole record. Left out, by the whole record.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -5109,6 +5113,10 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 2147483647
+        },
+        "byId": {
+          "description": "Whether to rank by the declared id rather than the whole record. Left out, by the whole record.",
+          "type": "boolean"
         }
       },
       "required": [
@@ -5249,6 +5257,10 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 2147483647
+        },
+        "byId": {
+          "description": "Whether to rank by the declared id rather than the whole record. Left out, by the whole record.",
+          "type": "boolean"
         }
       },
       "required": [

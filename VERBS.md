@@ -800,8 +800,10 @@ Puts the rows in an order drawn from a seed, before they are divided, so every p
 | key | holds | an example |
 |---|---|---|
 | `seed` | a whole number | `20260929` |
+| `byId` | `true` or `false`; left out, `false` | left out |
 
 - **`seed`**: The number that makes the shuffle repeatable: the same seed puts the same rows in the same order.
+- **`byId`**: Whether to rank by the declared id rather than the whole record. Left out, by the whole record.
 
 Means what it says from version 7 of the file.
 
@@ -824,12 +826,14 @@ Divides the rows at random, the same way every time for the same seed.
 | `testSeed` | a whole number, at least 0; left out, -1 | `99` |
 | `folds` | a whole number, at least 2; left out, 0 | `5` |
 | `fold` | a whole number, at least 0; left out, -1 | `0` |
+| `byId` | `true` or `false`; left out, `false` | left out |
 
 - **`train`**: How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.
 - **`seed`**: The number that makes the shuffle repeatable: the same seed deals the same rows the same way.
 - **`testSeed`**: The number that deals the rows to be measured on, none or more. Given, those rows are the same whatever the seed is, and the seed deals the rest. Left out, the seed deals every part.
 - **`folds`**: How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.
 - **`fold`**: Which of the slices is validation, counted from nought; said with folds, and below them.
+- **`byId`**: Whether to rank by the declared id rather than the whole record. Left out, by the whole record.
 
 Means what it says from version 2 of the file.
 
@@ -880,12 +884,14 @@ Divides the rows at random while keeping the mixture of one column the same in e
 | `seed` | a whole number | `20260923` |
 | `folds` | a whole number, at least 2; left out, 0 | `5` |
 | `fold` | a whole number, at least 0; left out, -1 | `0` |
+| `byId` | `true` or `false`; left out, `false` | left out |
 
 - **`column`**: The column whose mixture of values is kept the same in every part.
 - **`train`**: How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.
 - **`seed`**: The number that makes the shuffle repeatable: the same seed deals the same rows the same way.
 - **`folds`**: How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.
 - **`fold`**: Which of the slices is validation, counted from nought; said with folds, and below them.
+- **`byId`**: Whether to rank by the declared id rather than the whole record. Left out, by the whole record.
 
 Means what it says from version 2 of the file.
 

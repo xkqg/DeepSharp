@@ -386,7 +386,7 @@ The NuGet package Microsoft.DiaSymReader, its Microsoft.DiaSymReader.dll (github
 Copyright (c) .NET Foundation and Contributors. MIT License.
 
 
-Microsoft.Extensions.DependencyInjection.Abstractions 10.0.13
+Microsoft.Extensions.DependencyInjection.Abstractions 10.0.14
 The NuGet package Microsoft.Extensions.DependencyInjection.Abstractions, its
 Microsoft.Extensions.DependencyInjection.Abstractions.dll (github.com/dotnet/dotnet), carried by the build for .NET 8.
 Copyright (c) .NET Foundation and Contributors. MIT License.
@@ -492,7 +492,7 @@ The NuGet package System.IO.Hashing, its System.IO.Hashing.dll (github.com/dotne
 Copyright (c) .NET Foundation and Contributors. MIT License.
 
 
-System.Numerics.Tensors 10.0.13
+System.Numerics.Tensors 10.0.14
 The NuGet package System.Numerics.Tensors, its System.Numerics.Tensors.dll (github.com/dotnet/dotnet).
 Copyright (c) .NET Foundation and Contributors. MIT License.
 

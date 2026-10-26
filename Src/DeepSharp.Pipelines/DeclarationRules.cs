@@ -703,6 +703,44 @@ internal sealed class ARemainderIsMadeFromItsCountsAsRead : IDeclarationRule
 }
 
 /// <summary>
+/// A step asked to rank by the declared id has one declared above it.
+/// </summary>
+/// <remarks>
+/// A step that ranks by an id nobody declared would rank by nothing, which a run would then have to guess at or refuse;
+/// said here, once, rather than left for a run that reads no id and has nothing sensible left to do.
+/// </remarks>
+internal sealed class ARankByIdHasAnId : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        var id = steps.OfType<DeclareStep>().FirstOrDefault()?.IdColumn;
+
+        if (id is not null)
+        {
+            yield break;
+        }
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            if (RanksById(steps[at]))
+            {
+                yield return new DeclarationFault(
+                    at, steps[at].Verb,
+                    "ranks by the declared id, and no schema above it names one: declare an id, or do not ask to rank by it.");
+            }
+        }
+    }
+
+    private static bool RanksById(IPipelineStep step) => step switch
+    {
+        SplitAtRandomStep random => random.ById,
+        SplitStratifiedStep stratified => stratified.ById,
+        ShuffleStep shuffle => shuffle.ById,
+        _ => false,
+    };
+}
+
+/// <summary>
 /// The column the schema says names each row is not an answer.
 /// </summary>
 /// <remarks>

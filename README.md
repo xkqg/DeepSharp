@@ -18,22 +18,15 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.16.0 answers the flock team's fifth letter.** A split at random, a stratified split and a shuffle rank each row by a
+digest of every column, so a feature column added or dropped can move a row to another part though nothing about the row
+itself changed; declaring an id turns this off, and the three then rank by it alone, so every row that shares an id lands
+together. A study trying several networks together is judged once every deal has finished, with no way to stop one early —
+a `Pruner` hears a single network's own epochs and is refused beside the `Judge` several networks need; a `DealStopper` now
+hears the trial's own judged number after each deal but the last, and may end it there. The pipeline file is at version 15,
+and a file 0.15.0 wrote is read, written again and served as it was.
+
 **0.15.0 is about the engine's own arithmetic.** An engine on libtorch can keep its work in half the width — `Precision.BFloat16`, or `Precision.Half` with a scaled loss — with the numbers a network learns kept in full width beside it, so a stack of eight layers 2048 wide fitted 1.93 times the batch on the same card and a step of it took three quarters to a half of full width's; a layer's workings can be thrown away and worked out again to fit a larger batch. Running one network over more than one graphics card, and keeping a trained one in whole numbers of eight bits, were built, held to a rule written down first, and not kept: the numbers are in the changelog. The pipeline file is at version 14, and a file 0.14.0 wrote is read, written again and served as it was.
-
-**0.14.0 is about where the light engine can be made faster without a bit of any answer changing, and about a network that is not a straight line.** What it brings is listed in the changelog.
-
-**0.13.0 is about what a model is worth, and more ways to train it.** A number measured on one cut of the rows is partly luck, and a model could only be trained on a table. A fold or an origin cuts a small table or a series more than once and lays what each cut measured beside itself; rows set aside before anything is fitted give every answer an interval around it in its own units, for a network and for a tree; and a model says which column its answer leans on and what a single answer is made of. Networks trained apart answer together as an ensemble, kept as one file with the pipeline. A folder of pictures, recordings or texts is read as rows of arrays whose size the step says and never changes, varied while a network trains and never while it is measured, and text is cut into ids by a vocabulary learned from the training rows alone. A part of a network moves at a rate of its own, and a low-rank pair sits beside a held kernel. The pipeline file is at version 12, and a file 0.12.0 wrote is read, written again and served as it was.
-
-**0.12.0 is about a model watched after it ships.** A pipeline read from its file kept what its steps learned and not
-the rows they learned it from, so the rows a served model met had nothing to be measured against, and a model whose world
-had moved on went on answering as if it had not. `.Watch(warnAbove)` below the split keeps the training rows of the columns
-it watches, counted — each value once with how many rows hold it — and changes nothing a replay does. `prepared.Watched(window)`
-measures a window of served rows against them, column by column, by the same two distances the likeness of the parts takes —
-Kolmogorov–Smirnov for numbers and moments, total variation for words — flagged above the watch's bound, each beside the rows
-it was worked out from, and says when the window was. Nothing is learned from a window, the windows are the caller's, and
-`windows.Distances()` in `DeepSharp.Charts` draws them one beside another. The pipeline file is at version 11, and a file
-0.11.0 wrote is read, written again and served as it was; a model trained behind it is watched once its pipeline is fitted
-again with the watch and the model trained behind that fit.
 
 Every release that brought something to call, this one and the ones before it, has examples on the wiki: what is new and what was improved, in code that
 is compiled against the library as it is now — see [Examples](https://github.com/xkqg/DeepSharp/wiki/Examples). Earlier

@@ -12,6 +12,23 @@ namespace DeepSharp.Learners.Networks;
 public readonly record struct Progress(int Deal, IReadOnlyList<double> SoFar, IReadOnlyList<Trial> Earlier);
 
 /// <summary>
+/// Where a trial's run stands at the end of a deal, as a study's <see cref="Study.DealStopper"/> hears it.
+/// </summary>
+/// <param name="Scores">
+/// How this trial was judged on every deal that has finished so far, in deal order — the same number
+/// <see cref="Study.Judge"/>, a <see cref="Study.Score"/> of the caller's, or the default validation loss already judges
+/// a finished deal by, never a raw per-epoch loss.
+/// </param>
+/// <param name="Earlier">The trials before this one, each with how it was judged.</param>
+/// <remarks>Not <see cref="Progress"/>: the two differ in more than their C# shape. A <see cref="Progress"/>'s <see cref="Progress.SoFar"/>
+/// is one network's raw loss, once an epoch; this one's <see cref="Scores"/> is the whole trial's judged number, once a deal.</remarks>
+public readonly record struct DealsJudged(IReadOnlyList<double> Scores, IReadOnlyList<Trial> Earlier)
+{
+    /// <summary>The deal that just finished, from nought.</summary>
+    public int Deal => Scores.Count - 1;
+}
+
+/// <summary>
 /// Optuna's median rule: a trial is stopped at an epoch when the best validation loss it has reached on a deal by then is
 /// worse than the median of what the trials that finished reached at that same epoch of that same deal.
 /// </summary>

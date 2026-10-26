@@ -409,18 +409,8 @@ public static class Handover
 
     // The id of each row, as the column that names it holds it at the end of the pipeline; nothing when no column does, or
     // none reached the end. A gap names no row, and is refused where the rows are handed over.
-    private static IReadOnlyList<string>? IdsOf(Table table, int[] rows)
-    {
-        if (table.Id is not { } id || !table.Has(id))
-        {
-            return null;
-        }
-
-        var column = table[id];
-
-        return [.. rows.Select(row => column.TextAt(row) ?? throw new InvalidOperationException(
-            string.Create(CultureInfo.InvariantCulture, $"Row {table.Identities[row].ReadAt + 1} has no '{id}': the id names every row it is carried with, so a gap there is refused. Fill it in the rows, or drop the rows without one.")))];
-    }
+    private static IReadOnlyList<string>? IdsOf(Table table, int[] rows) =>
+        table.IdColumnInForce is not { } column ? null : [.. rows.Select(row => table.IdAt(column, row))];
 
     // The answers half: each row's answers, as many as the output names, refused as a feature is, and by the output.
     private static HandedAnswers AnswersOf(PreparedData prepared, Table table, int[] rows)

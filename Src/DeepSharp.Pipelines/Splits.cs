@@ -304,7 +304,8 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
         .With(SeedKey, step => step.Seed)
         .With(TestSeedKey, step => step.TestSeed ?? TestSeedKey.LeftOut!.Value)
         .With(Slices.FoldsKey, step => step.Fold?.Folds ?? 0)
-        .With(Slices.FoldKey, step => step.Fold?.Index ?? -1);
+        .With(Slices.FoldKey, step => step.Fold?.Index ?? -1)
+        .With(Ranking.ByIdKey, step => step.ById);
 
     /// <summary>How much goes to training, validation and test.</summary>
     public SplitShares Shares { get; }
@@ -321,6 +322,9 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
 
     /// <summary>Which slice of the rows that are neither test nor predict is validation; nothing when the rows are cut once, as the shares say.</summary>
     public Fold? Fold { get; }
+
+    /// <summary>Whether this step ranks by the declared id rather than the whole record; set by the builder when the schema names one.</summary>
+    public bool ById { get; init; }
 
     /// <inheritdoc />
     public static string Name => "split.atRandom";
@@ -341,7 +345,8 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
     /// <inheritdoc />
     /// <remarks>
     /// Each row is ranked by a digest of the seed and what the row says, so the same rows are dealt the same
-    /// way whatever order they arrive in, and every copy of a repeated row lands where its first copy does.
+    /// way whatever order they arrive in, and every copy of a repeated row lands where its first copy does. Where
+    /// the schema names an id, every row of one id lands together instead, whatever columns are added or dropped.
     /// With a test seed the rows are first dealt by that number alone and only the rows to be measured on and the
     /// rows kept for predicting are taken from it; the rows left are then ranked again by the seed and divided into
     /// training and validation in the numbers the first deal gave them. A digest ranks a row without regard to the
@@ -353,10 +358,10 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
         ArgumentNullException.ThrowIfNull(table);
 
         var rows = Enumerable.Range(0, table.RowCount).ToArray();
-        var ranked = table.Ranked(rows, TestSeed ?? Seed);
+        var ranked = table.Ranked(rows, TestSeed ?? Seed, ById);
         var parts = Shares.Over(table.RowCount).Placed(ranked);
 
-        parts.KeptTogether(ranked, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
+        parts.KeptTogether(ranked, (one, other) => table.Together(one, other, ById));
 
         if (TestSeed is null)
         {
@@ -365,25 +370,25 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
 
         var left = rows.Where(row => parts[row] is Part.Train or Part.Validation).ToArray();
         var training = left.Count(row => parts[row] == Part.Train);
-        var again = table.Ranked(left, Seed);
+        var again = table.Ranked(left, Seed, ById);
 
         for (var at = 0; at < again.Length; at++)
         {
             parts[again[at]] = at < training ? Part.Train : Part.Validation;
         }
 
-        parts.KeptTogether(again, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
+        parts.KeptTogether(again, (one, other) => table.Together(one, other, ById));
 
         return Fold is { } folded ? Folded(table, parts, rows, folded) : parts;
     }
 
     // The rows that learn, dealt again in the order the seed ranks them into slices: the fold's slice is validation and the others
-    // are training, and a repeated record stays in the slice its first copy is in.
+    // are training, and a repeated record, or a repeated id when this step ranks by one, stays in the slice its first copy is in.
     private Part[] Folded(Table table, Part[] parts, int[] rows, Fold slice)
     {
         var left = rows.Where(row => parts[row] is Part.Train or Part.Validation).ToArray();
 
-        parts.Sliced(table.Ranked(left, Seed), slice, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
+        parts.Sliced(table.Ranked(left, Seed, ById), slice, (one, other) => table.Together(one, other, ById));
 
         return parts;
     }
@@ -393,12 +398,16 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
     /// <returns>The step the file describes.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The file gives a test seed below nought, or a fold it does not have.</exception>
     /// <exception cref="FormatException">The file names one of a fold's two keys without the other.</exception>
-    public static SplitAtRandomStep ReadFrom(JsonElement element) =>
-        Slices.ReadFrom(element) is { } folded
-            ? new(SharesKey.Read(element), SeedKey.Read(element), element.TryGetProperty(TestSeedKey.Key, out _) ? TestSeedKey.Read(element) : null, folded)
+    public static SplitAtRandomStep ReadFrom(JsonElement element)
+    {
+        var step = Slices.ReadFrom(element) is { } folded
+            ? new SplitAtRandomStep(SharesKey.Read(element), SeedKey.Read(element), element.TryGetProperty(TestSeedKey.Key, out _) ? TestSeedKey.Read(element) : null, folded)
             : element.TryGetProperty(TestSeedKey.Key, out _)
-                ? new(SharesKey.Read(element), SeedKey.Read(element), TestSeedKey.Read(element))
-                : new(SharesKey.Read(element), SeedKey.Read(element));
+                ? new SplitAtRandomStep(SharesKey.Read(element), SeedKey.Read(element), TestSeedKey.Read(element))
+                : new SplitAtRandomStep(SharesKey.Read(element), SeedKey.Read(element));
+
+        return step with { ById = Ranking.ByIdKey.Read(element) };
+    }
 }
 
 /// <summary>
@@ -449,7 +458,8 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
         .With(SharesKey, step => step.Shares)
         .With(SeedKey, step => step.Seed)
         .With(Slices.FoldsKey, step => step.Fold?.Folds ?? 0)
-        .With(Slices.FoldKey, step => step.Fold?.Index ?? -1);
+        .With(Slices.FoldKey, step => step.Fold?.Index ?? -1)
+        .With(Ranking.ByIdKey, step => step.ById);
 
     /// <summary>The column whose mixture is kept the same in every part.</summary>
     public string Column { get; }
@@ -462,6 +472,9 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
 
     /// <summary>The number that makes the shuffle repeatable.</summary>
     public int Seed { get; }
+
+    /// <summary>Whether this step ranks by the declared id rather than the whole record; set by the builder when the schema names one.</summary>
+    public bool ById { get; init; }
 
     /// <inheritdoc />
     public static string Name => "split.stratified";
@@ -483,7 +496,8 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
     /// <remarks>
     /// Within each group, each row is ranked by a digest of the seed and what the row says, so the same rows
     /// are dealt the same way whatever order they arrive in, and every copy of a repeated row — which is in the
-    /// same group, holding the same value — lands where its first copy does.
+    /// same group, holding the same value — lands where its first copy does. Where the schema names an id, every
+    /// row of one id that falls in the same group lands together instead.
     /// </remarks>
     public Part[] Assign(Table table)
     {
@@ -498,7 +512,7 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
 
         foreach (var group in groups)
         {
-            var ranked = table.Ranked(group, Seed);
+            var ranked = table.Ranked(group, Seed, ById);
             var share = Shares.Over(ranked.Length);
 
             for (var at = 0; at < ranked.Length; at++)
@@ -506,11 +520,11 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
                 parts[ranked[at]] = share[at];
             }
 
-            parts.KeptTogether(ranked, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
+            parts.KeptTogether(ranked, (one, other) => table.Together(one, other, ById));
 
             if (Fold is { } slice)
             {
-                parts.Sliced([.. ranked.Where(row => parts[row] is Part.Train or Part.Validation)], slice, (one, other) => table.Identities[one].Key == table.Identities[other].Key);
+                parts.Sliced([.. ranked.Where(row => parts[row] is Part.Train or Part.Validation)], slice, (one, other) => table.Together(one, other, ById));
             }
         }
 
@@ -520,10 +534,61 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
-    public static SplitStratifiedStep ReadFrom(JsonElement element) =>
-        Slices.ReadFrom(element) is { } folded
-            ? new(ColumnKey.Read(element), SharesKey.Read(element), SeedKey.Read(element), folded)
-            : new(ColumnKey.Read(element), SharesKey.Read(element), SeedKey.Read(element));
+    public static SplitStratifiedStep ReadFrom(JsonElement element)
+    {
+        var step = Slices.ReadFrom(element) is { } folded
+            ? new SplitStratifiedStep(ColumnKey.Read(element), SharesKey.Read(element), SeedKey.Read(element), folded)
+            : new SplitStratifiedStep(ColumnKey.Read(element), SharesKey.Read(element), SeedKey.Read(element));
+
+        return step with { ById = Ranking.ByIdKey.Read(element) };
+    }
+}
+
+/// <summary>The one key a step that ranks rows takes to say it ranks by the declared id instead of the whole record.</summary>
+/// <remarks>
+/// Shared by every step <see cref="SplitPlacement.Ranked"/> serves, so a file says "by the declared id" once, the same
+/// way, wherever it is read. Left out, as every file before this key existed is, a step ranks by the whole record exactly
+/// as it always has — declaring an id changes nothing on its own, until a step is asked to rank by it.
+/// </remarks>
+internal static class Ranking
+{
+    /// <summary>Whether a step ranks by the declared id rather than the whole record; left out, it does not.</summary>
+    internal static readonly TrueOrFalseParameter ByIdKey = new(
+        "byId", "Whether to rank by the declared id rather than the whole record. Left out, by the whole record.", example: false)
+    {
+        LeftOut = false,
+    };
+
+    extension(ISplitStep step)
+    {
+        /// <summary>This step, asked to rank by the declared id, for the split kinds that read one; unchanged for the one that does not.</summary>
+        /// <returns>The step with <c>ById</c> set, where it has one.</returns>
+        internal ISplitStep RankedById() => step switch
+        {
+            SplitAtRandomStep random => random with { ById = true },
+            SplitStratifiedStep stratified => stratified with { ById = true },
+            _ => step,
+        };
+    }
+}
+
+/// <summary>A row's rank when a declared id is in force: by the id first, by the whole record only to break a tie.</summary>
+/// <param name="Primary">The seeded rank of the id.</param>
+/// <param name="Tie">The seeded rank of the whole record, which a repeated id leaves to break.</param>
+/// <remarks>
+/// An id is a group, named by the person who declared it — "a flock number, a customer code" — and never
+/// promised to be one row: two rows of one id rank together by it, and only between two different ids does
+/// the whole record decide which comes first.
+/// </remarks>
+internal readonly record struct CompositeRank(RowKey Primary, RowKey Tie) : IComparable<CompositeRank>
+{
+    /// <inheritdoc />
+    public int CompareTo(CompositeRank other)
+    {
+        var primary = Primary.CompareTo(other.Primary);
+
+        return primary != 0 ? primary : Tie.CompareTo(other.Tie);
+    }
 }
 
 /// <summary>
@@ -533,24 +598,73 @@ internal static class SplitPlacement
 {
     extension(Table table)
     {
-        /// <summary>Rows in the order of a digest of the seed and what each row says.</summary>
+        /// <summary>The column the schema says names each row, when it still stands; nothing when none does, or it was dropped.</summary>
+        internal IColumn? IdColumnInForce => table.Id is { } id && table.Has(id) ? table[id] : null;
+
+        /// <summary>The id column, when a step asks to rank by it; nothing when it does not ask.</summary>
+        /// <param name="byId">Whether the step ranks by the declared id.</param>
+        /// <returns>The id column, when <paramref name="byId"/> asks for it; nothing otherwise.</returns>
+        /// <exception cref="InvalidOperationException"><paramref name="byId"/> asks for it, and no id stands here.</exception>
+        internal IColumn? IdColumnFor(bool byId) =>
+            !byId ? null
+            : table.IdColumnInForce is { } column ? column
+            : throw new InvalidOperationException(
+                "This step ranks by the declared id, and no id stands here: a step above it took the id column away. "
+                + "Keep the id above this step, or do not ask to rank by it.");
+
+        /// <summary>The text a row holds in the id column, refusing a gap.</summary>
+        /// <param name="column">The id column, as read off this table.</param>
+        /// <param name="row">The row.</param>
+        /// <returns>The text.</returns>
+        /// <exception cref="InvalidOperationException">The row has no value there.</exception>
+        /// <remarks>The one guard an id is read through, so a split, a shuffle and the handover refuse a gap the same way.</remarks>
+        internal string IdAt(IColumn column, int row) =>
+            column.TextAt(row) ?? throw new InvalidOperationException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Row {table.Identities[row].ReadAt + 1} has no '{column.Name}': the id names every row it is carried with, so a gap there is refused. Fill it in the rows, or drop the rows without one."));
+
+        /// <summary>Rows in the order of a digest of the seed and what each row says — or, when a step ranks by the declared id, of the seed and the id, with the whole record only to break a tie.</summary>
         /// <param name="rows">The rows to rank.</param>
         /// <param name="seed">The number that makes the ranking one of many possible ones, and the same one each time.</param>
-        /// <returns>The rows, ranked; rows that say the same thing stand side by side.</returns>
+        /// <param name="byId">Whether to rank by the declared id rather than the whole record.</param>
+        /// <returns>The rows, ranked; rows that say the same thing, or share the id a step ranks by, stand side by side.</returns>
         /// <remarks>
         /// SHA-256 rather than a generator of random numbers: a generator shuffles places, so the same rows in
         /// another order were dealt differently, while a digest of what a row says ranks it the same wherever it
-        /// stands, on every machine.
+        /// stands, on every machine. Ranking by the id uses the same digest, over the id alone, so adding or
+        /// dropping a feature column never moves a row to another part.
         /// </remarks>
-        internal int[] Ranked(IEnumerable<int> rows, int seed)
+        internal int[] Ranked(IEnumerable<int> rows, int seed, bool byId = false)
         {
             var ranked = rows.ToArray();
-            var ranks = ranked.Select(row => table.Identities[row].Key.Ranked(seed)).ToArray();
 
-            Array.Sort(ranks, ranked);
+            if (table.IdColumnFor(byId) is { } column)
+            {
+                var ranks = ranked
+                    .Select(row => new CompositeRank(RowKey.Of([column.Name], [table.IdAt(column, row)]).Ranked(seed), table.Identities[row].Key.Ranked(seed)))
+                    .ToArray();
+
+                Array.Sort(ranks, ranked);
+            }
+            else
+            {
+                var ranks = ranked.Select(row => table.Identities[row].Key.Ranked(seed)).ToArray();
+
+                Array.Sort(ranks, ranked);
+            }
 
             return ranked;
         }
+
+        /// <summary>Whether two rows belong together: the same declared id, when a step ranks by it; the same record otherwise.</summary>
+        /// <param name="one">A row.</param>
+        /// <param name="other">Another row.</param>
+        /// <param name="byId">Whether the step ranks by the declared id.</param>
+        internal bool Together(int one, int other, bool byId = false) =>
+            table.IdColumnFor(byId) is { } column
+                ? table.IdAt(column, one) == table.IdAt(column, other)
+                : table.Identities[one].Key == table.Identities[other].Key;
     }
 
     extension(Part[] parts)

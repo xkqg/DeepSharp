@@ -425,7 +425,8 @@ public sealed class PipelineBuilder
     /// never written beside <see cref="OrderBy(string[])"/>; the training loop shuffles again within each epoch, from
     /// its own seed, which is a different question from which rows end up beside which.
     /// </remarks>
-    public PipelineBuilder Shuffle(int seed = 20260929) => Add(new ShuffleStep(seed));
+    public PipelineBuilder Shuffle(int seed = 20260929) =>
+        Add(DeclaredId() is { } id ? new ShuffleStep(seed) { ById = true } : new ShuffleStep(seed));
 
     /// <summary>Says where the features of this pipeline land, for every scaling that names no kind.</summary>
     /// <param name="range">
@@ -706,13 +707,19 @@ public sealed class PipelineBuilder
     private FittingBuilder Split(ISplitStep step)
     {
         ThrowIfSplit();
-        PipelineDeclaration.ThrowIfFaulty([.. _steps, step]);
 
-        _steps.Add(step);
+        var ranked = DeclaredId() is { } id ? step.RankedById() : step;
+
+        PipelineDeclaration.ThrowIfFaulty([.. _steps, ranked]);
+
+        _steps.Add(ranked);
         _split = true;
 
         return new FittingBuilder(_steps, _rows, FeaturesLandIn);
     }
+
+    // The column the schema above this builder names each row by, when one is declared; nothing when none is.
+    private string? DeclaredId() => _steps.OfType<DeclareStep>().FirstOrDefault()?.IdColumn;
 
     private void ThrowIfSplit()
     {

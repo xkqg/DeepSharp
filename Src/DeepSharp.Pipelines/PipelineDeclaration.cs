@@ -40,6 +40,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         new RowOrderIsDeclaredBeforeItIsRead(),
         new AtMostOne<INamesTheAnswer>("output"),
         new TheIdIsNoAnswer(),
+        new ARankByIdHasAnId(),
         new AnActingOutputMakesItsAnswer(),
         new OnlyAnOutputReadsAhead(),
         new RowsAheadAreKeptApart(),
@@ -137,10 +138,12 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// over the last few rows of a key.
     /// The fourteenth is the same rule for what the release after 0.14.0 adds: a loss that is scaled so that small gradients survive
     /// an engine that keeps its work in a narrow width.
+    /// The fifteenth is the same rule for a split at random, a stratified split and a shuffle asked to rank by a declared
+    /// id rather than the whole record: a file from before this version never asks, so it is read exactly as it always was.
     /// A property rather than a constant, so a package compiled against this version reads the number the running
     /// library has.
     /// </remarks>
-    public static int Version => 14;
+    public static int Version => 15;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;

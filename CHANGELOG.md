@@ -3,6 +3,35 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.16.0]
+
+The fifth letter of the flock team, answered in two: a split or a shuffle may rank by a declared id instead of the whole
+record, and a study may stop a trial between deals, judged by the same number it is judged by at the end.
+
+### Upgrading from 0.15.0
+
+- **The pipeline file is at version 15.** Everything written before still reads and means what it meant; `split.atRandom`,
+  `split.stratified` and `shuffle` gain an optional `byId` key, left out exactly where it always was, so a file that says
+  nothing new writes what it wrote before, but for its number. 0.15.0 refuses a file of the fifteenth whole, naming the
+  version.
+
+### Added
+
+- **A split at random, a stratified split and a shuffle may rank by a declared id.** The three ordinarily rank each row by a
+  digest of every column, so a feature column added or dropped can move a row to another part though nothing about the row
+  itself changed. `schema.Id("flock", ColumnKind.Integer)` turns this off for the step below it: it then ranks by the id
+  alone — a digest of the seed and the id, the whole record only breaking a tie — and every row that shares an id lands
+  together. An id is a group, not a promise of one row; a gap in it is refused the same way a gap is already refused where
+  the rows are handed over. The builder writes the key on its own, whenever the schema above the step names an id; nothing
+  is asked of a pipeline written by hand beyond the key itself. See [Splitting the rows](https://github.com/xkqg/DeepSharp/wiki/Splitting-the-rows).
+
+- **A study may stop a trial between deals.** `Study.DealStopper` hears the trial's own judged number — a `Judge`, a
+  `Score`, or the default validation loss, whichever judges it — after each deal but the last, and may end the trial there.
+  Unlike `Pruner`, which hears a single network's own validation loss mid-training and is refused beside a `Judge` for
+  exactly that reason, a deal stopper hears the same number the trial is judged by, so it may stand beside a `Judge`, a
+  `Score`, or a `Pruner` alike. A trial it stops keeps the real score of every deal that did finish, and is never the
+  study's best. See [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
+
 ## [0.15.0]
 
 The engine's own arithmetic, and two rows that were built, measured and not kept. An engine on libtorch can keep its work in half the width with the numbers a network learns in full width beside it, a loss can be scaled so that small gradients survive, a sum of gradients is added up wide, and layers can have their workings thrown away and worked out again to fit a larger batch. The other two rows of the roadmap's last three — one run spread over more than one graphics card, and a trained model kept in whole numbers of eight bits — were built and held to a rule written down before the first run, and neither met it; the numbers are below. The sections below say what each brought, what it refuses and why, and what changes for you.

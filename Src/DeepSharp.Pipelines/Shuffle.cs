@@ -25,6 +25,8 @@ namespace DeepSharp.Pipelines;
 /// The order is drawn the way the splits draw theirs: each row ranked by a digest of what it says together with the
 /// seed, rather than by a generator of random numbers. A generator shuffles places, so the same rows arriving in
 /// another order would be shuffled differently; a digest ranks a row the same wherever it stands, on every machine.
+/// Where the schema names an id, this step ranks by it instead, so every row of one id stands together — a group
+/// order rather than a row-by-row one.
 /// </para>
 /// </remarks>
 public sealed record ShuffleStep : IPipelineStep<ShuffleStep>, IOrdersRows, IDescribesColumns
@@ -39,6 +41,13 @@ public sealed record ShuffleStep : IPipelineStep<ShuffleStep>, IOrdersRows, IDes
     /// <summary>The number the order is drawn from.</summary>
     public int Seed { get; }
 
+    /// <summary>
+    /// Whether this step ranks by the declared id rather than the whole record; set by the builder when the schema names
+    /// one. Every row of one id then stands together, in the order their own records rank among themselves — a group
+    /// order rather than a row-by-row one.
+    /// </summary>
+    public bool ById { get; init; }
+
     /// <inheritdoc />
     public static string Name => "shuffle";
 
@@ -51,7 +60,7 @@ public sealed record ShuffleStep : IPipelineStep<ShuffleStep>, IOrdersRows, IDes
 
     /// <inheritdoc />
     public static StepParameters<ShuffleStep> Parameters { get; } =
-        new StepParameters<ShuffleStep>().With(SeedKey, step => step.Seed);
+        new StepParameters<ShuffleStep>().With(SeedKey, step => step.Seed).With(Ranking.ByIdKey, step => step.ById);
 
     /// <inheritdoc />
     public string Verb => Name;
@@ -64,13 +73,13 @@ public sealed record ShuffleStep : IPipelineStep<ShuffleStep>, IOrdersRows, IDes
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
     /// <exception cref="FormatException">A parameter is missing, or is not what it should be.</exception>
-    public static ShuffleStep ReadFrom(JsonElement element) => new(SeedKey.Read(element));
+    public static ShuffleStep ReadFrom(JsonElement element) => new(SeedKey.Read(element)) { ById = Ranking.ByIdKey.Read(element) };
 
     /// <inheritdoc />
     public IReadOnlyList<int> RowOrder(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        return table.Ranked(Enumerable.Range(0, table.RowCount), Seed);
+        return table.Ranked(Enumerable.Range(0, table.RowCount), Seed, ById);
     }
 }

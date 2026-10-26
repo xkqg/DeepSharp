@@ -3774,14 +3774,20 @@ search is the baseline a cleverer search has to beat, and whether a tree of Parz
 trials there are: with few it has little to learn from and often does not, with a hundred it usually does. One written
 elsewhere plugs in behind the seam, and no code of anybody else's is carried here.
 
-A trial that is plainly not going anywhere can be stopped. `Pruner` is handed the progress of each deal as it ends — the
-scores so far and the trials before — and the one that ships, `MedianPruner`, is Optuna's: a trial whose score so far is worse
-than the median of the trials before at the same deal is stopped, once so many trials have finished and so many deals have
-been heard. Its unit is the deal, the score a trial is chosen by, never a loss halfway through an epoch, which is not the loss
-the run ends at. A pruned trial says so, keeps what it heard, and is never the best. A pruner is refused beside a score of the
-caller's own, which can mean anything a median of it would not. A study can also go on from the trials it ran before, handed
-back to it: their numbering, their candidates and the space are held to this study's, and the best of them is trained again on
-every deal and refused by name if its scores differ, so a resumed study's winner is a network it trained itself.
+A trial that is plainly not going anywhere can be stopped, at either of two grains. `Pruner` is handed the progress of each
+epoch as it ends — the validation losses of this deal so far, and the trials before — and the one that ships, `MedianPruner`,
+is Optuna's: a trial whose best loss so far is worse than the median of the finished trials' at that same epoch of that same
+deal is stopped, once so many trials have finished and so many epochs have been heard. Its unit is the epoch, a loss halfway
+through a run, never the score a trial is chosen by. `DealStopper` is handed the progress of each deal as it ends instead — the
+trial's own judged score of every deal that has finished, and the trials before — and may stop it there: its unit is the deal,
+the very score the trial is chosen by, whether that is a `Judge`'s, a caller's own `Score`, or the default validation loss. A
+`Pruner` is refused beside a `Judge` or a score of the caller's own for exactly this difference: it would stop a trial by a
+loss that score does not choose by. A `DealStopper` is refused by neither, because it never hears anything else. Either way, a
+stopped trial says so, keeps what it heard, and is never the best — a `Pruner`'s stop keeps no score at all, since the deal it
+stopped on never finished fairly; a `DealStopper`'s stop keeps the real score of every deal that did. A study can also go on
+from the trials it ran before, handed back to it: their numbering, their candidates and the space are held to this study's,
+and the best of them is trained again on every deal and refused by name if its scores differ, so a resumed study's winner is a
+network it trained itself.
 
 Three decisions are in its shape. Trials run one after another and share nothing they change: a network is declared afresh
 for every trial and the engines are filled before the study starts, because one optimizer shared by trials running side by
