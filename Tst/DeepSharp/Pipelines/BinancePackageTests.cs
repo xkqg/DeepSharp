@@ -39,7 +39,7 @@ public class BinancePackageTests
         var packages = Project().Descendants("PackageReference").Select(reference => $"{reference.Attribute("Include")!.Value} {reference.Attribute("Version")!.Value}");
         var projects = Project().Descendants("ProjectReference").Select(reference => reference.Attribute("Include")!.Value);
 
-        Assert.Equal(["Polly.Core 8.8.0"], packages);
+        Assert.Equal(["Polly.Core 8.8.1"], packages);
         Assert.Equal([@"..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj"], projects);
         Assert.Equal(["DeepSharp.Pipelines", "Polly.Core"], ReferencedOutsideTheRuntime(Package));
     }

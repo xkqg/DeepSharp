@@ -49,6 +49,22 @@ public sealed record LearnMLStep : IPipelineStep<LearnMLStep>, INamesTheLearner,
     /// </exception>
     public LearnMLStep(PartDeclaration trainer) => Trainer = TrainerKey.Require([trainer])[0];
 
+    /// <summary>What a trainer line and a seed declare, shared by the pipeline's fluent door and a bare caller's own.</summary>
+    /// <param name="trainer">The sentence that names the trainer and its settings.</param>
+    /// <param name="seed">The number the trainer's own random draws are worked out from.</param>
+    /// <returns>The step the sentence declares.</returns>
+    /// <exception cref="ArgumentNullException">There is no sentence.</exception>
+    internal static LearnMLStep Declared(Action<MLTrainerLine> trainer, int seed)
+    {
+        ArgumentNullException.ThrowIfNull(trainer);
+
+        var line = new MLTrainerLine();
+
+        trainer(line);
+
+        return new LearnMLStep(line.Trainer) { Seed = seed };
+    }
+
     /// <summary>The trainer these rows are prepared for, and the settings it takes.</summary>
     public PartDeclaration Trainer { get; }
 

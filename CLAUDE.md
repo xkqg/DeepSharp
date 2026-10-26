@@ -98,8 +98,10 @@ the code.
   project plus the changelog's upgrading notes; a package new in a release joins `PublishedBefore` in the next release.
 - A package that brings a verb must also be referenced by the notebook project and the core suite's project (hand-written
   lists, held to each other by tests) — a verb package missing from one is a red test, not a runtime surprise.
-- `DeepSharp` (tensors) and `DeepSharp.Pipelines` never reference each other; they meet only in
-  `DeepSharp.Learners.Networks`. A test reads the assembly references, so a new reference between them fails.
+- `DeepSharp` (tensors) and `DeepSharp.Pipelines` never reference each other; a package that needs both references
+  both, held to its own closed list a test reads — `DeepSharp.Learners.Networks`, `DeepSharp.Charts` and
+  `DeepSharp.Learners.MLNet` so far. A test reads the two tensor/pipeline assemblies' own references, so a direct
+  reference between them still fails.
 - First step of any work: move every package reference to the newest version on nuget.org — `MatPlotLibNet*` always, with no
   exception (owner's own library) — then build and run the gate. That includes TorchSharp with its `libtorch-*` and
   `TorchSharp-cuda-*` packages (they move together) and CudaSharp, wherever it is used. Only a deliberate pin with its

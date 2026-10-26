@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using DeepSharp.Learners.ML;
 using DeepSharp.Pipelines;
+using DeepSharp.Tensors;
 using Microsoft.ML;
 
 namespace DeepSharp.Learners.MLNet;
@@ -15,22 +16,17 @@ namespace DeepSharp.Learners.MLNet;
 /// <remarks>
 /// What a run of a pipeline that names a trainer hands back: the trainer as the declaration named it, the rows it
 /// learned from, and what it predicts for any part of the same run. It is held to the pipeline it was trained behind —
-/// the same way a network is — so a prediction is never asked of a model beside another fit of its own steps.
+/// the same way a network is — so a prediction is never asked of a model beside another fit of its own steps. The
+/// fitting and the predicting are <see cref="FittedMLModel"/>'s, held here behind the pipeline that gave it its rows.
 /// </remarks>
 public sealed class TrainedMLModel
 {
-    private readonly ITransformer _model;
-    private readonly MLContext _context;
+    private readonly FittedMLModel _fitted;
 
-    internal TrainedMLModel(ITransformer model, MLContext context, PreparedData prepared, TrainedOnRows trainedOn)
+    internal TrainedMLModel(FittedMLModel fitted, PreparedData prepared, TrainedOnRows trainedOn)
     {
-        var step = (LearnMLStep)prepared.Declaration.Learner!;
-
-        _model = model;
-        _context = context;
+        _fitted = fitted;
         Prepared = prepared;
-        Trainer = step.Trainer;
-        Seed = step.Seed;
         TrainedOn = trainedOn;
         Archive = new Lazy<byte[]>(Saved, LazyThreadSafetyMode.ExecutionAndPublication);
     }
@@ -39,10 +35,10 @@ public sealed class TrainedMLModel
     public PreparedData Prepared { get; }
 
     /// <summary>The trainer as the declaration named it, with the settings it was given.</summary>
-    public PartDeclaration Trainer { get; }
+    public PartDeclaration Trainer => _fitted.Trainer;
 
     /// <summary>The number the trainer's random draws were worked out from.</summary>
-    public int Seed { get; }
+    public int Seed => _fitted.Seed;
 
     /// <summary>What the model was trained on: how many rows, and the features and answer it was handed.</summary>
     public TrainedOnRows TrainedOn { get; }
@@ -79,7 +75,7 @@ public sealed class TrainedMLModel
     /// calibration rows, in the answer's own units. It is kept in the model's file.
     /// </remarks>
     public TrainedMLModel WithInterval(double alpha) =>
-        new(_model, _context, Prepared, TrainedOn) { Interval = Prepared.IntervalOf(PredictedFor(Part.Calibration), alpha), Archive = Archive };
+        new(_fitted, Prepared, TrainedOn) { Interval = Prepared.IntervalOf(PredictedFor(Part.Calibration), alpha), Archive = Archive };
 
     // What the model predicts for a part, as the pipeline measures predictions: one answer a row.
     private PartPredictions PredictedFor(Part part) =>
@@ -110,7 +106,7 @@ public sealed class TrainedMLModel
     {
         using var saved = new MemoryStream();
 
-        _context.Model.Save(_model, inputSchema: null, saved);
+        _fitted.Context.Model.Save(_fitted.Model, inputSchema: null, saved);
 
         return saved.ToArray();
     }
@@ -133,12 +129,9 @@ public sealed class TrainedMLModel
                 $"This model was trained on {string.Join(", ", TrainedOn.Features.Select(name => $"'{name}'"))}, and its pipeline hands over {string.Join(", ", served.FeatureNames.Select(name => $"'{name}'"))}: a model answers only what it learned from.");
         }
 
-        var scored = _model.Transform(HandedRows.Of(_context, new Batch(served.FeatureNames, served.Features, null), TrainedOn.Classes, answers: false));
+        var scored = _fitted.Predict(FeaturesOf(served.Features));
 
-        return Prepared.BackToOriginal(
-            [.. _context.Data.CreateEnumerable<ScoredRow>(scored, reuseRowObject: false).Select(row => new[] { (double)row.Score })],
-            served,
-            rows);
+        return Prepared.BackToOriginal([.. AnswersOf(scored).Select(answer => new[] { answer })], served, rows);
     }
 
     /// <summary>What this model predicts for every row of a part of the run it was trained behind.</summary>
@@ -148,10 +141,20 @@ public sealed class TrainedMLModel
     public IReadOnlyList<double> Predict(Part part)
     {
         var batch = Prepared.Batch(part, LearnMLStep.FeatureNeeds);
-        var scored = _model.Transform(HandedRows.Of(_context, batch, TrainedOn.Classes, answers: false));
 
-        return [.. _context.Data.CreateEnumerable<ScoredRow>(scored, reuseRowObject: false).Select(row => (double)row.Score)];
+        return AnswersOf(_fitted.Predict(FeaturesOf(batch.Features)));
     }
+
+    // The rows of a pipeline's own numbers, as the Tensor FittedMLModel.Predict reads.
+    private static Tensor FeaturesOf(IReadOnlyList<double[]> rows)
+    {
+        var width = rows.Count == 0 ? 0 : rows[0].Length;
+
+        return Tensor.From(new Shape([rows.Count, width]), [.. rows.SelectMany(row => row.Select(value => (float)value))]);
+    }
+
+    // The one answer a row FittedMLModel.Predict hands back, read out of its width-one tensor.
+    private static double[] AnswersOf(Tensor predicted) => [.. predicted.Values.ToArray().Select(value => (double)value)];
 }
 
 /// <summary>What a model was trained on: the rows it learned from, and what each of them held.</summary>
@@ -160,10 +163,3 @@ public sealed class TrainedMLModel
 /// <param name="Answer">The column it was asked to predict.</param>
 /// <param name="Classes">Whether that answer was one of two classes rather than a number, decided from the training rows.</param>
 public readonly record struct TrainedOnRows(int Rows, IReadOnlyList<string> Features, string Answer, bool Classes);
-
-/// <summary>One row as ML.NET hands a prediction back.</summary>
-internal sealed class ScoredRow
-{
-    /// <summary>The number the model answers with.</summary>
-    public float Score { get; init; }
-}

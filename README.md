@@ -23,8 +23,11 @@ digest of every column, so a feature column added or dropped can move a row to a
 itself changed; declaring an id turns this off, and the three then rank by it alone, so every row that shares an id lands
 together. A study trying several networks together is judged once every deal has finished, with no way to stop one early —
 a `Pruner` hears a single network's own epochs and is refused beside the `Judge` several networks need; a `DealStopper` now
-hears the trial's own judged number after each deal but the last, and may end it there. The pipeline file is at version 15,
-and a file 0.15.0 wrote is read, written again and served as it was.
+hears the trial's own judged number after each deal but the last, and may end it there. A trainer from ML.NET may now be
+fitted and asked to predict on rows handed over directly, with no pipeline behind them, the way a network already could
+through `CompiledNetwork`; and a tree or a forest answering one of two classes now predicts a true probability, where
+before it answered ML.NET's own raw score. The pipeline file is at version 15, and a file 0.15.0 wrote is read, written
+again and served as it was.
 
 **0.15.0 is about the engine's own arithmetic.** An engine on libtorch can keep its work in half the width — `Precision.BFloat16`, or `Precision.Half` with a scaled loss — with the numbers a network learns kept in full width beside it, so a stack of eight layers 2048 wide fitted 1.93 times the batch on the same card and a step of it took three quarters to a half of full width's; a layer's workings can be thrown away and worked out again to fit a larger batch. Running one network over more than one graphics card, and keeping a trained one in whole numbers of eight bits, were built, held to a rule written down first, and not kept: the numbers are in the changelog. The pipeline file is at version 14, and a file 0.14.0 wrote is read, written again and served as it was.
 

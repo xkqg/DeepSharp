@@ -38,17 +38,6 @@ public class RefusalTests
     }
 
     [Fact]
-    public void RowsHandedOverWithoutAnAnswer_CannotBeTrainedFrom()
-    {
-        // A pipeline names what a model is asked to predict; rows handed over without one are the question, not the
-        // lesson, and the refusal says so rather than training on a column of noughts.
-        var refused = Assert.Throws<InvalidOperationException>(
-            () => HandedRows.Of(new Microsoft.ML.MLContext(1), new Batch(["a"], [[1.0]], Labels: null), classes: false));
-
-        Assert.Contains("Target", refused.Message, StringComparison.Ordinal);
-    }
-
-    [Fact]
     public void EveryTrainerTheWordsOffer_IsOneThisPackageTrains()
     {
         // The two lists are the same list seen twice: the words a declaration may name, and the trainers behind them.

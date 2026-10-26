@@ -141,8 +141,9 @@ Tst/DeepSharp.Verso.Serve.TestParts/  parts the server's tests carry beside it, 
 
 The tensor library and the pipeline library do not reference each other, and a test reads their assembly
 references to keep it that way. They meet in `DeepSharp.Learners.Networks`, which references both and which neither
-references, and the charts reference both and MatPlotLibNet; what each of those packages references is a closed list a
-test reads. The host references Verso's engine and the notebook's package and reaches the core through the second, so it
+references, and the charts reference both and MatPlotLibNet, and the half of the ML.NET learner that carries ML.NET,
+`DeepSharp.Learners.MLNet`, references both as well — the tensor core for the bare door's own `TrainingData`, the
+pipeline for the door trained behind one; what each of those packages references is a closed list a test reads. The host references Verso's engine and the notebook's package and reaches the core through the second, so it
 writes a notebook whole by the core's one routine rather than by a copy of its own, and a test holds its dependencies to
 those two.
 
@@ -3753,6 +3754,18 @@ name nothing was given is refused by name rather than falling back to something 
 and trains it — the same `TrainedNetwork` the hand-written door gives, number for number, which a test holds both
 doors to. The pipeline file gains a step and nothing else: a model saved by an earlier release still loads, because a
 network is held to its pipeline by the digest of the text that pipeline carries, and that text is kept verbatim.
+
+**The two tiers a network has, a trainer from ML.NET has too.** `CompiledNetwork.Fit` is bare: no pipeline, no file,
+answering only `History`. `pipeline.Train()` is the richer door built on it, adding the one-file promise. ML.NET's
+learner draws the same line in `DeepSharp.Learners.MLNet`: a bare `TrainingData` fits and predicts through
+`FittedMLModel` — a caller's own feature matrix, built outside any pipeline, is exactly the case `CompiledNetwork.Fit`
+already allows a network — and `TrainedMLModel`, the pipeline-backed door, is `FittedMLModel` held behind the pipeline
+that prepared its rows, the same shape `TrainedNetwork` holds a network behind. Neither bare type is saved as a file;
+`CompiledNetwork` never was, and `FittedMLModel` follows it rather than growing a half-file of its own. One difference
+the engines force rather than the design: ML.NET's own binary trainers answer a class with a raw score, calibrated for
+one of the two words (`fastTree`) and not the other (`fastForest`), so the one place both tiers convert ML.NET's rows
+(`HandedRows`) fits a calibrator alongside the arm that lacks one — every class answer either tier hands back is a
+probability between nought and one, never a raw margin, which is what the pipeline's own measures already assume.
 
 ### A search chooses by the validation rows and keeps the test rows for the winner
 

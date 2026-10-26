@@ -8,9 +8,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Polly.Core 8.8.0, BSD-3-Clause (github.com/App-vNext/Polly): the retry and the timeout of a try, borrowed rather than
+    <!-- Polly.Core 8.8.1, BSD-3-Clause (github.com/App-vNext/Polly): the retry and the timeout of a try, borrowed rather than
          written. It brings nothing else on .NET 8 or .NET 10, and nothing of it is in what this package publishes. -->
-    <PackageReference Include="Polly.Core" Version="8.8.0" />
+    <PackageReference Include="Polly.Core" Version="8.8.1" />
   </ItemGroup>
 
   <ItemGroup>

@@ -4,6 +4,7 @@
 using DeepSharp.Learners.ML;
 using DeepSharp.Learners.MLNet;
 using DeepSharp.Pipelines;
+using DeepSharp.Tensors;
 using Microsoft.ML;
 
 namespace DeepSharp.Tests.Learners.MLNet;
@@ -21,10 +22,11 @@ public class HandoverTests
     public void AnAnswerOfTwoClasses_RidesAsOneTrueOrFalse_AndANumberAsItself()
     {
         var context = new MLContext(1);
-        var batch = new Batch(["a", "b"], [[1.0, 2.0], [3.0, 4.0]], Labels: [0, 1]);
+        var features = Tensor.From(new Shape([2, 2]), [1f, 2f, 3f, 4f]);
+        var answers = Tensor.From(new Shape([2, 1]), [0f, 1f]);
 
-        Assert.Equal(2, context.Data.CreateEnumerable<Scored>(HandedRows.Of(context, batch, classes: true), reuseRowObject: false).Count());
-        Assert.Equal(2, context.Data.CreateEnumerable<Scored>(HandedRows.Of(context, batch, classes: false), reuseRowObject: false).Count());
+        Assert.Equal(2, context.Data.CreateEnumerable<Scored>(HandedRows.Of(context, features, classes: true, answers), reuseRowObject: false).Count());
+        Assert.Equal(2, context.Data.CreateEnumerable<Scored>(HandedRows.Of(context, features, classes: false, answers), reuseRowObject: false).Count());
     }
 
     [Fact]
@@ -33,10 +35,10 @@ public class HandoverTests
         // What a prediction is asked of: the features alone. Nothing may refuse them for lacking the answer, and
         // nothing may read an answer that is not there.
         var context = new MLContext(1);
-        var asked = new Batch(["a"], [[1.0], [2.0]], Labels: null);
+        var asked = Tensor.From(new Shape([2, 1]), [1f, 2f]);
 
-        Assert.Equal(2, context.Data.CreateEnumerable<Scored>(HandedRows.Of(context, asked, classes: true, answers: false), reuseRowObject: false).Count());
-        Assert.Equal(2, context.Data.CreateEnumerable<Scored>(HandedRows.Of(context, asked, classes: false, answers: false), reuseRowObject: false).Count());
+        Assert.Equal(2, context.Data.CreateEnumerable<Scored>(HandedRows.Of(context, asked, classes: true), reuseRowObject: false).Count());
+        Assert.Equal(2, context.Data.CreateEnumerable<Scored>(HandedRows.Of(context, asked, classes: false), reuseRowObject: false).Count());
     }
 
     [Fact]

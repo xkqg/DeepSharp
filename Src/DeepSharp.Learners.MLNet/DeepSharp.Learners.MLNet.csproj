@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DeepSharp\DeepSharp.csproj" />
     <ProjectReference Include="..\DeepSharp.Pipelines\DeepSharp.Pipelines.csproj" />
     <ProjectReference Include="..\DeepSharp.Learners.ML\DeepSharp.Learners.ML.csproj" />
   </ItemGroup>

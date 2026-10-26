@@ -1,7 +1,8 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using DeepSharp.Pipelines;
+using DeepSharp.Networks;
+using DeepSharp.Tensors;
 using Microsoft.ML;
 using Microsoft.ML.Data;
 
@@ -17,7 +18,7 @@ namespace DeepSharp.Learners.MLNet;
 /// </remarks>
 internal sealed class HandedRow
 {
-    /// <summary>The features of one row, in the order the handover names them.</summary>
+    /// <summary>The features of one row, as the rows name them.</summary>
     public float[] Features { get; init; } = [];
 
     /// <summary>The answer the row is labelled with, where the answer is a number.</summary>
@@ -29,12 +30,13 @@ internal sealed class HandedRow
 }
 
 /// <summary>
-/// The rows a pipeline hands over, as a view ML.NET can read.
+/// The rows a <see cref="TrainingData"/> holds, as a view ML.NET can read.
 /// </summary>
 /// <remarks>
-/// The order is the handover's order and nothing may change it: a view that let a trainer shuffle would put the row
-/// order outside the declaration, and two runs of one declaration could then differ. The column names ride along as the
-/// vector's slot names, so a model read back a year later still says which feature each number was.
+/// The one conversion both doors share: a pipeline's rows and a caller's own are both, by the time they reach here, a
+/// <see cref="TrainingData"/> — a matrix of features and, for training, a matrix of answers one column wide. The order
+/// is the handover's order and nothing may change it: a view that let a trainer shuffle would put the row order outside
+/// the declaration, and two runs of one declaration could then differ.
 /// </remarks>
 internal static class HandedRows
 {
@@ -44,37 +46,31 @@ internal static class HandedRows
     /// <summary>The name the answer is handed over under.</summary>
     public const string LabelColumn = "Label";
 
-    /// <summary>A view of one part's rows, as ML.NET reads them.</summary>
+    /// <summary>A view of rows, as ML.NET reads them.</summary>
     /// <param name="context">The context the view belongs to.</param>
-    /// <param name="batch">The rows the pipeline hands over.</param>
+    /// <param name="features">The features, a row for each example.</param>
     /// <param name="classes">Whether the answer is one of two classes rather than a number.</param>
-    /// <param name="answers">Whether the rows carry the answer: they do to train from, and they do not to predict for.</param>
+    /// <param name="answers">The answer for each row, one column wide; nothing to predict for, where every row is handed over as nought.</param>
     /// <returns>The view.</returns>
-    /// <exception cref="InvalidOperationException">The handover carries no answers, which a trainer cannot learn from.</exception>
-    public static IDataView Of(MLContext context, Batch batch, bool classes, bool answers = true)
+    public static IDataView Of(MLContext context, Tensor features, bool classes, Tensor? answers = null)
     {
-        if (answers && batch.Labels is null)
-        {
-            throw new InvalidOperationException(
-                "These rows are handed over without an answer, so nothing can be trained on them. A pipeline names what a model is "
-                + "asked to predict with Target or Ahead, and a trainer takes exactly one answer.");
-        }
+        var width = features.Shape.Count / features.Shape[0];
+        var rows = features.Shape[0];
+        var values = features.Values.ToArray();
+        var labels = answers?.Values.ToArray();
 
-        var names = batch.FeatureNames;
         var definition = SchemaDefinition.Create(typeof(HandedRow));
 
         definition[nameof(HandedRow.Features)].ColumnName = FeaturesColumn;
-        definition[nameof(HandedRow.Features)].ColumnType = new VectorDataViewType(NumberDataViewType.Single, names.Count);
+        definition[nameof(HandedRow.Features)].ColumnType = new VectorDataViewType(NumberDataViewType.Single, width);
         definition[classes ? nameof(HandedRow.Class) : nameof(HandedRow.Label)].ColumnName = LabelColumn;
 
-        var labels = batch.Labels ?? [.. Enumerable.Repeat(0.0, batch.Features.Count)];
-
         return context.Data.LoadFromEnumerable(
-            batch.Features.Select((row, at) => new HandedRow
+            Enumerable.Range(0, rows).Select(row => new HandedRow
             {
-                Features = [.. row.Select(value => (float)value)],
-                Label = (float)labels[at],
-                Class = labels[at] is not 0,
+                Features = values[(row * width)..((row * width) + width)],
+                Label = labels is null ? 0f : labels[row],
+                Class = labels is not null && labels[row] is not 0f,
             }),
             definition);
     }

@@ -57,9 +57,8 @@ public class ModelFileTests
         // trained one are handed to the constructor the training uses, with other names for its features.
         var trained = Passengers().TrainWithML();
         const System.Reflection.BindingFlags Private = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-        var model = (Microsoft.ML.ITransformer)typeof(TrainedMLModel).GetField("_model", Private)!.GetValue(trained)!;
-        var context = (Microsoft.ML.MLContext)typeof(TrainedMLModel).GetField("_context", Private)!.GetValue(trained)!;
-        var other = new TrainedMLModel(model, context, trained.Prepared, trained.TrainedOn with { Features = ["elsewhere"] });
+        var fitted = (FittedMLModel)typeof(TrainedMLModel).GetField("_fitted", Private)!.GetValue(trained)!;
+        var other = new TrainedMLModel(fitted, trained.Prepared, trained.TrainedOn with { Features = ["elsewhere"] });
         var served = CsvRowSource.FromText(string.Join('\n', File.ReadLines(Repository.Data("titanic.csv")).Take(13)) + "\n");
 
         var refused = Assert.Throws<InvalidOperationException>(() => other.Predict(served));

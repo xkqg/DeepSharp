@@ -2,14 +2,14 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using DeepSharp.Learners.ML;
+using DeepSharp.Networks;
 using DeepSharp.Pipelines;
-using Microsoft.ML;
-using Microsoft.ML.Trainers.FastTree;
+using DeepSharp.Tensors;
 
 namespace DeepSharp.Learners.MLNet;
 
 /// <summary>
-/// Training the trainer a pipeline declares.
+/// Training the trainer a pipeline declares, or a trainer fitted on rows a caller hands over directly.
 /// </summary>
 /// <remarks>
 /// The door is not called <c>Train</c>: the networks package already offers that on a pipeline, and two packages
@@ -45,7 +45,6 @@ public static class TrainWithMLExtensions
             ArgumentNullException.ThrowIfNull(prepared);
 
             var step = Declared(prepared.Declaration);
-            var context = new MLContext(step.Seed);
             var train = prepared.Batch(Part.Train, step.Needs);
 
             if (train.AnswerNames is not { Count: 1 })
@@ -55,16 +54,34 @@ public static class TrainWithMLExtensions
                     + $"{train.AnswerNames?.Count ?? 0}. Name one with Target or Ahead, or train what names several through a learner that takes several.");
             }
 
-            // Whether the answer is one of two classes or a number is decided from the training rows alone, and written
-            // down with the model: a replay puts the same rows through the same trainer rather than deciding again.
-            var classes = train.Labels!.All(label => label is 0 or 1);
-            var model = Fitted(context, step, HandedRows.Of(context, train, classes), classes);
+            var fitted = FittedMLModel.Fit(step.Trainer, step.Seed, Carried(train));
 
             return new TrainedMLModel(
-                model,
-                context,
+                fitted,
                 prepared,
-                new TrainedOnRows(train.Features.Count, train.FeatureNames, train.AnswerNames[0], classes));
+                new TrainedOnRows(fitted.Rows, train.FeatureNames, train.AnswerNames[0], fitted.Classes));
+        }
+    }
+
+    extension(TrainingData train)
+    {
+        /// <summary>Fits a trainer from ML.NET on rows handed over directly, with no pipeline behind them.</summary>
+        /// <param name="trainer">The trainer, and the settings it takes.</param>
+        /// <param name="seed">The number the trainer's own random draws are worked out from.</param>
+        /// <returns>
+        /// The fitted model: what it predicts for rows handed over the same way, and nothing of a pipeline it was never
+        /// trained behind. It is not saved as a file — <see cref="CompiledNetwork"/> has none either — and the way to
+        /// measure it, keep it behind a split, or serve it later is the pipeline-backed door, <c>Pipeline.TrainWithML()</c>.
+        /// </returns>
+        /// <exception cref="ArgumentNullException">There are no rows, or no sentence names the trainer.</exception>
+        /// <exception cref="ArgumentException">
+        /// There are no rows, the answer is not one column wide, or an answer is not a finite number.
+        /// </exception>
+        public FittedMLModel TrainWithML(Action<MLTrainerLine> trainer, int seed = 20260929)
+        {
+            ArgumentNullException.ThrowIfNull(train);
+
+            return FittedMLModel.Fit(LearnMLStep.Declared(trainer, seed).Trainer, seed, train);
         }
     }
 
@@ -81,59 +98,14 @@ public static class TrainWithMLExtensions
                 + ".WithML(trainer => trainer.FastTree()) for a tree from ML.NET — and run it again."),
         };
 
-    // One trainer, pinned to the seed the declaration carries: every setting the word takes is written there, so nothing
-    // about the model is decided by whatever the library defaults to today.
-    private static ITransformer Fitted(MLContext context, LearnMLStep step, IDataView rows, bool classes)
+    // The rows a pipeline's Batch hands over, as the TrainingData every fit goes through now: the one conversion both
+    // doors share lives in FittedMLModel.Fit, and this is the pipeline side's own edge onto it.
+    private static TrainingData Carried(Batch batch)
     {
-        var settings = step.Trainer.Settings.ToDictionary(setting => setting.Key, setting => setting.Value, StringComparer.Ordinal);
+        var width = batch.FeatureNames.Count;
 
-        int Whole(string key) => (int)settings[key].Number;
-
-        return step.Trainer.Kind switch
-        {
-            "fastTree" when classes => context.BinaryClassification.Trainers.FastTree(new FastTreeBinaryTrainer.Options
-            {
-                FeatureColumnName = HandedRows.FeaturesColumn,
-                LabelColumnName = HandedRows.LabelColumn,
-                NumberOfLeaves = Whole("leaves"),
-                NumberOfTrees = Whole("trees"),
-                MinimumExampleCountPerLeaf = Whole("leastRows"),
-                LearningRate = settings["rate"].Number,
-                Seed = step.Seed,
-            }).Fit(rows),
-
-            "fastForest" when classes => context.BinaryClassification.Trainers.FastForest(new FastForestBinaryTrainer.Options
-            {
-                FeatureColumnName = HandedRows.FeaturesColumn,
-                LabelColumnName = HandedRows.LabelColumn,
-                NumberOfLeaves = Whole("leaves"),
-                NumberOfTrees = Whole("trees"),
-                MinimumExampleCountPerLeaf = Whole("leastRows"),
-                Seed = step.Seed,
-            }).Fit(rows),
-
-            "fastTree" => context.Regression.Trainers.FastTree(new FastTreeRegressionTrainer.Options
-            {
-                FeatureColumnName = HandedRows.FeaturesColumn,
-                LabelColumnName = HandedRows.LabelColumn,
-                NumberOfLeaves = Whole("leaves"),
-                NumberOfTrees = Whole("trees"),
-                MinimumExampleCountPerLeaf = Whole("leastRows"),
-                LearningRate = settings["rate"].Number,
-                Seed = step.Seed,
-            }).Fit(rows),
-
-            // Every word the vocabulary offers is one of the four arms above, and a test holds the two lists to each
-            // other, so there is no arm here for a word that cannot be written.
-            _ => context.Regression.Trainers.FastForest(new FastForestRegressionTrainer.Options
-            {
-                FeatureColumnName = HandedRows.FeaturesColumn,
-                LabelColumnName = HandedRows.LabelColumn,
-                NumberOfLeaves = Whole("leaves"),
-                NumberOfTrees = Whole("trees"),
-                MinimumExampleCountPerLeaf = Whole("leastRows"),
-                Seed = step.Seed,
-            }).Fit(rows),
-        };
+        return new TrainingData(
+            Tensor.From(new Shape([batch.Features.Count, width]), [.. batch.Features.SelectMany(row => row.Select(value => (float)value))]),
+            Tensor.From(new Shape([batch.Features.Count, 1]), [.. batch.Labels!.Select(value => (float)value)]));
     }
 }

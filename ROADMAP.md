@@ -42,7 +42,7 @@ is true, and the [changelog](CHANGELOG.md) is where it says so.
 | **Done** | The engine's own arithmetic | Numbers kept in half the width with a full-width copy, a scaled loss, a sum of gradients kept wide, and layers worked out again to fit a larger batch. |
 | **Done** | More than one graphics card | One run spread over two cards was built and measured against one card taking two batches to a step, and not kept. |
 | **Done** | Smaller numbers to serve with | A trained model in whole numbers of eight bits was built and measured against the answers it gave before, and not kept. |
-| **Done** | What the flock team asked for a fifth time | A split or a shuffle may rank by a declared id, and a study may stop a trial between deals. |
+| **Done** | What the flock team asked for a fifth time | A split or a shuffle may rank by a declared id, a study may stop a trial between deals, and a trainer from ML.NET may be fitted and asked to predict without a pipeline. |
 
 Every row has a section of its own on the [roadmap in the wiki](https://github.com/xkqg/DeepSharp/wiki/Roadmap): what it
 takes, why it stands where it does, and what is left out on purpose. This table is the wiki's, and a test holds the two to

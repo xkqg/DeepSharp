@@ -5,8 +5,9 @@ as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.16.0]
 
-The fifth letter of the flock team, answered in two: a split or a shuffle may rank by a declared id instead of the whole
-record, and a study may stop a trial between deals, judged by the same number it is judged by at the end.
+The fifth letter of the flock team, answered in three: a split or a shuffle may rank by a declared id instead of the whole
+record, a study may stop a trial between deals, judged by the same number it is judged by at the end, and a trainer from
+ML.NET may now be fitted and asked to predict without a pipeline, the way a network already could.
 
 ### Upgrading from 0.15.0
 
@@ -14,6 +15,11 @@ record, and a study may stop a trial between deals, judged by the same number it
   `split.stratified` and `shuffle` gain an optional `byId` key, left out exactly where it always was, so a file that says
   nothing new writes what it wrote before, but for its number. 0.15.0 refuses a file of the fifteenth whole, naming the
   version.
+- **A tree or a forest from ML.NET answering one of two classes now predicts a true probability, not ML.NET's raw
+  score.** Anything read from `TrainedMLModel.Predict` for such a model — a saved threshold, a chart, a comparison
+  against another learner's class answer — moves to match; a `fastForest` model is fitted a little differently
+  underneath (a calibrator alongside it), so its saved archive's bytes differ from a file written before, though its
+  `MLModelFile` format does not.
 
 ### Added
 
@@ -31,6 +37,23 @@ record, and a study may stop a trial between deals, judged by the same number it
   exactly that reason, a deal stopper hears the same number the trial is judged by, so it may stand beside a `Judge`, a
   `Score`, or a `Pruner` alike. A trial it stops keeps the real score of every deal that did finish, and is never the
   study's best. See [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
+
+- **A trainer from ML.NET may be fitted on rows handed over directly, with no pipeline behind them.**
+  `TrainingData.TrainWithML(trainer => trainer.FastTree(), seed)` fits and predicts the same way
+  `CompiledNetwork.Fit`/`Predict` already let a network be used by hand: a `FittedMLModel` answers only what it was
+  fitted on, keeps no pipeline, and is not saved as a file — the pipeline-backed `Pipeline.TrainWithML()` stays the door
+  that measures a model, gives it an interval, and keeps it behind the pipeline that prepared its rows. `DeepSharp.Learners.MLNet`
+  references the tensor core for `TrainingData`, the same way the charts already reference both the tensor core and the
+  pipeline. See [ML.NET learner](https://github.com/xkqg/DeepSharp/wiki/ML.NET-learner).
+
+### Fixed
+
+- **A tree or a forest from ML.NET answering one of two classes answered a raw score, not a probability.** `Predict`
+  read ML.NET's `Score` column, which is a margin with no fixed range, as though it already were the nought-to-one
+  chance the rest of the library assumes wherever a class answer is measured or compared. A tree (`fastTree`) happened
+  to already carry a calibrated `Probability` column ML.NET's own catalog adds and this library never read; a forest
+  (`fastForest`) carries none, so it is now fitted alongside a calibrator of its own, on the training rows alone. Every
+  class answer a trainer from ML.NET gives, through either door, is now a probability between nought and one.
 
 ## [0.15.0]
 

@@ -62,13 +62,8 @@ public static class MLChainExtensions
         public FittingBuilder WithML(Action<MLTrainerLine> trainer, int seed = 20260929)
         {
             ArgumentNullException.ThrowIfNull(fitting);
-            ArgumentNullException.ThrowIfNull(trainer);
 
-            var line = new MLTrainerLine();
-
-            trainer(line);
-
-            return fitting.Add(new LearnMLStep(line.Trainer) { Seed = seed });
+            return fitting.Add(LearnMLStep.Declared(trainer, seed));
         }
     }
 }
