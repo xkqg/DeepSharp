@@ -53,6 +53,53 @@ public class InitialiserTests
     }
 
     [Fact]
+    public void KaimingNormal_WithPyTorchsOwnSlope_HasTheSpreadKaimingNormalGives()
+    {
+        // PyTorch's linear layer slope, the root of five: the spread is one over the root of three times the inputs.
+        var weights = new KaimingNormal().Draw(new Shape(200, 200), new Fans(200, 200), DrawsFor("0.weight"));
+
+        AssertDeviation(weights, 1 / Math.Sqrt(3 * 200));
+    }
+
+    [Fact]
+    public void KaimingNormal_WithTheSlopeOfARectifier_HasHesNormalSpread()
+    {
+        // The root of two over the inputs, for a slope of nothing: He's spread for layers a rectifier follows.
+        var weights = new KaimingNormal(negativeSlope: 0).Draw(new Shape(200, 200), new Fans(200, 200), DrawsFor("0.weight"));
+
+        AssertDeviation(weights, Math.Sqrt(2.0 / 200));
+    }
+
+    [Fact]
+    public void GlorotNormal_HasTheRootOfTwoOverTheInputsAndOutputsAsItsSpread()
+    {
+        var weights = new GlorotNormal().Draw(new Shape(200, 220), new Fans(200, 220), DrawsFor("0.weight"));
+
+        AssertDeviation(weights, Math.Sqrt(2.0 / 420));
+    }
+
+    [Fact]
+    public void TheNormalStarts_RepeatFromTheSameSeedAndPurpose_AndDifferFromAnother()
+    {
+        var first = new KaimingNormal().Draw(new Shape(4, 3), new Fans(4, 3), DrawsFor("0.weight"));
+        var again = new KaimingNormal().Draw(new Shape(4, 3), new Fans(4, 3), DrawsFor("0.weight"));
+        var other = new GlorotNormal().Draw(new Shape(4, 3), new Fans(4, 3), DrawsFor("0.weight"));
+
+        Assert.Equal(first.Values.ToArray(), again.Values.ToArray());
+        Assert.NotEqual(first.Values.ToArray(), other.Values.ToArray());
+    }
+
+    // The measured spread of a draw of 40 000 values is within two hundredths of the theoretical one, or the draw is wrong.
+    private static void AssertDeviation(Tensor drawn, double expected)
+    {
+        var values = drawn.Values.ToArray();
+        var mean = values.Average();
+        var deviation = Math.Sqrt(values.Sum(value => (value - mean) * (value - mean)) / values.Length);
+
+        Assert.InRange(deviation, expected * 0.98, expected * 1.02);
+    }
+
+    [Fact]
     public void Zeros_AreNothing()
     {
         var weights = new Zeros().Draw(new Shape(3, 2), new Fans(3, 2), DrawsFor("0.weight"));
@@ -77,6 +124,9 @@ public class InitialiserTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new KaimingUniform().Draw(new Shape(1), new Fans(0, 1), DrawsFor("x")));
         Assert.Throws<ArgumentOutOfRangeException>(() => new GlorotUniform().Draw(new Shape(1), new Fans(1, 0), DrawsFor("x")));
         Assert.Throws<ArgumentOutOfRangeException>(() => new KaimingUniform(double.NaN));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new KaimingNormal().Draw(new Shape(1), new Fans(0, 1), DrawsFor("x")));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new GlorotNormal().Draw(new Shape(1), new Fans(1, 0), DrawsFor("x")));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new KaimingNormal(double.NaN));
     }
 
     [Fact]

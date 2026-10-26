@@ -133,6 +133,38 @@ public sealed class GlorotUniform : Initialiser
     protected override Tensor Drawn(Shape shape, Fans fans, Draws draws) => Uniform(shape, Math.Sqrt(6.0 / (fans.In + fans.Out)), draws);
 }
 
+/// <summary>He's normal initialisation: from a normal curve with a spread of the root of two over the inputs, as PyTorch's <c>kaiming_normal_</c> starts a layer.</summary>
+public sealed class KaimingNormal : Initialiser
+{
+    /// <summary>He's normal start for a leaky rectifier of the given slope.</summary>
+    /// <param name="negativeSlope">The slope below nothing: the root of five, unless said, as PyTorch's linear layer has it.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The slope is not a number.</exception>
+    public KaimingNormal(double negativeSlope = 2.23606797749979)
+    {
+        if (!double.IsFinite(negativeSlope))
+        {
+            throw new ArgumentOutOfRangeException(nameof(negativeSlope), negativeSlope, "A slope is a number.");
+        }
+
+        NegativeSlope = negativeSlope;
+    }
+
+    /// <summary>The slope below nothing it is written for.</summary>
+    public double NegativeSlope { get; }
+
+    /// <inheritdoc />
+    protected override Tensor Drawn(Shape shape, Fans fans, Draws draws) =>
+        Filled(shape, () => draws.NextNormal() * Math.Sqrt(2.0 / ((1 + (NegativeSlope * NegativeSlope)) * fans.In)));
+}
+
+/// <summary>Glorot's normal initialisation: from a normal curve with a spread of the root of two over the inputs and outputs together, as Keras's <c>RandomNormal</c> for a layer's weights.</summary>
+public sealed class GlorotNormal : Initialiser
+{
+    /// <inheritdoc />
+    protected override Tensor Drawn(Shape shape, Fans fans, Draws draws) =>
+        Filled(shape, () => draws.NextNormal() * Math.Sqrt(2.0 / (fans.In + fans.Out)));
+}
+
 /// <summary>Nothing, everywhere.</summary>
 public sealed class Zeros : Initialiser
 {
