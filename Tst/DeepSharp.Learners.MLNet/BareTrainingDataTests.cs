@@ -151,11 +151,12 @@ public class BareTrainingDataTests
         Assert.All(barePredicted.Values.ToArray(), value => Assert.True(float.IsFinite(value)));
     }
 
+    // One row of a flock delivery: whether it survived, and its weight.
+    private static string?[] Delivery(int at) => [(at % 2).ToString(), (100 + at).ToString()];
+
     // Ten flocks, two deliveries, read as a source any pipeline step can declare over.
     private static InMemoryRowSource Flocks() =>
-        new(
-            ["survived", "weight"],
-            [.. Enumerable.Range(0, 20).Select(at => (IReadOnlyList<string?>)[(at % 2).ToString(), (100 + at).ToString()])]);
+        new(["survived", "weight"], [.. Enumerable.Range(0, 20).Select(Delivery)]);
 
     // Twelve rows in a checkerboard, three copies of four: two features, the class true exactly where the two agree.
     private static TrainingData Checkerboard() =>
