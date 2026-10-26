@@ -426,7 +426,7 @@ public sealed class PipelineBuilder
     /// its own seed, which is a different question from which rows end up beside which.
     /// </remarks>
     public PipelineBuilder Shuffle(int seed = 20260929) =>
-        Add(DeclaredId() is { } id ? new ShuffleStep(seed) { ById = true } : new ShuffleStep(seed));
+        Add(DeclaredId() is not null ? new ShuffleStep(seed) { ById = true } : new ShuffleStep(seed));
 
     /// <summary>Says where the features of this pipeline land, for every scaling that names no kind.</summary>
     /// <param name="range">
@@ -708,7 +708,7 @@ public sealed class PipelineBuilder
     {
         ThrowIfSplit();
 
-        var ranked = DeclaredId() is { } id ? step.RankedById() : step;
+        var ranked = DeclaredId() is not null ? step.RankedById() : step;
 
         PipelineDeclaration.ThrowIfFaulty([.. _steps, ranked]);
 

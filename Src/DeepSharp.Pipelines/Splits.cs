@@ -510,9 +510,8 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
             .GroupBy(row => column.TextAt(row) ?? "\u0000missing")
             .OrderBy(group => group.Key, StringComparer.Ordinal);
 
-        foreach (var group in groups)
+        foreach (var ranked in groups.Select(group => table.Ranked(group, Seed, ById)))
         {
-            var ranked = table.Ranked(group, Seed, ById);
             var share = Shares.Over(ranked.Length);
 
             for (var at = 0; at < ranked.Length; at++)
