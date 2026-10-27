@@ -442,5 +442,30 @@ public static class EnsembleExtensions
 
             return [.. finished.Take(count).Select(trial => trial.Declared)];
         }
+
+        /// <summary>The finished trials none of the others betters on every one of the study's objectives: its Pareto front.</summary>
+        /// <returns>Those trials, in the order the study tried them.</returns>
+        /// <exception cref="InvalidOperationException">The study was given no objectives, so no trial holds an objective score.</exception>
+        /// <remarks>
+        /// Where a single <see cref="StudyResult.Best"/> alone would hide that two or more trade-offs are really being weighed
+        /// against each other, the front keeps every candidate: a trial on it is one no other trial is at least as good as on
+        /// every objective, and strictly better on one.
+        /// </remarks>
+        public IReadOnlyList<Trial> ParetoFront()
+        {
+            ArgumentNullException.ThrowIfNull(result);
+
+            var candidates = result.Trials
+                .Where(trial => trial.Finished && trial.ObjectiveScores.Count > 0)
+                .Select(trial => (Trial: trial, Verdict: new Verdict(trial.ObjectiveMean)))
+                .ToArray();
+
+            if (candidates.Length == 0)
+            {
+                throw new InvalidOperationException("A Pareto front is of a study given objectives, and none of this study's finished trials holds an objective score: give it a Study.Objectives.");
+            }
+
+            return [.. candidates.Where(mine => !candidates.Any(other => other.Trial.Number != mine.Trial.Number && other.Verdict.Dominates(mine.Verdict))).Select(each => each.Trial)];
+        }
     }
 }

@@ -40,11 +40,26 @@ public sealed record Trial(int Number, Candidate Candidate, LearnNetworkStep Dec
         init;
     }
 
-    /// <summary>Whether every deal gave a number: a network that diverged, or a trial that was pruned, is a trial that did not finish.</summary>
-    public bool Finished => !Pruned && Scores.Count > 0 && Scores.All(double.IsFinite);
+    /// <summary>
+    /// How the networks were weighed on every objective, once on each deal that finished, in whatever units the caller's
+    /// <see cref="Study.Objectives"/> chooses; empty, for a trial a <see cref="Study.Score"/> or a <see cref="Study.Judge"/>
+    /// judges, whose <see cref="Scores"/> holds its numbers instead, and for one a pruner stopped mid-epoch.
+    /// </summary>
+    public IReadOnlyList<IReadOnlyList<double>> ObjectiveScores { get; init; } = [];
+
+    /// <summary>Whether every deal gave a number, or every one of a vector: a network that diverged, or a trial that was pruned, is a trial that did not finish.</summary>
+    public bool Finished =>
+        !Pruned
+        && ((Scores.Count > 0 && Scores.All(double.IsFinite)) || (ObjectiveScores.Count > 0 && ObjectiveScores.All(objectives => objectives.All(double.IsFinite))));
 
     /// <summary>How the network was judged: the mean of its scores over the deals; no number for a trial that has none.</summary>
     public double Score => Scores.Count == 0 ? double.NaN : Scores.Average();
+
+    /// <summary>How the networks were weighed on every objective: the mean of each over the deals; none for a trial that has none.</summary>
+    public IReadOnlyList<double> ObjectiveMean =>
+        ObjectiveScores.Count == 0
+            ? []
+            : [.. Enumerable.Range(0, ObjectiveScores[0].Count).Select(at => ObjectiveScores.Average(objectives => objectives[at]))];
 
     /// <summary>How much the score moved from one deal to the next: the sample standard deviation, none for a single deal.</summary>
     public double Spread
@@ -61,6 +76,54 @@ public sealed record Trial(int Number, Candidate Candidate, LearnNetworkStep Dec
             return Math.Sqrt(Scores.Sum(score => (score - mean) * (score - mean)) / (Scores.Count - 1));
         }
     }
+}
+
+/// <summary>
+/// How a trial is weighed against another: the one number a <see cref="Study.Score"/> or a <see cref="Study.Judge"/> gives, as
+/// a vector of one, or the several a <see cref="Study.Objectives"/> gives — the shape every trial of one study is weighed in.
+/// </summary>
+/// <param name="Values">The number, or numbers, lower being better on each.</param>
+/// <remarks>
+/// A vector of one value makes <see cref="Better"/> the plain <c>&lt;</c> a <see cref="Study.Score"/> or a <see cref="Study.Judge"/>
+/// already chose a trial by, and <see cref="Dominates"/> moot — nothing else is weighed against it on a second value — so the one
+/// comparison serves both a study's ordinary trials and its objectives alike, never a branch of its own for either.
+/// </remarks>
+internal readonly record struct Verdict(IReadOnlyList<double> Values)
+{
+    /// <summary>Whether this verdict is better than another: the lexicographic least of the two, the first value that differs deciding it.</summary>
+    /// <param name="than">The other verdict, of the same number of values.</param>
+    public bool Better(Verdict than)
+    {
+        for (var at = 0; at < Values.Count; at++)
+        {
+            var compared = Values[at].CompareTo(than.Values[at]);
+
+            if (compared != 0)
+            {
+                return compared < 0;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Whether this verdict dominates another under a Pareto order: no worse on any value, and better on at least one.</summary>
+    /// <param name="than">The other verdict, of the same number of values.</param>
+    public bool Dominates(Verdict than) =>
+        Values.Zip(than.Values, (mine, theirs) => mine <= theirs).All(atLeastAsGood => atLeastAsGood)
+        && Values.Zip(than.Values, (mine, theirs) => mine < theirs).Any(strictlyBetter => strictlyBetter);
+}
+
+// Whether two objective vectors hold the same values, in the same order: a plain SequenceEqual of IReadOnlyList<double>
+// values would compare the lists by reference, never their numbers, since a list is not a value type.
+internal sealed class VectorEquality : IEqualityComparer<IReadOnlyList<double>>
+{
+    public static readonly VectorEquality Instance = new();
+
+    public bool Equals(IReadOnlyList<double>? first, IReadOnlyList<double>? second) =>
+        first is null ? second is null : second is not null && first.SequenceEqual(second);
+
+    public int GetHashCode(IReadOnlyList<double> vector) => vector.Aggregate(17, (hash, value) => (hash * 31) + value.GetHashCode());
 }
 
 /// <summary>
@@ -228,6 +291,27 @@ public sealed class Study
     /// <see cref="Score"/> or a <see cref="Pruner"/>: the trial would be judged by two numbers, or stopped by one it is not judged by.
     /// </remarks>
     public Func<IReadOnlyList<TrainedNetwork>, double>? Judge
+    {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <summary>
+    /// How the networks one deal trained are weighed against more than one trade-off, lower being better on each: the several
+    /// numbers for them, in whatever units the caller chooses; nothing, unless said, and then a trial is judged by the one
+    /// number a <see cref="Score"/> or a <see cref="Judge"/> gives.
+    /// </summary>
+    /// <remarks>
+    /// Where two or more trade-offs are really being weighed against each other, no one number chooses between candidates
+    /// honestly, so a study with objectives keeps every candidate none of the others betters on every one of them —
+    /// <see cref="EnsembleExtensions.ParetoFront"/> — rather than a single <see cref="StudyResult.Best"/> alone; <see cref="StudyResult.Best"/>
+    /// still answers, as the lexicographic least of the mean objective vector, the earlier trial on a tie, which is always a
+    /// trial the front holds. It is refused beside a <see cref="Score"/> of the caller's own, a <see cref="Judge"/>, a
+    /// <see cref="Pruner"/> or a <see cref="DealStopper"/>: a <see cref="Pruner"/> hears one raw number an epoch, which does not
+    /// exist where judging is a vector, and a <see cref="DealStopper"/> hears the same shape a trial is judged by, which here
+    /// is several numbers, not the one <see cref="DealsJudged.Scores"/> gives.
+    /// </remarks>
+    public Func<IReadOnlyList<TrainedNetwork>, IReadOnlyList<double>>? Objectives
     {
         get;
         init => field = value ?? throw new ArgumentNullException(nameof(value));
@@ -412,11 +496,18 @@ public sealed class Study
                 $"A {nameof(Pruner)} hears each epoch's validation loss, and this study judges its trials by a {nameof(Score)} of its own: a pruner would stop trials by a number they are not judged by. Leave one of the two out.");
         }
 
+        if (Objectives is not null && (_scoredItsOwnWay ? nameof(Score) : Judge is not null ? nameof(Judge) : Pruner is not null ? nameof(Pruner) : DealStopper is not null ? nameof(DealStopper) : null) is { } against)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(Objectives)} judges a trial by several numbers, and this study also has a {against}: the trial would be judged by two shapes of number, "
+                + "or stopped by one it is not judged by that way. Leave one of the two out.");
+        }
+
         ThrowIfNotThisStudys(earlier);
 
         var prepare = begin();
         var trials = new List<Trial>(earlier);
-        var best = earlier.Where(trial => trial.Finished).MinBy(trial => trial.Score);
+        var best = BestOf(earlier.Where(trial => trial.Finished));
         IReadOnlyList<IReadOnlyList<TrainedNetwork>> winner = [];
 
         for (var number = earlier.Count; number < Trials; number++)
@@ -432,7 +523,7 @@ public sealed class Study
             trials.Add(trial);
             OnTrial?.Invoke(trial);
 
-            if (trial.Finished && (best is null || trial.Score < best.Score))
+            if (trial.Finished && (best is null || VerdictOf(trial).Better(VerdictOf(best))))
             {
                 best = trial;
                 winner = networks;
@@ -453,14 +544,16 @@ public sealed class Study
     {
         var steps = DeclaredBy(candidate);
 
-        if (steps.Count > 1 && Judge is null)
+        if (steps.Count > 1 && Judge is null && Objectives is null)
         {
-            throw new InvalidOperationException($"Trial {before.Count} declares {steps.Count} networks, and no score of one of them says how they do together: give the study a {nameof(Judge)}.");
+            throw new InvalidOperationException(
+                $"Trial {before.Count} declares {steps.Count} networks, and no score of one of them says how they do together: give the study a {nameof(Judge)} or an {nameof(Objectives)}.");
         }
 
         var networks = new List<IReadOnlyList<TrainedNetwork>>();
         var heard = new List<IReadOnlyList<double>>();
         var dealScores = new List<double>();
+        var objectiveScores = new List<IReadOnlyList<double>>();
         var pruned = false;
         var stoppedBetweenDeals = false;
         var deals = Deals;
@@ -489,7 +582,15 @@ public sealed class Study
                 if (!pruned)
                 {
                     networks.Add(trained);
-                    dealScores.Add(Judged(trained));
+
+                    if (Objectives is not null)
+                    {
+                        objectiveScores.Add(JudgedByObjectives(trained));
+                    }
+                    else
+                    {
+                        dealScores.Add(Judged(trained));
+                    }
 
                     if (deal < deals - 1 && DealStopper?.Invoke(new DealsJudged([.. dealScores], [.. before])) is true)
                     {
@@ -505,7 +606,12 @@ public sealed class Study
             heard.Add(Pruner is null ? [.. networks[^1][0].History!.Epochs.Select(epoch => epoch.ValidationLoss!.Value)] : soFar);
         }
 
-        var trial = new Trial(before.Count, candidate, steps[0], pruned ? [] : dealScores) { Pruned = pruned || stoppedBetweenDeals, Heard = heard };
+        var trial = new Trial(before.Count, candidate, steps[0], pruned ? [] : dealScores)
+        {
+            Pruned = pruned || stoppedBetweenDeals,
+            Heard = heard,
+            ObjectiveScores = pruned ? [] : objectiveScores,
+        };
 
         return new TriedTrial(steps.Count > 1 ? trial with { Members = steps } : trial, networks);
     }
@@ -524,6 +630,28 @@ public sealed class Study
     // How the networks of one deal are judged: by the judge, which looks at all of them, or by the score of the one there is.
     private double Judged(IReadOnlyList<TrainedNetwork> networks) => Judge is { } judge ? judge(networks) : Score(networks[0]);
 
+    // How the networks of one deal are weighed against the study's objectives.
+    private IReadOnlyList<double> JudgedByObjectives(IReadOnlyList<TrainedNetwork> networks) => Objectives!(networks);
+
+    // The verdict a finished trial stands for: its Score, as a vector of one, or the mean of its ObjectiveScores.
+    private Verdict VerdictOf(Trial trial) => new(Objectives is null ? [trial.Score] : trial.ObjectiveMean);
+
+    // The finished trial whose verdict is best, the earlier one on a tie; none, where there is no finished trial.
+    private Trial? BestOf(IEnumerable<Trial> finished)
+    {
+        Trial? best = null;
+
+        foreach (var trial in finished)
+        {
+            if (best is null || VerdictOf(trial).Better(VerdictOf(best)))
+            {
+                best = trial;
+            }
+        }
+
+        return best;
+    }
+
     // The best trial was one the caller handed back, whose networks were not kept: trained again, they must be judged as it was.
     private IReadOnlyList<IReadOnlyList<TrainedNetwork>> TrainedAgain(Trial best, Preparation prepare, CancellationToken cancellation)
     {
@@ -531,7 +659,11 @@ public sealed class Study
             .Select(deal => TrainedOn(prepare(best.Candidate, best.Number, deal), best.Members, new RunControls(Engines, null, cancellation)))
             .ToArray();
 
-        if (!networks.Select(Judged).SequenceEqual(best.Scores))
+        var matches = Objectives is null
+            ? networks.Select(Judged).SequenceEqual(best.Scores)
+            : networks.Select(JudgedByObjectives).SequenceEqual(best.ObjectiveScores, VectorEquality.Instance);
+
+        if (!matches)
         {
             throw new InvalidOperationException(
                 $"The best of the earlier trials, trial {best.Number}, was trained again on every deal and judged otherwise than it was handed back: these are not the rows, "
