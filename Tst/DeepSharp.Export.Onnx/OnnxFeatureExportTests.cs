@@ -112,6 +112,39 @@ public class OnnxFeatureExportTests
         Assert.Contains("by their places", refused.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void AProductOfThreeSteps_IsWrittenAsTwoMulNodes_AndAnswersAsTheNetworkDoes()
+    {
+        var network = Runtime.Filled(
+            new Sequential()
+                .Dense(3).Named("a")
+                .Dense(3).Takes("input").Named("b")
+                .Dense(3).Takes("input").Named("c")
+                .Multiply("a", "b", "c")
+                .Lower(new Shape(3), new RandomStream(1)));
+        var rows = Runtime.Rows(2, 3);
+
+        AnswersAs(network, rows, rows, new MeanSquaredError());
+    }
+
+    [Fact]
+    public void AProductOfTwoRowsEachAnImageFlattenedDifferently_IsRefused_ForTheTwoDoNotHoldTheirValuesInOneOrder()
+    {
+        // Both branches read "input" directly and both flatten to sixteen values, but one is a 4x4 image of one channel and
+        // the other a 2x2 image of four: ONNX flattens each channel by channel, so the two rows do not agree on what each
+        // place in them means, even though their widths match and the tensor-level product would otherwise go through.
+        var network = Runtime.Filled(
+            new Sequential()
+                .Conv2D(1, new Window(1, 1)).Named("a").Flatten().Named("aFlat")
+                .Conv2D(4, new Window(2, 2) { Stride = 2 }).Takes("input").Named("b").Flatten().Named("bFlat")
+                .Multiply("aFlat", "bFlat")
+                .Lower(new Shape(4, 4, 1), new RandomStream(1)));
+
+        var refused = Assert.Throws<NotSupportedException>(() => new OnnxExport(new Shape(4, 4, 1)).ToBytes(network, new MeanSquaredError()));
+
+        Assert.Contains("do not hold their values in one order", refused.Message, StringComparison.Ordinal);
+    }
+
     // A layer nobody wrote a kind for.
     private sealed class Unwritten : Layer
     {

@@ -128,6 +128,52 @@ public class BoostedNetworkTests
     }
 
     [Fact]
+    public void ACorrectionThatRestoresItsBestEpoch_EndsHoldingThatEpochsWeights_NotItsLast()
+    {
+        var (prepared, basis, correction) = Setup();
+        var stoppingEarly = correction with
+        {
+            Stopping = new PartDeclaration("patience", [new PartSetting("patience", PartValue.Of(2)), new PartSetting("least", PartValue.Of(0.0)), new PartSetting("best", PartValue.Of(true))]),
+        };
+
+        var boosted = prepared.TrainBoosted(basis, stoppingEarly, new BoostedOptions { Cancellation = TestContext.Current.CancellationToken });
+
+        Assert.NotNull(boosted);
+    }
+
+    [Fact]
+    public void ACorrectionTrainedWithNoValidationRowsSetAside_StillTrains_WithNoValidationResidualTarget()
+    {
+        var pipeline = Pdd.Create().ReadCsv(RegressionCsv()).Declare(schema => schema.Number("x", "y")).SplitAtRandom(0.85, 0, seed: 5).Normalise("x", Scale.MidRange).Target("y")
+            .WithTorch(network => network.Dense(2).Relu().Dense(1).Adam(0.05).MeanSquaredError().Run(1, 2)).Build();
+        var basis = Step(pipeline);
+        var correction = basis with { Seed = 2 };
+        var prepared = pipeline.RunFor(basis.Needs);
+
+        var boosted = prepared.TrainBoosted(basis, correction, new BoostedOptions { Cancellation = TestContext.Current.CancellationToken });
+
+        Assert.NotNull(boosted);
+    }
+
+    private static string RegressionCsv()
+    {
+        Directory.CreateDirectory(Folder);
+
+        var rows = new StringBuilder("x,y\n");
+
+        for (var row = 0; row < 60; row++)
+        {
+            rows.Append(CultureInfo.InvariantCulture, $"{1 + (row % 4)},{1000 + (row % 5)}\n");
+        }
+
+        var path = Path.Join(Folder, "no-validation.csv");
+
+        File.WriteAllText(path, rows.ToString());
+
+        return path;
+    }
+
+    [Fact]
     public void ABasisOrACorrectionWhoseLossIsNotTheIdentity_IsRefused_NamingWhichOneAndItsActivation()
     {
         var (prepared, basis, _) = Setup();
@@ -203,6 +249,72 @@ public class BoostedNetworkTests
 
         Assert.Equal(["version", "basis", "correction", "basisDigest", "pipeline"], file.Select(each => each.Key));
         Assert.Equal(1, (int)file["version"]!);
+    }
+
+    [Fact]
+    public void APipelineThatDeclaresAReport_MeasuresTheBoostedPairsCombinedAnswer_NotEitherHalfAlone()
+    {
+        var pipeline = Regression().Report(report => report.Measure(Metric.Rmse).On(Part.Train, Part.Validation).As(Shown.Numbers))
+            .WithTorch(network => network.Dense(2).Relu().Dense(1).Adam(0.05).MeanSquaredError().Run(1, 6)).Build();
+        var basis = Step(pipeline);
+        var correction = basis with { Seed = 2 };
+        var prepared = pipeline.RunFor(basis.Needs);
+
+        var boosted = prepared.TrainBoosted(basis, correction, new BoostedOptions { Cancellation = TestContext.Current.CancellationToken });
+
+        Assert.NotNull(boosted.Measures);
+        Assert.Contains(Metric.Rmse, boosted.Measures!.Parts.SelectMany(part => part.Values).Select(measured => measured.Metric));
+    }
+
+    [Fact]
+    public void RowsThePipelineHandsOverAsOtherFeaturesThanTheBasisLearned_AreRefused_NamingBoth()
+    {
+        var (prepared, basis, correction) = Setup();
+        var boosted = prepared.TrainBoosted(basis, correction, new BoostedOptions { Cancellation = TestContext.Current.CancellationToken });
+        var mismatched = new TrainedNetwork(boosted.Basis.Network, boosted.Basis.Loss, boosted.Basis.Prepared, boosted.Basis.TrainedOn with { Features = ["elsewhere"] })
+        {
+            Carried = boosted.Basis.Carried,
+        };
+        var pair = BoostedNetwork.Of(mismatched, boosted.Correction, BoostedNetwork.Digest(mismatched));
+
+        var fault = Assert.Throws<InvalidOperationException>(() => pair.Predict(Served()));
+
+        Assert.Contains("'elsewhere'", fault.Message, StringComparison.Ordinal);
+        Assert.Contains("answers only what it learned from", fault.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABoostedPairFile_WhoseBasisOrCorrectionNamesNothingItWasTrainedOn_IsRefused()
+    {
+        var (prepared, basis, correction) = Setup();
+        var boosted = prepared.TrainBoosted(basis, correction, new BoostedOptions { Cancellation = TestContext.Current.CancellationToken });
+        var file = JsonNode.Parse(boosted.ToJson())!.AsObject();
+
+        var basisFile = file.DeepClone().AsObject();
+        basisFile["basis"]!.AsObject().Remove("trainedOn");
+        var basisFault = Assert.Throws<NetworkFileException>(() => BoostedNetwork.FromJson(basisFile.ToJsonString(), NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks()));
+
+        var correctionFile = file.DeepClone().AsObject();
+        correctionFile["correction"]!.AsObject().Remove("trainedOn");
+        var correctionFault = Assert.Throws<NetworkFileException>(() => BoostedNetwork.FromJson(correctionFile.ToJsonString(), NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks()));
+
+        Assert.Contains("basis names nothing", basisFault.Message, StringComparison.Ordinal);
+        Assert.Contains("correction names nothing", correctionFault.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABoostedPairFile_WhoseBasisWasTrainedBehindAnotherFit_IsRefusedWhereItStands_NamingIt()
+    {
+        var (prepared, basis, correction) = Setup();
+        var boosted = prepared.TrainBoosted(basis, correction, new BoostedOptions { Cancellation = TestContext.Current.CancellationToken });
+
+        var file = JsonNode.Parse(boosted.ToJson())!.AsObject();
+
+        file["basis"]!["trainedOn"]!["trainedBehind"] = "0000000000000000000000000000000000000000000000000000000000000000";
+
+        var refused = Assert.Throws<NetworkFileException>(() => BoostedNetwork.FromJson(file.ToJsonString(), NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks()));
+
+        Assert.Contains("another fit", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

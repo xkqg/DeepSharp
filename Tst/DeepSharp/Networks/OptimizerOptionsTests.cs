@@ -211,6 +211,113 @@ public class OptimizerOptionsTests
         Assert.Equal(2, document.RootElement.GetProperty("training").GetProperty("version").GetInt32());
     }
 
+    [Fact]
+    public void LionRAdamAndAdan_WriteTheSecondVersionWithNoOption_AndTheFifthWithOne()
+    {
+        foreach (var plain in new Optimizer[] { new Lion(0.1), new RAdam(0.1), new Adan(0.1) })
+        {
+            Assert.Equal(2, ((ISaved)plain).FileVersion);
+        }
+
+        var decayedLion = new Lion(0.1) { WeightDecay = 0.1 };
+        var decayedAdan = new Adan(0.1) { WeightDecay = 0.1 };
+        var decoupledRAdam = new RAdam(0.1) { DecoupledWeightDecay = true, WeightDecay = 0.1 };
+        var coupledRAdam = new RAdam(0.1) { WeightDecay = 0.2 };
+
+        Assert.Equal(5, ((ISaved)decayedLion).FileVersion);
+        Assert.Equal(5, ((ISaved)decayedAdan).FileVersion);
+        Assert.Equal(5, ((ISaved)decoupledRAdam).FileVersion);
+        Assert.Equal(5, ((ISaved)coupledRAdam).FileVersion);
+        Assert.Contains("\"weightDecay\":0.1", SettingsOf(decayedLion), StringComparison.Ordinal);
+        Assert.Contains("\"weightDecay\":0.1", SettingsOf(decayedAdan), StringComparison.Ordinal);
+        Assert.Contains("\"decoupledWeightDecay\":true", SettingsOf(decoupledRAdam), StringComparison.Ordinal);
+
+        // RAdam without DecoupledWeightDecay writes its weight decay the coupled way, under the Adam family's own key.
+        Assert.Contains("\"weightDecay\":0.2", SettingsOf(coupledRAdam), StringComparison.Ordinal);
+        Assert.DoesNotContain("decoupledWeightDecay", SettingsOf(coupledRAdam), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ARunWhoseOptimizerIsLionRAdamOrAdan_IsWrittenAndReadBackAsItself()
+    {
+        foreach (var optimizer in new Optimizer[] { new Lion(0.1) { WeightDecay = 0.1 }, new RAdam(0.1) { DecoupledWeightDecay = true, WeightDecay = 0.1 }, new Adan(0.1) { WeightDecay = 0.1 } })
+        {
+            var compiled = new LayerStack(new Dense(1, 1, new RandomStream(5).Draw("initialise:0", 0, 0))).Compile(optimizer, new MeanSquaredError());
+            Checkpoint? kept = null;
+            var rows = new TrainingData(Tensor.From(new Shape(4, 1), [0.1f, 0.2f, 0.3f, 0.4f]), Tensor.From(new Shape(4, 1), [0.2f, 0.4f, 0.6f, 0.8f]));
+
+            compiled.Fit(rows, validation: null, new FitOptions(seed: 3) { Epochs = 2, BatchSize = 2, Checkpoints = new Checkpoints(checkpoint => kept = checkpoint) });
+
+            var written = Written(compiled, kept!);
+            var read = NetworkDocument.ReadCheckpoint(written, "network", "training", NetworkCatalog.BuiltIn());
+
+            Assert.Equal(5, JsonDocument.Parse(written).RootElement.GetProperty("training").GetProperty("version").GetInt32());
+            Assert.Equal(written, Written(read.Run.Compiled, read.Run.Checkpoint));
+        }
+    }
+
+    [Fact]
+    public void AMemoryThatCountsNoStep_IsRefusedByName_ForAdanRemembersOnlyWhatStepped()
+    {
+        var weight = new Dense(1, 2, new RandomStream(1).Draw("initialise:test", 0, 0)).Weight;
+        var shape = weight.Value.Shape;
+        Tensor Some() => Tensor.Zeros(shape);
+        var memory = Memory(0, ("exp_avg", Some()), ("exp_avg_diff", Some()), ("exp_avg_sq", Some()), ("neg_pre_grad", Some()));
+
+        var refused = Assert.Throws<ArgumentException>(() => new Adan().PutBack(weight, memory));
+
+        Assert.Contains("counts no step", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LionAndAdan_RememberTheirOwnTensorsUnderTheirOwnNames_AndGoOnFromAPutBackMemory_BitForBit()
+    {
+        foreach (var make in new Func<Optimizer>[] { () => new Lion(0.1), () => new Adan(0.1) })
+        {
+            var straight = Network();
+            var optimizer = make();
+
+            Stepped(straight, optimizer);
+            Stepped(straight, optimizer);
+
+            var stopped = Network();
+            var first = make();
+
+            Stepped(stopped, first);
+
+            var memory = stopped.Parameters().ToDictionary(parameter => parameter, parameter => first.KeptOf(parameter));
+            var resumed = make();
+
+            foreach (var (parameter, kept) in memory.Where(each => each.Value is not null))
+            {
+                resumed.PutBack(parameter, kept!.Value);
+            }
+
+            Stepped(stopped, resumed);
+
+            Assert.Equal(Bits(straight), Bits(stopped));
+        }
+    }
+
+    [Fact]
+    public void RAdamsRateAtSixOrMoreTrialTrustedSteps_RectifiesTheStep_AsPyTorchsOwnRAdamDoes()
+    {
+        // With the default betas, rho_t crosses PyTorch's threshold of five between the fifth and sixth step, so this run
+        // exercises both the plain bias-corrected mean (steps one to five) and the rectified step (step six).
+        var parameter = new Dense(Tensor.From(new Shape(1, 1), [1f]), Tensor.Zeros(new Shape(1))).Weight;
+        var radam = new RAdam(0.1);
+
+        for (var step = 0; step < 6; step++)
+        {
+            var gradients = new Gradients(new Dictionary<Tensor, Tensor>(ReferenceEqualityComparer.Instance) { [parameter.Value] = Tensor.From(new Shape(1, 1), [0.5f]) });
+
+            radam.Step([parameter], gradients, 0.1, Backend);
+        }
+
+        // torch.optim.RAdam(lr=0.1) on a parameter of 1.0, stepped six times on a constant gradient of 0.5.
+        Assert.Equal(0.7474178076, parameter.Value.Values[0], 1e-6);
+    }
+
     private static JsonElement Walk(string name) => Walks.EnumerateArray().Single(each => each.GetProperty("name").GetString() == name);
 
     private static LayerStack Network() => new(

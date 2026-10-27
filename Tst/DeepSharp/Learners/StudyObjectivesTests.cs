@@ -63,11 +63,58 @@ public class StudyObjectivesTests
     }
 
     [Fact]
+    public void AnObjectivesStudyHandedItsEarlierTrials_WhoseBestIsAnEarlierOne_TrainsItAgain_AndVerifiesItsObjectiveVectorMatches()
+    {
+        var first = Studied(trials: 3).Run(deal => StudyTests.Passengers(deal), TestContext.Current.CancellationToken);
+        var resumed = Studied(trials: 3).Run(deal => StudyTests.Passengers(deal), first.Trials, TestContext.Current.CancellationToken);
+
+        Assert.Equal(first.Best.Number, resumed.Best.Number);
+        Assert.Equal(first.Best.ObjectiveScores, resumed.Best.ObjectiveScores);
+    }
+
+    [Fact]
+    public void AnObjectivesStudyHandedItsEarlierTrials_WhoseBestTrainsAgainToAnotherObjectiveVector_IsRefused_NamingTheTrial()
+    {
+        var first = Studied(trials: 3).Run(deal => StudyTests.Passengers(deal), TestContext.Current.CancellationToken);
+        Trial[] altered = [.. first.Trials.Select(trial => trial.Number == first.Best.Number ? trial with { ObjectiveScores = [[trial.ObjectiveScores[0][0], 9001.0]] } : trial)];
+
+        var refused = Assert.Throws<InvalidOperationException>(() => Studied(trials: 3).Run(deal => StudyTests.Passengers(deal), altered, TestContext.Current.CancellationToken));
+
+        Assert.Contains($"trial {first.Best.Number}", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AnObjectivesTrial_IsNotFinished_WhenAValueIsNotANumber()
     {
         var trial = Finished(0, [double.NaN, 1.0]);
 
         Assert.False(trial.Finished);
+    }
+
+    [Fact]
+    public void VectorEquality_ComparesTwoVectorsByTheirNumbers_NeverByReference_AndHashesThemConsistently()
+    {
+        var equality = VectorEquality.Instance;
+        IReadOnlyList<double> first = [1.0, 2.0];
+        IReadOnlyList<double> again = [1.0, 2.0];
+        IReadOnlyList<double> other = [1.0, 3.0];
+
+        Assert.True(equality.Equals(null, null));
+        Assert.False(equality.Equals(first, null));
+        Assert.False(equality.Equals(null, first));
+        Assert.True(equality.Equals(first, again));
+        Assert.False(equality.Equals(first, other));
+        Assert.Equal(equality.GetHashCode(first), equality.GetHashCode(again));
+    }
+
+    [Fact]
+    public void AVerdictEqualToAnotherInEveryValue_IsNotBetterThanIt_EitherWay()
+    {
+        var one = new Verdict([1.0, 2.0]);
+        var another = new Verdict([1.0, 2.0]);
+
+        Assert.False(one.Better(another));
+        Assert.False(another.Better(one));
     }
 
     [Fact]
@@ -85,6 +132,17 @@ public class StudyObjectivesTests
         var front = result.ParetoFront();
 
         Assert.Equal([1, 2], front.Select(trial => trial.Number));
+    }
+
+    [Fact]
+    public void AParetoFrontOfAStudyGivenNoObjectives_IsRefused_SayingToGiveItOne()
+    {
+        var ordinary = new Trial(0, new Candidate([]), null!, [0.5]);
+        var result = new StudyResult([ordinary], ordinary, []);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => result.ParetoFront());
+
+        Assert.Contains(nameof(Study.Objectives), refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

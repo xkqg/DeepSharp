@@ -206,4 +206,53 @@ public class BatchEnsemblingTests
         Assert.NotNull(layerNormed);
         Assert.NotNull(rmsNormed);
     }
+
+    [Fact]
+    public void ADeclaredBatchEnsemble_IsRefusedOverAnExampleThatIsNotOneRow_NamingItsShape()
+    {
+        var described = new Sequential().BatchEnsemble(2);
+
+        var thrown = Assert.Throws<ArgumentException>(() => described.Lower(new Shape(4, 4), new RandomStream(1)));
+
+        Assert.Contains("batchEnsemble", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ADeclaredVariantHeads_IsRefusedOverAnExampleNotLaidOutByItsVariants_NamingItsShape()
+    {
+        var described = new Sequential().Dense(3).VariantHeads(1);
+
+        var thrown = Assert.Throws<ArgumentException>(() => described.Lower(new Shape(2), new RandomStream(1)));
+
+        Assert.Contains("variantHeads", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ABatchEnsembleAdapterThenVariantHeads_IsTheEighthVersion_AndIsWrittenAndReadBackAsItWas()
+    {
+        var network = new Sequential().BatchEnsemble(3).Dense(4).Relu().VariantHeads(2).Lower(new Shape(2), new RandomStream(1));
+        var written = Written(network);
+        var read = NetworkDocument.ReadNetwork(written, "network", NetworkCatalog.BuiltIn());
+
+        Assert.Equal(8, VersionOf(written));
+        Assert.Equal(written, Written(read.Network));
+    }
+
+    private static string Written(Network network)
+    {
+        using var stream = new MemoryStream();
+
+        using (var writer = new System.Text.Json.Utf8JsonWriter(stream, new System.Text.Json.JsonWriterOptions { Indented = true }))
+        {
+            writer.WriteStartObject();
+            writer.WritePropertyName("network");
+            NetworkDocument.WriteNetwork(writer, network, new MeanSquaredError());
+            writer.WriteEndObject();
+        }
+
+        return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    private static int VersionOf(string written) =>
+        System.Text.Json.JsonDocument.Parse(written).RootElement.GetProperty("network").GetProperty("version").GetInt32();
 }

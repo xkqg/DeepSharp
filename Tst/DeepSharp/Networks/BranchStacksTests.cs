@@ -73,6 +73,24 @@ public class BranchStacksTests
 
         Assert.Equal(8, VersionOf(written));
         Assert.Contains("\"takes\"", written, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AProduct_HandedOneTensorThroughTheOrdinaryForward_IsRefused_ForItTakesItsStepsByName()
+    {
+        var thrown = Assert.Throws<InvalidOperationException>(() => new Product().Forward(Tensor.Zeros(new Shape(2)), Pass.Evaluation(new CpuBackend())));
+
+        Assert.Contains("by name", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AProduct_IsTheEighthVersion_AndIsWrittenAndReadBackAsItWas()
+    {
+        var network = new LayerStack([new Step(Dense(3, 3), "a"), new Step(Dense(3, 3), "b"), new Step(new Product(), "out", ["a", "b"])]);
+        var written = Written(network);
+        var read = NetworkDocument.ReadNetwork(written, "network", NetworkCatalog.BuiltIn());
+
+        Assert.Equal(8, VersionOf(written));
         Assert.Equal(written, Written(read.Network));
         Assert.Equal(network.Steps.Select(step => step.Takes), ((LayerStack)read.Network).Steps.Select(step => step.Takes));
     }
