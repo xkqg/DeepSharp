@@ -189,22 +189,26 @@ public static class TrainExtensions
         step.Layers
             .Described(prepared)
             .Compile(step.Optimizer.Moved(), JudgedFor(step.Loss, prepared.Declaration.Output), step.Schedule.Scheduled())
-            .Fit(prepared, new FitOptions(step.Seed)
-            {
-                Epochs = step.Epochs,
-                BatchSize = step.Batch,
-                EarlyStopping = step.Stopping.Stops(),
-                GradientClip = step.Clip > 0 ? new GradientClip(step.Clip) : null,
-                ClipValue = step.ClipValue > 0 ? step.ClipValue : null,
-                StepEvery = step.StepEvery,
-                Average = step.Average > 0 ? step.Average : null,
-                JudgedByAverage = step.JudgedByAverage,
-                LossScale = step.LossScaleStart > 0 ? LossScale.Dynamic(step.LossScaleStart) : null,
-                Recompute = step.Recompute ? Recompute.Everything : null,
-                Backend = (controls.Engines ?? new Engines()).Named(step.Engine),
-                Cancellation = controls.Cancellation,
-                OnEpoch = controls.OnEpoch,
-            });
+            .Fit(prepared, OptionsFor(step, controls));
+
+    // What a step says of how its run goes, as a run of FitOptions: every door that trains a declared network's layers
+    // builds its options here, and nowhere else, so a step means the same run wherever it is trained from.
+    internal static FitOptions OptionsFor(LearnNetworkStep step, RunControls controls) => new(step.Seed)
+    {
+        Epochs = step.Epochs,
+        BatchSize = step.Batch,
+        EarlyStopping = step.Stopping.Stops(),
+        GradientClip = step.Clip > 0 ? new GradientClip(step.Clip) : null,
+        ClipValue = step.ClipValue > 0 ? step.ClipValue : null,
+        StepEvery = step.StepEvery,
+        Average = step.Average > 0 ? step.Average : null,
+        JudgedByAverage = step.JudgedByAverage,
+        LossScale = step.LossScaleStart > 0 ? LossScale.Dynamic(step.LossScaleStart) : null,
+        Recompute = step.Recompute ? Recompute.Everything : null,
+        Backend = (controls.Engines ?? new Engines()).Named(step.Engine),
+        Cancellation = controls.Cancellation,
+        OnEpoch = controls.OnEpoch,
+    };
 
     // What a call may add to a declared run without changing any number of it: the engines its name stands for, a hook that
     // hears each epoch, and a token that stops it.
@@ -212,7 +216,7 @@ public static class TrainExtensions
 
     // The loss a declared part names, for the output it judges: a distance along an order leaves what is left of a
     // distribution's whole outside that order, when the distribution makes one.
-    private static Loss JudgedFor(PartDeclaration loss, INamesTheAnswer? output) =>
+    internal static Loss JudgedFor(PartDeclaration loss, INamesTheAnswer? output) =>
         loss.Judged() is EarthMoversDistance && output is DistributionStep { Remainder: not null } ? new EarthMoversDistance(remainder: true) : loss.Judged();
 
     private static LearnNetworkStep Declared(PipelineDeclaration declaration) =>

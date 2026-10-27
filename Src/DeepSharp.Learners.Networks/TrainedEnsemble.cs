@@ -162,7 +162,7 @@ public sealed class TrainedEnsemble
         ArgumentNullException.ThrowIfNull(networks);
         ArgumentNullException.ThrowIfNull(steps);
 
-        var file = new FileText(json, ensemble: true);
+        var file = new FileText(json, FileKind.Ensemble);
         var saved = NetworkDocument.ReadNetworks(json, NetworkDocument.NetworksKey, networks);
         var prepared = PreparedData.FromJson(json, steps, TrainedNetwork.PipelineKey);
         var carried = file.Pipeline();

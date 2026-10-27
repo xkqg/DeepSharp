@@ -10,6 +10,19 @@ using DeepSharp.Pipelines;
 
 namespace DeepSharp.Learners.Networks;
 
+/// <summary>Which of the three files this library writes a text is read as.</summary>
+internal enum FileKind
+{
+    /// <summary>A single trained network's file.</summary>
+    Network,
+
+    /// <summary>An ensemble's file: several networks and how their answers become one.</summary>
+    Ensemble,
+
+    /// <summary>A boosted pair's file: a basis and the correction trained on what it left unexplained.</summary>
+    Boosted,
+}
+
 /// <summary>
 /// The top of the one file, surveyed before any part of it is read: that it is JSON, one object, of a version this library
 /// reads, holding its parts and nothing else — where each part stands, so a fault about a part is placed at it, and the text
@@ -31,19 +44,21 @@ internal sealed class FileText
 
     private static readonly string[] EnsembleParts = [TrainedNetwork.VersionKey, TrainedEnsemble.BlendKey, NetworkDocument.NetworksKey, TrainedNetwork.PipelineKey, TrainedNetwork.IntervalKey];
 
+    private static readonly string[] BoostedParts = [TrainedNetwork.VersionKey, BoostedNetwork.BasisKey, BoostedNetwork.CorrectionKey, BoostedNetwork.BasisDigestKey, TrainedNetwork.PipelineKey];
+
     private readonly string _json;
-    private readonly bool _ensemble;
+    private readonly FileKind _kind;
     private readonly Dictionary<string, long> _places = new(StringComparer.Ordinal);
     private readonly Dictionary<string, byte[]> _kept = new(StringComparer.Ordinal);
 
     /// <summary>Surveys a file's top.</summary>
     /// <param name="json">The file.</param>
-    /// <param name="ensemble">Whether the file is an ensemble's, with several networks and a blend, rather than a single network's.</param>
+    /// <param name="kind">Whether the file is a single network's, an ensemble's or a boosted pair's.</param>
     /// <exception cref="NetworkFileException">The text is not JSON, not one object, of no version this library reads, or holds what is no part of it.</exception>
-    public FileText(string json, bool ensemble = false)
+    public FileText(string json, FileKind kind = FileKind.Network)
     {
         _json = json;
-        _ensemble = ensemble;
+        _kind = kind;
 
         var faults = Survey();
 
@@ -60,11 +75,14 @@ internal sealed class FileText
     /// <summary>The word the file names its members' blend by; nothing when the file names none as text.</summary>
     public string? Blend { get; private set; }
 
-    private string[] Parts => _ensemble ? EnsembleParts : NetworkParts;
+    /// <summary>The digest a boosted pair's file names its correction was fitted against; nothing when the file names none as text.</summary>
+    public string? BasisDigest { get; private set; }
 
-    private string Noun => _ensemble ? "an ensemble's" : "a trained network's";
+    private string[] Parts => _kind switch { FileKind.Ensemble => EnsembleParts, FileKind.Boosted => BoostedParts, _ => NetworkParts };
 
-    private int Version => _ensemble ? TrainedEnsemble.Version : TrainedNetwork.Version;
+    private string Noun => _kind switch { FileKind.Ensemble => "an ensemble's", FileKind.Boosted => "a boosted pair's", _ => "a trained network's" };
+
+    private int Version => _kind switch { FileKind.Ensemble => TrainedEnsemble.Version, FileKind.Boosted => BoostedNetwork.Version, _ => TrainedNetwork.Version };
 
     /// <summary>The pipeline the file carries, its text taken from the file as it stands there.</summary>
     /// <exception cref="NetworkFileException">The file carries no pipeline: nothing under its key, or no object.</exception>
@@ -125,9 +143,12 @@ internal sealed class FileText
                     {
                         if (reader.TokenType != JsonTokenType.StartObject)
                         {
-                            faults.Add(new Noted(0, _ensemble
-                                ? "An ensemble's file is one JSON object: its version, how its members' answers become one, its networks and the pipeline they were trained behind."
-                                : "A trained network's file is one JSON object: its version, its network and the pipeline it was trained behind."));
+                            faults.Add(new Noted(0, _kind switch
+                            {
+                                FileKind.Ensemble => "An ensemble's file is one JSON object: its version, how its members' answers become one, its networks and the pipeline they were trained behind.",
+                                FileKind.Boosted => "A boosted pair's file is one JSON object: its version, its basis, its correction and the pipeline they were trained behind.",
+                                _ => "A trained network's file is one JSON object: its version, its network and the pipeline it was trained behind.",
+                            }));
 
                             return faults;
                         }
@@ -161,9 +182,13 @@ internal sealed class FileText
                         {
                             version = reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var number) ? number : 0;
                         }
-                        else if (_ensemble && key == TrainedEnsemble.BlendKey && reader.TokenType == JsonTokenType.String)
+                        else if (_kind == FileKind.Ensemble && key == TrainedEnsemble.BlendKey && reader.TokenType == JsonTokenType.String)
                         {
                             Blend = reader.GetString();
+                        }
+                        else if (_kind == FileKind.Boosted && key == BoostedNetwork.BasisDigestKey && reader.TokenType == JsonTokenType.String)
+                        {
+                            BasisDigest = reader.GetString();
                         }
 
                         within = reader.TokenType is JsonTokenType.StartObject or JsonTokenType.StartArray;
@@ -198,7 +223,7 @@ internal sealed class FileText
         {
             faults.Insert(0, new Noted(
                 _places.GetValueOrDefault(TrainedNetwork.VersionKey),
-                $"{(_ensemble ? "An ensemble's" : "A trained network's")} file names the whole number of the version it was written against, from 1, under '{TrainedNetwork.VersionKey}'."));
+                $"{char.ToUpperInvariant(Noun[0])}{Noun[1..]} file names the whole number of the version it was written against, from 1, under '{TrainedNetwork.VersionKey}'."));
         }
         else if (version > Version)
         {
@@ -229,15 +254,20 @@ internal sealed class FileText
         }
     }
 
-    // What is said of a key that is no part of the file: that it is the other kind of file's, by name, or that it is nobody's.
+    // What is said of a key that is no part of the file: that it is another kind of file's, by name, or that it is nobody's.
     private string NotAPart(string key) =>
-        !_ensemble && key is NetworkDocument.NetworksKey or TrainedEnsemble.BlendKey
-            ? $"'{key}' is a part of an ensemble's file, and this is read as a single network's: read an ensemble with TrainedEnsemble.FromJson."
-            : _ensemble && key is TrainedNetwork.NetworkKey or TrainedNetwork.TrainingKey
-                ? $"'{key}' is a part of a single network's file, and this is read as an ensemble's: read a single network with TrainedNetwork.FromJson."
-                : _ensemble
-                    ? $"'{key}' is no part of an ensemble's file: it holds its version, how its members' answers become one, its networks and the pipeline they were trained behind."
-                    : $"'{key}' is no part of a trained network's file: it holds its version, its network, the pipeline it was trained behind and, for a checkpoint, what the run needs to go on.";
+        _kind != FileKind.Ensemble && key is NetworkDocument.NetworksKey or TrainedEnsemble.BlendKey
+            ? $"'{key}' is a part of an ensemble's file, and this is read as {Noun[..^2]}: read an ensemble with TrainedEnsemble.FromJson."
+            : _kind != FileKind.Boosted && key is BoostedNetwork.BasisKey or BoostedNetwork.CorrectionKey
+                ? $"'{key}' is a part of a boosted pair's file, and this is read as {Noun[..^2]}: read a boosted pair with BoostedNetwork.FromJson."
+                : _kind != FileKind.Network && key is TrainedNetwork.NetworkKey or TrainedNetwork.TrainingKey
+                    ? $"'{key}' is a part of a single network's file, and this is read as {Noun[..^2]}: read a single network with TrainedNetwork.FromJson."
+                    : _kind switch
+                    {
+                        FileKind.Ensemble => $"'{key}' is no part of an ensemble's file: it holds its version, how its members' answers become one, its networks and the pipeline they were trained behind.",
+                        FileKind.Boosted => $"'{key}' is no part of a boosted pair's file: it holds its version, its basis, its correction, the digest the correction was fitted against and the pipeline they were trained behind.",
+                        _ => $"'{key}' is no part of a trained network's file: it holds its version, its network, the pipeline it was trained behind and, for a checkpoint, what the run needs to go on.",
+                    };
 
     /// <summary>Where a reader's fault is, from the line and the byte in that line it names, both from nought.</summary>
     /// <remarks>
