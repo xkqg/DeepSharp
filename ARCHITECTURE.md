@@ -917,8 +917,11 @@ says what it holds. The training part of a checkpoint whose gradients were clipp
 its number; a layer whose window strides otherwise along one axis than another, is dilated, rounds its places up or states
 its border at each end is the fourth; everything else — a network, a checkpoint of a run that clipped nothing, a window
 that says none of those — is still the second, which 0.8.0 reads. That is per instance and never per kind: the same
-convolution is the second version or the fourth according to the window it is given. A new kind of layer, of loss or of
-optimizer needs no new number either way: it is a name, and a library that does not know the name refuses it by name.
+convolution is the second version or the fourth according to the window it is given. A new kind of loss or of optimizer
+needs no new number: it is a name, and a library that does not know the name refuses it by name alone. A new kind of layer
+is not the same, since the part gained its eighth version: a layer the eighth version did not yet know — BatchEnsemble
+and VariantHeads among them — unconditionally raises the part that holds it to the eighth, whatever else the part says, so
+an older library refuses it by that number before it ever reaches the name a newer layer is refused by too.
 
 The ninth version is the same rule applied to a different thing: a setting may be left out of a part. A declared network
 is a list of named parts and every setting a name takes was written, so a file that left one out was refused. The settings
@@ -2757,8 +2760,11 @@ the pipeline hands its rows over. Embeddings stand before any other layer, since
 
 A loss that says more than it used to raises the network's part the way a layer that says more does: the part is written as
 the oldest version that says what the network, its layers and its loss hold, so a cross-entropy that softens its labels is the
-sixth and one that does not is written as it always was. A new kind of layer or loss is written as the second version, and an
-older library refuses it by its name.
+sixth and one that does not is written as it always was. A new kind of loss is written as the second version, and an older
+library refuses it by its name alone — a loss, like an optimizer, is never itself a reason to raise the number. A new kind of
+layer no longer travels that light: since the part gained its eighth version, a layer the eighth version did not yet know
+raises the part that holds it to the eighth regardless of anything else it says, so an older library is refused by the
+number before the name is ever read.
 
 ### A layer begins with one value, and a layer may have no bias
 
@@ -2984,6 +2990,16 @@ schedule is worked out from the epoch in closed form — constant, falling in st
 that rises in a straight line from a share of the rate to the whole of it and may hand over to another schedule — and
 asked once an epoch. None watches the validation loss: the rows a model is chosen on would then shape the weights it is
 chosen for. A reduce-on-plateau schedule was asked for and is not built, for that reason.
+
+`Lion`, `RAdam` and `Adan` are three more, added by name rather than left to whoever wants one, because a look at real use
+beyond PyTorch's own five still reaches for them. `RAdam` is PyTorch's own formula: Adam's step rectified once the running
+mean of the squares has seen enough of the gradients to trust its spread, plain before that point, both matched to torch
+step by step. PyTorch ships neither `Lion` nor `Adan`, so each is run as its own reference implementation does rather than
+this library's own reading of a paper — lucidrains's `lion-pytorch` for the sign of an interpolated momentum and its
+gradient, and sail-sg's `Adan` for the running means of a gradient, its difference step to step, and their combined square
+— named as such, since a formula with no engine to check it against is a claim nobody but its own author can be held to. All
+three remember by path under names that are theirs rather than Adam's, and a part that says none of their own options is
+written exactly as it always was, the same rule every option here keeps.
 
 `Optimizer` is open: the memory of its slots is public and a subclass writes and recalls its own, so an optimizer of
 one's own remembers across a checkpoint file and goes on from it bit for bit, as the shipped ones do. It is registered
@@ -3243,6 +3259,24 @@ A table model that turns each column into a token and reads the tokens with thes
 engine, and measured against ML.NET's trees by a rule written before the first run. It did not beat them by more than the spread
 of its own seeds, and it is not kept; the numbers are in the changelog, and attention and the encoder block, which it was made of,
 stay.
+
+A gated feed-forward part splits the encoder block's hidden layer into a gate and a value, the gate weighing the value after its
+own bend — `ReGlu`, `GeGlu` or `SwiGlu` — the shape the newer transformer recipes write and PyTorch's own layer has no form of.
+Weighing one by the other asked for nothing new: the `Product` join that two steps already use to multiply what they made is
+exactly a gate times a value, so the gate is a `Dense` and whichever bend its name calls for — `Relu`, `Gelu`, or the
+already-standing `Silu` for `SwiGlu` — put together rather than a fourth activation invented to carry one option's name alone.
+PyTorch's own layer has no gated form to match state against, so the gate and the value it weighs are found under this
+library's own names, `linear1_gate` and `linear1_value`, beside the names PyTorch does give the rest of the block.
+
+`BatchEnsemble` and `VariantHeads` are TabM-mini's own shape rather than a generic architecture borrowed from elsewhere, since a
+table-first look found it genuinely competitive and not merely convenient. `BatchEnsemble` multiplies every row of a batch by a
+different one of several learned adapters before the shared layers run once, so the shared stack answers as that many virtual
+members without a loop over them; `VariantHeads` closes the variants again with separate, un-shared weights, since a shared
+`Dense` at the end would undo exactly the separation the adapters opened. A `BatchNorm`, an attention, the sine positions or a
+recurrent layer standing over variants a `VariantHeads` has not yet closed is refused by name: a `BatchNorm` would mix
+statistics across virtual members of the same row as though they were independent examples, and attention, the positions and a
+recurrent layer would each read the variants as though they were steps of one series, which they are not. A layer and an RMS
+normalisation are not refused beside an open `BatchEnsemble`, since neither reads across a batch's rows at all.
 
 ### A graph is written from the model and never read back as it
 
@@ -3801,6 +3835,27 @@ stopped on never finished fairly; a `DealStopper`'s stop keeps the real score of
 from the trials it ran before, handed back to it: their numbering, their candidates and the space are held to this study's,
 and the best of them is trained again on every deal and refused by name if its scores differ, so a resumed study's winner is a
 network it trained itself.
+
+`Score`, `Judge` and `DealStopper` all reduce a trial to one number, which hides it where two or more things really are being
+weighed against each other — how well a model answers against how large or how slow it is. `Study.Objectives` gives a trial a
+vector instead, and a `Verdict` orders two of them the lexicographic way a `Score` or a `Judge` already ordered a vector of one,
+the first value that differs deciding it, so the one comparison serves both kinds of trial and needs no branch of its own for
+either. `EnsembleExtensions.ParetoFront()` keeps every finished trial none of the others betters on every value and is
+strictly better on at least one, instead of the single winner an ordinary study returns, because collapsing the front to one
+trial first would be the same number picked first that `Objectives` exists to avoid. Resuming a study with earlier trials
+verifies a resumed best's objective vector the same bit-for-bit way an ordinary study's resumed best is verified. `Objectives`
+is refused beside a `Score`, a `Judge`, a `Pruner` or a `DealStopper`, each of which stops or orders a trial by a number
+`Objectives` does not give — the same reason a `Pruner` is already refused beside a `Judge`.
+
+Not every network trained in sequence is an ensemble of networks answering together. `BoostedNetwork` trains a correction
+after a basis, on the basis's own frozen answer subtracted from the truth and never on the truth itself, replayed unchanged
+everywhere after training — the training-split-only rule the rest of the library is built on, applied to a second network
+rather than a second split. The two answer by their raw numbers summed once, before either comes back into the answer's own
+units, since the mean of two ways back is not the way back of their mean; a basis or a correction whose loss bends its raw
+answer — anything but the identity, `Quantile` among them — is refused by name, because a sum of two raw answers means
+something only when both are the same thing summed. `BoostedExtensions.TrainBoosted` stands apart from `pipeline.Train()` on
+purpose: a basis and a correction are a pair of trainings decided once, in code, the way `TrainedEnsemble` already takes its
+members rather than a new verb a pipeline's own chain would have to declare and keep declaring the same way for every caller.
 
 Three decisions are in its shape. Trials run one after another and share nothing they change: a network is declared afresh
 for every trial and the engines are filled before the study starts, because one optimizer shared by trials running side by

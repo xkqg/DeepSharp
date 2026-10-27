@@ -18,6 +18,18 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.17.0 is three shapes a network could not yet be put together as, and a study that weighs more than one number.**
+A gated feed-forward block splits the encoder block's hidden layer into a gate and a value, the gate weighing the value
+after its own bend — `EncoderShape.Gate`, one of `ReGlu`, `GeGlu` or `SwiGlu`. `BoostedNetwork` trains a correction on
+what a basis already answered, its own frozen answer subtracted from the truth, the two summed once before either
+comes back into the answer's own units. `BatchEnsemble` and `VariantHeads` make one network answer as an ensemble of
+itself — every row multiplied by a different one of several learned adapters before the shared layers run, closed again
+by separate, un-shared heads at the end. And `Study.Objectives` gives a trial a vector instead of the one number a
+`Score` or a `Judge` gives, with `ParetoFront()` keeping every trial none of the others betters on every value and is
+strictly better on at least one. Three more optimizers, `Lion`, `RAdam` and `Adan`, round out what a 2025–2026 look at
+PyTorch and TensorFlow still found missing. Nothing here moves a file's version; everything reads, trains and serves
+behind a pipeline exactly as before.
+
 **0.16.0 answers the flock team's fifth letter.** A split at random, a stratified split and a shuffle rank each row by a
 digest of every column, so a feature column added or dropped can move a row to another part though nothing about the row
 itself changed; declaring an id turns this off, and the three then rank by it alone, so every row that shares an id lands
@@ -28,8 +40,6 @@ fitted and asked to predict on rows handed over directly, with no pipeline behin
 through `CompiledNetwork`; and a tree or a forest answering one of two classes now predicts a true probability, where
 before it answered ML.NET's own raw score. The pipeline file is at version 15, and a file 0.15.0 wrote is read, written
 again and served as it was.
-
-**0.15.0 is about the engine's own arithmetic.** An engine on libtorch can keep its work in half the width — `Precision.BFloat16`, or `Precision.Half` with a scaled loss — with the numbers a network learns kept in full width beside it, so a stack of eight layers 2048 wide fitted 1.93 times the batch on the same card and a step of it took three quarters to a half of full width's; a layer's workings can be thrown away and worked out again to fit a larger batch. Running one network over more than one graphics card, and keeping a trained one in whole numbers of eight bits, were built, held to a rule written down first, and not kept: the numbers are in the changelog. The pipeline file is at version 14, and a file 0.14.0 wrote is read, written again and served as it was.
 
 Every release that brought something to call, this one and the ones before it, has examples on the wiki: what is new and what was improved, in code that
 is compiled against the library as it is now — see [Examples](https://github.com/xkqg/DeepSharp/wiki/Examples). Earlier

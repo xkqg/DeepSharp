@@ -3,6 +3,69 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.17.0]
+
+A 2025–2026 look at PyTorch, TensorFlow and the wider training ecosystem, next to what DeepSharp already had: three more
+optimizers, a gated feed-forward block, one network trained on what another left unexplained, a tabular network that
+answers as an ensemble of itself, and a study that weighs a trial by more than one number.
+
+### Added
+
+- **Three more optimizers.** `Lion`, `RAdam` and `Adan`, beside the five already here. PyTorch itself ships `RAdam`,
+  rectifying the step once enough trial has gone into trusting the variance, and left plain before it; `Lion` and `Adan`
+  are each run as their own reference implementation does — lucidrains's `lion-pytorch` and sail-sg's `Adan` — since
+  PyTorch ships neither. Each saves and reads back its own tensors under PyTorch's own names, and a part that says none
+  of its options is written exactly as it always would be. See [Networks](https://github.com/xkqg/DeepSharp/wiki/Networks).
+
+- **A gated feed-forward block.** `EncoderShape.Gate`, one of `ReGlu`, `GeGlu` or `SwiGlu`, splits the encoder block's
+  feed-forward hidden layer into a gate and a value, the gate weighing the value after its own bend — the shape the
+  newer transformer recipes write, which PyTorch's own `TransformerEncoderLayer` has no form of. Nothing new was needed
+  to weigh one by the other: a `Product` join, multiplying what two steps made the way a `Sum` already adds what several
+  made, is the gate and the value multiplied, and the gate's own bend is a `Dense` and whichever activation its name
+  calls for — `Relu`, `Gelu`, or the already-standing `Silu` for `SwiGlu` — reused rather than invented again under the
+  gate's own name. The gate and the value it weighs are found under this library's own names, `linear1_gate` and
+  `linear1_value`, beside the names PyTorch does give the rest of the block's state. See
+  [Networks](https://github.com/xkqg/DeepSharp/wiki/Networks).
+
+- **Training one network on what another already answered.** `BoostedNetwork`, a basis trained first and a correction
+  trained after it, on the basis's own frozen answer subtracted from the truth — never the truth itself — and only on
+  the training rows, replayed unchanged everywhere after. The two answer together by their raw numbers summed once,
+  before either comes back into the answer's own units, since the mean of two ways back is not the way back of their
+  mean. `BoostedExtensions.TrainBoosted` takes a basis and a correction the way `TrainedEnsemble` takes its members, a
+  pair of trainings decided in code rather than a new verb a pipeline declares. A basis or a correction whose loss bends
+  its raw answer — anything but the identity, `Quantile` among them — is refused by name, naming which one and its
+  activation: a sum of two raw answers means something only when both are the same thing summed. Kept as the one file
+  this library writes a boosted pair as — the basis, the correction, the digest the correction was fitted against, and
+  the one pipeline both were trained behind — refusing a correction fitted against another basis, or either network
+  trained behind another fit of the pipeline beside it. See
+  [Networks](https://github.com/xkqg/DeepSharp/wiki/Networks).
+
+- **A tabular network that answers as an ensemble of itself.** `BatchEnsemble`, one set of weights answering as several:
+  every row of a batch is multiplied, before the shared layers that follow it, by a different one of several learned
+  adapters, each starting at a random sign, so the shared stack runs once and answers as that many virtual members — Wen,
+  Tran and Ba's design, the one adapter TabM-mini keeps of it. `VariantHeads` closes the variants again at the end, as
+  many separate, un-shared projections as there are variants, each answering only its own share of the rows; while a
+  pass trains, the mean of the variants' own losses is taken rather than the loss of their mean, as TabM-mini's own
+  training does, and while it only answers, each variant's raw output is brought through the loss's activation first
+  and the mean of those taken, in the answer's own units — as a deep ensemble's members are averaged. A `BatchNorm`, an
+  attention, the sine positions, or a recurrent layer opened over a `BatchEnsemble` not yet closed by `VariantHeads` is
+  refused by name, naming where it opened: each would mix statistics, or read the variants as a series, across virtual
+  members that must stay apart until the heads end them; a layer or an RMS normalisation is not refused, since neither
+  reads across a batch's rows. Written as ONNX's own broadcasting `Mul` and a batched `MatMul`, and the variants reduced
+  to their mean, after the loss's activation, by the one node every network answering through `OnnxExport` ends at. See
+  [Networks](https://github.com/xkqg/DeepSharp/wiki/Networks).
+
+- **A study judged by more than one number.** `Study.Objectives` gives a trial a vector instead of the one number a
+  `Study.Score` or a `Study.Judge` gives — `ValidationLoss()` beside a network's own size, say — where no one trade-off
+  alone chooses the winner. The vector is ordered the lexicographic way a `Score` or a `Judge` already was, the first
+  value that differs deciding it, so the one rule serves an ordinary trial and an objectives trial alike.
+  `EnsembleExtensions.ParetoFront()` keeps every finished trial none of the others betters on every objective and is
+  strictly better on at least one, rather than the single best an ordinary study keeps. Resuming a study with earlier
+  trials verifies a resumed best's objective vector the same bit-for-bit way an ordinary study's resumed best is
+  verified. `Objectives` is refused beside a `Score`, a `Judge`, a `Pruner` or a `DealStopper`, each of which stops or
+  orders a trial by a number `Objectives` does not give. See
+  [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
+
 ## [0.16.0]
 
 The fifth letter of the flock team, answered in three: a split or a shuffle may rank by a declared id instead of the whole
