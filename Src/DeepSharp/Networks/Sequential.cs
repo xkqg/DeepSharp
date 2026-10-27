@@ -154,6 +154,36 @@ public sealed partial class Sequential
     /// <exception cref="InvalidOperationException">A layer that is no variation is written already: a variation stands first.</exception>
     public Sequential GaussianNoise(double spread, long seed) => Append(new NoiseWord(new GaussianNoise(spread, seed).Spread, seed));
 
+    /// <summary>
+    /// A BatchEnsemble adapter: every example multiplied, before the layers after it, by a different one of so many
+    /// learned adapters, so the layers after it answer as that many variants at once. Takes an example of one row, and
+    /// hands on one of <paramref name="variants"/> rows, each as wide as the one it took.
+    /// </summary>
+    /// <param name="variants">How many virtual members the adapter gives the layers after it; at least one.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">There are fewer than one variant.</exception>
+    public Sequential BatchEnsemble(int variants)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(variants, 1);
+
+        return Append(new BatchEnsembleWord(variants));
+    }
+
+    /// <summary>
+    /// Closes the variants a <see cref="BatchEnsemble"/> opened: as many separate, un-shared projections as there are
+    /// variants, each its own weights and its own bias. Takes an example of as many rows as there are variants, and
+    /// hands on one of the same, each row <paramref name="outputs"/> wide.
+    /// </summary>
+    /// <param name="outputs">How many values each variant's own projection makes of its row.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">It makes fewer than one value.</exception>
+    public Sequential VariantHeads(int outputs)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(outputs, 1);
+
+        return Append(new VariantHeadsWord(outputs));
+    }
+
     /// <summary>Normalises each feature — the last axis of an example — over the batch.</summary>
     /// <returns>This description, so the next word can be written after it.</returns>
     /// <remarks>As PyTorch leaves it: a momentum of a tenth, in PyTorch's meaning, and an epsilon of a hundred-thousandth.</remarks>
@@ -752,6 +782,32 @@ public sealed partial class Sequential
         public Shape After(Shape each) => each;
 
         Layer IWord.Make(Shape each, Draws draws) => Make(each[each.Rank - 1]);
+    }
+
+    private sealed record BatchEnsembleWord(int Variants) : IWord
+    {
+        public string? Refusal(Shape each) =>
+            each.Rank == 1
+                ? null
+                : string.Create(CultureInfo.InvariantCulture, $"batchEnsemble, takes an example of one row, and each reaching it is {each}.");
+
+        public Shape After(Shape each) => new(Variants, each[0]);
+
+        public Layer Make(Shape each, Draws draws) => new BatchEnsemble(Variants, each[0], draws);
+    }
+
+    private sealed record VariantHeadsWord(int Outputs) : IWord
+    {
+        public string? Refusal(Shape each) =>
+            each.Rank == 2
+                ? null
+                : string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"variantHeads, takes an example laid out by its variants — a BatchEnsemble opened them — and each reaching it is {each}.");
+
+        public Shape After(Shape each) => new(each[0], Outputs);
+
+        public Layer Make(Shape each, Draws draws) => new VariantHeads(each[0], each[1], Outputs, draws);
     }
 
     private sealed record ReshapeWord(Shape Each) : IWord

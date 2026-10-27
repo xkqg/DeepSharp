@@ -70,7 +70,9 @@ public abstract class Network : Layer
         ArgumentNullException.ThrowIfNull(loss);
         ArgumentNullException.ThrowIfNull(backend);
 
-        return loss.Predictions(Forward(features, Pass.Evaluation(backend)), backend);
+        var outputs = Forward(features, Pass.Evaluation(backend));
+
+        return this.Variants is not null ? loss.VariantPredictions(outputs, backend) : loss.Predictions(outputs, backend);
     }
 
     /// <summary>Puts numbers read from a file into the network's slots, each by the path of its slot: all of them, or none.</summary>

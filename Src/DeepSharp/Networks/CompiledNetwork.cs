@@ -405,7 +405,11 @@ public sealed class CompiledNetwork
                 var batch = train.Rows(order.AsSpan(start, Math.Min(options.BatchSize, order.Length - start)));
                 var recording = new RecordingBackend(_backend);
                 var outputs = compiled.Network.Forward(batch.Features, Pass.Training(recording, _stream, epoch, step).Recomputing(options.Recompute));
-                var loss = Penalised(compiled.Loss.Of(outputs, batch.Answers, recording), recording);
+                var loss = Penalised(
+                    compiled.Network.Variants is not null
+                        ? compiled.Loss.OfVariants(outputs, batch.Answers, recording)
+                        : compiled.Loss.Of(outputs, batch.Answers, recording),
+                    recording);
                 var value = loss.Values[0];
 
                 if (float.IsFinite(value))
@@ -558,7 +562,9 @@ public sealed class CompiledNetwork
             {
                 var batch = rows.Slice(start, Math.Min(options.BatchSize, rows.Count - start));
                 var outputs = compiled.Network.Forward(batch.Features, Pass.Evaluation(_backend));
-                var value = compiled.Loss.Of(outputs, batch.Answers, _backend).Values[0] + penalty;
+                var value = (compiled.Network.Variants is not null
+                    ? compiled.Loss.OfVariants(outputs, batch.Answers, _backend)
+                    : compiled.Loss.Of(outputs, batch.Answers, _backend)).Values[0] + penalty;
 
                 if (!float.IsFinite(value))
                 {

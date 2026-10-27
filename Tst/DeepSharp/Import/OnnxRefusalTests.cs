@@ -92,7 +92,7 @@ public class OnnxRefusalTests
 
     private const string Unmade = "which is neither the input nor a value a node before it made.";
 
-    private const string Several = "and a Reshape here works on one: an Add takes two, to add them up, and a Concat any number, to lay them side by side.";
+    private const string Several = "and a Reshape here works on one: an Add or a Mul takes two, to add or to multiply them, and a Concat any number, to lay them side by side.";
 
     private const string Unsqueezed = $"node 'node_unsqueeze' (Unsqueeze): 'Unsqueeze' is no operator a network here is built of: {Operators}";
 

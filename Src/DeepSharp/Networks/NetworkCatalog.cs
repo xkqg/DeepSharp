@@ -90,6 +90,8 @@ public sealed class NetworkCatalog
         .Register<Product>()
         .Register<Unpadded>()
         .Register<EveryStep>()
+        .Register<BatchEnsemble>()
+        .Register<VariantHeads>()
         .Register<Lstm>()
         .Register<Gru>()
         .Register<Attention>()
