@@ -138,6 +138,24 @@ public class OnnxExportTests
     }
 
     [Fact]
+    public void ANetworkOfBatchEnsembleAndVariantHeads_IsAnsweredThroughByOnnxRuntime_AsTheNetworkAnswers()
+    {
+        // Not added to Networks/EveryNetwork: DeepSharp.Import.Onnx has no reader for a BatchEnsemble/VariantHeads graph yet,
+        // so only the export-and-answer direction is proven here, not the read-back-into-DeepSharp direction "gated" also covers.
+        var network = Runtime.Filled(new Sequential().BatchEnsemble(3).Dense(6).Relu().VariantHeads(2).Lower(new Shape(6), new RandomStream(13)));
+        var loss = new MeanSquaredError();
+        var rows = Runtime.Rows(5, 6);
+        var graph = new OnnxExport(new Shape(6)).ToBytes(network, loss);
+
+        var here = network.Predict(rows, loss, Engine).Values.ToArray();
+        var there = Runtime.Answers(graph, rows);
+
+        Assert.Equal(10, here.Length);
+        Assert.Equal(here.Length, there.Length);
+        Assert.InRange(here.Zip(there, (one, other) => Math.Abs(one - other)).Max(), 0, 1e-5);
+    }
+
+    [Fact]
     public void ALowRankPair_IsWrittenAsTheProductsItIs_AndAnsweredThroughAsTheLayerAnswers()
     {
         var network = Runtime.Filled(new Sequential().Dense(5, new Beginning { LowRank = new LowRank(2, 4) }).Relu().Dense(2).Lower(new Shape(6), new RandomStream(1)));

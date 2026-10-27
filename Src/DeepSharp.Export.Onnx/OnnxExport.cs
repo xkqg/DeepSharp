@@ -90,17 +90,31 @@ public sealed class OnnxExport
                 "The network ends in a row a flatten made of an image: ONNX flattens it channel by channel and the network place by place, so the graph would give the values in another order than the network does.");
         }
 
-        var output = loss.Activation switch
+        var variants = stack is { Layers: [.., VariantHeads heads] } ? heads.Variants : (int?)null;
+        var activatedName = variants is null ? "output" : "output/activated";
+
+        var activated = loss.Activation switch
         {
-            OutputActivation.Sigmoid => graph.Node(new NodeOf("Sigmoid", 6, "output/Sigmoid"), [made.Name], "output"),
+            OutputActivation.Sigmoid => graph.Node(new NodeOf("Sigmoid", 6, "output/Sigmoid"), [made.Name], activatedName),
             OutputActivation.Softmax => graph.Node(
                 new NodeOf("Softmax", made.Each.Rank == 1 ? 1 : 13, "output/Softmax") { Attributes = node => node.State("axis", 1L) },
                 [made.Name],
-                "output"),
+                activatedName),
             _ => made.Name,
         };
 
-        graph.Gives(output, ChannelsFirst(made.Each));
+        // VariantHeads' k answers for each row are averaged after the activation, in the answer's own units, as a deep
+        // ensemble's members are — the mean taken over the variants, which the graph holds last, right after the batch's
+        // own channels, as every multi-axis value here does.
+        var output = variants is null
+            ? activated
+            : graph.Node(
+                new NodeOf("ReduceMean", 1, "output/ReduceMean") { Attributes = node => { node.States("axes", (long)made.Each.Rank); node.State("keepdims", 0L); } },
+                [activated],
+                "output");
+        var givenEach = variants is null ? made.Each : new Shape(made.Each[1]);
+
+        graph.Gives(output, ChannelsFirst(givenEach));
         graph.Settle();
 
         var model = new ModelProto
