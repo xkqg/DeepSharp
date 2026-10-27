@@ -93,6 +93,9 @@ public class OptimizerTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new Sgd(rate));
         Assert.Throws<ArgumentOutOfRangeException>(() => new Adam(rate));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new RAdam(rate));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Lion(rate));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Adan(rate));
         Assert.Throws<ArgumentOutOfRangeException>(() => new Sgd().Step([], new Gradients(new Dictionary<Tensor, Tensor>()), rate, _backend));
     }
 
@@ -140,9 +143,9 @@ public class OptimizerTests
     }
 
     [Fact]
-    public void AdamWAndNadam_RememberTheStepsAndBothRunningMeans_UnderPyTorchsNames()
+    public void AdamWAndNadamAndRAdam_RememberTheStepsAndBothRunningMeans_UnderPyTorchsNames()
     {
-        foreach (var optimizer in new Optimizer[] { new AdamW(0.01), new Nadam(0.01) })
+        foreach (var optimizer in new Optimizer[] { new AdamW(0.01), new Nadam(0.01), new RAdam(0.01) })
         {
             var output = Walked(optimizer);
             var memory = optimizer.KeptOf(output.Weight)!.Value;
@@ -222,6 +225,101 @@ public class OptimizerTests
         Assert.Null(new AdamW().KeptOf(weight));
         Assert.Null(new RmsProp().KeptOf(weight));
         Assert.Null(new Nadam().KeptOf(weight));
+        Assert.Null(new RAdam().KeptOf(weight));
+        Assert.Null(new Lion().KeptOf(weight));
+        Assert.Null(new Adan().KeptOf(weight));
+    }
+
+    [Fact]
+    public void ACheckpointAdamWroteUnderItsOwnTwoNames_IsReadByRAdam_ForTheyShareTheSameTwoMeans()
+    {
+        var adam = new Adam(0.01);
+        var weight = Walked(adam);
+        var radam = new RAdam(0.01);
+
+        radam.PutBack(weight.Weight, adam.KeptOf(weight.Weight)!.Value);
+
+        Assert.Equal(adam.KeptOf(weight.Weight)!.Value.Tensors["exp_avg"], radam.KeptOf(weight.Weight)!.Value.Tensors["exp_avg"]);
+        Assert.Equal(3, radam.KeptOf(weight.Weight)!.Value.Steps);
+    }
+
+    [Fact]
+    public void RAdamsRateHasLessThanFiveTrialTrustedStepsOfRunningSquares_MovesByTheBiasCorrectedMeanAlone_UnlikeAdam()
+    {
+        var parameter = new Dense(Tensor.From(new Shape(1, 1), [1f]), Tensor.Zeros(new Shape(1))).Weight;
+        var another = new Dense(Tensor.From(new Shape(1, 1), [1f]), Tensor.Zeros(new Shape(1))).Weight;
+        var gradients = new Gradients(new Dictionary<Tensor, Tensor>(ReferenceEqualityComparer.Instance) { [parameter.Value] = Tensor.From(new Shape(1, 1), [0.5f]) });
+        var gradientsAgain = new Gradients(new Dictionary<Tensor, Tensor>(ReferenceEqualityComparer.Instance) { [another.Value] = Tensor.From(new Shape(1, 1), [0.5f]) });
+
+        // rho_1 is 1 for the default betas, below PyTorch's threshold of five, so the first step is the bias-corrected mean
+        // alone: the bias correction of the mean exactly cancels its own (1 - beta1), so it moves by the rate times the
+        // gradient, to the bit — unlike Adam's first step, which divides by the gradient's own size and so moves by about
+        // the rate times the gradient's sign.
+        new RAdam(0.1).Step([parameter], gradients, 0.1, _backend);
+        new Adam(0.1).Step([another], gradientsAgain, 0.1, _backend);
+
+        AssertClose([1 - (0.1 * 0.5)], parameter.Value);
+        Assert.NotEqual(parameter.Value.Values[0], another.Value.Values[0]);
+    }
+
+    [Fact]
+    public void Lion_MovesAgainstTheSignOfAnInterpolationOfItsMomentumAndTheGradient_AndKeepsOnlyAMomentum()
+    {
+        var parameter = new Dense(Tensor.From(new Shape(1, 3), [1f, -2f, 3f]), Tensor.Zeros(new Shape(3))).Weight;
+        var gradients = new Gradients(new Dictionary<Tensor, Tensor>(ReferenceEqualityComparer.Instance)
+        {
+            [parameter.Value] = Tensor.From(new Shape(1, 3), [0.5f, -0.3f, 0f]),
+        });
+        var lion = new Lion(0.1);
+
+        lion.Step([parameter], gradients, 0.1, _backend);
+
+        AssertClose([0.9, -1.9, 3], parameter.Value);
+        AssertClose([0.005, -0.003, 0], lion.MomentumOf(parameter));
+        Assert.Equal(["momentum_buffer"], lion.KeptOf(parameter)!.Value.Tensors.Keys);
+    }
+
+    [Fact]
+    public void LionsWeightDecay_ShrinksTheParameterFirst_DecoupledFromTheGradient_AsAdamWsDoes()
+    {
+        var parameter = new Dense(Tensor.From(new Shape(1, 1), [1f]), Tensor.Zeros(new Shape(1))).Weight;
+        var gradients = new Gradients(new Dictionary<Tensor, Tensor>(ReferenceEqualityComparer.Instance) { [parameter.Value] = Tensor.From(new Shape(1, 1), [0.5f]) });
+
+        new Lion(0.1) { WeightDecay = 0.1 }.Step([parameter], gradients, 0.1, _backend);
+
+        AssertClose([(1 * (1 - (0.1 * 0.1))) - (0.1 * 1)], parameter.Value);
+    }
+
+    [Fact]
+    public void ASignOfAGradientThatIsNotANumber_IsNought_WhereTorchsOwnSignIsNotANumber()
+    {
+        var parameter = new Dense(Tensor.From(new Shape(1, 1), [1f]), Tensor.Zeros(new Shape(1))).Weight;
+        var gradients = new Gradients(new Dictionary<Tensor, Tensor>(ReferenceEqualityComparer.Instance) { [parameter.Value] = Tensor.From(new Shape(1, 1), [float.NaN]) });
+
+        new Lion(0.1).Step([parameter], gradients, 0.1, _backend);
+
+        AssertClose([1], parameter.Value);
+    }
+
+    [Fact]
+    public void Adan_OnItsFirstStep_HasNoDifferenceYetToCarry_AndMovesByAboutTheRateTimesTheSignOfTheGradient()
+    {
+        var parameter = new Dense(Tensor.From(new Shape(1, 1), [1f]), Tensor.Zeros(new Shape(1))).Weight;
+        var gradients = new Gradients(new Dictionary<Tensor, Tensor>(ReferenceEqualityComparer.Instance) { [parameter.Value] = Tensor.From(new Shape(1, 1), [0.5f]) });
+        var adan = new Adan(0.1);
+
+        adan.Step([parameter], gradients, 0.1, _backend);
+
+        AssertClose([1 - 0.1], parameter.Value);
+        Assert.Equal(["exp_avg", "exp_avg_diff", "exp_avg_sq", "neg_pre_grad"], adan.KeptOf(parameter)!.Value.Tensors.Keys.Order(StringComparer.Ordinal));
+        AssertClose([0], adan.KeptOf(parameter)!.Value.Tensors["exp_avg_diff"]);
+    }
+
+    [Fact]
+    public void Adan_RefusesBetasThatAreNotEachAShareBelowOne()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Adan { Betas = new AdanBetas(1, 0.9, 0.9) });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Adan { Betas = new AdanBetas(0.9, -0.1, 0.9) });
     }
 
     // Three steps of an optimizer over the Titanic walk; the output layer it moved.

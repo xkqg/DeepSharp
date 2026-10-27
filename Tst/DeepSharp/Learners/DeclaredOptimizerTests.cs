@@ -47,10 +47,17 @@ public class DeclaredOptimizerTests
         var adamW = Assert.IsType<AdamW>(Word("adamw").Declared().Moved());
         var rmsProp = Assert.IsType<RmsProp>(Word("rmsprop").Declared().Moved());
         var nadam = Assert.IsType<Nadam>(Word("nadam").Declared().Moved());
+        var radam = Assert.IsType<RAdam>(Word("radam").Declared().Moved());
+        var lion = Assert.IsType<Lion>(Word("lion").Declared().Moved());
+        var adan = Assert.IsType<Adan>(Word("adan").Declared().Moved());
 
         Assert.Equal([0.001, 0.9, 0.999, 1e-8, 0.01], new[] { adamW.Rate, adamW.Betas.First, adamW.Betas.Second, adamW.Epsilon, adamW.WeightDecay });
         Assert.Equal([0.01, 0.99, 1e-8, 0], new[] { rmsProp.Rate, rmsProp.Alpha, rmsProp.Epsilon, rmsProp.Momentum });
         Assert.Equal([0.002, 0.9, 0.999, 1e-8, 0.004], new[] { nadam.Rate, nadam.Betas.First, nadam.Betas.Second, nadam.Epsilon, nadam.MomentumDecay });
+        Assert.Equal([0.001, 0.9, 0.999, 1e-8, 0], new[] { radam.Rate, radam.Betas.First, radam.Betas.Second, radam.Epsilon, radam.WeightDecay });
+        Assert.False(radam.DecoupledWeightDecay);
+        Assert.Equal([0.0001, 0.9, 0.99, 0], new[] { lion.Rate, lion.Betas.First, lion.Betas.Second, lion.WeightDecay });
+        Assert.Equal([0.001, 0.98, 0.92, 0.99, 1e-8, 0], new[] { adan.Rate, adan.Betas.First, adan.Betas.Second, adan.Betas.Third, adan.Epsilon, adan.WeightDecay });
     }
 
     [Theory]
@@ -108,6 +115,9 @@ public class DeclaredOptimizerTests
     [InlineData("adamw")]
     [InlineData("rmsprop")]
     [InlineData("nadam")]
+    [InlineData("radam")]
+    [InlineData("lion")]
+    [InlineData("adan")]
     public void ANetworkDeclaredWithANewOptimizer_IsTheNetworkTheSameWordsWrittenAsCodeGive_NumberForNumber(string kind)
     {
         var declared = Passengers()
@@ -115,6 +125,9 @@ public class DeclaredOptimizerTests
             {
                 "adamw" => network.Dense(4).Relu().Dense(1).AdamW(0.01, weightDecay: 0.1),
                 "rmsprop" => network.Dense(4).Relu().Dense(1).RmsProp(0.001, momentum: 0.9),
+                "radam" => network.Dense(4).Relu().Dense(1).RAdam(0.01),
+                "lion" => network.Dense(4).Relu().Dense(1).Lion(0.001, weightDecay: 0.01),
+                "adan" => network.Dense(4).Relu().Dense(1).Adan(0.01),
                 _ => network.Dense(4).Relu().Dense(1).Nadam(0.01),
             })
             .BinaryCrossEntropy()
@@ -125,6 +138,9 @@ public class DeclaredOptimizerTests
         {
             "adamw" => new AdamW(0.01) { WeightDecay = 0.1 },
             "rmsprop" => new RmsProp(0.001) { Momentum = 0.9 },
+            "radam" => new RAdam(0.01),
+            "lion" => new Lion(0.001) { WeightDecay = 0.01 },
+            "adan" => new Adan(0.01),
             _ => new Nadam(0.01),
         };
         var written = new Sequential().Dense(4).Relu().Dense(1)
@@ -145,6 +161,15 @@ public class DeclaredOptimizerTests
         Assert.Equal(["rate", "firstMoment", "secondMoment", "epsilon", "weightDecay", "amsgrad"], Word("adamw").Settings.Select(setting => setting.Key));
         Assert.Equal(["rate", "alpha", "epsilon", "momentum", "weightDecay", "centered"], Word("rmsprop").Settings.Select(setting => setting.Key));
         Assert.Equal(["rate", "firstMoment", "secondMoment", "epsilon", "momentumDecay", "weightDecay"], Word("nadam").Settings.Select(setting => setting.Key));
+        Assert.Equal(["rate", "firstMoment", "secondMoment", "epsilon", "weightDecay", "decoupledWeightDecay"], Word("radam").Settings.Select(setting => setting.Key));
+        Assert.Equal(["rate", "firstMoment", "secondMoment", "weightDecay"], Word("lion").Settings.Select(setting => setting.Key));
+        Assert.Equal(["rate", "firstMoment", "secondMoment", "thirdMoment", "epsilon", "weightDecay"], Word("adan").Settings.Select(setting => setting.Key));
+
+        // Lion's and Adan's weight decay, like Sgd's, Adam's, RmsProp's and Nadam's, is none unless said, and left out then;
+        // only AdamW's own is always on and always written.
+        Assert.DoesNotContain("weightDecay", Word("lion").Settings.Where(setting => setting.RequiredKeys.Count > 0).Select(setting => setting.Key));
+        Assert.DoesNotContain("weightDecay", Word("adan").Settings.Where(setting => setting.RequiredKeys.Count > 0).Select(setting => setting.Key));
+        Assert.DoesNotContain("weightDecay", Word("radam").Settings.Where(setting => setting.RequiredKeys.Count > 0).Select(setting => setting.Key));
 
         // AdamW's weight decay is its own, decoupled and always written; every other decay is added to the gradient and left out
         // meaning none.
@@ -221,7 +246,19 @@ public class DeclaredOptimizerTests
         Assert.Contains("AmsGrad", Assert.Throws<NotSupportedException>(() => Learner(network => network.Sgd().AmsGrad())).Message, StringComparison.Ordinal);
         Assert.Contains("Centered", Assert.Throws<NotSupportedException>(() => Learner(network => network.Adam().Centered())).Message, StringComparison.Ordinal);
         Assert.Contains("WeightDecay", Assert.Throws<NotSupportedException>(() => Learner(network => network.AdamW().WeightDecay(0.1))).Message, StringComparison.Ordinal);
-        Assert.Contains("AdamW(", Assert.Throws<NotSupportedException>(() => Learner(network => network.AdamW().WeightDecay(0.1))).Message, StringComparison.Ordinal);
+        Assert.Contains("'adamw'", Assert.Throws<NotSupportedException>(() => Learner(network => network.AdamW().WeightDecay(0.1))).Message, StringComparison.Ordinal);
+        Assert.Contains("'lion'", Assert.Throws<NotSupportedException>(() => Learner(network => network.Lion().WeightDecay(0.1))).Message, StringComparison.Ordinal);
+        Assert.Contains("'adan'", Assert.Throws<NotSupportedException>(() => Learner(network => network.Adan().WeightDecay(0.1))).Message, StringComparison.Ordinal);
+        Assert.Contains("decoupled", Assert.Throws<NotSupportedException>(() => Learner(network => network.RAdam(decoupledWeightDecay: true).WeightDecay(0.1))).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void RAdamsWeightDecay_IsCoupledByDefault_SoTheGenericDoorTakesIt_ButNotOnceItIsDecoupled()
+    {
+        var coupled = Learner(network => network.RAdam().WeightDecay(0.1));
+
+        Assert.Equal(0.1, coupled.Optimizer.Number("weightDecay"));
+        Assert.False(coupled.Optimizer.YesOrNo("decoupledWeightDecay"));
     }
 
     [Fact]

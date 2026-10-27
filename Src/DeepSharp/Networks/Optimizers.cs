@@ -923,6 +923,365 @@ public sealed class Nadam : Optimizer, ISaved<Nadam>
 }
 
 /// <summary>
+/// RAdam: Adam, with the step rectified once the running mean of the squares has seen enough of the gradients to trust its
+/// spread — before that, the step is the bias-corrected mean of the gradients alone. PyTorch's <c>RAdam</c>, its arithmetic
+/// and its threshold of five in PyTorch's own order, which the paper's own text gives as four.
+/// </summary>
+/// <remarks>
+/// With a weight decay the parameter times it is added to the gradient first, as PyTorch's RAdam does by default; with
+/// <see cref="DecoupledWeightDecay"/> the parameter is shrunk towards nothing first instead, decoupled from the gradient, as
+/// AdamW's decay is. It steps through the running means <see cref="Adam"/> and <see cref="Nadam"/> keep them by, never through
+/// an engine's fused step for Adam's own formula, which would rectify nothing.
+/// </remarks>
+public sealed class RAdam : Optimizer, ISaved<RAdam>
+{
+    private readonly RunningMoments _moments = new();
+    private readonly Betas _betas = new(0.9, 0.999);
+    private readonly double _epsilon = 1e-8;
+    private readonly double _weightDecay;
+
+    /// <summary>RAdam at the given rate.</summary>
+    /// <param name="rate">How far a step moves the parameters; a thousandth, unless said, as PyTorch leaves it.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The rate is not a number above nothing.</exception>
+    public RAdam(double rate = 0.001)
+        : base(rate)
+    {
+    }
+
+    /// <summary>How much of each running mean carries on from one step to the next; nine tenths and 0.999, unless said.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Either is not a share from nothing to below one.</exception>
+    public Betas Betas
+    {
+        get => _betas;
+        init => _betas = RequireBetas(value);
+    }
+
+    /// <summary>What is added to the root of the mean of the squares, so nothing is divided by nothing; a hundred-millionth, unless said.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a number above nothing.</exception>
+    public double Epsilon
+    {
+        get => _epsilon;
+        init => _epsilon = RequireEpsilon(value);
+    }
+
+    /// <summary>How much of each parameter is added to its gradient before the step, unless <see cref="DecoupledWeightDecay"/> shrinks it instead; none, unless said.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is below nothing, or not a finite number.</exception>
+    public double WeightDecay
+    {
+        get => _weightDecay;
+        init => _weightDecay = RequireAtLeastNothing(value, "Weight decay");
+    }
+
+    /// <summary>Whether the weight decay shrinks the parameter first, decoupled from the gradient, as AdamW's decay does; it is added to the gradient, unless said.</summary>
+    public bool DecoupledWeightDecay { get; init; }
+
+    /// <inheritdoc />
+    public static string Name => "radam";
+
+    /// <inheritdoc />
+    public int FileVersion => VersionOf(WeightDecay > 0 || DecoupledWeightDecay);
+
+    /// <inheritdoc />
+    protected override double CoupledDecay => DecoupledWeightDecay ? 0 : WeightDecay;
+
+    /// <inheritdoc />
+    public static RAdam Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        var betas = BetasIn(settings, rebuilding);
+
+        return new(rebuilding.Number(settings, "rate"))
+        {
+            Betas = betas,
+            Epsilon = rebuilding.Number(settings, "epsilon"),
+            WeightDecay = rebuilding.Number(settings, "weightDecay"),
+            DecoupledWeightDecay = rebuilding.Holds(settings, "decoupledWeightDecay"),
+        };
+    }
+
+    /// <inheritdoc />
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber("rate", Rate);
+        WriteBetas(writer, Betas);
+        writer.WriteNumber("epsilon", Epsilon);
+
+        if (DecoupledWeightDecay)
+        {
+            writer.WriteNumber("weightDecay", WeightDecay);
+            writer.WriteBoolean("decoupledWeightDecay", true);
+        }
+        else
+        {
+            WriteCoupledDecay(writer, WeightDecay);
+        }
+    }
+
+    /// <inheritdoc />
+    protected override SlotMemory? MemoryOf(Parameter parameter) => _moments.MemoryOf(parameter);
+
+    /// <inheritdoc />
+    /// <remarks>Shares its memory's shape with <see cref="Adam"/>, <see cref="AdamW"/> and <see cref="Nadam"/>: a checkpoint any of them wrote is read back here, under the same two names.</remarks>
+    protected override void Recall(Parameter parameter, SlotMemory memory) => _moments.Recall(parameter, memory, "RAdam", amsgrad: false);
+
+    /// <inheritdoc />
+    protected override Tensor Moved(Parameter parameter, Tensor gradient, double rate, ITensorBackend backend)
+    {
+        var decayed = DecoupledWeightDecay && WeightDecay > 0
+            ? backend.Scale(parameter.Value, Scalar(backend, 1 - (rate * WeightDecay)))
+            : parameter.Value;
+
+        var moments = _moments.After(parameter, gradient, new MeansKept(Betas, AmsGrad: false), backend);
+        var step = moments.Steps;
+        var biasFirst = 1 - Math.Pow(Betas.First, step);
+        var biasSecond = 1 - Math.Pow(Betas.Second, step);
+        var rhoInfinite = (2.0 / (1 - Betas.Second)) - 1;
+        var rho = rhoInfinite - (2.0 * step * Math.Pow(Betas.Second, step) / biasSecond);
+        var mean = backend.Scale(moments.Average, Scalar(backend, 1 / biasFirst));
+
+        if (rho > 5)
+        {
+            var rectified = Math.Sqrt((rho - 4) * (rho - 2) * rhoInfinite / ((rhoInfinite - 4) * (rhoInfinite - 2) * rho));
+            var root = backend.Add(
+                backend.Scale(backend.Sqrt(moments.SquaredAverage), Scalar(backend, 1 / Math.Sqrt(biasSecond))),
+                backend.Fill(gradient.Shape, (float)Epsilon));
+
+            return backend.Subtract(decayed, backend.Scale(backend.Divide(mean, root), Scalar(backend, rate * rectified)));
+        }
+
+        return backend.Subtract(decayed, backend.Scale(mean, Scalar(backend, rate)));
+    }
+}
+
+/// <summary>
+/// Lion: every parameter moved against the sign of an interpolation between a kept momentum and its gradient, the
+/// momentum itself updated by a second share only after the step is taken. Lucidrains's <c>lion-pytorch</c>, since PyTorch
+/// ships no Lion of its own: Chen and others' EvoLved Sign Momentum.
+/// </summary>
+/// <remarks>
+/// With a weight decay the parameter is shrunk towards nothing first, decoupled from the gradient, as AdamW's decay is:
+/// Lion's own step is one or minus one in every place but for that shrink, so a decay added to the gradient first would move
+/// a parameter by more than its step is worth. The sign is <see cref="LaidOverExtensions.Sign"/>, composed of two steps, so
+/// nothing but a running momentum is kept.
+/// </remarks>
+public sealed class Lion : Optimizer, ISaved<Lion>
+{
+    private readonly Dictionary<Parameter, Tensor> _momentums = [];
+    private readonly Betas _betas = new(0.9, 0.99);
+    private readonly double _weightDecay;
+
+    /// <summary>Lion at the given rate.</summary>
+    /// <param name="rate">How far a step moves the parameters; a ten-thousandth, unless said, as lucidrains's own leaves it.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The rate is not a number above nothing.</exception>
+    public Lion(double rate = 0.0001)
+        : base(rate)
+    {
+    }
+
+    /// <summary>
+    /// How much of the kept momentum the step's interpolation takes, and how much of it the kept momentum itself takes from
+    /// the gradient after the step; nine tenths and 0.99, unless said, as lucidrains's own leaves them.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">Either is not a share from nothing to below one.</exception>
+    public Betas Betas
+    {
+        get => _betas;
+        init => _betas = RequireBetas(value);
+    }
+
+    /// <summary>How far every parameter is shrunk towards nothing at each step, as a share of the step's rate; none, unless said.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is below nothing, or not a finite number.</exception>
+    public double WeightDecay
+    {
+        get => _weightDecay;
+        init => _weightDecay = RequireAtLeastNothing(value, "Weight decay");
+    }
+
+    /// <inheritdoc />
+    public static string Name => "lion";
+
+    /// <inheritdoc />
+    public int FileVersion => VersionOf(WeightDecay > 0);
+
+    /// <inheritdoc />
+    public static Lion Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        var betas = BetasIn(settings, rebuilding);
+
+        return new(rebuilding.Number(settings, "rate")) { Betas = betas, WeightDecay = rebuilding.Number(settings, "weightDecay") };
+    }
+
+    /// <inheritdoc />
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber("rate", Rate);
+        WriteBetas(writer, Betas);
+        writer.WriteNumber("weightDecay", WeightDecay);
+    }
+
+    /// <summary>The momentum a parameter carries into its next step.</summary>
+    internal Tensor MomentumOf(Parameter parameter) => _momentums[parameter];
+
+    /// <inheritdoc />
+    protected override SlotMemory? MemoryOf(Parameter parameter) =>
+        _momentums.TryGetValue(parameter, out var momentum)
+            ? new SlotMemory(0, new Dictionary<string, Tensor> { ["momentum_buffer"] = momentum })
+            : null;
+
+    /// <inheritdoc />
+    protected override void Recall(Parameter parameter, SlotMemory memory)
+    {
+        RequireNothingMore(parameter, memory, "momentum_buffer");
+        _momentums[parameter] = Remembered(parameter, memory, "momentum_buffer");
+    }
+
+    /// <inheritdoc />
+    protected override Tensor Moved(Parameter parameter, Tensor gradient, double rate, ITensorBackend backend)
+    {
+        var before = _momentums.TryGetValue(parameter, out var momentum) ? momentum : backend.Fill(gradient.Shape, 0f);
+        var interpolated = backend.Add(backend.Scale(before, Scalar(backend, Betas.First)), backend.Scale(gradient, Scalar(backend, 1 - Betas.First)));
+        var direction = backend.Sign(interpolated);
+
+        _momentums[parameter] = backend.Add(backend.Scale(before, Scalar(backend, Betas.Second)), backend.Scale(gradient, Scalar(backend, 1 - Betas.Second)));
+
+        var decayed = WeightDecay > 0 ? backend.Scale(parameter.Value, Scalar(backend, 1 - (rate * WeightDecay))) : parameter.Value;
+
+        return backend.Subtract(decayed, backend.Scale(direction, Scalar(backend, rate)));
+    }
+}
+
+/// <summary>The three rates Adan's three running means forget at.</summary>
+/// <param name="First">How much of the running mean of the gradients carries on.</param>
+/// <param name="Second">How much of the running mean of the gradients' differences from one step to the last carries on.</param>
+/// <param name="Third">How much of the running mean of the squares carries on.</param>
+public readonly record struct AdanBetas(double First, double Second, double Third);
+
+/// <summary>
+/// Adan: every parameter moved by a running mean of its gradients and of how they differ step to step, over the root of a
+/// running mean of their combined squares, every mean corrected for starting at nothing. Sail-sg's <c>Adan</c>, its
+/// arithmetic in the official implementation's own order, since PyTorch ships no Adan of its own.
+/// </summary>
+/// <remarks>
+/// With a weight decay the step is taken first and the parameter is then divided by one plus the rate times the decay, as
+/// Adan's own proximal form has it by default — not AdamW's decoupled shrink, taken before the step. Every mean is
+/// corrected for starting at nothing, which Adan's own implementation always does, unlike Adam's family here.
+/// </remarks>
+public sealed class Adan : Optimizer, ISaved<Adan>
+{
+    private readonly AdanRunningMoments _moments = new();
+    private readonly AdanBetas _betas = new(0.98, 0.92, 0.99);
+    private readonly double _epsilon = 1e-8;
+    private readonly double _weightDecay;
+
+    /// <summary>Adan at the given rate.</summary>
+    /// <param name="rate">How far a step moves the parameters; a thousandth, unless said, as sail-sg's own leaves it.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The rate is not a number above nothing.</exception>
+    public Adan(double rate = 0.001)
+        : base(rate)
+    {
+    }
+
+    /// <summary>How much of each running mean carries on from one step to the next; 0.98, 0.92 and 0.99, unless said, as sail-sg's own leaves them.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">Any is not a share from nothing to below one.</exception>
+    public AdanBetas Betas
+    {
+        get => _betas;
+        init => _betas = value.First is >= 0 and < 1 && value.Second is >= 0 and < 1 && value.Third is >= 0 and < 1
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), value, "Each of Adan's three betas is a share from nothing to below one.");
+    }
+
+    /// <summary>What is added to the root of the mean of the squares, so nothing is divided by nothing; a hundred-millionth, unless said.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is not a number above nothing.</exception>
+    public double Epsilon
+    {
+        get => _epsilon;
+        init => _epsilon = RequireEpsilon(value);
+    }
+
+    /// <summary>How far every parameter is shrunk towards nothing, by its proximal division after the step, as a share of the step's rate; none, unless said.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">It is below nothing, or not a finite number.</exception>
+    public double WeightDecay
+    {
+        get => _weightDecay;
+        init => _weightDecay = RequireAtLeastNothing(value, "Weight decay");
+    }
+
+    /// <inheritdoc />
+    public static string Name => "adan";
+
+    /// <inheritdoc />
+    public int FileVersion => VersionOf(WeightDecay > 0);
+
+    /// <inheritdoc />
+    public static Adan Rebuild(JsonElement settings, Rebuilding rebuilding)
+    {
+        ArgumentNullException.ThrowIfNull(rebuilding);
+
+        var betas = rebuilding.Numbers(settings, "betas");
+
+        if (betas.Count != 3)
+        {
+            throw new FormatException("'betas' is the three rates Adan's running means forget at, as a list of three numbers.");
+        }
+
+        return new(rebuilding.Number(settings, "rate"))
+        {
+            Betas = new AdanBetas(betas[0], betas[1], betas[2]),
+            Epsilon = rebuilding.Number(settings, "epsilon"),
+            WeightDecay = rebuilding.Number(settings, "weightDecay"),
+        };
+    }
+
+    /// <inheritdoc />
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        writer.WriteNumber("rate", Rate);
+        writer.WriteStartArray("betas");
+        writer.WriteNumberValue(Betas.First);
+        writer.WriteNumberValue(Betas.Second);
+        writer.WriteNumberValue(Betas.Third);
+        writer.WriteEndArray();
+        writer.WriteNumber("epsilon", Epsilon);
+        writer.WriteNumber("weightDecay", WeightDecay);
+    }
+
+    /// <inheritdoc />
+    protected override SlotMemory? MemoryOf(Parameter parameter) => _moments.MemoryOf(parameter);
+
+    /// <inheritdoc />
+    protected override void Recall(Parameter parameter, SlotMemory memory) => _moments.Recall(parameter, memory);
+
+    /// <inheritdoc />
+    protected override Tensor Moved(Parameter parameter, Tensor gradient, double rate, ITensorBackend backend)
+    {
+        var moments = _moments.After(parameter, gradient, Betas, backend);
+        var biasFirst = 1 - Math.Pow(Betas.First, moments.Steps);
+        var biasSecond = 1 - Math.Pow(Betas.Second, moments.Steps);
+        var biasThird = 1 - Math.Pow(Betas.Third, moments.Steps);
+
+        var root = backend.Add(
+            backend.Scale(backend.Sqrt(moments.SquaredAverage), Scalar(backend, 1 / Math.Sqrt(biasThird))),
+            backend.Fill(gradient.Shape, (float)Epsilon));
+
+        var moved = backend.Subtract(
+            backend.Subtract(parameter.Value, backend.Scale(backend.Divide(moments.Average, root), Scalar(backend, rate / biasFirst))),
+            backend.Scale(backend.Divide(moments.DifferenceAverage, root), Scalar(backend, rate * Betas.Second / biasSecond)));
+
+        return WeightDecay > 0 ? backend.Divide(moved, backend.Fill(gradient.Shape, (float)(1 + (rate * WeightDecay)))) : moved;
+    }
+}
+
+/// <summary>
 /// What Adam remembers of one parameter: how many steps it took, its running means of the gradients and of their squares, and,
 /// under AMSGrad, the largest mean of the squares there has been.
 /// </summary>
@@ -1090,3 +1449,82 @@ internal sealed class RunningMoments
 /// momentum, and its running mean of the gradients when it is centred.
 /// </summary>
 internal readonly record struct SquareMoments(int Steps, Tensor SquareAverage, Tensor? Buffer, Tensor? GradientAverage = null);
+
+/// <summary>
+/// What Adan remembers of one parameter: how many steps it took, its running mean of the gradients, of how they differ step
+/// to step, and of their combined squares, and the negated gradient of its last step, which the next step's difference is
+/// worked out from.
+/// </summary>
+internal readonly record struct AdanMoments(int Steps, Tensor Average, Tensor DifferenceAverage, Tensor SquaredAverage, Tensor NegatedPreviousGradient);
+
+/// <summary>The running means of the gradients, of their differences and of their combined squares that Adan keeps of every parameter it moves.</summary>
+internal sealed class AdanRunningMoments
+{
+    private readonly Dictionary<Parameter, AdanMoments> _kept = [];
+
+    /// <summary>
+    /// A parameter's means after one more step with this gradient: the gradient's difference from the last step's, from
+    /// nothing at the first step, carried into the mean of the differences and, combined with the gradient, into the mean of
+    /// the squares; worked out as Adan's own implementation works them out.
+    /// </summary>
+    /// <param name="parameter">The parameter.</param>
+    /// <param name="gradient">Its gradient.</param>
+    /// <param name="betas">The three rates the means forget at.</param>
+    /// <param name="backend">The backend the arithmetic runs on.</param>
+    /// <returns>The steps, one more, and the three means, and the negated gradient this step kept for the next.</returns>
+    public AdanMoments After(Parameter parameter, Tensor gradient, AdanBetas betas, ITensorBackend backend)
+    {
+        var before = _kept.TryGetValue(parameter, out var last)
+            ? last
+            : new AdanMoments(0, backend.Fill(gradient.Shape, 0f), backend.Fill(gradient.Shape, 0f), backend.Fill(gradient.Shape, 0f), backend.Scale(gradient, backend.Fill(new Shape(), -1f)));
+
+        // The difference from the last step's gradient, nothing at the first step, which has none before it.
+        var difference = before.Steps == 0 ? backend.Fill(gradient.Shape, 0f) : backend.Add(gradient, before.NegatedPreviousGradient);
+        var average = backend.Add(
+            backend.Scale(before.Average, backend.Fill(new Shape(), (float)betas.First)), backend.Scale(gradient, backend.Fill(new Shape(), (float)(1 - betas.First))));
+        var differenceAverage = backend.Add(
+            backend.Scale(before.DifferenceAverage, backend.Fill(new Shape(), (float)betas.Second)),
+            backend.Scale(difference, backend.Fill(new Shape(), (float)(1 - betas.Second))));
+        var combined = backend.Add(gradient, backend.Scale(difference, backend.Fill(new Shape(), (float)betas.Second)));
+        var squared = backend.Add(
+            backend.Scale(before.SquaredAverage, backend.Fill(new Shape(), (float)betas.Third)),
+            backend.Scale(backend.Multiply(combined, combined), backend.Fill(new Shape(), (float)(1 - betas.Third))));
+        var negated = backend.Scale(gradient, backend.Fill(new Shape(), -1f));
+
+        return _kept[parameter] = new AdanMoments(before.Steps + 1, average, differenceAverage, squared, negated);
+    }
+
+    /// <summary>What is remembered of a parameter, under Adan's own names; nothing before its first step.</summary>
+    /// <param name="parameter">The parameter.</param>
+    /// <returns>Its steps and its three means and negated last gradient, or nothing.</returns>
+    public SlotMemory? MemoryOf(Parameter parameter) =>
+        _kept.TryGetValue(parameter, out var moments)
+            ? new SlotMemory(moments.Steps, new Dictionary<string, Tensor>
+              {
+                  ["exp_avg"] = moments.Average,
+                  ["exp_avg_diff"] = moments.DifferenceAverage,
+                  ["exp_avg_sq"] = moments.SquaredAverage,
+                  ["neg_pre_grad"] = moments.NegatedPreviousGradient,
+              })
+            : null;
+
+    /// <summary>Puts back what a checkpoint says was remembered of a parameter, refusing a memory that is not Adan's.</summary>
+    /// <param name="parameter">The parameter.</param>
+    /// <param name="memory">What was remembered.</param>
+    /// <exception cref="ArgumentException">The memory counts no step, lacks a tensor Adan keeps, or holds one it does not.</exception>
+    public void Recall(Parameter parameter, SlotMemory memory)
+    {
+        Optimizer.RequireNothingMore(parameter, memory, "exp_avg", "exp_avg_diff", "exp_avg_sq", "neg_pre_grad");
+
+        var steps = memory.Steps >= 1
+            ? memory.Steps
+            : throw new ArgumentException($"What the checkpoint remembers of '{parameter.Name}' counts no step, and Adan remembers only what stepped.", nameof(memory));
+
+        _kept[parameter] = new AdanMoments(
+            steps,
+            Optimizer.Remembered(parameter, memory, "exp_avg"),
+            Optimizer.Remembered(parameter, memory, "exp_avg_diff"),
+            Optimizer.Remembered(parameter, memory, "exp_avg_sq"),
+            Optimizer.Remembered(parameter, memory, "neg_pre_grad"));
+    }
+}

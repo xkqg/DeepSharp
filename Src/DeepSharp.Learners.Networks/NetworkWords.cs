@@ -116,6 +116,21 @@ public static class NetworkWords
 
     private static readonly NumberParameter WarmingKey = new("momentumDecay", "How fast the momentum warms up over the steps.", 0.004) { AtLeast = 0 };
 
+    private static readonly TrueOrFalseParameter DecoupledDecayKey =
+        new("decoupledWeightDecay", "Whether the weight decay shrinks the parameter first, decoupled from the gradient, as AdamW's does; it is added to the gradient, unless said.", false) { LeftOut = false };
+
+    private static readonly NumberParameter LionStepKey = new("rate", "How far one step moves the numbers.", 0.0001) { Above = 0 };
+
+    private static readonly NumberParameter LionFirstKey = new("firstMoment", "How much of the kept momentum the step's interpolation takes.", 0.9) { Above = 0 };
+
+    private static readonly NumberParameter LionSecondKey = new("secondMoment", "How much of the kept momentum itself carries on, once it takes in the gradient after the step.", 0.99) { Above = 0 };
+
+    private static readonly NumberParameter AdanFirstKey = new("firstMoment", "How much of the running mean of the gradients carries on.", 0.98) { Above = 0 };
+
+    private static readonly NumberParameter AdanSecondKey = new("secondMoment", "How much of the running mean of how the gradients differ step to step carries on.", 0.92) { Above = 0 };
+
+    private static readonly NumberParameter AdanThirdKey = new("thirdMoment", "How much of the running mean of the combined squares carries on.", 0.99) { Above = 0 };
+
     private static readonly WholeNumberParameter EveryKey = new("every", "How many epochs pass between two falls of the rate.", 10) { AtLeast = 1 };
 
     private static readonly NumberParameter FallKey = new("factor", "What the rate is multiplied by at each fall.", 0.1) { Above = 0 };
@@ -278,6 +293,9 @@ public static class NetworkWords
         new("adamw", "Adam, with every number shrunk towards nought before its step, apart from its gradient.", [StepKey, FirstKey, SecondKey, TinyKey, DecayKey, AmsGradKey]),
         new("rmsprop", "Moves every number by its gradient over the root of a running mean of the squares of its gradients.", [SquaresRateKey, AlphaKey, TinyKey, CarriedKey, CoupledDecayKey, CenteredKey]),
         new("nadam", "Adam with Nesterov's momentum, warmed up over the steps.", [NesterovRateKey, FirstKey, SecondKey, TinyKey, WarmingKey, CoupledDecayKey]),
+        new("radam", "Adam, with the step rectified once the running mean of the squares has seen enough of the gradients to trust its spread.", [StepKey, FirstKey, SecondKey, TinyKey, CoupledDecayKey, DecoupledDecayKey]),
+        new("lion", "Moves every number against the sign of an interpolation of a kept momentum and its gradient.", [LionStepKey, LionFirstKey, LionSecondKey, CoupledDecayKey]),
+        new("adan", "Moves every number by a running mean of its gradients and of how they differ step to step, over the root of a running mean of their combined squares.", [StepKey, AdanFirstKey, AdanSecondKey, AdanThirdKey, TinyKey, CoupledDecayKey]),
     ];
 
     /// <summary>The losses a declared network is judged by.</summary>
@@ -703,6 +721,24 @@ public static class NetworkWords
                 Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
                 Epsilon = optimizer.Number(TinyKey.Key),
                 MomentumDecay = optimizer.Number(WarmingKey.Key),
+                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
+            },
+            ["radam"] = optimizer => new RAdam(optimizer.Number(StepKey.Key))
+            {
+                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
+                Epsilon = optimizer.Number(TinyKey.Key),
+                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
+                DecoupledWeightDecay = optimizer.YesOrNo(DecoupledDecayKey.Key),
+            },
+            ["lion"] = optimizer => new Lion(optimizer.Number(LionStepKey.Key))
+            {
+                Betas = new Betas(optimizer.Number(LionFirstKey.Key), optimizer.Number(LionSecondKey.Key)),
+                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
+            },
+            ["adan"] = optimizer => new Adan(optimizer.Number(StepKey.Key))
+            {
+                Betas = new AdanBetas(optimizer.Number(AdanFirstKey.Key), optimizer.Number(AdanSecondKey.Key), optimizer.Number(AdanThirdKey.Key)),
+                Epsilon = optimizer.Number(TinyKey.Key),
                 WeightDecay = optimizer.Number(CoupledDecayKey.Key),
             },
         };

@@ -30,5 +30,12 @@ internal static class LaidOverExtensions
 
         /// <summary>The size of every number: the rectified number and the rectified opposite, whose slope at nought is nought, as PyTorch's is.</summary>
         internal Tensor SizeOf(Tensor values) => backend.Add(backend.Relu(values), backend.Relu(backend.Scale(values, backend.Scalar(-1))));
+
+        /// <summary>
+        /// The sign of every number: one where it is above nothing, less one where it is below, and nought at nought, as
+        /// PyTorch's <c>sign</c> is. Composed of two steps, so a number that is not a number gives nought here, where PyTorch's
+        /// own gives a number that is not one.
+        /// </summary>
+        internal Tensor Sign(Tensor values) => backend.Subtract(backend.Positive(values), backend.Positive(backend.Scale(values, backend.Scalar(-1))));
     }
 }

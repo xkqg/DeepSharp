@@ -656,6 +656,87 @@ public sealed class NetworkDeclaration
     }
 
     /// <summary>
+    /// Moves the network's numbers as Adam does, with the step rectified once the running mean of the squares has seen
+    /// enough of the gradients to trust its spread: PyTorch's RAdam. Declared in PyTorch's words only.
+    /// </summary>
+    /// <param name="rate">How far one step moves them; a thousandth, unless said.</param>
+    /// <param name="betas">How much of each running mean carries on; nine tenths and 0.999, unless said.</param>
+    /// <param name="epsilon">The small number added so nothing is divided by nought; a hundred-millionth, unless said.</param>
+    /// <param name="decoupledWeightDecay">Whether a weight decay said after shrinks the parameter first, decoupled from the gradient, as AdamW's does; it is not, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="NotSupportedException">The network is declared in Keras's words, which names no RAdam.</exception>
+    public NetworkDeclaration RAdam(double rate = 0.001, Betas? betas = null, double epsilon = 1e-8, bool decoupledWeightDecay = false)
+    {
+        RequirePyTorchsWords("RAdam", "RAdam");
+
+        var said = betas ?? new Betas(0.9, 0.999);
+
+        _optimizer = new PartDeclaration("radam", [
+            new PartSetting("rate", PartValue.Of(rate)),
+            new PartSetting("firstMoment", PartValue.Of(said.First)),
+            new PartSetting("secondMoment", PartValue.Of(said.Second)),
+            new PartSetting("epsilon", PartValue.Of(epsilon)),
+            new PartSetting("decoupledWeightDecay", PartValue.Of(decoupledWeightDecay)),
+        ]);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Moves the network's numbers against the sign of an interpolation of a kept momentum and its gradient: lucidrains's
+    /// <c>lion-pytorch</c>, since PyTorch ships no Lion of its own. Declared in PyTorch's words only.
+    /// </summary>
+    /// <param name="rate">How far one step moves them; a ten-thousandth, unless said.</param>
+    /// <param name="betas">How much the step's interpolation takes of the kept momentum, and how much the kept momentum itself carries on after the step; nine tenths and 0.99, unless said.</param>
+    /// <param name="weightDecay">How far every number is shrunk towards nought at each step, decoupled from the gradient; nought, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="NotSupportedException">The network is declared in Keras's words, which names no Lion this library runs.</exception>
+    public NetworkDeclaration Lion(double rate = 0.0001, Betas? betas = null, double weightDecay = 0)
+    {
+        RequirePyTorchsWords("Lion", "Lion");
+
+        var said = betas ?? new Betas(0.9, 0.99);
+
+        _optimizer = new PartDeclaration("lion", [
+            new PartSetting("rate", PartValue.Of(rate)),
+            new PartSetting("firstMoment", PartValue.Of(said.First)),
+            new PartSetting("secondMoment", PartValue.Of(said.Second)),
+            new PartSetting("weightDecay", PartValue.Of(weightDecay)),
+        ]);
+
+        return this;
+    }
+
+    /// <summary>
+    /// Moves the network's numbers by a running mean of its gradients and of how they differ step to step, over the root of
+    /// a running mean of their combined squares: sail-sg's <c>Adan</c>, since PyTorch ships no Adan of its own. Declared in
+    /// PyTorch's words only.
+    /// </summary>
+    /// <param name="rate">How far one step moves them; a thousandth, unless said.</param>
+    /// <param name="betas">How much of each running mean carries on; 0.98, 0.92 and 0.99, unless said, as sail-sg's own leaves them.</param>
+    /// <param name="epsilon">The small number added so nothing is divided by nought; a hundred-millionth, unless said.</param>
+    /// <param name="weightDecay">How far every number is shrunk, by its proximal division after the step; nought, unless said.</param>
+    /// <returns>The declaration.</returns>
+    /// <exception cref="NotSupportedException">The network is declared in Keras's words, which names no Adan.</exception>
+    public NetworkDeclaration Adan(double rate = 0.001, AdanBetas? betas = null, double epsilon = 1e-8, double weightDecay = 0)
+    {
+        RequirePyTorchsWords("Adan", "Adan");
+
+        var said = betas ?? new AdanBetas(0.98, 0.92, 0.99);
+
+        _optimizer = new PartDeclaration("adan", [
+            new PartSetting("rate", PartValue.Of(rate)),
+            new PartSetting("firstMoment", PartValue.Of(said.First)),
+            new PartSetting("secondMoment", PartValue.Of(said.Second)),
+            new PartSetting("thirdMoment", PartValue.Of(said.Third)),
+            new PartSetting("epsilon", PartValue.Of(epsilon)),
+            new PartSetting("weightDecay", PartValue.Of(weightDecay)),
+        ]);
+
+        return this;
+    }
+
+    /// <summary>
     /// Adds a share of every number to its gradient before the step moves it, as PyTorch's <c>weight_decay</c> does for SGD, Adam,
     /// RMSprop and NAdam. Declared in PyTorch's words only.
     /// </summary>
@@ -1074,10 +1155,17 @@ public sealed class NetworkDeclaration
             throw new NotSupportedException($"{door} is not something {(optimizer.Kind is null ? "no optimizer" : $"the '{optimizer.Kind}' optimizer")} takes: name an optimizer that does.");
         }
 
-        // AdamW's weight decay is its own, decoupled from the gradient, and said as AdamW's own number.
-        if (optimizer.Kind == "adamw" && key == "weightDecay")
+        // AdamW's, Lion's and Adan's weight decay is their own, decoupled or proximal, and said as their own number; RAdam's
+        // is its own only once it is declared with its own decoupled decay — any other optimizer's weightDecay is the one
+        // WeightDecay adds to the gradient, which is the setting these four do not take by that door.
+        if (key == "weightDecay" && optimizer.Kind is "adamw" or "lion" or "adan")
         {
-            throw new NotSupportedException("WeightDecay adds a share of every number to its gradient, which AdamW does not: its weight decay is its own, said as AdamW(weightDecay: …).");
+            throw new NotSupportedException($"WeightDecay adds a share of every number to its gradient, which the '{optimizer.Kind}' optimizer does not: its weight decay is its own, said as its own number.");
+        }
+
+        if (key == "weightDecay" && optimizer.Kind == "radam" && optimizer.YesOrNo("decoupledWeightDecay"))
+        {
+            throw new NotSupportedException("WeightDecay adds a share of every number to its gradient, which RAdam's decoupled weight decay does not: say RAdam(weightDecay: …, decoupledWeightDecay: true) instead.");
         }
 
         return optimizer.With(key, value);
