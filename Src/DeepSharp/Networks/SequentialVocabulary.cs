@@ -122,7 +122,7 @@ public sealed partial class Sequential
     {
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Append(new NormalisationWord(channels => new InstanceNorm(channels, affine) { Epsilon = epsilon }));
+        return Append(new NormalisationWord(channels => new InstanceNorm(channels, affine) { Epsilon = epsilon }, MixesAcrossRows: false));
     }
 
     /// <summary>Divides each row of the last axis by the root of the mean of its squares, and scales it, as PyTorch leaves it.</summary>
@@ -144,7 +144,7 @@ public sealed partial class Sequential
     {
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Append(new NormalisationWord(features => new RmsNorm(features, scale) { Epsilon = epsilon }));
+        return Append(new NormalisationWord(features => new RmsNorm(features, scale) { Epsilon = epsilon }, MixesAcrossRows: false));
     }
 
     /// <summary>

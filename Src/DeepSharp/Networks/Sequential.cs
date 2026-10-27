@@ -192,7 +192,7 @@ public sealed partial class Sequential
     /// <summary>Normalises each feature — the last axis of an example — over the batch, keeping the scale and the shift it is told to.</summary>
     /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one — Keras's <c>scale</c> and <c>center</c>.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential BatchNorm(Affine affine) => Append(new NormalisationWord(features => new BatchNorm(features, affine)));
+    public Sequential BatchNorm(Affine affine) => Append(new NormalisationWord(features => new BatchNorm(features, affine), MixesAcrossRows: true));
 
     /// <summary>Normalises each feature — the last axis of an example — over the batch, with Keras's momentum and epsilon.</summary>
     /// <param name="momentum">
@@ -224,7 +224,7 @@ public sealed partial class Sequential
 
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Append(new NormalisationWord(features => new BatchNorm(features, affine) { Momentum = 1 - momentum, Epsilon = epsilon }));
+        return Append(new NormalisationWord(features => new BatchNorm(features, affine) { Momentum = 1 - momentum, Epsilon = epsilon }, MixesAcrossRows: true));
     }
 
     /// <summary>Normalises each example over its features — the last axis.</summary>
@@ -235,7 +235,7 @@ public sealed partial class Sequential
     /// <summary>Normalises each example over its features — the last axis — keeping the scale and the shift it is told to.</summary>
     /// <param name="affine">Whether it scales and shifts what it normalised: both, unless it says it keeps neither or one — Keras's <c>scale</c> and <c>center</c>.</param>
     /// <returns>This description, so the next word can be written after it.</returns>
-    public Sequential LayerNorm(Affine affine) => Append(new NormalisationWord(features => new LayerNorm(features, affine)));
+    public Sequential LayerNorm(Affine affine) => Append(new NormalisationWord(features => new LayerNorm(features, affine), MixesAcrossRows: false));
 
     /// <summary>Normalises each example over its features — the last axis — with Keras's epsilon.</summary>
     /// <param name="epsilon">What is added to each variance before its root is taken, above nothing — 0.001 in Keras.</param>
@@ -252,7 +252,7 @@ public sealed partial class Sequential
     {
         Normalisation.RequireEpsilon(epsilon, nameof(epsilon));
 
-        return Append(new NormalisationWord(features => new LayerNorm(features, affine) { Epsilon = epsilon }));
+        return Append(new NormalisationWord(features => new LayerNorm(features, affine) { Epsilon = epsilon }, MixesAcrossRows: false));
     }
 
     /// <summary>Lays each example out in another shape holding as many values: a row of pixels as an image, say.</summary>
@@ -530,6 +530,20 @@ public sealed partial class Sequential
     // example of which cannot reach one of its words.
     private void Check(Shape input, Shape? mask = null) => Resolve(input, mask);
 
+    // What a word says when it is handed an example a BatchEnsemble opened the variants of, and is not written to work
+    // over them: a batch normalisation would mix its statistics across variants as if they were one another's rows, and
+    // attention, positions and a recurrent layer would read the variants as if they were the steps of a series. A Dense, an
+    // activation, a Dropout, a layer or RMS normalisation and VariantHeads itself are not named here, and so take the
+    // variants on, unchanged, as an ordinary batch: nothing, for them.
+    private static string? VariantsRefusal(IWordOfSteps word) => word switch
+    {
+        NormalisationWord { MixesAcrossRows: true } => "batchNorm, which measures each feature over the batch: a BatchEnsemble opened the variants an example is laid out by, and batchNorm would mix its statistics across them as if they were one another's rows.",
+        AttentionWord => "attention, which reads an example as the steps of a series: a BatchEnsemble opened the variants an example is laid out by, which are not steps to attend over.",
+        PositionsWord => "sinePositions, which gives an example's steps the place each holds in a series: a BatchEnsemble opened the variants an example is laid out by, which are not positions in a series.",
+        RecurrentWord recurrent => $"{recurrent.Kind}, which reads an example as the steps of a series: a BatchEnsemble opened the variants an example is laid out by, which are not steps of a time series.",
+        _ => null,
+    };
+
     // What each word takes and hands on for an example of the given shape: the shape of what each step it takes made, and of what it
     // makes, worked out down the description and refused where an example cannot reach a word.
     private List<Visited> Resolve(Shape input, Shape? mask = null)
@@ -548,6 +562,7 @@ public sealed partial class Sequential
 
         var shapes = new Dictionary<string, Shape>(StringComparer.Ordinal) { [Step.Input] = input };
         var visits = new List<Visited>(_words.Count);
+        var laidOutByVariants = new HashSet<string>(StringComparer.Ordinal);
 
         if (mask is { } maskShape)
         {
@@ -567,6 +582,14 @@ public sealed partial class Sequential
                     string.Create(CultureInfo.InvariantCulture, $"This network cannot be lowered at {input}: word {place + 1} takes '{unknown}', which is not the input or a word before it."), nameof(input));
             }
 
+            var fromVariants = takes.Any(laidOutByVariants.Contains);
+
+            if (fromVariants && VariantsRefusal(word) is { } variantsRefusal)
+            {
+                throw new ArgumentException(
+                    string.Create(CultureInfo.InvariantCulture, $"This network cannot be lowered at {input}: word {place + 1}, {variantsRefusal}"), nameof(input));
+            }
+
             Shape[] inputs = [.. takes.Select(taken => shapes[taken])];
             var refusal = word.Refusal(inputs);
 
@@ -580,6 +603,11 @@ public sealed partial class Sequential
 
             shapes[name] = after;
             visits.Add(new Visited(name, said, word, inputs, after));
+
+            if (fromVariants || word is BatchEnsembleWord)
+            {
+                laidOutByVariants.Add(name);
+            }
         }
 
         return visits;
@@ -775,7 +803,9 @@ public sealed partial class Sequential
     }
 
     /// <summary>A normalisation, of as many features as the last axis of an example holds.</summary>
-    private sealed record NormalisationWord(Func<int, Layer> Make) : IWord
+    /// <param name="Make">What makes the layer, from the features its last axis holds.</param>
+    /// <param name="MixesAcrossRows">Whether it keeps a running statistic over the batch, as <see cref="global::DeepSharp.Networks.BatchNorm"/> does; a layer or RMS normalisation does not.</param>
+    private sealed record NormalisationWord(Func<int, Layer> Make, bool MixesAcrossRows) : IWord
     {
         public string? Refusal(Shape each) => null;
 

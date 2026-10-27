@@ -160,4 +160,50 @@ public class BatchEnsemblingTests
         Assert.Equal(new Shape(8, 1), predicted.Shape);
         Assert.All(predicted.Values.ToArray(), value => Assert.True(float.IsFinite(value)));
     }
+
+    [Fact]
+    public void ABatchNormAfterAnOpenBatchEnsemble_IsRefused_ForItWouldMixStatisticsAcrossVariants()
+    {
+        var network = new Sequential().BatchEnsemble(3).Dense(4).BatchNorm().Relu().VariantHeads(1);
+
+        var thrown = Assert.Throws<ArgumentException>(() => network.Lower(new Shape(2), new RandomStream(1)));
+        Assert.Contains("BatchEnsemble opened", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AttentionAfterAnOpenBatchEnsemble_IsRefused_ForTheVariantsAreNotASeriesToAttendOver()
+    {
+        var network = new Sequential().BatchEnsemble(3).Attention(2);
+
+        var thrown = Assert.Throws<ArgumentException>(() => network.Lower(new Shape(2), new RandomStream(1)));
+        Assert.Contains("BatchEnsemble opened", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SinePositionsAfterAnOpenBatchEnsemble_IsRefused_ForTheVariantsAreNotPositionsInASeries()
+    {
+        var network = new Sequential().BatchEnsemble(3).SinePositions();
+
+        var thrown = Assert.Throws<ArgumentException>(() => network.Lower(new Shape(2), new RandomStream(1)));
+        Assert.Contains("BatchEnsemble opened", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnLstmAfterAnOpenBatchEnsemble_IsRefused_ForTheVariantsAreNotStepsOfATimeSeries()
+    {
+        var network = new Sequential().BatchEnsemble(3).Lstm(4);
+
+        var thrown = Assert.Throws<ArgumentException>(() => network.Lower(new Shape(2), new RandomStream(1)));
+        Assert.Contains("BatchEnsemble opened", thrown.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LayerNormAndRmsNormAfterAnOpenBatchEnsemble_AreNotRefused_ForNeitherMixesStatisticsAcrossRows()
+    {
+        var layerNormed = new Sequential().BatchEnsemble(3).Dense(4).LayerNorm().VariantHeads(1).Lower(new Shape(2), new RandomStream(1));
+        var rmsNormed = new Sequential().BatchEnsemble(3).Dense(4).RmsNorm().VariantHeads(1).Lower(new Shape(2), new RandomStream(1));
+
+        Assert.NotNull(layerNormed);
+        Assert.NotNull(rmsNormed);
+    }
 }
