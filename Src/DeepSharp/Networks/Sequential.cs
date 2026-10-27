@@ -325,6 +325,17 @@ public sealed partial class Sequential
         return Append(new JoinWord("add", shapes => shapes.Distinct().Count() == 1 ? null : $"takes steps of one shape, and these are {string.Join(" and ", shapes)}.", shapes => shapes[0], () => new Sum())).Takes(steps);
     }
 
+    /// <summary>Multiplies what the named steps made, value by value: a gate that lets a value through by the share another step gives it.</summary>
+    /// <param name="steps">The names of the steps multiplied: two or more, <c>input</c> for the rows the network is handed.</param>
+    /// <returns>This description, so the next word can be written after it.</returns>
+    /// <exception cref="ArgumentException">No step is named.</exception>
+    public Sequential Multiply(params string[] steps)
+    {
+        RequireNames(steps);
+
+        return Append(new JoinWord("multiply", shapes => shapes.Distinct().Count() == 1 ? null : $"takes steps of one shape, and these are {string.Join(" and ", shapes)}.", shapes => shapes[0], () => new Product())).Takes(steps);
+    }
+
     /// <summary>Lays what the named steps made side by side, along the last axis, in the order they are named.</summary>
     /// <param name="steps">The names of the steps laid side by side: two or more, <c>input</c> for the rows the network is handed.</param>
     /// <returns>This description, so the next word can be written after it.</returns>

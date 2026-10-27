@@ -29,6 +29,7 @@ internal static class ExportKinds
         new SumKind(),
         new ConcatenationKind(),
         new ColumnsKind(),
+        new ProductKind(),
         new StackKind(),
         new RecurrentKind<Lstm>("LSTM", [0, 3, 1, 2]),
         new RecurrentKind<Gru>("GRU", [1, 0, 2]),

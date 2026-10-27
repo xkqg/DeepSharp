@@ -196,6 +196,42 @@ public sealed class Columns : Layer, ISaved<Columns>
     }
 }
 
+/// <summary>
+/// What two steps made, multiplied value by value: a gate that lets a value through by the share another step gives it, as the
+/// newer transformer recipes' gated feed-forward blocks weigh a value by a bend of a gate.
+/// </summary>
+/// <remarks>
+/// A step that takes several others works on them as they stand in a stack that names them; asked alone, in a place that hands
+/// it one tensor, it has nothing to multiply and says so. The product is the engine's own multiplication, so every engine gives
+/// the same numbers and the gradient goes back to every step multiplied, scaled by what the others made. It has no numbers to learn.
+/// </remarks>
+public sealed class Product : Layer, ISaved<Product>
+{
+    /// <inheritdoc />
+    public static string Name => "multiply";
+
+    /// <inheritdoc />
+    public int FileVersion => NetworkDocument.EighthVersion;
+
+    /// <inheritdoc />
+    public static Product Rebuild(JsonElement settings, Rebuilding rebuilding) => new();
+
+    /// <inheritdoc />
+    public void WriteSettings(Utf8JsonWriter writer)
+    {
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">Always: a product multiplies the work of two steps or more, which a stack hands it by their names.</exception>
+    protected override Tensor Compute(Tensor input, Pass pass) =>
+        throw new InvalidOperationException("A product multiplies what two steps or more made: it takes them by name inside a stack, and is not handed one tensor.");
+
+    internal override bool Accepts(int steps) => steps >= 2;
+
+    internal override Tensor Taking(IReadOnlyList<Tensor> inputs, Pass pass) =>
+        inputs.Skip(1).Aggregate(inputs[0], (product, next) => pass.Backend.Multiply(product, next));
+}
+
 // A matrix of noughts and ones worked out from its shape alone: a one where the rule says, so a product with it sets values where
 // they stand.
 internal static class Selection

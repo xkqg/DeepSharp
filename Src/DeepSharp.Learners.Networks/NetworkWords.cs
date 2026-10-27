@@ -282,6 +282,7 @@ public static class NetworkWords
         Step("add", "Adds up what the steps it takes made, value by value: a residual block's way of handing on what it was given beside what it made. It takes two steps or more, which must be of one shape.", []),
         Step("concatenate", "Lays what the steps it takes made side by side along the last axis, in the order they are taken: a block that reads everything made before it. It takes two steps or more, alike in every axis but the last.", []),
         Step("columns", "Takes some of the columns of a row as a step of its own: how a network of two inputs reads each of them from the one row it is handed.", [ColumnFirstKey, ColumnCountKey]),
+        Step("multiply", "Multiplies what the steps it takes made, value by value: a gate that lets a value through by the share another step gives it. It takes two steps or more, which must be of one shape.", []),
         new(EmbeddingWord, "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.", [EmbeddingColumnKey, EmbeddingWidthKey]),
     ];
 
@@ -452,7 +453,7 @@ public static class NetworkWords
                 _ = StepList(layer.Text(TakesKey.Key).Split(','));
             }
 
-            foreach (var layer in layers.Where(each => each.Kind is "add" or "concatenate" && !(each.Holds(TakesKey.Key) && each.Text(TakesKey.Key).Length > 0)))
+            foreach (var layer in layers.Where(each => each.Kind is "add" or "concatenate" or "multiply" && !(each.Holds(TakesKey.Key) && each.Text(TakesKey.Key).Length > 0)))
             {
                 throw new ArgumentException($"An '{layer.Kind}' works on the steps it takes, and this one takes none: name them in '{TakesKey.Key}'.", nameof(layers));
             }
@@ -580,7 +581,7 @@ public static class NetworkWords
         return kind.Setting(TakesKey.Key) is not null && !IsJoin(layer.Kind) && completed.Text(TakesKey.Key) is { Length: > 0 } takes ? made.Takes(takes.Split(',')) : made;
     }
 
-    private static bool IsJoin(string kind) => kind is "add" or "concatenate";
+    private static bool IsJoin(string kind) => kind is "add" or "concatenate" or "multiply";
 
     // The steps a join works on: the steps its word takes, and no join works on none.
     private static string[] StepsOf(PartDeclaration layer) =>
@@ -656,6 +657,7 @@ public static class NetworkWords
             ["add"] = (described, layer) => described.Add(StepsOf(layer)),
             ["concatenate"] = (described, layer) => described.Concatenate(StepsOf(layer)),
             ["columns"] = (described, layer) => described.Columns(layer.Whole(ColumnFirstKey.Key), layer.Whole(ColumnCountKey.Key)),
+            ["multiply"] = (described, layer) => described.Multiply(StepsOf(layer)),
             ["batchNorm"] = (described, layer) => GovernedBy(layer, described.BatchNorm(layer.Number(MomentumKey.Key), layer.Number(EpsilonKey.Key), KeptBy(layer))),
             ["layerNorm"] = (described, layer) => GovernedBy(layer, described.LayerNorm(layer.Number(EpsilonKey.Key), KeptBy(layer))),
             ["gelu"] = (described, layer) => described.Gelu(layer.YesOrNo(ApproximateKey.Key)),

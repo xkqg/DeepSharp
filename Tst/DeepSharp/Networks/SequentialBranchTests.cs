@@ -39,6 +39,28 @@ public class SequentialBranchTests
     }
 
     [Fact]
+    public void AGateInWords_IsTheStackWrittenAsCode_LayerForLayerAndBitForBit()
+    {
+        var described = new Sequential().Dense(6).Named("gate").Relu().Named("bent").Dense(6).Named("value").Multiply("bent", "value").Lower(Six, new RandomStream(7));
+        var stream = new RandomStream(7);
+        var written = new LayerStack(
+            [
+                new Step(new Dense(6, 6, stream.Draw("initialise:0", 0, 0)), "gate"),
+                new Step(new Relu(), "bent"),
+                new Step(new Dense(6, 6, stream.Draw("initialise:2", 0, 0)), "value"),
+                new Step(new Product(), Takes: ["bent", "value"]),
+            ]);
+        var rows = Tensor.From(new Shape(3, 6), [.. Enumerable.Range(0, 18).Select(at => (float)(Math.Sin(at) / 2))]);
+        var backend = new CpuBackend();
+
+        Assert.Equal(written.Slots().Select(slot => slot.Path), described.Slots().Select(slot => slot.Path));
+        Assert.Equal(
+            written.Slots().Select(slot => slot.Slot.Value.Values.ToArray()),
+            described.Slots().Select(slot => slot.Slot.Value.Values.ToArray()));
+        Assert.Equal(written.Forward(rows, Pass.Evaluation(backend)).Values.ToArray(), described.Forward(rows, Pass.Evaluation(backend)).Values.ToArray());
+    }
+
+    [Fact]
     public void NamingAStep_MovesNoLayersStart()
     {
         var named = new Sequential().Dense(4).Named("hidden").Relu().Dense(1).Lower(Six, new RandomStream(3));

@@ -276,6 +276,10 @@ internal sealed partial class OnnxGraph
             {
                 Joined(node, data, Joining.Add);
             }
+            else if (node.Operator == "Mul" && data.Count == 2)
+            {
+                Joined(node, data, Joining.Multiply);
+            }
             else if (node.Operator == "Concat")
             {
                 Joined(node, data, Joining.Concatenate);
@@ -393,7 +397,7 @@ internal sealed partial class OnnxGraph
         else
         {
             _built.Add(new Built(node, new OnnxLayer(null, first.Flow) { Join = join }, false) { Sources = [.. parts.Select(part => part.Step)] });
-            _values[node.Output] = new Made(_built.Count - 1, first, false, join == Joining.Add ? parts[0].Width : Together(parts));
+            _values[node.Output] = new Made(_built.Count - 1, first, false, join == Joining.Concatenate ? Together(parts) : parts[0].Width);
             _previous = node.Operator;
         }
     }
@@ -734,6 +738,9 @@ internal sealed partial class OnnxGraph
                     case Joining.Add:
                         _description.Add(taking);
                         break;
+                    case Joining.Multiply:
+                        _description.Multiply(taking);
+                        break;
                     case Joining.Concatenate:
                         _description.Concatenate(taking);
                         break;
@@ -789,7 +796,7 @@ internal sealed partial class OnnxGraph
 
     // What a node is refused with that takes several values, and is none of the joins.
     private static string Several(OnnxNode node, List<string> data) =>
-        $"it takes {Listed(data)}, {data.Count} values the graph works out, and a {node.Operator} here works on one: an Add takes two, to add them up, and a Concat any number, to lay them side by side.";
+        $"it takes {Listed(data)}, {data.Count} values the graph works out, and a {node.Operator} here works on one: an Add or a Mul takes two, to add or to multiply them, and a Concat any number, to lay them side by side.";
 
     private static string Listed(List<string> names) => names.Count == 1
         ? $"'{names[0].Quoted()}'"

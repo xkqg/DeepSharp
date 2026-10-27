@@ -3407,6 +3407,38 @@
                 "additionalProperties": false
               },
               {
+                "description": "Multiplies what the steps it takes made, value by value: a gate that lets a value through by the share another step gives it. It takes two steps or more, which must be of one shape.",
+                "properties": {
+                  "kind": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "multiply"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(?:[Mm][Uu][Ll][Tt][Ii][Pp][Ll][Yy])$"
+                      }
+                    ]
+                  },
+                  "name": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The name of the layer's step, so a later layer can take what it made and its numbers are found under it; none, unless said."
+                  },
+                  "takes": {
+                    "type": "string",
+                    "pattern": "\\S",
+                    "description": "The names of the steps the layer works on instead of the one before it, with a comma between them; 'input' is the rows the network is handed; the step before it, unless said."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false
+              },
+              {
                 "description": "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.",
                 "properties": {
                   "kind": {

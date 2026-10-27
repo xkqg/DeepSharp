@@ -22,6 +22,29 @@ public readonly record struct EncoderShape(int Heads, int FeedForward)
 
     /// <summary>Whether the block is handed the mask of the padding as its second take, which its attention looks past; it is handed none, unless said.</summary>
     public bool Masked { get; init; }
+
+    /// <summary>
+    /// Whether the feed-forward part's hidden layer is split into a gate and a value, the gate weighing the value after its own
+    /// bend, as the newer transformer recipes write it; it is not split, unless said, and bends by <see cref="Gelu"/> alone.
+    /// </summary>
+    /// <remarks>Refused beside <see cref="Gelu"/>, which would say the bend a second way.</remarks>
+    public FeedForwardGate? Gate { get; init; }
+}
+
+/// <summary>
+/// The bend a gated feed-forward's gate weighs its value by: Shazeer's 'GLU Variants Improve Transformer', which PyTorch's own
+/// <c>TransformerEncoderLayer</c> has no form of.
+/// </summary>
+public enum FeedForwardGate
+{
+    /// <summary>The gate bends with a ReLU: ReGLU.</summary>
+    ReGlu,
+
+    /// <summary>The gate bends with a GELU: GeGLU.</summary>
+    GeGlu,
+
+    /// <summary>The gate bends with a SiLU, also called Swish: SwiGLU.</summary>
+    SwiGlu,
 }
 
 /// <summary>The words that look across the steps of a series: attention, the positions of the steps, and the encoder block made of them.</summary>
@@ -74,10 +97,13 @@ public sealed partial class Sequential
     /// The block is one step. Its numbers are found under the names PyTorch gives a layer's state: <c>self_attn.in_proj_weight</c>,
     /// <c>self_attn.out_proj.weight</c>, <c>linear1.weight</c>, <c>linear2.weight</c>, <c>norm1.weight</c>, <c>norm2.weight</c>, each with its bias, under the
     /// name the step is given. A block begun with <see cref="EncoderShape.Masked"/> is given the mask of the padding as its second take.
+    /// A block begun with <see cref="EncoderShape.Gate"/> has no such state to match: PyTorch's own layer has no gated form, so the
+    /// gate and the value it weighs are found under this library's own names, <c>linear1_gate</c> and <c>linear1_value</c>, beside it.
     /// </remarks>
     public Sequential EncoderBlock(EncoderShape shape)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(shape.FeedForward, 1);
+        RequireOneBend(shape);
         _ = Attended(new Attending(shape.Heads) { Dropout = shape.Dropout });
 
         return Append(new BlockWord(each => EncoderWords(shape, each[each.Rank - 1])));
@@ -92,6 +118,7 @@ public sealed partial class Sequential
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(shape.FeedForward, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(embed, 1);
+        RequireOneBend(shape);
 
         return Encoder(shape, Attended(new Attending(shape.Heads) { Dropout = shape.Dropout }), embed);
     }
@@ -102,6 +129,16 @@ public sealed partial class Sequential
         _ = global::DeepSharp.Networks.Dropout.RequireRate(how.Dropout);
 
         return how;
+    }
+
+    // Refuses a shape that says the feed-forward's bend twice: once by Gelu, and again by a gate's own bend.
+    private static void RequireOneBend(EncoderShape shape)
+    {
+        if (shape.Gate is not null && shape.Gelu)
+        {
+            throw new ArgumentException(
+                "A gated feed-forward part already says its bend by its gate, and a Gelu beside it says it again: say one or the other.", nameof(shape));
+        }
     }
 
     // The words of an encoder block, each step called as the module of PyTorch's layer is: the sums are added back to the block's input.
@@ -117,7 +154,7 @@ public sealed partial class Sequential
             inner.MultiHeadAttention(how).Named("self_attn").Takes(["norm1", .. mask]);
             inner.Add(Step.Input, Dropped(inner, rate, "dropout1", "self_attn")).Named("sum1");
             inner.LayerNorm().Named("norm2");
-            inner.Add("sum1", FeedForward(inner, shape, embed)).Named("sum2");
+            inner.Add("sum1", FeedForward(inner, shape, embed, "norm2")).Named("sum2");
 
             return inner;
         }
@@ -125,17 +162,35 @@ public sealed partial class Sequential
         inner.MultiHeadAttention(how).Named("self_attn").Takes([Step.Input, .. mask]);
         inner.Add(Step.Input, Dropped(inner, rate, "dropout1", "self_attn")).Named("sum1");
         inner.LayerNorm().Named("norm1");
-        inner.Add("norm1", FeedForward(inner, shape, embed)).Named("sum2");
+        inner.Add("norm1", FeedForward(inner, shape, embed, "norm1")).Named("sum2");
         inner.LayerNorm().Named("norm2");
 
         return inner;
     }
 
-    // The feed-forward part over each step: a layer wide, the bend, a layer back to the width of the step, and the dropouts; the name of its last step.
-    private static string FeedForward(Sequential inner, EncoderShape shape, int embed)
+    // The feed-forward part over each step: a layer wide, the bend (or a gate and a value, each their own layer wide, multiplied),
+    // a layer back to the width of the step, and the dropouts; the name of its last step. "from" is the step the part reads from.
+    private static string FeedForward(Sequential inner, EncoderShape shape, int embed, string from)
     {
-        inner.Dense(shape.FeedForward).Named("linear1");
-        _ = shape.Gelu ? inner.Gelu() : inner.Relu();
+        if (shape.Gate is { } gate)
+        {
+            inner.Dense(shape.FeedForward).Named("linear1_gate_proj").Takes(from);
+            _ = (gate switch
+            {
+                FeedForwardGate.ReGlu => inner.Relu(),
+                FeedForwardGate.GeGlu => inner.Gelu(),
+                FeedForwardGate.SwiGlu => inner.Silu(),
+                _ => throw new ArgumentOutOfRangeException(nameof(shape), gate, "A gate is one of the gated feed-forward's own words."),
+            }).Named("linear1_gate");
+
+            inner.Dense(shape.FeedForward).Named("linear1_value").Takes(from);
+            inner.Multiply("linear1_gate", "linear1_value").Named("linear1");
+        }
+        else
+        {
+            inner.Dense(shape.FeedForward).Named("linear1");
+            _ = shape.Gelu ? inner.Gelu() : inner.Relu();
+        }
 
         _ = Dropped(inner, shape.Dropout, "dropout", string.Empty);
         inner.Dense(embed).Named("linear2");

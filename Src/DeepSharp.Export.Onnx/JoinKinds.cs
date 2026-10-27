@@ -55,6 +55,31 @@ internal sealed class ConcatenationKind : ExportKind<Concatenation>
     }
 }
 
+/// <summary>The steps multiplied value by value: ONNX's Mul, one for each step beyond the first, in the order the layer multiplies them in.</summary>
+internal sealed class ProductKind : ExportKind<Product>
+{
+    /// <inheritdoc />
+    protected override Value Write(Product layer, Writing at)
+    {
+        if (at.Inputs.Any(input => input.Image != at.Input.Image))
+        {
+            throw new NotSupportedException(
+                "A product multiplies a row a flatten made of an image by a row it did not, or by one made of another image, and ONNX flattens an image channel by channel where the network flattens it place by place: the two rows do not hold their values in one order.");
+        }
+
+        var product = at.Input.Name;
+
+        for (var next = 1; next < at.Inputs.Count; next++)
+        {
+            var last = next == at.Inputs.Count - 1;
+
+            product = at.Graph.Node(at.Node("Mul", 7, last ? null : $"Mul.{next}"), [product, at.Inputs[next].Name], last ? at.Path : $"{at.Path}/Mul.{next}");
+        }
+
+        return at.Keeping(product);
+    }
+}
+
 /// <summary>A block of a row's columns: ONNX's Slice along the axis after the batch, from the tenth operator set where the bounds are inputs.</summary>
 internal sealed class ColumnsKind : ExportKind<Columns>
 {

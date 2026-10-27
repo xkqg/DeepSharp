@@ -62,6 +62,9 @@ internal enum Joining
 
     /// <summary>Laid side by side along the last axis.</summary>
     Concatenate,
+
+    /// <summary>Multiplied, value by value.</summary>
+    Multiply,
 }
 
 /// <summary>A number a node holds for one slot of the layer it becomes, and how it is laid out for that slot.</summary>

@@ -39,6 +39,7 @@ public class OnnxExportTests
             .Lower(new Shape(6), new RandomStream(9)),
         ["a block"] = () => new Sequential().Block(new Sequential().Dense(6).Named("project").Relu()).Named("encoder").Dense(2).Lower(new Shape(6), new RandomStream(10)),
         ["three added"] = () => new Sequential().Dense(6).Named("a").Dense(6).Named("b").Dense(6).Named("c").Add("a", "b", "c").Dense(1).Lower(new Shape(6), new RandomStream(11)),
+        ["gated"] = () => new Sequential().Dense(6).Named("gate").Relu().Named("bent").Dense(6).Named("value").Multiply("bent", "value").Dense(2).Lower(new Shape(6), new RandomStream(12)),
     };
 
     public static TheoryData<string> EveryNetwork => [.. Networks.Keys];
