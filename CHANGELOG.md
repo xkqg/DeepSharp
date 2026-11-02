@@ -77,6 +77,13 @@ across a part it had no business crossing, and a history able to read a value th
   column whose earlier rows are read carried the later value through every earlier row that held it. Refused now by
   name.
 
+### Changed
+
+- **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.29.0**, and every package reference
+  is taken at its newest version when the release is made, but for a handful of pins that name their reason in the
+  project — Verso.Abstractions's range and NAudio.Core 2.4.0 among them, and now `Corvus.Json.Validator` pinned to 5.7.9:
+  5.8.0 dropped its own `net8.0` build, so the schema it compiles at test time no longer compiles against that runtime.
+
 ## [0.17.0]
 
 A 2025–2026 look at PyTorch, TensorFlow and the wider training ecosystem, next to what DeepSharp already had: three more
