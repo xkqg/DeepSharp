@@ -44,6 +44,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         new AnActingOutputMakesItsAnswer(),
         new OnlyAnOutputReadsAhead(),
         new RowsAheadAreKeptApart(),
+        new EarlierAnswersFollowTime(),
         new AReturnIsMadeFromItsColumnAsRead(),
         new ARemainderIsMadeFromItsCountsAsRead(),
         new AtMostOne<INamesTheLearner>("learner"),

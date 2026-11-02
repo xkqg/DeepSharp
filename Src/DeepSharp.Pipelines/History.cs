@@ -39,7 +39,7 @@ public readonly record struct HistoryReach(double Shrink, int Window);
 /// rows' values. The number is in the units of the column it reads, and lands in no range until a scale says where.
 /// </para>
 /// </remarks>
-public sealed record HistoryStep : IFittedStep, IPipelineStep<HistoryStep>, IDescribesColumns
+public sealed record HistoryStep : IFittedStep, IPipelineStep<HistoryStep>, IDescribesColumns, IReadsAnEarlierValue
 {
     private static readonly ColumnParameter KeyKey = new(
         "key", "The column whose value says which rows are of one kind: a farm, a type.", "key", ColumnKinds.Any);

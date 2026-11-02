@@ -448,6 +448,67 @@ internal sealed class RowsAheadAreKeptApart : IDeclarationRule
 }
 
 /// <summary>
+/// A step that reads a column's earlier rows, or carries the value before a gap forward, stands below a split in
+/// time, the rows ordered by the column that split divides by alone; and reads no column an output already made
+/// from rows ahead.
+/// </summary>
+/// <remarks>
+/// A row's part under a split at random or a stratified split has nothing to do with where it stands in the file: a
+/// training row can sit right after a validation row, and the value before it, or the mean of a key's earlier rows,
+/// is read from whichever part happened to stand there. Only a split in time, with the rows ordered by the very
+/// column it divides by, keeps every part a contiguous run, so the row before a training row is always another
+/// training row. Separately, a column an output already made from rows ahead holds a value from later than the row
+/// it stands on; reading it as the value whose earlier rows are read carries that later value back in through every
+/// earlier row that holds it, however many rows stand between — the same leak <see cref="OnlyAnOutputReadsAhead"/>
+/// refuses directly, reached here by a step that is not itself reading ahead.
+/// </remarks>
+internal sealed class EarlierAnswersFollowTime : IDeclarationRule
+{
+    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
+    {
+        var split = NothingLearnsBeforeTheSplit.FirstSplit(steps);
+        var order = steps.OfType<IOrdersRows>().FirstOrDefault();
+        var madeFromRowsAhead = steps
+            .Where(step => step is IReadsRowsAhead)
+            .OfType<INamesTheAnswer>()
+            .SelectMany(step => step.Answers)
+            .ToHashSet(StringComparer.Ordinal);
+
+        for (var at = 0; at < steps.Count; at++)
+        {
+            // A step above the split, or one with no split below it at all, has no part to mix up: nothing here is at risk
+            // until a step actually stands below one, and NothingLearnsBeforeTheSplit is the rule that says so for a step
+            // that must. Dropping rows is a position, never a value read from another row, so IDropsRows is not this rule's
+            // concern either way. Without an order declared at all, RowOrderIsDeclaredBeforeItIsRead already says so, once.
+            if (steps[at] is IReadsRowOrder and not IReadsRowsAhead and not IDropsRows && split >= 0 && split < at)
+            {
+                if (steps[split] is not IDividesInTime time)
+                {
+                    yield return new DeclarationFault(
+                        at, steps[at].Verb,
+                        "reads a column's earlier rows, and only a split in time keeps every part a contiguous run: split.byTime.");
+                }
+                else if (order is not null && (order.OrderedBy is not [var only] || only != time.Column))
+                {
+                    yield return new DeclarationFault(
+                        at, steps[at].Verb,
+                        $"reads a column's earlier rows, and the split divides by '{time.Column}': order them by '{time.Column}' "
+                        + "alone, so a part is a contiguous run.");
+                }
+            }
+
+            if (steps[at] is IReadsAnEarlierValue reads && madeFromRowsAhead.Contains(reads.Value))
+            {
+                yield return new DeclarationFault(
+                    at, steps[at].Verb,
+                    $"reads '{reads.Value}' as the column whose earlier rows it reads, and that column is an answer made from "
+                    + "rows ahead: it already holds a value from later than the row it stands on.");
+            }
+        }
+    }
+}
+
+/// <summary>
 /// A report stands below the output whose answers it measures.
 /// </summary>
 /// <remarks>

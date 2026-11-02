@@ -55,6 +55,21 @@ public interface IReadsRowOrder : IPipelineStep
 }
 
 /// <summary>
+/// A step whose value for a row is the mean, or the carried-forward value, of a column over rows the declared order
+/// calls earlier than it.
+/// </summary>
+/// <remarks>
+/// An answer an output already made from rows ahead already holds a value from later than the row it stands on —
+/// a history, or any step like it, reading that column as its own value reads that later value back in, through
+/// every earlier row that holds it, however many rows stand between.
+/// </remarks>
+public interface IReadsAnEarlierValue : IPipelineStep
+{
+    /// <summary>The column whose earlier rows are read.</summary>
+    string Value { get; }
+}
+
+/// <summary>
 /// A split that divides the rows by when they happened, and keeps a gap between its parts.
 /// </summary>
 /// <remarks>
