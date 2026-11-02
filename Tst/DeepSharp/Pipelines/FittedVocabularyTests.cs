@@ -31,6 +31,7 @@ public class FittedVocabularyTests
         { "tokenize", [], [], ["tokens"] },
         { "encode.piecewise", [], [], ["edges"] },
         { "history", [], [], ["keys", "order1", "prior", "values"] },
+        { "history.known", [], [], ["keys", "order1", "prior", "values"] },
         { "fill.missing", ["gaps"], [], ["value"] },
         { "fill.missing.refused", ["gaps", "share"], ["filled"], [] },
         { "fill.nan", ["notNumbers"], [], [] },
@@ -100,7 +101,7 @@ public class FittedVocabularyTests
 
         var exercised = new[]
             {
-                "normalise", "normalise.power", "encode", "encode.categories", "tokenize", "encode.piecewise", "history", "fill.missing", "fill.missing.refused",
+                "normalise", "normalise.power", "encode", "encode.categories", "tokenize", "encode.piecewise", "history", "history.known", "fill.missing", "fill.missing.refused",
                 "fill.nan", "fill.nan.mean", "clip", "watch.reference",
             }
             .Select(fit => ((IPipelineStep)Of(fit).Step).Verb)
@@ -254,6 +255,7 @@ public class FittedVocabularyTests
         "tokenize" => (new TokenizeStep("c", 3, 10), Words("x y", "y z", "x")),
         "encode.piecewise" => (new PiecewiseLinearStep("a", 2), Numbers(1, 2, 3, 4, 10)),
         "history" => (new HistoryStep("a", "a", ["a"], 2), Numbers(1, 2, 3, 4, 10)),
+        "history.known" => (new KnownHistoryStep("a", "a", ["a"], new HistoryReach(2, 0)), Numbers(1, 2, 3, 4, 10)),
         "fill.missing" => (FillMissingStep.Of("a", With.Median), Numbers(1, 2, null, 4, 10)),
         "fill.missing.refused" => (FillMissingStep.Of("a", With.Median, 0.10), Numbers(1, 2, null, 4, 10)),
         "fill.nan" => (new FillNaNStep("a"), Numbers(1, 2, 3, 4, 10)),

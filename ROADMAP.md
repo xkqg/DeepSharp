@@ -46,9 +46,9 @@ is true, and the [changelog](CHANGELOG.md) is where it says so.
 | **Done** | Starting and training a layer | A schedule that warms up before it decays by a cosine, three more optimizers, a batch stepped over more than it is read, and a running average of the weights. |
 | **Done** | Shaping what a network can be | A gated feed-forward block, training one network on what another already answered, and a tabular network that answers as an ensemble of itself. |
 | **Done** | A search judged by more than one number | A study choosing between candidates on one trade-off alone, where two or more are really being weighed against each other. |
-| **Later** | A margin per kind of row, and a correlation matrix without a pipeline | A conformal margin worked out for a group the caller names, from errors the caller hands in, and `CorrelationMatrix.From` opened for a plain table of numbers. |
-| **Later** | A model trained outside DeepSharp, counted as a study's own | A `Study` candidate and a `TrainedEnsemble` member whose training is a function of the caller's, the sampler, the deals and the stopping staying the library's. |
-| **Later** | A history over rows already answered | Whether `History` may read a validation or a test row's own earlier rows, known once a model serves, without crossing the line PDD draws. |
+| **Done** | A margin per kind of row, and a correlation matrix without a pipeline | A conformal margin from the caller's own errors, and `CorrelationMatrix.From`, both reachable outside any pipeline. |
+| **Done** | A model trained outside DeepSharp, counted as a study's own | `Study<TModel>` tries candidates trained by a function of the caller's, and `ModelEnsemble<TModel>` answers as several of them blended, the sampler, the deals and the stopping staying the library's. |
+| **Done** | A history over rows already answered | `history.known` reads a key's rows already answered since the pipeline was fitted, validation and test rows included, below a split in time. |
 
 Every row has a section of its own on the [roadmap in the wiki](https://github.com/xkqg/DeepSharp/wiki/Roadmap): what it
 takes, why it stands where it does, and what is left out on purpose. This table is the wiki's, and a test holds the two to

@@ -165,7 +165,7 @@ public sealed record KnownHistoryStep : IFittedStep, IPipelineStep<KnownHistoryS
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(parts);
 
-        return table.FitTheEarlierTrainingRows(parts, Value, Key, OrderBy);
+        return table.FitTheEarlierTrainingRows(parts, new EarlierColumns(Value, Key, OrderBy));
     }
 
     /// <inheritdoc />

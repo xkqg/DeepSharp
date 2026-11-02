@@ -3873,6 +3873,17 @@ something only when both are the same thing summed. `BoostedExtensions.TrainBoos
 purpose: a basis and a correction are a pair of trainings decided once, in code, the way `TrainedEnsemble` already takes its
 members rather than a new verb a pipeline's own chain would have to declare and keep declaring the same way for every caller.
 
+A candidate need not be trained by this library's own `Train` for its score to count. `Study<TModel>` takes a trainer as a
+delegate — handed one deal, returning the score its trial is judged by and the model it trained — the same shape `Score`,
+`Judge`, `DealStopper` and `pipelineFor` already take theirs in: a function the caller writes, not a fifth seam beside
+`ITensorBackend`, `IRowSource`, a learner and `IImporter`. The sampler, the deals, the pruner, the deal stopper, `OnTrial`
+and resuming from earlier trials stay exactly as they are; only what trains, and the model inside, is the caller's — and
+since the caller's model is not a network, `Score`, `Judge` and `Objectives` mean nothing to it and are not offered.
+`ModelEnsemble<TModel>` answers the way `TrainedEnsemble` does — several members blended in the answer's own units,
+measured and given an interval through the same four methods a network ensemble already stands on — but it is built only
+by `Study<TModel>.TrainEnsemble`, which trains every member on the one fit it is handed, so no digest has to tie its
+members together the way `TrainedEnsemble.Of` ties networks that could have been trained apart.
+
 Three decisions are in its shape. Trials run one after another and share nothing they change: a network is declared afresh
 for every trial and the engines are filled before the study starts, because one optimizer shared by trials running side by
 side had its memory corrupted, measured. Validation chooses between finished networks and may stop a run, and it never

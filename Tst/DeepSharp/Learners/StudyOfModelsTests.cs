@@ -212,6 +212,50 @@ public class StudyOfModelsTests
         public Candidate Suggest(SearchSpace space, int trial, IReadOnlyList<Trial> finished) => new([new Setting("momentum", 0.9, null)]);
     }
 
+    private sealed class OutOfRange : ISampler
+    {
+        public Candidate Suggest(SearchSpace space, int trial, IReadOnlyList<Trial> finished) => new([new Setting("rate", 99, null), new Setting("units", 4, null)]);
+    }
+
+    [Fact]
+    public void ACandidateOfASettingTheSpaceCannotTake_IsRefused_NamingIt()
+    {
+        var study = new Study<double>(Space, deal => new Trained<double>(0, 0)) { Sampler = new OutOfRange(), Trials = 1 };
+
+        var refused = Assert.Throws<InvalidOperationException>(() => study.Run(deal => StudyTests.Passengers(deal), TestContext.Current.CancellationToken));
+
+        Assert.Contains("'rate'", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WhenNoTrialFinishes_TheStudyRefuses_SayingSo()
+    {
+        var study = new Study<double>(Space, deal => new Trained<double>(double.NaN, 0)) { Sampler = new RandomSampler(11), Trials = 2 };
+
+        Assert.Contains("No trial finished", Assert.Throws<InvalidOperationException>(() => study.Run(deal => StudyTests.Passengers(deal), TestContext.Current.CancellationToken)).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DealsThatDoNotShareTheirTestRows_AreRefused_NamingTestSeed()
+    {
+        var study = new Study<double>(Space, deal => new Trained<double>(deal.Candidate.Number("rate"), deal.Candidate.Number("rate"))) { Sampler = new RandomSampler(11), Trials = 2, Deals = 2 };
+
+        var refused = Assert.Throws<InvalidOperationException>(() => study.Run(deal => StudyTests.Passengers(deal, testSeed: null), TestContext.Current.CancellationToken));
+
+        Assert.Contains("testSeed", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void EarlierTrialsNumberedWithAGap_AreRefused()
+    {
+        var study = new Study<double>(Space, deal => new Trained<double>(deal.Candidate.Number("rate"), deal.Candidate.Number("rate"))) { Sampler = new RandomSampler(11), Trials = 1 };
+        var gap = new Trial(1, new Candidate([new Setting("rate", 0.01, null), new Setting("units", 4, null)]), Declared: null, [0.5]);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => study.Run(deal => StudyTests.Passengers(deal), [gap], TestContext.Current.CancellationToken));
+
+        Assert.Contains("numbered from nought without a gap", refused.Message, StringComparison.Ordinal);
+    }
+
     private static PreparedData CalibratedRows()
     {
         var noise = new Random(11);
@@ -234,6 +278,47 @@ public class StudyOfModelsTests
             .WithTorch(network => network.Dense(2).Relu().Dense(1).Adam(0.02).MeanSquaredError().Run(seed: 1, epochs: 1))
             .Build()
             .Run();
+    }
+
+    private static PreparedData CalibratedRowsMeasuringCoverage()
+    {
+        var noise = new Random(11);
+        var rows = Enumerable.Range(1, 400).Select(t =>
+        {
+            var x = noise.NextDouble();
+            var y = (2 * x) + ((noise.NextDouble() + noise.NextDouble() - 1) * 0.05);
+
+            return new string?[] { $"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture) };
+        }).ToList();
+
+        return Pdd.Create()
+            .Read(new InMemoryRowSource(["t", "x", "y"], rows), "four hundred")
+            .Declare(schema => schema.Integer("t").Number("x", "y"))
+            .Calibrate(0.20)
+            .SplitAtRandom(0.50, 0.10, 5, testSeed: 9)
+            .Drop("t")
+            .Target("y")
+            .Normalise("x", Scale.MidRange)
+            .Report(report => report.Measure(Metric.Coverage, Metric.Width).On(Part.Validation, Part.Test).As(Shown.Numbers))
+            .WithTorch(network => network.Dense(2).Relu().Dense(1).Adam(0.02).MeanSquaredError().Run(seed: 1, epochs: 1))
+            .Build()
+            .Run();
+    }
+
+    [Fact]
+    public void WithInterval_MeasuresTheEnsembleAgain_WhenTheReportNamesCoverageOrWidth()
+    {
+        var study = new Study<double>(Space, deal => new Trained<double>(0, deal.Candidate.Number("rate")));
+        var rows = CalibratedRowsMeasuringCoverage();
+        Candidate[] candidates = [new([new Setting("rate", 0.3, null)]), new([new Setting("rate", 0.7, null)])];
+
+        static IReadOnlyList<double[]> Answer(double weight, IReadOnlyList<double[]> features) => [.. features.Select(_ => new[] { weight })];
+
+        var ensemble = study.TrainEnsemble(rows, candidates, Answer);
+        var withInterval = ensemble.WithInterval(0.10);
+
+        Assert.Contains(Metric.Coverage, withInterval.Measures!.Ensemble.Metrics);
+        Assert.Contains(Metric.Width, withInterval.Measures!.Ensemble.Metrics);
     }
 
     private static InMemoryRowSource Asked(int rows = 5) =>
@@ -285,5 +370,26 @@ public class StudyOfModelsTests
         var refused = Assert.Throws<ArgumentException>(() => study.TrainEnsemble(rows, two, Answer, new EnsembleOptions { Engines = new Engines() }));
 
         Assert.Contains("Engines", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ATrialOfAModelStudy_DeclaresNoNetwork_AndHasNoMembers()
+    {
+        // A trial a Study<TModel> tried never declares a network, and never sets Members itself: the fallback that used to
+        // read [Declared] unconditionally now has a second case to answer for, since Declared can be null.
+        var trial = new Trial(0, new Candidate([new Setting("rate", 0.3, null)]), Declared: null, [0.1]);
+
+        Assert.Empty(trial.Members);
+    }
+
+    [Fact]
+    public void ATrialsObjectiveMean_IsEmptyWithNoObjectives_AndTheMeanOfEachObjectiveOtherwise()
+    {
+        var candidate = new Candidate([new Setting("rate", 0.3, null)]);
+        var none = new Trial(0, candidate, Declared: null, []);
+        var weighed = new Trial(0, candidate, Declared: null, []) { ObjectiveScores = [[1, 10], [3, 20]] };
+
+        Assert.Empty(none.ObjectiveMean);
+        Assert.Equal([2, 15], weighed.ObjectiveMean);
     }
 }

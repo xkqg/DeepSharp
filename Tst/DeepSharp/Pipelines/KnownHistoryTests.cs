@@ -137,6 +137,32 @@ public class KnownHistoryTests
         Assert.Contains("contiguous run", fault.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(-1, 1)]
+    [InlineData(double.NaN, 1)]
+    [InlineData(1, -1)]
+    public void ANoWindowAndNoWeight_OrANumberThatMeansNothing_IsRefusedWhereTheStepIsMade(double shrink, int window)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new KnownHistoryStep("key", "v", ["t"], new HistoryReach(shrink, window)));
+    }
+
+    [Fact]
+    public void TwoKnownHistorySteps_AreEqual_WhenTheySayTheSameThing()
+    {
+        var one = new KnownHistoryStep("key", "v", ["t"], new HistoryReach(1, 2));
+
+        Assert.Equal(one, new KnownHistoryStep("key", "v", ["t"], new HistoryReach(1, 2)));
+        Assert.Equal(one.GetHashCode(), new KnownHistoryStep("key", "v", ["t"], new HistoryReach(1, 2)).GetHashCode());
+        Assert.NotEqual(one, new KnownHistoryStep("other", "v", ["t"], new HistoryReach(1, 2)));
+        Assert.NotEqual(one, new KnownHistoryStep("key", "other", ["t"], new HistoryReach(1, 2)));
+        Assert.NotEqual(one, new KnownHistoryStep("key", "v", ["other"], new HistoryReach(1, 2)));
+        Assert.NotEqual(one, new KnownHistoryStep("key", "v", ["t"], new HistoryReach(2, 2)));
+        Assert.NotEqual(one, new KnownHistoryStep("key", "v", ["t"], new HistoryReach(1, 3)));
+        Assert.NotEqual(one, one with { Written = "named" });
+        Assert.False(one.Equals(null));
+    }
+
     [Fact]
     public void AKnownHistoryThatReadsAValueAnOutputMadeFromRowsAhead_IsRefused()
     {

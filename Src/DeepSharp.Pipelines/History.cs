@@ -190,7 +190,7 @@ public sealed record HistoryStep : IFittedStep, IPipelineStep<HistoryStep>, IDes
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(parts);
 
-        return table.FitTheEarlierTrainingRows(parts, Value, Key, OrderBy);
+        return table.FitTheEarlierTrainingRows(parts, new EarlierColumns(Value, Key, OrderBy));
     }
 
     /// <inheritdoc />

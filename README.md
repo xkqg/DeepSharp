@@ -18,6 +18,18 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.18.0 answers the flock team's sixth letter.** `Study<TModel>` tries candidates trained by a function of the
+caller's own — handed the deal, returning the score and the model it made — with the sampler, the deals, a pruner, a
+deal stopper and resuming from earlier trials all working exactly as they do for a `Study` of networks;
+`ModelEnsemble<TModel>` answers as several of them blended, trained on the very same rows so no digest ties the
+members together. `history.known` reads a key's rows already answered since the pipeline was fitted — validation and
+test rows included, because by the time a later row of a producer is asked for, an earlier one's own outcome is
+already known — standing only below a split in time. Answering that found two existing leaks nobody had asked about:
+`fill.missing` with `With.Previous`, and `history` itself, could each read a value from across a part or from later
+than the row it stood on; both are refused now, by name. `ConformalInterval.FromErrors` and `CorrelationMatrix.From`
+are public, so a margin and a correlation matrix can both be worked out outside any pipeline. The pipeline file is at
+version 16, and a file 0.17.0 wrote is read, written again and served as it was.
+
 **0.17.0 is three shapes a network could not yet be put together as, and a study that weighs more than one number.**
 A gated feed-forward block splits the encoder block's hidden layer into a gate and a value, the gate weighing the value
 after its own bend — `EncoderShape.Gate`, one of `ReGlu`, `GeGlu` or `SwiGlu`. `BoostedNetwork` trains a correction on
@@ -29,17 +41,6 @@ by separate, un-shared heads at the end. And `Study.Objectives` gives a trial a 
 strictly better on at least one. Three more optimizers, `Lion`, `RAdam` and `Adan`, round out what a 2025–2026 look at
 PyTorch and TensorFlow still found missing. Nothing here moves a file's version; everything reads, trains and serves
 behind a pipeline exactly as before.
-
-**0.16.0 answers the flock team's fifth letter.** A split at random, a stratified split and a shuffle rank each row by a
-digest of every column, so a feature column added or dropped can move a row to another part though nothing about the row
-itself changed; declaring an id turns this off, and the three then rank by it alone, so every row that shares an id lands
-together. A study trying several networks together is judged once every deal has finished, with no way to stop one early —
-a `Pruner` hears a single network's own epochs and is refused beside the `Judge` several networks need; a `DealStopper` now
-hears the trial's own judged number after each deal but the last, and may end it there. A trainer from ML.NET may now be
-fitted and asked to predict on rows handed over directly, with no pipeline behind them, the way a network already could
-through `CompiledNetwork`; and a tree or a forest answering one of two classes now predicts a true probability, where
-before it answered ML.NET's own raw score. The pipeline file is at version 15, and a file 0.15.0 wrote is read, written
-again and served as it was.
 
 Every release that brought something to call, this one and the ones before it, has examples on the wiki: what is new and what was improved, in code that
 is compiled against the library as it is now — see [Examples](https://github.com/xkqg/DeepSharp/wiki/Examples). Earlier

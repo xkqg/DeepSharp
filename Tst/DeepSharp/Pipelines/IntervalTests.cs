@@ -109,6 +109,17 @@ public class IntervalTests
     }
 
     [Fact]
+    public void APredictionThatComesBackNotAFiniteNumber_IsRefused_NamingTheRowAndTheColumn()
+    {
+        var prepared = Priced();
+        var refused = Assert.Throws<ArgumentException>(() => prepared.IntervalOf(Shifted(prepared, Part.Calibration, at => at == 3 ? double.PositiveInfinity : 0.01), 0.10));
+
+        Assert.Contains("'y'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("calibration row 4", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("not a finite number", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ASplitThatSetsNoRowsAside_HasNothingToCalibrateOn()
     {
         var prepared = Pdd.Create()

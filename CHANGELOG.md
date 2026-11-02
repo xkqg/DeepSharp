@@ -3,6 +3,80 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.18.0]
+
+The sixth letter of the flock team, answered in three: a `Study` candidate and a `TrainedEnsemble`-sibling member may now
+be trained by a function of the caller's own rather than a network step declared to this library; a history may now read
+a key's own rows already answered since the pipeline was fitted, validation and test rows included; and a conformal
+margin, and a correlation matrix, may both be worked out on a plain table of numbers, outside any pipeline. Answering the
+second of those closed two leaks the look found on the way, neither asked for in the letter: a value carried forward
+across a part it had no business crossing, and a history able to read a value that had not happened yet.
+
+### Upgrading from 0.17.0
+
+- **The pipeline file is at version 16.** Everything written before still reads and means what it meant; `history.known`
+  is new. 0.18.0 refuses a file of the sixteenth whole, naming the version.
+- **Two pipelines that loaded before are now refused, naming why.** `fill.missing` with `With.Previous`, and `history` (or
+  the new `history.known`), each read a column's earlier rows by the order they stand in rather than by the part a row
+  belongs to. Declared under `split.atRandom`, `split.stratified`, or a `split.byTime` ordered by a column other than the
+  one the split itself divides by, a training row could read a value from a validation or a test row that merely
+  happened to come first in that order — the leak `settle.gaps`' training-only rule exists to close, run the other way.
+  Both are now refused at the step that reads ahead of its part, naming the split it needs above it. A pipeline that
+  already orders by the time split's own column, or that never crossed a part in practice, reads and runs unchanged; one
+  that did cross a part answers differently once rebuilt, because the value it used to read is no longer the one it
+  reads now. `history` is further refused wherever its value is a column `target.ahead` already made: that column holds
+  a value from later than the row it stands on, and reading it back in carried that later value through every earlier
+  row that held it.
+- **`Trial.Declared` is now `LearnNetworkStep?`, not `LearnNetworkStep`.** A `Study` of networks still always has one; it
+  is null only on a trial of the new `Study<TModel>`. Third-party code that reads `Trial.Declared` or `Trial.Members` —
+  an `ISampler`, a `DealStopper`, an `OnTrial` handler — compiles unchanged, but sees null where it never could before if
+  it is ever handed a trial from a `Study<TModel>`; with nullable warnings as errors, reading it without a check is now a
+  build error (CS8602) rather than a guaranteed non-null read.
+
+### Added
+
+- **A `Study` candidate, and a `TrainedEnsemble`-sibling member, trained by a function of the caller's.**
+  `Study<TModel>(space, train)` tries a function the caller writes, handed one `TrainingDeal` — the candidate, the
+  pipeline's rows prepared for that deal, where to report progress, and when to stop — and returning the `Trained<TModel>`
+  it made: the number the trial is judged by, and the model. The sampler, the deals, a pruner heard once a step at a
+  time through `TrainingDeal.Heard`, a deal stopper, `OnTrial`, and resuming from an earlier run's trials all work the
+  same way a `Study` of networks already does; only what trains, and the model trained, is the caller's, so `Score`,
+  `Judge` and `Objectives` mean nothing here and are not offered. `ModelEnsemble<TModel>`, built only by
+  `Study<TModel>.TrainEnsemble`, answers the way `TrainedEnsemble` does — several members blended in the answer's own
+  units, measured and given an interval through the same four methods — but every member is trained on the one fit it
+  is handed, so no digest has to tie members trained apart. See
+  [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
+
+- **A history may read a key's rows already answered since the pipeline was fitted.** `history.known` keeps the same
+  training floor `history` already does — the training rows of a key, by order, fitted once and replayed unchanged, so a
+  flock served alone never loses its history — and reads, above that floor, every row of the same key in the table it is
+  applied to that stands strictly after the floor's last place and strictly before the row being computed, its value
+  present rather than a gap. A training row is never counted twice for standing in both. It stands only below a split in
+  time, ordered by the very column the split divides by, for the same reason the two leaks above are now refused; its
+  value may not be a column an output already made from rows ahead, for the same reason. See
+  [Networks](https://github.com/xkqg/DeepSharp/wiki/Networks).
+
+- **A conformal margin from the caller's own errors, outside any pipeline.** `ConformalInterval.FromErrors(errors, alpha)`
+  is the same rank-order rule `Conformal.Of` already applies to a pipeline's own calibration errors — the
+  ⌈(n+1)(1−α)⌉-th smallest absolute error — reachable directly on a plain list, so a caller may work out a margin for a
+  group it defines itself, from a number it derives rather than a pipeline's answer. See
+  [Measuring and drawing](https://github.com/xkqg/DeepSharp/wiki/Measuring-and-drawing).
+
+- **`CorrelationMatrix.From` is public.** The same Pearson's and Spearman's coefficients the `Correlate` step already
+  works out over a pipeline's training rows, now reachable on a plain table of columns and rows, before any pipeline
+  exists. See [Measuring and drawing](https://github.com/xkqg/DeepSharp/wiki/Measuring-and-drawing).
+
+### Fixed
+
+- **`fill.missing` with `With.Previous` could carry a value across a part.** It filled a gap from the row before it in
+  declared order, whatever part either row belonged to; under `split.atRandom` or `split.stratified`, the row before a
+  training row's gap could be a validation or a test row. Refused now unless it stands below a `split.byTime` ordered by
+  the split's own column, which keeps every part a contiguous run.
+- **`history` could read a value from later than the row it stood on.** Its value column could be one `target.ahead`
+  already made, which holds a value from a row later than the one it is written beside; reading that back in as the
+  column whose earlier rows are read carried the later value through every earlier row that held it. Refused now by
+  name.
+
 ## [0.17.0]
 
 A 2025–2026 look at PyTorch, TensorFlow and the wider training ecosystem, next to what DeepSharp already had: three more

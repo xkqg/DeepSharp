@@ -116,6 +116,10 @@ internal sealed class Earlier
     }
 }
 
+// The three columns that say what a history reads and whose rows it reads them from: the value, the key that groups
+// rows into one history, and the columns that order them. Held as one so fitting them takes four parameters, not five.
+internal readonly record struct EarlierColumns(string Value, string Key, IReadOnlyList<string> OrderBy);
+
 // What HistoryStep and KnownHistoryStep both do at Fit: learn the training rows' prior, and keep their key, value and
 // place so a replay can read them back — the training floor every history has, however it is read afterwards.
 internal static class EarlierFit
@@ -156,12 +160,12 @@ internal static class EarlierFit
         }
 
         /// <exception cref="InvalidOperationException">No training row holds a number of the column, or a row has a gap where its order is said.</exception>
-        internal FittedStepValues FitTheEarlierTrainingRows(IReadOnlyList<Part> parts, string value, string key, IReadOnlyList<string> orderBy)
+        internal FittedStepValues FitTheEarlierTrainingRows(IReadOnlyList<Part> parts, EarlierColumns columns)
         {
-            var prior = table.TrainingValues(value, parts).Learnable("the mean of every training row").Mean;
-            var values = table.NumbersOf(value);
-            var keys = table[key];
-            var order = table.PlacesBy(orderBy);
+            var prior = table.TrainingValues(columns.Value, parts).Learnable("the mean of every training row").Mean;
+            var values = table.NumbersOf(columns.Value);
+            var keys = table[columns.Key];
+            var order = table.PlacesBy(columns.OrderBy);
             var kept = Enumerable.Range(0, table.RowCount).Where(row => parts[row] == Part.Train && values[row] is { } x && double.IsFinite(x) && !keys.IsMissing(row)).ToArray();
             var learned = new FittedStepValues();
 
@@ -169,7 +173,7 @@ internal static class EarlierFit
             learned.Learned("keys", [.. kept.Select(row => keys.TextAt(row)!)]);
             learned.Learned("values", [.. kept.Select(row => values[row]!.Value)]);
 
-            for (var at = 0; at < orderBy.Count; at++)
+            for (var at = 0; at < columns.OrderBy.Count; at++)
             {
                 learned.Learned(string.Create(CultureInfo.InvariantCulture, $"order{at + 1}"), [.. kept.Select(row => order[row][at])]);
             }

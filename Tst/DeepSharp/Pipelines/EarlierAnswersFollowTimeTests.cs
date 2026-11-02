@@ -47,6 +47,22 @@ public class EarlierAnswersFollowTimeTests
     }
 
     [Fact]
+    public void ARowCarriedForward_UnderASplitByTime_OrderedByAnotherColumn_IsRefused()
+    {
+        var fault = Assert.Single(Assert.Throws<DeclarationException>(() =>
+            Pdd.Create()
+                .Read(CsvRowSource.FromText("a,b,c\n1,1,9\n2,,8\n3,3,7\n4,4,6\n5,5,5\n6,6,4\n7,7,3\n8,8,2\n9,9,1\n10,10,0\n"), "ten rows")
+                .Declare(schema => schema.Number("a", "b", "c"))
+                .OrderBy("c")
+                .SplitByTime("b", 0.70, 0.15)
+                .FillMissing("a", With.Previous)
+                .Build()).Faults);
+
+        Assert.Equal("fill.missing", fault.Verb);
+        Assert.Contains("order them by 'b'", fault.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AHistoryThatReadsAValueAnOutputMadeFromRowsAhead_IsRefused()
     {
         var fault = Assert.Single(Assert.Throws<DeclarationException>(() =>
