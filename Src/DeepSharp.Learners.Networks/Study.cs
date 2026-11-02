@@ -691,6 +691,11 @@ public sealed class Study
 
             ThrowIfNotOfTheSpace(trial.Candidate);
 
+            if (trial.Declared is null)
+            {
+                throw new InvalidOperationException($"Earlier trial {at} declares no network, as a trial a caller-trained study tried does: it was tried by another kind of study.");
+            }
+
             if (!trial.Members.SequenceEqual(DeclaredBy(trial.Candidate)))
             {
                 throw new InvalidOperationException($"Earlier trial {at} declares another network than this study declares for its candidate: it was tried by another study.");
