@@ -64,6 +64,63 @@ public sealed record ConformalInterval(double Alpha, int Rows, IReadOnlyList<dou
             [.. answers.Select(row => row.Select((answer, column) => answer + Margins[column]).ToArray())]);
     }
 
+    /// <summary>
+    /// Works out the margin a set of errors allows at a level, outside any pipeline: the caller's own kind of row, the
+    /// caller's own derived number, the caller's own errors on rows nothing was fitted or chosen on.
+    /// </summary>
+    /// <param name="errors">The absolute error on each of those rows.</param>
+    /// <param name="alpha">The share of rows allowed to land outside.</param>
+    /// <returns>The interval, with one margin.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The level is not above nothing and below one.</exception>
+    /// <exception cref="ArgumentException">There are no errors, or one of them is not a finite number of nought or more.</exception>
+    /// <exception cref="InvalidOperationException">The rows hold no margin that keeps the promise.</exception>
+    public static ConformalInterval FromErrors(IReadOnlyList<double> errors, double alpha)
+    {
+        ArgumentNullException.ThrowIfNull(errors);
+
+        if (!(alpha > 0 && alpha < 1))
+        {
+            throw new ArgumentOutOfRangeException(nameof(alpha), alpha, "A level is the share of rows allowed to land outside the margin: above nothing and below one.");
+        }
+
+        if (errors.Count == 0)
+        {
+            throw new ArgumentException("A margin is worked out from at least one error.", nameof(errors));
+        }
+
+        foreach (var error in errors)
+        {
+            if (!double.IsFinite(error) || error < 0)
+            {
+                throw new ArgumentException(
+                    string.Create(CultureInfo.InvariantCulture, $"An error is a finite number that is nought or more, and {error} is none."), nameof(errors));
+            }
+        }
+
+        return new ConformalInterval(alpha, errors.Count, [RankOrderMargin([.. errors], alpha)]);
+    }
+
+    // The rank-order statistic split conformal prediction rests on: the ceiled (n+1)(1-alpha)-th smallest of n errors,
+    // refused where fewer rows hold none that keeps the promise. Shared by FromErrors above and Conformal.Of below, so
+    // the one rule is worked out in the one place.
+    internal static double RankOrderMargin(double[] errors, double alpha)
+    {
+        var rows = errors.Length;
+        var rank = (int)Math.Ceiling(((rows + 1) * (1 - alpha)) - 1e-9);
+
+        if (rank > rows)
+        {
+            throw new InvalidOperationException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"{rows} rows hold no margin that keeps a promise of {1 - alpha:0.####} at the level {alpha:0.####}: it takes {Math.Ceiling((1 / alpha) - 1e-9) - 1:0} rows, each as likely to be the one that lands outside. Hand in more rows, or ask for a wider level."));
+        }
+
+        Array.Sort(errors);
+
+        return errors[rank - 1];
+    }
+
     /// <summary>Reads an interval back from the object <see cref="WriteTo"/> writes.</summary>
     /// <param name="element">The object.</param>
     /// <returns>The interval.</returns>
@@ -175,16 +232,6 @@ internal static class Conformal
         }
 
         var rows = actual.Count;
-        var rank = (int)Math.Ceiling(((rows + 1) * (1 - alpha)) - 1e-9);
-
-        if (rank > rows)
-        {
-            throw new InvalidOperationException(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{rows} rows of calibration hold no margin that keeps a promise of {1 - alpha:0.####} at the level {alpha:0.####}: it takes {Math.Ceiling((1 / alpha) - 1e-9) - 1:0} rows, each as likely to be the one that lands outside. Set more rows aside, or ask for a wider level."));
-        }
-
         double[] margins = new double[output.Answers.Count];
 
         for (var column = 0; column < margins.Length; column++)
@@ -203,8 +250,7 @@ internal static class Conformal
                 }
             }
 
-            Array.Sort(errors);
-            margins[column] = errors[rank - 1];
+            margins[column] = ConformalInterval.RankOrderMargin(errors, alpha);
         }
 
         return new ConformalInterval(alpha, rows, margins);

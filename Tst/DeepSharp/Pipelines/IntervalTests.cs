@@ -331,6 +331,65 @@ public class IntervalTests
         Assert.Equal(2 * interval.Margins[0], test.Values.Single(value => value.Metric == Metric.Width).Value, 12);
     }
 
+    // ---- a margin from the caller's own errors, outside any pipeline, per kind of row the caller defines ----
+
+    [Fact]
+    public void FromErrors_WorksOutTheSameMargin_AsTheRankOrderRuleOnAPlainListOfErrors()
+    {
+        double[] errors = [.. Enumerable.Range(1, 20).Select(value => (double)value)];
+
+        var interval = ConformalInterval.FromErrors(errors, 0.10);
+
+        // Twenty rows and alpha a tenth: ceil(21 x 0.9) = 19, the nineteenth smallest of 1..20, which is 19.
+        Assert.Equal(0.10, interval.Alpha);
+        Assert.Equal(20, interval.Rows);
+        Assert.Equal(19, Assert.Single(interval.Margins));
+    }
+
+    [Fact]
+    public void FromErrors_TooFewRows_ForTheLevelAsked_AreRefused_NamingTheRowsThereAreTheLevelAndTheRowsNeeded()
+    {
+        double[] errors = [1, 2, 3, 4, 5];
+
+        var refused = Assert.Throws<InvalidOperationException>(() => ConformalInterval.FromErrors(errors, 0.10));
+
+        Assert.Contains("5 rows", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("0.1", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("9 rows", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(-0.1)]
+    [InlineData(double.NaN)]
+    public void FromErrors_TheLevel_IsRequired_AndIsAShareBetweenNothingAndAll(double alpha) =>
+        Assert.Throws<ArgumentOutOfRangeException>(() => ConformalInterval.FromErrors([1, 2, 3], alpha));
+
+    [Fact]
+    public void FromErrors_NoErrors_IsRefused_ForAMarginNeedsAtLeastOne() =>
+        Assert.Throws<ArgumentException>(() => ConformalInterval.FromErrors([], 0.10));
+
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(-1)]
+    public void FromErrors_AnErrorThatIsNotAFiniteNumberOfNoughtOrMore_IsRefused(double bad) =>
+        Assert.Throws<ArgumentException>(() => ConformalInterval.FromErrors([1, 2, bad], 0.10));
+
+    [Fact]
+    public void FromErrors_GivesTheSameMargin_AsConformalOfOnTheSameColumnOfErrors()
+    {
+        // The library's own internal path reuses this core, so one group's margin by hand matches the one a pipeline works out.
+        var prepared = Priced();
+        double Shift(int at) => 0.01 * (at + 1);
+
+        var fromThePipeline = prepared.IntervalOf(Shifted(prepared, Part.Calibration, Shift), 0.10);
+        var byHand = ConformalInterval.FromErrors(OwnErrors(prepared, Part.Calibration, Shift), 0.10);
+
+        Assert.Equal(fromThePipeline.Margins[0], byHand.Margins[0], 12);
+    }
+
     private sealed class IntervalComparer : IEqualityComparer<ConformalInterval>
     {
         public bool Equals(ConformalInterval? left, ConformalInterval? right) =>
