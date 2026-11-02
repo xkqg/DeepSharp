@@ -190,23 +190,7 @@ public sealed record HistoryStep : IFittedStep, IPipelineStep<HistoryStep>, IDes
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(parts);
 
-        var prior = table.TrainingValues(Value, parts).Learnable("the mean of every training row").Mean;
-        var values = table.NumbersOf(Value);
-        var keys = table[Key];
-        var order = Places(table);
-        var kept = Enumerable.Range(0, table.RowCount).Where(row => parts[row] == Part.Train && values[row] is { } x && double.IsFinite(x) && !keys.IsMissing(row)).ToArray();
-        var learned = new FittedStepValues();
-
-        learned.Learned("prior", prior);
-        learned.Learned("keys", [.. kept.Select(row => keys.TextAt(row)!)]);
-        learned.Learned("values", [.. kept.Select(row => values[row]!.Value)]);
-
-        for (var at = 0; at < OrderBy.Count; at++)
-        {
-            learned.Learned(string.Create(CultureInfo.InvariantCulture, $"order{at + 1}"), [.. kept.Select(row => order[row][at])]);
-        }
-
-        return learned;
+        return table.FitTheEarlierTrainingRows(parts, Value, Key, OrderBy);
     }
 
     /// <inheritdoc />
@@ -217,53 +201,20 @@ public sealed record HistoryStep : IFittedStep, IPipelineStep<HistoryStep>, IDes
         ArgumentNullException.ThrowIfNull(fitted);
 
         var prior = fitted.Number("prior");
-        var learnedKeys = fitted.List("keys");
-        var learnedValues = fitted.Curve("values");
-        var learnedOrder = Enumerable.Range(1, OrderBy.Count).Select(at => fitted.Curve(string.Create(CultureInfo.InvariantCulture, $"order{at}"))).ToArray();
-        var earlier = Enumerable.Range(0, learnedKeys.Count)
-            .GroupBy(row => learnedKeys[row], StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => new Earlier([.. group.Select(row => new Held([.. learnedOrder.Select(curve => curve[row])], learnedValues[row]))], Window > 0), StringComparer.Ordinal);
+        var earlier = fitted.TrainingRowsByKey(OrderBy.Count)
+            .ToDictionary(group => group.Key, group => new Earlier(group.Value, Window > 0), StringComparer.Ordinal);
         var keys = table[Key];
-        var order = Places(table);
+        var order = table.PlacesBy(OrderBy);
         var read = new double?[table.RowCount];
 
         for (var row = 0; row < table.RowCount; row++)
         {
-            var (sum, count) = !keys.IsMissing(row) && earlier.TryGetValue(keys.TextAt(row)!, out var rows) ? rows.Before(order[row], Window) : default;
+            var counted = !keys.IsMissing(row) && earlier.TryGetValue(keys.TextAt(row)!, out var rows) ? rows.Before(order[row], Window) : default;
 
-            // A window of nothing held, read with no weight, has no mean of its own to read: it reads the prior.
-            read[row] = (count + Shrink) is 0d ? prior : (sum + (Shrink * prior)) / (count + Shrink);
+            read[row] = counted.Blended(Shrink, prior);
         }
 
         table.Put(new Column<double>(Into, ColumnKind.Number, read));
-    }
-
-    // Each row's place in the order, one number for each column that says it: a moment as days since 1970, a whole number and
-    // a number as themselves — the declaration lets no other kind through. A row with a gap there has no place, and is refused
-    // naming it.
-    private double[][] Places(Table table)
-    {
-        var columns = OrderBy.Select(name => table[name]).ToArray();
-        var places = new double[table.RowCount][];
-
-        for (var row = 0; row < table.RowCount; row++)
-        {
-            places[row] = new double[columns.Length];
-
-            for (var at = 0; at < columns.Length; at++)
-            {
-                places[row][at] = columns[at] switch
-                {
-                    _ when columns[at].IsMissing(row) => throw new InvalidOperationException(
-                        $"Row {table.Identities[row].ReadAt + 1} has no '{OrderBy[at]}', so nothing says which rows came before it."),
-                    Column<DateTime> moments => (moments[row]!.Value - DateTime.UnixEpoch).TotalDays,
-                    Column<long> whole => whole[row]!.Value,
-                    _ => ((Column<double>)columns[at])[row]!.Value,
-                };
-            }
-        }
-
-        return places;
     }
 
     /// <summary>Reads this step back out of a file.</summary>
@@ -271,95 +222,4 @@ public sealed record HistoryStep : IFittedStep, IPipelineStep<HistoryStep>, IDes
     /// <returns>The step the file describes.</returns>
     public static HistoryStep ReadFrom(JsonElement element) =>
         new(KeyKey.Read(element), ValueKey.Read(element), OrderByKey.Read(element), new HistoryReach(ShrinkKey.Read(element), WindowKey.Read(element))) { Written = IntoKey.Read(element) };
-
-    // The sum and the count of the training rows of a key that came before a row.
-    private readonly record struct Counted(double Sum, int Count);
-
-    // One training row of a key: its place in the order, and its value.
-    private readonly record struct Held(double[] Place, double Value);
-
-    // The training rows of one key, in their order, with the running sum of their values: what came before a place is a search. Where
-    // a window reads only the last places, the rows are put in an order that is the same whatever order they were handed in — by place
-    // and then by value — and what a window holds is added up row by row, since the difference of two running totals is not the sum of
-    // the rows between them once a total has lost the small values a large one swallowed.
-    private sealed class Earlier
-    {
-        private readonly double[][] _places;
-        private readonly double[] _values;
-        private readonly double[] _sums;
-        private readonly int[] _starts;
-
-        public Earlier(Held[] rows, bool windowed)
-        {
-            Array.Sort(rows, windowed ? (one, other) => Compared(one.Place, other.Place) is var order and not 0 ? order : one.Value.CompareTo(other.Value) : (one, other) => Compared(one.Place, other.Place));
-
-            _places = [.. rows.Select(row => row.Place)];
-            _values = [.. rows.Select(row => row.Value)];
-            _sums = new double[rows.Length + 1];
-
-            for (var at = 0; at < rows.Length; at++)
-            {
-                _sums[at + 1] = _sums[at] + rows[at].Value;
-            }
-
-            _starts = [.. Enumerable.Range(0, rows.Length).Where(at => at == 0 || Compared(_places[at - 1], _places[at]) != 0)];
-        }
-
-        // The sum and the count of the rows strictly before a place: all of them, or those on the last places of a window.
-        public Counted Before(double[] place, int window)
-        {
-            int low = 0, high = _places.Length;
-
-            while (low < high)
-            {
-                var middle = (low + high) / 2;
-
-                if (Compared(_places[middle], place) < 0)
-                {
-                    low = middle + 1;
-                }
-                else
-                {
-                    high = middle;
-                }
-            }
-
-            if (window == 0)
-            {
-                return new Counted(_sums[low], low);
-            }
-
-            var places = _starts.Count(start => start < low);
-
-            if (places == 0)
-            {
-                return default;
-            }
-
-            var first = _starts[Math.Max(0, places - window)];
-            var sum = 0d;
-
-            for (var at = first; at < low; at++)
-            {
-                sum += _values[at];
-            }
-
-            return new Counted(sum, low - first);
-        }
-
-        private static int Compared(double[] one, double[] other)
-        {
-            for (var at = 0; at < one.Length; at++)
-            {
-                var compared = one[at].CompareTo(other[at]);
-
-                if (compared != 0)
-                {
-                    return compared;
-                }
-            }
-
-            return 0;
-        }
-    }
 }

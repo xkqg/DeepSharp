@@ -42,6 +42,7 @@ public class PipelineTextTests
         ("fill.missing", 1),
         ("fill.nan", 1),
         ("history", 10),
+        ("history.known", 16),
         ("learn.ml", 7),
         ("learn.network", 5),
         ("maths", 1),

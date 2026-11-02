@@ -27,6 +27,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`fill.missing`](#fillmissing) | Fills the gaps in a column the named way, below the split, and marks where they were. A value no row decided is settle.gaps, above it. |
 | [`fill.nan`](#fillnan) | Deals with a value that is not a number a model can use; refusing it is the default. |
 | [`history`](#history) | Writes beside each row the mean of a column over the earlier training rows of its key, pulled towards the training rows' mean. |
+| [`history.known`](#historyknown) | Writes beside each row the mean of a column over the earlier rows of its key already known at the time it is asked for, pulled towards the training rows' mean. |
 | [`learn.ml`](#learnml) | Names the trainer from ML.NET this pipeline is declared for: which trainer, the settings it takes and the seed it repeats from. |
 | [`learn.network`](#learnnetwork) | Names the network this pipeline is declared for: its layers, what moves them, what judges them, when the run stops and the engine it runs on. |
 | [`maths`](#maths) | Pulls a column into another shape by arithmetic that learns nothing: a logarithm, a root, a reciprocal. |
@@ -424,6 +425,32 @@ Writes beside each row the mean of a column over the earlier training rows of it
 - **`into`**: The name of the column it makes; left out, the value's name, 'history' and the key's name.
 
 Means what it says from version 10 of the file.
+
+## `history.known`
+
+Writes beside each row the mean of a column over the earlier rows of its key already known at the time it is asked for, pulled towards the training rows' mean.
+
+```json
+{"step":"history.known","key":"key","value":"value","orderBy":["when"],"shrink":3,"window":3,"into":"value_knownHistory_key"}
+```
+
+| key | holds | an example |
+|---|---|---|
+| `key` | the name of a column holding anything | `"key"` |
+| `value` | the name of a column holding a number, a whole number or true or false | `"value"` |
+| `orderBy` | a list of the names of columns holding a moment in time, a whole number or a number, each named once | `["when"]` |
+| `shrink` | a number, 0 or more | `3` |
+| `window` | a whole number, at least 1; left out, 0 | `3` |
+| `into` | the name of the column it makes; left out, the step decides | `"value_knownHistory_key"` |
+
+- **`key`**: The column whose value says which rows are of one kind: a farm, a type.
+- **`value`**: The column of numbers whose mean over the earlier rows of the same kind is read.
+- **`orderBy`**: The columns that say which rows came before a row: the first is the column the split above divides time by, each next one decides between rows the ones before call equal.
+- **`shrink`**: How many rows' worth of weight the mean of every training row has beside a key's own rows, above nothing: the larger, the more a key with few rows is pulled towards it.
+- **`window`**: How many of the last places of the order a row reads, rows of one place counting as one; left out, every earlier row. A window of nothing is read with a weight of nothing too.
+- **`into`**: The name of the column it makes; left out, the value's name, 'knownHistory' and the key's name.
+
+Means what it says from version 16 of the file.
 
 ## `learn.ml`
 

@@ -51,6 +51,7 @@ public sealed class StepCatalog
         catalog.Register<TokenizeStep>();
         catalog.Register<PiecewiseLinearStep>();
         catalog.Register<HistoryStep>();
+        catalog.Register<KnownHistoryStep>();
         catalog.Register<TargetStep>();
         catalog.Register<DistributionStep>();
         catalog.Register<LabelsStep>();

@@ -405,6 +405,7 @@ public class ColumnFlowTests
             "tokenize" => new TokenizeStep("w", 3, 10),
             "encode.piecewise" => new PiecewiseLinearStep("b", 3),
             "history" => new HistoryStep("g", "b", ["when"], 2),
+            "history.known" => new KnownHistoryStep("g", "b", ["when"], new HistoryReach(2, 0)),
             "watch.reference" => new WatchStep(0.2, ["a", "g"]),
             "encode.categories" => new EncodeCategoriesStep(As.Ordinal),
             "outliers.clip" => new ClipOutliersStep("b"),

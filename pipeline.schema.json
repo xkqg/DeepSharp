@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 15
+      "maximum": 16
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -55,6 +55,7 @@
             "fill.missing",
             "fill.nan",
             "history",
+            "history.known",
             "learn.ml",
             "learn.network",
             "maths",
@@ -374,6 +375,21 @@
           },
           "then": {
             "$ref": "#/$defs/history"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "history.known"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/history.known"
           }
         },
         {
@@ -1889,6 +1905,60 @@
           "type": "string",
           "pattern": "\\S",
           "description": "The name of the column it makes; left out, the value's name, 'history' and the key's name."
+        }
+      },
+      "required": [
+        "step",
+        "key",
+        "value",
+        "orderBy",
+        "shrink"
+      ],
+      "additionalProperties": false
+    },
+    "history.known": {
+      "description": "Writes beside each row the mean of a column over the earlier rows of its key already known at the time it is asked for, pulled towards the training rows' mean.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "history.known"
+        },
+        "key": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column whose value says which rows are of one kind: a farm, a type."
+        },
+        "value": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column of numbers whose mean over the earlier rows of the same kind is read."
+        },
+        "orderBy": {
+          "description": "The columns that say which rows came before a row: the first is the column the split above divides time by, each next one decides between rows the ones before call equal.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "\\S"
+          }
+        },
+        "shrink": {
+          "description": "How many rows' worth of weight the mean of every training row has beside a key's own rows, above nothing: the larger, the more a key with few rows is pulled towards it.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1.7976931348623157E+308
+        },
+        "window": {
+          "description": "How many of the last places of the order a row reads, rows of one place counting as one; left out, every earlier row. A window of nothing is read with a weight of nothing too.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "into": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The name of the column it makes; left out, the value's name, 'knownHistory' and the key's name."
         }
       },
       "required": [
@@ -5737,6 +5807,7 @@
                       "evidence.report",
                       "feature.cycle",
                       "history",
+                      "history.known",
                       "learn.ml",
                       "learn.network",
                       "order.by",
@@ -5786,6 +5857,7 @@
                       "evidence.report",
                       "feature.cycle",
                       "history",
+                      "history.known",
                       "learn.ml",
                       "learn.network",
                       "read.images",
@@ -5827,6 +5899,7 @@
                       "evidence.likeness",
                       "feature.cycle",
                       "history",
+                      "history.known",
                       "learn.ml",
                       "learn.network",
                       "read.images",
@@ -5868,6 +5941,7 @@
                       "evidence.likeness",
                       "feature.cycle",
                       "history",
+                      "history.known",
                       "learn.ml",
                       "read.images",
                       "read.join",
@@ -5908,6 +5982,7 @@
                       "evidence.likeness",
                       "feature.cycle",
                       "history",
+                      "history.known",
                       "learn.ml",
                       "read.images",
                       "read.join",
@@ -5947,6 +6022,7 @@
                       "evidence.likeness",
                       "feature.cycle",
                       "history",
+                      "history.known",
                       "read.images",
                       "read.join",
                       "read.sounds",
@@ -5982,6 +6058,7 @@
                       "encode.piecewise",
                       "evidence.likeness",
                       "history",
+                      "history.known",
                       "read.images",
                       "read.sounds",
                       "read.texts",
@@ -6012,6 +6089,7 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "history.known",
                       "read.images",
                       "read.sounds",
                       "read.texts",
@@ -6042,10 +6120,37 @@
                 "step": {
                   "not": {
                     "enum": [
+                      "history.known",
                       "read.images",
                       "read.sounds",
                       "read.texts",
                       "tokenize"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 16
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "declaration": {
+            "items": {
+              "properties": {
+                "step": {
+                  "not": {
+                    "enum": [
+                      "history.known"
                     ]
                   }
                 }
