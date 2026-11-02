@@ -12,13 +12,17 @@ namespace DeepSharp.Learners.Networks;
 /// </summary>
 /// <param name="Number">The place of the trial in its study, from nought.</param>
 /// <param name="Candidate">The values the sampler gave.</param>
-/// <param name="Declared">The network those values declared; a step a pipeline keeps, and trains again with <c>Train</c>. The first of the trial's networks, where it has several.</param>
+/// <param name="Declared">
+/// The network those values declared; a step a pipeline keeps, and trains again with <c>Train</c>. The first of the trial's
+/// networks, where it has several. Nothing, for a trial a caller-trained study tried, whose candidate is trained by a function
+/// of the caller's rather than declared as a step.
+/// </param>
 /// <param name="Scores">
 /// How the network was judged, once on each deal that finished; lower is better. None, for a trial a <see cref="Study.Pruner"/>
 /// stopped mid-epoch, which has no deal it finished fairly; the real scores of however many deals did finish, for a trial a
 /// <see cref="Study.DealStopper"/> stopped between deals, which has nothing untrustworthy about the ones it kept.
 /// </param>
-public sealed record Trial(int Number, Candidate Candidate, LearnNetworkStep Declared, IReadOnlyList<double> Scores)
+public sealed record Trial(int Number, Candidate Candidate, LearnNetworkStep? Declared, IReadOnlyList<double> Scores)
 {
     /// <summary>Whether the study's pruner or deal stopper stopped the trial before its deals ran out; it ran to their end, unless said.</summary>
     public bool Pruned { get; init; }
@@ -36,7 +40,7 @@ public sealed record Trial(int Number, Candidate Candidate, LearnNetworkStep Dec
     /// </summary>
     public IReadOnlyList<LearnNetworkStep> Members
     {
-        get => field ?? [Declared];
+        get => field ?? (Declared is { } one ? [one] : []);
         init;
     }
 

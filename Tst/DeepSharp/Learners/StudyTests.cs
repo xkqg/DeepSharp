@@ -57,8 +57,8 @@ public class StudyTests
         foreach (var trial in result.Trials)
         {
             Assert.Equal(new RandomSampler(11).Suggest(Space, trial.Number, []), trial.Candidate);
-            Assert.Equal(trial.Candidate.Whole("units"), trial.Declared.Layers[0].Whole("units"));
-            Assert.Equal(trial.Candidate.Number("rate"), trial.Declared.Optimizer.Number("rate"));
+            Assert.Equal(trial.Candidate.Whole("units"), trial.Declared!.Layers[0].Whole("units"));
+            Assert.Equal(trial.Candidate.Number("rate"), trial.Declared!.Optimizer.Number("rate"));
             Assert.Single(trial.Scores);
         }
     }
@@ -214,7 +214,7 @@ public class StudyTests
         var result = study.Run(deal => Passengers(deal), TestContext.Current.CancellationToken);
 
         Assert.Equal(2, result.Trials.Count);
-        Assert.All(result.Trials, trial => Assert.Equal(1, trial.Declared.Epochs));
+        Assert.All(result.Trials, trial => Assert.Equal(1, trial.Declared!.Epochs));
     }
 
     private static LearnNetworkStep Declared() => Assert.IsType<LearnNetworkStep>(
@@ -235,7 +235,7 @@ public class StudyTests
     [Fact]
     public void TheBestDeclaration_IsAStepAFileKeeps_SoTheWinnerLeavesTheStudyAsADeclaration()
     {
-        var best = Studied(trials: 3).Run(deal => Passengers(deal), TestContext.Current.CancellationToken).Best.Declared;
+        var best = Studied(trials: 3).Run(deal => Passengers(deal), TestContext.Current.CancellationToken).Best.Declared!;
         var written = System.Text.Json.JsonDocument.Parse(best.Canonical()).RootElement;
 
         Assert.Equal("learn.network", best.Verb);

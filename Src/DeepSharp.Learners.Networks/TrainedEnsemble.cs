@@ -440,7 +440,7 @@ public static class EnsembleExtensions
                     $"Trial {several.Number} declared {several.Members.Count} networks, judged together: an ensemble blends networks that each answer the same rows, and these answer different ones. Train its networks from StudyResult.Members, or by their declarations in Trial.Members.");
             }
 
-            return [.. finished.Take(count).Select(trial => trial.Declared)];
+            return [.. finished.Take(count).Select(trial => trial.Declared!)];
         }
 
         /// <summary>The finished trials none of the others betters on every one of the study's objectives: its Pareto front.</summary>
