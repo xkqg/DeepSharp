@@ -590,8 +590,11 @@ it was never public, and making it public would have put a drawing-library type 
 **Anything that learns from the data is fitted on the training split alone, and then replayed unchanged.**
 A mean and a standard deviation, the value a fill learns for a gap, the categories an encoder knows, the bounds
 of a clip — each is a parameter, each is learned once, and each is applied identically to validation, to test, and to
-data arriving in production long afterwards. A value no row decided — a nought, a number you chose — is not one of
-them, and that is what lets `settle.gaps` stand above the split.
+data arriving in production long afterwards. Two things named here are not one of them: a value no row decided — a
+nought, a number you chose — which is what lets `settle.gaps` stand above the split; and arithmetic over the rows
+that came before a row, learning nothing from the set as a whole, which is what lets an indicator stand there too.
+Either is a hole only a step that is actually one of them may stand in — a hole claimed by analogy, rather than by a
+name already here, is not one.
 
 Break it and nothing goes red. A mean computed over the whole set gives a model that scores beautifully in
 validation and disappoints the day it meets real data, because the validation rows had already been allowed
@@ -1060,7 +1063,7 @@ and is refused. Edges taken from the answer — the paper's target-aware form �
 feature's edges, a second rule for the same edges, which the rows a model is measured on would have to replay without the
 answers that placed them.
 
-### A key's history is what its earlier training rows held
+### A key's history is what its earlier training rows held — and `history.known` adds what has answered since
 
 A flock is weighed again and again, and what it weighed before says something about what it weighs now. `history` writes
 beside every row the mean of a column over the training rows of the row's key that come strictly before it on the order its
@@ -1070,8 +1073,21 @@ with few rows is trusted depends on the data. What it keeps is the training rows
 validation, of test or one served later is answered from them alone and changes nothing: a single new flock served on its own
 gets the history its key had, which a window over the rows handed in with it could not give, since one flock handed alone has
 no rows before it. A row whose ordering columns have a gap has no place in the order and is refused, naming it. A later
-training row reaches the history of the rows before it only through the mean of every training row, which it is part of, and
-the overlap of flocks whose weighings interleave is the data's to say: nothing here asks when an answer became known.
+training row reaches the history of the rows before it only through the mean of every training row, which it is part of.
+
+That training floor never moves, and a flock served alone never loses it — but the overlap of flocks whose weighings
+interleave is real: a validation or a test weighing, once it has happened, is known by the time the same flock is weighed
+again, the way a farm's own earlier weighings are known to whoever weighs it next. `history.known` is that floor plus
+those: the rows of a key already read from the training rows, exactly as `history` keeps them, and beside them every row of
+the same key, in the table a row is served with, that stands strictly after the training floor's last place in the order and
+strictly before the row being computed, its value present rather than a gap not yet answered. A training row is never
+counted twice for standing in both; a key with none of either reads the training rows' own mean, as `history` does. It
+stands below a split in time only, ordered by the very column that split divides by, because under a split at random or a
+stratified split a row's part has nothing to do with where it stands in the order, and a training row could read a
+validation or a test row's weighing that merely happened to come first — the same leak running the other way `settle.gaps`'
+own training-only rule exists to close. Nor may its value be an answer an output already made from rows ahead: that value
+already holds a weighing from later than the row it stands on, and reading it back in would be the leak in a second
+disguise.
 
 ### Normalising is a family, and two of its choices are declared
 
@@ -3983,9 +3999,8 @@ all, and Keras is not a thing it has. What the reference says is the spec; what 
   second, for a histogram, is not a number that is nought for a perfect prediction.
 - **An expected calibration error.** Binned, it misjudges most the models that are best calibrated; the Brier score bins
   nothing, and the reliability curve is the picture.
-- **Bins whose edges are placed by the answer, and a history over the rows handed in.** The first reads the answer to place a
-  feature's edges, a second rule the measured rows would replay without their answers; the second would give a flock served
-  alone no history at all.
+- **Bins whose edges are placed by the answer.** It reads the answer to place a feature's edges, a second rule the measured
+  rows would replay without their answers.
 - **A second word for a loss that is another's over a number.** PyTorch's SmoothL1 is the Huber loss over its beta, and Keras's
   `rms_scaling` is a scale worked out from the variance: the first is said as `huber`, the second is refused and
   `RMSNormalization` read.
