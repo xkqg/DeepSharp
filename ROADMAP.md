@@ -1,7 +1,7 @@
 # Roadmap
 
 What DeepSharp has built and what it will build, in the order the work is done: what is done first, and below it what
-is still to come; at the moment nothing is queued, and a row stands here when it is asked for. The one rule behind the order is that nothing stands above a row it needs; among the rows that are free
+is still to come; a row stands here when it is asked for. The one rule behind the order is that nothing stands above a row it needs; among the rows that are free
 to move, the one a reader reaches for most often, and pays least for, comes first. There are no dates — a row moves when it
 is true, and the [changelog](CHANGELOG.md) is where it says so.
 
@@ -46,6 +46,9 @@ is true, and the [changelog](CHANGELOG.md) is where it says so.
 | **Done** | Starting and training a layer | A schedule that warms up before it decays by a cosine, three more optimizers, a batch stepped over more than it is read, and a running average of the weights. |
 | **Done** | Shaping what a network can be | A gated feed-forward block, training one network on what another already answered, and a tabular network that answers as an ensemble of itself. |
 | **Done** | A search judged by more than one number | A study choosing between candidates on one trade-off alone, where two or more are really being weighed against each other. |
+| **Later** | A margin per kind of row, and a correlation matrix without a pipeline | A conformal margin worked out for a group the caller names, from errors the caller hands in, and `CorrelationMatrix.From` opened for a plain table of numbers. |
+| **Later** | A model trained outside DeepSharp, counted as a study's own | A `Study` candidate and a `TrainedEnsemble` member whose training is a function of the caller's, the sampler, the deals and the stopping staying the library's. |
+| **Later** | A history over rows already answered | Whether `History` may read a validation or a test row's own earlier rows, known once a model serves, without crossing the line PDD draws. |
 
 Every row has a section of its own on the [roadmap in the wiki](https://github.com/xkqg/DeepSharp/wiki/Roadmap): what it
 takes, why it stands where it does, and what is left out on purpose. This table is the wiki's, and a test holds the two to
