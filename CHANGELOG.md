@@ -54,7 +54,7 @@ across a part it had no business crossing, and a history able to read a value th
   present rather than a gap. A training row is never counted twice for standing in both. It stands only below a split in
   time, ordered by the very column the split divides by, for the same reason the two leaks above are now refused; its
   value may not be a column an output already made from rows ahead, for the same reason. See
-  [Networks](https://github.com/xkqg/DeepSharp/wiki/Networks).
+  [Filling and scaling](https://github.com/xkqg/DeepSharp/wiki/Filling-and-scaling).
 
 - **A conformal margin from the caller's own errors, outside any pipeline.** `ConformalInterval.FromErrors(errors, alpha)`
   is the same rank-order rule `Conformal.Of` already applies to a pipeline's own calibration errors — the
