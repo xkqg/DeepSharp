@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Globalization;
+using System.Reflection;
 using DeepSharp.Pipelines;
 
 namespace DeepSharp.Tests.Pipelines;
@@ -239,6 +240,22 @@ public class CorrelationMatrixTests
 
         Assert.DoesNotContain(references, name => name!.StartsWith("MatPlotLibNet", StringComparison.Ordinal));
         Assert.DoesNotContain(references, name => name!.StartsWith("MathNet", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void FromIsPublic_AndWorksOutTheSameMatrixAsCorrelate_OnAPlainTableOutsideAnyPipeline()
+    {
+        var method = typeof(CorrelationMatrix).GetMethod(nameof(CorrelationMatrix.From), BindingFlags.Public | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        double[][] rows = [.. Enumerable.Range(0, X.Length).Select(row => new[] { X[row], Y[row], Math.Exp(X[row]), -X[row], X[row] })];
+        var matrix = CorrelationMatrix.From(FlockNames, rows);
+
+        Assert.Equal(FlockNames, matrix.Columns);
+        Assert.Equal(10, matrix.Kept);
+        AssertMatches(FlockPearson, matrix.Pearson);
+        AssertMatches(FlockSpearman, matrix.Spearman);
     }
 
     private static void AssertMatches(double[][] expected, CorrelationCoefficients actual)

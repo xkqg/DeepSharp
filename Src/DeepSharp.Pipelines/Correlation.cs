@@ -130,11 +130,14 @@ public sealed class CorrelationMatrix
         _ => throw new ArgumentOutOfRangeException(nameof(coefficient), coefficient, "A correlation is Pearson's or Spearman's."),
     };
 
-    /// <summary>Works out both coefficients between every pair of these columns.</summary>
+    /// <summary>
+    /// Works out both coefficients between every pair of these columns, on a plain table of numbers: no pipeline, no
+    /// training split, the rows exactly as handed in.
+    /// </summary>
     /// <param name="columns">The columns, in the order the rows list them.</param>
     /// <param name="rows">The complete rows, each with one finite number per column.</param>
     /// <returns>The coefficients.</returns>
-    internal static CorrelationMatrix From(IReadOnlyList<string> columns, IReadOnlyList<double[]> rows)
+    public static CorrelationMatrix From(IReadOnlyList<string> columns, IReadOnlyList<double[]> rows)
     {
         double[][] values = [.. Enumerable.Range(0, columns.Count).Select(column => rows.Select(row => row[column]).ToArray())];
         double[][] ranks = [.. values.Select(column => column.AverageRanks())];
