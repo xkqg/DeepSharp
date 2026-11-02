@@ -311,6 +311,41 @@ public sealed class Study<TModel>
         }
     }
 
+    /// <summary>Trains several candidates on the rows a run of a pipeline prepared, through this study's own trainer, and puts them together as a <see cref="ModelEnsemble{TModel}"/>.</summary>
+    /// <param name="rows">The rows every candidate trains on: one fit, so the members answer rows replayed once for all of them.</param>
+    /// <param name="candidates">The candidates to train: at least two.</param>
+    /// <param name="answer">What a model answers for rows of features, in the shape its pipeline hands them over.</param>
+    /// <param name="options">How their answers become one, and what stops the run; averaged and unstoppable, unless said.</param>
+    /// <returns>The ensemble.</returns>
+    /// <exception cref="ArgumentNullException">There are no rows, no candidates, or no way to answer with a model.</exception>
+    /// <exception cref="ArgumentException">There are fewer than two candidates, or the options name an engine.</exception>
+    /// <remarks>Every candidate trains on the very same rows, so the members are trained behind one fit by construction: no digest is compared.</remarks>
+    public ModelEnsemble<TModel> TrainEnsemble(PreparedData rows, IReadOnlyList<Candidate> candidates, Func<TModel, IReadOnlyList<double[]>, IReadOnlyList<double[]>> answer, EnsembleOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(candidates);
+        ArgumentNullException.ThrowIfNull(answer);
+
+        if (options?.Engines is not null)
+        {
+            throw new ArgumentException(
+                "An ensemble's members are trained by a function of the caller's, and the engines a declaration's names stand for mean nothing to it: leave Engines out.",
+                nameof(options));
+        }
+
+        if (candidates.Count < 2)
+        {
+            throw new ArgumentException(
+                $"An ensemble is of at least two candidates, and {candidates.Count} {(candidates.Count == 1 ? "was" : "were")} given: a single model predicts for itself.",
+                nameof(candidates));
+        }
+
+        var cancellation = options?.Cancellation ?? default;
+        TModel[] trained = [.. candidates.Select(candidate => _train(new TrainingDeal(candidate, rows, null, cancellation)).Model)];
+
+        return new ModelEnsemble<TModel>(trained, answer, rows, options?.Blend ?? Blend.Average);
+    }
+
     private PreparedData[] Prepared(Func<int, Pipeline> pipelineFor, CancellationToken cancellation)
     {
         var prepared = new PreparedData[Deals];

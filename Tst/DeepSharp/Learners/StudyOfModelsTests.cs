@@ -1,7 +1,9 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
 using DeepSharp.Learners.Networks;
+using DeepSharp.Pipelines;
 
 namespace DeepSharp.Tests.Learners;
 
@@ -208,5 +210,80 @@ public class StudyOfModelsTests
     private sealed class Foreign : ISampler
     {
         public Candidate Suggest(SearchSpace space, int trial, IReadOnlyList<Trial> finished) => new([new Setting("momentum", 0.9, null)]);
+    }
+
+    private static PreparedData CalibratedRows()
+    {
+        var noise = new Random(11);
+        var rows = Enumerable.Range(1, 400).Select(t =>
+        {
+            var x = noise.NextDouble();
+            var y = (2 * x) + ((noise.NextDouble() + noise.NextDouble() - 1) * 0.05);
+
+            return new string?[] { $"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture) };
+        }).ToList();
+
+        return Pdd.Create()
+            .Read(new InMemoryRowSource(["t", "x", "y"], rows), "four hundred")
+            .Declare(schema => schema.Integer("t").Number("x", "y"))
+            .Calibrate(0.20)
+            .SplitAtRandom(0.50, 0.10, 5, testSeed: 9)
+            .Drop("t")
+            .Target("y")
+            .Normalise("x", Scale.MidRange)
+            .WithTorch(network => network.Dense(2).Relu().Dense(1).Adam(0.02).MeanSquaredError().Run(seed: 1, epochs: 1))
+            .Build()
+            .Run();
+    }
+
+    private static InMemoryRowSource Asked(int rows = 5) =>
+        new(["t", "x"], [.. Enumerable.Range(1, rows).Select(t => new string?[] { $"{t}", (t / 10.0).ToString(CultureInfo.InvariantCulture) })]);
+
+    [Fact]
+    public void ModelEnsemble_PredictsMeasuresAndGivesAnInterval_ThroughTheFourPipelinesMethods()
+    {
+        var study = new Study<double>(Space, deal => new Trained<double>(0, deal.Candidate.Number("rate")));
+        var rows = CalibratedRows();
+        Candidate[] candidates = [new([new Setting("rate", 0.3, null)]), new([new Setting("rate", 0.7, null)])];
+
+        static IReadOnlyList<double[]> Answer(double weight, IReadOnlyList<double[]> features) => [.. features.Select(_ => new[] { weight })];
+
+        var ensemble = study.TrainEnsemble(rows, candidates, Answer);
+
+        Assert.Equal([0.3, 0.7], ensemble.Members);
+        Assert.Same(rows, ensemble.Prepared);
+
+        var predicted = ensemble.Predict(Asked());
+
+        Assert.Equal(5, predicted.Answers.Count);
+        Assert.All(predicted.Answers, answer => Assert.Equal(0.5, answer[0], 12));
+        Assert.Equal(["y"], predicted.AnswerNames);
+
+        var withInterval = ensemble.WithInterval(0.10);
+
+        Assert.True(withInterval.Interval!.Margins[0] > 0);
+
+        var intervaled = withInterval.Predict(Asked());
+
+        Assert.All(intervaled.Answers, answer => Assert.Equal(0.5, answer[0], 12));
+        Assert.Equal(intervaled.Answers[0][0] - withInterval.Interval.Margins[0], intervaled.Lower![0][0], 12);
+        Assert.Equal(intervaled.Answers[0][0] + withInterval.Interval.Margins[0], intervaled.Upper![0][0], 12);
+    }
+
+    [Fact]
+    public void TrainEnsemble_RefusesFewerThanTwoCandidates_AndEnginesInTheOptions_ByName()
+    {
+        var study = new Study<double>(Space, deal => new Trained<double>(0, deal.Candidate.Number("rate")));
+        var rows = CalibratedRows();
+        Candidate[] one = [new([new Setting("rate", 0.3, null)])];
+        Candidate[] two = [new([new Setting("rate", 0.3, null)]), new([new Setting("rate", 0.7, null)])];
+
+        static IReadOnlyList<double[]> Answer(double weight, IReadOnlyList<double[]> features) => [.. features.Select(_ => new[] { weight })];
+
+        Assert.Throws<ArgumentException>(() => study.TrainEnsemble(rows, one, Answer));
+
+        var refused = Assert.Throws<ArgumentException>(() => study.TrainEnsemble(rows, two, Answer, new EnsembleOptions { Engines = new Engines() }));
+
+        Assert.Contains("Engines", refused.Message, StringComparison.Ordinal);
     }
 }
