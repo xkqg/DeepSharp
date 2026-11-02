@@ -14,8 +14,8 @@ namespace DeepSharp.Learners.Networks;
 /// <param name="Candidate">The values the sampler gave.</param>
 /// <param name="Declared">
 /// The network those values declared; a step a pipeline keeps, and trains again with <c>Train</c>. The first of the trial's
-/// networks, where it has several. Nothing, for a trial a caller-trained study tried, whose candidate is trained by a function
-/// of the caller's rather than declared as a step.
+/// networks, where it has several. Nothing, for a trial a <see cref="Study{TModel}"/> tried, whose candidate is trained by a
+/// function of the caller's rather than declared as a step.
 /// </param>
 /// <param name="Scores">
 /// How the network was judged, once on each deal that finished; lower is better. None, for a trial a <see cref="Study.Pruner"/>
