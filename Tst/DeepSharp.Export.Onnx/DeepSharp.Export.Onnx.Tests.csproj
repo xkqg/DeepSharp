@@ -19,7 +19,7 @@
     <PackageReference Include="xunit.v3" Version="4.*" />
     <!-- ONNX Runtime 1.31.0, MIT (github.com/microsoft/onnxruntime): the proof that what is written is a graph any runtime answers
          through. It is this suite's, and the writer's package never carries it. -->
-    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
   </ItemGroup>
 
   <ItemGroup>
