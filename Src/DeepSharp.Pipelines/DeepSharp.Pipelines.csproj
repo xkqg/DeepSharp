@@ -10,7 +10,7 @@
   <ItemGroup>
     <!-- Abstractions only: a pipeline can be registered in a host that has a container, and built with
          `new` in a program that has none. The library never requires one. -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.*" />
   </ItemGroup>
 
   <ItemGroup>
