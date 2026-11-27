@@ -801,9 +801,26 @@ public sealed class PreparedData
     /// <param name="blend">How the members' answers become one.</param>
     /// <returns>One answer for each served row, in the units of the column each answer comes back to.</returns>
     /// <exception cref="ArgumentException">There are no members; or, as <see cref="BackToOriginal(IReadOnlyList{double[]}, ServedBatch, IRowSource)"/> refuses them.</exception>
-    /// <exception cref="InvalidOperationException">As <see cref="BackToOriginal(IReadOnlyList{double[]}, ServedBatch, IRowSource)"/> refuses.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// As <see cref="BackToOriginal(IReadOnlyList{double[]}, ServedBatch, IRowSource)"/> refuses; or the members vote on answers that are amounts.
+    /// </exception>
     /// <remarks>The rows are walked once, whatever the number of members.</remarks>
     public IReadOnlyList<double[]> BackToOriginal(IReadOnlyList<IReadOnlyList<double[]>> members, ServedBatch served, IRowSource rows, Blend blend)
+    {
+        blend.ThrowIfVotedOnAmounts([this]);
+
+        return blend.CombinedBack([.. BackEach(members, served, rows).Select(back => new ServedAnswers(back, served))], Declaration.Output?.Ones ?? 0).Answers;
+    }
+
+    /// <summary>Puts several members' predictions for the same served rows back into the units each answer was read in, each apart.</summary>
+    /// <param name="members">For each member, what it said for each served row, in the order they were served.</param>
+    /// <param name="served">What was handed over for these rows.</param>
+    /// <param name="rows">The rows that were handed in to be served, in the order they were handed in.</param>
+    /// <returns>For each member, one answer for each served row, in the units of the column each answer comes back to.</returns>
+    /// <exception cref="ArgumentException">There are no members; or, as <see cref="BackToOriginal(IReadOnlyList{double[]}, ServedBatch, IRowSource)"/> refuses them.</exception>
+    /// <exception cref="InvalidOperationException">As <see cref="BackToOriginal(IReadOnlyList{double[]}, ServedBatch, IRowSource)"/> refuses.</exception>
+    /// <remarks>The rows are walked once, whatever the number of members.</remarks>
+    internal IReadOnlyList<IReadOnlyList<double[]>> BackEach(IReadOnlyList<IReadOnlyList<double[]>> members, ServedBatch served, IRowSource rows)
     {
         ArgumentNullException.ThrowIfNull(members);
 
@@ -814,7 +831,7 @@ public sealed class PreparedData
 
         var found = Found(served, rows);
 
-        return blend.Combine([.. members.Select(member => Back(member, found))], Declaration.Output?.Ones ?? 0);
+        return [.. members.Select(member => Back(member, found))];
     }
 
     private IReadOnlyList<double[]> Back(IReadOnlyList<double[]> predictions, RowAsRead[] rows)
@@ -948,14 +965,20 @@ public sealed class PreparedData
     /// <returns>The ensemble's measures beside each member's, on the very same rows.</returns>
     /// <exception cref="ArgumentException">There are fewer than two members; or a member's predictions are refused as <see cref="Measure"/> refuses them.</exception>
     /// <exception cref="ArgumentOutOfRangeException">The blend is none of the blends.</exception>
-    /// <exception cref="InvalidOperationException">As <see cref="Measure"/> refuses; or the members vote on an answer that is no class.</exception>
+    /// <exception cref="InvalidOperationException">As <see cref="Measure"/> refuses; or the members vote on answers that are amounts.</exception>
     /// <remarks>
     /// A way back is not a straight line — a log is undone by an exponential, and the mean of exponentials is not the exponential
     /// of the mean — so the members meet in the answer's own units and not before. An ensemble's measures hold what the members
     /// said together, which no one text holds: each member's measures cross as text, the ensemble's do not.
     /// </remarks>
-    public EnsembleMeasures MeasureEnsemble(IReadOnlyList<IReadOnlyList<PartPredictions>> members, Blend blend = Blend.Average, ConformalInterval? interval = null) =>
-        Measurement.OfEnsemble(this, members, blend, interval);
+    public EnsembleMeasures MeasureEnsemble(IReadOnlyList<IReadOnlyList<PartPredictions>> members, Blend blend = Blend.Average, ConformalInterval? interval = null)
+    {
+        ArgumentNullException.ThrowIfNull(members);
+
+        blend.ThrowIfVotedOnAmounts([this]);
+
+        return Measurement.OfEnsemble([.. members.Select(member => new MemberPredictions(this, member))], blend, interval);
+    }
 
     /// <summary>The interval a model's predictions for the calibration rows allow, at a level: split conformal prediction.</summary>
     /// <param name="calibration">What the model predicted for the rows the pipeline set aside to calibrate on, as <see cref="Measure"/> takes predictions: in the units the answers were handed over in.</param>
@@ -972,7 +995,7 @@ public sealed class PreparedData
     /// promise it rests on.
     /// </remarks>
     public ConformalInterval IntervalOf(PartPredictions calibration, double alpha) =>
-        Conformal.Of(this, [calibration], Blend.Average, alpha);
+        Conformal.Of([new MemberPredictions(this, [calibration])], Blend.Average, alpha);
 
     /// <summary>The interval several members\' predictions for the calibration rows allow, once combined, at a level.</summary>
     /// <param name="members">What each member predicted for the calibration rows, in the units the answers were handed over in. At least one.</param>
@@ -980,11 +1003,17 @@ public sealed class PreparedData
     /// <param name="alpha">The share of rows allowed to land outside the margin: above nothing and below one. Required.</param>
     /// <returns>A margin for each answer, in its own units, of the combined answer.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The level is not above nothing and below one.</exception>
-    /// <exception cref="InvalidOperationException">As <see cref="IntervalOf(PartPredictions, double)"/> refuses.</exception>
+    /// <exception cref="InvalidOperationException">As <see cref="IntervalOf(PartPredictions, double)"/> refuses; or the members vote on answers that are amounts.</exception>
     /// <exception cref="ArgumentException">As <see cref="IntervalOf(PartPredictions, double)"/> refuses, or there are no members.</exception>
     /// <remarks>Each member comes back into the answer\'s own units first and the errors are those of what they say together.</remarks>
-    public ConformalInterval IntervalOf(IReadOnlyList<PartPredictions> members, Blend blend, double alpha) =>
-        Conformal.Of(this, members, blend, alpha);
+    public ConformalInterval IntervalOf(IReadOnlyList<PartPredictions> members, Blend blend, double alpha)
+    {
+        ArgumentNullException.ThrowIfNull(members);
+
+        blend.ThrowIfVotedOnAmounts([this]);
+
+        return Conformal.Of([.. members.Select(member => new MemberPredictions(this, [member]))], blend, alpha);
+    }
 
     /// <summary>
     /// This run's file as a run of the same declaration that left out these steps would have written it: each of them that

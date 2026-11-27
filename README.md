@@ -25,7 +25,10 @@ A split of your own comes in through `Split`, the door the library's own splits 
 keeps. `history.known` stands below any split: a training row reads training rows alone, and every other row every
 earlier known row of its key, whatever part it is in. A study can be told its deals are of different kinds — splits at
 random beside one in time — each kind held to its own test rows and weighed in the score, so its promise is made per kind:
-a candidate is chosen on no row its own kind measures on. It is built on MatPlotLibNet 1.30.0 and Microsoft.ML 6.0.0, and the pipeline file is at version 17.
+a candidate is chosen on no row its own kind measures on. An ensemble's members may be whole models, each with a pipeline of
+its own: every member is served the rows through its own pipeline and comes back through its own way back before the
+answers meet, and the ensemble is measured and calibrated only on rows every member set aside alike. It is built on
+MatPlotLibNet 1.30.0 and Microsoft.ML 6.0.0, and the pipeline file is at version 17.
 
 **0.18.0 answers the flock team's sixth letter.** `Study<TModel>` tries candidates trained by a function of the
 caller's own — handed the deal, returning the score and the model it made — with the sampler, the deals, a pruner, a

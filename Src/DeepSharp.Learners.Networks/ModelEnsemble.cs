@@ -6,36 +6,47 @@ using DeepSharp.Pipelines;
 namespace DeepSharp.Learners.Networks;
 
 /// <summary>
-/// Several models trained behind one fit of a pipeline, by a function of the caller's, answering as one: what it predicts
-/// for rows served later is its members' answers combined, in the answer's own units.
+/// Several models trained by a function of the caller's, answering as one: what it predicts for rows served later is its members'
+/// answers combined, in the answer's own units.
 /// </summary>
 /// <remarks>
-/// The sibling of <see cref="TrainedEnsemble"/> for a model this library did not train: the members share the pipeline they
-/// were trained behind, since <see cref="Study{TModel}.TrainEnsemble"/> trains every one of them on the very same rows, and
-/// their answers meet only once each has come back into the answer's own units.
+/// <para>
+/// The sibling of <see cref="TrainedEnsemble"/> for a model this library did not train. The members may share the pipeline they
+/// were trained behind, or each be a whole model behind a pipeline of its own: each member is served the rows through its own
+/// pipeline, as it needs its features, and comes back through its own way back, and their answers meet only then, in the answer's
+/// own units.
+/// </para>
+/// <para>
+/// It has no file of its own: the models are the caller's, and so is keeping them. Each member's pipeline is kept as any run of a
+/// pipeline is, by its own file.
+/// </para>
 /// </remarks>
 public sealed class ModelEnsemble<TModel>
 {
-    private readonly Func<TModel, IReadOnlyList<double[]>, IReadOnlyList<double[]>> _answer;
-    private readonly ServedAnswer _serving;
+    private readonly Ensemble _core;
 
-    // The members answer as the pipeline the serving sequence holds hands rows over, and as it refuses features they did not learn from.
-    internal ModelEnsemble(IReadOnlyList<TModel> members, Func<TModel, IReadOnlyList<double[]>, IReadOnlyList<double[]>> answer, ServedAnswer serving, Blend blend)
+    // The members answer as the core's members do: each behind its own pipeline, as it needs its features.
+    internal ModelEnsemble(IReadOnlyList<TModel> members, Ensemble core)
     {
         Members = members;
-        _answer = answer;
-        _serving = serving;
-        Blend = blend;
+        _core = core;
     }
 
     /// <summary>The models, in the order they were trained.</summary>
     public IReadOnlyList<TModel> Members { get; }
 
+    /// <summary>The run of the pipeline each member was trained behind, in the order of <see cref="Members"/>: what serves it rows, and what brings its answers back.</summary>
+    public IReadOnlyList<PreparedData> MembersPrepared => [.. _core.Members.Select(member => member.Serving.Prepared)];
+
     /// <summary>How the members' answers become one.</summary>
-    public Blend Blend { get; }
+    public Blend Blend => _core.Blend;
 
     /// <summary>The pipeline every member was trained behind: what serves it rows, and what brings its answers back into their own units.</summary>
-    public PreparedData Prepared => _serving.Prepared;
+    /// <exception cref="InvalidOperationException">
+    /// The members were trained behind pipelines of their own, so no one pipeline serves the ensemble: each member's own stands in
+    /// <see cref="MembersPrepared"/>.
+    /// </exception>
+    public PreparedData Prepared => _core.Shared("each member answers behind its own, MembersPrepared[i]");
 
     /// <summary>
     /// How the pipeline's report measured the ensemble beside each of its members, on the same rows; nothing when the pipeline
@@ -53,42 +64,29 @@ public sealed class ModelEnsemble<TModel>
     /// <param name="rows">The rows, without the answer: it is what is being asked.</param>
     /// <returns>For each row, a number for each answer, and where the row stood among those handed in.</returns>
     /// <exception cref="ArgumentNullException">There are no rows.</exception>
-    /// <exception cref="InvalidOperationException">The pipeline hands over other features than the members were trained on, or a row is refused as a training row would be.</exception>
-    /// <remarks>The rows are replayed and named once for all the members, each member answers them through <c>answer</c>, and the answers are brought back through one walk of the rows and combined in the answer's own units.</remarks>
-    public Predictions Predict(IRowSource rows)
-    {
-        var answered = _serving.Blended(rows, served => [.. Members.Select(member => _answer(member, served.Features))], Blend, Interval);
+    /// <exception cref="InvalidOperationException">
+    /// A pipeline hands over other features than its members were trained on, a row is refused as a training row would be, or a row
+    /// handed in is answered by one member and not by another, whose pipeline left it out.
+    /// </exception>
+    /// <remarks>
+    /// The rows are replayed and named once for every pipeline the members were trained behind, each member answers them through
+    /// <c>answer</c>, and each member's answers come back through its own pipeline's way back before they are combined in the answer's
+    /// own units, in the order the first member's pipeline served the rows.
+    /// </remarks>
+    public Predictions Predict(IRowSource rows) => Predictions.Of(_core.Answered(rows, default, Interval), _core.Answers, unfamiliar: null);
 
-        return Predictions.Of(answered, Prepared.Declaration.Output!.Answers, unfamiliar: null);
-    }
-
-    /// <summary>An ensemble of the same members with the width its combined answers are worth, worked out on the rows the pipeline set aside to calibrate on.</summary>
+    /// <summary>An ensemble of the same members with the width its combined answers are worth, worked out on the rows every member set aside to calibrate on.</summary>
     /// <param name="alpha">The share of rows allowed to land outside the margin: above nothing and below one. Required.</param>
-    /// <returns>The same members behind the same pipeline, answering with a lower and an upper end.</returns>
+    /// <returns>The same members behind the same pipelines, answering with a lower and an upper end.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The level is not above nothing and below one.</exception>
-    /// <exception cref="InvalidOperationException">The pipeline sets no rows aside to calibrate on, they are too few for the level, or the answers are classes.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The pipelines set no rows aside to calibrate on, they are too few for the level, the answers are classes, or the members' pipelines
+    /// set other rows aside — a member that learned from a row another calibrates on named first.
+    /// </exception>
     public ModelEnsemble<TModel> WithInterval(double alpha)
     {
-        var calibration = Prepared.Batch(Part.Calibration, Needs.Numbers);
-        var interval = Prepared.IntervalOf([.. Members.Select(member => Predicted(member, calibration))], Blend, alpha);
+        var interval = _core.IntervalOf(alpha, default);
 
-        return new ModelEnsemble<TModel>(Members, _answer, _serving, Blend) { Interval = interval, Measures = Report(interval) };
-    }
-
-    // What one member answers for a batch's rows.
-    private PartPredictions Predicted(TModel member, Batch batch) => new(batch, _answer(member, batch.Features));
-
-    // The report measured again, with the interval's margins, when it names the coverage or the width of one; as it was otherwise.
-    private EnsembleMeasures? Report(ConformalInterval interval)
-    {
-        if (Prepared.Declaration.Report is not { } report || !report.NamesAnInterval())
-        {
-            return Measures;
-        }
-
-        var parts = report.Parts.Distinct().ToArray();
-        IReadOnlyList<IReadOnlyList<PartPredictions>> said = [.. Members.Select(member => parts.Select(part => Predicted(member, Prepared.Batch(part, Needs.Numbers))).ToArray())];
-
-        return Prepared.MeasureEnsemble(said, Blend, interval);
+        return new ModelEnsemble<TModel>(Members, _core) { Interval = interval, Measures = _core.Remeasured(default, interval, Measures) };
     }
 }

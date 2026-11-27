@@ -277,15 +277,28 @@ Why a model answers as it does is asked of the rows as they were read, not of th
 
 A part of the rows is set aside for a width and not for a number: `Calibration` is fitted on by nothing and chosen by nothing, which is what lets the errors made there stand for the errors made on rows nobody has seen. Validation cannot be it, since a model is chosen by validation and so has already seen what it chose; test cannot, since a number is reported there once everything else is settled. An interval is therefore the pipeline's and not a learner's: the margin is the ⌈(n+1)(1−α)⌉-th smallest error on those rows in the answer's own units, worked out once beside the measures from whatever a model predicted, so a network, an ensemble and a tree are given it by the same arithmetic and keep it under one key in their own files. It is the same width on every row, holds on average over exchangeable rows, and says nothing of one row.
 
-Deals and members are two shapes and are not one. Several fits of one declaration — folds, a study's deals, a comparison — each have a
-fit of their own and so a digest of their own. Several networks behind one fit are an ensemble: one pipeline is fitted once, every
-member is trained on the rows it prepared, and a served row is replayed and named once for all of them. Their answers meet in the
-answer's own units, never in the units a network was trained in, because the way back is not affine — a log is undone by an
-exponential, and the mean of exponentials is not the exponential of the mean — so the measurement door takes every member's
-predictions as they were handed over, brings each back and only then combines, and the same door measures each member alone on the same
-rows. Numbers are averaged, and classes are averaged as chances or counted as votes, a tie going to the higher mean chance. An ensemble is
-kept as a file of its own, not as a network with a list: the single reader and the ensemble reader each refuse the other's file by name, and a
-reader that does not know the file refuses it whole instead of reading one member of it.
+Several fits of one declaration — folds, a study's deals, a comparison — each have a fit of their own and so a digest of their own,
+and an ensemble's members may too. A member is a whole model: the model and the pipeline it was trained behind, with what it needs of
+its features. Members of one fit share the pipeline, and a served row is replayed and named once for all of them; a member behind a
+pipeline of its own — other steps, other features, a log where another takes the number as it is — is handed the rows its own
+pipeline prepared, and a served row is replayed through each member's pipeline. However they came in, their answers meet only in the
+answer's own units, each member brought back through its own pipeline's way back first, because the way back is not affine — a log is
+undone by an exponential, and the mean of exponentials is not the exponential of the mean — and the members' pipelines are free to
+shape the answer apart on the way in. One place combines them, `CombinedBack`, after putting every member's answers in the first
+member's order of rows: served rows by where they were handed in, the rows of a part by their keys. So what an ensemble refuses
+follows from where its members meet. A served row one member's pipeline left out has no answer of that member, and is refused rather
+than answered by the others. Members that answer another question — other answers, or the same named by another output — cannot meet
+in one unit, and are refused. And an ensemble is measured and calibrated on rows every member set aside alike: each member's own split
+keeps the rows it measures on from the rows it learned from, but not from the rows another member learned from, so through the blend a
+member would be measured on a row it was trained on — that member is refused, naming the row. Numbers are averaged, and classes are
+averaged as chances or counted as votes, a tie going to the higher mean chance; a vote is refused where an ensemble is made, before it
+serves, is calibrated or is measured, decided by the output where it says its answers are amounts and by the training rows' answers
+where it says they may be classes. An ensemble is kept as a file of its own, not as a network with a list: members of one fit are
+written as they always were, their networks beside the one pipeline, and members of several as single networks' files, each with its
+own pipeline, in a second version of the file; the single reader and the ensemble reader each refuse the other's file by name, and a
+reader that does not know the file refuses it whole instead of reading one member of it. `ModelEnsemble` has no file, since its models
+are the caller's. A boosted pair is not an ensemble: its correction is added to the basis's answer before the one way back, in the
+units they were trained in, so both stand behind one fit, and that is refused otherwise.
 
 Reading ahead is held to that. Only an output reads rows after its own — a feature that knows the future scores
 well on every row it is measured on and on none it is asked about — and an output that does stands below a split in
@@ -1527,9 +1540,9 @@ answer's way back before anything is handed over.
 
 Every model behind a pipeline answers a served row by one sequence, and supplies only how it answers the rows handed over to
 it: the rows are served; refused when the pipeline hands over other features than the model learned from, in one sentence
-whatever the model is; answered; brought back through the way back — each member brought back first and combined there, for an
-ensemble, and a boosted pair's raw sum brought back once, since it is one answerer; and given the ends of the interval when the
-model has one. A network, an ensemble of networks or of a caller's models, a boosted pair and a tree are five ways of answering
+whatever the model is; answered; brought back through the way back — for an ensemble, each member through its own pipeline's way back
+and the members combined there, and a boosted pair's raw sum brought back once, since it is one answerer; and given the ends of
+the interval when the model has one. A network, an ensemble of networks or of a caller's models, a boosted pair and a tree are five ways of answering
 and one way of serving. The answers stand in the order the rows were served, which is the pipeline's, and a network's
 predictions keep that order with where each row was handed in beside it. Whatever is handed back row for row — the answers
 the questions of why read, a tree's answers to rows — goes back through one bridge to the order the rows were handed in: under
@@ -3913,12 +3926,13 @@ delegate — handed one deal, returning the score its trial is judged by and the
 `ITensorBackend`, `IRowSource`, a learner and `IImporter`. The sampler, the deals, the pruner, the deal stopper, `OnTrial`,
 a pipeline for each candidate and deal, and resuming from earlier trials stay exactly as they are; only what trains, and the
 model inside, is the caller's — and since the caller's model is not a network, `Score`, `Judge` and `Objectives` mean
-nothing to it and are not offered. Its pipelines are run for a learner of numbers, every step as declared, since the
-caller's model asks nothing of a feature's scale that a network would.
-`ModelEnsemble<TModel>` answers the way `TrainedEnsemble` does — several members blended in the answer's own units,
-measured and given an interval through the same four methods a network ensemble already stands on — but it is built only
-by `Study<TModel>.TrainEnsemble`, which trains every member on the one fit it is handed, so no digest has to tie its
-members together the way `TrainedEnsemble.Of` ties networks that could have been trained apart.
+nothing to it and are not offered. Its pipelines are run for what the caller's model says it needs, `Study<TModel>.Needs` —
+a learner of numbers, every step as declared, unless said, since the caller's model asks nothing of a feature's scale that a
+network would; one that takes each category as its place says so, and is served so.
+`ModelEnsemble<TModel>` and `TrainedEnsemble` are two faces of one ensemble: members, each a model behind the pipeline it
+was trained behind with what it needs of its features, blended in the answer's own units, measured and given an interval by
+one core. `ModelEnsemble<TModel>` is built by `Study<TModel>.TrainEnsemble`, which hands each candidate the rows a pipeline of
+its own prepared, or every candidate the same rows; its one pipeline, when the members share one, is its `Prepared`.
 
 Three decisions are in its shape. Trials run one after another and share nothing they change: a network is declared afresh
 for every trial and the engines are filled before the study starts, because one optimizer shared by trials running side by

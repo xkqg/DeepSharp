@@ -390,8 +390,9 @@ public class StudyOfModelsTests
         new(["t", "x"], [.. Enumerable.Range(1, rows).Select(t => new string?[] { $"{t}", (t / 10.0).ToString(CultureInfo.InvariantCulture) })]);
 
     [Fact]
-    public void ModelEnsemble_PredictsMeasuresAndGivesAnInterval_ThroughTheFourPipelinesMethods()
+    public void ModelEnsemble_OfMembersBehindOneDistinctPipeline_PredictsMeasuresAndGivesAnInterval_AndHandsThatPipelineBackAsItsOwn()
     {
+        // Every candidate trained on the very same rows: one distinct pipeline among the members, which is the ensemble's Prepared.
         var study = new Study<double>(Space, deal => new Trained<double>(0, deal.Candidate.Number("rate")));
         var rows = CalibratedRows();
         Candidate[] candidates = [new([new Setting("rate", 0.3, null)]), new([new Setting("rate", 0.7, null)])];
@@ -402,6 +403,7 @@ public class StudyOfModelsTests
 
         Assert.Equal([0.3, 0.7], ensemble.Members);
         Assert.Same(rows, ensemble.Prepared);
+        Assert.All(ensemble.MembersPrepared, prepared => Assert.Same(rows, prepared));
 
         var predicted = ensemble.Predict(Asked());
 
@@ -430,7 +432,8 @@ public class StudyOfModelsTests
         static IReadOnlyList<double[]> Answer(double weight, IReadOnlyList<double[]> features) => [.. features.Select(_ => new[] { weight })];
 
         var trained = study.TrainEnsemble(rows, candidates, Answer);
-        var elsewhere = new ModelEnsemble<double>(trained.Members, Answer, new ServedAnswer(rows, Needs.Numbers, new LearnedFrom("ensemble", ["elsewhere"])), Blend.Average);
+        var serving = new ServedAnswer(rows, Needs.Numbers, new LearnedFrom("ensemble", ["elsewhere"]));
+        var elsewhere = new ModelEnsemble<double>(trained.Members, new Ensemble([.. trained.Members.Select(model => new ModelMember<double>(model, serving, Answer))], Blend.Average));
 
         var refused = Assert.Throws<InvalidOperationException>(() => elsewhere.Predict(Asked()));
 
@@ -478,5 +481,110 @@ public class StudyOfModelsTests
 
         Assert.Empty(none.ObjectiveMean);
         Assert.Equal([2, 15], weighed.ObjectiveMean);
+    }
+
+    // Four hundred rows of an amount above nought, as they are or read on a log scale: the same rows, divided alike either way.
+    private static PreparedData WholeModelRows(bool logged)
+    {
+        var noise = new Random(11);
+        var rows = Enumerable.Range(1, 400).Select(t =>
+        {
+            var x = noise.NextDouble();
+            var y = 1 + (2 * x) + ((noise.NextDouble() + noise.NextDouble() - 1) * 0.05);
+
+            return new string?[] { $"{t}", x.ToString("R", CultureInfo.InvariantCulture), y.ToString("R", CultureInfo.InvariantCulture) };
+        }).ToList();
+        var read = Pdd.Create()
+            .Read(new InMemoryRowSource(["t", "x", "y"], rows), "four hundred")
+            .Declare(schema => schema.Integer("t").Number("x", "y"));
+
+        return (logged ? read.Reshape("y", Maths.Log) : read)
+            .Calibrate(0.20)
+            .SplitAtRandom(0.50, 0.10, 5, testSeed: 9)
+            .Drop("t")
+            .Target("y")
+            .Build()
+            .Run();
+    }
+
+    [Fact]
+    public void AnEnsembleOfWholeModels_EachMemberReplaysTheRowsThroughItsOwnPipeline_AndTheAnswersMeetInOriginalUnits()
+    {
+        // The first member says 0.3 of the answer as it is; the second says 0.7 of its log, which comes back as e to the 0.7.
+        var plain = WholeModelRows(logged: false);
+        var logged = WholeModelRows(logged: true);
+        var study = new Study<double>(Space, deal => new Trained<double>(0, deal.Candidate.Number("rate")));
+        Candidate[] candidates = [new([new Setting("rate", 0.3, null)]), new([new Setting("rate", 0.7, null)])];
+
+        static IReadOnlyList<double[]> Answer(double weight, IReadOnlyList<double[]> features) => [.. features.Select(_ => new[] { weight })];
+
+        var ensemble = study.TrainEnsemble(candidates, candidate => candidate.Number("rate") < 0.5 ? plain : logged, Answer);
+        var predicted = ensemble.Predict(Asked());
+
+        Assert.Equal(5, predicted.Answers.Count);
+        Assert.All(predicted.Answers, answer => Assert.Equal((0.3 + Math.Exp(0.7)) / 2, answer[0], 12));
+        Assert.Equal([plain, logged], ensemble.MembersPrepared);
+        Assert.Equal(Blend.Average, ensemble.Blend);
+        Assert.Contains("MembersPrepared", Assert.Throws<InvalidOperationException>(() => ensemble.Prepared).Message, StringComparison.Ordinal);
+
+        // Both set the same rows aside to calibrate on, so the ensemble is calibrated on them.
+        Assert.True(ensemble.WithInterval(0.10).Interval!.Margins[0] > 0);
+    }
+
+    [Fact]
+    public void AMemberTrainedOnCategories_IsServedOnCategories_EachAsItsPlace()
+    {
+        // A model that takes each category as its place is handed 'sex' as one feature, its place among the training rows'
+        // categories, and is served so: as numbers, the same rows would be two one-hot columns it never learned from.
+        var rows = Pdd.Create()
+            .ReadCsv(Repository.Data("titanic.csv"))
+            .Declare(schema => schema.Integer("survived").Category("sex"))
+            .SplitAtRandom(0.70, 0.15, 100, 7)
+            .EncodeCategories()
+            .Target("survived")
+            .Build()
+            .RunFor(Needs.Categories);
+        var places = rows.Batch(Part.Train, Needs.Categories).Categories!["sex"];
+        var study = new Study<double>(Space, deal => new Trained<double>(0, deal.Candidate.Number("rate"))) { Needs = Needs.Categories };
+        Candidate[] candidates = [new([new Setting("rate", 0.3, null)]), new([new Setting("rate", 0.7, null)])];
+
+        static IReadOnlyList<double[]> Answer(double weight, IReadOnlyList<double[]> features) => [.. features.Select(row => new[] { row[0] })];
+
+        var ensemble = study.TrainEnsemble(rows, candidates, Answer);
+        var asked = CsvRowSource.FromText(string.Join('\n', File.ReadLines(Repository.Data("titanic.csv")).Take(4)) + "\n");
+
+        // male, female, female, as the first three passengers are.
+        Assert.Equal(
+            [places.ToList().IndexOf("male"), places.ToList().IndexOf("female"), places.ToList().IndexOf("female")],
+            ensemble.Predict(asked).Answers.Select(answer => answer[0]));
+        Assert.Equal(Needs.Categories, study.Needs);
+    }
+
+    [Fact]
+    public void ACandidateWhoseRowsAreNothing_IsRefused_NamingTheCandidate()
+    {
+        var study = new Study<double>(Space, deal => new Trained<double>(0, deal.Candidate.Number("rate")));
+        Candidate[] candidates = [new([new Setting("rate", 0.3, null)]), new([new Setting("rate", 0.7, null)])];
+
+        static IReadOnlyList<double[]> Answer(double weight, IReadOnlyList<double[]> features) => [.. features.Select(_ => new[] { weight })];
+
+        var refused = Assert.Throws<InvalidOperationException>(() => study.TrainEnsemble(candidates, candidate => candidate.Number("rate") < 0.5 ? CalibratedRows() : null!, Answer));
+
+        Assert.Contains("candidate 2", refused.Message, StringComparison.Ordinal);
+        Assert.Throws<ArgumentNullException>(() => study.TrainEnsemble((PreparedData)null!, candidates, Answer));
+        Assert.Throws<ArgumentNullException>(() => study.TrainEnsemble(candidates, null!, Answer));
+    }
+
+    [Fact]
+    public void VotesOnAnAmount_AreRefusedWhereTheEnsembleIsMade()
+    {
+        var study = new Study<double>(Space, deal => new Trained<double>(0, deal.Candidate.Number("rate")));
+        Candidate[] candidates = [new([new Setting("rate", 0.3, null)]), new([new Setting("rate", 0.7, null)])];
+
+        static IReadOnlyList<double[]> Answer(double weight, IReadOnlyList<double[]> features) => [.. features.Select(_ => new[] { weight })];
+
+        var refused = Assert.Throws<InvalidOperationException>(() => study.TrainEnsemble(CalibratedRows(), candidates, Answer, new EnsembleOptions { Blend = Blend.Vote }));
+
+        Assert.Contains("which is no class", refused.Message, StringComparison.Ordinal);
     }
 }

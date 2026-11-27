@@ -20,7 +20,8 @@ internal readonly record struct ServedAnswers(IReadOnlyList<double[]> Answers, S
 /// <summary>
 /// The one way a model trained behind a pipeline answers rows that arrive after training: the rows are served, refused when the
 /// pipeline hands over other features than the model learned from, answered by the model's own function, brought back into the
-/// answer's own units — the members' answers combined there, for an ensemble — and given the ends of the model's interval.
+/// answer's own units — for an ensemble, each member through its own pipeline and the members' answers combined there — and given
+/// the ends of the model's interval.
 /// </summary>
 /// <remarks>
 /// A network, an ensemble of networks or of a caller's models, a boosted pair and a trainer from ML.NET each supply only how they
@@ -30,7 +31,6 @@ internal readonly record struct ServedAnswers(IReadOnlyList<double[]> Answers, S
 /// </remarks>
 internal sealed class ServedAnswer
 {
-    private readonly Needs _needs;
     private readonly LearnedFrom _learned;
 
     /// <summary>The way a model answers behind a pipeline.</summary>
@@ -40,12 +40,15 @@ internal sealed class ServedAnswer
     internal ServedAnswer(PreparedData prepared, Needs needs, LearnedFrom learned)
     {
         Prepared = prepared;
-        _needs = needs;
+        Needs = needs;
         _learned = learned;
     }
 
     /// <summary>The pipeline the model was trained behind.</summary>
     internal PreparedData Prepared { get; }
+
+    /// <summary>What the model needs of the features it is handed: what every batch it is handed is made for.</summary>
+    internal Needs Needs { get; }
 
     /// <summary>What one model answers for rows served to it.</summary>
     /// <param name="rows">The rows, without the answer: it is what is being asked.</param>
@@ -61,20 +64,29 @@ internal sealed class ServedAnswer
         return Ended(new ServedAnswers(Prepared.BackToOriginal(answer(served), served, rows), served), interval);
     }
 
-    /// <summary>What several members answer together for rows served to them, each brought back into the answer's own units and combined there.</summary>
+    /// <summary>What several members behind this one pipeline answer for rows served to them, each brought back into the answer's own units apart.</summary>
     /// <param name="rows">The rows, without the answer: it is what is being asked.</param>
-    /// <param name="members">How the members answer the rows the pipeline hands over: for each member, one row of answers for each row, in the units they were handed over in.</param>
-    /// <param name="blend">How the members' answers become one.</param>
-    /// <param name="interval">The ensemble's interval; nothing, for one given none.</param>
-    /// <returns>The combined answers in their own units, in the order the rows were served, and what was served.</returns>
+    /// <param name="members">How each member answers the rows the pipeline hands over: one row of answers for each row, in the units they were handed over in.</param>
+    /// <returns>For each member, its answers in their own units, in the order the rows were served, and what was served.</returns>
     /// <exception cref="ArgumentNullException">There are no rows.</exception>
     /// <exception cref="InvalidOperationException">The pipeline hands over other features than the members learned from, or a row is refused as a training row would be.</exception>
-    internal ServedAnswers Blended(IRowSource rows, Func<ServedBatch, IReadOnlyList<IReadOnlyList<double[]>>> members, Blend blend, ConformalInterval? interval)
+    /// <remarks>The rows are replayed, named and walked back once for all of them.</remarks>
+    internal IReadOnlyList<ServedAnswers> Each(IRowSource rows, IReadOnlyList<Func<ServedBatch, IReadOnlyList<double[]>>> members)
     {
         var served = Served(rows);
 
-        return Ended(new ServedAnswers(Prepared.BackToOriginal(members(served), served, rows, blend), served), interval);
+        return [.. Prepared.BackEach([.. members.Select(member => member(served))], served, rows).Select(back => new ServedAnswers(back, served))];
     }
+
+    /// <summary>What an ensemble's members answered for served rows, each through its own pipeline, combined into one answer and given the ensemble's interval.</summary>
+    /// <param name="members">For each member, its answers in their own units and what its pipeline served.</param>
+    /// <param name="blend">How the members' answers become one.</param>
+    /// <param name="ones">How many answers a row holds as one, when they are classes; nought for any number.</param>
+    /// <param name="interval">The ensemble's interval; nothing, for one given none.</param>
+    /// <returns>The combined answers, in the order the first member's pipeline served the rows, and what it served.</returns>
+    /// <exception cref="InvalidOperationException">A row handed in is answered by one member and not by another.</exception>
+    internal static ServedAnswers Blended(IReadOnlyList<ServedAnswers> members, Blend blend, int ones, ConformalInterval? interval) =>
+        Ended(blend.CombinedBack(members, ones), interval);
 
     // The rows served, refused when the pipeline hands over other features than the model learned from: a model fed other
     // numbers than it learned from answers something nobody asked.
@@ -82,7 +94,7 @@ internal sealed class ServedAnswer
     {
         ArgumentNullException.ThrowIfNull(rows);
 
-        var served = Prepared.Served(rows, _needs);
+        var served = Prepared.Served(rows, Needs);
 
         return served.FeatureNames.SequenceEqual(_learned.Features)
             ? served

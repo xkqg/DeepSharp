@@ -24,6 +24,19 @@ The seventh letter of the flock team.
   handed a share held back. Write `.Split(step)` where `.Add(step)` stood; nothing else changes.
 - **An ensemble file whose blend is written as a number is refused.** A blend is read as one of its words, `average` or
   `vote`, as every other word a file holds is; `"1"` was taken for `vote` before. DeepSharp never wrote one.
+- **An ensemble's file can be of the second version.** An ensemble behind one pipeline is written exactly as before, as the
+  first version, and every file written before reads unchanged; one whose members have pipelines of their own is written as
+  the second, each member whole, as a single network's file holds it. 0.18.0 refuses a file of the second version whole,
+  naming the version. `TrainedEnsemble.Version` is now 2: code compiled against it holds the number it was compiled with.
+- **Votes on answers that are amounts are refused where an ensemble is made.** `Blend.Vote` was refused only when an
+  ensemble was measured; served or given an interval, it counted votes of an amount. Now `TrainedEnsemble.Of`, both
+  `TrainEnsemble` forms, `TrainedEnsemble.FromJson`, and `MeasureEnsemble`, `IntervalOf` and the members' `BackToOriginal`
+  of a pipeline refuse a vote first — by the output, where it says its answers are amounts (`target.numbers`, a
+  distribution, a return), and otherwise by the training rows' answers, each nought or one or refused. Average them instead.
+- **`TrainedEnsemble.Prepared` and `ModelEnsemble.Prepared` are refused when the members have pipelines of their own.**
+  They hand back the one pipeline as before whenever every member was trained behind one fit; for members of several, the
+  refusal says where each member's own is: `Members[i].Prepared`, or `MembersPrepared[i]`. Asking why an ensemble of such
+  members answers as it does (`Leaning`, `Curve`, `MakeUp`) is refused the same way: ask each member.
 
 ### Added
 
@@ -67,8 +80,25 @@ The seventh letter of the flock team.
   Unless said there is one kind of every deal, weighing one, and every study scores exactly as it did. Earlier trials handed
   back to a study are held to its kinds, and refused naming both layouts.
 
+- **An ensemble of whole models, each with its own pipeline.** A member of an ensemble may carry a pipeline of its own —
+  other steps, other features, a log where another takes the number as it is — and the ensemble answers rows through each
+  member's own. `TrainedEnsemble.Of` takes networks trained behind different pipelines, and
+  `study.TrainEnsemble(candidates, candidate => rows, answer)` hands each of your own candidates the rows its own pipeline
+  prepared, the form that hands them all the same rows staying as it was. A served row is replayed through every member's
+  pipeline, each member answers it and comes back through its own pipeline's way back, and only then are their answers
+  combined, in the answer's own units; a row one member's pipeline leaves out is refused, naming where it was handed in. The
+  members answer one question — the same answers, named by the same output — or are refused, naming both. An ensemble is
+  measured and given an interval on rows every member set aside alike, so no member answers, through the blend, a row it
+  learned from: a member that learned from a row another measures or calibrates on is refused, naming the row and both
+  members. `ModelEnsemble.MembersPrepared` holds each member's run, and `Study<TModel>.Needs` says what your model needs of
+  its features — each category as its place, say — so a member trained on categories is served on categories. See
+  [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
+
 ### Fixed
 
+- **Votes are refused on an amount whether an ensemble serves, is calibrated or is measured.** An ensemble voting on a
+  number answered with noughts and ones and was given an interval of them; only measuring it refused. The refusal now
+  stands where the ensemble is made, before any of the three.
 - **Earlier trials judged on another number of deals are refused.** A study went on from trials of three deals as if they
   were trials of its six, and weighed a mean of three against a mean of six; it now refuses such a trial, naming how many
   deals it was judged on and how many the study deals. A trial a pruner or a deal stopper stopped may hold fewer, never more.

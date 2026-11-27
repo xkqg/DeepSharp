@@ -219,4 +219,51 @@ public class NetworkIntervalTests
         Assert.Equal(ensemble.Predict(Served()).Lower, read.Predict(Served()).Lower);
         Assert.Null(TrainedEnsemble.FromJson(prepared.TrainEnsemble([.. Enumerable.Range(1, 2).Select(seed => ((LearnNetworkStep)prepared.Declaration.Learner!) with { Seed = seed })], new EnsembleOptions { Cancellation = TestContext.Current.CancellationToken }).ToJson(), NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks()).Interval);
     }
+
+    [Fact]
+    public void AnEnsembleOfWholeModels_CalibratesOnTheRowsEveryMemberSetAsideAlike_TheMarginOfWhatTheyAnswerTogether()
+    {
+        // Each member answers the calibration rows its own pipeline set aside — the same rows for both — and comes back through
+        // its own way back; the margin is that of their average, in the answer's own units.
+        var plain = TrainedEnsembleTests.Regressed(TrainedEnsembleTests.Regression());
+        var logged = TrainedEnsembleTests.Regressed(TrainedEnsembleTests.Regression(logged: true));
+        var with = TrainedEnsemble.Of([plain, logged]).WithInterval(Alpha);
+        var chunking = new Chunking(new CpuBackend(), TrainedNetwork.ServingBatchSize);
+
+        IReadOnlyList<double[]> Back(TrainedNetwork member) =>
+            member.Prepared.BackToOriginal(member.Predicted(member.Prepared.Batch(Part.Calibration, TrainedNetwork.FeatureNeeds), chunking).Predictions, Part.Calibration);
+
+        var said = new[] { Back(plain), Back(logged) };
+        var actual = plain.Prepared.Batch(Part.Calibration).Answers!;
+        var errors = Enumerable.Range(0, actual.Count).Select(row => Math.Abs(actual[row][0] - ((said[0][row][0] + said[1][row][0]) / 2))).ToArray();
+
+        Assert.Equal(ConformalInterval.FromErrors(errors, Alpha).Margins, with.Interval!.Margins);
+
+        var predicted = with.Predict(Served());
+
+        Assert.Equal(predicted.Answers[0][0] - with.Interval.Margins[0], predicted.Lower![0][0], 12);
+
+        // A member that sets nothing aside to calibrate on keeps the first member's calibration rows among its test rows: not the
+        // same rows, so the ensemble is not calibrated, and the row is named.
+        var uncalibrated = TrainedEnsembleTests.Regressed(TrainedEnsembleTests.Regression(calibrated: false));
+        var apart = Assert.Throws<InvalidOperationException>(() => TrainedEnsemble.Of([plain, uncalibrated]).WithInterval(Alpha));
+
+        Assert.Contains("Member 1 sets row", apart.Message, StringComparison.Ordinal);
+        Assert.Contains("aside as 'calibration', and member 2 holds it as 'test'", apart.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AMemberThatLearnedFromRowsAnotherCalibratesOn_IsRefused_NamingTheRowAndBothMembers()
+    {
+        // The second member deals its test and calibration rows from another seed, so it learned from rows the first calibrates
+        // on: through the blend, the margin would be worked out from errors on rows one member was trained on.
+        var calibrated = TrainedEnsembleTests.Regressed(TrainedEnsembleTests.Regression());
+        var dealtElsewise = TrainedEnsembleTests.Regressed(TrainedEnsembleTests.Regression(testSeed: 10));
+
+        var refused = Assert.Throws<InvalidOperationException>(() => TrainedEnsemble.Of([calibrated, dealtElsewise]).WithInterval(Alpha));
+
+        Assert.Contains("Member 2 learned from row", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("member 1", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("'calibration'", refused.Message, StringComparison.Ordinal);
+    }
 }

@@ -1,6 +1,8 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
+
 namespace DeepSharp.Pipelines;
 
 /// <summary>How several members' answers become one, once each has come back into the answer's own units.</summary>
@@ -15,7 +17,8 @@ public enum Blend
 
     /// <summary>
     /// Each member names its classes — a chance of a half or more, or the likeliest labels where a row holds a number of them —
-    /// and the classes most members named are the answer, a tie going to the higher mean chance. Of classes only.
+    /// and the classes most members named are the answer, a tie going to the higher mean chance. Of classes only: votes on answers
+    /// that are amounts are refused where the members are put together.
     /// </summary>
     Vote,
 }
@@ -46,9 +49,17 @@ public sealed class EnsembleMeasures
     public Blend Blend { get; }
 }
 
-/// <summary>Combining several members' answers into one.</summary>
+/// <summary>Combining several members' answers into one, and what is refused before they are.</summary>
+/// <remarks>
+/// <see cref="CombinedBackExtensions"/> is the one place members' answers are combined, once each has come back through its own
+/// pipeline; this holds how, and the two refusals every place that puts members together asks: too few of them, and votes on
+/// answers that are amounts.
+/// </remarks>
 internal static class Blending
 {
+    // An answer within a millionth of nought or one is that class: a way back is held to leading back within as much.
+    private const double Tolerance = 1e-6;
+
     extension(Blend blend)
     {
         /// <summary>The answers of several members for the same rows, in the answer's own units, as one answer for each row.</summary>
@@ -56,6 +67,7 @@ internal static class Blending
         /// <param name="ones">How many answers a row holds as one, when they are classes; nought for any number.</param>
         /// <returns>For each row, the combined answers.</returns>
         /// <exception cref="ArgumentOutOfRangeException">The blend is none of the blends.</exception>
+        /// <remarks>Asked by <see cref="CombinedBackExtensions"/> alone.</remarks>
         public IReadOnlyList<double[]> Combine(IReadOnlyList<IReadOnlyList<double[]>> members, int ones) =>
             blend switch
             {
@@ -71,6 +83,94 @@ internal static class Blending
             if (!Vocabulary<Blend>.Has(blend))
             {
                 throw Undefined(blend);
+            }
+        }
+
+        /// <summary>
+        /// Refuses votes counted of answers that are amounts, where members are put together — before any of them serves, is
+        /// calibrated on or is measured — decided by the output of each pipeline the members were trained behind.
+        /// </summary>
+        /// <param name="pipelines">The pipeline each member was trained behind.</param>
+        /// <exception cref="InvalidOperationException">
+        /// The blend is a vote, and an output says its answers are amounts, or — where its answers may be classes and the run holds
+        /// its rows — a training row's answer, in its own units, is neither nought nor one.
+        /// </exception>
+        /// <remarks>
+        /// An output that says its answers are amounts — free numbers, shares of a whole, a return — decides it alone. One whose
+        /// answers may be classes, as the column a target names may, is read where it can be: its training rows' answers, brought back
+        /// into their own units. A pipeline read from its file holds no rows, and its output decides alone.
+        /// </remarks>
+        public void ThrowIfVotedOnAmounts(IReadOnlyList<PreparedData> pipelines)
+        {
+            if (blend != Blend.Vote)
+            {
+                return;
+            }
+
+            foreach (var prepared in pipelines.Distinct())
+            {
+                if (prepared.Declaration.Output is not { } output)
+                {
+                    continue;
+                }
+
+                if (!output.AnswersCanBeClasses)
+                {
+                    throw new InvalidOperationException(
+                        $"'{output.Verb}' names its answers {output.Answers.Quoted()} as amounts, and an amount is no class: votes are counted of classes, each nought or one. The members' answers to an amount are averaged.");
+                }
+
+                if (prepared.Table.RowCount > 0)
+                {
+                    ThrowIfAnyIsNoClass(prepared, output);
+                }
+            }
+        }
+    }
+
+    extension<T>(IReadOnlyCollection<T> members)
+    {
+        /// <summary>What is said of too few members to be an ensemble, in the one sentence it is said in; nothing when there are two or more.</summary>
+        /// <param name="noun">What the members are, in the plural: networks, candidates, members.</param>
+        /// <param name="instead">What to do with fewer: train one with Train, say.</param>
+        /// <returns>The sentence, or nothing.</returns>
+        public string? FewerThanTwo(string noun, string instead) =>
+            members.Count >= 2
+                ? null
+                : string.Create(CultureInfo.InvariantCulture, $"An ensemble is of at least two {noun}, and {members.Count} {(members.Count == 1 ? "was" : "were")} given: {instead}.");
+
+        /// <summary>Refuses too few members to be an ensemble.</summary>
+        /// <param name="noun">What the members are, in the plural.</param>
+        /// <param name="instead">What to do with fewer.</param>
+        /// <param name="parameter">The parameter the members were handed as.</param>
+        /// <exception cref="ArgumentException">There are fewer than two.</exception>
+        public void ThrowIfFewerThanTwo(string noun, string instead, string parameter)
+        {
+            if (members.FewerThanTwo(noun, instead) is { } fewer)
+            {
+                throw new ArgumentException(fewer, parameter);
+            }
+        }
+    }
+
+    // Every training row's answers, brought back into their own units, nought or one: votes are counted of classes.
+    private static void ThrowIfAnyIsNoClass(PreparedData prepared, INamesTheAnswer output)
+    {
+        var actual = prepared.BackToOriginal(Handover.AnswersOf(prepared, Part.Train).Answers!, Part.Train);
+        var readAt = prepared.ReadAtOf(Part.Train);
+
+        for (var row = 0; row < actual.Count; row++)
+        {
+            for (var column = 0; column < actual[row].Length; column++)
+            {
+                var value = actual[row][column];
+
+                if (Math.Abs(value) > Tolerance && Math.Abs(value - 1) > Tolerance)
+                {
+                    throw new InvalidOperationException(string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Row {readAt[row] + 1} of '{output.Answers[column]}' is {value}, which is no class: votes are counted of classes, each nought or one. The members' answers to an amount are averaged."));
+                }
             }
         }
     }

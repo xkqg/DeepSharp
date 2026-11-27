@@ -173,8 +173,10 @@ public readonly record struct IntervalEnds(IReadOnlyList<double[]> Lower, IReadO
 internal static class Conformal
 {
     /// <summary>The interval a model's predictions for the calibration rows allow, at a level.</summary>
-    /// <param name="prepared">The run, which set rows aside to calibrate on.</param>
-    /// <param name="members">What each model predicted for the calibration rows, in the units the answers were handed over in: one, or several that are combined.</param>
+    /// <param name="members">
+    /// For each model, the run of the pipeline it was trained behind, which set rows aside to calibrate on, and what it predicted for
+    /// them in the units its pipeline handed them over in: one, or several that are combined once each has come back through its own.
+    /// </param>
     /// <param name="blend">How several members' answers become one.</param>
     /// <param name="alpha">The share of rows allowed to land outside.</param>
     /// <returns>The interval.</returns>
@@ -183,14 +185,16 @@ internal static class Conformal
     /// The run sets no rows aside; its answers are classes; or the rows hold no margin that keeps the promise.
     /// </exception>
     /// <exception cref="ArgumentException">The predictions are not for the calibration rows, or not one for each of them, or come back as no number.</exception>
-    public static ConformalInterval Of(PreparedData prepared, IReadOnlyList<PartPredictions> members, Blend blend, double alpha)
+    /// <exception cref="InvalidOperationException">Members' pipelines set other rows aside to calibrate on: named, with the row.</exception>
+    public static ConformalInterval Of(IReadOnlyList<MemberPredictions> members, Blend blend, double alpha)
     {
-        ArgumentNullException.ThrowIfNull(prepared);
-
         if (!(alpha > 0 && alpha < 1))
         {
             throw new ArgumentOutOfRangeException(nameof(alpha), alpha, "A level is the share of rows allowed to land outside the margin: above nothing and below one.");
         }
+
+        var calibrated = members.Count > 0 ? members[0] : throw new ArgumentException("An interval is worked out from what at least one model predicted for the calibration rows.", nameof(members));
+        var prepared = calibrated.Prepared;
 
         prepared.RequireRows();
 
@@ -204,9 +208,7 @@ internal static class Conformal
                 "This pipeline sets no rows aside to calibrate an interval on: say Calibrate(…) before its split, so there are rows that nothing was fitted or chosen on.");
         }
 
-        ArgumentNullException.ThrowIfNull(members);
-
-        var calibration = members.Count > 0 ? members[0] : throw new ArgumentException("An interval is worked out from what at least one model predicted for the calibration rows.", nameof(members));
+        var calibration = calibrated.Parts[0];
 
         if (calibration.Batch is not { Part: Part.Calibration, Keys: not null })
         {
@@ -217,13 +219,15 @@ internal static class Conformal
 
         foreach (var each in members)
         {
-            Measurement.ThrowIfOtherRows(Part.Calibration, handed.Keys, each.Batch.Keys ?? []);
+            Measurement.ThrowIfOtherRows(Part.Calibration, each.Prepared.KeysOf(Part.Calibration), each.Parts[0].Batch.Keys ?? []);
         }
 
+        IReadOnlyList<PreparedData> pipelines = [.. members.Select(each => each.Prepared)];
+
+        pipelines.ThrowIfTheyMeasureApart(Part.Calibration);
+
         var actual = prepared.BackToOriginal(handed.Answers!, Part.Calibration);
-        var predicted = members.Count == 1
-            ? prepared.BackToOriginal(calibration.Predictions, Part.Calibration)
-            : blend.Combine([.. members.Select(each => prepared.BackToOriginal(each.Predictions, Part.Calibration))], output.Ones);
+        var predicted = blend.CombinedBack(members, Part.Calibration, output.Ones);
 
         if (actual.All(row => row.All(value => value is 0 or 1)))
         {

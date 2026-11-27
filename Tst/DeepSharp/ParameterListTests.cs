@@ -259,6 +259,31 @@ public class ParameterListTests
     }
 
     [Fact]
+    public void NoPackageCombinesMembersAnswers_ButCombinedBack_NorRefusesTooFewMembers_ButItsOneOwner()
+    {
+        // Members' answers meet in one place, each first brought back through its own pipeline and put in one order of rows: a
+        // copy elsewhere combined them before the way back of a member with a pipeline of its own, or rows another member's
+        // pipeline served in another order. Too few members are refused in one sentence, which six copies had worded apart.
+        var combined = Spelled(["blend.Combine("]);
+        var tooFew = Spelled(["An ensemble is of at least two"]);
+
+        Assert.All(combined, at => Assert.StartsWith("Src/DeepSharp.Pipelines/CombinedBack.cs:", at, StringComparison.Ordinal));
+        Assert.Equal(ReadsTheOwners(), combined.Length > 0);
+        Assert.All(tooFew, at => Assert.StartsWith("Src/DeepSharp.Pipelines/Ensembles.cs:", at, StringComparison.Ordinal));
+        Assert.True(tooFew.Length == (ReadsTheOwners() ? 1 : 0), string.Join(Environment.NewLine, tooFew));
+    }
+
+    [Fact]
+    public void NoEnsembleSaysWhatItsMembersNeedOfTheirFeatures_ButTheMembers()
+    {
+        // A member carries what it needs of its features, so one trained on categories is served on categories: an ensemble that
+        // named a need of its own served every member as a learner of numbers.
+        var spelled = Spelled(["Needs."]).Where(at => at.Contains("Ensemble", StringComparison.Ordinal)).ToArray();
+
+        Assert.Empty(spelled);
+    }
+
+    [Fact]
     public void NoPackageDecidesWhetherAReportMeasuresAnIntervalByHand_ButTheMetricsOwner()
     {
         // Whether a measure is of an interval, and so whether a report is measured again once a model has one, has one owner

@@ -160,12 +160,64 @@ public class EnsembleMeasuresTests
     }
 
     [Fact]
-    public void VotesOfAnAmount_AreRefused_ForAnAmountIsNoClass()
+    public void VotesOfAnAmount_AreRefused_ForAnAmountIsNoClass_WhetherMeasuredServedOrCalibratedOn()
     {
+        // Refused before anything is combined, wherever members' answers are put together: not only where they are measured.
         var prepared = Priced();
-        var refused = Assert.Throws<InvalidOperationException>(() => prepared.MeasureEnsemble([Said(prepared, Off(0.1)), Said(prepared, Off(-0.1))], Blend.Vote));
+        var handedIn = new InMemoryRowSource(["t", "x"], [.. Enumerable.Range(30, 3).Select(t => new string?[] { $"{t}", "1" })]);
+        IReadOnlyList<double[]>[] members = [[[2.0], [2.5], [3.0]], [[2.2], [2.3], [2.6]]];
+        var measured = Assert.Throws<InvalidOperationException>(() => prepared.MeasureEnsemble([Said(prepared, Off(0.1)), Said(prepared, Off(-0.1))], Blend.Vote));
+        var served = Assert.Throws<InvalidOperationException>(() => prepared.BackToOriginal(members, prepared.Served(handedIn), handedIn, Blend.Vote));
+        var calibrated = Assert.Throws<InvalidOperationException>(() => prepared.IntervalOf([.. Said(prepared, Off(0.1)).Where(each => each.Batch.Part == Part.Test)], Blend.Vote, 0.10));
 
-        Assert.Contains("class", refused.Message, StringComparison.Ordinal);
+        Assert.All([measured, served, calibrated], refused => Assert.Contains("which is no class", refused.Message, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void VotesOfAnAmount_AreRefused_WhenTheOutputSaysItsAnswersAreAmounts_AsAPipelineReadFromItsFileHoldsNoRowsToLookAt()
+    {
+        var prepared = PreparedData.FromJson(FreeNumbers().ToJson(), StepCatalog.BuiltIn());
+        var handedIn = new InMemoryRowSource(["t", "a", "b"], [["30", "1", "3"]]);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => prepared.BackToOriginal([[[0.5, 0.5]], [[0.4, 0.6]]], prepared.Served(handedIn), handedIn, Blend.Vote));
+
+        Assert.Contains("'target.numbers'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("amounts", refused.Message, StringComparison.Ordinal);
+    }
+
+    // Free numbers, which the output says are amounts and never classes, however they fall on the rows.
+    private static PreparedData FreeNumbers() =>
+        Pdd.Create()
+            .Read(new InMemoryRowSource(["t", "a", "b"], [.. Enumerable.Range(1, 20).Select(t => new string?[] { $"{t}", $"{t % 2}", $"{(t + 1) % 2}" })]), "twenty rows")
+            .Declare(schema => schema.Integer("t").Number("a", "b"))
+            .SplitByTime("t", 0.50, 0.25)
+            .Numbers(["a", "b"])
+            .Build()
+            .Run();
+
+    [Fact]
+    public void MembersThatSetAPartsRowsAsideApart_AreRefused_NamingARowOneOfTheirPipelinesLeftOut()
+    {
+        // The second pipeline drops every passenger whose age is a gap, so it holds none of the first's training rows of no age.
+        static PreparedData Ages(bool dropsAGap)
+        {
+            var declared = Pdd.Create()
+                .ReadCsv(Repository.Data("titanic.csv"))
+                .Declare(schema => schema.Integer("survived").Optional("age", ColumnKind.Number));
+
+            return (dropsAGap ? declared.DropGaps("age") : declared)
+                .SplitAtRandom(0.70, 0.15, 100, 7)
+                .FillMissing("age", With.Median)
+                .Target("survived")
+                .Build()
+                .Run();
+        }
+
+        IReadOnlyList<PreparedData> pipelines = [Ages(dropsAGap: false), Ages(dropsAGap: true)];
+        var refused = Assert.Throws<InvalidOperationException>(() => pipelines.ThrowIfTheyMeasureApart(Part.Train));
+
+        Assert.Contains("aside as 'train', and member 2 does not hold it", refused.Message, StringComparison.Ordinal);
+        new[] { pipelines[0], pipelines[0] }.ThrowIfTheyMeasureApart(Part.Train);
     }
 
     [Fact]

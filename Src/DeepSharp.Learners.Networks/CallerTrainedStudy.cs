@@ -34,8 +34,9 @@ public readonly record struct TrainingDeal(Candidate Candidate, PreparedData Row
 /// and the model it trained, in one call.
 /// </para>
 /// <para>
-/// The pipelines are run for a learner of numbers, every step as declared (<see cref="Needs.Numbers"/>): the caller's model
-/// takes the rows as it chooses, and no feature has to be put on one scale, as a network's would.
+/// The pipelines are run for what the caller's model says it needs of its features, <see cref="Needs"/>: a learner of numbers,
+/// every step as declared, unless said — the caller's model takes the rows as it chooses, and no feature has to be put on one
+/// scale, as a network's would.
 /// </para>
 /// <para>
 /// There is no <see cref="Study.Score"/>, <see cref="Study.Judge"/> or <see cref="Study.Objectives"/> here: the trainer's
@@ -63,6 +64,20 @@ public sealed class Study<TModel>
 
     /// <summary>What may vary.</summary>
     public SearchSpace Space { get; }
+
+    /// <summary>
+    /// What the caller's model needs of the features it is handed: every pipeline is run for it, every deal's rows handed over for it,
+    /// and an ensemble's members served so; a learner of numbers, every step as declared, unless said.
+    /// </summary>
+    /// <remarks>A model that takes each category as its place says <see cref="Needs.Categories"/>, and is served each category as its place.</remarks>
+    /// <exception cref="ArgumentOutOfRangeException">No need is named by the value.</exception>
+    public Needs Needs
+    {
+        get;
+        init => field = value.Named();
+    }
+
+    = Needs.Numbers;
 
     /// <summary>Which candidate each trial tries; random, drawn from a seed, unless said.</summary>
     public ISampler Sampler
@@ -203,7 +218,7 @@ public sealed class Study<TModel>
     // caller's trainer gives back for each deal.
     private StudyResult<TModel> Run(IReadOnlyList<Trial> earlier, Func<Needs, DealPreparation> begin, CancellationToken cancellation)
     {
-        var found = new StudyLoop<TModel>(Space, _settings, new ModelOfADeal(_train)).Run(earlier, begin, cancellation);
+        var found = new StudyLoop<TModel>(Space, _settings, new ModelOfADeal(_train, Needs)).Run(earlier, begin, cancellation);
 
         return new StudyResult<TModel>(found.Trials, found.Best, found.Winner);
     }
@@ -216,16 +231,50 @@ public sealed class Study<TModel>
     /// <returns>The ensemble.</returns>
     /// <exception cref="ArgumentNullException">There are no rows, no candidates, or no way to answer with a model.</exception>
     /// <exception cref="ArgumentException">There are fewer than two candidates, or the options name an engine.</exception>
-    /// <exception cref="InvalidOperationException">The training rows are refused as a learner of numbers is refused them: the ensemble serves rows so.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The training rows are refused as a learner that needs what <see cref="Needs"/> says is refused them: the ensemble serves rows so;
+    /// or the blend is a vote, and the answers are amounts.
+    /// </exception>
     /// <remarks>
-    /// Every candidate trains on the very same rows, so the members are trained behind one fit by construction: no digest is compared.
-    /// The features the training rows hand a learner of numbers are what the ensemble says its members learned from, so a row served
-    /// later as other features is refused, as it is of a network.
+    /// The form of <see cref="TrainEnsemble(IReadOnlyList{Candidate}, Func{Candidate, PreparedData}, Func{TModel, IReadOnlyList{double[]}, IReadOnlyList{double[]}}, EnsembleOptions?)"/>
+    /// that hands every candidate the very same rows, so the members are trained behind one pipeline, which is the ensemble's
+    /// <see cref="ModelEnsemble{TModel}.Prepared"/>.
     /// </remarks>
     public ModelEnsemble<TModel> TrainEnsemble(PreparedData rows, IReadOnlyList<Candidate> candidates, Func<TModel, IReadOnlyList<double[]>, IReadOnlyList<double[]>> answer, EnsembleOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(rows);
+
+        return TrainEnsemble(candidates, _ => rows, answer, options);
+    }
+
+    /// <summary>
+    /// Trains several candidates, each on the rows a pipeline of its own prepared, through this study's own trainer, and puts them
+    /// together as a <see cref="ModelEnsemble{TModel}"/>: an ensemble of whole models, each with its own steps.
+    /// </summary>
+    /// <param name="candidates">The candidates to train: at least two.</param>
+    /// <param name="rowsFor">The run of the pipeline a candidate trains on: the same for every candidate, or one of its own each.</param>
+    /// <param name="answer">What a model answers for rows of features, in the shape its pipeline hands them over.</param>
+    /// <param name="options">How their answers become one, and what stops the run; averaged and unstoppable, unless said.</param>
+    /// <returns>The ensemble.</returns>
+    /// <exception cref="ArgumentNullException">There are no candidates, no way to find their rows, or no way to answer with a model.</exception>
+    /// <exception cref="ArgumentException">
+    /// There are fewer than two candidates, the options name an engine, or a member answers another question than the first: other
+    /// answers, or the same named by another output.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// The rows for a candidate are nothing, a member's training rows are refused as a learner that needs what <see cref="Needs"/> says
+    /// is refused them, or the blend is a vote and the answers are amounts.
+    /// </exception>
+    /// <remarks>
+    /// Each member is served rows later through its own pipeline, as <see cref="Needs"/> says, and comes back through that pipeline's
+    /// own way back, so the members' answers meet in the answer's own units however their pipelines shape it on the way in. The
+    /// features a member's training rows hand over are what it says it learned from, so a row its pipeline serves as other features is
+    /// refused, as it is of a network. The ensemble is measured and calibrated on rows every member set aside alike.
+    /// </remarks>
+    public ModelEnsemble<TModel> TrainEnsemble(IReadOnlyList<Candidate> candidates, Func<Candidate, PreparedData> rowsFor, Func<TModel, IReadOnlyList<double[]>, IReadOnlyList<double[]>> answer, EnsembleOptions? options = null)
+    {
         ArgumentNullException.ThrowIfNull(candidates);
+        ArgumentNullException.ThrowIfNull(rowsFor);
         ArgumentNullException.ThrowIfNull(answer);
 
         if (options?.Engines is not null)
@@ -235,28 +284,32 @@ public sealed class Study<TModel>
                 nameof(options));
         }
 
-        if (candidates.Count < 2)
-        {
-            throw new ArgumentException(
-                $"An ensemble is of at least two candidates, and {candidates.Count} {(candidates.Count == 1 ? "was" : "were")} given: a single model predicts for itself.",
-                nameof(candidates));
-        }
+        candidates.ThrowIfFewerThanTwo("candidates", "a single model predicts for itself", nameof(candidates));
 
         var cancellation = options?.Cancellation ?? default;
-        TModel[] trained = [.. candidates.Select(candidate => _train(new TrainingDeal(candidate, rows, null, cancellation)).Model)];
+        var needs = Needs;
+        ModelMember<TModel>[] members =
+        [
+            .. candidates.Select((candidate, at) =>
+            {
+                var rows = rowsFor(candidate) ?? throw new InvalidOperationException(
+                    $"The rows for candidate {at + 1} are nothing: rowsFor hands each candidate the run of the pipeline it trains on.");
+                var model = _train(new TrainingDeal(candidate, rows, null, cancellation)).Model;
 
-        // The members learned from the training rows as a learner of numbers is handed them, which is how the ensemble serves rows.
-        var serving = new ServedAnswer(rows, Needs.Numbers, new LearnedFrom("ensemble", rows.Batch(Part.Train, Needs.Numbers).FeatureNames));
+                // The member learned from the training rows as they are handed over for what it needs, which is how it is served rows.
+                return new ModelMember<TModel>(model, new ServedAnswer(rows, needs, new LearnedFrom("ensemble", rows.Batch(Part.Train, needs).FeatureNames)), answer);
+            }),
+        ];
 
-        return new ModelEnsemble<TModel>(trained, answer, serving, options?.Blend ?? Blend.Average);
+        return new ModelEnsemble<TModel>([.. members.Select(member => member.Model)], new Ensemble(members, options?.Blend ?? Blend.Average));
     }
 
     // How a deal of a caller-trained study is trained and judged: by the caller's trainer, handed the rows of the deal, whose
     // returned score is the one number the trial is judged by.
-    private sealed class ModelOfADeal(Func<TrainingDeal, Trained<TModel>> train) : IDealTrainer<TModel>
+    private sealed class ModelOfADeal(Func<TrainingDeal, Trained<TModel>> train, Needs needs) : IDealTrainer<TModel>
     {
-        // A learner of numbers: every step as declared, and no scale asked of any feature, since the caller's model asks its own.
-        public Needs Needs => Needs.Numbers;
+        // What the study says the caller's model needs: a learner of numbers, every step as declared, unless said.
+        public Needs Needs => needs;
 
         // The caller's trainer gives one number a deal, and nothing else is there to judge or stop a trial by another.
         public void RefuseHowItIsSet()

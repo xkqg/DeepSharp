@@ -11,7 +11,10 @@ namespace DeepSharp.Pipelines;
 /// model has one — the interval; as text with a line feed between lines on every system.
 /// </summary>
 /// <param name="Version">The version of the file, written first.</param>
-/// <param name="Pipeline">The pipeline the model was trained behind, written as it stands.</param>
+/// <param name="Pipeline">
+/// The pipeline the model was trained behind, written as it stands; nothing for a file whose parts carry a pipeline each, as an
+/// ensemble's members of their own do, and then nothing is written for it.
+/// </param>
 /// <param name="Interval">The width the model's answers are worth; nothing when it has none, and then nothing is written for it.</param>
 /// <remarks>
 /// A network's file, an ensemble's, a boosted pair's and a tree's all say the same four things in the same order around what is
@@ -19,7 +22,7 @@ namespace DeepSharp.Pipelines;
 /// the pipeline, or, for the one part that stands after the pipeline — a checkpoint's training — between the pipeline and the
 /// interval.
 /// </remarks>
-internal readonly record struct ModelFileFrame(int Version, PipelineText Pipeline, ConformalInterval? Interval)
+internal readonly record struct ModelFileFrame(int Version, PipelineText? Pipeline, ConformalInterval? Interval)
 {
     /// <summary>The key the version stands under.</summary>
     internal const string VersionKey = "version";
@@ -48,8 +51,13 @@ internal readonly record struct ModelFileFrame(int Version, PipelineText Pipelin
             writer.WriteStartObject();
             writer.WriteNumber(VersionKey, Version);
             parts(writer);
-            writer.WritePropertyName(PipelineKey);
-            writer.WriteRawValue(Pipeline.Text);
+
+            if (Pipeline is { } pipeline)
+            {
+                writer.WritePropertyName(PipelineKey);
+                writer.WriteRawValue(pipeline.Text);
+            }
+
             afterPipeline?.Invoke(writer);
 
             if (Interval is { } interval)

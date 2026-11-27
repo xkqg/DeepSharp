@@ -14,7 +14,9 @@ namespace DeepSharp.Learners.Networks;
 /// over another's one column after another — serves them through the pipeline the model was trained behind, and reads the answers it
 /// gives in their own units. Nothing is fitted, so a category is one-hot and a log is undone exactly as they are when the model is asked
 /// anything else; and every draw comes from a seed the caller names. Each row is answered by its own answer, in the order the rows were
-/// handed in, though a pipeline that orders its rows serves them in another.
+/// handed in, though a pipeline that orders its rows serves them in another. An ensemble is asked through the one pipeline its
+/// members share; one whose members were trained behind pipelines of their own is refused, as its <see cref="TrainedEnsemble.Prepared"/>
+/// is, since each member reads rows its own way: ask each member.
 /// </remarks>
 public static class AskWhyExtensions
 {

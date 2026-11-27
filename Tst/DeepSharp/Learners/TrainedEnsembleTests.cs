@@ -7,20 +7,29 @@ using DeepSharp.Pipelines;
 namespace DeepSharp.Tests.Learners;
 
 /// <summary>
-/// Several networks trained behind one fit answer as one. The members are declarations of one pipeline — the best few of a study,
-/// or one declaration under several seeds — trained on the rows it prepared once; each is measured alone and the ensemble beside
-/// them on the same rows, the members' answers meeting in the answer's own units. What an ensemble predicts for served rows is
-/// its members' answers combined, the rows replayed and named once for all of them.
+/// Several networks answer as one. The members are declarations of one pipeline — the best few of a study, or one declaration under
+/// several seeds — trained on the rows it prepared once; or whole models, each behind a pipeline of its own. Each is measured alone and
+/// the ensemble beside them on the same rows, the members' answers meeting in the answer's own units. What an ensemble predicts for
+/// served rows is its members' answers combined, each member served and brought back through its own pipeline; a row a member's
+/// pipeline left out, members that answer another question, and votes on an amount are refused.
 /// </summary>
 public class TrainedEnsembleTests
 {
     private static readonly SearchSpace Space = new([new LogRange("rate", 1e-3, 1e-1), new WholeRange("units", 2, 8)]);
 
-    private static Pipeline Declared(int seed = 1) =>
-        Pdd.Create().ReadCsv(Repository.Data("titanic.csv"))
-            .Declare(schema => schema.Integer("survived", "sibsp", "parch").Category("sex").Optional("age", ColumnKind.Number).Number("fare"))
-            .SplitAtRandom(0.70, 0.15, 100, 7)
-            .FillMissing("age", With.Median)
+    private static Pipeline Declared(int seed = 1) => Declared(seed, dropsAGap: false);
+
+    // The passengers, a gap in age filled with the median; or every passenger whose age is a gap dropped, served rows too.
+    private static Pipeline Declared(int seed, bool dropsAGap) =>
+        (dropsAGap
+            ? Pdd.Create().ReadCsv(Repository.Data("titanic.csv"))
+                .Declare(schema => schema.Integer("survived", "sibsp", "parch").Category("sex").Optional("age", ColumnKind.Number).Number("fare"))
+                .DropGaps("age")
+                .SplitAtRandom(0.70, 0.15, 100, 7)
+            : Pdd.Create().ReadCsv(Repository.Data("titanic.csv"))
+                .Declare(schema => schema.Integer("survived", "sibsp", "parch").Category("sex").Optional("age", ColumnKind.Number).Number("fare"))
+                .SplitAtRandom(0.70, 0.15, 100, 7)
+                .FillMissing("age", With.Median))
             .EncodeCategories()
             .Normalise("age", Scale.MidRange)
             .Normalise("fare", Scale.MidRange)
@@ -77,6 +86,9 @@ public class TrainedEnsembleTests
 
         Assert.Equal(Blend.Average, ensemble.Blend);
         Assert.Equal(Blend.Average, measured.Blend);
+
+        // Without options: averaged, on the light engine, unstoppable.
+        Assert.Equal(Blend.Average, prepared.TrainEnsemble([step, step with { Seed = 2 }]).Blend);
     }
 
     [Fact]
@@ -144,14 +156,17 @@ public class TrainedEnsembleTests
     }
 
     [Fact]
-    public void NetworksTrainedBehindOtherFits_AreRefusedAsMembersOfOneEnsemble()
+    public void NetworksTrainedBehindOtherFits_AreMembersEachBehindItsOwn_AndTheEnsembleHasNoOnePipelineToHandBack()
     {
+        // Once refused as members of one ensemble: now each answers behind the fit it was trained behind.
         var (prepared, step) = Prepared();
         var other = StudyTests.Passengers(3).RunFor(step.Needs);
-        var refused = Assert.Throws<ArgumentException>(() => TrainedEnsemble.Of([Alone(prepared, step), Alone(other, step)]));
+        var ensemble = TrainedEnsemble.Of([Alone(prepared, step), Alone(other, step)]);
 
-        Assert.Contains("another fit", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("2", refused.Message, StringComparison.Ordinal);
+        Assert.Same(prepared, ensemble.Members[0].Prepared);
+        Assert.Same(other, ensemble.Members[1].Prepared);
+        Assert.Equal(12, ensemble.Predict(Served()).Answers.Count);
+        Assert.Contains("2 pipelines", Assert.Throws<InvalidOperationException>(() => ensemble.Prepared).Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -179,5 +194,106 @@ public class TrainedEnsembleTests
         Assert.Equal(3, Trained(prepared, best).Members.Count);
         Assert.Throws<ArgumentOutOfRangeException>(() => result.Top(0));
         Assert.Throws<ArgumentOutOfRangeException>(() => result.Top(5));
+    }
+
+    // Six hundred rows of an amount above nought: as they are, or read on a log scale, so what a network says is a log; the same
+    // rows divided alike either way — a fifth set aside to calibrate on, unless said — and the answer the one column or the other.
+    internal static PreparedData Regression(bool logged = false, string answer = "y", bool calibrated = true, int testSeed = 9)
+    {
+        var noise = new Random(11);
+        var rows = Enumerable.Range(1, 600).Select(t =>
+        {
+            var x = noise.NextDouble();
+            var y = 1 + (3 * x) + ((noise.NextDouble() + noise.NextDouble() - 1) * 0.1);
+
+            return new string?[] { $"{t}", x.ToString("R", System.Globalization.CultureInfo.InvariantCulture), y.ToString("R", System.Globalization.CultureInfo.InvariantCulture) };
+        }).ToList();
+        var read = Pdd.Create()
+            .Read(new InMemoryRowSource(["t", "x", "y"], rows), "six hundred")
+            .Declare(schema => schema.Integer("t").Number("x", "y"));
+
+        var shaped = logged ? read.Reshape("y", Maths.Log) : read;
+
+        return (calibrated ? shaped.Calibrate(0.20) : shaped)
+            .SplitAtRandom(0.50, 0.10, 5, testSeed)
+            .Drop("t")
+            .Target(answer)
+            .Normalise(answer == "y" ? "x" : "y", Scale.MidRange)
+            .WithTorch(network => network.Dense(4).Relu().Dense(1).Adam(0.02).MeanSquaredError().Run(seed: 1, epochs: 3))
+            .Build()
+            .Run();
+    }
+
+    internal static TrainedNetwork Regressed(PreparedData prepared, int seed = 1) =>
+        prepared.Train(((LearnNetworkStep)prepared.Declaration.Learner!) with { Seed = seed }, cancellation: TestContext.Current.CancellationToken);
+
+    internal static InMemoryRowSource Asked(int rows = 8) =>
+        new(["t", "x"], [.. Enumerable.Range(900, rows).Select(t => new string?[] { $"{t}", ((t % 10) / 10.0).ToString(System.Globalization.CultureInfo.InvariantCulture) })]);
+
+    [Fact]
+    public void AnEnsembleOfWholeModels_EachMemberReplaysTheRowsThroughItsOwnPipeline_AndTheAnswersMeetInOriginalUnits()
+    {
+        // One member was trained on the answer as it is, the other on its log: each comes back through its own pipeline's way
+        // back — the log undone by an exponential — and only then are they averaged.
+        var plain = Regressed(Regression());
+        var logged = Regressed(Regression(logged: true));
+        var ensemble = TrainedEnsemble.Of([plain, logged]);
+        var rows = Asked();
+
+        var predicted = ensemble.Predict(rows);
+        var alone = new[] { plain.Predict(rows), logged.Predict(rows) };
+
+        Assert.Equal(8, predicted.Answers.Count);
+        Assert.Equal(alone[0].HandedInAt, predicted.HandedInAt);
+
+        for (var row = 0; row < 8; row++)
+        {
+            Assert.Equal((alone[0].Answers[row][0] + alone[1].Answers[row][0]) / 2, predicted.Answers[row][0], 1e-12);
+        }
+
+        Assert.Same(logged.Prepared, ensemble.Members[1].Prepared);
+
+        // There is no one pipeline to hand back: the refusal says where each member's own is.
+        var refused = Assert.Throws<InvalidOperationException>(() => ensemble.Prepared);
+
+        Assert.Contains("Members", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("2 pipelines", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AServedRowOneMemberDidNotAnswer_IsRefusedByName(bool droppingFirst)
+    {
+        // The sixth passenger handed in has no age: the member whose pipeline drops a gap in age answers nothing for that row,
+        // and an ensemble answers a row with every member's answer or not at all.
+        var filled = Alone(Declared(1).RunFor(Needs.OneScale), Step(Declared(1)));
+        var dropping = Alone(Declared(1, dropsAGap: true).RunFor(Needs.OneScale), Step(Declared(1, dropsAGap: true)));
+        var ensemble = TrainedEnsemble.Of(droppingFirst ? [dropping, filled] : [filled, dropping]);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => ensemble.Predict(Served()));
+
+        Assert.Contains("Row 6 handed in", refused.Message, StringComparison.Ordinal);
+        Assert.Contains($"not by member {(droppingFirst ? 1 : 2)}", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MembersThatNameOtherAnswers_AreRefused_NamingBoth()
+    {
+        var refused = Assert.Throws<ArgumentException>(() => TrainedEnsemble.Of([Regressed(Regression()), Regressed(Regression(answer: "x"))]));
+
+        Assert.Contains("Member 2", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("'x'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("'y'", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void VotesOnAnAmount_AreRefusedWhereTheEnsembleIsMade_BeforeItServesOrCalibrates()
+    {
+        var prepared = Regression();
+        var refused = Assert.Throws<InvalidOperationException>(() => TrainedEnsemble.Of([Regressed(prepared, 1), Regressed(prepared, 2)], Blend.Vote));
+
+        Assert.Contains("no class", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("averaged", refused.Message, StringComparison.Ordinal);
     }
 }

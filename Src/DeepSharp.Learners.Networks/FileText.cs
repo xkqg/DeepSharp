@@ -42,7 +42,7 @@ internal sealed class FileText
 
     private static readonly string[] NetworkParts = [TrainedNetwork.VersionKey, TrainedNetwork.NetworkKey, TrainedNetwork.PipelineKey, TrainedNetwork.TrainingKey, TrainedNetwork.IntervalKey];
 
-    private static readonly string[] EnsembleParts = [TrainedNetwork.VersionKey, TrainedEnsemble.BlendKey, NetworkDocument.NetworksKey, TrainedNetwork.PipelineKey, TrainedNetwork.IntervalKey];
+    private static readonly string[] EnsembleParts = [TrainedNetwork.VersionKey, TrainedEnsemble.BlendKey, NetworkDocument.NetworksKey, TrainedEnsemble.MembersKey, TrainedNetwork.PipelineKey, TrainedNetwork.IntervalKey];
 
     private static readonly string[] BoostedParts = [TrainedNetwork.VersionKey, BoostedNetwork.BasisKey, BoostedNetwork.CorrectionKey, BoostedNetwork.BasisDigestKey, TrainedNetwork.PipelineKey];
 
@@ -75,6 +75,86 @@ internal sealed class FileText
 
     /// <summary>Which of the kinds of file this is read as.</summary>
     public FileKind Kind => _kind;
+
+    /// <summary>The file, as it was handed in.</summary>
+    public string Text => _json;
+
+    /// <summary>The version the file names it was written against, which this library reads.</summary>
+    public int WrittenAgainst { get; private set; }
+
+    /// <summary>Whether the file holds a part, by its key.</summary>
+    /// <param name="key">The key.</param>
+    /// <returns>Whether the key stands in the file's object.</returns>
+    public bool Holds(string key) => _places.ContainsKey(key);
+
+    /// <summary>The members of an ensemble's file of the second version, each its own text and where that text starts in the file.</summary>
+    /// <returns>The members, in their order; nothing when the file holds no list under the key.</returns>
+    public IReadOnlyList<MemberText>? MemberTexts()
+    {
+        var bytes = Encoding.UTF8.GetBytes(_json);
+        var reader = new Utf8JsonReader(bytes);
+
+        // The file's own object, which the survey found it is.
+        reader.Read();
+
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var key = reader.GetString();
+
+            reader.Read();
+
+            if (key == TrainedEnsemble.MembersKey && reader.TokenType == JsonTokenType.StartArray)
+            {
+                var members = new List<MemberText>();
+
+                while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                {
+                    var start = (int)reader.TokenStartIndex;
+
+                    reader.Skip();
+                    members.Add(MemberAt(bytes, start, (int)reader.BytesConsumed));
+                }
+
+                return members;
+            }
+
+            reader.Skip();
+        }
+
+        return null;
+    }
+
+    /// <summary>Reads one member of the file by its own text, every fault it is refused with placed where it stands in the whole file.</summary>
+    /// <param name="member">The member's text, and where it starts.</param>
+    /// <param name="at">Which member it is, from nought.</param>
+    /// <param name="read">Reads the member's text, as a single network's file is read.</param>
+    /// <returns>What it read.</returns>
+    /// <exception cref="NetworkFileException">The member's network, or its file, is refused: each fault named as the member's, at its place in the file.</exception>
+    /// <exception cref="PipelineFileException">The member's pipeline is refused: each fault named as the member's, at its place in the file.</exception>
+    public T Read<T>(MemberText member, int at, Func<string, T> read)
+    {
+        try
+        {
+            return read(member.Text);
+        }
+        catch (NetworkFileException refused)
+        {
+            throw new NetworkFileException([.. refused.Faults.Select(fault => new NetworkFileFault(member.LineIn(fault.Line), member.ColumnIn(fault.Line, fault.Column), $"Network {at + 1}: {fault.Message}"))]);
+        }
+        catch (PipelineFileException refused)
+        {
+            throw new PipelineFileException([.. refused.Faults.Select(fault => new PipelineFileFault(member.LineIn(fault.Line), member.ColumnIn(fault.Line, fault.Column), $"Network {at + 1}: {fault.Message}"))]);
+        }
+    }
+
+    // A member's text, from the byte it starts at to the one after its end, with the line and the column it starts at.
+    private MemberText MemberAt(byte[] bytes, int start, int end)
+    {
+        var from = Encoding.UTF8.GetCharCount(bytes, 0, start);
+        var lineStart = _json.LastIndexOf('\n', from - 1) + 1;
+
+        return new MemberText(_json.Substring(from, Encoding.UTF8.GetCharCount(bytes, start, end - start)), _json.AsSpan(0, from).Count('\n') + 1, from - lineStart + 1);
+    }
 
     /// <summary>The word the file names its members' blend by; nothing when the file names none as text.</summary>
     public string? Blend { get; private set; }
@@ -149,7 +229,7 @@ internal sealed class FileText
                         {
                             faults.Add(new Noted(0, _kind switch
                             {
-                                FileKind.Ensemble => "An ensemble's file is one JSON object: its version, how its members' answers become one, its networks and the pipeline they were trained behind.",
+                                FileKind.Ensemble => "An ensemble's file is one JSON object: its version, how its members' answers become one, and its networks and the pipeline they were trained behind, or its members, each with its own.",
                                 FileKind.Boosted => "A boosted pair's file is one JSON object: its version, its basis, its correction and the pipeline they were trained behind.",
                                 _ => "A trained network's file is one JSON object: its version, its network and the pipeline it was trained behind.",
                             }));
@@ -236,6 +316,8 @@ internal sealed class FileText
                 string.Create(CultureInfo.InvariantCulture, $"This file was written against version {version}, by a newer DeepSharp than this one, which reads up to version {Version}: read it with that DeepSharp.")));
         }
 
+        WrittenAgainst = version ?? 0;
+
         return faults;
 
         // A part has been read past: the pipeline's bytes kept when they are the pipeline's, and a key that is no part named.
@@ -260,7 +342,7 @@ internal sealed class FileText
 
     // What is said of a key that is no part of the file: that it is another kind of file's, by name, or that it is nobody's.
     private string NotAPart(string key) =>
-        _kind != FileKind.Ensemble && key is NetworkDocument.NetworksKey or TrainedEnsemble.BlendKey
+        _kind != FileKind.Ensemble && key is NetworkDocument.NetworksKey or TrainedEnsemble.BlendKey or TrainedEnsemble.MembersKey
             ? $"'{key}' is a part of an ensemble's file, and this is read as {Noun[..^2]}: read an ensemble with TrainedEnsemble.FromJson."
             : _kind != FileKind.Boosted && key is BoostedNetwork.BasisKey or BoostedNetwork.CorrectionKey
                 ? $"'{key}' is a part of a boosted pair's file, and this is read as {Noun[..^2]}: read a boosted pair with BoostedNetwork.FromJson."
@@ -268,7 +350,7 @@ internal sealed class FileText
                     ? $"'{key}' is a part of a single network's file, and this is read as {Noun[..^2]}: read a single network with TrainedNetwork.FromJson."
                     : _kind switch
                     {
-                        FileKind.Ensemble => $"'{key}' is no part of an ensemble's file: it holds its version, how its members' answers become one, its networks and the pipeline they were trained behind.",
+                        FileKind.Ensemble => $"'{key}' is no part of an ensemble's file: it holds its version, how its members' answers become one, and its networks and the pipeline they were trained behind, or its members, each with its own.",
                         FileKind.Boosted => $"'{key}' is no part of a boosted pair's file: it holds its version, its basis, its correction, the digest the correction was fitted against and the pipeline they were trained behind.",
                         _ => $"'{key}' is no part of a trained network's file: it holds its version, its network, the pipeline it was trained behind and, for a checkpoint, what the run needs to go on.",
                     };
@@ -376,4 +458,22 @@ internal sealed class FileText
             Passed += taken;
         }
     }
+}
+
+/// <summary>One member of an ensemble's file of the second version: its own text, and the line and column it starts at in the file, both from one.</summary>
+/// <param name="Text">The member's text, exactly as the file holds it.</param>
+/// <param name="Line">The line of the file its first character stands on.</param>
+/// <param name="Column">The column of the file its first character stands at, in characters.</param>
+internal readonly record struct MemberText(string Text, int Line, int Column)
+{
+    /// <summary>The line of the file a line of the member's text stands on.</summary>
+    /// <param name="line">The line in the member's text, from one.</param>
+    /// <returns>The line in the file, from one.</returns>
+    public int LineIn(int line) => Line + line - 1;
+
+    /// <summary>The column of the file a place on a line of the member's text stands at: moved along only on its first line.</summary>
+    /// <param name="line">The line in the member's text, from one.</param>
+    /// <param name="column">The column on that line, from one.</param>
+    /// <returns>The column in the file, from one.</returns>
+    public int ColumnIn(int line, int column) => line == 1 ? Column + column - 1 : column;
 }

@@ -508,36 +508,41 @@ internal sealed class Measurement
     }
 
     /// <summary>The measures of several members' predictions combined, beside each member's own.</summary>
-    /// <param name="prepared">The run.</param>
-    /// <param name="members">What each member predicted, for each part the report names.</param>
+    /// <param name="members">Each member's pipeline, and what it predicted for each part the first member's report names.</param>
     /// <param name="blend">How the members' answers become one.</param>
     /// <param name="interval">The interval the ensemble was given, when it has one.</param>
     /// <returns>The ensemble's measures and each member's.</returns>
-    public static EnsembleMeasures OfEnsemble(PreparedData prepared, IReadOnlyList<IReadOnlyList<PartPredictions>> members, Blend blend, ConformalInterval? interval)
+    /// <remarks>
+    /// Each member is measured alone by its own pipeline's report, on its own rows; the ensemble by the first member's report, on
+    /// the rows of each part every member set aside alike, each member's answers brought back through its own pipeline and put in
+    /// the first member's order of rows before they meet.
+    /// </remarks>
+    public static EnsembleMeasures OfEnsemble(IReadOnlyList<MemberPredictions> members, Blend blend, ConformalInterval? interval)
     {
-        ArgumentNullException.ThrowIfNull(members);
-
         blend.ThrowIfUndefined();
-
-        if (members.Count < 2)
-        {
-            throw new ArgumentException(
-                string.Create(CultureInfo.InvariantCulture, $"An ensemble is of at least two members, and {members.Count} {(members.Count == 1 ? "was" : "were")} given: measure one network's predictions with Measure."),
-                nameof(members));
-        }
+        members.ThrowIfFewerThanTwo("members", "measure one model's predictions with Measure", nameof(members));
 
         // Every member is measured alone first, which holds its predictions to the part's own rows in their order.
-        Measures[] alone = [.. members.Select(member => Of(prepared, member))];
+        Measures[] alone = [.. members.Select(member => Of(member.Prepared, member.Parts))];
 
+        var prepared = members[0].Prepared;
         var report = prepared.Declaration.Report!;
-        var measurement = new Measurement(prepared, report, prepared.Declaration.Output!, Average(prepared)) { Metrics = EffectiveMetrics(report, interval is not null) };
-        var given = members.Select(member => Given(report, member)).ToArray();
+        IReadOnlyList<PreparedData> pipelines = [.. members.Select(member => member.Prepared)];
+
+        foreach (var part in report.Parts.Distinct())
+        {
+            pipelines.ThrowIfTheyMeasureApart(part);
+        }
+
+        var output = prepared.Declaration.Output!;
+        var measurement = new Measurement(prepared, report, output, Average(prepared)) { Metrics = EffectiveMetrics(report, interval is not null) };
+        var given = members.Select(member => Given(report, member.Parts)).ToArray();
 
         PartMeasures OnPart(Part part) =>
             measurement.On(
                 part,
                 given[0][part] with { Margins = interval?.Margins },
-                rows => measurement.Combined(blend, [.. given.Select(each => each[part])], part, rows));
+                () => blend.CombinedBack(members, part, output.Ones));
 
         return new EnsembleMeasures(new Measures(new ReportedAs(measurement.Metrics, report.Shown), prepared, [.. report.Parts.Select(OnPart)], null), alone, blend);
     }
@@ -571,36 +576,6 @@ internal sealed class Measurement
                     CultureInfo.InvariantCulture,
                     $"The margins are one number for each of the {_output.Answers.Count} answers, each nought or more, as an interval's half-width is: {margins.Count} were given."),
                 "predictions");
-        }
-    }
-
-    // What the members said of one part's rows, each brought back into the answer's own units and then combined.
-    private IReadOnlyList<double[]> Combined(Blend blend, PartPredictions[] members, Part part, AnswersRead rows)
-    {
-        if (blend == Blend.Vote)
-        {
-            ThrowIfNotVotable(rows.Actual, rows.ReadAt);
-        }
-
-        return blend.Combine([.. members.Select(member => _prepared.BackToOriginal(member.Predictions, part))], _output.Ones);
-    }
-
-    // Votes are counted of classes, each answer nought or one.
-    private void ThrowIfNotVotable(IReadOnlyList<double[]> actual, int[] readAt)
-    {
-        for (var row = 0; row < actual.Count; row++)
-        {
-            for (var column = 0; column < actual[row].Length; column++)
-            {
-                var value = actual[row][column];
-
-                if (Math.Abs(value) > Tolerance && Math.Abs(value - 1) > Tolerance)
-                {
-                    throw new InvalidOperationException(string.Create(
-                        CultureInfo.InvariantCulture,
-                        $"Row {readAt[row] + 1} of '{_output.Answers[column]}' is {value}, which is no class: votes are counted of classes, each nought or one. The members' answers to an amount are averaged."));
-                }
-            }
         }
     }
 
@@ -667,16 +642,11 @@ internal sealed class Measurement
     // The measures of one part: its rows' answers and keys, checked against the rows the predictions were made for, both
     // brought back into the answer's units, and measured beside the training rows' average brought back the same way.
     private PartMeasures On(Part part, PartPredictions given) =>
-        On(part, given, _ => _prepared.BackToOriginal(given.Predictions, part));
+        On(part, given, () => _prepared.BackToOriginal(given.Predictions, part));
 
-    /// <summary>A part's answers in their own units, and where each of its rows was read.</summary>
-    /// <param name="Actual">Each row's answers.</param>
-    /// <param name="ReadAt">Where each row was read, from nought.</param>
-    private readonly record struct AnswersRead(IReadOnlyList<double[]> Actual, int[] ReadAt);
-
-    // The measures of one part, the predictions brought back into the answer's units by the given hand: handed the answers in
-    // those units and where each row was read, it gives what was predicted for each row in them.
-    private PartMeasures On(Part part, PartPredictions given, Func<AnswersRead, IReadOnlyList<double[]>> predictedInOwnUnits)
+    // The measures of one part, the predictions brought back into the answer's units by the given hand, in the order the part
+    // hands its rows over: one model's own way back, or an ensemble's members' combined.
+    private PartMeasures On(Part part, PartPredictions given, Func<IReadOnlyList<double[]>> predictedInOwnUnits)
     {
         var handed = Handover.AnswersOf(_prepared, part);
         var rows = handed.Keys.Count;
@@ -707,7 +677,7 @@ internal sealed class Measurement
             ThrowIfBadMargins(margins);
         }
 
-        var model = new Answered(actual, predictedInOwnUnits(new AnswersRead(actual, readAt))) { InTheOrder = inTheOrder, Margins = margins };
+        var model = new Answered(actual, predictedInOwnUnits()) { InTheOrder = inTheOrder, Margins = margins };
         var average = new Answered(model.Actual, _prepared.BackToOriginal([.. Enumerable.Repeat(_average, rows)], part)) { InTheOrder = inTheOrder, Margins = margins };
 
         ThrowIfNotFinite(model.Predicted, readAt);
