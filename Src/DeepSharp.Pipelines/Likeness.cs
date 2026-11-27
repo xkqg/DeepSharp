@@ -175,32 +175,12 @@ public sealed record LikenessStep : IPipelineStep<LikenessStep>, IProducesEviden
     public ColumnState After(ColumnState before) => before;
 
     /// <inheritdoc />
-    public bool Equals(LikenessStep? other) => other is not null && WarnAbove.Equals(other.WarnAbove) && Columns.SequenceEqual(other.Columns);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(WarnAbove);
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    /// <inheritdoc />
     public Evidence Produce(PipelineView view)
     {
         ArgumentNullException.ThrowIfNull(view);
 
         var table = view.Table;
-        var named = Columns.Count > 0
-            ? Columns
-            : [.. table.Columns.Where(column => column.Kind != ColumnKind.Media).Select(column => column.Name).Where(name => name != table.Id && !view.Answers.Contains(name, StringComparer.Ordinal))];
+        var named = Columns.Count > 0 ? Columns : table.DefaultColumns(view.Answers);
         Standing[] parts = [Standing.Train, Standing.Validation, Standing.Calibration, Standing.Test];
         var present = parts.Where(part => view.Standings.Contains(part)).ToArray();
         var pairs = present.SelectMany((first, at) => present.Skip(at + 1).Select(second => new Pair(first, second))).ToArray();

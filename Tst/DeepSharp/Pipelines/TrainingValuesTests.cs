@@ -175,7 +175,11 @@ public class TrainingValuesTests
         Assert.Throws<InvalidOperationException>(() => training.Mean);
         Assert.Throws<InvalidOperationException>(() => training.Quantile(0.5));
         Assert.Throws<ArgumentOutOfRangeException>(() => table.TrainingValues("b", AllTraining(table)).Quantile(1.5));
-        Assert.Throws<ArgumentException>(() => table.TrainingValues("a", [Part.Train]));
+
+        var unmatched = Assert.Throws<ArgumentException>(() => table.TrainingValues("a", [Part.Train]));
+
+        Assert.Equal("parts", unmatched.ParamName);
+        Assert.StartsWith($"There are 1 parts for {table.RowCount} rows, and a row belongs to exactly one part.", unmatched.Message, StringComparison.Ordinal);
     }
 
     [Fact]

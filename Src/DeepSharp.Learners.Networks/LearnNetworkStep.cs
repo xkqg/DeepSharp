@@ -148,9 +148,9 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
     /// <remarks>A file written before the key was known says nothing of it, and is read as the optimizer's own rate, as it ran.</remarks>
     public PartDeclaration Schedule
     {
-        get => field.Kind is null ? NetworkWords.Schedules[0].Declared() : field;
+        get;
         init => field = ScheduleKey.Require([value])[0];
-    }
+    } = NetworkWords.Schedules[0].Declared();
 
     /// <summary>The most norm a step's gradients may have together before they move the network; nought, unless said, for none.</summary>
     /// <remarks>A file written before the key was known says nothing of it, and is read as a run whose gradients are not clipped, as it ran.</remarks>
@@ -216,16 +216,16 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
     /// <summary>When the run stops; at its last pass, unless said.</summary>
     public PartDeclaration Stopping
     {
-        get => field.Kind is null ? NetworkWords.Stopping[0].Declared() : field;
+        get;
         init => field = StoppingKey.Require([value])[0];
-    }
+    } = NetworkWords.Stopping[0].Declared();
 
     /// <summary>The name of the engine the run happens on; the light one, unless said.</summary>
     public string Engine
     {
-        get => field ?? LightEngine;
+        get;
         init => field = EngineKey.Require(value);
-    }
+    } = LightEngine;
 
     /// <summary>The number every random draw of the run is worked out from.</summary>
     public int Seed
@@ -314,53 +314,4 @@ public sealed record LearnNetworkStep : IPipelineStep<LearnNetworkStep>, INamesT
     /// <inheritdoc />
     /// <remarks>It changes no column: what it names happens once the pipeline has run.</remarks>
     public ColumnState After(ColumnState before) => before;
-
-    /// <inheritdoc />
-    public bool Equals(LearnNetworkStep? other) =>
-        other is not null
-        && Layers.SequenceEqual(other.Layers)
-        && Optimizer == other.Optimizer
-        && Loss == other.Loss
-        && Schedule == other.Schedule
-        && Clip.Equals(other.Clip)
-        && ClipValue.Equals(other.ClipValue)
-        && StepEvery == other.StepEvery
-        && Average.Equals(other.Average)
-        && JudgedByAverage == other.JudgedByAverage
-        && LossScaleStart.Equals(other.LossScaleStart)
-        && Recompute == other.Recompute
-        && Stopping == other.Stopping
-        && Engine == other.Engine
-        && Seed == other.Seed
-        && Epochs == other.Epochs
-        && Batch == other.Batch;
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        foreach (var layer in Layers)
-        {
-            hash.Add(layer);
-        }
-
-        hash.Add(Optimizer);
-        hash.Add(Loss);
-        hash.Add(Schedule);
-        hash.Add(Clip);
-        hash.Add(ClipValue);
-        hash.Add(StepEvery);
-        hash.Add(Average);
-        hash.Add(JudgedByAverage);
-        hash.Add(LossScaleStart);
-        hash.Add(Recompute);
-        hash.Add(Stopping);
-        hash.Add(Engine);
-        hash.Add(Seed);
-        hash.Add(Epochs);
-        hash.Add(Batch);
-
-        return hash.ToHashCode();
-    }
 }

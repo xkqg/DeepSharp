@@ -338,4 +338,15 @@ public class BoostedNetworkTests
         Assert.NotNull(property);
         Assert.False(property!.GetMethod!.IsPublic);
     }
+
+    [Fact]
+    public void TwoSetsOfAnswers_AreCombinedNumberByNumber_ByTheOperationGiven()
+    {
+        IReadOnlyList<double[]> first = [[1, 2], [3]];
+        IReadOnlyList<double[]> second = [[10, 20], [30]];
+
+        Assert.Equal([[11, 22], [33]], first.Combined(second, (one, other) => one + other));
+        Assert.Equal([[9, 18], [27]], second.Combined(first, (one, other) => one - other));
+        Assert.Empty(new List<double[]>().Combined(second, (one, other) => one + other));
+    }
 }

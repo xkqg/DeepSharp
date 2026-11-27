@@ -65,6 +65,32 @@ public interface IReadsAFile : INamesItsColumns
 }
 
 /// <summary>
+/// Opening a file's rows from where the file lies.
+/// </summary>
+internal static class ReadsAFileExtensions
+{
+    extension(IReadsAFile read)
+    {
+        /// <summary>Reads the bytes of the step's file once, where the pipeline's folder says it is, and hands them to the step to parse.</summary>
+        /// <param name="folder">Where a relative path the step holds is read from: the pipeline's folder.</param>
+        /// <returns>The rows, as the step reads its file.</returns>
+        /// <exception cref="FileNotFoundException">There is no file there.</exception>
+        /// <remarks>
+        /// The file is read whole and opened for sharing, as a file's bytes are read, so another pipeline reading the same file at
+        /// that moment is not refused by a lock.
+        /// </remarks>
+        public IRowSource OpenIn(SourceFolder folder)
+        {
+            ArgumentNullException.ThrowIfNull(folder);
+
+            var file = folder.Resolve(read.Path);
+
+            return read.Open(File.ReadAllBytes(file), file);
+        }
+    }
+}
+
+/// <summary>
 /// A source that is several files, read as one: where each lies, in the order the step names them, and its rows read from
 /// the files' bytes once they are in hand.
 /// </summary>

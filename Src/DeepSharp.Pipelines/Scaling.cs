@@ -603,25 +603,6 @@ public sealed record NormaliseRowStep : IPipelineStep<NormaliseRowStep>, IAddsCo
     public string Verb => Name;
 
     /// <inheritdoc />
-    public bool Equals(NormaliseRowStep? other) =>
-        other is not null && Norm == other.Norm && Columns.SequenceEqual(other.Columns);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(Norm);
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    /// <inheritdoc />
     public void AddTo(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);

@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace DeepSharp.Pipelines;
 
 /// <summary>
-/// Rows read from a JSON file holding an array of records, one object a row.
+/// Reads rows from a JSON file holding an array of records, one object a row.
 /// </summary>
 /// <remarks>
 /// JSON is text, as a comma-separated file is, so every value is handed over as the file writes it: words as the words
@@ -16,7 +16,7 @@ namespace DeepSharp.Pipelines;
 /// not one value to a cell, and it is refused by name with its record rather than flattened by a guess about what it was
 /// meant to be. The whole file is read when it is opened, so its rows are the ones it held at that moment.
 /// </remarks>
-internal sealed class JsonRowSource : IRowSource
+internal static class JsonRecords
 {
     // What each kind of value is, in words, for a refusal that says what stood where a record or a cell should.
     private static readonly Dictionary<JsonValueKind, string> Kinds = new()
@@ -30,16 +30,15 @@ internal sealed class JsonRowSource : IRowSource
         [JsonValueKind.Null] = "nothing",
     };
 
-    private readonly List<IReadOnlyList<string?>> _rows = [];
-
     /// <summary>Reads a JSON file's bytes.</summary>
     /// <param name="bytes">Every byte of the file.</param>
     /// <param name="file">What a refusal names the file as.</param>
+    /// <returns>The rows, a record each, the columns the keys the records use.</returns>
     /// <exception cref="FormatException">
     /// The bytes are not JSON, not an array of records, or a record names a key twice or holds a value that is not one
     /// value to a cell.
     /// </exception>
-    public JsonRowSource(byte[] bytes, string file)
+    public static InMemoryRowSource Read(byte[] bytes, string file)
     {
         // Read as text, as the file is, so a byte-order mark is taken as what it is rather than as the start of the first value.
         var text = bytes.AsText();
@@ -58,8 +57,7 @@ internal sealed class JsonRowSource : IRowSource
         {
             var records = Records(file, document.RootElement);
             var names = Names(file, records);
-
-            ColumnNames = names;
+            var rows = new List<IReadOnlyList<string?>>();
 
             foreach (var record in records)
             {
@@ -70,16 +68,12 @@ internal sealed class JsonRowSource : IRowSource
                     cells[names.IndexOf(property.Name)] = Cell(property.Value);
                 }
 
-                _rows.Add(cells);
+                rows.Add(cells);
             }
+
+            return new InMemoryRowSource(names, rows);
         }
     }
-
-    /// <inheritdoc />
-    public IReadOnlyList<string> ColumnNames { get; }
-
-    /// <inheritdoc />
-    public IEnumerable<IReadOnlyList<string?>> Rows => _rows;
 
     // The records: the array the file holds, every one of them an object.
     private static JsonElement[] Records(string file, JsonElement root)

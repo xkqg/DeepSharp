@@ -31,7 +31,7 @@ internal static class JsonElementExtensions
         {
             if (!element.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.String)
             {
-                throw new FormatException($"The step is missing a text value for '{name}'.");
+                throw MissingText(name);
             }
 
             return value.GetString()!;
@@ -146,6 +146,11 @@ internal static class JsonElementExtensions
             return Held(value, name);
         }
     }
+
+    /// <summary>What is said of a step that holds no text under a key.</summary>
+    /// <param name="name">The key.</param>
+    /// <returns>The refusal, naming the key.</returns>
+    internal static FormatException MissingText(string name) => new($"The step is missing a text value for '{name}'.");
 
     /// <summary>A number as a double, or a fault when it is larger than a double holds.</summary>
     private static double Held(JsonElement value, string name) =>

@@ -47,14 +47,7 @@ public sealed record ReadJsonStep : IPipelineStep<ReadJsonStep>, IOpensRows, IRe
     /// <exception cref="FormatException">
     /// The file is not JSON, is not an array of records, or holds a value that is not one value to a cell.
     /// </exception>
-    public IRowSource Open(SourceFolder folder)
-    {
-        ArgumentNullException.ThrowIfNull(folder);
-
-        var file = folder.Resolve(Path);
-
-        return Open(File.ReadAllBytes(file), file);
-    }
+    public IRowSource Open(SourceFolder folder) => this.OpenIn(folder);
 
     /// <inheritdoc />
     /// <remarks>Read as text as the file is, in the encoding its byte-order mark names, UTF-8 when it names none.</remarks>
@@ -66,7 +59,7 @@ public sealed record ReadJsonStep : IPipelineStep<ReadJsonStep>, IOpensRows, IRe
         ArgumentNullException.ThrowIfNull(bytes);
         ArgumentException.ThrowIfNullOrWhiteSpace(file);
 
-        return new JsonRowSource(bytes, file);
+        return JsonRecords.Read(bytes, file);
     }
 
     /// <inheritdoc />

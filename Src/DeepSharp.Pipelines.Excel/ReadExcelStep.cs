@@ -71,16 +71,7 @@ public sealed record ReadExcelStep : IPipelineStep<ReadExcelStep>, IOpensRows, I
     /// <exception cref="FormatException">
     /// The file is not a workbook, it has no sheet of the name the step gives, or the sheet has no row to name its columns.
     /// </exception>
-    public IRowSource Open(SourceFolder folder)
-    {
-        ArgumentNullException.ThrowIfNull(folder);
-
-        var file = folder.Resolve(Path);
-
-        // Read whole and opened for sharing, as a file's bytes are read, so another pipeline reading the same workbook at
-        // that moment is not refused by a lock.
-        return Open(File.ReadAllBytes(file), file);
-    }
+    public IRowSource Open(SourceFolder folder) => this.OpenIn(folder);
 
     /// <inheritdoc />
     /// <remarks>The sheet this step names, or the first.</remarks>
@@ -92,7 +83,7 @@ public sealed record ReadExcelStep : IPipelineStep<ReadExcelStep>, IOpensRows, I
         ArgumentNullException.ThrowIfNull(bytes);
         ArgumentException.ThrowIfNullOrWhiteSpace(file);
 
-        return new ExcelRowSource(bytes, file, Sheet);
+        return ExcelSheet.Read(bytes, file, Sheet);
     }
 
     /// <inheritdoc />

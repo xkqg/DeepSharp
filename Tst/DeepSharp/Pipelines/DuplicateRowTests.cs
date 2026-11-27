@@ -81,6 +81,9 @@ public class DuplicateRowTests
     {
         var table = new Table([new Column<double>("a", ColumnKind.Number, [1.0, 1.0])]);
 
-        Assert.Throws<ArgumentException>(() => table.Duplicates([Part.Train]));
+        var refused = Assert.Throws<ArgumentException>(() => table.Duplicates([Part.Train]));
+
+        Assert.Equal("parts", refused.ParamName);
+        Assert.StartsWith("There are 1 parts for 2 rows, and a row belongs to exactly one part.", refused.Message, StringComparison.Ordinal);
     }
 }

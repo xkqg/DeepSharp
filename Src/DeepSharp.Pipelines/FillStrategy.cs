@@ -1,6 +1,8 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
+
 namespace DeepSharp.Pipelines;
 
 /// <summary>
@@ -35,6 +37,13 @@ public readonly record struct FillStrategy
 
     /// <summary>The number this strategy fills with, for the one that takes a number.</summary>
     public double? Value { get; }
+
+    /// <summary>What is said of a gap that a strategy of refusing meets.</summary>
+    /// <param name="column">The column the gap is in.</param>
+    /// <param name="row">The row the gap is in, counting from nought.</param>
+    /// <returns>The refusal, naming the column and the row as a person counts them.</returns>
+    internal InvalidOperationException RefusedGap(string column, int row) =>
+        new(string.Create(CultureInfo.InvariantCulture, $"Row {row + 1} of '{column}' is a gap, and this pipeline says there should be none."));
 
     /// <summary>The strategy as it is spoken: <c>mean</c>, or <c>constant(-1)</c>.</summary>
     /// <returns>The name, with the number when there is one.</returns>

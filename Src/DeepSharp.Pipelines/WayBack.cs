@@ -93,6 +93,56 @@ internal sealed class ColumnsAsRead
 internal readonly record struct UndoLink(int At, IUndoesItself Step, FittedStepValues? Fitted);
 
 /// <summary>
+/// A step that can put a value back the way it found it.
+/// </summary>
+/// <remarks>
+/// For the answer, and only really for the answer. Scale what a model predicts and its predictions come
+/// back scaled: an error of 0.03 means nothing until it is 0.03 of something, and a report in scaled units
+/// flatters every model equally. So the way back is part of the saved pipeline rather than a sum somebody
+/// does by hand afterwards.
+/// <para>
+/// The way back follows a column up the steps: a step that undoes it is undone, and the way back goes on with
+/// the column the step made it from. Most steps change a column in place and need nothing but the number; a step
+/// that made a column from another says which, and a step that needs the row the number belongs to reads it.
+/// </para>
+/// </remarks>
+public interface IUndoesItself : IPipelineStep
+{
+    /// <summary>The column this step leaves behind.</summary>
+    string Produces { get; }
+
+    /// <summary>Puts one value back into the units this step found it in.</summary>
+    /// <param name="value">The value as this step left it.</param>
+    /// <param name="fitted">What this step learned, when it learned anything.</param>
+    /// <returns>The value in the units of the column before this step touched it.</returns>
+    double Undo(double value, FittedStepValues? fitted);
+
+    /// <summary>Whether undoing this step is on the way back of a column.</summary>
+    /// <param name="column">The column the way back follows.</param>
+    /// <returns><see langword="true"/> when this step left that column as it is: the column it produces, unless it says otherwise.</returns>
+    bool Undoes(string column) => column == Produces;
+
+    /// <summary>The column a value of a column this step undoes was made from, which the way back goes on to.</summary>
+    /// <param name="column">A column this step undoes.</param>
+    /// <returns>The same column, unless this step made it from another.</returns>
+    string From(string column) => column;
+
+    /// <summary>Puts one value back into the units this step found it in, with the row it belongs to as it was read.</summary>
+    /// <param name="value">The value as this step left it.</param>
+    /// <param name="fitted">What this step learned, when it learned anything.</param>
+    /// <param name="row">
+    /// The row the value belongs to, as it was read: the columns this step reads, and the column the answer comes
+    /// back to.
+    /// </param>
+    /// <returns>The value in the units of the column before this step touched it.</returns>
+    /// <remarks>
+    /// The same as without the row, for a step whose way back is the number alone. A step that needs its row — a
+    /// share of the birds in it, a return on the price in it — undoes here, and refuses without the row.
+    /// </remarks>
+    double Undo(double value, FittedStepValues? fitted, RowAsRead row) => Undo(value, fitted);
+}
+
+/// <summary>
 /// The way back for one answer: every step that changed it, the last one first, and the column as read it comes
 /// back to.
 /// </summary>

@@ -385,24 +385,6 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
     public ColumnState After(ColumnState before) => before;
 
     /// <inheritdoc />
-    public bool Equals(ProfileStep? other) => other is not null && RankAbove == other.RankAbove && Columns.SequenceEqual(other.Columns);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(RankAbove);
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    /// <inheritdoc />
     public Evidence Produce(PipelineView view)
     {
         ArgumentNullException.ThrowIfNull(view);
@@ -410,7 +392,7 @@ public sealed record ProfileStep : IPipelineStep<ProfileStep>, IProducesEvidence
         var table = view.Table;
         var measured = view.MeasuredRows();
         // Every column where it stands but the id, which names the rows and is never measured; named outright, it is profiled.
-        var names = Columns.Count > 0 ? Columns : [.. table.Columns.Where(column => column.Kind != ColumnKind.Media).Select(column => column.Name).Where(name => name != table.Id)];
+        var names = Columns.Count > 0 ? Columns : table.DefaultColumns([]);
         var profiles = names.Select(name => Profiled(view, table[name], measured)).ToArray();
         ProfileAlert[] alerts = [.. profiles.SelectMany(profile => Alerts(view, profile)), .. Pairs(view, names, measured)];
 
@@ -862,26 +844,6 @@ public sealed record CorrelationStep : IPipelineStep<CorrelationStep>, IProduces
 
     /// <inheritdoc />
     public ColumnState After(ColumnState before) => before;
-
-    /// <inheritdoc />
-    public bool Equals(CorrelationStep? other) =>
-        other is not null && Shown == other.Shown && Coefficient == other.Coefficient && Columns.SequenceEqual(other.Columns);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(Shown);
-        hash.Add(Coefficient);
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
 
     /// <inheritdoc />
     public Evidence Produce(PipelineView view)

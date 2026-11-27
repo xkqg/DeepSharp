@@ -149,22 +149,6 @@ public sealed record OrderByStep : IPipelineStep<OrderByStep>, IOrdersRows, IDes
     public ColumnState After(ColumnState before) => before;
 
     /// <inheritdoc />
-    public bool Equals(OrderByStep? other) => other is not null && Columns.SequenceEqual(other.Columns);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    /// <inheritdoc />
     /// <exception cref="InvalidOperationException">A key is a gap or not a number, or two rows are equal on every key.</exception>
     public IReadOnlyList<int> RowOrder(Table table)
     {

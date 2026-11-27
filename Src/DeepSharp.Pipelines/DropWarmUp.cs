@@ -73,22 +73,6 @@ public sealed record DropGapsStep : IPipelineStep<DropGapsStep>, IDropsRows, IDe
     public ColumnState After(ColumnState before) => before;
 
     /// <inheritdoc />
-    public bool Equals(DropGapsStep? other) => other is not null && Columns.SequenceEqual(other.Columns);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    /// <inheritdoc />
     /// <remarks>A column it names that a served row awaits is not judged: the gap there is the question.</remarks>
     public IReadOnlyList<bool> RowsToKeep(Table table)
     {

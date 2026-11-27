@@ -232,29 +232,6 @@ public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns,
     public string Verb => Name;
 
     /// <inheritdoc />
-    public bool Equals(TimePartsStep? other) =>
-        other is not null
-        && Column == other.Column
-        && AsCategories == other.AsCategories
-        && Parts.SequenceEqual(other.Parts);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(Column);
-        hash.Add(AsCategories);
-
-        foreach (var part in Parts)
-        {
-            hash.Add(part);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    /// <inheritdoc />
     public void AddTo(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);

@@ -150,31 +150,6 @@ public sealed record AddIndicatorStep : IPipelineStep<AddIndicatorStep>, IAddsCo
     public string Verb => Name;
 
     /// <inheritdoc />
-    public bool Equals(AddIndicatorStep? other) =>
-        other is not null
-        && Column == other.Column
-        && Kind == other.Kind
-        && Period == other.Period
-        && Columns.SequenceEqual(other.Columns);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(Column);
-        hash.Add(Kind);
-        hash.Add(Period);
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    /// <inheritdoc />
     public void AddTo(Table table)
     {
         ArgumentNullException.ThrowIfNull(table);

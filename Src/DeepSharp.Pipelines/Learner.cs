@@ -29,3 +29,26 @@ public interface INamesTheLearner : IPipelineStep
     /// </remarks>
     Needs Needs { get; }
 }
+
+/// <summary>
+/// The learner a declaration names, for the package that trains it.
+/// </summary>
+internal static class DeclaredLearnerExtensions
+{
+    extension(PipelineDeclaration declaration)
+    {
+        /// <summary>The learner the declaration names, or the reason the package asking is the wrong one to train it.</summary>
+        /// <typeparam name="TLearner">The learner step the package trains.</typeparam>
+        /// <param name="kind">What the package trains, as the refusal says it of a learner it does not: a network this package trains.</param>
+        /// <param name="hint">How a pipeline is declared for the package, as the refusal ends: declare one with .WithTorch(…).</param>
+        /// <returns>The learner step.</returns>
+        /// <exception cref="InvalidOperationException">The declaration names no learner, or names one the package does not train.</exception>
+        public TLearner Learner<TLearner>(string kind, string hint)
+            where TLearner : class, INamesTheLearner =>
+            declaration.Learner as TLearner
+            ?? throw new InvalidOperationException(
+                declaration.Learner is null
+                    ? $"This pipeline names no learner, so there is nothing here to train: {hint}"
+                    : $"This pipeline names '{declaration.Learner.Verb}', which is not {kind}: {hint}");
+    }
+}

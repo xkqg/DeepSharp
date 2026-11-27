@@ -394,7 +394,7 @@ public sealed class ColumnsParameter : StepParameter<IReadOnlyList<string>>
             }
         }
 
-        return value;
+        return value.Valued();
     }
 
     /// <inheritdoc />
@@ -804,7 +804,7 @@ public sealed class SeveralOfParameter<TEnum>(string key, string description, IR
 
         return at >= 0
             ? _only[at]
-            : throw new FormatException($"'{written}' is not one of the things '{Key}' can be: {string.Join(", ", Choices)}.");
+            : throw Vocabulary<TEnum>.NotOneOf(written, Key, Choices);
     }
 
     /// <inheritdoc />
@@ -843,7 +843,7 @@ public sealed class SeveralOfParameter<TEnum>(string key, string description, IR
             }
         }
 
-        return value;
+        return value.Valued();
     }
 
     /// <inheritdoc />
@@ -906,7 +906,7 @@ public sealed class FillStrategyParameter : StepParameter<FillStrategy>
     {
         if (!step.TryGetProperty(Key, out var with))
         {
-            throw new FormatException($"The step is missing a text value for '{Key}'.");
+            throw JsonElementExtensions.MissingText(Key);
         }
 
         switch (with.ValueKind)
@@ -924,7 +924,7 @@ public sealed class FillStrategyParameter : StepParameter<FillStrategy>
                 return new FillStrategy(with.RequiredString(KindKey), with.RequiredNumber(ValueKey));
 
             default:
-                throw new FormatException($"The step is missing a text value for '{Key}'.");
+                throw JsonElementExtensions.MissingText(Key);
         }
     }
 
@@ -1256,7 +1256,7 @@ public sealed class ColumnDeclarationsParameter(string key, string description, 
         var duplicate = value.GroupBy(column => column.Name).FirstOrDefault(group => group.Count() > 1);
 
         return duplicate is null
-            ? value
+            ? value.Valued()
             : throw new ArgumentException($"The column '{duplicate.Key}' is declared twice.", Key);
     }
 
@@ -1336,8 +1336,16 @@ internal static class Vocabulary<TEnum>
             }
         }
 
-        throw new FormatException($"'{written}' is not one of the things '{key}' can be: {string.Join(", ", Words)}.");
+        throw NotOneOf(written, key, Words);
     }
+
+    /// <summary>What is said of a word that is none of the ones a key can be written as.</summary>
+    /// <param name="written">The word as a file holds it.</param>
+    /// <param name="key">The key it was written under.</param>
+    /// <param name="words">The words the key may be written as.</param>
+    /// <returns>The refusal, naming the words.</returns>
+    public static FormatException NotOneOf(string written, string key, IEnumerable<string> words) =>
+        new($"'{written}' is not one of the things '{key}' can be: {string.Join(", ", words)}.");
 
     /// <summary>Whether a value is one of the set's, and not a number cast to it.</summary>
     /// <param name="value">The value.</param>

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Learners.ML;
 using DeepSharp.Learners.Networks;
 using DeepSharp.Networks;
 using DeepSharp.Pipelines;
@@ -154,7 +155,19 @@ public class DeclaredNetworkTests
     {
         var refused = Assert.Throws<InvalidOperationException>(() => Passengers().Build().Train());
 
-        Assert.Contains("names no learner", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "This pipeline names no learner, so there is nothing here to train: declare one with .WithTorch(…) or .WithTensorflow(…).",
+            refused.Message);
+    }
+
+    [Fact]
+    public void APipelineThatNamesAnotherLearner_IsNotOneThisPackageTrains()
+    {
+        var refused = Assert.Throws<InvalidOperationException>(() => Passengers().WithML(trainer => trainer.FastTree(trees: 5)).Build().Train());
+
+        Assert.Equal(
+            "This pipeline names 'learn.ml', which is not a network this package trains: declare one with .WithTorch(…) or .WithTensorflow(…).",
+            refused.Message);
     }
     [Fact]
     public void EveryWordADeclaredNetworkIsWrittenIn_BecomesTheLayerTheSavedNetworkWritesUnderThatName()

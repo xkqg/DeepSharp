@@ -48,6 +48,13 @@ public class BareTrainingDataTests
     }
 
     [Fact]
+    public void TheSettingsOfATreeTrainer_AreReadOnce_AndAForestHasNoRate()
+    {
+        Assert.Equal(new TreeSettings(7, 9, 3, 0.5), TreeSettings.Of(new MLTrainerLine().FastTree(leaves: 7, trees: 9, leastRows: 3, rate: 0.5).Trainer));
+        Assert.Equal(new TreeSettings(4, 6, 2, 0), TreeSettings.Of(new MLTrainerLine().FastForest(leaves: 4, trees: 6, leastRows: 2).Trainer));
+    }
+
+    [Fact]
     public void ThreeOrMoreClasses_AreLearnedAsANumber_NotRefused()
     {
         // The same rule the pipeline-backed door keeps: a learner that takes several classes is a network, so a

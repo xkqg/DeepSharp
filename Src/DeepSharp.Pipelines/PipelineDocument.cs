@@ -650,7 +650,7 @@ internal sealed partial class PipelineDocument
         {
             throw new FormatException(course.Skipped.Contains(at)
                 ? $"Step {at + 1}, '{step.Verb}', was left out of the run this file was written from, so nothing it learned can be here."
-                : $"Step {at + 1}, '{step.Verb}', learns nothing, so nothing it learned can be here.");
+                : PreparedData.NothingToLearnAt(at, step));
         }
 
         if (!fitted.TryAdd(at, entry.Learned))

@@ -134,57 +134,61 @@ public sealed class FittedMLModel
     // is a probability between nought and one — the same promise the networks side's own activation keeps.
     private static ITransformer Trained(MLContext context, LearnMLStep step, IDataView rows, bool classes)
     {
-        var settings = step.Trainer.Settings.ToDictionary(setting => setting.Key, setting => setting.Value, StringComparer.Ordinal);
-
-        int Whole(string key) => (int)settings[key].Number;
+        var trees = TreeSettings.Of(step.Trainer);
 
         return step.Trainer.Kind switch
         {
-            "fastTree" when classes => context.BinaryClassification.Trainers.FastTree(new FastTreeBinaryTrainer.Options
-            {
-                FeatureColumnName = HandedRows.FeaturesColumn,
-                LabelColumnName = HandedRows.LabelColumn,
-                NumberOfLeaves = Whole("leaves"),
-                NumberOfTrees = Whole("trees"),
-                MinimumExampleCountPerLeaf = Whole("leastRows"),
-                LearningRate = settings["rate"].Number,
-                Seed = step.Seed,
-            }).Fit(rows),
+            "fastTree" when classes => context.BinaryClassification.Trainers.FastTree(Boosted<FastTreeBinaryTrainer.Options>(trees, step.Seed)).Fit(rows),
 
-            "fastForest" when classes => context.BinaryClassification.Trainers.FastForest(new FastForestBinaryTrainer.Options
-            {
-                FeatureColumnName = HandedRows.FeaturesColumn,
-                LabelColumnName = HandedRows.LabelColumn,
-                NumberOfLeaves = Whole("leaves"),
-                NumberOfTrees = Whole("trees"),
-                MinimumExampleCountPerLeaf = Whole("leastRows"),
-                Seed = step.Seed,
-            }).Append(context.BinaryClassification.Calibrators.Platt()).Fit(rows),
+            "fastForest" when classes => context.BinaryClassification.Trainers.FastForest(Pinned<FastForestBinaryTrainer.Options>(trees, step.Seed))
+                .Append(context.BinaryClassification.Calibrators.Platt()).Fit(rows),
 
-            "fastTree" => context.Regression.Trainers.FastTree(new FastTreeRegressionTrainer.Options
-            {
-                FeatureColumnName = HandedRows.FeaturesColumn,
-                LabelColumnName = HandedRows.LabelColumn,
-                NumberOfLeaves = Whole("leaves"),
-                NumberOfTrees = Whole("trees"),
-                MinimumExampleCountPerLeaf = Whole("leastRows"),
-                LearningRate = settings["rate"].Number,
-                Seed = step.Seed,
-            }).Fit(rows),
+            "fastTree" => context.Regression.Trainers.FastTree(Boosted<FastTreeRegressionTrainer.Options>(trees, step.Seed)).Fit(rows),
 
             // Every word the vocabulary offers is one of the four arms above, and a test holds the two lists to each
             // other, so there is no arm here for a word that cannot be written.
-            _ => context.Regression.Trainers.FastForest(new FastForestRegressionTrainer.Options
-            {
-                FeatureColumnName = HandedRows.FeaturesColumn,
-                LabelColumnName = HandedRows.LabelColumn,
-                NumberOfLeaves = Whole("leaves"),
-                NumberOfTrees = Whole("trees"),
-                MinimumExampleCountPerLeaf = Whole("leastRows"),
-                Seed = step.Seed,
-            }).Fit(rows),
+            _ => context.Regression.Trainers.FastForest(Pinned<FastForestRegressionTrainer.Options>(trees, step.Seed)).Fit(rows),
         };
     }
+
+    // The options every tree trainer is given, whichever it is: the columns the rows were handed over in, the size of the
+    // trees and the seed, so nothing is decided by what the library defaults to today.
+    private static TOptions Pinned<TOptions>(TreeSettings trees, int seed)
+        where TOptions : TreeOptions, new() =>
+        new()
+        {
+            FeatureColumnName = HandedRows.FeaturesColumn,
+            LabelColumnName = HandedRows.LabelColumn,
+            NumberOfLeaves = trees.Leaves,
+            NumberOfTrees = trees.Trees,
+            MinimumExampleCountPerLeaf = trees.LeastRows,
+            Seed = seed,
+        };
+
+    // The same, and how much of each tree's correction a boosted trainer takes.
+    private static TOptions Boosted<TOptions>(TreeSettings trees, int seed)
+        where TOptions : BoostedTreeOptions, new()
+    {
+        var options = Pinned<TOptions>(trees, seed);
+
+        options.LearningRate = trees.Rate;
+
+        return options;
+    }
+}
+
+/// <summary>What a tree trainer's word says of its trees: how big they grow, how many there are, and how much of each correction is taken.</summary>
+/// <param name="Leaves">How many leaves one tree may grow to.</param>
+/// <param name="Trees">How many trees are grown.</param>
+/// <param name="LeastRows">The fewest training rows a leaf may stand for.</param>
+/// <param name="Rate">How much of each tree's correction is taken; nought for a forest, whose trees are grown apart and take none.</param>
+internal readonly record struct TreeSettings(int Leaves, int Trees, int LeastRows, double Rate)
+{
+    /// <summary>The settings a trainer's word carries, read once.</summary>
+    /// <param name="trainer">The trainer, as a pipeline declares it.</param>
+    /// <returns>The settings; the rate nought where the word takes none.</returns>
+    public static TreeSettings Of(PartDeclaration trainer) =>
+        new(trainer.Whole("leaves"), trainer.Whole("trees"), trainer.Whole("leastRows"), trainer.Holds("rate") ? trainer.Number("rate") : 0);
 }
 
 /// <summary>One row as ML.NET hands a prediction back.</summary>

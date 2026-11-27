@@ -52,7 +52,7 @@ internal sealed class ParquetRowSource : IStatesKinds
         [typeof(ReadOnlyMemory<byte>)] = "raw bytes",
     };
 
-    private readonly List<IReadOnlyList<string?>> _rows;
+    private readonly InMemoryRowSource _held;
 
     /// <summary>Reads a Parquet file's bytes.</summary>
     /// <param name="bytes">Every byte of the file.</param>
@@ -64,16 +64,15 @@ internal sealed class ParquetRowSource : IStatesKinds
         // pool and waited for there: nothing the caller's context holds is waited on, so nothing can wait on the wait.
         var read = Task.Run(() => Read(bytes, file)).GetAwaiter().GetResult();
 
-        ColumnNames = read.ColumnNames;
+        _held = new InMemoryRowSource(read.ColumnNames, read.Rows);
         StatedKinds = read.StatedKinds;
-        _rows = read.Rows;
     }
 
     /// <inheritdoc />
-    public IReadOnlyList<string> ColumnNames { get; }
+    public IReadOnlyList<string> ColumnNames => _held.ColumnNames;
 
     /// <inheritdoc />
-    public IEnumerable<IReadOnlyList<string?>> Rows => _rows;
+    public IEnumerable<IReadOnlyList<string?>> Rows => _held.Rows;
 
     /// <inheritdoc />
     public IReadOnlyDictionary<string, ColumnKind> StatedKinds { get; }
@@ -111,7 +110,7 @@ internal sealed class ParquetRowSource : IStatesKinds
         }
         catch (IOException unreadable)
         {
-            throw new FormatException($"{file} cannot be read as a Parquet file: {unreadable.Message}", unreadable);
+            throw Unreadable(file, unreadable);
         }
     }
 
@@ -162,9 +161,13 @@ internal sealed class ParquetRowSource : IStatesKinds
         }
         catch (Exception unreadable) when (unreadable is InvalidDataException or IOException)
         {
-            throw new FormatException($"{file} cannot be read as a Parquet file: {unreadable.Message}", unreadable);
+            throw Unreadable(file, unreadable);
         }
     }
+
+    // Every file the reader cannot read is refused in these words, whichever of its reads found it so.
+    private static FormatException Unreadable(string file, Exception unreadable) =>
+        new($"{file} cannot be read as a Parquet file: {unreadable.Message}", unreadable);
 
     // The file's columns, each one value to a row of a type it can be read as; a column that is not is refused by name.
     private static DataField[] Columns(string file, ParquetSchema schema)

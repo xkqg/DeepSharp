@@ -1,7 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using System.Globalization;
 using System.Text.Json;
 
 namespace DeepSharp.Pipelines;
@@ -132,8 +131,7 @@ public sealed record SettleGapsStep : IPipelineStep<SettleGapsStep>, IAddsColumn
             }
 
             column[row] = Strategy.Name == With.Refuse.Name
-                ? throw new InvalidOperationException(
-                    string.Create(CultureInfo.InvariantCulture, $"Row {row + 1} of '{Column}' is a gap, and this pipeline says there should be none."))
+                ? throw Strategy.RefusedGap(Column, row)
                 : asValue(Strategy.Name == With.Zero.Name ? 0 : Strategy.Value!.Value);
         }
     }

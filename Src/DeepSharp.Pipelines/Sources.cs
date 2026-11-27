@@ -43,14 +43,7 @@ public sealed record ReadCsvStep : IPipelineStep<ReadCsvStep>, IOpensRows, IRead
     /// A relative path is read from the pipeline's folder; the path stays as it was written. The file's bytes are read once
     /// and parsed as <see cref="Open(byte[], string)"/> parses them.
     /// </remarks>
-    public IRowSource Open(SourceFolder folder)
-    {
-        ArgumentNullException.ThrowIfNull(folder);
-
-        var file = folder.Resolve(Path);
-
-        return Open(File.ReadAllBytes(file), file);
-    }
+    public IRowSource Open(SourceFolder folder) => this.OpenIn(folder);
 
     /// <inheritdoc />
     /// <remarks>Read as text as the file is, in the encoding its byte-order mark names, UTF-8 when it names none.</remarks>

@@ -571,7 +571,7 @@ public class PipelineFileTests
         var fault = Assert.Single(Refused(json).Faults);
 
         Assert.Equal(Where(json, "{\"step\":\"read.csv\",\"prefix\""), At(fault));
-        Assert.Contains("learns nothing", fault.Message, StringComparison.Ordinal);
+        Assert.Contains("Step 1, 'read.csv', learns nothing, so nothing it learned can be here.", fault.Message, StringComparison.Ordinal);
     }
 
     [Fact]

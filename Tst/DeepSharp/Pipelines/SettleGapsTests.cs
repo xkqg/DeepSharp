@@ -55,8 +55,7 @@ public class SettleGapsTests
     {
         var refused = Assert.Throws<InvalidOperationException>(() => new SettleGapsStep("a", With.Refuse).AddTo(Numbers(1, null, 3)));
 
-        Assert.Contains("'a'", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("Row 2", refused.Message, StringComparison.Ordinal);
+        Assert.Equal("Row 2 of 'a' is a gap, and this pipeline says there should be none.", refused.Message);
     }
 
     [Fact]

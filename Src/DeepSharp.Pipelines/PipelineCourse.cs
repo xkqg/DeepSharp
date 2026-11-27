@@ -178,11 +178,14 @@ internal readonly record struct CourseStepJudgement(IPipelineStep? Made, IReadOn
 /// prepared pipeline, in order, each waiting for what only its person knows — the file, the columns, the bounds — while
 /// what merely settles how starts as its verb starts it. It is a file of its own, as a preset is, read through the same
 /// door with the same care, and it is not a pipeline: it holds what has been said of each verb, never a step, because a
-/// step cannot be half made.
+/// step cannot be half made. Two courses are equal when they hold the same steps, each saying the same, in the same order.
 /// </remarks>
 public sealed record PipelineCourse
 {
-    private PipelineCourse(CourseStep[] steps) => Steps = Array.AsReadOnly(steps);
+    /// <summary>What is said of a course of no step.</summary>
+    internal const string NoStep = "A course holds at least one step.";
+
+    private PipelineCourse(CourseStep[] steps) => Steps = steps.Valued();
 
     /// <summary>
     /// The course for the rows of a table, rows that do not depend on one another: a passenger list, a customer file.
@@ -257,7 +260,7 @@ public sealed record PipelineCourse
 
         if (kept.Length == 0)
         {
-            throw new ArgumentException("A course holds at least one step.", nameof(steps));
+            throw new ArgumentException(NoStep, nameof(steps));
         }
 
         if (kept.Any(step => step is null))
@@ -464,23 +467,5 @@ public sealed record PipelineCourse
         ArgumentNullException.ThrowIfNull(catalog);
 
         return PipelineDocument.ReadCourse(json, catalog);
-    }
-
-    /// <summary>Whether two courses say the same steps in the same order.</summary>
-    /// <param name="other">The course to compare with.</param>
-    /// <returns><see langword="true"/> when both hold the same steps, each saying the same, in the same order.</returns>
-    public bool Equals(PipelineCourse? other) => other is not null && Steps.SequenceEqual(other.Steps);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        foreach (var step in Steps)
-        {
-            hash.Add(step);
-        }
-
-        return hash.ToHashCode();
     }
 }

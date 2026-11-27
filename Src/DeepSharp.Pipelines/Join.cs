@@ -206,27 +206,6 @@ public sealed record ReadJoinStep : IPipelineStep<ReadJoinStep>, IOpensRows, IRe
         return Header(CsvRowSource.HeaderOf(left), left, CsvRowSource.HeaderOf(right), right).Names;
     }
 
-    /// <inheritdoc />
-    public bool Equals(ReadJoinStep? other) =>
-        other is not null && Left == other.Left && Right == other.Right && Unmatched == other.Unmatched && On.SequenceEqual(other.On, StringComparer.Ordinal);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(Left);
-        hash.Add(Right);
-        hash.Add(Unmatched);
-
-        foreach (var key in On)
-        {
-            hash.Add(key);
-        }
-
-        return hash.ToHashCode();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>

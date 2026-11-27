@@ -424,31 +424,6 @@ public sealed record DistributionStep : IPipelineStep<DistributionStep>, IMakesT
         return Remainder is null ? before : Answers.Aggregate(before, (state, answer) => state.With(answer, ColumnKind.Number));
     }
 
-    /// <inheritdoc />
-    public bool Equals(DistributionStep? other) =>
-        other is not null
-        && ScaleBy == other.ScaleBy
-        && Ordered == other.Ordered
-        && Remainder == other.Remainder
-        && Columns.SequenceEqual(other.Columns, StringComparer.Ordinal);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(ScaleBy);
-        hash.Add(Ordered);
-        hash.Add(Remainder);
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
@@ -548,25 +523,6 @@ public sealed record LabelsStep : IPipelineStep<LabelsStep>, INamesTheAnswer, ID
     /// <inheritdoc />
     public ColumnState After(ColumnState before) => before;
 
-    /// <inheritdoc />
-    public bool Equals(LabelsStep? other) =>
-        other is not null && Ones == other.Ones && Columns.SequenceEqual(other.Columns, StringComparer.Ordinal);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(Ones);
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>
@@ -627,22 +583,6 @@ public sealed record NumbersStep : IPipelineStep<NumbersStep>, INamesTheAnswer, 
 
     /// <inheritdoc />
     public ColumnState After(ColumnState before) => before;
-
-    /// <inheritdoc />
-    public bool Equals(NumbersStep? other) => other is not null && Columns.SequenceEqual(other.Columns, StringComparer.Ordinal);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>

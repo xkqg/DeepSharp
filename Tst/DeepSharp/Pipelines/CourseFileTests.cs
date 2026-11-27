@@ -188,7 +188,7 @@ public class CourseFileTests
     {
         var faults = Refused("""{"version": 7, "course": []}""");
 
-        Assert.Contains(faults, fault => fault.Message.Contains("at least one step", StringComparison.Ordinal));
+        Assert.Contains(faults, fault => fault.Message.Contains("A course holds at least one step.", StringComparison.Ordinal));
     }
 
     [Fact]

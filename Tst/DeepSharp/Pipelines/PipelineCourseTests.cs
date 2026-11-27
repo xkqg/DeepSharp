@@ -63,7 +63,9 @@ public class PipelineCourseTests
     [Fact]
     public void ACourseWithNoStep_IsRefused()
     {
-        Assert.Throws<ArgumentException>(() => PipelineCourse.Of([]));
+        var refused = Assert.Throws<ArgumentException>(() => PipelineCourse.Of([]));
+
+        Assert.StartsWith("A course holds at least one step.", refused.Message, StringComparison.Ordinal);
         Assert.Throws<ArgumentNullException>(() => PipelineCourse.Of(null!));
     }
 

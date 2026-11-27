@@ -266,7 +266,7 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
 
         Columns = ColumnsKey.Require([.. columns]);
         Remainder = RemainderKey.Require(remainder);
-        Taking = [.. Columns.Where(column => !column.Excluded)];
+        Taking = Columns.Where(column => !column.Excluded).Valued();
 
         if (Taking.Count == 0 && Remainder != Remainder.Keep)
         {
@@ -501,25 +501,6 @@ public sealed record DeclareStep : IPipelineStep<DeclareStep>, IBindsColumns, ID
     /// a column it excludes, which nothing below may read.
     /// </remarks>
     public ColumnState After(ColumnState before) => ColumnState.Declared(Columns, Remainder);
-
-    /// <inheritdoc />
-    public bool Equals(DeclareStep? other) =>
-        other is not null && Remainder == other.Remainder && Columns.SequenceEqual(other.Columns);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(Remainder);
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
 
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>

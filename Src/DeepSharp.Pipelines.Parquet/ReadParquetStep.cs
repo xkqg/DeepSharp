@@ -49,14 +49,7 @@ public sealed record ReadParquetStep : IPipelineStep<ReadParquetStep>, IOpensRow
     /// The file is not a Parquet file, or a column holds something other than one value to a row: a list, a group of
     /// fields, raw bytes.
     /// </exception>
-    public IRowSource Open(SourceFolder folder)
-    {
-        ArgumentNullException.ThrowIfNull(folder);
-
-        var file = folder.Resolve(Path);
-
-        return Open(File.ReadAllBytes(file), file);
-    }
+    public IRowSource Open(SourceFolder folder) => this.OpenIn(folder);
 
     /// <inheritdoc />
     /// <remarks>Every row group, in the order the file holds them, with what the file states each column holds.</remarks>

@@ -98,7 +98,7 @@ internal sealed partial class PipelineDocument
 
         if (written.GetArrayLength() == 0)
         {
-            _text.Fault(_text.Of(CourseKey), "A course holds at least one step.");
+            _text.Fault(_text.Of(CourseKey), PipelineCourse.NoStep);
 
             return steps;
         }

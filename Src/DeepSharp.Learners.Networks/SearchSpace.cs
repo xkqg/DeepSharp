@@ -321,7 +321,7 @@ public sealed class Candidate : IEquatable<Candidate>
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        Settings = [.. settings];
+        Settings = settings.Valued();
 
         if (Settings.Select(each => each.Name).Distinct(StringComparer.Ordinal).Count() != Settings.Count)
         {
@@ -374,23 +374,13 @@ public sealed class Candidate : IEquatable<Candidate>
     }
 
     /// <inheritdoc />
-    public bool Equals(Candidate? other) => other is not null && Settings.SequenceEqual(other.Settings);
+    public bool Equals(Candidate? other) => other is not null && Settings.Equals(other.Settings);
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => Equals(obj as Candidate);
 
     /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        foreach (var setting in Settings)
-        {
-            hash.Add(setting);
-        }
-
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => Settings.GetHashCode();
 
     private Setting Named(string name) =>
         Settings.FirstOrDefault(each => each.Name == name) is { Name: not null } found

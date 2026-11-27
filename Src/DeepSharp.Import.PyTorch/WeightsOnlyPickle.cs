@@ -376,11 +376,16 @@ internal sealed class WeightsOnlyPickle(byte[] pickle)
         return items;
     }
 
+    // The two faults of text and of reach that several reads of the pickle meet, said once.
+    private FormatException EndsInsideTheInstruction() => new($"data.pkl ends inside the instruction at byte {_instruction}.");
+
+    private FormatException NoUtf8Text() => new($"data.pkl holds text at byte {_instruction} that is no UTF-8.");
+
     private ReadOnlySpan<byte> Bytes(long count)
     {
         if (count > pickle.Length - _at)
         {
-            throw new FormatException($"data.pkl ends inside the instruction at byte {_instruction}.");
+            throw EndsInsideTheInstruction();
         }
 
         _at += (int)count;
@@ -395,7 +400,7 @@ internal sealed class WeightsOnlyPickle(byte[] pickle)
 
         if (end < 0)
         {
-            throw new FormatException($"data.pkl ends inside the instruction at byte {_instruction}.");
+            throw EndsInsideTheInstruction();
         }
 
         var line = Text(pickle.AsSpan(_at, end - _at));
@@ -412,7 +417,7 @@ internal sealed class WeightsOnlyPickle(byte[] pickle)
         }
         catch (DecoderFallbackException)
         {
-            throw new FormatException($"data.pkl holds text at byte {_instruction} that is no UTF-8.");
+            throw NoUtf8Text();
         }
     }
 
@@ -428,7 +433,7 @@ internal sealed class WeightsOnlyPickle(byte[] pickle)
         {
             if (at + 2 >= bytes.Length || bytes[at + 2] is < 0x80 or > 0xBF)
             {
-                throw new FormatException($"data.pkl holds text at byte {_instruction} that is no UTF-8.");
+                throw NoUtf8Text();
             }
 
             var half = (char)(0xD000 | ((bytes[at + 1] & 0x3F) << 6) | (bytes[at + 2] & 0x3F));

@@ -87,16 +87,7 @@ public static class TrainWithMLExtensions
 
     // The trainer the declaration names, or the reason this door is the wrong one for it.
     private static LearnMLStep Declared(PipelineDeclaration declaration) =>
-        declaration.Learner switch
-        {
-            LearnMLStep step => step,
-            { } other => throw new InvalidOperationException(
-                $"This pipeline is declared for '{other.Verb}', not for a trainer from ML.NET. Train what it names through that "
-                + "learner's own door, or declare this one with .WithML(trainer => trainer.FastTree()), whose verb is 'learn.ml'."),
-            _ => throw new InvalidOperationException(
-                "This pipeline names no learner, so there is nothing here to train. Name one below the output — "
-                + ".WithML(trainer => trainer.FastTree()) for a tree from ML.NET — and run it again."),
-        };
+        declaration.Learner<LearnMLStep>("a trainer from ML.NET", "declare one with .WithML(trainer => trainer.FastTree()), whose verb is 'learn.ml'.");
 
     // The rows a pipeline's Batch hands over, as the TrainingData every fit goes through now: the one conversion both
     // doors share lives in FittedMLModel.Fit, and this is the pipeline side's own edge onto it.

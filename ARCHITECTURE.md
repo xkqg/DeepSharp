@@ -91,10 +91,14 @@ Src/DeepSharp.Pipelines/          the data side
     CellTextExtensions.cs TypedValueExtensions.cs KindProposal.cs
                                     the one reading of a cell as each kind, the one writing of a typed value as a cell,
                                     and the kinds a source's cells propose
-    Walk.cs Course.cs Execution.cs Views.cs Fitting.cs Handover.cs NeedsExtensions.cs
+    Walk.cs Course.cs Execution.cs Views.cs Fitting.cs FittedStepValues.cs Handover.cs NeedsExtensions.cs
                                     the one walk every run is, the steps a run for a learner takes and leaves out, the
-                                    data after any step, what a fit learned, the handover, and what each need says
-    Outputs.cs WayBack.cs           what a model is asked to predict, and how its answers come back into their units
+                                    data after any step, a pipeline that has been run, what one step's fit wrote down, the
+                                    handover, and what each need says
+    Outputs.cs WayBack.cs           what a model is asked to predict, and how its answers come back into their units: the
+                                    step that can put a value back, and the way back it makes
+    ValueList.cs                    the list every list a step holds is handed back as, equal to another of the same items,
+                                    so a step is a record and compares itself
     FileTextExtensions.cs           a file's own words shown in a message as words, the core's rule kept here too
 Src/DeepSharp.Pipelines.DataFrame/   a reader of Microsoft's DataFrame, through MatPlotLibNet.DataFrame
 Src/DeepSharp.Pipelines.Parquet/     a reader of Apache Parquet files, through Parquet.Net

@@ -157,11 +157,7 @@ public static class TableExtensions
             ArgumentNullException.ThrowIfNull(table);
             ArgumentNullException.ThrowIfNull(parts);
 
-            if (parts.Count != table.RowCount)
-            {
-                throw new ArgumentException(
-                    $"There are {parts.Count} parts for {table.RowCount} rows, and a row belongs to exactly one part.", nameof(parts));
-            }
+            table.ThrowIfNotOnePartPerRow(parts);
 
             return table.ValuesOf(column, parts.IsTraining);
         }

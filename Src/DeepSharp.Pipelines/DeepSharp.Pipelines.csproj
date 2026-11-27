@@ -30,6 +30,11 @@
          and hands them back in the order they were handed in by the one bridge from the served order, rather than keeping
          its own copy of either. -->
     <InternalsVisibleTo Include="DeepSharp.Learners.MLNet" />
+    <!-- The readers of a workbook, of JSON and of Parquet open their file through the one read every reader of a file opens
+         it by, rather than each keeping its own copy of it. -->
+    <InternalsVisibleTo Include="DeepSharp.Pipelines.Excel" />
+    <InternalsVisibleTo Include="DeepSharp.Pipelines.Json" />
+    <InternalsVisibleTo Include="DeepSharp.Pipelines.Parquet" />
   </ItemGroup>
 
   <ItemGroup>

@@ -251,33 +251,6 @@ public sealed record ReportStep : IPipelineStep<ReportStep>, INamesTheMeasures, 
     /// <inheritdoc />
     public ColumnState After(ColumnState before) => before;
 
-    /// <inheritdoc />
-    public bool Equals(ReportStep? other) =>
-        other is not null && Metrics.SequenceEqual(other.Metrics) && Parts.SequenceEqual(other.Parts) && Shown.SequenceEqual(other.Shown);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        foreach (var metric in Metrics)
-        {
-            hash.Add(metric);
-        }
-
-        foreach (var part in Parts)
-        {
-            hash.Add(part);
-        }
-
-        foreach (var shown in Shown)
-        {
-            hash.Add(shown);
-        }
-
-        return hash.ToHashCode();
-    }
-
     /// <summary>Reads this step back out of a file.</summary>
     /// <param name="element">The JSON object the step was written as.</param>
     /// <returns>The step the file describes.</returns>

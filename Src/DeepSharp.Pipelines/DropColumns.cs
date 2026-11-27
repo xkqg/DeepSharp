@@ -74,22 +74,6 @@ public sealed record DropColumnsStep : IPipelineStep<DropColumnsStep>, IDropsCol
     }
 
     /// <inheritdoc />
-    public bool Equals(DropColumnsStep? other) => other is not null && Columns.SequenceEqual(other.Columns);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    /// <inheritdoc />
     /// <exception cref="InvalidOperationException">A column is not on the table at this point.</exception>
     public void DropFrom(Table table)
     {

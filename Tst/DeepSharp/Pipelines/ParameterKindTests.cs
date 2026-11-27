@@ -199,8 +199,7 @@ public class ParameterKindTests
 
         var read = Assert.Throws<FormatException>(() => parts.Read(Step("""{"parts":["hour","month"]}""")));
 
-        Assert.Contains("'month'", read.Message, StringComparison.Ordinal);
-        Assert.Contains("minute, hour", read.Message, StringComparison.Ordinal);
+        Assert.Equal("'month' is not one of the things 'parts' can be: minute, hour.", read.Message);
 
         var required = Assert.ThrowsAny<ArgumentException>(() => parts.Require([TimePart.Hour, TimePart.Month]));
 
@@ -409,6 +408,19 @@ public class ParameterKindTests
         Assert.Equal("""{"with":{"kind":"constant","value":-1}}""", Written(with, With.Constant(-1)));
     }
 
+    [Theory]
+    [InlineData("""{"other":1}""", "with")]
+    [InlineData("""{"with":3}""", "with")]
+    [InlineData("""{"with":{"value":1}}""", "kind")]
+    public void AFillStrategyWithoutItsWord_IsRefusedNamingTheKeyThatLacksIt(string written, string key)
+    {
+        var with = new FillStrategyParameter("with", "What goes in.", With.Mean, ["mean", "zero"]) { What = "filling a gap" };
+
+        var refused = Assert.Throws<FormatException>(() => with.Read(Step(written)));
+
+        Assert.Equal($"The step is missing a text value for '{key}'.", refused.Message);
+    }
+
     [Fact]
     public void AParameterNeedsAKeyAndSaysWhatItMeans()
     {
@@ -443,7 +455,7 @@ public class ParameterKindTests
 
         var refused = Assert.Throws<FormatException>(() => scale.Read(Step($$"""{"scale":"{{written}}"}""")));
 
-        Assert.Contains("standard, minmax, maxabs", refused.Message, StringComparison.Ordinal);
+        Assert.Equal($"'{written}' is not one of the things 'scale' can be: {string.Join(", ", scale.Choices)}.", refused.Message);
         Assert.Throws<FormatException>(() => parts.Read(Step($$"""{"scales":["{{written}}"]}""")));
     }
 

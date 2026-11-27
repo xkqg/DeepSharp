@@ -112,25 +112,7 @@ public sealed class BoostedNetwork
         var basisAnswered = TrainedNetwork.Answered(Basis.Network, Basis.Loss, features, chunking);
         var correctionAnswered = TrainedNetwork.Answered(Correction.Network, Correction.Loss, features, chunking);
 
-        return Summed(basisAnswered, correctionAnswered);
-    }
-
-    // One row for another, each number of one added to the matching number of the other.
-    internal static double[][] Summed(IReadOnlyList<double[]> first, IReadOnlyList<double[]> second)
-    {
-        var summed = new double[first.Count][];
-
-        for (var row = 0; row < first.Count; row++)
-        {
-            summed[row] = new double[first[row].Length];
-
-            for (var column = 0; column < first[row].Length; column++)
-            {
-                summed[row][column] = first[row][column] + second[row][column];
-            }
-        }
-
-        return summed;
+        return basisAnswered.Combined(correctionAnswered, (basis, correction) => basis + correction);
     }
 
     /// <summary>The one file: the basis, the correction, the digest it was fitted against, and the pipeline they were trained behind.</summary>
@@ -287,27 +269,9 @@ public static class BoostedExtensions
     private static TrainingData ResidualOf(Batch batch, TrainedNetwork basisTrained, Chunking chunking)
     {
         var basisAnswered = TrainedNetwork.Answered(basisTrained.Network, basisTrained.Loss, batch.Features, chunking);
-        var residual = Subtracted(batch.Answers!, basisAnswered);
+        var residual = batch.Answers!.Combined(basisAnswered, (truth, basis) => truth - basis);
 
         return new TrainingData(batch.Features.Floats(batch.Width, batch.ExampleShape), residual.Floats(batch.AnswerNames!.Count));
-    }
-
-    // One row's answers for another, each number of the second taken from the matching number of the first.
-    private static double[][] Subtracted(IReadOnlyList<double[]> truth, IReadOnlyList<double[]> basisAnswered)
-    {
-        var residual = new double[truth.Count][];
-
-        for (var row = 0; row < truth.Count; row++)
-        {
-            residual[row] = new double[truth[row].Length];
-
-            for (var column = 0; column < truth[row].Length; column++)
-            {
-                residual[row][column] = truth[row][column] - basisAnswered[row][column];
-            }
-        }
-
-        return residual;
     }
 
     // The pipeline's report, measured on the pair's combined answer, part by part; nothing when the pipeline declares no report.
@@ -329,7 +293,7 @@ public static class BoostedExtensions
                 var basisAnswered = TrainedNetwork.Answered(basisTrained.Network, basisTrained.Loss, batch.Features, chunking with { Example = batch.ExampleShape });
                 var correctionAnswered = TrainedNetwork.Answered(correctionTrained.Network, correctionTrained.Loss, batch.Features, chunking with { Example = batch.ExampleShape });
 
-                return new PartPredictions(batch, BoostedNetwork.Summed(basisAnswered, correctionAnswered))
+                return new PartPredictions(batch, basisAnswered.Combined(correctionAnswered, (basis, correction) => basis + correction))
                 {
                     Unfamiliar = TrainedNetwork.Unfamiliar(basisTrained.TrainedOn, batch.Features),
                 };

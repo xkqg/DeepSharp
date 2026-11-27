@@ -130,7 +130,7 @@ public class OneWalkTests
         var refused = Assert.Throws<ArgumentException>(
             () => new PreparedData(declaration, new Table([]), [], fitted));
 
-        Assert.Contains("declare", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("Step 2, 'declare', learns nothing, so nothing it learned can be here.", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

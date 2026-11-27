@@ -116,6 +116,25 @@ internal readonly record struct ViewedDeclaration(IReadOnlyList<string> Answers,
         declaration.Output?.Brought() ?? [],
         [.. declaration.Steps.OfType<IOrdersRows>().SelectMany(order => order.OrderedBy), .. declaration.Steps.OfType<IDividesByAColumn>().Select(split => split.Column)],
         declaration.SplitAt >= 0 ? Standing.Train : Standing.Undivided);
+
+    /// <summary>The columns that are answers or that put the rows in order: the ones a step that is told no columns leaves out of its default.</summary>
+    public IReadOnlyList<string> AnswersAndOrder => [.. Answers, .. OrderedBy];
+}
+
+/// <summary>
+/// What a step takes where it is named no columns.
+/// </summary>
+internal static class TableDefaults
+{
+    extension(Table table)
+    {
+        /// <summary>The columns a step that is told none takes: every column that holds no medium and does not name the rows, less the ones it leaves out.</summary>
+        /// <param name="leftOut">The columns it leaves out as well: none, the answers, or the answers and the order the rows stand in.</param>
+        /// <returns>The names, in the order the table holds the columns.</returns>
+        public IReadOnlyList<string> DefaultColumns(IReadOnlyCollection<string> leftOut) =>
+            [.. table.Columns.Where(column => column.Kind != ColumnKind.Media).Select(column => column.Name)
+                .Where(name => name != table.Id && !leftOut.Contains(name, StringComparer.Ordinal))];
+    }
 }
 
 /// <summary>

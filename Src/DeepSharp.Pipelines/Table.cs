@@ -433,6 +433,18 @@ public sealed class Table
         return true;
     }
 
+    /// <summary>Refuses parts that are not one for every row.</summary>
+    /// <param name="parts">Which part each row belongs to.</param>
+    /// <exception cref="ArgumentException">The parts are not one per row.</exception>
+    internal void ThrowIfNotOnePartPerRow(IReadOnlyList<Part> parts)
+    {
+        if (parts.Count != RowCount)
+        {
+            throw new ArgumentException(
+                $"There are {parts.Count} parts for {RowCount} rows, and a row belongs to exactly one part.", nameof(parts));
+        }
+    }
+
     /// <summary>How many rows are the same row more than once, and how many of those a split has pulled apart.</summary>
     /// <param name="parts">Which part each row belongs to, when the rows have been divided.</param>
     /// <returns>The groups of identical rows, the rows in them, the copies beyond the first, and the groups whose copies landed in more than one part.</returns>
@@ -444,10 +456,9 @@ public sealed class Table
     /// </remarks>
     public DuplicateRows Duplicates(IReadOnlyList<Part>? parts = null)
     {
-        if (parts is not null && parts.Count != RowCount)
+        if (parts is not null)
         {
-            throw new ArgumentException(
-                $"There are {parts.Count} parts for {RowCount} rows, and a row belongs to exactly one part.", nameof(parts));
+            ThrowIfNotOnePartPerRow(parts);
         }
 
         var groups = new Dictionary<RowKey, List<int>>();

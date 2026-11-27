@@ -183,32 +183,6 @@ public abstract record EarlierRowsStep<TSelf>
         table.Put(new Column<double>(Into, ColumnKind.Number, read));
     }
 
-    /// <inheritdoc />
-    public virtual bool Equals(EarlierRowsStep<TSelf>? other) =>
-        other is not null && EqualityContract == other.EqualityContract && Key == other.Key && Value == other.Value && OrderBy.SequenceEqual(other.OrderBy)
-        && Shrink.Equals(other.Shrink) && Window == other.Window && Written == other.Written;
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(EqualityContract);
-        hash.Add(Key);
-        hash.Add(Value);
-
-        foreach (var column in OrderBy)
-        {
-            hash.Add(column);
-        }
-
-        hash.Add(Shrink);
-        hash.Add(Window);
-        hash.Add(Written);
-
-        return hash.ToHashCode();
-    }
-
     // What a step keeps of the fit beyond the floor; nothing, unless it reads more than the floor.
     private protected virtual void Remember(Table table, IReadOnlyList<Part> parts, FittedStepValues learned)
     {

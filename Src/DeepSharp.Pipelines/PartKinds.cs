@@ -69,6 +69,10 @@ public readonly record struct PartSetting(string Key, PartValue Value);
 /// </remarks>
 public readonly record struct PartDeclaration(string Kind, IReadOnlyList<PartSetting> Settings)
 {
+    /// <summary>Its settings, in the order the name's own parameters stand.</summary>
+    /// <remarks>None when none were given, and a part that was never made says none at all.</remarks>
+    public IReadOnlyList<PartSetting> Settings { get; init => field = (value ?? ValueList<PartSetting>.None).Valued(); } = (Settings ?? ValueList<PartSetting>.None).Valued();
+
     /// <summary>The number a setting holds.</summary>
     /// <param name="key">The setting's key.</param>
     /// <returns>The number.</returns>
@@ -120,23 +124,13 @@ public readonly record struct PartDeclaration(string Kind, IReadOnlyList<PartSet
     }
 
     /// <inheritdoc />
-    public bool Equals(PartDeclaration other) =>
-        Kind == other.Kind && (Settings ?? []).SequenceEqual(other.Settings ?? []);
+    /// <remarks>A part no settings were ever given is one that was given none: both compare, and hash, as the empty list.</remarks>
+    public bool Equals(PartDeclaration other) => Kind == other.Kind && Held.Equals(other.Held);
 
     /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
+    public override int GetHashCode() => HashCode.Combine(Kind, Held);
 
-        hash.Add(Kind);
-
-        foreach (var setting in Settings ?? [])
-        {
-            hash.Add(setting);
-        }
-
-        return hash.ToHashCode();
-    }
+    private ValueList<PartSetting> Held => (Settings ?? ValueList<PartSetting>.None).Valued();
 
     private PartValue Setting(string key) =>
         (Settings ?? []).FirstOrDefault(setting => setting.Key == key, new PartSetting(string.Empty, default)) is { Key.Length: > 0 } found
@@ -380,7 +374,7 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
             held.Add(kind.Completed(part));
         }
 
-        return held;
+        return held.Valued();
     }
 
     /// <inheritdoc />

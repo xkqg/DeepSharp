@@ -11,7 +11,7 @@ namespace DeepSharp.Pipelines;
 /// Nothing fitted and no rows — only what a person decided, so a pipeline written again next month, over rows that
 /// did not exist yet, can take it over. It is written and read through the same door as a pipeline file: with the
 /// catalog of the verbs it may hold, every fault at its line and column, and a file from a newer version refused
-/// whole.
+/// whole. Two presets are equal when they hold the same schema, drops, output and source columns.
 /// </remarks>
 public sealed record PipelinePreset
 {
@@ -27,9 +27,9 @@ public sealed record PipelinePreset
         ArgumentNullException.ThrowIfNull(declare);
 
         Declare = declare;
-        Drop = NamedOnce(drop ?? []);
+        Drop = NamedOnce(drop ?? []).Valued();
         Output = output;
-        Source = source is null ? null : [.. source];
+        Source = source?.Valued();
     }
 
     /// <summary>The schema: every column it names, those it excludes too, with their kinds.</summary>
@@ -166,32 +166,6 @@ public sealed record PipelinePreset
         ArgumentNullException.ThrowIfNull(catalog);
 
         return PipelineDocument.ReadPreset(json, catalog);
-    }
-
-    /// <summary>Whether two presets say the same thing.</summary>
-    /// <param name="other">The preset to compare with.</param>
-    /// <returns><see langword="true"/> when both hold the same schema, drops, output and source columns.</returns>
-    public bool Equals(PipelinePreset? other) =>
-        other is not null
-        && Declare.Equals(other.Declare)
-        && Drop.SequenceEqual(other.Drop, StringComparer.Ordinal)
-        && Equals(Output, other.Output)
-        && (Source is null ? other.Source is null : other.Source is not null && Source.SequenceEqual(other.Source, StringComparer.Ordinal));
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(Declare);
-        hash.Add(Output);
-
-        foreach (var column in Drop.Concat(Source ?? []))
-        {
-            hash.Add(column, StringComparer.Ordinal);
-        }
-
-        return hash.ToHashCode();
     }
 
     // The steps these decisions make of a pipeline, a stage at a time and each kept to the rules before the next: the

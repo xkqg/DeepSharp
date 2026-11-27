@@ -66,7 +66,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     // The label the chain of keys starts from. Fixed for good, because the keys are written into files.
     private const string KeyLabel = "deepsharp.declaration";
 
-    private readonly IPipelineStep[] _steps;
+    private readonly ValueList<IPipelineStep> _steps;
 
     // Worked out once, when a key is first asked for: the steps never change, so neither do their keys.
     private string[]? _keys;
@@ -86,7 +86,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     // Steps whose rules have been asked already, by the one door that asks them: so the declaration made of them asks no more.
     private PipelineDeclaration(KeptSteps kept)
     {
-        _steps = kept.Steps;
+        _steps = kept.Steps.Valued();
         ColumnsAt = _steps.FirstIndexOf<IBindsColumns>();
         SplitAt = _steps.FirstIndexOf<ISplitStep>();
         OutputAt = _steps.FirstIndexOf<INamesTheAnswer>();
@@ -225,7 +225,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     public string KeyAt(int position)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(position);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(position, _steps.Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(position, _steps.Count);
 
         return (_keys ??= ChainOfKeys(_steps))[position];
     }
@@ -247,7 +247,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     public string ViewKeyAt(int position)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(position);
-        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(position, _steps.Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(position, _steps.Count);
 
         var walked = KeyAt(WalkedFor(position + 1) - 1);
 
@@ -260,14 +260,14 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// <returns>Those, or the steps down to the split when it stands below them, since it places the rows above it.</returns>
     internal int WalkedFor(int steps) => Math.Max(steps, SplitAt + 1);
 
-    private static string[] ChainOfKeys(IPipelineStep[] steps)
+    private static string[] ChainOfKeys(IReadOnlyList<IPipelineStep> steps)
     {
-        var keys = new string[steps.Length];
+        var keys = new string[steps.Count];
         var previous = Encoding.UTF8.GetBytes(KeyLabel);
 
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
-        for (var at = 0; at < steps.Length; at++)
+        for (var at = 0; at < steps.Count; at++)
         {
             hash.AppendData(previous);
             hash.AppendData(steps[at].Canonical());
@@ -322,7 +322,7 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     public ColumnState ColumnsBefore(int position)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(position);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(position, _steps.Length);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(position, _steps.Count);
 
         return ColumnFlow.Follow(_steps, ColumnState.None, ..position, declared: false).State;
     }
@@ -363,23 +363,13 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// <param name="other">The declaration to compare with.</param>
     /// <returns><see langword="true"/> when both declare the same steps in the same order.</returns>
     public bool Equals(PipelineDeclaration? other) =>
-        other is not null && _steps.SequenceEqual(other._steps);
+        other is not null && _steps.Equals(other._steps);
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => Equals(obj as PipelineDeclaration);
 
     /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        foreach (var step in _steps)
-        {
-            hash.Add(step);
-        }
-
-        return hash.ToHashCode();
-    }
+    public override int GetHashCode() => _steps.GetHashCode();
 
     /// <summary>Whether two declarations say the same thing.</summary>
     /// <param name="left">One declaration.</param>

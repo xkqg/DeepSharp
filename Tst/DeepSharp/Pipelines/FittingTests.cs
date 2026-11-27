@@ -125,7 +125,7 @@ public class FittingTests
         var refused = Assert.Throws<InvalidOperationException>(
             () => trained.Replay(CsvRowSource.FromText("a,b\n,1\n")));
 
-        Assert.Contains("should be none", refused.Message, StringComparison.Ordinal);
+        Assert.Equal("Row 1 of 'a' is a gap, and this pipeline says there should be none.", refused.Message);
     }
 
     [Fact]

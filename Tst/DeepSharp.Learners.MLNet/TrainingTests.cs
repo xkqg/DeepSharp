@@ -75,8 +75,9 @@ public class TrainingTests
 
         var refused = Assert.Throws<InvalidOperationException>(network.TrainWithML);
 
-        Assert.Contains("learn.network", refused.Message, StringComparison.Ordinal);
-        Assert.Contains("learn.ml", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "This pipeline names 'learn.network', which is not a trainer from ML.NET: declare one with .WithML(trainer => trainer.FastTree()), whose verb is 'learn.ml'.",
+            refused.Message);
     }
 
     [Fact]
@@ -89,7 +90,11 @@ public class TrainingTests
             .Target("survived")
             .Build();
 
-        Assert.Throws<InvalidOperationException>(bare.TrainWithML);
+        var refused = Assert.Throws<InvalidOperationException>(bare.TrainWithML);
+
+        Assert.Equal(
+            "This pipeline names no learner, so there is nothing here to train: declare one with .WithML(trainer => trainer.FastTree()), whose verb is 'learn.ml'.",
+            refused.Message);
     }
 
     [Fact]

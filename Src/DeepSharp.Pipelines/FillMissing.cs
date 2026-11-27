@@ -276,8 +276,7 @@ public sealed record FillMissingByValueStep : FillMissingStep
 
             // A row served a year from now can hold the gap the training rows never did; the refusal holds then too.
             column[row] = Strategy.Name == With.Refuse.Name
-                ? throw new InvalidOperationException(
-                    $"Row {row + 1} of '{Column}' is a gap, and this pipeline says there should be none.")
+                ? throw Strategy.RefusedGap(Column, row)
                 : asValue(fitted.Number("value"));
         }
     }

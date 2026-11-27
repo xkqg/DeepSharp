@@ -70,24 +70,6 @@ public sealed record WatchStep : IPipelineStep<WatchStep>, IFittedStep, IDescrib
     internal const string KeptColumns = "columns";
 
     /// <inheritdoc />
-    public bool Equals(WatchStep? other) => other is not null && WarnAbove.Equals(other.WarnAbove) && Columns.SequenceEqual(other.Columns);
-
-    /// <inheritdoc />
-    public override int GetHashCode()
-    {
-        var hash = new HashCode();
-
-        hash.Add(WarnAbove);
-
-        foreach (var column in Columns)
-        {
-            hash.Add(column);
-        }
-
-        return hash.ToHashCode();
-    }
-
-    /// <inheritdoc />
     /// <remarks>
     /// Over a table alone there is no answer and no order to leave out, so every column but the id is kept unless the step names
     /// them; in a walk, the declaration says which those are.
@@ -116,10 +98,7 @@ public sealed record WatchStep : IPipelineStep<WatchStep>, IFittedStep, IDescrib
 
     // The columns watched: those named, or every column but the id, the answers and the columns the rows are ordered by.
     private IReadOnlyList<string> Watched(Table table, ViewedDeclaration declared) =>
-        Columns.Count > 0
-            ? Columns
-            : [.. table.Columns.Where(column => column.Kind != ColumnKind.Media).Select(column => column.Name)
-                .Where(name => name != table.Id && !declared.Answers.Contains(name, StringComparer.Ordinal) && !declared.OrderedBy.Contains(name, StringComparer.Ordinal))];
+        Columns.Count > 0 ? Columns : table.DefaultColumns(declared.AnswersAndOrder);
 
     // Each watched column of the training rows, counted, and said as seen.
     private static FittedStepValues Kept(Table table, IReadOnlyList<Part> parts, IReadOnlyList<string> watched)

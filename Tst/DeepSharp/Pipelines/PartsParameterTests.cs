@@ -291,6 +291,16 @@ public class PartsParameterTests
         Assert.Equal(new PartDeclaration("relu", []).GetHashCode(), (default(PartDeclaration) with { Kind = "relu" }).GetHashCode());
         Assert.False((default(PartDeclaration) with { Kind = "relu" }).Holds("units"));
         Assert.Throws<KeyNotFoundException>(() => (default(PartDeclaration) with { Kind = "relu" }).Number("units"));
+
+        // Settings given as nothing are none, and settings given later are compared by what they hold, as the ones it was made with are.
+        PartSetting units = new("units", PartValue.Of(8));
+
+        Assert.Equal(new PartDeclaration("relu", []), new PartDeclaration("relu", null!));
+        Assert.Equal(new PartDeclaration("relu", []), new PartDeclaration("relu", [units]) with { Settings = null! });
+        Assert.Equal(new PartDeclaration("relu", [units]), default(PartDeclaration) with { Kind = "relu", Settings = new List<PartSetting> { units } });
+        Assert.Equal(
+            new PartDeclaration("relu", [units]).GetHashCode(),
+            (default(PartDeclaration) with { Kind = "relu", Settings = new List<PartSetting> { units } }).GetHashCode());
     }
 
 }

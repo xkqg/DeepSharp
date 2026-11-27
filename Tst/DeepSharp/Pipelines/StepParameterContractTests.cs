@@ -109,6 +109,27 @@ public class StepParameterContractTests
 
     [Theory]
     [MemberData(nameof(EveryVerb))]
+    public void EqualsAgreesWithCanonical_TwoStepsThatWriteTheSameJsonCompareEqualAndHashAlike(string verb)
+    {
+        // A step's members are read from the file as lists of their own, so equality that compared a list by reference would
+        // call two steps of one file different. Each verb's template is read twice, into two steps sharing nothing.
+        var catalog = Everything();
+        var template = catalog.Describe(verb).Template;
+
+        using var first = JsonDocument.Parse(template);
+        using var second = JsonDocument.Parse(template);
+
+        var one = catalog.Read(first.RootElement);
+        var other = catalog.Read(second.RootElement);
+
+        Assert.NotSame(one, other);
+        Assert.Equal(Written(one), Written(other));
+        Assert.True(one.Equals(other), $"'{verb}': two steps that write the same JSON are not equal.");
+        Assert.Equal(one.GetHashCode(), other.GetHashCode());
+    }
+
+    [Theory]
+    [MemberData(nameof(EveryVerb))]
     public void AKeyNoParameterNames_IsRefusedAndNamed(string verb)
     {
         var catalog = Everything();

@@ -220,9 +220,5 @@ public static class TrainExtensions
         loss.Judged() is EarthMoversDistance && output is DistributionStep { Remainder: not null } ? new EarthMoversDistance(remainder: true) : loss.Judged();
 
     private static LearnNetworkStep Declared(PipelineDeclaration declaration) =>
-        declaration.Learner as LearnNetworkStep
-        ?? throw new InvalidOperationException(
-            declaration.Learner is null
-                ? "This pipeline names no learner, so there is nothing here to train: declare one with .WithTorch(…) or .WithTensorflow(…)."
-                : $"This pipeline names '{declaration.Learner.Verb}', which is not a network this package trains.");
+        declaration.Learner<LearnNetworkStep>("a network this package trains", "declare one with .WithTorch(…) or .WithTensorflow(…).");
 }

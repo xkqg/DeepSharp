@@ -139,6 +139,11 @@ The seventh letter of the flock team.
 - **An ensemble of your own models refuses rows handed over as other features than its members learned from**, as a
   network, an ensemble of networks, a boosted pair and a tree already did. All five now serve rows the same way and refuse
   such rows in one sentence, which names the features on both sides.
+- **A pipeline that names no learner, or another one, is refused in the same words by both packages that train.**
+  `Train()` of a network and `TrainWithML()` of a tree each say what the pipeline names, what the package trains and how to
+  declare one, in the one form: *This pipeline names 'learn.ml', which is not a network this package trains: declare one
+  with .WithTorch(…) or .WithTensorflow(…).* A pipeline that names no learner at all is refused as before by a network, and now in
+  the same form by a tree.
 
 ### Changed
 
