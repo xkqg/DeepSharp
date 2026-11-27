@@ -235,6 +235,35 @@ public class DeclaredNetworkTests
     }
 
     [Fact]
+    public void EveryDoor_WritesTheNumberACallerSays_RatherThanTheOneItsLibraryLeavesUnsaid()
+    {
+        static LearnNetworkStep Said(Vocabularies words, Func<NetworkDeclaration, NetworkDeclaration> network) =>
+            network(new NetworkDeclaration(words).Dense(1)).Step();
+
+        var keras = Said(Vocabularies.Keras, network => network
+            .Dense(4).LowRank(2).Dense(4).LowRank(2, alpha: 3).LeakyRelu(0.2).RmsNorm(epsilon: 1e-4).TokenEmbedding(10, 3, keepSteps: false)
+            .Lstm(4, sequences: true).Gru(4, sequences: true).Adam().Focal(alpha: 0.5)).Layers;
+        var torch = Said(Vocabularies.Torch, network => network.Adam().Poisson(logInput: false));
+
+        Assert.Equal([2.0, 0.0, 2.0, 3.0], new[] { keras[1].Number("rank"), keras[1].Number("alpha"), keras[2].Number("rank"), keras[2].Number("alpha") });
+        Assert.Equal(0.2, keras[3].Number("negativeSlope"));
+        Assert.Equal(1e-4, keras[4].Number("epsilon"));
+        Assert.False(keras[5].YesOrNo("keepSteps"));
+        Assert.True(keras[6].YesOrNo("sequences"));
+        Assert.True(keras[7].YesOrNo("sequences"));
+        Assert.Equal(0.5, Said(Vocabularies.Keras, network => network.Adam().Focal(alpha: 0.5)).Loss.Number("alpha"));
+        Assert.False(torch.Loss.YesOrNo("logInput"));
+        Assert.Equal(
+            ["meanAbsoluteError", "huber", "hinge"],
+            new[] { Said(Vocabularies.Torch, network => network.Adam().MeanAbsoluteError()), Said(Vocabularies.Torch, network => network.Adam().Huber()), Said(Vocabularies.Torch, network => network.Adam().Hinge()) }
+                .Select(step => step.Loss.Kind));
+        Assert.Equal(0.8, Said(Vocabularies.Torch, network => network.RAdam(betas: new Betas(0.8, 0.9)).Hinge()).Optimizer.Number("firstMoment"));
+        Assert.Equal(0.7, Said(Vocabularies.Torch, network => network.Lion(betas: new Betas(0.7, 0.8)).Hinge()).Optimizer.Number("firstMoment"));
+        Assert.Equal(0.6, Said(Vocabularies.Torch, network => network.Adan(betas: new AdanBetas(0.9, 0.8, 0.6)).Hinge()).Optimizer.Number("thirdMoment"));
+        Assert.Contains("is not something no optimizer takes", Assert.Throws<NotSupportedException>(() => Said(Vocabularies.Torch, network => network.WeightDecay(0.1).Hinge())).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AStepWrittenByHand_IsHeldToTheSameWordsAndNumbersAsOneTheChainWrote()
     {
         var step = new LearnNetworkStep(

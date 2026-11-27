@@ -28,6 +28,55 @@ public class DeclaredVocabularyTests
         Assert.Equal(1e-6, keras.Layers[3].Number("epsilon"));
         Assert.Equal(0.25, torch.Loss.Number("alpha"));
         Assert.Equal(-1, keras.Loss.Number("alpha"));
+        Assert.Equal(0.9, torch.Layers[4].Number("momentum"));
+        Assert.Equal(0.99, keras.Layers[4].Number("momentum"));
+        Assert.Equal(1e-5, torch.Layers[4].Number("epsilon"));
+        Assert.Equal(1e-3, keras.Layers[4].Number("epsilon"));
+        Assert.Equal(1e-5, torch.Layers[5].Number("epsilon"));
+        Assert.Equal(1e-3, keras.Layers[5].Number("epsilon"));
+        Assert.Equal(1e-8, torch.Optimizer.Number("epsilon"));
+        Assert.Equal(1e-7, keras.Optimizer.Number("epsilon"));
+    }
+
+    [Theory]
+    [InlineData("layers")]
+    [InlineData("optimizers")]
+    [InlineData("losses")]
+    [InlineData("schedules")]
+    [InlineData("stopping")]
+    public void EveryKindHasItsLowering_ByConstruction(string family)
+    {
+        switch (family)
+        {
+            case "layers":
+                HeldByConstruction(NetworkWords.Layers, NetworkWords.LayerVocabulary);
+                break;
+            case "optimizers":
+                HeldByConstruction(NetworkWords.Optimizers, NetworkWords.OptimizerVocabulary);
+                break;
+            case "losses":
+                HeldByConstruction(NetworkWords.Losses, NetworkWords.LossVocabulary);
+                break;
+            case "schedules":
+                HeldByConstruction(NetworkWords.Schedules, NetworkWords.ScheduleVocabulary);
+                break;
+            default:
+                HeldByConstruction(NetworkWords.Stopping, NetworkWords.StoppingVocabulary);
+                break;
+        }
+    }
+
+    [Fact]
+    public void AKindRegisteredWithoutItsLowering_OrUnderANameAlreadyTaken_IsNoVocabulary()
+    {
+        Func<PartDeclaration, Loss> lowered = _ => new Hinge();
+        var bare = new KindWord<Func<PartDeclaration, Loss>>("hinge", "A margin of one.", [], null!);
+        var hinge = bare with { Lower = lowered };
+        var refused = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        Assert.Contains("'hinge'", Assert.Throws<ArgumentException>(() => new KindVocabulary<Func<PartDeclaration, Loss>>([bare], refused)).Message, StringComparison.Ordinal);
+        Assert.Contains("'hinge'", Assert.Throws<ArgumentException>(() => new KindVocabulary<Func<PartDeclaration, Loss>>([hinge, hinge], refused)).Message, StringComparison.Ordinal);
+        Assert.Same(lowered, new KindVocabulary<Func<PartDeclaration, Loss>>([hinge], refused).Lowered(new PartDeclaration("hinge", [])));
     }
 
     [Fact]
@@ -170,7 +219,16 @@ public class DeclaredVocabularyTests
     }
 
     private static LearnNetworkStep Declared(Vocabularies words) =>
-        Step(words, network => network.Dense(4).LeakyRelu().PRelu().RmsNorm().Dense(1).Focal());
+        Step(words, network => network.Dense(4).LeakyRelu().PRelu().RmsNorm().BatchNorm().LayerNorm().Dense(1).Focal());
+
+    // The list a step publishes is the vocabulary's own, and every kind in it is lowered by what was registered beside it.
+    private static void HeldByConstruction<TLower>(IReadOnlyList<PartKind> published, KindVocabulary<TLower> registered)
+        where TLower : Delegate
+    {
+        Assert.Same(registered.Kinds, published);
+        Assert.All(published, kind => Assert.Same(kind, registered.Kind(kind.Name)));
+        Assert.All(published, kind => Assert.NotNull(registered.Lowered(kind.Declared())));
+    }
 
     private static LearnNetworkStep Step(Vocabularies words, Func<NetworkDeclaration, NetworkDeclaration> network)
     {

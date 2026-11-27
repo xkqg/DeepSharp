@@ -68,9 +68,6 @@ public enum Vocabularies
 /// </remarks>
 public sealed class NetworkDeclaration
 {
-    // What PyTorch adds to the mean of the squares of a root-mean-square normalisation unless told otherwise.
-    private const double RmsNormSingleStep = 1.1920928955078125e-07;
-
     private readonly List<PartDeclaration> _layers = [];
     private readonly Vocabularies _words;
 
@@ -318,8 +315,8 @@ public sealed class NetworkDeclaration
     /// <returns>The declaration.</returns>
     public NetworkDeclaration BatchNorm(double? momentum, double? epsilon, bool scale, bool shift = true) => Layer(
         Kind("batchNorm").Declared()
-            .With("momentum", PartValue.Of(momentum ?? (_words == Vocabularies.Keras ? 0.99 : 0.9)))
-            .With("epsilon", PartValue.Of(epsilon ?? (_words == Vocabularies.Keras ? 1e-3 : 1e-5)))
+            .With("momentum", PartValue.Of(momentum ?? _words.Unsaid(NetworkWords.NormMomentum)))
+            .With("epsilon", PartValue.Of(epsilon ?? _words.Unsaid(NetworkWords.NormEpsilon)))
             .With("scale", PartValue.Of(scale))
             .With("shift", PartValue.Of(shift)));
 
@@ -342,7 +339,7 @@ public sealed class NetworkDeclaration
     /// <returns>The declaration.</returns>
     public NetworkDeclaration LayerNorm(double? epsilon, bool scale, bool shift = true) => Layer(
         Kind("layerNorm").Declared()
-            .With("epsilon", PartValue.Of(epsilon ?? (_words == Vocabularies.Keras ? 1e-3 : 1e-5)))
+            .With("epsilon", PartValue.Of(epsilon ?? _words.Unsaid(NetworkWords.NormEpsilon)))
             .With("scale", PartValue.Of(scale))
             .With("shift", PartValue.Of(shift)));
 
@@ -363,7 +360,7 @@ public sealed class NetworkDeclaration
     /// <param name="negativeSlope">The share; each library's own, unless said: a hundredth in PyTorch, three tenths in Keras's layer.</param>
     /// <returns>The declaration.</returns>
     public NetworkDeclaration LeakyRelu(double? negativeSlope = null) =>
-        Layer("leakyRelu", new PartSetting("negativeSlope", PartValue.Of(negativeSlope ?? (_words == Vocabularies.Keras ? 0.3 : 0.01))));
+        Layer("leakyRelu", new PartSetting("negativeSlope", PartValue.Of(negativeSlope ?? _words.Unsaid(NetworkWords.LeakySlope))));
 
     /// <summary>A layer that leaves what is above nought and lets a share of what is below it through that it learns.</summary>
     /// <param name="eachFeature">
@@ -372,7 +369,7 @@ public sealed class NetworkDeclaration
     /// </param>
     /// <returns>The declaration.</returns>
     public NetworkDeclaration PRelu(bool? eachFeature = null) =>
-        Layer("prelu", new PartSetting("eachFeature", PartValue.Of(eachFeature ?? _words == Vocabularies.Keras)));
+        Layer("prelu", new PartSetting("eachFeature", PartValue.Of(eachFeature ?? _words.Unsaid(NetworkWords.SlopeOfEachFeature))));
 
     /// <summary>A layer that leaves what is above nought and bends what is below it towards minus alpha: the ELU.</summary>
     /// <param name="alpha">What it bends towards, below nought; one, as both libraries leave it, unless said.</param>
@@ -394,7 +391,7 @@ public sealed class NetworkDeclaration
     /// <returns>The declaration.</returns>
     public NetworkDeclaration RmsNorm(double? epsilon = null, bool scale = true) => Layer(
         Kind("rmsNorm").Declared()
-            .With("epsilon", PartValue.Of(epsilon ?? (_words == Vocabularies.Keras ? 1e-6 : RmsNormSingleStep)))
+            .With("epsilon", PartValue.Of(epsilon ?? _words.Unsaid(NetworkWords.RootNormEpsilon)))
             .With("scale", PartValue.Of(scale)));
 
     /// <summary>
@@ -547,7 +544,7 @@ public sealed class NetworkDeclaration
     public NetworkDeclaration Sgd(double? rate = null, double momentum = 0)
     {
         _optimizer = new PartDeclaration("sgd", [
-            new PartSetting("rate", PartValue.Of(rate ?? (_words == Vocabularies.Keras ? 0.01 : 0.001))),
+            new PartSetting("rate", PartValue.Of(rate ?? _words.Unsaid(NetworkWords.SgdRate))),
             new PartSetting("momentum", PartValue.Of(momentum)),
         ]);
 
@@ -564,7 +561,7 @@ public sealed class NetworkDeclaration
             new PartSetting("rate", PartValue.Of(rate)),
             new PartSetting("firstMoment", PartValue.Of(0.9)),
             new PartSetting("secondMoment", PartValue.Of(0.999)),
-            new PartSetting("epsilon", PartValue.Of(epsilon ?? (_words == Vocabularies.Keras ? 1e-7 : 1e-8))),
+            new PartSetting("epsilon", PartValue.Of(epsilon ?? _words.Unsaid(NetworkWords.AdamEpsilon))),
         ]);
 
         return this;
@@ -849,7 +846,7 @@ public sealed class NetworkDeclaration
     public NetworkDeclaration Focal(double gamma = 2, double? alpha = null) => Judged(
         "focal",
         new PartSetting("gamma", PartValue.Of(gamma)),
-        new PartSetting("alpha", PartValue.Of(alpha ?? (_words == Vocabularies.Keras ? global::DeepSharp.Networks.Focal.NoWeight : 0.25))));
+        new PartSetting("alpha", PartValue.Of(alpha ?? _words.Unsaid(NetworkWords.FocalAlpha))));
 
     /// <summary>Judges labels by how far each answer falls short of a margin of one on its side of nought, as Keras's hinge does; read by the side it falls.</summary>
     /// <returns>The declaration.</returns>
@@ -863,8 +860,8 @@ public sealed class NetworkDeclaration
     /// <returns>The declaration.</returns>
     public NetworkDeclaration Poisson(bool? logInput = null) => Judged(
         "poisson",
-        new PartSetting("logInput", PartValue.Of(logInput ?? _words != Vocabularies.Keras)),
-        new PartSetting("epsilon", PartValue.Of(_words == Vocabularies.Keras ? 1e-7 : 1e-8)));
+        new PartSetting("logInput", PartValue.Of(logInput ?? _words.Unsaid(NetworkWords.CountLogInput))),
+        new PartSetting("epsilon", PartValue.Of(_words.Unsaid(NetworkWords.CountEpsilon))));
 
     /// <summary>How the run goes: the number every draw is worked out from, how many passes, and how many rows a step.</summary>
     /// <param name="seed">The number every random draw of the run is worked out from.</param>
@@ -1111,7 +1108,7 @@ public sealed class NetworkDeclaration
 
     // The kind of layer a name stands for, so that a layer is declared from what its kind starts with rather than from keys
     // written out again here.
-    private static PartKind Kind(string name) => NetworkWords.Layers.Single(kind => kind.Name == name);
+    private static PartKind Kind(string name) => NetworkWords.LayerVocabulary.Kind(name);
 
     private NetworkDeclaration Judged(string kind, params PartSetting[] settings)
     {
@@ -1150,7 +1147,7 @@ public sealed class NetworkDeclaration
             return optimizer;
         }
 
-        if (optimizer.Kind is null || NetworkWords.Optimizers.Single(kind => kind.Name == optimizer.Kind).Setting(key) is null)
+        if (optimizer.Kind is null || NetworkWords.OptimizerVocabulary.Kind(optimizer.Kind).Setting(key) is null)
         {
             throw new NotSupportedException($"{door} is not something {(optimizer.Kind is null ? "no optimizer" : $"the '{optimizer.Kind}' optimizer")} takes: name an optimizer that does.");
         }
@@ -1172,23 +1169,11 @@ public sealed class NetworkDeclaration
     }
 
     // An option of PyTorch's optimizers that Keras's words cannot say, refused in them rather than written as something else.
-    private void RequirePyTorchsOption(string door, string meaning)
-    {
-        if (_words == Vocabularies.Keras)
-        {
-            throw new NotSupportedException(
-                $"{door} {meaning}, and this library runs it as PyTorch's optimizers do, so a network declared in Keras's words cannot say it: declare it in PyTorch's, .WithTorch(network => network.{door}(…)).");
-        }
-    }
+    private void RequirePyTorchsOption(string door, string meaning) =>
+        _words.RequirePyTorchs(door, $"{door} {meaning}, and this library runs it as PyTorch's optimizers do");
 
     // An optimizer whose Keras namesake runs other arithmetic is declared in PyTorch's words only, and refused in Keras's
     // rather than written down as an optimizer they would name otherwise.
-    private void RequirePyTorchsWords(string keras, string door)
-    {
-        if (_words == Vocabularies.Keras)
-        {
-            throw new NotSupportedException(
-                $"Keras's {keras} works its steps out otherwise than PyTorch's, which this library runs, so a network declared in Keras's words cannot say it: declare it in PyTorch's, .WithTorch(network => network.{door}(…)).");
-        }
-    }
+    private void RequirePyTorchsWords(string keras, string door) =>
+        _words.RequirePyTorchs(door, $"Keras's {keras} works its steps out otherwise than PyTorch's, which this library runs");
 }

@@ -248,71 +248,22 @@ public static class NetworkWords
     private static readonly NumberParameter SmoothingKey =
         new("smoothing", "How much of the answers is spread evenly before they are compared, so no label is taken as quite certain; none, unless said.", 0) { AtLeast = 0, LeftOut = 0 };
 
+    // The words left out on purpose, each with why and with the word that says it. Written before the families below, which
+    // are made with it.
+    private static IReadOnlyDictionary<string, string> Refused { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["smoothL1"] =
+            "PyTorch's SmoothL1Loss is the Huber loss over its beta, so it is one word, 'huber', with its delta at that beta — the same network learned, its loss beta times as large.",
+    };
+
     /// <summary>The layers a declared network is built from, in the words a saved network writes them under.</summary>
-    public static IReadOnlyList<PartKind> Layers { get; } =
-    [
-        Step("dense", "A layer that answers with as many numbers as it is given, each a weighted sum of the ones below it.", [UnitsKey, BiasKey, WeightsKey, BiasStartKey, L1Key, L2Key, MaxNormKey, LearnsKey, RateShareKey, RankKey, PairAlphaKey]),
-        Step("relu", "Leaves what is below nought at nought.", []),
-        Step("tanh", "Squashes every number between minus one and one.", []),
-        Step("sigmoid", "Squashes every number between nought and one.", []),
-        Step("dropout", "Leaves a share of the numbers out at every pass while training, and none while serving.", [RateKey]),
-        Step("batchNorm", "Brings every number to the mean and spread of the rows it was trained on.", [MomentumKey, EpsilonKey, ScaleKey, ShiftKey, LearnsKey, RateShareKey]),
-        Step("layerNorm", "Brings every number of one row to that row's own mean and spread.", [EpsilonKey, ScaleKey, ShiftKey, LearnsKey, RateShareKey]),
-        Step("gelu", "Weighs every number by the share of a normal curve below it: smooth where relu bends.", [ApproximateKey]),
-        Step("silu", "Weighs every number by its own sigmoid; also called swish.", []),
-        Step("mish", "Weighs every number by the hyperbolic tangent of its softplus.", []),
-        Step("leakyRelu", "Leaves what is above nought, and lets a share of what is below it through.", [SlopeKey]),
-        Step("prelu", "Leaves what is above nought, and lets a share of what is below it through that it learns.", [EachFeatureKey]),
-        Step("elu", "Leaves what is above nought, and bends what is below it towards minus alpha.", [BendKey]),
-        Step("selu", "Bends as elu does, at the alpha and the scale that keep a network's numbers normalised.", []),
-        Step("softmax", "Turns the numbers of a row into shares of one whole.", []),
-        Step("rmsNorm", "Divides every number of one row by the root of the mean of the row's squares, and scales it.", [RootEpsilonKey, ScaleKey, LearnsKey, RateShareKey]),
-        Step("periodic", "Turns every number of the row into its cosines and sines at frequencies it learns, through a linear layer: a relu after it makes it PLR.", [FrequenciesKey, SigmaKey, WidthKey, LiteKey]),
-        Step("randomFlip", "Mirrors images at random while training and not while serving; it varies the rows themselves, so it stands first.", [FlipAcrossKey, FlipDownKey, VariationSeedKey]),
-        Step("randomCrop", "Shifts images at random while training and not while serving, padding each and cutting a window of its own size out; it stands first.", [PadKey, VariationSeedKey]),
-        Step("gaussianNoise", "Adds normal noise to every number while training and not while serving; it stands first.", [SpreadKey, VariationSeedKey]),
-        Step("flatten", "Lays an example out as one row of numbers: an image as the row of its pixels.", []),
-        Step("tokenEmbedding", "Turns the ids a pipeline cut a text into to one small vector: each id looked up in vectors it learns, the vectors of the words averaged and the padding left out — or, kept a step at a time, each id its own vector and the padding nothing; it reads the rows as the pipeline hands them over, so it stands first.", [TokenVocabularyKey, TokenWidthKey, KeepStepsKey]),
-        Step("unpadded", "The mask of a row of ids: a one where an id is a word, a nought where it is padding; a recurrent layer takes it as its second step, from the same ids the embedding reads.", []),
-        Step("lstm", "A long short-term memory layer that reads each series a step at a time and carries a state along it, as PyTorch's nn.LSTM does; given a mask as its second step, a batch of series of unequal lengths is read each as it would be read alone.", [UnitsKey, RecurrentLayersKey, BothWaysKey, SequencesKey]),
-        Step("gru", "A gated recurrent unit that reads each series a step at a time and carries a state along it, as PyTorch's nn.GRU does; given a mask as its second step, a batch of series of unequal lengths is read each as it would be read alone.", [UnitsKey, RecurrentLayersKey, BothWaysKey, SequencesKey]),
-        Step("multiHeadAttention", "Attention across the steps of a series, as PyTorch's nn.MultiheadAttention works it out: each step made of the steps it looks at, in the shares their queries and keys give them; given a mask as its second step, a padding step is looked past.", [HeadsKey, CausalKey, AttentionDropoutKey]),
-        Step("attention", "Scaled dot-product attention with no number of its own, as PyTorch's scaled_dot_product_attention works it out: given one step it looks across that series; given three, at keys and values apart from the queries; a mask of the steps that take part is the last it is given.", [HeadsKey, CausalKey, AttentionDropoutKey]),
-        Step("sinePositions", "Adds to each step of a series the place it stands at, as the sine and cosine waves of 'Attention Is All You Need' write it, so attention can tell one step from another.", []),
-        Step("add", "Adds up what the steps it takes made, value by value: a residual block's way of handing on what it was given beside what it made. It takes two steps or more, which must be of one shape.", []),
-        Step("concatenate", "Lays what the steps it takes made side by side along the last axis, in the order they are taken: a block that reads everything made before it. It takes two steps or more, alike in every axis but the last.", []),
-        Step("columns", "Takes some of the columns of a row as a step of its own: how a network of two inputs reads each of them from the one row it is handed.", [ColumnFirstKey, ColumnCountKey]),
-        Step("multiply", "Multiplies what the steps it takes made, value by value: a gate that lets a value through by the share another step gives it. It takes two steps or more, which must be of one shape.", []),
-        new(EmbeddingWord, "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.", [EmbeddingColumnKey, EmbeddingWidthKey]),
-    ];
+    public static IReadOnlyList<PartKind> Layers => LayerVocabulary.Kinds;
 
     /// <summary>The optimizers a declared network is moved by.</summary>
-    public static IReadOnlyList<PartKind> Optimizers { get; } =
-    [
-        new("sgd", "Moves every number against its gradient, carrying some of the last step's velocity.", [StepKey, CarriedKey, CoupledDecayKey, DampeningKey, NesterovKey]),
-        new("adam", "Moves every number by a running mean of its gradients over the root of a running mean of their squares.", [StepKey, FirstKey, SecondKey, TinyKey, CoupledDecayKey, AmsGradKey]),
-        new("adamw", "Adam, with every number shrunk towards nought before its step, apart from its gradient.", [StepKey, FirstKey, SecondKey, TinyKey, DecayKey, AmsGradKey]),
-        new("rmsprop", "Moves every number by its gradient over the root of a running mean of the squares of its gradients.", [SquaresRateKey, AlphaKey, TinyKey, CarriedKey, CoupledDecayKey, CenteredKey]),
-        new("nadam", "Adam with Nesterov's momentum, warmed up over the steps.", [NesterovRateKey, FirstKey, SecondKey, TinyKey, WarmingKey, CoupledDecayKey]),
-        new("radam", "Adam, with the step rectified once the running mean of the squares has seen enough of the gradients to trust its spread.", [StepKey, FirstKey, SecondKey, TinyKey, CoupledDecayKey, DecoupledDecayKey]),
-        new("lion", "Moves every number against the sign of an interpolation of a kept momentum and its gradient.", [LionStepKey, LionFirstKey, LionSecondKey, CoupledDecayKey]),
-        new("adan", "Moves every number by a running mean of its gradients and of how they differ step to step, over the root of a running mean of their combined squares.", [StepKey, AdanFirstKey, AdanSecondKey, AdanThirdKey, TinyKey, CoupledDecayKey]),
-    ];
+    public static IReadOnlyList<PartKind> Optimizers => OptimizerVocabulary.Kinds;
 
     /// <summary>The losses a declared network is judged by.</summary>
-    public static IReadOnlyList<PartKind> Losses { get; } =
-    [
-        new("meanSquaredError", "The mean of the squared differences: an answer that is an amount.", []),
-        new("crossEntropy", "The loss of one answer among several classes, read through a softmax.", [SmoothingKey]),
-        new("binaryCrossEntropy", "The loss of an answer that is a chance, read through a sigmoid.", [SmoothingKey]),
-        new("earthMoversDistance", "How far the shares have to move along the order of the bands to be the answer's: an answer of shares in an order, read through a softmax.", []),
-        new("meanAbsoluteError", "The mean of the size of the differences: an answer that is an amount, some far off.", []),
-        new("huber", "Half the square of the difference near the answer, its size further off: an amount with outliers.", [DeltaKey]),
-        new("quantile", "The pinball loss: the value the answer stays below a share of the time, rather than its mean.", [QuantileKey]),
-        new("focal", "A binary cross-entropy that weighs down the labels the network is already sure of: a rare class, read through a sigmoid.", [GammaKey, BalanceKey]),
-        new("hinge", "How far each answer falls short of a margin of one on its side of nought: a label, read by the side it falls.", []),
-        new("poisson", "The loss of a count: an answer that is how many times something happened, read through an exponential when it is a logarithm.", [LogInputKey, RateEpsilonKey]),
-    ];
+    public static IReadOnlyList<PartKind> Losses => LossVocabulary.Kinds;
 
     /// <summary>How the rate a declared network is moved at changes from epoch to epoch, in the words a network's file writes it in.</summary>
     /// <remarks>
@@ -320,22 +271,231 @@ public static class NetworkWords
     /// the optimizer's own rate; one that hands over to a decay is written as code, where a <see cref="LinearWarmup"/> holds
     /// the schedule that follows it.
     /// </remarks>
-    public static IReadOnlyList<PartKind> Schedules { get; } =
-    [
-        new("constant", "The rate the optimizer starts at, every epoch.", []),
-        new("stepDecay", "The rate multiplied by a factor every so many epochs.", [EveryKey, FallKey]),
-        new("exponentialDecay", "The rate multiplied by a factor every epoch.", [EpochFactorKey]),
-        new("cosineDecay", "The rate falling along half a cosine to its least over so many epochs.", [CosineKey, LeastRateKey]),
-        new("linearWarmup", "The rate rising in a straight line from a share of itself to the whole of it over so many epochs, then held.", [WarmupKey, StartKey]),
-        new("trainingPlateau", "The rate lowered by a factor once the training loss has stopped falling for so many epochs.", [PlateauWaitKey, PlateauFactorKey, PlateauThresholdKey, PlateauCooldownKey, PlateauLeastKey]),
-    ];
+    public static IReadOnlyList<PartKind> Schedules => ScheduleVocabulary.Kinds;
 
     /// <summary>When a run stops: at its last pass, or once the validation loss stops falling.</summary>
-    public static IReadOnlyList<PartKind> Stopping { get; } =
+    public static IReadOnlyList<PartKind> Stopping => StoppingVocabulary.Kinds;
+
+    // What each library leaves unsaid where the two leave different numbers, PyTorch's beside Keras's: the one table a
+    // declaration's doors fill in what a caller leaves unsaid from.
+
+    /// <summary>A batch normalisation's momentum.</summary>
+    internal static Dialect<double> NormMomentum { get; } = new(Torch: 0.9, Keras: 0.99);
+
+    /// <summary>A batch or layer normalisation's epsilon.</summary>
+    internal static Dialect<double> NormEpsilon { get; } = new(Torch: 1e-5, Keras: 1e-3);
+
+    /// <summary>A root-mean-square normalisation's epsilon: PyTorch's is the step a single-precision number takes above one.</summary>
+    internal static Dialect<double> RootNormEpsilon { get; } = new(Torch: 1.1920928955078125e-07, Keras: 1e-6);
+
+    /// <summary>The share of a number below nought a leaky relu lets through.</summary>
+    internal static Dialect<double> LeakySlope { get; } = new(Torch: 0.01, Keras: 0.3);
+
+    /// <summary>Whether every number of a row learns a share of its own in a parametric relu.</summary>
+    internal static Dialect<bool> SlopeOfEachFeature { get; } = new(Torch: false, Keras: true);
+
+    /// <summary>The rate of SGD.</summary>
+    internal static Dialect<double> SgdRate { get; } = new(Torch: 0.001, Keras: 0.01);
+
+    /// <summary>The epsilon of Adam.</summary>
+    internal static Dialect<double> AdamEpsilon { get; } = new(Torch: 1e-8, Keras: 1e-7);
+
+    /// <summary>What a focal loss weighs a one by: a quarter in torchvision, no weight in Keras.</summary>
+    internal static Dialect<double> FocalAlpha { get; } = new(Torch: 0.25, Keras: Focal.NoWeight);
+
+    /// <summary>Whether a count loss reads the logarithm of each count's rate.</summary>
+    internal static Dialect<bool> CountLogInput { get; } = new(Torch: true, Keras: false);
+
+    /// <summary>The small number a count loss adds to a rate before its logarithm is taken.</summary>
+    internal static Dialect<double> CountEpsilon { get; } = new(Torch: 1e-8, Keras: 1e-7);
+
+    /// <summary>The layers, each with the description it puts on.</summary>
+    internal static KindVocabulary<Func<Sequential, PartDeclaration, Sequential>> LayerVocabulary { get; } = new(
     [
-        new("never", "The run goes on to its last pass.", []),
-        new("patience", "The run stops once the validation loss has not fallen for as many passes as it waits.", [PatienceKey, LeastKey, BestKey]),
-    ];
+        Step("dense", "A layer that answers with as many numbers as it is given, each a weighted sum of the ones below it.", [UnitsKey, BiasKey, WeightsKey, BiasStartKey, L1Key, L2Key, MaxNormKey, LearnsKey, RateShareKey, RankKey, PairAlphaKey],
+            (described, layer) => GovernedBy(layer, described.Dense(layer.Whole(UnitsKey.Key), StartOf(layer)))),
+        Step("relu", "Leaves what is below nought at nought.", [], (described, _) => described.Relu()),
+        Step("tanh", "Squashes every number between minus one and one.", [], (described, _) => described.Tanh()),
+        Step("sigmoid", "Squashes every number between nought and one.", [], (described, _) => described.Sigmoid()),
+        Step("dropout", "Leaves a share of the numbers out at every pass while training, and none while serving.", [RateKey],
+            (described, layer) => described.Dropout(layer.Number(RateKey.Key))),
+        Step("batchNorm", "Brings every number to the mean and spread of the rows it was trained on.", [MomentumKey, EpsilonKey, ScaleKey, ShiftKey, LearnsKey, RateShareKey],
+            (described, layer) => GovernedBy(layer, described.BatchNorm(layer.Number(MomentumKey.Key), layer.Number(EpsilonKey.Key), KeptBy(layer)))),
+        Step("layerNorm", "Brings every number of one row to that row's own mean and spread.", [EpsilonKey, ScaleKey, ShiftKey, LearnsKey, RateShareKey],
+            (described, layer) => GovernedBy(layer, described.LayerNorm(layer.Number(EpsilonKey.Key), KeptBy(layer)))),
+        Step("gelu", "Weighs every number by the share of a normal curve below it: smooth where relu bends.", [ApproximateKey],
+            (described, layer) => described.Gelu(layer.YesOrNo(ApproximateKey.Key))),
+        Step("silu", "Weighs every number by its own sigmoid; also called swish.", [], (described, _) => described.Silu()),
+        Step("mish", "Weighs every number by the hyperbolic tangent of its softplus.", [], (described, _) => described.Mish()),
+        Step("leakyRelu", "Leaves what is above nought, and lets a share of what is below it through.", [SlopeKey],
+            (described, layer) => described.LeakyRelu(layer.Number(SlopeKey.Key))),
+        Step("prelu", "Leaves what is above nought, and lets a share of what is below it through that it learns.", [EachFeatureKey],
+            (described, layer) => described.PRelu(layer.YesOrNo(EachFeatureKey.Key))),
+        Step("elu", "Leaves what is above nought, and bends what is below it towards minus alpha.", [BendKey],
+            (described, layer) => described.Elu(layer.Number(BendKey.Key))),
+        Step("selu", "Bends as elu does, at the alpha and the scale that keep a network's numbers normalised.", [], (described, _) => described.Selu()),
+        Step("softmax", "Turns the numbers of a row into shares of one whole.", [], (described, _) => described.Softmax()),
+        Step("rmsNorm", "Divides every number of one row by the root of the mean of the row's squares, and scales it.", [RootEpsilonKey, ScaleKey, LearnsKey, RateShareKey],
+            (described, layer) => GovernedBy(layer, described.RmsNorm(layer.Number(RootEpsilonKey.Key), layer.YesOrNo(ScaleKey.Key)))),
+        Step("periodic", "Turns every number of the row into its cosines and sines at frequencies it learns, through a linear layer: a relu after it makes it PLR.", [FrequenciesKey, SigmaKey, WidthKey, LiteKey],
+            (described, layer) => described.Periodic(
+                new Periodicity(layer.Whole(FrequenciesKey.Key), layer.Number(SigmaKey.Key), layer.Whole(WidthKey.Key)) { Lite = layer.YesOrNo(LiteKey.Key) })),
+        Step("randomFlip", "Mirrors images at random while training and not while serving; it varies the rows themselves, so it stands first.", [FlipAcrossKey, FlipDownKey, VariationSeedKey],
+            (described, layer) => described.RandomFlip(layer.YesOrNo(FlipAcrossKey.Key), layer.YesOrNo(FlipDownKey.Key), layer.Whole(VariationSeedKey.Key))),
+        Step("randomCrop", "Shifts images at random while training and not while serving, padding each and cutting a window of its own size out; it stands first.", [PadKey, VariationSeedKey],
+            (described, layer) => described.RandomCrop(layer.Whole(PadKey.Key), layer.Whole(VariationSeedKey.Key))),
+        Step("gaussianNoise", "Adds normal noise to every number while training and not while serving; it stands first.", [SpreadKey, VariationSeedKey],
+            (described, layer) => described.GaussianNoise(layer.Number(SpreadKey.Key), layer.Whole(VariationSeedKey.Key))),
+        Step("flatten", "Lays an example out as one row of numbers: an image as the row of its pixels.", [], (described, _) => described.Flatten()),
+        Step("tokenEmbedding", "Turns the ids a pipeline cut a text into to one small vector: each id looked up in vectors it learns, the vectors of the words averaged and the padding left out — or, kept a step at a time, each id its own vector and the padding nothing; it reads the rows as the pipeline hands them over, so it stands first.", [TokenVocabularyKey, TokenWidthKey, KeepStepsKey],
+            (described, layer) => described.TokenEmbedding(layer.Whole(TokenVocabularyKey.Key), layer.Whole(TokenWidthKey.Key), layer.YesOrNo(KeepStepsKey.Key))),
+        Step("unpadded", "The mask of a row of ids: a one where an id is a word, a nought where it is padding; a recurrent layer takes it as its second step, from the same ids the embedding reads.", [],
+            (described, _) => described.Unpadded()),
+        Step("lstm", "A long short-term memory layer that reads each series a step at a time and carries a state along it, as PyTorch's nn.LSTM does; given a mask as its second step, a batch of series of unequal lengths is read each as it would be read alone.", [UnitsKey, RecurrentLayersKey, BothWaysKey, SequencesKey],
+            (described, layer) => described.Lstm(layer.Whole(UnitsKey.Key), layer.YesOrNo(BothWaysKey.Key), layer.Whole(RecurrentLayersKey.Key), layer.YesOrNo(SequencesKey.Key))),
+        Step("gru", "A gated recurrent unit that reads each series a step at a time and carries a state along it, as PyTorch's nn.GRU does; given a mask as its second step, a batch of series of unequal lengths is read each as it would be read alone.", [UnitsKey, RecurrentLayersKey, BothWaysKey, SequencesKey],
+            (described, layer) => described.Gru(layer.Whole(UnitsKey.Key), layer.YesOrNo(BothWaysKey.Key), layer.Whole(RecurrentLayersKey.Key), layer.YesOrNo(SequencesKey.Key))),
+        Step("multiHeadAttention", "Attention across the steps of a series, as PyTorch's nn.MultiheadAttention works it out: each step made of the steps it looks at, in the shares their queries and keys give them; given a mask as its second step, a padding step is looked past.", [HeadsKey, CausalKey, AttentionDropoutKey],
+            (described, layer) => described.MultiHeadAttention(Looking(layer))),
+        Step("attention", "Scaled dot-product attention with no number of its own, as PyTorch's scaled_dot_product_attention works it out: given one step it looks across that series; given three, at keys and values apart from the queries; a mask of the steps that take part is the last it is given.", [HeadsKey, CausalKey, AttentionDropoutKey],
+            (described, layer) => described.Attention(Looking(layer))),
+        Step("sinePositions", "Adds to each step of a series the place it stands at, as the sine and cosine waves of 'Attention Is All You Need' write it, so attention can tell one step from another.", [],
+            (described, _) => described.SinePositions()),
+        Step("add", "Adds up what the steps it takes made, value by value: a residual block's way of handing on what it was given beside what it made. It takes two steps or more, which must be of one shape.", [],
+            (described, layer) => described.Add(StepsOf(layer))),
+        Step("concatenate", "Lays what the steps it takes made side by side along the last axis, in the order they are taken: a block that reads everything made before it. It takes two steps or more, alike in every axis but the last.", [],
+            (described, layer) => described.Concatenate(StepsOf(layer))),
+        Step("columns", "Takes some of the columns of a row as a step of its own: how a network of two inputs reads each of them from the one row it is handed.", [ColumnFirstKey, ColumnCountKey],
+            (described, layer) => described.Columns(layer.Whole(ColumnFirstKey.Key), layer.Whole(ColumnCountKey.Key))),
+        Step("multiply", "Multiplies what the steps it takes made, value by value: a gate that lets a value through by the share another step gives it. It takes two steps or more, which must be of one shape.", [],
+            (described, layer) => described.Multiply(StepsOf(layer))),
+        new(EmbeddingWord, "Turns the columns a category was written down as into a small vector it learns for each category; it reads the rows as the pipeline hands them over, so it stands first.", [EmbeddingColumnKey, EmbeddingWidthKey],
+            (_, layer) => throw new InvalidOperationException(
+                $"An embedding of '{layer.Text(EmbeddingColumnKey.Key)}' reads its block from the rows a pipeline hands over, so it is lowered where they are: train the network behind its pipeline.")),
+    ], Refused);
+
+    /// <summary>The optimizers, each with the optimizer it makes.</summary>
+    internal static KindVocabulary<Func<PartDeclaration, Optimizer>> OptimizerVocabulary { get; } = new(
+    [
+        new("sgd", "Moves every number against its gradient, carrying some of the last step's velocity.", [StepKey, CarriedKey, CoupledDecayKey, DampeningKey, NesterovKey],
+            optimizer => new Sgd(optimizer.Number(StepKey.Key))
+            {
+                Momentum = optimizer.Number(CarriedKey.Key),
+                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
+                Dampening = optimizer.Number(DampeningKey.Key),
+                Nesterov = optimizer.YesOrNo(NesterovKey.Key),
+            }),
+        new("adam", "Moves every number by a running mean of its gradients over the root of a running mean of their squares.", [StepKey, FirstKey, SecondKey, TinyKey, CoupledDecayKey, AmsGradKey],
+            optimizer => new Adam(optimizer.Number(StepKey.Key))
+            {
+                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
+                Epsilon = optimizer.Number(TinyKey.Key),
+                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
+                AmsGrad = optimizer.YesOrNo(AmsGradKey.Key),
+            }),
+        new("adamw", "Adam, with every number shrunk towards nought before its step, apart from its gradient.", [StepKey, FirstKey, SecondKey, TinyKey, DecayKey, AmsGradKey],
+            optimizer => new AdamW(optimizer.Number(StepKey.Key))
+            {
+                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
+                Epsilon = optimizer.Number(TinyKey.Key),
+                WeightDecay = optimizer.Number(DecayKey.Key),
+                AmsGrad = optimizer.YesOrNo(AmsGradKey.Key),
+            }),
+        new("rmsprop", "Moves every number by its gradient over the root of a running mean of the squares of its gradients.", [SquaresRateKey, AlphaKey, TinyKey, CarriedKey, CoupledDecayKey, CenteredKey],
+            optimizer => new RmsProp(optimizer.Number(SquaresRateKey.Key))
+            {
+                Alpha = optimizer.Number(AlphaKey.Key),
+                Epsilon = optimizer.Number(TinyKey.Key),
+                Momentum = optimizer.Number(CarriedKey.Key),
+                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
+                Centered = optimizer.YesOrNo(CenteredKey.Key),
+            }),
+        new("nadam", "Adam with Nesterov's momentum, warmed up over the steps.", [NesterovRateKey, FirstKey, SecondKey, TinyKey, WarmingKey, CoupledDecayKey],
+            optimizer => new Nadam(optimizer.Number(NesterovRateKey.Key))
+            {
+                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
+                Epsilon = optimizer.Number(TinyKey.Key),
+                MomentumDecay = optimizer.Number(WarmingKey.Key),
+                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
+            }),
+        new("radam", "Adam, with the step rectified once the running mean of the squares has seen enough of the gradients to trust its spread.", [StepKey, FirstKey, SecondKey, TinyKey, CoupledDecayKey, DecoupledDecayKey],
+            optimizer => new RAdam(optimizer.Number(StepKey.Key))
+            {
+                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
+                Epsilon = optimizer.Number(TinyKey.Key),
+                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
+                DecoupledWeightDecay = optimizer.YesOrNo(DecoupledDecayKey.Key),
+            }),
+        new("lion", "Moves every number against the sign of an interpolation of a kept momentum and its gradient.", [LionStepKey, LionFirstKey, LionSecondKey, CoupledDecayKey],
+            optimizer => new Lion(optimizer.Number(LionStepKey.Key))
+            {
+                Betas = new Betas(optimizer.Number(LionFirstKey.Key), optimizer.Number(LionSecondKey.Key)),
+                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
+            }),
+        new("adan", "Moves every number by a running mean of its gradients and of how they differ step to step, over the root of a running mean of their combined squares.", [StepKey, AdanFirstKey, AdanSecondKey, AdanThirdKey, TinyKey, CoupledDecayKey],
+            optimizer => new Adan(optimizer.Number(StepKey.Key))
+            {
+                Betas = new AdanBetas(optimizer.Number(AdanFirstKey.Key), optimizer.Number(AdanSecondKey.Key), optimizer.Number(AdanThirdKey.Key)),
+                Epsilon = optimizer.Number(TinyKey.Key),
+                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
+            }),
+    ], Refused);
+
+    /// <summary>The losses, each with the loss it makes.</summary>
+    internal static KindVocabulary<Func<PartDeclaration, Loss>> LossVocabulary { get; } = new(
+    [
+        new("meanSquaredError", "The mean of the squared differences: an answer that is an amount.", [], _ => new MeanSquaredError()),
+        new("crossEntropy", "The loss of one answer among several classes, read through a softmax.", [SmoothingKey],
+            loss => new CrossEntropy { Smoothing = loss.Number(SmoothingKey.Key) }),
+        new("binaryCrossEntropy", "The loss of an answer that is a chance, read through a sigmoid.", [SmoothingKey],
+            loss => new BinaryCrossEntropy { Smoothing = loss.Number(SmoothingKey.Key) }),
+        new("earthMoversDistance", "How far the shares have to move along the order of the bands to be the answer's: an answer of shares in an order, read through a softmax.", [],
+            _ => new EarthMoversDistance()),
+        new("meanAbsoluteError", "The mean of the size of the differences: an answer that is an amount, some far off.", [], _ => new MeanAbsoluteError()),
+        new("huber", "Half the square of the difference near the answer, its size further off: an amount with outliers.", [DeltaKey],
+            loss => new Huber(loss.Number(DeltaKey.Key))),
+        new("quantile", "The pinball loss: the value the answer stays below a share of the time, rather than its mean.", [QuantileKey],
+            loss => new Quantile(loss.Number(QuantileKey.Key))),
+        new("focal", "A binary cross-entropy that weighs down the labels the network is already sure of: a rare class, read through a sigmoid.", [GammaKey, BalanceKey],
+            loss => new Focal(loss.Number(GammaKey.Key)) { Alpha = Focal.FromWritten(loss.Number(BalanceKey.Key)) }),
+        new("hinge", "How far each answer falls short of a margin of one on its side of nought: a label, read by the side it falls.", [], _ => new Hinge()),
+        new("poisson", "The loss of a count: an answer that is how many times something happened, read through an exponential when it is a logarithm.", [LogInputKey, RateEpsilonKey],
+            loss => new Poisson(loss.YesOrNo(LogInputKey.Key)) { Epsilon = loss.Number(RateEpsilonKey.Key) }),
+    ], Refused);
+
+    /// <summary>The schedules, each with the schedule it makes.</summary>
+    internal static KindVocabulary<Func<PartDeclaration, LearningRateSchedule>> ScheduleVocabulary { get; } = new(
+    [
+        new("constant", "The rate the optimizer starts at, every epoch.", [], _ => new ConstantRate()),
+        new("stepDecay", "The rate multiplied by a factor every so many epochs.", [EveryKey, FallKey],
+            schedule => new StepDecay(schedule.Whole(EveryKey.Key), schedule.Number(FallKey.Key))),
+        new("exponentialDecay", "The rate multiplied by a factor every epoch.", [EpochFactorKey],
+            schedule => new ExponentialDecay(schedule.Number(EpochFactorKey.Key))),
+        new("cosineDecay", "The rate falling along half a cosine to its least over so many epochs.", [CosineKey, LeastRateKey],
+            schedule => new CosineDecay(schedule.Whole(CosineKey.Key), schedule.Number(LeastRateKey.Key))),
+        new("linearWarmup", "The rate rising in a straight line from a share of itself to the whole of it over so many epochs, then held.", [WarmupKey, StartKey],
+            schedule => new LinearWarmup(schedule.Whole(WarmupKey.Key), schedule.Number(StartKey.Key))),
+        new("trainingPlateau", "The rate lowered by a factor once the training loss has stopped falling for so many epochs.", [PlateauWaitKey, PlateauFactorKey, PlateauThresholdKey, PlateauCooldownKey, PlateauLeastKey],
+            schedule => new TrainingPlateau(schedule.Whole(PlateauWaitKey.Key), schedule.Number(PlateauFactorKey.Key))
+            {
+                Threshold = schedule.Number(PlateauThresholdKey.Key),
+                Cooldown = schedule.Whole(PlateauCooldownKey.Key),
+                Minimum = schedule.Number(PlateauLeastKey.Key),
+            }),
+    ], Refused);
+
+    /// <summary>The ways a run stops, each with the stopping it makes: nothing for a run that goes on to its last pass.</summary>
+    internal static KindVocabulary<Func<PartDeclaration, EarlyStopping?>> StoppingVocabulary { get; } = new(
+    [
+        new("never", "The run goes on to its last pass.", [], _ => null),
+        new("patience", "The run stops once the validation loss has not fallen for as many passes as it waits.", [PatienceKey, LeastKey, BestKey],
+            stopping => new EarlyStopping
+            {
+                Patience = stopping.Whole(PatienceKey.Key),
+                MinDelta = stopping.Number(LeastKey.Key),
+                RestoreBest = stopping.YesOrNo(BestKey.Key),
+            }),
+    ], Refused);
 
     extension(IReadOnlyList<PartDeclaration> layers)
     {
@@ -494,8 +654,7 @@ public static class NetworkWords
         /// <exception cref="ArgumentException">A setting is outside what the optimizer takes, or its options do not go together.</exception>
         public Optimizer Moved()
         {
-            var made = Word(OptimizerWords, optimizer, Optimizers);
-            var moved = made(Optimizers.Single(kind => kind.Name == optimizer.Kind).Completed(optimizer));
+            var moved = OptimizerVocabulary.Lowered(optimizer)(OptimizerVocabulary.Kind(optimizer.Kind).Completed(optimizer));
 
             moved.Validate();
 
@@ -508,7 +667,7 @@ public static class NetworkWords
         /// <summary>The loss a declared part names.</summary>
         /// <returns>The loss.</returns>
         /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
-        public Loss Judged() => Word(LossWords, loss, Losses)(Losses.Single(kind => kind.Name == loss.Kind).Completed(loss));
+        public Loss Judged() => LossVocabulary.Lowered(loss)(LossVocabulary.Kind(loss.Kind).Completed(loss));
     }
 
     extension(PartDeclaration schedule)
@@ -516,7 +675,7 @@ public static class NetworkWords
         /// <summary>How the rate changes from epoch to epoch, as a declared part names it.</summary>
         /// <returns>The schedule.</returns>
         /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
-        public LearningRateSchedule Scheduled() => Word(ScheduleWords, schedule, Schedules)(schedule);
+        public LearningRateSchedule Scheduled() => ScheduleVocabulary.Lowered(schedule)(schedule);
     }
 
     extension(PartDeclaration stopping)
@@ -524,11 +683,14 @@ public static class NetworkWords
         /// <summary>When the run a declared part names stops, or nothing when it goes on to its last pass.</summary>
         /// <returns>The stopping, or nothing.</returns>
         /// <exception cref="NotSupportedException">It gives a name these words do not know.</exception>
-        public EarlyStopping? Stops() => Word(StoppingWords, stopping, Stopping)(stopping);
+        public EarlyStopping? Stops() => StoppingVocabulary.Lowered(stopping)(stopping);
     }
 
-    // A layer's kind, with the two things every step may say beside what its word takes: a name and the steps it takes.
-    private static PartKind Step(string name, string purpose, IReadOnlyList<StepParameter> settings) => new(name, purpose, [.. settings, NameKey, TakesKey]);
+    // A layer's kind, with the two things every step may say beside what its word takes, a name and the steps it takes, and
+    // the description it puts on.
+    private static KindWord<Func<Sequential, PartDeclaration, Sequential>> Step(
+        string name, string purpose, IReadOnlyList<StepParameter> settings, Func<Sequential, PartDeclaration, Sequential> lower) =>
+        new(name, purpose, [.. settings, NameKey, TakesKey], lower);
 
     /// <summary>The name of a step, held to the rule a name written in a description is held to.</summary>
     /// <param name="name">The name.</param>
@@ -568,8 +730,8 @@ public static class NetworkWords
     // One declared layer put on the description: what its word makes, then the name and the steps it says of the step that word made.
     private static Sequential Made(Sequential described, PartDeclaration layer)
     {
-        var word = Word(LayerWords, layer, Layers);
-        var kind = Layers.Single(each => each.Name == layer.Kind);
+        var word = LayerVocabulary.Lowered(layer);
+        var kind = LayerVocabulary.Kind(layer.Kind);
         var completed = kind.Completed(layer);
         var made = word(described, completed);
 
@@ -626,165 +788,7 @@ public static class NetworkWords
         WithoutShift = !layer.YesOrNo(ShiftKey.Key),
     };
 
-    // What one word makes, looked up by the name the part gives: one table per family, so a word is added by writing it
-    // beside the name it is written under rather than by widening a decision somewhere else.
-    private static TMade Word<TMade>(IReadOnlyDictionary<string, TMade> words, PartDeclaration part, IReadOnlyList<PartKind> kinds) =>
-        words.TryGetValue(part.Kind, out var made)
-            ? made
-            : throw new NotSupportedException(Refused.TryGetValue(part.Kind, out var why)
-                ? $"'{part.Kind}' is not a word a declared network is written in: {why}"
-                : $"'{part.Kind}' is not a word a declared network is written in: {kinds.Select(kind => kind.Name).Quoted()}.");
-
-    // The words left out on purpose, each with why and with the word that says it.
-    private static IReadOnlyDictionary<string, string> Refused { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["smoothL1"] =
-            "PyTorch's SmoothL1Loss is the Huber loss over its beta, so it is one word, 'huber', with its delta at that beta — the same network learned, its loss beta times as large.",
-    };
-
-    private static IReadOnlyDictionary<string, Func<Sequential, PartDeclaration, Sequential>> LayerWords { get; } =
-        new Dictionary<string, Func<Sequential, PartDeclaration, Sequential>>(StringComparer.Ordinal)
-        {
-            ["dense"] = (described, layer) => GovernedBy(layer, described.Dense(layer.Whole(UnitsKey.Key), StartOf(layer))),
-            ["relu"] = (described, _) => described.Relu(),
-            ["tanh"] = (described, _) => described.Tanh(),
-            ["sigmoid"] = (described, _) => described.Sigmoid(),
-            ["dropout"] = (described, layer) => described.Dropout(layer.Number(RateKey.Key)),
-            ["randomFlip"] = (described, layer) => described.RandomFlip(layer.YesOrNo(FlipAcrossKey.Key), layer.YesOrNo(FlipDownKey.Key), layer.Whole(VariationSeedKey.Key)),
-            ["randomCrop"] = (described, layer) => described.RandomCrop(layer.Whole(PadKey.Key), layer.Whole(VariationSeedKey.Key)),
-            ["gaussianNoise"] = (described, layer) => described.GaussianNoise(layer.Number(SpreadKey.Key), layer.Whole(VariationSeedKey.Key)),
-            ["flatten"] = (described, _) => described.Flatten(),
-            ["add"] = (described, layer) => described.Add(StepsOf(layer)),
-            ["concatenate"] = (described, layer) => described.Concatenate(StepsOf(layer)),
-            ["columns"] = (described, layer) => described.Columns(layer.Whole(ColumnFirstKey.Key), layer.Whole(ColumnCountKey.Key)),
-            ["multiply"] = (described, layer) => described.Multiply(StepsOf(layer)),
-            ["batchNorm"] = (described, layer) => GovernedBy(layer, described.BatchNorm(layer.Number(MomentumKey.Key), layer.Number(EpsilonKey.Key), KeptBy(layer))),
-            ["layerNorm"] = (described, layer) => GovernedBy(layer, described.LayerNorm(layer.Number(EpsilonKey.Key), KeptBy(layer))),
-            ["gelu"] = (described, layer) => described.Gelu(layer.YesOrNo(ApproximateKey.Key)),
-            ["silu"] = (described, _) => described.Silu(),
-            ["mish"] = (described, _) => described.Mish(),
-            ["leakyRelu"] = (described, layer) => described.LeakyRelu(layer.Number(SlopeKey.Key)),
-            ["prelu"] = (described, layer) => described.PRelu(layer.YesOrNo(EachFeatureKey.Key)),
-            ["elu"] = (described, layer) => described.Elu(layer.Number(BendKey.Key)),
-            ["selu"] = (described, _) => described.Selu(),
-            ["softmax"] = (described, _) => described.Softmax(),
-            ["rmsNorm"] = (described, layer) => GovernedBy(layer, described.RmsNorm(layer.Number(RootEpsilonKey.Key), layer.YesOrNo(ScaleKey.Key))),
-            ["periodic"] = (described, layer) => described.Periodic(
-                new Periodicity(layer.Whole(FrequenciesKey.Key), layer.Number(SigmaKey.Key), layer.Whole(WidthKey.Key)) { Lite = layer.YesOrNo(LiteKey.Key) }),
-            ["tokenEmbedding"] = (described, layer) => described.TokenEmbedding(layer.Whole(TokenVocabularyKey.Key), layer.Whole(TokenWidthKey.Key), layer.YesOrNo(KeepStepsKey.Key)),
-            ["unpadded"] = (described, _) => described.Unpadded(),
-            ["lstm"] = (described, layer) => described.Lstm(layer.Whole(UnitsKey.Key), layer.YesOrNo(BothWaysKey.Key), layer.Whole(RecurrentLayersKey.Key), layer.YesOrNo(SequencesKey.Key)),
-            ["gru"] = (described, layer) => described.Gru(layer.Whole(UnitsKey.Key), layer.YesOrNo(BothWaysKey.Key), layer.Whole(RecurrentLayersKey.Key), layer.YesOrNo(SequencesKey.Key)),
-            ["multiHeadAttention"] = (described, layer) => described.MultiHeadAttention(Looking(layer)),
-            ["attention"] = (described, layer) => described.Attention(Looking(layer)),
-            ["sinePositions"] = (described, _) => described.SinePositions(),
-            [EmbeddingWord] = (_, layer) => throw new InvalidOperationException(
-                $"An embedding of '{layer.Text(EmbeddingColumnKey.Key)}' reads its block from the rows a pipeline hands over, so it is lowered where they are: train the network behind its pipeline."),
-        };
-
     // How a declared attention looks: its heads, whether it is causal, and the share of its weights it leaves out as it trains.
     private static Attending Looking(PartDeclaration layer) =>
         new(layer.Whole(HeadsKey.Key)) { Causal = layer.YesOrNo(CausalKey.Key), Dropout = layer.Number(AttentionDropoutKey.Key) };
-
-    private static IReadOnlyDictionary<string, Func<PartDeclaration, Optimizer>> OptimizerWords { get; } =
-        new Dictionary<string, Func<PartDeclaration, Optimizer>>(StringComparer.Ordinal)
-        {
-            ["sgd"] = optimizer => new Sgd(optimizer.Number(StepKey.Key))
-            {
-                Momentum = optimizer.Number(CarriedKey.Key),
-                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
-                Dampening = optimizer.Number(DampeningKey.Key),
-                Nesterov = optimizer.YesOrNo(NesterovKey.Key),
-            },
-            ["adam"] = optimizer => new Adam(optimizer.Number(StepKey.Key))
-            {
-                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
-                Epsilon = optimizer.Number(TinyKey.Key),
-                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
-                AmsGrad = optimizer.YesOrNo(AmsGradKey.Key),
-            },
-            ["adamw"] = optimizer => new AdamW(optimizer.Number(StepKey.Key))
-            {
-                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
-                Epsilon = optimizer.Number(TinyKey.Key),
-                WeightDecay = optimizer.Number(DecayKey.Key),
-                AmsGrad = optimizer.YesOrNo(AmsGradKey.Key),
-            },
-            ["rmsprop"] = optimizer => new RmsProp(optimizer.Number(SquaresRateKey.Key))
-            {
-                Alpha = optimizer.Number(AlphaKey.Key),
-                Epsilon = optimizer.Number(TinyKey.Key),
-                Momentum = optimizer.Number(CarriedKey.Key),
-                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
-                Centered = optimizer.YesOrNo(CenteredKey.Key),
-            },
-            ["nadam"] = optimizer => new Nadam(optimizer.Number(NesterovRateKey.Key))
-            {
-                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
-                Epsilon = optimizer.Number(TinyKey.Key),
-                MomentumDecay = optimizer.Number(WarmingKey.Key),
-                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
-            },
-            ["radam"] = optimizer => new RAdam(optimizer.Number(StepKey.Key))
-            {
-                Betas = new Betas(optimizer.Number(FirstKey.Key), optimizer.Number(SecondKey.Key)),
-                Epsilon = optimizer.Number(TinyKey.Key),
-                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
-                DecoupledWeightDecay = optimizer.YesOrNo(DecoupledDecayKey.Key),
-            },
-            ["lion"] = optimizer => new Lion(optimizer.Number(LionStepKey.Key))
-            {
-                Betas = new Betas(optimizer.Number(LionFirstKey.Key), optimizer.Number(LionSecondKey.Key)),
-                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
-            },
-            ["adan"] = optimizer => new Adan(optimizer.Number(StepKey.Key))
-            {
-                Betas = new AdanBetas(optimizer.Number(AdanFirstKey.Key), optimizer.Number(AdanSecondKey.Key), optimizer.Number(AdanThirdKey.Key)),
-                Epsilon = optimizer.Number(TinyKey.Key),
-                WeightDecay = optimizer.Number(CoupledDecayKey.Key),
-            },
-        };
-
-    private static IReadOnlyDictionary<string, Func<PartDeclaration, Loss>> LossWords { get; } =
-        new Dictionary<string, Func<PartDeclaration, Loss>>(StringComparer.Ordinal)
-        {
-            ["meanSquaredError"] = _ => new MeanSquaredError(),
-            ["crossEntropy"] = loss => new CrossEntropy { Smoothing = loss.Number(SmoothingKey.Key) },
-            ["binaryCrossEntropy"] = loss => new BinaryCrossEntropy { Smoothing = loss.Number(SmoothingKey.Key) },
-            ["earthMoversDistance"] = _ => new EarthMoversDistance(),
-            ["meanAbsoluteError"] = _ => new MeanAbsoluteError(),
-            ["huber"] = loss => new Huber(loss.Number(DeltaKey.Key)),
-            ["quantile"] = loss => new Quantile(loss.Number(QuantileKey.Key)),
-            ["focal"] = loss => new Focal(loss.Number(GammaKey.Key)) { Alpha = Focal.FromWritten(loss.Number(BalanceKey.Key)) },
-            ["hinge"] = _ => new Hinge(),
-            ["poisson"] = loss => new Poisson(loss.YesOrNo(LogInputKey.Key)) { Epsilon = loss.Number(RateEpsilonKey.Key) },
-        };
-
-    private static IReadOnlyDictionary<string, Func<PartDeclaration, LearningRateSchedule>> ScheduleWords { get; } =
-        new Dictionary<string, Func<PartDeclaration, LearningRateSchedule>>(StringComparer.Ordinal)
-        {
-            ["constant"] = _ => new ConstantRate(),
-            ["stepDecay"] = schedule => new StepDecay(schedule.Whole(EveryKey.Key), schedule.Number(FallKey.Key)),
-            ["exponentialDecay"] = schedule => new ExponentialDecay(schedule.Number(EpochFactorKey.Key)),
-            ["cosineDecay"] = schedule => new CosineDecay(schedule.Whole(CosineKey.Key), schedule.Number(LeastRateKey.Key)),
-            ["linearWarmup"] = schedule => new LinearWarmup(schedule.Whole(WarmupKey.Key), schedule.Number(StartKey.Key)),
-            ["trainingPlateau"] = schedule => new TrainingPlateau(schedule.Whole(PlateauWaitKey.Key), schedule.Number(PlateauFactorKey.Key))
-            {
-                Threshold = schedule.Number(PlateauThresholdKey.Key),
-                Cooldown = schedule.Whole(PlateauCooldownKey.Key),
-                Minimum = schedule.Number(PlateauLeastKey.Key),
-            },
-        };
-
-    private static IReadOnlyDictionary<string, Func<PartDeclaration, EarlyStopping?>> StoppingWords { get; } =
-        new Dictionary<string, Func<PartDeclaration, EarlyStopping?>>(StringComparer.Ordinal)
-        {
-            ["never"] = _ => null,
-            ["patience"] = stopping => new EarlyStopping
-            {
-                Patience = stopping.Whole(PatienceKey.Key),
-                MinDelta = stopping.Number(LeastKey.Key),
-                RestoreBest = stopping.YesOrNo(BestKey.Key),
-            },
-        };
 }

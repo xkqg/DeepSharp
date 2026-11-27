@@ -109,6 +109,12 @@ public class DeclaredOptimizerTests
         Assert.Equal(Word("adamw").Declared(), keras.Optimizer);
         Assert.Contains("WithTorch", Assert.Throws<NotSupportedException>(() => Passengers().WithTensorflow(network => network.Dense(1).RmsProp())).Message, StringComparison.Ordinal);
         Assert.Contains("WithTorch", Assert.Throws<NotSupportedException>(() => Passengers().WithTensorflow(network => network.Dense(1).Nadam())).Message, StringComparison.Ordinal);
+        Assert.Equal(
+            "Keras's RMSprop works its steps out otherwise than PyTorch's, which this library runs, so a network declared in Keras's words cannot say it: declare it in PyTorch's, .WithTorch(network => network.RmsProp(…)).",
+            Assert.Throws<NotSupportedException>(() => Passengers().WithTensorflow(network => network.Dense(1).RmsProp())).Message);
+        Assert.Equal(
+            "WeightDecay adds a share of every number to its gradient, which Keras's weight_decay does not: it decays the number itself, and this library runs it as PyTorch's optimizers do, so a network declared in Keras's words cannot say it: declare it in PyTorch's, .WithTorch(network => network.WeightDecay(…)).",
+            Assert.Throws<NotSupportedException>(() => Passengers().WithTensorflow(network => network.Dense(1).Adam().WeightDecay(0.1))).Message);
     }
 
     [Theory]
