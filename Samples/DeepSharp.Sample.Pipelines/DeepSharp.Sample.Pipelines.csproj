@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <!-- The same major as the library's container abstractions, the newest that is built for .NET 8. -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="11.0.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.*" />
   </ItemGroup>
 
