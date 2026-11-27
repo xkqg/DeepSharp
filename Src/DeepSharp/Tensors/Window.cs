@@ -140,12 +140,13 @@ public readonly record struct Window(int Height, int Width)
     /// What an average that counts its border divides by: the border it was told to pad with counts, and the places beyond it
     /// that a window rounding up overhangs do not, which is PyTorch's own rule for <c>count_include_pad</c>.
     /// </remarks>
-    internal (int[] Down, int[] Across) CellsWithin(int rows, int columns)
+    internal CellCounts CellsWithin(int rows, int columns)
     {
         var border = BordersOver(rows, columns);
 
-        return (Within(rows + border.Top + border.Bottom, RowsOver(rows), Downward),
-                Within(columns + border.Left + border.Right, ColumnsOver(columns), Crosswise));
+        return new CellCounts(
+            Within(rows + border.Top + border.Bottom, RowsOver(rows), Downward),
+            Within(columns + border.Left + border.Right, ColumnsOver(columns), Crosswise));
     }
 
     // Whether the patch of the last place reaches past the end of an axis, which it can only where the window rounds up.
@@ -284,6 +285,11 @@ public readonly record struct Margins3D(Sides Deep, Sides Down, Sides Across);
 /// miss the dilation: a window that says more than an engine reads would walk the wrong places and say nothing about it.
 /// </remarks>
 public readonly record struct Placing(Borders Border, Steps Stride, Steps Dilation);
+
+/// <summary>How many cells of each patch lie inside an image with its border, for every place along each of its two axes.</summary>
+/// <param name="Down">A count for every row of patches.</param>
+/// <param name="Across">A count for every column of patches.</param>
+internal readonly record struct CellCounts(int[] Down, int[] Across);
 
 /// <summary>How a <see cref="Window"/> has its border.</summary>
 public enum PaddingMode

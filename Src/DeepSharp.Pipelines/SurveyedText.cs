@@ -196,7 +196,7 @@ internal sealed class SurveyedText
         $"The text stops being JSON here: {WithoutItsPlace(fault.Message).Quoted()}";
 
     /// <summary>The value a larger file holds under a key at its top, taken as it passes, and where it starts.</summary>
-    private (byte[] Part, long Start) PartUnder(string property)
+    private TakenValue PartUnder(string property)
     {
         var pieces = new TextPieces(_json);
         var taken = new ArrayBufferWriter<byte>();
@@ -284,7 +284,7 @@ internal sealed class SurveyedText
 
         ThrowIfFaulty();
 
-        return (taken.WrittenSpan.ToArray(), start);
+        return new TakenValue(taken.WrittenSpan.ToArray(), start);
     }
 
     /// <summary>Where a reader's fault is, from the line and the byte in that line it names, both from nought.</summary>
@@ -341,6 +341,9 @@ internal sealed class SurveyedText
 
     /// <summary>A fault noted while reading, and the offset in the text of the thing it is about.</summary>
     private readonly record struct Noted(long Offset, string Message);
+
+    /// <summary>The value a larger file holds under a key at its top, as the bytes it is written in and the offset of its first byte in that file.</summary>
+    private readonly record struct TakenValue(byte[] Bytes, long Start);
 
     /// <summary>Where the parts of a file stand in its text, as offsets of their first byte.</summary>
     private sealed class Places

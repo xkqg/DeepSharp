@@ -349,7 +349,7 @@ public sealed partial class Sequential
         RequireUnseeded(beginning);
 
         var stated = window.Border ?? new Sides(window.Padding, window.Padding);
-        var settled = TransposedConvolution.Settling(stated, outputPadding);
+        var settled = TransposedConvolution.Settle(stated, outputPadding);
 
         return Append(new TransposedWord(
             "conv1dtranspose",
@@ -386,8 +386,8 @@ public sealed partial class Sequential
         RequireUnseeded(beginning);
 
         var even = new Sides(window.Padding, window.Padding);
-        var down = TransposedConvolution.Settling(window.Border is { } sides ? sides.Down : even, outputPadding.Down);
-        var across = TransposedConvolution.Settling(window.Border is { } also ? also.Across : even, outputPadding.Across);
+        var down = TransposedConvolution.Settle(window.Border is { } sides ? sides.Down : even, outputPadding.Down);
+        var across = TransposedConvolution.Settle(window.Border is { } also ? also.Across : even, outputPadding.Across);
 
         return Append(new TransposedWord(
             "conv2dtranspose",
@@ -426,9 +426,9 @@ public sealed partial class Sequential
 
         var even = new Sides(window.Padding, window.Padding);
         var stated = window.Border ?? new Margins3D(even, even, even);
-        var deep = TransposedConvolution.Settling(stated.Deep, outputPadding.Deep);
-        var down = TransposedConvolution.Settling(stated.Down, outputPadding.Down);
-        var across = TransposedConvolution.Settling(stated.Across, outputPadding.Across);
+        var deep = TransposedConvolution.Settle(stated.Deep, outputPadding.Deep);
+        var down = TransposedConvolution.Settle(stated.Down, outputPadding.Down);
+        var across = TransposedConvolution.Settle(stated.Across, outputPadding.Across);
 
         return Append(new TransposedWord(
             "conv3dtranspose",

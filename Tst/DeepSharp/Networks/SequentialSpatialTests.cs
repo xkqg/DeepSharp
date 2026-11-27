@@ -98,6 +98,30 @@ public class SequentialSpatialTests
     }
 
     [Fact]
+    public void TheOutputPaddingIsKeptByDroppingLess_AndOnlyWhatTheBorderLacksIsAdded_InBothFormsOfTheAnswer()
+    {
+        static void Settles(Sides given, int outputPadding, Sides drops, int added)
+        {
+            var settled = TransposedConvolution.Settle(given, outputPadding);
+
+            Assert.Equal(drops, settled.Dropped);
+            Assert.Equal(added, settled.Added);
+
+            // The form an earlier release published stays, and says the same thing as a pair.
+#pragma warning disable CS0618
+            var (dropped, grown) = TransposedConvolution.Settling(given, outputPadding);
+#pragma warning restore CS0618
+
+            Assert.Equal(settled.Dropped, dropped);
+            Assert.Equal(settled.Added, grown);
+        }
+
+        Settles(new Sides(2, 3), 1, new Sides(2, 2), 0);
+        Settles(new Sides(2, 0), 1, new Sides(2, 0), 1);
+        Settles(new Sides(1, 1), 0, new Sides(1, 1), 0);
+    }
+
+    [Fact]
     public void EveryWordOfTheRefusedList_LowersToTheLayerItNames_AlongASeries_OverAnImage_AndThroughAVolume()
     {
         var line = new Sequential()

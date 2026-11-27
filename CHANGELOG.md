@@ -7,6 +7,12 @@ as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 The seventh letter of the flock team.
 
+### Upgrading from 0.18.0
+
+- **`TransposedConvolution.Settling` is obsolete.** It handed back a pair of values; `TransposedConvolution.Settle` hands
+  back the same two, `Dropped` and `Added`, as a `Settlement`. The old form still compiles, with a warning naming the new
+  one.
+
 ### Changed
 
 - **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.30.0.** Its data frame now hands

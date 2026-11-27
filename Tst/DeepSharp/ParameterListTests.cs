@@ -9,7 +9,9 @@ namespace DeepSharp.Tests;
 /// <summary>
 /// No method and no constructor in a package takes more than four parameters, as CONTRIBUTING says: a fifth says some
 /// of them belong together. The rule is read from the assemblies themselves, public members and private ones alike,
-/// so it holds for code nobody remembered to look at.
+/// so it holds for code nobody remembered to look at. The same reading holds two more of CONTRIBUTING's rules about the
+/// shape of a member: several values out of a method are a record struct and never a tuple, and no type is named for a
+/// drawer nobody owns (a helper, a utility, a manager).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -126,6 +128,149 @@ public class ParameterListTests
 
         Assert.Equal(packages, ReadBy.Keys.Order(StringComparer.Ordinal));
     }
+
+    [Fact]
+    public void NoMemberHandsBackOrTakesATuple()
+    {
+        var read = ReadHere().ToArray();
+        var tuples = read.SelectMany(TupleMembers).Except(PublishedTuples).Except(TuplesUntilTheirStepRemovesThem).ToArray();
+
+        Assert.NotEmpty(read);
+
+        if (tuples.Length > 0)
+        {
+            Assert.Fail($"{tuples.Length} members return, take or hold a tuple, where CONTRIBUTING asks for a readonly record struct:{Environment.NewLine}" +
+                        string.Join(Environment.NewLine, tuples));
+        }
+    }
+
+    [Fact]
+    public void EachListedTupleFormIsStillThere_AndAPublishedOneIsObsolete()
+    {
+        // A name that no longer matches a member would let the lists outlive what they excuse.
+        foreach (var assembly in ReadHere())
+        {
+            var name = assembly.GetName().Name;
+            var members = TupleMemberInfos(assembly).ToArray();
+
+            foreach (var listed in PublishedTuples.Concat(TuplesUntilTheirStepRemovesThem).Where(entry => entry.StartsWith($"{name}: ", StringComparison.Ordinal)))
+            {
+                var found = members.Where(member => ListedTuple(member) == listed).ToArray();
+
+                Assert.NotEmpty(found);
+            }
+
+            foreach (var listed in PublishedTuples.Where(entry => entry.StartsWith($"{name}: ", StringComparison.Ordinal)))
+            {
+                var member = members.First(member => ListedTuple(member) == listed);
+
+                Assert.True(member.IsDefined(typeof(ObsoleteAttribute), false), $"{listed} is kept but not obsolete.");
+            }
+        }
+    }
+
+    [Fact]
+    public void NoTypeIsNamedForADrawerNobodyOwns()
+    {
+        var read = ReadHere().ToArray();
+        var drawers = read.SelectMany(assembly => assembly.GetTypes())
+            .Where(type => !WrittenByTheCompiler(type))
+            .Where(type => Drawers.Any(drawer => type.Name.EndsWith(drawer, StringComparison.Ordinal)))
+            .Select(type => $"{type.Assembly.GetName().Name}: {type.FullName}")
+            .ToArray();
+
+        Assert.NotEmpty(read);
+
+        if (drawers.Length > 0)
+        {
+            Assert.Fail($"{drawers.Length} types are named for a drawer, which CONTRIBUTING refuses:{Environment.NewLine}" + string.Join(Environment.NewLine, drawers));
+        }
+    }
+
+    private static readonly string[] Drawers = ["Helper", "Helpers", "Util", "Utils", "Utility", "Utilities", "Manager"];
+
+    /// <summary>
+    /// The only tuple form a package may keep: one an earlier release published, marked obsolete in favour of the record
+    /// struct beside it, so that code written against it still compiles.
+    /// </summary>
+    private static readonly string[] PublishedTuples =
+    [
+        "DeepSharp: DeepSharp.Networks.TransposedConvolution.Settling(Sides, Int32)",
+    ];
+
+    /// <summary>
+    /// A tuple that is on its way out in a later step of the same release: the study loop it belongs to is dissolved
+    /// there, and the loop's trial and its models are handed over by what replaces it. Step S10 removes this entry with it.
+    /// </summary>
+    private static readonly string[] TuplesUntilTheirStepRemovesThem =
+    [
+        "DeepSharp.Learners.Networks: DeepSharp.Learners.Networks.Study`1.Tried(Candidate, PreparedData[], List<Trial>, CancellationToken)",
+    ];
+
+    private static IEnumerable<string> TupleMembers(Assembly assembly) => TupleMemberInfos(assembly).Select(ListedTuple);
+
+    private static IEnumerable<MemberInfo> TupleMemberInfos(Assembly assembly) =>
+        assembly.GetTypes()
+            .Where(type => !WrittenByTheCompiler(type))
+            .SelectMany(type => type.GetConstructors(Declared).Cast<MemberInfo>()
+                .Concat(type.GetMethods(Declared))
+                .Concat(type.GetFields(Declared)))
+            .Where(member => !member.Name.Contains('<', StringComparison.Ordinal) && !member.IsDefined(typeof(CompilerGeneratedAttribute), false))
+            .Where(member => TypesOf(member).Any(IsOrHoldsATuple))
+            .Where(member => member is not MethodInfo method || !IsSetByAnotherLibrary(method));
+
+    /// <summary>
+    /// A member whose shape a library outside this repository dictates: it implements a member of that library's interface,
+    /// or overrides one of its methods. A package cannot hand back anything but what the member there is declared to.
+    /// </summary>
+    private static bool IsSetByAnotherLibrary(MethodInfo method)
+    {
+        var type = method.DeclaringType!;
+
+        if (method.GetBaseDefinition().DeclaringType!.Assembly != type.Assembly && !IsOurs(method.GetBaseDefinition().DeclaringType!.Assembly))
+        {
+            return true;
+        }
+
+        return !type.IsInterface && type.GetInterfaces()
+            .Where(contract => !IsOurs(contract.Assembly))
+            .Any(contract => type.GetInterfaceMap(contract).TargetMethods.Contains(method));
+    }
+
+    private static bool IsOurs(Assembly assembly) => assembly.GetName().Name!.StartsWith("DeepSharp", StringComparison.Ordinal);
+
+    private static IEnumerable<Type> TypesOf(MemberInfo member) => member switch
+    {
+        MethodInfo method => method.GetParameters().Select(parameter => parameter.ParameterType).Append(method.ReturnType),
+        ConstructorInfo constructor => constructor.GetParameters().Select(parameter => parameter.ParameterType),
+        FieldInfo field => [field.FieldType],
+        _ => [],
+    };
+
+    private static bool IsOrHoldsATuple(Type type)
+    {
+        if (type.HasElementType)
+        {
+            return IsOrHoldsATuple(type.GetElementType()!);
+        }
+
+        if (!type.IsGenericType)
+        {
+            return false;
+        }
+
+        var definition = type.GetGenericTypeDefinition().FullName!;
+
+        return definition.StartsWith("System.ValueTuple`", StringComparison.Ordinal)
+               || definition.StartsWith("System.Tuple`", StringComparison.Ordinal)
+               || type.GetGenericArguments().Any(IsOrHoldsATuple);
+    }
+
+    private static string ListedTuple(MemberInfo member) =>
+        $"{member.DeclaringType!.Assembly.GetName().Name}: {member.DeclaringType.FullName!.Replace('+', '.')}.{member.Name}" +
+        (member is MethodBase method
+            ? $"({string.Join(", ", method.GetParameters().Select(parameter => Named(parameter.ParameterType)))})"
+            : string.Empty);
 
     private static IEnumerable<string> Over(Assembly assembly) =>
         Members(assembly)

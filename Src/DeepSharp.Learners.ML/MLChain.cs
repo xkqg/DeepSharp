@@ -24,7 +24,13 @@ public sealed class MLTrainerLine
     /// <param name="rate">How much of each tree's correction is taken.</param>
     /// <returns>This line, so the sentence reads on.</returns>
     public MLTrainerLine FastTree(int leaves = 20, int trees = 100, int leastRows = 10, double rate = 0.2) =>
-        Named("fastTree", [("leaves", PartValue.Of(leaves)), ("trees", PartValue.Of(trees)), ("leastRows", PartValue.Of(leastRows)), ("rate", PartValue.Of(rate))]);
+        Named("fastTree",
+        [
+            new PartSetting("leaves", PartValue.Of(leaves)),
+            new PartSetting("trees", PartValue.Of(trees)),
+            new PartSetting("leastRows", PartValue.Of(leastRows)),
+            new PartSetting("rate", PartValue.Of(rate)),
+        ]);
 
     /// <summary>A forest of trees grown apart and averaged, which holds up better on few rows than boosting does.</summary>
     /// <param name="leaves">How many leaves one tree may grow to.</param>
@@ -32,11 +38,16 @@ public sealed class MLTrainerLine
     /// <param name="leastRows">The fewest training rows a leaf may stand for.</param>
     /// <returns>This line, so the sentence reads on.</returns>
     public MLTrainerLine FastForest(int leaves = 20, int trees = 100, int leastRows = 10) =>
-        Named("fastForest", [("leaves", PartValue.Of(leaves)), ("trees", PartValue.Of(trees)), ("leastRows", PartValue.Of(leastRows))]);
+        Named("fastForest",
+        [
+            new PartSetting("leaves", PartValue.Of(leaves)),
+            new PartSetting("trees", PartValue.Of(trees)),
+            new PartSetting("leastRows", PartValue.Of(leastRows)),
+        ]);
 
-    private MLTrainerLine Named(string kind, IReadOnlyList<(string Key, PartValue Value)> settings)
+    private MLTrainerLine Named(string kind, IReadOnlyList<PartSetting> settings)
     {
-        Trainer = new PartDeclaration(kind, [.. settings.Select(setting => new PartSetting(setting.Key, setting.Value))]);
+        Trainer = new PartDeclaration(kind, [.. settings]);
 
         return this;
     }

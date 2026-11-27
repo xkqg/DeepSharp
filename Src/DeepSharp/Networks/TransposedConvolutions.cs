@@ -133,8 +133,20 @@ public abstract class TransposedConvolution : Convolution
     /// The folding reaches as far as the window does, so a place the output padding asks for is a place already made: it is
     /// kept by dropping less, and only where it asks for more places than the border had is anything added at the end.
     /// </remarks>
-    public static (Sides Dropped, int Added) Settling(Sides sides, int outputPadding) =>
-        (new Sides(sides.Before, Math.Max(0, sides.After - outputPadding)), Math.Max(0, outputPadding - sides.After));
+    public static Settlement Settle(Sides sides, int outputPadding) =>
+        new(new Sides(sides.Before, Math.Max(0, sides.After - outputPadding)), Math.Max(0, outputPadding - sides.After));
+
+    /// <summary>The border a window states at each end of an axis, as the layer was given it, handed back as a pair of values.</summary>
+    /// <param name="sides">The border given.</param>
+    /// <param name="outputPadding">How many places the output padding asks for at the end.</param>
+    /// <returns>What the folding drops, and what is added after it.</returns>
+    [Obsolete("Use Settle(sides, outputPadding), which hands back a Settlement with the same two members, Dropped and Added.")]
+    public static (Sides Dropped, int Added) Settling(Sides sides, int outputPadding)
+    {
+        var settlement = Settle(sides, outputPadding);
+
+        return (settlement.Dropped, settlement.Added);
+    }
 
     /// <summary>Refuses an output padding that reaches as far as the window's own walk does, and a border that is worked out.</summary>
     /// <param name="worked">Whether the window works its border out from the example rather than stating it.</param>
@@ -201,6 +213,11 @@ public abstract class TransposedConvolution : Convolution
     }
 }
 
+/// <summary>What the folding of a transposed convolution does about the border one axis states.</summary>
+/// <param name="Dropped">The border the folding drops, once the output padding has kept what it asks for.</param>
+/// <param name="Added">The places of nothing added after the folding, where the output padding asks for more than the border had.</param>
+public readonly record struct Settlement(Sides Dropped, int Added);
+
 /// <summary>A convolution along a series that gives back the steps an ordinary one takes away.</summary>
 public sealed class Conv1DTranspose : TransposedConvolution, ISaved<Conv1DTranspose>
 {
@@ -216,7 +233,7 @@ public sealed class Conv1DTranspose : TransposedConvolution, ISaved<Conv1DTransp
     {
         Window = window;
         Grew = outputPadding;
-        Grows = Growth(Settling(Stated, outputPadding).Added);
+        Grows = Growth(Settle(Stated, outputPadding).Added);
         RequireGrowth(window.PaddingMode != PaddingMode.Stated);
     }
 
@@ -299,7 +316,7 @@ public sealed class Conv1DTranspose : TransposedConvolution, ISaved<Conv1DTransp
     private protected override int Size(int axis) => Window.Length;
 
     /// <inheritdoc />
-    private protected override Sides Sides(int axis) => Settling(Stated, Grew).Dropped;
+    private protected override Sides Sides(int axis) => Settle(Stated, Grew).Dropped;
 
     // The border the window was given, whichever way it says it.
     private Sides Stated => Window.Border ?? new Sides(Window.Padding, Window.Padding);
@@ -309,7 +326,7 @@ public sealed class Conv1DTranspose : TransposedConvolution, ISaved<Conv1DTransp
     {
         var stated = window.Border ?? new Sides(window.Padding, window.Padding);
 
-        return window with { Padding = 0, PaddingMode = PaddingMode.Stated, Border = Settling(stated, outputPadding).Dropped };
+        return window with { Padding = 0, PaddingMode = PaddingMode.Stated, Border = Settle(stated, outputPadding).Dropped };
     }
 
     private static ISpatialWalk? Growth(int added) =>
@@ -419,7 +436,7 @@ public sealed class Conv2DTranspose : TransposedConvolution, ISaved<Conv2DTransp
     private protected override int Size(int axis) => axis == 0 ? Window.Height : Window.Width;
 
     /// <inheritdoc />
-    private protected override Sides Sides(int axis) => Settling(Stated(axis), axis == 0 ? Grew.Down : Grew.Across).Dropped;
+    private protected override Sides Sides(int axis) => Settle(Stated(axis), axis == 0 ? Grew.Down : Grew.Across).Dropped;
 
     // The border the window was given along one axis, whichever way it says it.
     private Sides Stated(int axis) =>
@@ -435,13 +452,13 @@ public sealed class Conv2DTranspose : TransposedConvolution, ISaved<Conv2DTransp
         {
             Padding = 0,
             PaddingMode = PaddingMode.Stated,
-            Border = new Margins(Settling(down, outputPadding.Down).Dropped, Settling(across, outputPadding.Across).Dropped),
+            Border = new Margins(Settle(down, outputPadding.Down).Dropped, Settle(across, outputPadding.Across).Dropped),
         };
     }
 
     private ISpatialWalk? Growth()
     {
-        var added = new Steps(Settling(Stated(0), Grew.Down).Added, Settling(Stated(1), Grew.Across).Added);
+        var added = new Steps(Settle(Stated(0), Grew.Down).Added, Settle(Stated(1), Grew.Across).Added);
 
         return added == default
             ? null
@@ -554,7 +571,7 @@ public sealed class Conv3DTranspose : TransposedConvolution, ISaved<Conv3DTransp
 
     /// <inheritdoc />
     private protected override Sides Sides(int axis) =>
-        Settling(Stated(axis), axis switch { 0 => Grew.Deep, 1 => Grew.Down, _ => Grew.Across }).Dropped;
+        Settle(Stated(axis), axis switch { 0 => Grew.Deep, 1 => Grew.Down, _ => Grew.Across }).Dropped;
 
     // The border the window was given along one axis, whichever way it says it.
     private Sides Stated(int axis) =>
@@ -573,18 +590,18 @@ public sealed class Conv3DTranspose : TransposedConvolution, ISaved<Conv3DTransp
             Padding = 0,
             PaddingMode = PaddingMode.Stated,
             Border = new Margins3D(
-                Settling(stated.Deep, outputPadding.Deep).Dropped,
-                Settling(stated.Down, outputPadding.Down).Dropped,
-                Settling(stated.Across, outputPadding.Across).Dropped),
+                Settle(stated.Deep, outputPadding.Deep).Dropped,
+                Settle(stated.Down, outputPadding.Down).Dropped,
+                Settle(stated.Across, outputPadding.Across).Dropped),
         };
     }
 
     private ISpatialWalk? Growth()
     {
         var added = new Steps3D(
-            Settling(Stated(0), Grew.Deep).Added,
-            Settling(Stated(1), Grew.Down).Added,
-            Settling(Stated(2), Grew.Across).Added);
+            Settle(Stated(0), Grew.Deep).Added,
+            Settle(Stated(1), Grew.Down).Added,
+            Settle(Stated(2), Grew.Across).Added);
 
         return added == default
             ? null
