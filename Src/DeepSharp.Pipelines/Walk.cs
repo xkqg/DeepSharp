@@ -138,6 +138,8 @@ internal sealed class Walk(Course course, WalkMode mode, SourceFolder folder)
         var table = Table;
         var parts = assign(table);
 
+        ThrowIfNotWhatEverySplitPromises(table, parts, course.Steps[_at].Verb);
+
         _divided = table;
 
         mode.ValuesFor(_at, () =>
@@ -220,6 +222,41 @@ internal sealed class Walk(Course course, WalkMode mode, SourceFolder folder)
     /// <summary>Puts the rows in an order, in every mode: a replay hands rows back in the declared order too.</summary>
     /// <param name="order">The rows as they are now, in the order they are to stand.</param>
     public void Reorder(IReadOnlyList<int> order) => _table = Table.Ordered(order);
+
+    // What every split promises, checked where every split divides the rows, so a split of the caller's — which comes in
+    // through the same door — is held to what this library's own already keep: one part a row, a part of the split's own
+    // rather than undivided, and a record and its copies in one part. A split that leaves no training row is refused where it
+    // matters, by what is fitted or measured on them, as it always was.
+    private static void ThrowIfNotWhatEverySplitPromises(Table table, Part[] parts, string verb)
+    {
+        if (parts.Length != table.RowCount)
+        {
+            throw new InvalidOperationException(
+                $"'{verb}' handed back {parts.Length} parts for {table.RowCount} rows, and a split gives one part for every row.");
+        }
+
+        if (Array.IndexOf(parts, Part.Undivided) is >= 0 and var undivided)
+        {
+            throw new InvalidOperationException(
+                $"'{verb}' left row {table.Identities[undivided].ReadAt + 1} undivided, and a split puts every row in a part of its own dealing.");
+        }
+
+        var firstOfEach = new Dictionary<RowKey, int>();
+
+        for (var row = 0; row < parts.Length; row++)
+        {
+            var key = table.Identities[row].Key;
+
+            if (firstOfEach.TryGetValue(key, out var first) && parts[first] != parts[row])
+            {
+                throw new InvalidOperationException(
+                    $"'{verb}' put rows {table.Identities[first].ReadAt + 1} and {table.Identities[row].ReadAt + 1}, two copies of one record, "
+                    + $"in {parts[first].Word()} and {parts[row].Word()}: a copy measured on is a copy learned from.");
+            }
+
+            firstOfEach.TryAdd(key, row);
+        }
+    }
 
     // A column a step reads can be gone by the time it is reached though the declaration allowed it: a fill that
     // saw too many gaps and left only its marker, a category the training rows never held. The refusal says

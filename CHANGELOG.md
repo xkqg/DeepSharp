@@ -12,10 +12,20 @@ The seventh letter of the flock team.
 - **`TransposedConvolution.Settling` is obsolete.** It handed back a pair of values; `TransposedConvolution.Settle` hands
   back the same two, `Dropped` and `Added`, as a `Settlement`. The old form still compiles, with a warning naming the new
   one.
+- **`PipelineBuilder.Add` refuses a split, naming `Split`.** A split that came in through `Add` stayed on the builder that
+  learns nothing, so what learns was then taken by the same door, and the split was never ranked by the declared id nor
+  handed a share held back. Write `.Split(step)` where `.Add(step)` stood; nothing else changes.
 - **An ensemble file whose blend is written as a number is refused.** A blend is read as one of its words, `average` or
   `vote`, as every other word a file holds is; `"1"` was taken for `vote` before. DeepSharp never wrote one.
 
 ### Added
+
+- **A split of your own.** `PipelineBuilder.Split(split)` takes any step that divides the rows — one from another package,
+  or one you write — and hands back the half of the chain that learns, as the library's own split verbs do. What a split
+  hands back is now held to what every split here already keeps: one part a row, none of them left undivided, and a record
+  and its copies in one part. A share held back with `Predict` or `Calibrate` is given to a split this library writes, so it
+  is refused beside one of yours. A file that names your verb is read back once the verb is registered with the catalog that
+  reads it. See [Writing a step of your own](https://github.com/xkqg/DeepSharp/wiki/Writing-a-step-of-your-own).
 
 - **A declaration says what it holds, and whether steps make one.** `PipelineDeclaration.Try(steps)` hands back a
   `DeclarationAttempt` — the declaration, or every fault the steps have — without throwing; `Schema` and `IdColumn` name

@@ -16,7 +16,7 @@ namespace DeepSharp.Pipelines;
 /// than something the fit discovers, because a split you cannot reproduce makes every number after it
 /// unreproducible too.
 /// </remarks>
-public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandomStep>, IDescribesColumns
+public sealed record SplitAtRandomStep : ISplitStep, IRanksRows, IPipelineStep<SplitAtRandomStep>, IDescribesColumns
 {
     private static readonly SplitSharesParameter SharesKey = new();
 
@@ -93,6 +93,9 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
 
     /// <summary>Whether this step ranks by the declared id rather than the whole record; set by the builder when the schema names one.</summary>
     public bool ById { get; init; }
+
+    /// <inheritdoc />
+    IRanksRows IRanksRows.RankedById() => this with { ById = true };
 
     /// <inheritdoc />
     public static string Name => "split.atRandom";
@@ -186,7 +189,7 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
 /// and a model measured there is measured on nothing much; this deals each group out separately so every
 /// part looks like the whole.
 /// </remarks>
-public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStratifiedStep>, IDescribesColumns
+public sealed record SplitStratifiedStep : ISplitStep, IRanksRows, IPipelineStep<SplitStratifiedStep>, IDescribesColumns
 {
     private static readonly ColumnParameter ColumnKey = new(
         "column", "The column whose mixture of values is kept the same in every part.", "class", ColumnKinds.Any);
@@ -243,6 +246,9 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
 
     /// <summary>Whether this step ranks by the declared id rather than the whole record; set by the builder when the schema names one.</summary>
     public bool ById { get; init; }
+
+    /// <inheritdoc />
+    IRanksRows IRanksRows.RankedById() => this with { ById = true };
 
     /// <inheritdoc />
     public static string Name => "split.stratified";

@@ -207,6 +207,45 @@ public class OneWalkTests
         Assert.Equal(108, prepared.BackToOriginal(close[0]!.Value), 6);
     }
 
+    public static TheoryData<string, Part[]> SplitsThatBreakWhatASplitPromises => new()
+    {
+        // One part a row: a split that hands back fewer would leave rows the walk then reads past the end of.
+        { "one part for every row", [Part.Train, Part.Train, Part.Test] },
+        // A part from the split itself: undivided is what a pipeline with no split hands back.
+        { "undivided", [Part.Train, Part.Train, Part.Undivided, Part.Test] },
+        // A record and its copy land together, as every split here keeps them, or the copy is measured on what it learned.
+        { "two copies", [Part.Train, Part.Test, Part.Test, Part.Train] },
+    };
+
+    [Theory]
+    [MemberData(nameof(SplitsThatBreakWhatASplitPromises))]
+    public void ASplitThatBreaksWhatEverySplitPromises_IsRefusedAtTheSplit(string promise, Part[] parts)
+    {
+        // A split of the caller's comes in through the split door, so what it hands back is checked where every split's is.
+        var rows = new InMemoryRowSource(["age", "fare"], [["1", "7"], ["2", "8"], ["1", "7"], ["4", "9"]]);
+        var pipeline = Pdd.Create()
+            .Read(rows, "four rows, the first and the third alike")
+            .Declare(schema => schema.Number("age", "fare"))
+            .Split(new HandedParts(parts))
+            .Normalise("age")
+            .Build();
+
+        var refused = Assert.Throws<InvalidOperationException>(() => pipeline.Run());
+
+        Assert.Contains("test.handedParts", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(promise, refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <summary>A split that hands back the parts it is given, whatever the rows are.</summary>
+    private sealed class HandedParts(Part[] parts) : ISplitStep
+    {
+        public string Verb => "test.handedParts";
+
+        public Part[] Assign(Table table) => parts;
+
+        public void WriteTo(Utf8JsonWriter writer) => throw new NotSupportedException("A test split is never written down.");
+    }
+
     /// <summary>What a table holds, cell by cell, so two tables can be compared as values.</summary>
     private sealed record Snapshot(string Written)
     {

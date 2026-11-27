@@ -44,6 +44,34 @@ public sealed record ScaleByStep : IPipelineStep<ScaleByStep>, IAddsColumns
             Column, ColumnKind.Number, table.NumbersOf(Column).Select(value => value * By)));
 }
 
+/// <summary>
+/// A split another package brings: the part each row belongs to, read from a column the caller dealt themselves — nought
+/// for training, one for validation, two for test — written the way a package author writes a step.
+/// </summary>
+public sealed record SplitByPartColumnStep : IPipelineStep<SplitByPartColumnStep>, ISplitStep
+{
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column that names each row's part: 0 training, 1 validation, 2 test.", "part", ColumnKinds.Numbers);
+
+    public SplitByPartColumnStep(string column) => Column = ColumnKey.Require(column);
+
+    public string Column { get; }
+
+    public static string Name => "split.byPartColumn";
+
+    public static string Purpose => "Divides the rows by a column that names each row's part.";
+
+    public static StepParameters<SplitByPartColumnStep> Parameters { get; } =
+        new StepParameters<SplitByPartColumnStep>().With(ColumnKey, step => step.Column);
+
+    public string Verb => Name;
+
+    public static SplitByPartColumnStep ReadFrom(JsonElement element) => new(ColumnKey.Read(element));
+
+    public Part[] Assign(Table table) =>
+        [.. table.NumbersOf(Column).Select(part => part switch { 0 => Part.Train, 1 => Part.Validation, _ => Part.Test })];
+}
+
 /// <summary>A source another package brings, which has nothing to open in a test.</summary>
 public sealed record ReadAvroStep : IPipelineStep<ReadAvroStep>, IOpensRows
 {

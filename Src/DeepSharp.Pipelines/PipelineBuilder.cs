@@ -16,19 +16,16 @@ namespace DeepSharp.Pipelines;
 /// </remarks>
 public sealed class PipelineBuilder
 {
-    private readonly List<IPipelineStep> _steps = [];
-    private bool _split;
-    private double _predict;
-    private double _calibration;
+    private readonly StepChain _chain = new(null);
+    private HeldBack _held;
     private Form? _features;
-    private IRowSource? _rows;
 
     internal PipelineBuilder()
     {
     }
 
     /// <summary>What has been declared so far.</summary>
-    public PipelineDeclaration Declaration => new(_steps);
+    public PipelineDeclaration Declaration => _chain.Declaration;
 
     /// <summary>Adds a declared step. Every verb, including one from another package, comes through here.</summary>
     /// <param name="step">The step to declare. It must not be one that learns from the data.</param>
@@ -41,12 +38,19 @@ public sealed class PipelineBuilder
         ArgumentNullException.ThrowIfNull(step);
         ThrowIfSplit();
 
+        // A split that came in here stayed on the half that learns nothing: what learns was then taken by this same door, and
+        // the split was never ranked by the declared id nor handed the shares held back. Every split comes in through Split.
+        if (step is ISplitStep split)
+        {
+            throw new InvalidOperationException(
+                $"'{split.Verb}' divides the rows, and a split comes in through Split(…), which hands back the half of the chain "
+                + "that learns. Add takes every other step.");
+        }
+
         // Refused where it is written, by the same rules the declaration keeps — a step that learns, above a
         // split not written yet, among them — rather than at the moment somebody asks for the declaration and
         // has to work out which line made it wrong.
-        PipelineDeclaration.ThrowIfFaulty([.. _steps, step]);
-
-        _steps.Add(step);
+        _chain.Add(step);
 
         return this;
     }
@@ -64,7 +68,7 @@ public sealed class PipelineBuilder
     {
         ArgumentNullException.ThrowIfNull(rows);
 
-        _rows = rows;
+        _chain.Rows = rows;
 
         return Add(new ReadRowsStep(description));
     }
@@ -93,7 +97,7 @@ public sealed class PipelineBuilder
     /// person, once, and replayed as written — not worked out again from whatever the file holds on the day it runs.
     /// </remarks>
     public KindProposal ProposedKinds() =>
-        KindProposal.Of(_rows ?? (_steps is [IOpensRows source, ..]
+        KindProposal.Of(_chain.Rows ?? (_chain.Steps is [IOpensRows source, ..]
             ? source.Open(SourceFolder.WorkingDirectory)
             : throw new InvalidOperationException("This pipeline never says where its rows come from, so there is nothing to propose.")));
 
@@ -133,15 +137,8 @@ public sealed class PipelineBuilder
         ArgumentNullException.ThrowIfNull(preset);
         ThrowIfSplit();
 
-        declared = preset.TakeOverOfTheSchema(Declaration, HeaderOf(_steps, _rows));
-
-        if (declared.Faults.Count > 0)
-        {
-            throw new DeclarationException(declared.Faults);
-        }
-
-        _steps.Clear();
-        _steps.AddRange(declared.Steps);
+        declared = preset.TakeOverOfTheSchema(Declaration, HeaderOf(_chain.Steps, _chain.Rows));
+        _chain.TakeOver(declared.Steps, declared.Faults);
 
         return this;
     }
@@ -426,7 +423,7 @@ public sealed class PipelineBuilder
     /// its own seed, which is a different question from which rows end up beside which.
     /// </remarks>
     public PipelineBuilder Shuffle(int seed = 20260929) =>
-        Add(_steps.IdColumn() is not null ? new ShuffleStep(seed) { ById = true } : new ShuffleStep(seed));
+        Add(new ShuffleStep(seed).RankedWhereAnIdStands(_chain.Steps));
 
     /// <summary>Says where the features of this pipeline land, for every scaling that names no kind.</summary>
     /// <param name="range">
@@ -457,10 +454,10 @@ public sealed class PipelineBuilder
 
         // It governs what is written after it, so a step already standing that it would have governed would be left
         // written one way while everything after it is written another.
-        if (_steps.OfType<IPlacesOnACircle>().FirstOrDefault() is { } governed)
+        if (_chain.Steps.FirstIndexOf<IPlacesOnACircle>() is >= 0 and var governed)
         {
             throw new InvalidOperationException(
-                $"Step {_steps.IndexOf(governed) + 1}, '{governed.Verb}', is already written and would have been "
+                $"Step {governed + 1}, '{_chain.Steps[governed].Verb}', is already written and would have been "
                 + $"written in {range} had the range been said first. Say where the features land above the steps it "
                 + "governs.");
         }
@@ -485,20 +482,7 @@ public sealed class PipelineBuilder
     {
         ThrowIfSplit();
 
-        if (!double.IsFinite(share) || share <= 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(share), share, "A share to predict on is more than none of the data.");
-        }
-
-        if (_predict > 0)
-        {
-            throw new InvalidOperationException(
-                $"This pipeline already holds {_predict} back to predict on, and a second share would "
-                + "quietly replace the first.");
-        }
-
-        _predict = share;
+        _held = _held.Predicting(share);
 
         return this;
     }
@@ -517,19 +501,7 @@ public sealed class PipelineBuilder
     {
         ThrowIfSplit();
 
-        if (!double.IsFinite(share) || share <= 0)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(share), share, "A share to calibrate on is more than none of the data.");
-        }
-
-        if (_calibration > 0)
-        {
-            throw new InvalidOperationException(
-                $"This pipeline already sets {_calibration} aside to calibrate on, and a second share would quietly replace the first.");
-        }
-
-        _calibration = share;
+        _held = _held.Calibrating(share);
 
         return this;
     }
@@ -549,7 +521,7 @@ public sealed class PipelineBuilder
     /// up to more than everything there is. <c>80, 10</c> and <c>0.80, 0.10</c> say the same thing.
     /// </remarks>
     public FittingBuilder SplitByTime(string column, double train, double validation = 0) =>
-        Split(new SplitByTimeStep(column, SplitShares.Of(train, validation, _predict, _calibration)));
+        Divided(new SplitByTimeStep(column, _held.Of(train, validation)));
 
     /// <summary>Splits the rows by where they sit in time, keeping the last moments of every part apart.</summary>
     /// <param name="column">The column that says when a row happened.</param>
@@ -565,7 +537,7 @@ public sealed class PipelineBuilder
     /// model is measured on. The rows kept apart are fitted on by nothing and handed to nothing.
     /// </remarks>
     public FittingBuilder SplitByTime(string column, double train, double validation, int gap) =>
-        Split(new SplitByTimeStep(column, SplitShares.Of(train, validation, _predict, _calibration), gap));
+        Divided(new SplitByTimeStep(column, _held.Of(train, validation), gap));
 
     /// <summary>Splits the rows at random, and opens the half of the chain that learns.</summary>
     /// <param name="train">The share the model learns from.</param>
@@ -577,7 +549,7 @@ public sealed class PipelineBuilder
     /// out rather than written, as it is everywhere here.
     /// </remarks>
     public FittingBuilder SplitAtRandom(double train, double validation = 0, int seed = 20260923) =>
-        Split(new SplitAtRandomStep(SplitShares.Of(train, validation, _predict, _calibration), seed));
+        Divided(new SplitAtRandomStep(_held.Of(train, validation), seed));
 
     /// <summary>Splits the rows at random with the rows to be measured on dealt by a number of their own.</summary>
     /// <param name="train">The share the model learns from.</param>
@@ -590,7 +562,7 @@ public sealed class PipelineBuilder
     /// to see how much a result owes to the luck of the deal, measures every trial on the rows no trial learned from.
     /// </remarks>
     public FittingBuilder SplitAtRandom(double train, double validation, int seed, int testSeed) =>
-        Split(new SplitAtRandomStep(SplitShares.Of(train, validation, _predict, _calibration), seed, testSeed));
+        Divided(new SplitAtRandomStep(_held.Of(train, validation), seed, testSeed));
 
     /// <summary>Splits at random so that the rows that are neither test nor predict are cut into slices, one of them validation.</summary>
     /// <param name="train">The share the rows that learn and are chosen with make of all of them.</param>
@@ -602,7 +574,7 @@ public sealed class PipelineBuilder
     /// pipeline of its own: build one for each index, and the test rows are the same on all of them.
     /// </remarks>
     public FittingBuilder SplitAtRandom(double train, Fold fold, int seed = 20260923) =>
-        Split(new SplitAtRandomStep(SplitShares.Of(train, 0, _predict, _calibration), seed, null, fold));
+        Divided(new SplitAtRandomStep(_held.Of(train), seed, null, fold));
 
     /// <summary>Splits at random into folds, the rows to be measured on dealt by a number of their own.</summary>
     /// <param name="train">The share the rows that learn and are chosen with make of all of them.</param>
@@ -611,7 +583,7 @@ public sealed class PipelineBuilder
     /// <param name="testSeed">The number that deals the rows to be measured on.</param>
     /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
     public FittingBuilder SplitAtRandom(double train, Fold fold, int seed, int testSeed) =>
-        Split(new SplitAtRandomStep(SplitShares.Of(train, 0, _predict, _calibration), seed, testSeed, fold));
+        Divided(new SplitAtRandomStep(_held.Of(train), seed, testSeed, fold));
 
     /// <summary>Splits at random into folds while keeping the mixture of one column the same in every part and every slice.</summary>
     /// <param name="column">The column whose mixture is kept.</param>
@@ -620,7 +592,7 @@ public sealed class PipelineBuilder
     /// <param name="seed">The number that makes the shuffle repeatable.</param>
     /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
     public FittingBuilder SplitStratified(string column, double train, Fold fold, int seed = 20260923) =>
-        Split(new SplitStratifiedStep(column, SplitShares.Of(train, 0, _predict, _calibration), seed, fold));
+        Divided(new SplitStratifiedStep(column, _held.Of(train), seed, fold));
 
     /// <summary>Splits by time so that the cut between training and validation stands at one of several places.</summary>
     /// <param name="column">The column that says when a row happened.</param>
@@ -633,7 +605,7 @@ public sealed class PipelineBuilder
     /// whose training rows are the earlier blocks and whose validation rows are the next, and the test rows are one block at the end.
     /// </remarks>
     public FittingBuilder SplitByTime(string column, double train, Origin origin, int gap = 0) =>
-        Split(new SplitByTimeStep(column, SplitShares.Of(train, 0, _predict, _calibration), gap, origin));
+        Divided(new SplitByTimeStep(column, _held.Of(train), gap, origin));
 
     /// <summary>Splits at random while keeping the mixture of one column the same in every part.</summary>
     /// <param name="column">The column whose mixture is kept.</param>
@@ -644,7 +616,7 @@ public sealed class PipelineBuilder
     /// <remarks>The right split when an answer is rare enough that a plain shuffle could lose it.</remarks>
     public FittingBuilder SplitStratified(
         string column, double train, double validation = 0, int seed = 20260923) =>
-        Split(new SplitStratifiedStep(column, SplitShares.Of(train, validation, _predict, _calibration), seed));
+        Divided(new SplitStratifiedStep(column, _held.Of(train, validation), seed));
 
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
@@ -653,21 +625,9 @@ public sealed class PipelineBuilder
     {
         // A share held back by a pipeline that never divides anything is a promise nothing keeps: the
         // split is what carries it, so without one the rows would all come out as training.
-        if (_predict > 0)
-        {
-            throw new InvalidOperationException(
-                $"This pipeline holds {_predict} back to predict on but never splits the rows, and the "
-                + "split is what sets that share aside.");
-        }
+        _held.ThrowIfNothingSplits();
 
-        if (_calibration > 0)
-        {
-            throw new InvalidOperationException(
-                $"This pipeline sets {_calibration} aside to calibrate on but never splits the rows, and the "
-                + "split is what sets that share aside.");
-        }
-
-        return new Pipeline(Declaration, _rows);
+        return new Pipeline(Declaration, _chain.Rows);
     }
 
     /// <summary>The source's columns as a chain knows them before anything runs.</summary>
@@ -704,18 +664,26 @@ public sealed class PipelineBuilder
         }
     }
 
-    private FittingBuilder Split(ISplitStep step)
+    /// <summary>Splits the rows by a split of your own, and opens the half of the chain that learns.</summary>
+    /// <param name="split">The split: a step that divides the rows, from another package or written by you.</param>
+    /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
+    /// <exception cref="ArgumentNullException">There is no split.</exception>
+    /// <exception cref="InvalidOperationException">This builder has already been split, or a share is held back to predict or to calibrate on.</exception>
+    /// <exception cref="DeclarationException">The split cannot stand here.</exception>
+    /// <remarks>
+    /// The door every split comes through, this library's own among them, so a split of yours is held to what every split is:
+    /// ranked by the declared id where it ranks rows, and what it hands back checked when the rows are divided — one part a
+    /// row, none of them undivided, a record and its copies in one part, and rows to learn from. A share held back with
+    /// <see cref="Predict"/> or <see cref="Calibrate"/> is given to a split this library writes, so it is refused beside one of
+    /// yours. A file that names your verb is read back once the verb is registered with the catalog that reads it.
+    /// </remarks>
+    public FittingBuilder Split(ISplitStep split)
     {
+        ArgumentNullException.ThrowIfNull(split);
         ThrowIfSplit();
+        _held.ThrowIfHeldFrom(split.Verb);
 
-        var ranked = _steps.IdColumn() is not null ? step.RankedById() : step;
-
-        PipelineDeclaration.ThrowIfFaulty([.. _steps, ranked]);
-
-        _steps.Add(ranked);
-        _split = true;
-
-        return new FittingBuilder(_steps, _rows, FeaturesLandIn);
+        return Divided(split);
     }
 
     private void ThrowIfSplit()
@@ -723,12 +691,22 @@ public sealed class PipelineBuilder
         // Holding on to this builder after splitting used to let a feature be declared into the same list,
         // after the split — the leak arriving from the side — and a second split made one declaration that
         // claimed to divide the rows twice. Two pipelines are two chains, said out loud.
-        if (_split)
+        if (_chain.Split)
         {
             throw new InvalidOperationException(
                 "This pipeline has been split; carry on with the builder the split handed back, "
                 + "or start another pipeline for a second arrangement.");
         }
+    }
+
+    // The one way the rows are divided: the step ranked by the declared id where it ranks rows, held to the rules a
+    // declaration keeps, and the half that learns handed back on the same steps.
+    private FittingBuilder Divided(ISplitStep step)
+    {
+        ThrowIfSplit();
+        _chain.Add(step.RankedWhereAnIdStands(_chain.Steps));
+
+        return new FittingBuilder(_chain, FeaturesLandIn);
     }
 
     // Where the features land when the pipeline never said: said once, for the split that hands it on and for every line.
@@ -750,19 +728,17 @@ public sealed class PipelineBuilder
 /// </remarks>
 public sealed class FittingBuilder
 {
-    private readonly List<IPipelineStep> _steps;
-    private readonly IRowSource? _rows;
+    private readonly StepChain _chain;
     private readonly Form _features;
 
-    internal FittingBuilder(List<IPipelineStep> steps, IRowSource? rows, Form features)
+    internal FittingBuilder(StepChain chain, Form features)
     {
-        _steps = steps;
-        _rows = rows;
+        _chain = chain;
         _features = features;
     }
 
     /// <summary>What has been declared so far.</summary>
-    public PipelineDeclaration Declaration => new(_steps);
+    public PipelineDeclaration Declaration => _chain.Declaration;
 
     /// <summary>Adds a declared step, which may be one that is fitted on the training rows.</summary>
     /// <param name="step">The step to declare.</param>
@@ -770,9 +746,7 @@ public sealed class FittingBuilder
     public FittingBuilder Add(IPipelineStep step)
     {
         ArgumentNullException.ThrowIfNull(step);
-        PipelineDeclaration.ThrowIfFaulty([.. _steps, step]);
-
-        _steps.Add(step);
+        _chain.Add(step);
 
         return this;
     }
@@ -1139,22 +1113,15 @@ public sealed class FittingBuilder
     {
         ArgumentNullException.ThrowIfNull(preset);
 
-        taken = preset.TakeOver(Declaration, PipelineBuilder.HeaderOf(_steps, _rows));
-
-        if (taken.Faults.Count > 0)
-        {
-            throw new DeclarationException(taken.Faults);
-        }
-
-        _steps.Clear();
-        _steps.AddRange(taken.Steps);
+        taken = preset.TakeOver(Declaration, PipelineBuilder.HeaderOf(_chain.Steps, _chain.Rows));
+        _chain.TakeOver(taken.Steps, taken.Faults);
 
         return this;
     }
 
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
-    public Pipeline Build() => new(Declaration, _rows);
+    public Pipeline Build() => new(Declaration, _chain.Rows);
 
     // Every line of this half goes through the one fan-out, and the steps it declared are added as any step is.
     private FittingBuilder Many<TLine>(Action<TLine> line, string parameter)

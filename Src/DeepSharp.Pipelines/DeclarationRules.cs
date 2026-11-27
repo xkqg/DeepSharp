@@ -737,7 +737,7 @@ internal sealed class ARankByIdHasAnId : IDeclarationRule
 
         for (var at = 0; at < steps.Count; at++)
         {
-            if (RanksById(steps[at]))
+            if (steps[at] is IRanksRows { ById: true })
             {
                 yield return new DeclarationFault(
                     at, steps[at].Verb,
@@ -745,14 +745,6 @@ internal sealed class ARankByIdHasAnId : IDeclarationRule
             }
         }
     }
-
-    private static bool RanksById(IPipelineStep step) => step switch
-    {
-        SplitAtRandomStep random => random.ById,
-        SplitStratifiedStep stratified => stratified.ById,
-        ShuffleStep shuffle => shuffle.ById,
-        _ => false,
-    };
 }
 
 /// <summary>

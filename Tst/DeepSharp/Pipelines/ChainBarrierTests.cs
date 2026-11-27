@@ -68,6 +68,60 @@ public class ChainBarrierTests
         Assert.Throws<DeclarationException>(() => before.Add(FillMissingStep.Of("age", With.Mean)));
     }
 
+    public static TheoryData<ISplitStep> EverySplit => new()
+    {
+        new SplitByPartColumnStep("part"),
+        new SplitAtRandomStep(new SplitShares(0.70, 0.15, 0.15), 1),
+        new SplitStratifiedStep("part", new SplitShares(0.70, 0.15, 0.15), 1),
+        new SplitByTimeStep("t", new SplitShares(0.70, 0.15, 0.15)),
+    };
+
+    [Theory]
+    [MemberData(nameof(EverySplit))]
+    public void TheExtensionPointWillNotTakeASplit_NamingTheSplitDoor(ISplitStep split)
+    {
+        // A split that came in through Add stayed on the builder that does not learn, so what learns was then taken by the
+        // same door, never ranked by the declared id, and the shares held back were never given to it.
+        var before = Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Timestamp("t").Number("age", "part"));
+
+        var refused = Assert.Throws<InvalidOperationException>(() => before.Add(split));
+
+        Assert.Contains("Split(", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACallersSplitEntersByTheSplitDoor_AndHandsBackTheBuilderThatLearns()
+    {
+        var rows = new InMemoryRowSource(
+            ["age", "part"],
+            [["1", "0"], ["2", "0"], ["3", "0"], ["4", "1"], ["5", "2"], ["6", "2"]]);
+
+        var prepared = Pdd.Create()
+            .Read(rows, "six rows, each naming its part")
+            .Declare(schema => schema.Number("age", "part"))
+            .Split(new SplitByPartColumnStep("part"))
+            .Normalise("age")
+            .Build()
+            .Run();
+
+        Assert.Equal([Part.Train, Part.Train, Part.Train, Part.Validation, Part.Test, Part.Test], prepared.Parts);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void ASplitOfYourOwn_AfterAShareWasHeldBack_IsRefused(bool predict)
+    {
+        // A share held back to predict or to calibrate on is given to the split the library writes; a split of the caller's
+        // deals its own parts, so the share would be a promise nothing keeps.
+        var before = Pdd.Create().ReadCsv("x.csv").Declare(schema => schema.Number("age", "part"));
+        var held = predict ? before.Predict(10) : before.Calibrate(10);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => held.Split(new SplitByPartColumnStep("part")));
+
+        Assert.Contains(predict ? "predict on" : "calibrate on", refused.Message, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void AFileThatFitsBeforeItSplits_RefusesToLoad()
     {

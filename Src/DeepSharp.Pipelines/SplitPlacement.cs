@@ -20,17 +20,30 @@ internal static class Ranking
         LeftOut = false,
     };
 
-    extension(ISplitStep step)
+    extension<TStep>(TStep step)
+        where TStep : IPipelineStep
     {
-        /// <summary>This step, asked to rank by the declared id, for the split kinds that read one; unchanged for the one that does not.</summary>
-        /// <returns>The step with <c>ById</c> set, where it has one.</returns>
-        internal ISplitStep RankedById() => step switch
-        {
-            SplitAtRandomStep random => random with { ById = true },
-            SplitStratifiedStep stratified => stratified with { ById = true },
-            _ => step,
-        };
+        /// <summary>This step, ranking by the declared id where it is a step that ranks rows and the steps above declare an id.</summary>
+        /// <param name="above">The steps written before it.</param>
+        /// <returns>The step ranking by the id, or the step as it is.</returns>
+        internal TStep RankedWhereAnIdStands(IReadOnlyList<IPipelineStep> above) =>
+            above.IdColumn() is not null && step is IRanksRows ranks ? (TStep)ranks.RankedById() : step;
     }
+}
+
+/// <summary>A step that ranks the rows by a digest of what each says, and may rank them by the declared id instead.</summary>
+/// <remarks>
+/// The one thing the builder and the rule about an id need to know of such a step, said by the step itself: there used to
+/// be one switch over the step types for setting it and another for reading it, and the first had forgotten the shuffle.
+/// </remarks>
+internal interface IRanksRows : IPipelineStep
+{
+    /// <summary>Whether this step ranks by the declared id rather than the whole record.</summary>
+    bool ById { get; }
+
+    /// <summary>This step, ranking by the declared id.</summary>
+    /// <returns>The same step with <see cref="ById"/> set.</returns>
+    IRanksRows RankedById();
 }
 
 /// <summary>A row's rank when a declared id is in force: by the id first, by the whole record only to break a tie.</summary>

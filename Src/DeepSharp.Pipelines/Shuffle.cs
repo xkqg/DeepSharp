@@ -29,7 +29,7 @@ namespace DeepSharp.Pipelines;
 /// order rather than a row-by-row one.
 /// </para>
 /// </remarks>
-public sealed record ShuffleStep : IPipelineStep<ShuffleStep>, IOrdersRows, IDescribesColumns
+public sealed record ShuffleStep : IPipelineStep<ShuffleStep>, IOrdersRows, IRanksRows, IDescribesColumns
 {
     private static readonly WholeNumberParameter SeedKey = new(
         "seed", "The number that makes the shuffle repeatable: the same seed puts the same rows in the same order.", 20260929);
@@ -47,6 +47,9 @@ public sealed record ShuffleStep : IPipelineStep<ShuffleStep>, IOrdersRows, IDes
     /// order rather than a row-by-row one.
     /// </summary>
     public bool ById { get; init; }
+
+    /// <inheritdoc />
+    IRanksRows IRanksRows.RankedById() => this with { ById = true };
 
     /// <inheritdoc />
     public static string Name => "shuffle";

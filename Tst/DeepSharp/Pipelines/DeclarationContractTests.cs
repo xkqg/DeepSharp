@@ -31,6 +31,24 @@ public class DeclarationContractTests
     }
 
     [Fact]
+    public void ACallersSplitFromAnotherPackage_SurvivesTheRoundTrip()
+    {
+        var catalog = StepCatalog.BuiltIn();
+        catalog.Register<SplitByPartColumnStep>();
+
+        var original = Pdd.Create()
+            .ReadCsv("x.csv")
+            .Declare(schema => schema.Number("age", "part"))
+            .Split(new SplitByPartColumnStep("part"))
+            .Normalise("age")
+            .Declaration;
+
+        var returned = PipelineDeclaration.FromJson(original.ToJson(), catalog);
+
+        Assert.Equal(original, returned);
+    }
+
+    [Fact]
     public void EqualDeclarations_HaveEqualHashCodes()
     {
         // The contractual direction, and the one a dictionary depends on. The opposite — two unequal
@@ -78,6 +96,19 @@ public class DeclarationContractTests
 
         Assert.NotEmpty(verbs);
         Assert.True(unknown.Length == 0, $"The built-in catalog cannot read back: {string.Join(", ", unknown)}");
+    }
+
+    [Fact]
+    public void EveryStepThatCanRankById_SaysSoByWhatItImplements()
+    {
+        // The builder sets ById, and the rule about an id reads it, through what a step implements; a step with the
+        // property and not the capability would be ranked by the whole record while its file says by the id.
+        var ranking = typeof(Pdd).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && type.GetProperty("ById") is not null)
+            .ToArray();
+
+        Assert.NotEmpty(ranking);
+        Assert.All(ranking, type => Assert.True(typeof(IRanksRows).IsAssignableFrom(type), $"{type.Name} has ById and does not rank rows by it."));
     }
 
     [Fact]
