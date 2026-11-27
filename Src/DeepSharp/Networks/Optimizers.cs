@@ -379,24 +379,21 @@ public sealed class Sgd : Optimizer, ISaved<Sgd>
 public readonly record struct Betas(double First, double Second);
 
 /// <summary>
-/// Adam: every parameter moved by a running mean of its gradients over the root of a running mean of their squares, both
-/// corrected for starting at nothing. PyTorch's <c>Adam</c>, its arithmetic in PyTorch's order.
+/// What Adam, AdamW, NAdam and RAdam have in common: the two betas their running means of the gradients and of their squares
+/// forget at, the epsilon added to the root of the mean of the squares, and the running means themselves.
 /// </summary>
 /// <remarks>
-/// With a weight decay the parameter times it is added to the gradient first, which is not AdamW's decoupled decay. With AMSGrad
-/// the step is taken over the largest mean of the squares there has been, kept beside the others, instead of over the latest.
+/// A kind of this family keeps the same two tensors for each parameter, under the same two names, and writes the same two
+/// settings beside its rate, so a checkpoint any of them wrote is read back by another of them: the family holds that once. What
+/// differs stays with each kind — how it decays the weights, which options it has, and the step it takes from the means.
+/// The family is closed: the four kinds here are all that derive from it.
 /// </remarks>
-public sealed class Adam : Optimizer, ISaved<Adam>
+public abstract class AdamFamily : Optimizer
 {
-    private readonly RunningMoments _moments = new();
     private readonly Betas _betas = new(0.9, 0.999);
     private readonly double _epsilon = 1e-8;
-    private readonly double _weightDecay;
 
-    /// <summary>Adam at the given rate.</summary>
-    /// <param name="rate">How far a step moves the parameters; a thousandth, unless said, as PyTorch leaves it.</param>
-    /// <exception cref="ArgumentOutOfRangeException">The rate is not a number above nothing.</exception>
-    public Adam(double rate = 0.001)
+    private protected AdamFamily(double rate)
         : base(rate)
     {
     }
@@ -415,6 +412,48 @@ public sealed class Adam : Optimizer, ISaved<Adam>
     {
         get => _epsilon;
         init => _epsilon = RequireEpsilon(value);
+    }
+
+    /// <summary>What the optimizer remembers of each parameter between steps: its two running means, and the largest of the squares where a kind keeps it.</summary>
+    private protected RunningMoments Moments { get; } = new();
+
+    /// <summary>The steps a parameter has taken and its two running means.</summary>
+    internal AdamMoments MomentsOf(Parameter parameter) => Moments[parameter];
+
+    /// <inheritdoc />
+    protected override SlotMemory? MemoryOf(Parameter parameter) => Moments.MemoryOf(parameter);
+
+    /// <summary>Writes the two betas and the epsilon a kind of this family was set with, beside its rate.</summary>
+    /// <param name="writer">The writer of the kind's settings.</param>
+    private protected void WriteMeans(Utf8JsonWriter writer)
+    {
+        WriteBetas(writer, Betas);
+        writer.WriteNumber("epsilon", Epsilon);
+    }
+
+    /// <summary>The epsilon a kind of this family was written with.</summary>
+    /// <exception cref="FormatException">It is missing, or not a number.</exception>
+    private protected static double EpsilonIn(JsonElement settings, Rebuilding rebuilding) => rebuilding.Number(settings, "epsilon");
+}
+
+/// <summary>
+/// Adam: every parameter moved by a running mean of its gradients over the root of a running mean of their squares, both
+/// corrected for starting at nothing. PyTorch's <c>Adam</c>, its arithmetic in PyTorch's order.
+/// </summary>
+/// <remarks>
+/// With a weight decay the parameter times it is added to the gradient first, which is not AdamW's decoupled decay. With AMSGrad
+/// the step is taken over the largest mean of the squares there has been, kept beside the others, instead of over the latest.
+/// </remarks>
+public sealed class Adam : AdamFamily, ISaved<Adam>
+{
+    private readonly double _weightDecay;
+
+    /// <summary>Adam at the given rate.</summary>
+    /// <param name="rate">How far a step moves the parameters; a thousandth, unless said, as PyTorch leaves it.</param>
+    /// <exception cref="ArgumentOutOfRangeException">The rate is not a number above nothing.</exception>
+    public Adam(double rate = 0.001)
+        : base(rate)
+    {
     }
 
     /// <summary>How much of each parameter is added to its gradient before the step; none, unless said, as PyTorch leaves it.</summary>
@@ -447,7 +486,7 @@ public sealed class Adam : Optimizer, ISaved<Adam>
         return new(rebuilding.Number(settings, "rate"))
         {
             Betas = betas,
-            Epsilon = rebuilding.Number(settings, "epsilon"),
+            Epsilon = EpsilonIn(settings, rebuilding),
             WeightDecay = CoupledDecayIn(settings, rebuilding),
             AmsGrad = rebuilding.Holds(settings, "amsgrad"),
         };
@@ -459,8 +498,7 @@ public sealed class Adam : Optimizer, ISaved<Adam>
         ArgumentNullException.ThrowIfNull(writer);
 
         writer.WriteNumber("rate", Rate);
-        WriteBetas(writer, Betas);
-        writer.WriteNumber("epsilon", Epsilon);
+        WriteMeans(writer);
         WriteCoupledDecay(writer, WeightDecay);
 
         if (AmsGrad)
@@ -469,18 +507,12 @@ public sealed class Adam : Optimizer, ISaved<Adam>
         }
     }
 
-    /// <summary>The steps a parameter has taken and its two running means.</summary>
-    internal AdamMoments MomentsOf(Parameter parameter) => _moments[parameter];
-
     /// <inheritdoc />
-    protected override SlotMemory? MemoryOf(Parameter parameter) => _moments.MemoryOf(parameter);
-
-    /// <inheritdoc />
-    protected override void Recall(Parameter parameter, SlotMemory memory) => _moments.Recall(parameter, memory, "Adam", AmsGrad);
+    protected override void Recall(Parameter parameter, SlotMemory memory) => Moments.Recall(parameter, memory, "Adam", AmsGrad);
 
     /// <inheritdoc />
     protected override Tensor Moved(Parameter parameter, Tensor gradient, double rate, ITensorBackend backend) =>
-        _moments.Stepped(parameter, gradient, new AdamStepping(parameter.Value, rate, new MeansKept(Betas, AmsGrad), new AdamTerms(Betas, Epsilon)), backend);
+        Moments.Stepped(parameter, gradient, new AdamStepping(parameter.Value, rate, new MeansKept(Betas, AmsGrad), new AdamTerms(Betas, Epsilon)), backend);
 }
 
 /// <summary>
@@ -493,11 +525,8 @@ public sealed class Adam : Optimizer, ISaved<Adam>
 /// decay with it, and a parameter whose gradient is nothing shrinks all the same. Without a decay it steps as Adam does,
 /// to the last bit. With AMSGrad the step is taken over the largest mean of the squares there has been, as it is for Adam.
 /// </remarks>
-public sealed class AdamW : Optimizer, ISaved<AdamW>
+public sealed class AdamW : AdamFamily, ISaved<AdamW>
 {
-    private readonly RunningMoments _moments = new();
-    private readonly Betas _betas = new(0.9, 0.999);
-    private readonly double _epsilon = 1e-8;
     private readonly double _weightDecay = 0.01;
 
     /// <summary>AdamW at the given rate.</summary>
@@ -506,22 +535,6 @@ public sealed class AdamW : Optimizer, ISaved<AdamW>
     public AdamW(double rate = 0.001)
         : base(rate)
     {
-    }
-
-    /// <summary>How much of each running mean carries on from one step to the next; nine tenths and 0.999, unless said.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">Either is not a share from nothing to below one.</exception>
-    public Betas Betas
-    {
-        get => _betas;
-        init => _betas = RequireBetas(value);
-    }
-
-    /// <summary>What is added to the root of the mean of the squares, so nothing is divided by nothing; a hundred-millionth, unless said.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">It is not a number above nothing.</exception>
-    public double Epsilon
-    {
-        get => _epsilon;
-        init => _epsilon = RequireEpsilon(value);
     }
 
     /// <summary>
@@ -554,7 +567,7 @@ public sealed class AdamW : Optimizer, ISaved<AdamW>
         return new(rebuilding.Number(settings, "rate"))
         {
             Betas = betas,
-            Epsilon = rebuilding.Number(settings, "epsilon"),
+            Epsilon = EpsilonIn(settings, rebuilding),
             WeightDecay = rebuilding.Number(settings, "weightDecay"),
             AmsGrad = rebuilding.Holds(settings, "amsgrad"),
         };
@@ -566,8 +579,7 @@ public sealed class AdamW : Optimizer, ISaved<AdamW>
         ArgumentNullException.ThrowIfNull(writer);
 
         writer.WriteNumber("rate", Rate);
-        WriteBetas(writer, Betas);
-        writer.WriteNumber("epsilon", Epsilon);
+        WriteMeans(writer);
         writer.WriteNumber("weightDecay", WeightDecay);
 
         if (AmsGrad)
@@ -577,10 +589,7 @@ public sealed class AdamW : Optimizer, ISaved<AdamW>
     }
 
     /// <inheritdoc />
-    protected override SlotMemory? MemoryOf(Parameter parameter) => _moments.MemoryOf(parameter);
-
-    /// <inheritdoc />
-    protected override void Recall(Parameter parameter, SlotMemory memory) => _moments.Recall(parameter, memory, "AdamW", AmsGrad);
+    protected override void Recall(Parameter parameter, SlotMemory memory) => Moments.Recall(parameter, memory, "AdamW", AmsGrad);
 
     /// <inheritdoc />
     protected override Tensor Moved(Parameter parameter, Tensor gradient, double rate, ITensorBackend backend)
@@ -588,7 +597,7 @@ public sealed class AdamW : Optimizer, ISaved<AdamW>
         // PyTorch's order: the parameter shrunk first — not at all without a decay, as PyTorch skips it — then Adam's step.
         var decayed = WeightDecay is 0 ? parameter.Value : backend.Scale(parameter.Value, Scalar(backend, 1 - (rate * WeightDecay)));
 
-        return _moments.Stepped(parameter, gradient, new AdamStepping(decayed, rate, new MeansKept(Betas, AmsGrad), new AdamTerms(Betas, Epsilon)), backend);
+        return Moments.Stepped(parameter, gradient, new AdamStepping(decayed, rate, new MeansKept(Betas, AmsGrad), new AdamTerms(Betas, Epsilon)), backend);
     }
 }
 
@@ -780,12 +789,9 @@ public sealed class RmsProp : Optimizer, ISaved<RmsProp>
 /// float, so a checkpoint holds nothing but tensors of the parameter's shape and the steps. With a weight decay the parameter
 /// times it is added to the gradient first, as PyTorch's NAdam does by default.
 /// </remarks>
-public sealed class Nadam : Optimizer, ISaved<Nadam>
+public sealed class Nadam : AdamFamily, ISaved<Nadam>
 {
-    private readonly RunningMoments _moments = new();
     private readonly Dictionary<Parameter, float> _products = [];
-    private readonly Betas _betas = new(0.9, 0.999);
-    private readonly double _epsilon = 1e-8;
     private readonly double _momentumDecay = 0.004;
     private readonly double _weightDecay;
 
@@ -795,22 +801,6 @@ public sealed class Nadam : Optimizer, ISaved<Nadam>
     public Nadam(double rate = 0.002)
         : base(rate)
     {
-    }
-
-    /// <summary>How much of each running mean carries on from one step to the next; nine tenths and 0.999, unless said.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">Either is not a share from nothing to below one.</exception>
-    public Betas Betas
-    {
-        get => _betas;
-        init => _betas = RequireBetas(value);
-    }
-
-    /// <summary>What is added to the root of the mean of the squares, so nothing is divided by nothing; a hundred-millionth, unless said.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">It is not a number above nothing.</exception>
-    public double Epsilon
-    {
-        get => _epsilon;
-        init => _epsilon = RequireEpsilon(value);
     }
 
     /// <summary>How fast the momentum warms up to its first beta over the steps; four thousandths, unless said, as PyTorch leaves it.</summary>
@@ -848,7 +838,7 @@ public sealed class Nadam : Optimizer, ISaved<Nadam>
         return new(rebuilding.Number(settings, "rate"))
         {
             Betas = betas,
-            Epsilon = rebuilding.Number(settings, "epsilon"),
+            Epsilon = EpsilonIn(settings, rebuilding),
             MomentumDecay = rebuilding.Number(settings, "momentumDecay"),
             WeightDecay = CoupledDecayIn(settings, rebuilding),
         };
@@ -860,8 +850,7 @@ public sealed class Nadam : Optimizer, ISaved<Nadam>
         ArgumentNullException.ThrowIfNull(writer);
 
         writer.WriteNumber("rate", Rate);
-        WriteBetas(writer, Betas);
-        writer.WriteNumber("epsilon", Epsilon);
+        WriteMeans(writer);
         writer.WriteNumber("momentumDecay", MomentumDecay);
         WriteCoupledDecay(writer, WeightDecay);
     }
@@ -870,12 +859,9 @@ public sealed class Nadam : Optimizer, ISaved<Nadam>
     internal float MuProductOf(Parameter parameter) => _products[parameter];
 
     /// <inheritdoc />
-    protected override SlotMemory? MemoryOf(Parameter parameter) => _moments.MemoryOf(parameter);
-
-    /// <inheritdoc />
     protected override void Recall(Parameter parameter, SlotMemory memory)
     {
-        _moments.Recall(parameter, memory, "NAdam", amsgrad: false);
+        Moments.Recall(parameter, memory, "NAdam", amsgrad: false);
 
         var steps = memory.Steps;
 
@@ -893,7 +879,7 @@ public sealed class Nadam : Optimizer, ISaved<Nadam>
     /// <inheritdoc />
     protected override Tensor Moved(Parameter parameter, Tensor gradient, double rate, ITensorBackend backend)
     {
-        var moments = _moments.After(parameter, gradient, new MeansKept(Betas, AmsGrad: false), backend);
+        var moments = Moments.After(parameter, gradient, new MeansKept(Betas, AmsGrad: false), backend);
         var mu = Mu(moments.Steps);
         var next = Mu(moments.Steps + 1);
         var product = (_products.TryGetValue(parameter, out var kept) ? kept : 1f) * (float)mu;
@@ -927,11 +913,8 @@ public sealed class Nadam : Optimizer, ISaved<Nadam>
 /// AdamW's decay is. It steps through the running means <see cref="Adam"/> and <see cref="Nadam"/> keep them by, never through
 /// an engine's fused step for Adam's own formula, which would rectify nothing.
 /// </remarks>
-public sealed class RAdam : Optimizer, ISaved<RAdam>
+public sealed class RAdam : AdamFamily, ISaved<RAdam>
 {
-    private readonly RunningMoments _moments = new();
-    private readonly Betas _betas = new(0.9, 0.999);
-    private readonly double _epsilon = 1e-8;
     private readonly double _weightDecay;
 
     /// <summary>RAdam at the given rate.</summary>
@@ -940,22 +923,6 @@ public sealed class RAdam : Optimizer, ISaved<RAdam>
     public RAdam(double rate = 0.001)
         : base(rate)
     {
-    }
-
-    /// <summary>How much of each running mean carries on from one step to the next; nine tenths and 0.999, unless said.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">Either is not a share from nothing to below one.</exception>
-    public Betas Betas
-    {
-        get => _betas;
-        init => _betas = RequireBetas(value);
-    }
-
-    /// <summary>What is added to the root of the mean of the squares, so nothing is divided by nothing; a hundred-millionth, unless said.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">It is not a number above nothing.</exception>
-    public double Epsilon
-    {
-        get => _epsilon;
-        init => _epsilon = RequireEpsilon(value);
     }
 
     /// <summary>How much of each parameter is added to its gradient before the step, unless <see cref="DecoupledWeightDecay"/> shrinks it instead; none, unless said.</summary>
@@ -988,8 +955,8 @@ public sealed class RAdam : Optimizer, ISaved<RAdam>
         return new(rebuilding.Number(settings, "rate"))
         {
             Betas = betas,
-            Epsilon = rebuilding.Number(settings, "epsilon"),
-            WeightDecay = rebuilding.Number(settings, "weightDecay"),
+            Epsilon = EpsilonIn(settings, rebuilding),
+            WeightDecay = rebuilding.Number(settings, "weightDecay", 0),
             DecoupledWeightDecay = rebuilding.Holds(settings, "decoupledWeightDecay"),
         };
     }
@@ -1000,8 +967,7 @@ public sealed class RAdam : Optimizer, ISaved<RAdam>
         ArgumentNullException.ThrowIfNull(writer);
 
         writer.WriteNumber("rate", Rate);
-        WriteBetas(writer, Betas);
-        writer.WriteNumber("epsilon", Epsilon);
+        WriteMeans(writer);
 
         if (DecoupledWeightDecay)
         {
@@ -1015,11 +981,8 @@ public sealed class RAdam : Optimizer, ISaved<RAdam>
     }
 
     /// <inheritdoc />
-    protected override SlotMemory? MemoryOf(Parameter parameter) => _moments.MemoryOf(parameter);
-
-    /// <inheritdoc />
     /// <remarks>Shares its memory's shape with <see cref="Adam"/>, <see cref="AdamW"/> and <see cref="Nadam"/>: a checkpoint any of them wrote is read back here, under the same two names.</remarks>
-    protected override void Recall(Parameter parameter, SlotMemory memory) => _moments.Recall(parameter, memory, "RAdam", amsgrad: false);
+    protected override void Recall(Parameter parameter, SlotMemory memory) => Moments.Recall(parameter, memory, "RAdam", amsgrad: false);
 
     /// <inheritdoc />
     protected override Tensor Moved(Parameter parameter, Tensor gradient, double rate, ITensorBackend backend)
@@ -1028,7 +991,7 @@ public sealed class RAdam : Optimizer, ISaved<RAdam>
             ? backend.Scale(parameter.Value, Scalar(backend, 1 - (rate * WeightDecay)))
             : parameter.Value;
 
-        var moments = _moments.After(parameter, gradient, new MeansKept(Betas, AmsGrad: false), backend);
+        var moments = Moments.After(parameter, gradient, new MeansKept(Betas, AmsGrad: false), backend);
         var step = moments.Steps;
         var biasFirst = 1 - Math.Pow(Betas.First, step);
         var biasSecond = 1 - Math.Pow(Betas.Second, step);

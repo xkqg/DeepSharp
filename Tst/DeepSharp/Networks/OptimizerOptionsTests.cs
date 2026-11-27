@@ -256,6 +256,50 @@ public class OptimizerOptionsTests
         }
     }
 
+    public static TheoryData<string, Func<Betas, double, AdamFamily>> TheKindsOfAdamsFamily => new()
+    {
+        { "adam", (betas, epsilon) => new Adam(0.1) { Betas = betas, Epsilon = epsilon } },
+        { "adamw", (betas, epsilon) => new AdamW(0.1) { Betas = betas, Epsilon = epsilon } },
+        { "nadam", (betas, epsilon) => new Nadam(0.1) { Betas = betas, Epsilon = epsilon } },
+        { "radam", (betas, epsilon) => new RAdam(0.1) { Betas = betas, Epsilon = epsilon } },
+    };
+
+    [Theory]
+    [MemberData(nameof(TheKindsOfAdamsFamily))]
+    public void AKindOfAdamsFamily_HoldsItsBetasAndEpsilonOnce_ThroughItsDefaultsItsRefusalsItsFileAndItsRebuilding(string name, Func<Betas, double, AdamFamily> make)
+    {
+        var defaults = make(new Betas(0.9, 0.999), 1e-8);
+
+        Assert.Equal(new Betas(0.9, 0.999), defaults.Betas);
+        Assert.Equal(1e-8, defaults.Epsilon);
+        Assert.Throws<ArgumentOutOfRangeException>(() => make(new Betas(1, 0.5), 1e-8));
+        Assert.Throws<ArgumentOutOfRangeException>(() => make(new Betas(0.5, -0.1), 1e-8));
+        Assert.Contains("Epsilon is a finite number above nothing.", Assert.Throws<ArgumentOutOfRangeException>(() => make(new Betas(0.5, 0.5), 0)).Message, StringComparison.Ordinal);
+
+        // Beside the rate, the first two settings every kind writes are the betas and the epsilon, in that order.
+        var set = make(new Betas(0.8, 0.95), 1e-6);
+
+        using (var settings = JsonDocument.Parse(SettingsOf(set)))
+        {
+            Assert.Equal(["rate", "betas", "epsilon"], settings.RootElement.EnumerateObject().Take(3).Select(each => each.Name));
+            Assert.Equal(1e-6, settings.RootElement.GetProperty("epsilon").GetDouble());
+        }
+
+        // A run that stops and goes on from its file goes on under the betas and the epsilon it was set with.
+        var compiled = new LayerStack(new Dense(1, 1, new RandomStream(5).Draw("initialise:0", 0, 0))).Compile(set, new MeanSquaredError());
+        Checkpoint? kept = null;
+        var rows = new TrainingData(Tensor.From(new Shape(4, 1), [0.1f, 0.2f, 0.3f, 0.4f]), Tensor.From(new Shape(4, 1), [0.2f, 0.4f, 0.6f, 0.8f]));
+
+        compiled.Fit(rows, validation: null, new FitOptions(seed: 3) { Epochs = 2, BatchSize = 2, Checkpoints = new Checkpoints(checkpoint => kept = checkpoint) });
+
+        var written = Written(compiled, kept!);
+        var read = Assert.IsAssignableFrom<AdamFamily>(NetworkDocument.ReadCheckpoint(written, "network", "training", NetworkCatalog.BuiltIn()).Run.Compiled.Optimizer);
+
+        Assert.Equal(name, read.GetType().Name.ToLowerInvariant());
+        Assert.Equal(new Betas(0.8, 0.95), read.Betas);
+        Assert.Equal(1e-6, read.Epsilon);
+    }
+
     [Fact]
     public void AMemoryThatCountsNoStep_IsRefusedByName_ForAdanRemembersOnlyWhatStepped()
     {

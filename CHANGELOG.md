@@ -94,8 +94,16 @@ The seventh letter of the flock team.
   its features — each category as its place, say — so a member trained on categories is served on categories. See
   [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
 
+- **`AdamFamily`, a base for the settings Adam's four kinds share.** `Adam`, `AdamW`, `Nadam` and `RAdam` now derive from
+  `AdamFamily`, which holds their `Betas` and `Epsilon` and the running means they keep: a function that takes any of
+  the four can be written once against the base. Nothing changes for code that uses a kind itself, and no file written
+  changes by a byte.
+
 ### Fixed
 
+- **A `RAdam` with no weight decay can be read back from its file.** It wrote no `weightDecay` and then refused its own
+  file for the lack of it, so a default `RAdam` could not be saved with a checkpoint and resumed; it is read as it was
+  written, with none.
 - **Votes are refused on an amount whether an ensemble serves, is calibrated or is measured.** An ensemble voting on a
   number answered with noughts and ones and was given an interval of them; only measuring it refused. The refusal now
   stands where the ensemble is made, before any of the three.
