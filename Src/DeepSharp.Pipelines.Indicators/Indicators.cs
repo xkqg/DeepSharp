@@ -232,26 +232,28 @@ public sealed record AddIndicatorStep : IPipelineStep<AddIndicatorStep>, IAddsCo
 
     private IEnumerable<IndicatorOutput> Compute(DataFrame frame)
     {
-        var one = Columns[0];
-
+        // The frame hands over the column, or the bars, an indicator reads; the indicator is made from its own class.
         IEnumerable<double[]> values = Kind switch
         {
-            Indicator.Sma => [frame.Sma(one, Period)],
-            Indicator.Ema => [frame.Ema(one, Period)],
-            Indicator.Rsi => [frame.Rsi(one, Period)],
-            Indicator.Atr => [frame.Atr(Columns[0], Columns[1], Columns[2], Period)],
-            Indicator.Adx => [frame.Adx(Columns[0], Columns[1], Columns[2], Period)],
-            Indicator.Cci => [frame.Cci(Columns[0], Columns[1], Columns[2], Period)],
-            Indicator.WilliamsR => [frame.WilliamsR(Columns[0], Columns[1], Columns[2], Period)],
-            Indicator.Obv => [frame.Obv(Columns[0], Columns[1])],
-            Indicator.Macd => Macd(frame.Macd(one)),
-            Indicator.BollingerBands => Bands(frame.BollingerBands(one, Period)),
-            Indicator.Stochastic => Stochastic(frame.Stochastic(Columns[0], Columns[1], Columns[2], Period)),
-            _ => [frame.Vwap(Columns[0], Columns[1], Columns[2], Columns[3])],
+            Indicator.Sma => [new Sma(frame.Values(Columns[0]), Period).Compute()],
+            Indicator.Ema => [new Ema(frame.Values(Columns[0]), Period).Compute()],
+            Indicator.Rsi => [new Rsi(frame.Values(Columns[0]), Period).Compute()],
+            Indicator.Atr => [new Atr(Hlc(frame), Period).Compute()],
+            Indicator.Adx => [new Adx(Hlc(frame), Period).Compute()],
+            Indicator.Cci => [new Cci(Hlc(frame), Period).Compute()],
+            Indicator.WilliamsR => [new WilliamsR(Hlc(frame), Period).Compute()],
+            Indicator.Obv => [new Obv(frame.Values(Columns[0]), frame.Values(Columns[1])).Compute()],
+            Indicator.Macd => Macd(new Macd(frame.Values(Columns[0])).Compute()),
+            Indicator.BollingerBands => Bands(new BollingerBands(frame.Values(Columns[0]), Period).Compute()),
+            Indicator.Stochastic => Stochastic(new Stochastic(Hlc(frame), Period).Compute()),
+            _ => [new Vwap(frame.Hlcv(Columns[0], Columns[1], Columns[2], Columns[3])).Compute()],
         };
 
         return values.Zip(Made, (series, column) => new IndicatorOutput(column, series));
     }
+
+    // The high, low and close an indicator over candles reads, in the order the step names them.
+    private OhlcvBars Hlc(DataFrame frame) => frame.Hlc(Columns[0], Columns[1], Columns[2]);
 
     private static IEnumerable<double[]> Macd(MacdResult macd) => [macd.MacdLine, macd.SignalLine, macd.Histogram];
 
