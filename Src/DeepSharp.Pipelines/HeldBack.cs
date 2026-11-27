@@ -13,9 +13,6 @@ namespace DeepSharp.Pipelines;
 /// </remarks>
 internal readonly record struct HeldBack(double Predict, double Calibration)
 {
-    /// <summary>Whether anything is held back.</summary>
-    internal bool Any => Predict > 0 || Calibration > 0;
-
     /// <summary>The shares a split the builder writes divides the rows into, with what is held back.</summary>
     /// <param name="train">The share the model learns from.</param>
     /// <param name="validation">The share used while choosing between models; none, unless said.</param>

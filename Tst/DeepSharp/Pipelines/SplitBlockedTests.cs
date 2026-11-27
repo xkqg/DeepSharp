@@ -158,6 +158,20 @@ public class SplitBlockedTests
         Assert.Equal(10, Part.Dealt.Sum(part => prepared.Fitted[2].Numbers.TryGetValue($"blocks.{part.Word()}", out var weeks) ? weeks : 0));
     }
 
+    [Theory]
+    [InlineData(5, 5)]     // before every measured moment
+    [InlineData(10, 0)]    // on one
+    [InlineData(13, 3)]    // between two, nearer the earlier
+    [InlineData(18, 2)]    // between two, nearer the later
+    [InlineData(31, 11)]   // after every one
+    public void HowFarAMomentIsFromTheNearestMeasuredOne_IsTheShortestDistance_OnEitherSide(long moment, long distance)
+    {
+        // What the embargo asks of every training row: how near the nearest row a model is measured on stands, before it or after.
+        long[] measured = [10, 20];
+
+        Assert.Equal(distance, measured.Nearest(moment));
+    }
+
     [Fact]
     public void ABlockOfNoDays_OrAnEmbargoBelowNothing_IsRefusedWhereItIsWritten()
     {

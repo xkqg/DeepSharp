@@ -492,7 +492,7 @@ The NuGet package System.IO.Hashing, its System.IO.Hashing.dll (github.com/dotne
 Copyright (c) .NET Foundation and Contributors. MIT License.
 
 
-System.Numerics.Tensors 10.0.14
+System.Numerics.Tensors 10.0.15
 The NuGet package System.Numerics.Tensors, its System.Numerics.Tensors.dll (github.com/dotnet/dotnet).
 Copyright (c) .NET Foundation and Contributors. MIT License.
 
