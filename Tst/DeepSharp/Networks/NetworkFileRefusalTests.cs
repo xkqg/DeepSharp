@@ -788,7 +788,7 @@ public class NetworkFileRefusalTests
         var resumed = NetworkDocument.ReadTraining(third, "training", catalog, NetworkDocument.ReadNetwork(third, "network", catalog));
 
         Assert.Equal(
-            [Place(second, "\"clipNorm\"", "The norm a run's gradients were clipped to is written from the third version of a training part on, and this one is of the second.")],
+            [Place(second, "\"clipNorm\"", "The norm a run's gradients were clipped to, under 'clipNorm', is written from the third version of a training part on, and this one is of the second.")],
             TrainingRefused(second).Faults);
 
         // A part of the first version that holds a clip says something of its run, so it is held to saying all of it.
@@ -798,7 +798,7 @@ public class NetworkFileRefusalTests
             [
                 Place(first, "\"training\"", BatchSizeFault),
                 Place(first, "\"training\"", EarlyStoppingFault),
-                Place(first, "\"clipNorm\"", "The norm a run's gradients were clipped to is written from the third version of a training part on, and this one is of the first."),
+                Place(first, "\"clipNorm\"", "The norm a run's gradients were clipped to, under 'clipNorm', is written from the third version of a training part on, and this one is of the first."),
             ],
             TrainingRefused(first).Faults);
         Assert.Contains("clipped to a norm of 0.5, and going on without clipping them", Assert.Throws<ArgumentException>(() => resumed.Compiled.Fit(Rows(4), Rows(2), new FitOptions(seed: 5)

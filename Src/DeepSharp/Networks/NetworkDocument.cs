@@ -521,8 +521,8 @@ public static class NetworkDocument
                 .Select(held => held.Layer)
                 .Prepend(network)
                 .Max(layer => layer is ISaved saved ? saved.FileVersion : SecondVersion),
-            network.Parameters().Any(parameter => parameter.Rules.RateShare is not null) ? SeventhVersion
-                : network.Parameters().Any(parameter => !parameter.Rules.IsDefault) ? FifthVersion : 0);
+            network.Parameters().Any(parameter => parameter.Rules.RateShare is not null) ? PartSince.RateShare.From
+                : network.Parameters().Any(parameter => !parameter.Rules.IsDefault) ? PartSince.Rules.From : 0);
 
     /// <summary>
     /// The oldest version of a training part that says everything the run holds: what it records of the pace the run went at —
@@ -536,15 +536,30 @@ public static class NetworkDocument
     /// </remarks>
     internal static int TrainingVersionOf(CompiledNetwork compiled, Resumable state) =>
         Math.Max(
-            state.Pace is not { } recorded ? FirstVersion
-                : recorded.JudgedByAverage ? SixthVersion
-                : recorded.SaysMore ? FifthVersion
-                : recorded.Clip is null ? SecondVersion : ThirdVersion,
-            Math.Max(Math.Max(NeededBy(compiled.Optimizer), NeededBy(compiled.Schedule)), SaysTheNinth(state) ? NinthVersion : 0));
+            state.Pace is { } recorded ? PaceVersionOf(recorded) : FirstVersion,
+            Math.Max(Math.Max(NeededBy(compiled.Optimizer), NeededBy(compiled.Schedule)), BeyondPaceVersionOf(state)));
 
-    // Whether a run says what 0.14.0 could not: the width its engine kept its work in, a loss scale, a step skipped.
-    private static bool SaysTheNinth(Resumable state) =>
-        state.Engine is { Precision: not null } || state.Pace is { LossScale: not null } || state.History.Any(epoch => epoch.Skipped > 0);
+    // The oldest version that says what a run recorded of its pace: the second, and the later one of each thing it says beside.
+    internal static int PaceVersionOf(Pace pace) =>
+        new[]
+        {
+            SecondVersion,
+            pace.Clip is not null ? PartSince.ClipNorm.From : 0,
+            pace.ClipValue is not null ? PartSince.ClipValue.From : 0,
+            pace.StepEvery != 1 ? PartSince.StepEvery.From : 0,
+            pace.Average is not null ? PartSince.Average.From : 0,
+            pace.JudgedByAverage ? PartSince.JudgedByAverage.From : 0,
+        }.Max();
+
+    // The oldest version that says what a run says of its engine and its steps beyond the pace: the width its engine kept its work
+    // in, a loss scale, a step skipped — what 0.14.0 could not.
+    private static int BeyondPaceVersionOf(Resumable state) =>
+        new[]
+        {
+            state.Engine is { Precision: not null } ? PartSince.EnginePrecision.From : 0,
+            state.Pace is { LossScale: not null } ? PartSince.LossScale.From : 0,
+            state.History.Any(epoch => epoch.Skipped > 0) ? PartSince.Skipped.From : 0,
+        }.Max();
 
     // The version a kind needs of the part it is written into when it says more than the second could; nothing otherwise.
     private static int NeededBy(object thing) => thing is ISaved { FileVersion: > SecondVersion } saved ? saved.FileVersion : 0;

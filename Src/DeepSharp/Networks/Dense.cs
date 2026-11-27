@@ -142,7 +142,7 @@ public sealed class Dense : Layer, ISaved<Dense>
 
         var alpha = rebuilding.Number(settings, AlphaKey, rank);
 
-        return double.IsFinite(alpha) && alpha > 0 ? new LowRank(rank, alpha) : throw rebuilding.Refuse(AlphaKey, "a number above nothing");
+        return alpha.IsAboveNothing() ? new LowRank(rank, alpha) : throw rebuilding.Refuse(AlphaKey, "a number above nothing");
     }
 
     /// <inheritdoc />

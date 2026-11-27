@@ -511,9 +511,7 @@ public sealed class Huber : Loss, ISaved<Huber>
     /// <param name="delta">How far from the answer it stops being squared: a number above nothing, one in both PyTorch and Keras.</param>
     /// <exception cref="ArgumentOutOfRangeException">It is not a finite number above nothing.</exception>
     public Huber(double delta = 1) =>
-        Delta = double.IsFinite(delta) && delta > 0
-            ? delta
-            : throw new ArgumentOutOfRangeException(nameof(delta), delta, "A Huber loss bends at a distance from the answer above nothing.");
+        Delta = delta.AboveNothing(nameof(delta), "The distance from the answer a Huber loss bends at");
 
     /// <summary>How far from the answer it stops being squared.</summary>
     public double Delta { get; }
@@ -629,9 +627,7 @@ public sealed class Focal : Loss, ISaved<Focal>
     /// <param name="gamma">How hard a label the network is sure of is weighed down: nothing or more, two in torchvision and Keras.</param>
     /// <exception cref="ArgumentOutOfRangeException">It is not a finite number of nothing or more.</exception>
     public Focal(double gamma = 2) =>
-        Gamma = double.IsFinite(gamma) && gamma >= 0
-            ? gamma
-            : throw new ArgumentOutOfRangeException(nameof(gamma), gamma, "A focal loss weighs a sure label down by a power of nothing or more.");
+        Gamma = gamma.AtLeastNothing(nameof(gamma), "The power a focal loss weighs a sure label down by");
 
     /// <summary>How hard a label the network is sure of is weighed down.</summary>
     public double Gamma { get; }
@@ -774,9 +770,7 @@ public sealed class Poisson : Loss, ISaved<Poisson>
     public double Epsilon
     {
         get => _epsilon;
-        init => _epsilon = double.IsFinite(value) && value > 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "What is added to a rate before its logarithm is taken is a number above nothing.");
+        init => _epsilon = value.AboveNothing(nameof(value), "What is added to a rate before its logarithm is taken");
     }
 
     /// <inheritdoc />

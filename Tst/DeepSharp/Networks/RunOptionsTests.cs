@@ -135,6 +135,35 @@ public class RunOptionsTests
     }
 
     [Fact]
+    public void EveryOptionOfARun_IsWrittenAsTheVersionItIsWrittenFrom_AndRefusedBeforeIt_ForTheWriterAndTheReaderAskTheSameTable()
+    {
+        OptionCase[] cases =
+        [
+            new("clipNorm", PartSince.ClipNorm, new FitOptions(seed: 3) { Epochs = 1, BatchSize = 2, GradientClip = new GradientClip(1) }),
+            new("clipValue", PartSince.ClipValue, new FitOptions(seed: 3) { Epochs = 1, BatchSize = 2, ClipValue = 0.5 }),
+            new("stepEvery", PartSince.StepEvery, new FitOptions(seed: 3) { Epochs = 1, BatchSize = 2, StepEvery = 2 }),
+            new("average", PartSince.Average, new FitOptions(seed: 3) { Epochs = 1, BatchSize = 2, Average = 0.9 }),
+        ];
+
+        foreach (var each in cases)
+        {
+            var (written, _) = Written(Network().Compile(new Sgd(0.1), new BinaryCrossEntropy()), each.Options);
+
+            using var document = JsonDocument.Parse(written);
+
+            Assert.Equal(each.Since.From, document.RootElement.GetProperty("training").GetProperty("version").GetInt32());
+
+            var earlier = written.Replace($"\"version\":{each.Since.From}", $"\"version\":{each.Since.From - 1}", StringComparison.Ordinal);
+            var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(earlier, "network", "training", NetworkCatalog.BuiltIn()));
+
+            Assert.Contains(each.Since.Refusal(each.Key, each.Since.From - 1), refused.Message, StringComparison.Ordinal);
+        }
+    }
+
+    // One option of a run: the key it is written under, the row of the table that says which version it is written from, and a run that says it.
+    private readonly record struct OptionCase(string Key, PartSince Since, FitOptions Options);
+
+    [Fact]
     public void ARunWithNoOption_WritesNoneOfTheirKeys()
     {
         var (written, _) = Written(Network().Compile(new Adam(0.05), new BinaryCrossEntropy()), new FitOptions(seed: 3) { Epochs = 1, BatchSize = 2 });

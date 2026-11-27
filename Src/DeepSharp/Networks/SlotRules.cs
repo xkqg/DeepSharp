@@ -24,9 +24,7 @@ public readonly record struct SlotRules
     public double L1
     {
         get;
-        init => field = double.IsFinite(value) && value >= 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "A penalty is a finite number of at least nothing.");
+        init => field = value.AtLeastNothing(nameof(value), "A penalty");
     }
 
     /// <summary>How much of the sum of the squares of the numbers the loss adds; nothing, unless said.</summary>
@@ -34,9 +32,7 @@ public readonly record struct SlotRules
     public double L2
     {
         get;
-        init => field = double.IsFinite(value) && value >= 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "A penalty is a finite number of at least nothing.");
+        init => field = value.AtLeastNothing(nameof(value), "A penalty");
     }
 
     /// <summary>The most norm each unit's numbers may have after a step; no bound, unless said.</summary>
@@ -44,9 +40,7 @@ public readonly record struct SlotRules
     public double? MaxNorm
     {
         get;
-        init => field = value is null || (double.IsFinite(value.Value) && value.Value > 0)
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "A bound is a finite number above nothing.");
+        init => field = value.AboveNothing(nameof(value), "A bound");
     }
 
     /// <summary>Whether the numbers are held still: moved by no step, and out of the loss's gradient; they learn, unless said.</summary>
@@ -65,12 +59,9 @@ public readonly record struct SlotRules
     public double? RateShare
     {
         get;
-        init => field = value is null || (double.IsFinite(value.Value) && value.Value > 0)
-            ? value
-            : throw new ArgumentOutOfRangeException(
-                nameof(value),
-                value,
-                "A share of the rate is a finite number above nothing; numbers that no step should move are held still, with Held.");
+        init => field = value is 0d
+            ? throw new ArgumentOutOfRangeException(nameof(value), value, "A share of nothing would move nothing: numbers that no step should move are held still, with Held.")
+            : value.AboveNothing(nameof(value), "A share of the rate");
     }
 
     /// <summary>Whether the numbers learn.</summary>

@@ -236,12 +236,7 @@ public sealed class GaussianNoise : Variation, ISaved<GaussianNoise>
     public GaussianNoise(double spread, long seed)
         : base("gaussianNoise", seed)
     {
-        if (spread < 0 || !double.IsFinite(spread))
-        {
-            throw new ArgumentOutOfRangeException(nameof(spread), spread, "The spread of a noise is a number of nought or more.");
-        }
-
-        Spread = spread;
+        Spread = spread.AtLeastNothing(nameof(spread), "The spread of a noise");
     }
 
     /// <summary>The standard deviation of the noise.</summary>

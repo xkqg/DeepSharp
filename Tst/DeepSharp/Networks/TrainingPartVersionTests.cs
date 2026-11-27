@@ -94,6 +94,36 @@ public class TrainingPartVersionTests
         var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(written, "network", "training", NetworkCatalog.BuiltIn()));
 
         Assert.Contains("written from the sixth version of a training part on, and this one is of the fifth", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(PartSince.JudgedByAverage.Refusal("judgedByAverage", 5), refused.Message, StringComparison.Ordinal);
+        Assert.Equal(6, PartSince.JudgedByAverage.From);
+    }
+
+    [Fact]
+    public void TheVersionOfARunsPace_IsTheLaterOfTheVersionsOfWhatItSays_AsItWasWhenTheWriterDecidedItAlone()
+    {
+        // Every combination of the five things a pace says beside its batch size: the sixth when the epochs were judged by the
+        // average, else the fifth when it clipped values, took a window of batches or kept an average, else the third when it
+        // clipped a norm, else the second.
+        for (var combination = 0; combination < 32; combination++)
+        {
+            var clip = (combination & 1) != 0;
+            var clipValue = (combination & 2) != 0;
+            var window = (combination & 4) != 0;
+            var average = (combination & 8) != 0;
+            var judged = (combination & 16) != 0;
+            var pace = new Pace(32, null)
+            {
+                Clip = clip ? new GradientClip(1) : null,
+                ClipValue = clipValue ? 0.5 : null,
+                StepEvery = window ? 2 : 1,
+                Average = average ? 0.9 : null,
+                JudgedByAverage = judged,
+            };
+
+            var expected = judged ? 6 : clipValue || window || average ? 5 : clip ? 3 : 2;
+
+            Assert.Equal(expected, NetworkDocument.PaceVersionOf(pace));
+        }
     }
 
     [Fact]

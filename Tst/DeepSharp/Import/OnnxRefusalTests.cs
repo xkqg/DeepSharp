@@ -421,7 +421,7 @@ public class OnnxRefusalTests
             node.Input.Add(["scale", "shift"]);
         }, "node '/2/Relu' (LayerNormalization): it normalises an image, and a layer normalisation here normalises the values of a row."),
         ["a layer normalisation from another axis"] = new(Titanic, model => Normalised(model, 3).SetWhole("axis", 0), "node '/1/Relu' (LayerNormalization): it normalises from axis 0, and a layer normalisation here normalises over the last axis of a row."),
-        ["an epsilon of nothing"] = new(Titanic, model => Normalised(model, 3).SetNumber("epsilon", 0), "node '/1/Relu' (LayerNormalization): What is added to a variance is a number above nothing. (Parameter 'epsilon') Actual value was 0."),
+        ["an epsilon of nothing"] = new(Titanic, model => Normalised(model, 3).SetNumber("epsilon", 0), "node '/1/Relu' (LayerNormalization): What is added to a variance is a finite number above nothing. (Parameter 'epsilon') Actual value was 0."),
 
         // A flatten, and a reshape.
         ["a flatten from another axis"] = new(Images, model => model.Node("/4/Flatten").SetWhole("axis", 2), "node '/4/Flatten' (Flatten): it flattens from axis 2, and a flatten here keeps each example as one row."),

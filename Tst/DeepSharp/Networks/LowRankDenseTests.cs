@@ -181,6 +181,12 @@ public class LowRankDenseTests
         var withoutRank = text.Replace("\"rank\":2,", string.Empty, StringComparison.Ordinal);
 
         Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadNetwork(withoutRank, "network", NetworkCatalog.BuiltIn()));
+
+        var scaled = Written(new LayerStack(LowRankDense(inputs: 3, outputs: 2, new LowRank(2, 6))));
+        var nothing = scaled.Replace("\"alpha\":6", "\"alpha\":0", StringComparison.Ordinal);
+        var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadNetwork(nothing, "network", NetworkCatalog.BuiltIn()));
+
+        Assert.Contains("a number above nothing", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

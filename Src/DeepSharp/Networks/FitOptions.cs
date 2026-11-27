@@ -67,9 +67,7 @@ public sealed class FitOptions
     public double? ClipValue
     {
         get => _clipValue;
-        init => _clipValue = value is null || (double.IsFinite(value.Value) && value.Value > 0)
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "The bound a gradient's values are clipped to is a finite number above nothing.");
+        init => _clipValue = value.AboveNothing(nameof(value), "The bound a gradient's values are clipped to");
     }
 
     /// <summary>
@@ -221,9 +219,7 @@ public sealed class EarlyStopping
     public double MinDelta
     {
         get => _minDelta;
-        init => _minDelta = double.IsFinite(value) && value >= 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "The least fall that counts is a number of at least nothing.");
+        init => _minDelta = value.AtLeastNothing(nameof(value), "The least fall that counts");
     }
 
     /// <summary>How many epochs without a better one the run waits before it stops; none, unless said.</summary>
@@ -256,9 +252,7 @@ public sealed class GradientClip
     /// <param name="maxNorm">The most norm the gradients may have together.</param>
     /// <exception cref="ArgumentOutOfRangeException">It is not a number above nothing.</exception>
     public GradientClip(double maxNorm) =>
-        MaxNorm = double.IsFinite(maxNorm) && maxNorm > 0
-            ? maxNorm
-            : throw new ArgumentOutOfRangeException(nameof(maxNorm), maxNorm, "The most norm gradients are clipped to is a number above nothing.");
+        MaxNorm = maxNorm.AboveNothing(nameof(maxNorm), "The most norm gradients are clipped to");
 
     /// <summary>The most norm the gradients may have together.</summary>
     public double MaxNorm { get; }

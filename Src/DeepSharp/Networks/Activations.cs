@@ -181,9 +181,7 @@ public sealed class LeakyRelu : Layer, ISaved<LeakyRelu>
     /// <param name="negativeSlope">The share of a value below nothing let through: nothing at least, a hundredth unless said.</param>
     /// <exception cref="ArgumentOutOfRangeException">The slope is not a finite number of nothing or more.</exception>
     public LeakyRelu(double negativeSlope = 0.01) =>
-        NegativeSlope = double.IsFinite(negativeSlope) && negativeSlope >= 0
-            ? negativeSlope
-            : throw new ArgumentOutOfRangeException(nameof(negativeSlope), negativeSlope, "The share of a value below nothing that is let through is a number of nothing or more.");
+        NegativeSlope = negativeSlope.AtLeastNothing(nameof(negativeSlope), "The share of a value below nothing that is let through");
 
     /// <summary>The share of a value below nothing let through.</summary>
     public double NegativeSlope { get; }
@@ -299,9 +297,7 @@ public sealed class Elu : Layer, ISaved<Elu>
     /// <param name="alpha">What the values below nothing bend towards, below nothing: a finite number of nothing or more, one unless said.</param>
     /// <exception cref="ArgumentOutOfRangeException">It is not one.</exception>
     public Elu(double alpha = 1) =>
-        Alpha = double.IsFinite(alpha) && alpha >= 0
-            ? alpha
-            : throw new ArgumentOutOfRangeException(nameof(alpha), alpha, "An exponential linear unit bends towards minus alpha, and alpha is a number of nothing or more.");
+        Alpha = alpha.AtLeastNothing(nameof(alpha), "An exponential linear unit's alpha");
 
     /// <summary>What the values below nothing bend towards, below nothing.</summary>
     public double Alpha { get; }

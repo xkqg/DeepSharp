@@ -83,6 +83,7 @@ public class LossScaleFileTests
         var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(older, "network", "training", NetworkCatalog.BuiltIn()));
 
         Assert.Contains("ninth version of a training part", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(PartSince.LossScale.Refusal("lossScale", 8), refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -94,6 +95,8 @@ public class LossScaleFileTests
         var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadCheckpoint(older, "network", "training", NetworkCatalog.BuiltIn()));
 
         Assert.Contains("ninth version of a training part", refused.Message, StringComparison.Ordinal);
+        Assert.Contains(PartSince.Skipped.Refusal("skipped", 8), refused.Message, StringComparison.Ordinal);
+        Assert.Contains(PartSince.EnginePrecision.Refusal("precision", 8), refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]

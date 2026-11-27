@@ -1,6 +1,8 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Networks;
+
 namespace DeepSharp.Tensors;
 
 /// <summary>
@@ -55,10 +57,7 @@ internal static class TensorSelectionExtensions
         {
             ArgumentNullException.ThrowIfNull(values);
 
-            if (bound <= 0 || !float.IsFinite(bound))
-            {
-                throw new ArgumentOutOfRangeException(nameof(bound), bound, "A bound is a finite number above nothing.");
-            }
+            _ = ((double)bound).AboveNothing(nameof(bound), "A bound");
 
             return backend.Smaller(backend.Larger(values, backend.Fill(values.Shape, -bound)), backend.Fill(values.Shape, bound));
         }

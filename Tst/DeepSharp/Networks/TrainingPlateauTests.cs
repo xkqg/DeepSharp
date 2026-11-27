@@ -104,6 +104,7 @@ public class TrainingPlateauTests
         Assert.Throws<ArgumentOutOfRangeException>(() => new TrainingPlateau { Cooldown = -1 });
         Assert.Throws<ArgumentOutOfRangeException>(() => new TrainingPlateau { Minimum = -0.5 });
         Assert.Throws<ArgumentOutOfRangeException>(() => new TrainingPlateau { Minimum = double.NaN });
+        Assert.Throws<ArgumentOutOfRangeException>(() => new TrainingPlateau { Minimum = double.PositiveInfinity });
     }
 
     [Fact]

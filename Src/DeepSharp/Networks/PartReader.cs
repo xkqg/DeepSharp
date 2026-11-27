@@ -137,16 +137,16 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
         var stopping = EarlyStoppingOf(earlyStopping);
         var clip = ClipOf(clipNorm);
         var clipValue = OptionOf<double>(
-            new RunOption(ClipValueKey, "the bound each value of the run's gradients was clipped to", "a number above nothing"),
-            value => value.AsNumber() is { } bound && bound > 0 ? bound : null);
+            new RunOption(ClipValueKey, PartSince.ClipValue, "a number above nothing"),
+            value => value.AsNumber() is { } bound && bound.IsAboveNothing() ? bound : null);
         var stepEvery = OptionOf<int>(
-            new RunOption(StepEveryKey, "how many batches went into each step", "a whole number from two"),
+            new RunOption(StepEveryKey, PartSince.StepEvery, "a whole number from two"),
             value => value.AsWhole() is { } whole && whole >= 2 ? whole : null);
         var average = OptionOf<double>(
-            new RunOption(AverageKey, "the share an average of the run's weights kept of itself", "a number above nothing and below one"),
-            value => value.AsNumber() is { } share && share > 0 && share < 1 ? share : null);
+            new RunOption(AverageKey, PartSince.Average, "a number above nothing and below one"),
+            value => value.AsNumber() is { } share && share.IsAboveNothing() && share < 1 ? share : null);
         var judged = OptionOf<bool>(
-            new RunOption(JudgedByAverageKey, "that the run's epochs were judged by the average of its weights", "true") { From = SixthVersion },
+            new RunOption(JudgedByAverageKey, PartSince.JudgedByAverage, "true"),
             value => value.ValueKind == JsonValueKind.True ? true : null);
 
         var scale = ScaleOf();
@@ -180,9 +180,9 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
 
         string[] at = [.. _here, LossScaleKey];
 
-        if (version < NinthVersion)
+        if (PartSince.LossScale.Cannot(version))
         {
-            text.Fault(at, $"The loss scale a run went under, under '{LossScaleKey}', is written from the {Ordinal(NinthVersion)} version of a training part on, and this one is of the {Ordinal(version)}.");
+            text.Fault(at, PartSince.LossScale.Refusal(LossScaleKey, version));
 
             return null;
         }
@@ -206,10 +206,7 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
         {
             var options = LossScale.Read(initial, growth, interval, backoff);
 
-            if (!double.IsFinite(current) || current <= 0 || !double.IsInteger(double.Log2(current)))
-            {
-                throw new ArgumentOutOfRangeException(ScaleKey, current, "A scale is a power of two, so that scaling and scaling down again costs no digit.");
-            }
+            _ = current.PowerOfTwo(ScaleKey, "A scale");
 
             return new ScaleRead(options, new ScalerState(current, clean));
         }
@@ -234,9 +231,9 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
 
         string[] at = [.. _here, option.Key];
 
-        if (version < option.From)
+        if (option.Since.Cannot(version))
         {
-            text.Fault(at, $"{Capitalised(option.Says)}, under '{option.Key}', is written from the {Ordinal(option.From)} version of a training part on, and this one is of the {Ordinal(version)}.");
+            text.Fault(at, option.Since.Refusal(option.Key, version));
 
             return null;
         }
@@ -246,20 +243,16 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
             return value;
         }
 
-        text.Fault(at, $"{Capitalised(option.Says)} is written under '{option.Key}', as {option.Shape}.");
+        text.Fault(at, $"{char.ToUpperInvariant(option.Since.Says[0])}{option.Since.Says[1..]} is written under '{option.Key}', as {option.Shape}.");
 
         return null;
     }
 
-    /// <summary>An option of a run a training part may say: its key, what it says and how it is written, and the version that first says it.</summary>
+    /// <summary>An option of a run a training part may say: its key, the row of the table that says what it says and from which version, and how it is written.</summary>
     /// <param name="Key">The key it stands under.</param>
-    /// <param name="Says">What it says, as a refusal names it.</param>
+    /// <param name="Since">What it says, as a refusal names it, and the version of a training part that first says it.</param>
     /// <param name="Shape">How it is written, as a refusal names it.</param>
-    private readonly record struct RunOption(string Key, string Says, string Shape)
-    {
-        /// <summary>The version of a training part that first says it; the fifth, unless said.</summary>
-        public int From { get; init; } = FifthVersion;
-    }
+    private readonly record struct RunOption(string Key, PartSince Since, string Shape);
 
     // The loss scale a part names: what the run was told, and where the scale stood.
     private readonly record struct ScaleRead(LossScale Options, ScalerState State);
@@ -269,21 +262,6 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
     /// <param name="Pace">The batch size, the early stopping and the rest of the pace the run went at; nothing where the part says none.</param>
     /// <param name="Engine">The engine the run was on; nothing where the part names none.</param>
     internal readonly record struct RunMade(long Seed, Pace? Pace, Engine? Engine);
-
-    private static string Capitalised(string words) => char.ToUpperInvariant(words[0]) + words[1..];
-
-    private static string Ordinal(int version) => version switch
-    {
-        FirstVersion => "first",
-        SecondVersion => "second",
-        ThirdVersion => "third",
-        FourthVersion => "fourth",
-        FifthVersion => "fifth",
-        SixthVersion => "sixth",
-        SeventhVersion => "seventh",
-        EighthVersion => "eighth",
-        _ => "ninth",
-    };
 
     /// <summary>
     /// What the run averaged of its weights, by path: written exactly where the pace says it kept an average, and each of the
@@ -375,9 +353,9 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
 
         Only(written, at, NameKey, VersionKey, DeviceKey, PrecisionKey);
 
-        if (precision is not null && version < NinthVersion)
+        if (precision is not null && PartSince.EnginePrecision.Cannot(version))
         {
-            text.Fault([.. at, PrecisionKey], $"The width an engine kept its work in, under '{PrecisionKey}', is written from the {Ordinal(NinthVersion)} version of a training part on, and this one is of the {Ordinal(version)}.");
+            text.Fault([.. at, PrecisionKey], PartSince.EnginePrecision.Refusal(PrecisionKey, version));
 
             return null;
         }
@@ -462,9 +440,9 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
 
             var skipped = epoch.Member(SkippedKey);
 
-            if (skipped is not null && version < NinthVersion)
+            if (skipped is not null && PartSince.Skipped.Cannot(version))
             {
-                text.Fault([.. at, SkippedKey], $"How many steps an epoch skipped, under '{SkippedKey}', is written from the {Ordinal(NinthVersion)} version of a training part on, and this one is of the {Ordinal(version)}.");
+                text.Fault([.. at, SkippedKey], PartSince.Skipped.Refusal(SkippedKey, version));
             }
             else if (epoch.Member(NumberKey)?.AsWhole() == place
                 && epoch.Member(EpochLossKey)?.AsNumber() is { } loss
@@ -653,16 +631,14 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
 
         string[] at = [.. _here, ClipNormKey];
 
-        if (version < NetworkDocument.ThirdVersion)
+        if (PartSince.ClipNorm.Cannot(version))
         {
-            text.Fault(
-                at,
-                $"The norm a run's gradients were clipped to is written from the third version of a training part on, and this one is of the {(version == FirstVersion ? "first" : "second")}.");
+            text.Fault(at, PartSince.ClipNorm.Refusal(ClipNormKey, version));
 
             return null;
         }
 
-        if (written.Value.AsNumber() is { } norm && norm > 0)
+        if (written.Value.AsNumber() is { } norm && norm.IsAboveNothing())
         {
             return new GradientClip(norm);
         }
@@ -826,12 +802,12 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
         {
             says = true;
 
-            // A hold, a penalty and a bound are written from the fifth version on; a share of the rate from the seventh.
-            var from = key == RateShareKey ? SeventhVersion : FifthVersion;
+            // A hold, a penalty and a bound are written from one version on, a share of the rate from a later one.
+            var since = key == RateShareKey ? PartSince.RateShare : PartSince.Rules;
 
-            if (version < from)
+            if (since.Cannot(version))
             {
-                text.Fault([.. at, key], $"What the learning does to a parameter's numbers, under '{key}', is written from the {Ordinal(from)} version of a network's part on, and this one is of the {Ordinal(version)}.");
+                text.Fault([.. at, key], since.Refusal(key, version));
 
                 continue;
             }
@@ -843,16 +819,16 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
                 case LearnsKey when value.AsTruth() is false:
                     rules = rules with { Held = true };
                     break;
-                case L1Key when value.AsNumber() is { } l1 && l1 > 0 && double.IsFinite(l1):
+                case L1Key when value.AsNumber() is { } l1 && l1.IsAboveNothing():
                     rules = rules with { L1 = l1 };
                     break;
-                case L2Key when value.AsNumber() is { } l2 && l2 > 0 && double.IsFinite(l2):
+                case L2Key when value.AsNumber() is { } l2 && l2.IsAboveNothing():
                     rules = rules with { L2 = l2 };
                     break;
-                case MaxNormKey when value.AsNumber() is { } bound && bound > 0 && double.IsFinite(bound):
+                case MaxNormKey when value.AsNumber() is { } bound && bound.IsAboveNothing():
                     rules = rules with { MaxNorm = bound };
                     break;
-                case RateShareKey when value.AsNumber() is { } share && share > 0 && double.IsFinite(share):
+                case RateShareKey when value.AsNumber() is { } share && share.IsAboveNothing():
                     rules = rules with { RateShare = share };
                     break;
                 default:

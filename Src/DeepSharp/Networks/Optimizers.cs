@@ -173,18 +173,14 @@ public abstract class Optimizer
     /// <summary>What is added so nothing is divided by nothing: a number above nothing.</summary>
     /// <exception cref="ArgumentOutOfRangeException">It is not.</exception>
     private protected static double RequireEpsilon(double value) =>
-        double.IsFinite(value) && value > 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "Epsilon is a number above nothing.");
+        value.AboveNothing(nameof(value), "Epsilon");
 
     /// <summary>A setting that is a number of at least nothing.</summary>
     /// <param name="value">The number.</param>
     /// <param name="what">What the setting is, as the refusal names it.</param>
     /// <exception cref="ArgumentOutOfRangeException">It is below nothing, or not a finite number.</exception>
     private protected static double RequireAtLeastNothing(double value, string what) =>
-        double.IsFinite(value) && value >= 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, $"{what} is a number of at least nothing.");
+        value.AtLeastNothing(nameof(value), what);
 
     /// <summary>Writes a weight decay added to the gradient, when there is one: an optimizer without it writes what it always wrote.</summary>
     private protected static void WriteCoupledDecay(Utf8JsonWriter writer, double decay)
@@ -199,7 +195,7 @@ public abstract class Optimizer
     private protected static double CoupledDecayIn(JsonElement settings, Rebuilding rebuilding) => rebuilding.Number(settings, "weightDecay", 0);
 
     /// <summary>The oldest version of a network file's part that says an optimizer with these options: the second, unless one is on.</summary>
-    private protected static int VersionOf(bool anOptionIsOn) => anOptionIsOn ? NetworkDocument.FifthVersion : NetworkDocument.SecondVersion;
+    private protected static int VersionOf(bool anOptionIsOn) => anOptionIsOn ? PartSince.OptimizerOption.From : NetworkDocument.SecondVersion;
 
     /// <summary>The two betas a kind of Adam's family was written with, as a list of two numbers.</summary>
     /// <exception cref="FormatException">They are missing, or not two numbers.</exception>
@@ -222,7 +218,7 @@ public abstract class Optimizer
     }
 
     private static double RequireRate(double rate) =>
-        double.IsFinite(rate) && rate > 0 ? rate : throw new ArgumentOutOfRangeException(nameof(rate), rate, "A learning rate is a number above nothing.");
+        rate.AboveNothing(nameof(rate), "A learning rate");
 }
 
 /// <summary>
@@ -255,9 +251,7 @@ public sealed class Sgd : Optimizer, ISaved<Sgd>
     public double Momentum
     {
         get => _momentum;
-        init => _momentum = double.IsFinite(value) && value >= 0
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "Momentum is a number of at least nothing.");
+        init => _momentum = value.AtLeastNothing(nameof(value), "Momentum");
     }
 
     /// <summary>How much of each parameter is added to its gradient before the step; none, unless said, as PyTorch leaves it.</summary>

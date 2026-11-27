@@ -141,6 +141,19 @@ The seventh letter of the flock team.
   behind"; it now says, like a network's, an ensemble's and a boosted pair's file, "the file of a trained network says its
   features, its answers and the fit of the pipeline it was trained behind". No file written changes by a byte: the four
   kinds of file are now framed by one writer and held to what they carry by one reader.
+- **A setting that must be a finite number above nothing, or of at least nothing, is refused in one sentence for each.**
+  A learning rate, an epsilon, a spread, a gain, a penalty, a bound, a share of the rate, a momentum, a weight decay, a
+  noise, the least rate of a schedule and the rest said the same thing in about ten different wordings; every one now names
+  what the setting is and then says "is a finite number above nothing" or "is a finite number of at least nothing", so a
+  message that used to read "A learning rate is a number above nothing" reads "A learning rate is a finite number above
+  nothing". The same two questions are asked by the reader of a network file, so the file and the code cannot disagree about
+  what a number may be. The least rate of a `TrainingPlateau` was refused only below nothing or not a number, and let
+  infinity through; it is now refused as every other is. A share of the rate of nothing still points to `Held`.
+- **A network file's refusal of a part too early for what it says is one sentence.** The norm a run's gradients were clipped
+  to, in a training part of the first or second version, was refused without saying where it stood; it now says, as the
+  rest do, "…, under 'clipNorm', is written from the third version of a training part on, and this one is of the second".
+  The versions a part is written from are held in one table that the writer and the reader both read, so a file is written
+  as the version its reader will accept it from; no file written changes by a byte.
 
 - **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.30.0.** Its data frame now hands
   over the column or the bars an indicator reads, and the indicator is made from its own class; `indicator.add` builds

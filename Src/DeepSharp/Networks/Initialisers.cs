@@ -60,9 +60,7 @@ public abstract class Initialiser
     /// <summary>A spread: a finite number above nothing.</summary>
     /// <exception cref="ArgumentOutOfRangeException">It is not.</exception>
     private protected static double RequireDeviation(double deviation) =>
-        double.IsFinite(deviation) && deviation > 0
-            ? deviation
-            : throw new ArgumentOutOfRangeException(nameof(deviation), deviation, "A spread is a finite number above nothing.");
+        deviation.AboveNothing(nameof(deviation), "A spread");
 
     /// <summary>A mean, or a value: a finite number.</summary>
     /// <exception cref="ArgumentOutOfRangeException">It is not.</exception>
@@ -256,9 +254,7 @@ public sealed class Orthogonal : Initialiser
     /// <exception cref="ArgumentOutOfRangeException">The gain is not a finite number above nothing.</exception>
     public Orthogonal(double gain = 1)
     {
-        Gain = double.IsFinite(gain) && gain > 0
-            ? gain
-            : throw new ArgumentOutOfRangeException(nameof(gain), gain, "A gain is a finite number above nothing.");
+        Gain = gain.AboveNothing(nameof(gain), "A gain");
     }
 
     /// <summary>What the matrix is multiplied by.</summary>

@@ -88,9 +88,7 @@ public sealed record LossScale
             : string.Create(CultureInfo.InvariantCulture, $"a fixed loss scale of {Initial}");
 
     private static double RequirePowerOfTwo(double scale, string name) =>
-        double.IsFinite(scale) && scale > 0 && double.IsInteger(double.Log2(scale))
-            ? scale
-            : throw new ArgumentOutOfRangeException(name, scale, "A scale is a power of two, so that scaling and scaling down again costs no digit.");
+        scale.PowerOfTwo(name, "A scale");
 }
 
 /// <summary>Where a loss scale had got to: the scale the next step is worked back from, and how many clean steps in a row it has had.</summary>

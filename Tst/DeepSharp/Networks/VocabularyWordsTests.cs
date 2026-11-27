@@ -79,6 +79,13 @@ public class VocabularyWordsTests
         Assert.Equal(new Shape(8, 5), Assert.IsType<Periodic>(lite.Layers[0]).Weight.Value.Shape);
         Assert.Contains("periodic, takes each example as a row of numbers", Assert.Throws<ArgumentException>(() => new Sequential().Periodic(periodicity).Lower(new Shape(2, 3), new RandomStream(1))).Message, StringComparison.Ordinal);
         Assert.Throws<ArgumentOutOfRangeException>(() => new Sequential().Periodic(periodicity with { Sigma = 0 }));
+
+        // A batch of the wrong width, or not of rows at all, is refused by the layer that was told how wide a row is.
+        var embedding = Assert.IsType<Periodic>(stack.Layers[0]);
+        var evaluation = Pass.Evaluation(new CpuBackend());
+
+        Assert.Throws<ArgumentException>(() => embedding.Forward(Tensor.From(new Shape(2, 4), [.. new float[8]]), evaluation));
+        Assert.Throws<ArgumentException>(() => embedding.Forward(Tensor.From(new Shape(3), [0f, 0f, 0f]), evaluation));
     }
 
     [Fact]

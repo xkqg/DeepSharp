@@ -34,6 +34,33 @@ public class RulesTests
     }
 
     [Fact]
+    public void TheWriterNeverWritesAZeroPenalty()
+    {
+        // A penalty of nothing is no penalty: SlotRules accepts it, the file never holds it — so the reader, which refuses a
+        // written one that is not above nothing, and the writer, which writes only above nothing, say the same thing.
+        var (hidden, output, network) = Network();
+
+        hidden.Weight.Rules = new SlotRules { L1 = 0, L2 = 0.02 };
+        output.Weight.Rules = new SlotRules { L1 = 0, L2 = 0 };
+
+        var text = Written(network);
+        using var document = JsonDocument.Parse(text);
+        var parameters = document.RootElement.GetProperty("network").GetProperty("parameters");
+
+        Assert.False(parameters.GetProperty("0.weight").TryGetProperty("l1", out _));
+        Assert.Equal(0.02, parameters.GetProperty("0.weight").GetProperty("l2").GetDouble());
+        Assert.False(parameters.GetProperty("2.weight").TryGetProperty("l1", out _));
+        Assert.False(parameters.GetProperty("2.weight").TryGetProperty("l2", out _));
+
+        var read = Assert.IsType<LayerStack>(NetworkDocument.ReadNetwork(text, "network", NetworkCatalog.BuiltIn()).Network);
+        var layers = read.Layers.OfType<Dense>().ToArray();
+
+        Assert.Equal(new SlotRules { L2 = 0.02 }, layers[0].Weight.Rules);
+        Assert.Equal(default, layers[1].Weight.Rules);
+        Assert.Equal(text, Written(read));
+    }
+
+    [Fact]
     public void TheRulesOfAParameter_AreWrittenBesideItsNumbers_AsTheFifthVersion_AndReadBackAsTheyWere()
     {
         var (hidden, output, network) = Network();
@@ -63,6 +90,26 @@ public class RulesTests
         Assert.Equal(default, layers[1].Bias!.Rules);
         Assert.Equal(new SlotRules { L2 = 0.1 }, layers[1].Weight.Rules);
         Assert.Equal(text, Written(read));
+    }
+
+    [Theory]
+    [InlineData("l1")]
+    [InlineData("rateShare")]
+    public void TheVersionARuleIsWrittenAs_IsTheOneTheReaderRefusesItBefore_ForBothAskTheSameTable(string key)
+    {
+        var (hidden, _, network) = Network();
+        var since = key == "rateShare" ? PartSince.RateShare : PartSince.Rules;
+
+        hidden.Weight.Rules = key == "rateShare" ? new SlotRules { RateShare = 0.5 } : new SlotRules { L1 = 0.01 };
+
+        var text = Written(network);
+
+        Assert.Equal(since.From, JsonDocument.Parse(text).RootElement.GetProperty("network").GetProperty("version").GetInt32());
+
+        var earlier = text.Replace($"\"version\":{since.From}", $"\"version\":{since.From - 1}", StringComparison.Ordinal);
+        var refused = Assert.Throws<NetworkFileException>(() => NetworkDocument.ReadNetwork(earlier, "network", NetworkCatalog.BuiltIn()));
+
+        Assert.Contains(since.Refusal(key, since.From - 1), refused.Message, StringComparison.Ordinal);
     }
 
     [Theory]

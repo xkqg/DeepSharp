@@ -23,13 +23,8 @@ public readonly record struct LowRank
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(rank, 1);
 
-        if (alpha is { } given && !(double.IsFinite(given) && given > 0))
-        {
-            throw new ArgumentOutOfRangeException(nameof(alpha), alpha, "Alpha is a finite number above nothing.");
-        }
-
         Rank = rank;
-        Alpha = alpha ?? rank;
+        Alpha = alpha.AboveNothing(nameof(alpha), "Alpha") ?? rank;
     }
 
     /// <summary>How many columns A has and rows B has.</summary>

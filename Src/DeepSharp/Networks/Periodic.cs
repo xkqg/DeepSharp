@@ -60,10 +60,7 @@ public sealed class Periodic : Layer, ISaved<Periodic>
         ArgumentOutOfRangeException.ThrowIfLessThan(periodicity.Frequencies, 1, nameof(periodicity));
         ArgumentOutOfRangeException.ThrowIfLessThan(periodicity.Width, 1, nameof(periodicity));
 
-        if (!double.IsFinite(periodicity.Sigma) || periodicity.Sigma <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(periodicity), periodicity.Sigma, "The frequencies start from a normal curve whose spread is a number above nothing.");
-        }
+        _ = periodicity.Sigma.AboveNothing(nameof(periodicity), "The spread of the normal curve the frequencies start from");
 
         Features = features;
         Periodicity = periodicity;

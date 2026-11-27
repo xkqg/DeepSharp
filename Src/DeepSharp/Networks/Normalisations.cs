@@ -159,9 +159,7 @@ public abstract class Normalisation : Layer
     /// <summary>What may be added to a variance before its root is taken: a finite number above nothing, refused otherwise.</summary>
     /// <exception cref="ArgumentOutOfRangeException">It is not one.</exception>
     internal static double RequireEpsilon(double value, string parameter) =>
-        double.IsFinite(value) && value > 0
-            ? value
-            : throw new ArgumentOutOfRangeException(parameter, value, "What is added to a variance is a number above nothing.");
+        value.AboveNothing(parameter, "What is added to a variance");
 }
 
 /// <summary>

@@ -27,10 +27,7 @@ public abstract class LearningRateSchedule
     {
         ArgumentOutOfRangeException.ThrowIfNegative(epoch);
 
-        if (!double.IsFinite(initial) || initial <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(initial), initial, "A learning rate is a number above nothing.");
-        }
+        _ = initial.AboveNothing(nameof(initial), "A learning rate");
 
         return Rate(epoch, initial);
     }
@@ -46,10 +43,7 @@ public abstract class LearningRateSchedule
     {
         ArgumentNullException.ThrowIfNull(trainingLosses);
 
-        if (!double.IsFinite(initial) || initial <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(initial), initial, "A learning rate is a number above nothing.");
-        }
+        _ = initial.AboveNothing(nameof(initial), "A learning rate");
 
         if (trainingLosses.Any(loss => !double.IsFinite(loss)))
         {
@@ -76,9 +70,7 @@ public abstract class LearningRateSchedule
     /// <param name="parameter">The parameter it was handed in as.</param>
     /// <returns>The factor.</returns>
     private protected static double RequireFactor(double factor, string parameter) =>
-        double.IsFinite(factor) && factor > 0
-            ? factor
-            : throw new ArgumentOutOfRangeException(parameter, factor, "A rate is multiplied by a number above nothing.");
+        factor.AboveNothing(parameter, "The factor a rate is multiplied by");
 }
 
 /// <summary>The rate the optimizer starts at, every epoch.</summary>
@@ -193,13 +185,8 @@ public sealed class CosineDecay : LearningRateSchedule, ISaved<CosineDecay>
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(epochs, 1);
 
-        if (!double.IsFinite(minimum) || minimum < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(minimum), minimum, "The least rate is a number of at least nothing.");
-        }
-
         Epochs = epochs;
-        Minimum = minimum;
+        Minimum = minimum.AtLeastNothing(nameof(minimum), "The least rate");
     }
 
     /// <summary>How many epochs the fall takes.</summary>

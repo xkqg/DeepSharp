@@ -166,9 +166,6 @@ internal readonly record struct Pace(int BatchSize, EarlyStopping? EarlyStopping
     /// <summary>How it scaled its loss; nothing when it did not.</summary>
     public LossScale? LossScale { get; init; }
 
-    /// <summary>Whether it says anything an earlier version of a training part could not: a clipped value, a window of batches, an average.</summary>
-    public bool SaysMore => ClipValue is not null || StepEvery != 1 || Average is not null;
-
     /// <summary>How a run handed these options goes through its epochs.</summary>
     /// <param name="options">What the run is handed.</param>
     /// <returns>Its batch size, its early stopping, its clips, its window of batches, its average and how its epochs were judged.</returns>

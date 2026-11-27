@@ -84,19 +84,11 @@ public sealed class TrainingPlateau : LearningRateSchedule, ISaved<TrainingPlate
     }
 
     /// <summary>The least the rate is lowered to; nothing, unless said.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">It is below nothing, or not a number.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">It is below nothing, or not a finite number.</exception>
     public double Minimum
     {
         get => _minimum;
-        init
-        {
-            if (double.IsNaN(value) || value < 0)
-            {
-                throw new ArgumentOutOfRangeException(nameof(value), value, "The least rate is nothing or more.");
-            }
-
-            _minimum = value;
-        }
+        init => _minimum = value.AtLeastNothing(nameof(value), "The least rate");
     }
 
     /// <inheritdoc />
