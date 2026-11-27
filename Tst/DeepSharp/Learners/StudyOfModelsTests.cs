@@ -190,6 +190,13 @@ public class StudyOfModelsTests
         var refused = Assert.Throws<InvalidOperationException>(() => study.Run(deal => StudyTests.Passengers(deal), networked.Trials, TestContext.Current.CancellationToken));
 
         Assert.Contains("declares a network", refused.Message, StringComparison.Ordinal);
+
+        // And the reverse: the trials a study of the caller's models tried, handed to a study of networks.
+        var modelled = study.Run(deal => StudyTests.Passengers(deal), TestContext.Current.CancellationToken);
+        var networks = new DeepSharp.Learners.Networks.Study(Space, (candidate, network) => network.Dense(1).Adam(0.01).BinaryCrossEntropy().Run(seed: 1, epochs: 1)) { Trials = 3 };
+        var reverse = Assert.Throws<InvalidOperationException>(() => networks.Run(deal => StudyTests.Passengers(deal), modelled.Trials, TestContext.Current.CancellationToken));
+
+        Assert.Contains("declares no network", reverse.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -246,6 +253,40 @@ public class StudyOfModelsTests
     }
 
     [Fact]
+    public void OverFeaturesNoStepPutsOnOneScale_TheStudyStillRuns_ForTheCallersModelNeedsOnlyNumbers()
+    {
+        // A network needs every feature between minus one and one; a model of the caller's is handed numbers, as a learner of
+        // numbers takes them, and is not refused for a scale it never asked for.
+        static Pipeline Unscaled(int deal) => Pdd.Create()
+            .ReadCsv(Repository.Data("titanic.csv"))
+            .Declare(schema => schema.Integer("survived", "sibsp", "parch").Category("sex").Optional("age", ColumnKind.Number).Number("fare"))
+            .SplitAtRandom(0.70, 0.15, 100 + deal, 7)
+            .FillMissing("age", With.Median)
+            .EncodeCategories()
+            .Target("survived")
+            .Build();
+
+        var widths = new List<int>();
+        var study = new Study<double>(Space, deal =>
+        {
+            widths.Add(deal.Rows.Batch(Part.Train).Width);
+
+            return new Trained<double>(deal.Candidate.Number("rate"), deal.Candidate.Number("rate"));
+        })
+        {
+            Sampler = new RandomSampler(11),
+            Trials = 2,
+            Deals = 2,
+        };
+
+        var result = study.Run(Unscaled, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, result.Trials.Count);
+        Assert.Equal(4, widths.Count);
+        Assert.All(result.Trials, trial => Assert.True(trial.Finished));
+    }
+
+    [Fact]
     public void EarlierTrialsNumberedWithAGap_AreRefused()
     {
         var study = new Study<double>(Space, deal => new Trained<double>(deal.Candidate.Number("rate"), deal.Candidate.Number("rate"))) { Sampler = new RandomSampler(11), Trials = 1 };
@@ -254,6 +295,30 @@ public class StudyOfModelsTests
         var refused = Assert.Throws<InvalidOperationException>(() => study.Run(deal => StudyTests.Passengers(deal), [gap], TestContext.Current.CancellationToken));
 
         Assert.Contains("numbered from nought without a gap", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("is nothing", Assert.Throws<ArgumentException>(() => study.Run(deal => StudyTests.Passengers(deal), [null!], TestContext.Current.CancellationToken)).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ACancellationWhileADealTrains_IsNoPrune_AndReachesTheCaller()
+    {
+        using var source = new CancellationTokenSource();
+        var study = new Study<double>(Space, deal =>
+        {
+            source.Cancel();
+            deal.Cancellation.ThrowIfCancellationRequested();
+
+            return new Trained<double>(0, 0);
+        })
+        {
+            Sampler = new RandomSampler(11),
+            Trials = 2,
+            Pruner = _ => false,
+        };
+
+        var stopped = Assert.Throws<OperationCanceledException>(() => study.Run(deal => StudyTests.Passengers(deal), source.Token));
+
+        Assert.True(source.IsCancellationRequested);
+        Assert.NotNull(stopped);
     }
 
     private static PreparedData CalibratedRows()
@@ -365,7 +430,9 @@ public class StudyOfModelsTests
 
         static IReadOnlyList<double[]> Answer(double weight, IReadOnlyList<double[]> features) => [.. features.Select(_ => new[] { weight })];
 
-        Assert.Throws<ArgumentException>(() => study.TrainEnsemble(rows, one, Answer));
+        Assert.Contains("1 was given", Assert.Throws<ArgumentException>(() => study.TrainEnsemble(rows, one, Answer)).Message, StringComparison.Ordinal);
+        Assert.Contains("0 were given", Assert.Throws<ArgumentException>(() => study.TrainEnsemble(rows, [], Answer)).Message, StringComparison.Ordinal);
+        Assert.Equal([0.3, 0.7], study.TrainEnsemble(rows, two, Answer, new EnsembleOptions { Blend = Blend.Average, Cancellation = TestContext.Current.CancellationToken }).Members);
 
         var refused = Assert.Throws<ArgumentException>(() => study.TrainEnsemble(rows, two, Answer, new EnsembleOptions { Engines = new Engines() }));
 

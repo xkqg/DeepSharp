@@ -60,25 +60,57 @@ public class StudyOfPipelinesTests
             Judge = judge ?? (networks => networks.Sum(network => network.ValidationLoss())),
         };
 
-    [Fact]
-    public void AStudyHandedAPipelineForEachCandidate_PreparesItForEveryTrial_AndTheNumbersAreTheStudyHandedThemAllInOneWhereTheyAreTheSame()
+    // The trials of a study handed a pipeline for each candidate and deal, by either of the two faces: networks the study
+    // declares from the candidate, or a model a function of the caller's trains, judged by the number it gives back.
+    private static IReadOnlyList<Trial> Tried(bool byTheCaller, Func<Candidate, int, Pipeline> pipelineFor, int trials = 3, int deals = 1) =>
+        byTheCaller
+            ? new Study<double>(Space, deal => new Trained<double>(deal.Candidate.Number("rate"), deal.Rows.Batch(Part.Train).RowCount))
+            {
+                Sampler = new RandomSampler(11),
+                Trials = trials,
+                Deals = deals,
+            }.Run(pipelineFor, TestContext.Current.CancellationToken).Trials
+            : Studied(trials, deals).Run(pipelineFor, TestContext.Current.CancellationToken).Trials;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AStudyHandedAPipelineForEachCandidate_PreparesItForEveryTrialAndDeal_EachCandidateTrainingOnTheRowsItsOwnPipelinePrepared(bool byTheCaller)
     {
         var prepared = new List<(string Fill, int Deal)>();
-        var result = Studied(trials: 4).Run(
+        var trials = Tried(
+            byTheCaller,
             (candidate, deal) =>
             {
                 prepared.Add((candidate.Choice("fill"), deal));
 
                 return Passengers(candidate, deal);
             },
-            TestContext.Current.CancellationToken);
-        var once = Studied(trials: 4).Run(deal => Passengers(new Candidate([new Setting("rate", 0.01, null), new Setting("fill", 0, "median")]), deal), TestContext.Current.CancellationToken);
+            trials: 4,
+            deals: 2);
 
-        Assert.Equal(4, prepared.Count);
-        Assert.Equal(4, result.Trials.Count);
-        Assert.Equal(4, once.Trials.Count);
-        Assert.Contains(result.Trials, trial => trial.Candidate.Choice("fill") == "mean");
-        Assert.Contains(result.Trials, trial => trial.Candidate.Choice("fill") == "median");
+        Assert.Equal(8, prepared.Count);
+        Assert.Equal(trials.SelectMany(trial => new[] { (trial.Candidate.Choice("fill"), 0), (trial.Candidate.Choice("fill"), 1) }), prepared);
+        Assert.Contains(trials, trial => trial.Candidate.Choice("fill") == "mean");
+        Assert.Contains(trials, trial => trial.Candidate.Choice("fill") == "median");
+        Assert.All(trials, trial => Assert.Equal(2, trial.Scores.Count));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void AStudyHandedAPipelineForEachCandidate_GoneOnFromItsEarlierTrials_IsTheStudyThatNeverStopped(bool byTheCaller)
+    {
+        Func<Candidate, int, Pipeline> pipelineFor = (candidate, deal) => Passengers(candidate, deal);
+        var first = Tried(byTheCaller, pipelineFor, trials: 2);
+        var whole = Tried(byTheCaller, pipelineFor, trials: 3);
+        var resumed = byTheCaller
+            ? new Study<double>(Space, deal => new Trained<double>(deal.Candidate.Number("rate"), deal.Rows.Batch(Part.Train).RowCount)) { Sampler = new RandomSampler(11), Trials = 3 }
+                .Run(pipelineFor, first, TestContext.Current.CancellationToken).Trials
+            : Studied(trials: 3).Run(pipelineFor, first, TestContext.Current.CancellationToken).Trials;
+
+        Assert.Equal(whole.Select(trial => trial.Candidate), resumed.Select(trial => trial.Candidate));
+        Assert.Equal(whole.Select(trial => trial.Scores), resumed.Select(trial => trial.Scores));
     }
 
     [Fact]
@@ -98,39 +130,41 @@ public class StudyOfPipelinesTests
         Assert.Equal([0, 1], runs);
     }
 
-    [Fact]
-    public void ACandidatesPipelineThatMovesTheRowsItIsJudgedOn_IsRefused_NamingTheTrialAndTheDeal()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ACandidatesPipelineThatMovesTheRowsItIsJudgedOn_IsRefused_NamingTheTrialAndTheDeal(bool byTheCaller)
     {
-        var study = Studied(trials: 3);
-
-        var refused = Assert.Throws<InvalidOperationException>(() => study.Run(
-            (candidate, deal) => Passengers(candidate, deal, validation: candidate.Number("rate") > 0.02 ? 0.25 : 0.15),
-            TestContext.Current.CancellationToken));
+        var refused = Assert.Throws<InvalidOperationException>(() => Tried(
+            byTheCaller,
+            (candidate, deal) => Passengers(candidate, deal, validation: candidate.Number("rate") > 0.02 ? 0.25 : 0.15)));
 
         Assert.Contains("trial", refused.Message, StringComparison.Ordinal);
         Assert.Contains("validation", refused.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ACandidatesPipelineThatMovesTheTestRows_IsRefused_NamingTheTrial()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ACandidatesPipelineThatMovesTheTestRows_IsRefused_NamingTheTrialAndTheTestSeed(bool byTheCaller)
     {
-        var study = Studied(trials: 3);
+        var refused = Assert.Throws<InvalidOperationException>(() => Tried(
+            byTheCaller,
+            (candidate, deal) => Passengers(candidate, deal, testSeed: candidate.Number("rate") > 0.02 ? 8 : 7)));
 
-        var refused = Assert.Throws<InvalidOperationException>(() => study.Run(
-            (candidate, deal) => Passengers(candidate, deal, testSeed: candidate.Number("rate") > 0.02 ? 8 : 7),
-            TestContext.Current.CancellationToken));
-
-        Assert.Contains("test", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("measures on other test rows", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("trial", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("testSeed", refused.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void ACandidatesPipelineThatDealsTheValidationRowsAnotherWay_ButKeepsTheTestRows_IsRefused_NamingTheTrialAndTheDeal()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ACandidatesPipelineThatDealsTheValidationRowsAnotherWay_ButKeepsTheTestRows_IsRefused_NamingTheTrialAndTheDeal(bool byTheCaller)
     {
-        var study = Studied(trials: 3);
-
-        var refused = Assert.Throws<InvalidOperationException>(() => study.Run(
-            (candidate, deal) => Passengers(candidate, deal + (candidate.Number("rate") > 0.02 ? 1 : 0)),
-            TestContext.Current.CancellationToken));
+        var refused = Assert.Throws<InvalidOperationException>(() => Tried(
+            byTheCaller,
+            (candidate, deal) => Passengers(candidate, deal + (candidate.Number("rate") > 0.02 ? 1 : 0))));
 
         Assert.Contains("sets other rows aside as validation", refused.Message, StringComparison.Ordinal);
         Assert.Contains("deal 0", refused.Message, StringComparison.Ordinal);
@@ -146,12 +180,14 @@ public class StudyOfPipelinesTests
         Assert.Contains("deal 0", hole.Message, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public void APipelineForACandidateThatIsNothing_IsRefused_NamingTheTrialAndTheDeal()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void APipelineForACandidateThatIsNothing_IsRefused_NamingTheTrialAndTheDeal(bool byTheCaller)
     {
-        var refused = Assert.Throws<InvalidOperationException>(() => Studied(trials: 1).Run((candidate, deal) => (Pipeline)null!, TestContext.Current.CancellationToken));
+        var refused = Assert.Throws<InvalidOperationException>(() => Tried(byTheCaller, (candidate, deal) => null!, trials: 1));
 
-        Assert.Contains("deal 0", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("trial 0, deal 0", refused.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -174,6 +210,18 @@ public class StudyOfPipelinesTests
         Assert.Equal(2, result.Members.Count);
         Assert.All(result.Members, deal => Assert.Equal(2, deal.Count));
         Assert.All(result.Best.Scores, score => Assert.True(double.IsFinite(score)));
+    }
+
+    [Fact]
+    public void ACandidateThatDeclaresNoNetworks_OrNothing_IsRefused()
+    {
+        var none = new Study(Space, candidate => Listed<LearnNetworkStep>()) { Trials = 1 };
+        var nothing = new Study(Space, candidate => (IReadOnlyList<LearnNetworkStep>)null!) { Trials = 1 };
+
+        Assert.Contains("at least one network", Assert.Throws<InvalidOperationException>(
+            () => none.Run((candidate, deal) => Listed(Passengers(candidate, deal)), TestContext.Current.CancellationToken)).Message, StringComparison.Ordinal);
+        Assert.Contains("declared no networks", Assert.Throws<InvalidOperationException>(
+            () => nothing.Run((candidate, deal) => Listed(Passengers(candidate, deal)), TestContext.Current.CancellationToken)).Message, StringComparison.Ordinal);
     }
 
     [Fact]

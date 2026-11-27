@@ -117,11 +117,6 @@ public static class CompiledNetworkExtensions
     private static TrainingData Handed(Batch batch, PreparedData prepared) =>
         new(batch.Features.Floats(batch.Width, batch.ExampleShape), batch.Answers!.Floats(batch.AnswerNames!.Count))
         {
-            RowNames =
-            [
-                .. Enumerable.Range(0, prepared.Table.RowCount)
-                    .Where(row => prepared.Parts[row] == batch.Part)
-                    .Select(row => string.Create(CultureInfo.InvariantCulture, $"Row {prepared.Table.Identities[row].ReadAt + 1}")),
-            ],
+            RowNames = [.. prepared.ReadAtOf(batch.Part!.Value).Select(readAt => string.Create(CultureInfo.InvariantCulture, $"Row {readAt + 1}"))],
         };
 }

@@ -699,7 +699,7 @@ internal sealed class Measurement
                 "predictions");
         }
 
-        int[] readAt = [.. Enumerable.Range(0, _prepared.Table.RowCount).Where(row => _prepared.Parts[row] == part).Select(row => _prepared.Table.Identities[row].ReadAt)];
+        var readAt = _prepared.ReadAtOf(part);
         var inTheOrder = _output.InTheOrder();
         var actual = _prepared.BackToOriginal(handed.Answers!, part);
         var margins = given.Margins;

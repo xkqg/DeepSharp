@@ -731,12 +731,7 @@ public sealed class PreparedData
     {
         ArgumentNullException.ThrowIfNull(predictions);
 
-        RowAsRead[] rows =
-        [
-            .. Enumerable.Range(0, Table.RowCount)
-                .Where(row => Parts[row] == part)
-                .Select(row => new RowAsRead(AsRead, Table.Identities[row].ReadAt)),
-        ];
+        RowAsRead[] rows = [.. this.ReadAtOf(part).Select(readAt => new RowAsRead(AsRead, readAt))];
 
         return Back(predictions, rows);
     }

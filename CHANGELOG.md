@@ -47,8 +47,24 @@ The seventh letter of the flock team.
   the schema step and the column it calls the id; `KindHeldOnce(step)` says which kind of step a declaration may hold
   only one of. Each is what the rules already decided, now asked of the declaration rather than worked out again.
 
+- **A study of your own models takes a pipeline for each candidate and deal.** `Study<TModel>.Run((candidate, deal) => …)`
+  prepares the pipeline a candidate chooses — a feature, a window, a way of filling a gap — for every trial and deal, and
+  hands your trainer the rows that candidate's own pipeline prepared, as a study of networks already did; it goes on from
+  earlier trials the same way. Every candidate is held to the validation rows the first trial was chosen on for that deal,
+  and every deal to the same rows to be measured on, so a candidate whose pipeline deals them another way is refused,
+  naming the trial and the deal. Both kinds of study now run one loop, so the sampler, the deals, the pruner, the deal
+  stopper and going on from earlier trials work the same in each. See
+  [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
+
 ### Fixed
 
+- **`Top` of a study given `Objectives` hands on its best trials first.** It ordered the trials by a score such a study
+  never gives, so they came back in the order they were tried; it now orders them by the same verdict the study chose its
+  `Best` by — the least of the mean objectives, the first that differs deciding it — so `Top(1)` is what the study's
+  `Best` declared.
+- **A study of your own models no longer needs every feature on one scale.** It ran its pipelines as a network takes them,
+  and so refused a feature no step put between minus one and one, which your model never asked for; it now runs them for
+  a learner of numbers, every step as declared.
 - **A notebook whose first blocks leave out the split a later report needs no longer throws.** It reads the longest
   beginning that is a declaration, and names the step that stops it, as it does for any other fault.
 - **An answer read ahead with no order declared is refused once.** It was refused twice for the one missing order.

@@ -321,6 +321,7 @@ public class StudyTests
         var trial = new Trial(0, new Candidate([new Setting("rate", 0.01, null)]), Declared(), []);
 
         Assert.False(trial.Finished);
+        Assert.True(double.IsNaN(trial.Score));
         Assert.Equal(0, trial.Spread);
     }
 
@@ -329,6 +330,28 @@ public class StudyTests
     {
         Assert.Throws<ArgumentNullException>(() => new Study(Space, (candidate, network) => network) { Sampler = null! });
         Assert.Throws<ArgumentNullException>(() => new Study(Space, (candidate, network) => network) { Score = null! });
+        Assert.Throws<ArgumentNullException>(() => new Study(Space, (candidate, network) => network) { Judge = null! });
+        Assert.Throws<ArgumentNullException>(() => new Study(Space, (candidate, network) => network) { Objectives = null! });
+        Assert.Throws<ArgumentNullException>(() => new Study<double>(Space, deal => new Trained<double>(0, 0)) { Sampler = null! });
+    }
+
+    [Fact]
+    public void WhatAStudyIsSetBy_ReadsBackAsItWasSet_AndTheSameUnlessSaid_ForBothKindsOfStudy()
+    {
+        var sampler = new RandomSampler(5);
+        Func<Progress, bool> pruner = _ => false;
+        Func<DealsJudged, bool> stopper = _ => false;
+        Action<Trial> onTrial = _ => { };
+        var networks = new Study(Space, (candidate, network) => network) { Sampler = sampler, Trials = 3, Deals = 2, Pruner = pruner, DealStopper = stopper, OnTrial = onTrial };
+        var models = new Study<double>(Space, deal => new Trained<double>(0, 0)) { Sampler = sampler, Trials = 3, Deals = 2, Pruner = pruner, DealStopper = stopper, OnTrial = onTrial };
+        var plainNetworks = new Study(Space, (candidate, network) => network);
+        var plainModels = new Study<double>(Space, deal => new Trained<double>(0, 0));
+
+        Assert.Equal<object?>([sampler, 3, 2, pruner, stopper, onTrial], [networks.Sampler, networks.Trials, networks.Deals, networks.Pruner, networks.DealStopper, networks.OnTrial]);
+        Assert.Equal<object?>([sampler, 3, 2, pruner, stopper, onTrial], [models.Sampler, models.Trials, models.Deals, models.Pruner, models.DealStopper, models.OnTrial]);
+        Assert.Equal(plainNetworks.Sampler.GetType(), plainModels.Sampler.GetType());
+        Assert.Equal<object?>([20, 1, null, null, null], [plainNetworks.Trials, plainNetworks.Deals, plainNetworks.Pruner, plainNetworks.DealStopper, plainNetworks.OnTrial]);
+        Assert.Equal<object?>([20, 1, null, null, null], [plainModels.Trials, plainModels.Deals, plainModels.Pruner, plainModels.DealStopper, plainModels.OnTrial]);
     }
 
     [Fact]
@@ -344,6 +367,51 @@ public class StudyTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new Study(Space, (candidate, network) => network) { Trials = 0 });
         Assert.Throws<ArgumentOutOfRangeException>(() => new Study(Space, (candidate, network) => network) { Deals = 0 });
+    }
+
+    [Theory]
+    [InlineData(new[] { 0.4, 0.3, 0.9, 0.2, double.NaN, 0.1, 0.35, 0.3 })]
+    [InlineData(new[] { 0.6, 0.45, 0.2, 0.25, 0.7, 0.1, 0.15, 0.05 })]
+    public void TheTwoStudyFaces_RunOneLoop_TheSameScoresGivingTheSameTrialsStopsAndBest(double[] scores)
+    {
+        // A study of networks and a study of the caller's models, handed the same sampler, the same deals and the same score
+        // for each deal in turn, try the same candidates, stop the same trials between the same deals, and keep the same best.
+        var networkScores = new Queue<double>(scores);
+        var modelScores = new Queue<double>(scores);
+        var networkStops = new List<string>();
+        var modelStops = new List<string>();
+
+        static bool Stops(DealsJudged judged, List<string> heard)
+        {
+            heard.Add($"{judged.Earlier.Count}:{string.Join(",", judged.Scores)}");
+
+            return judged.Scores[^1] > 0.5;
+        }
+
+        var networks = new Study(Space, (candidate, network) => network.Dense(2).Relu().Dense(1).Adam(candidate.Number("rate")).BinaryCrossEntropy().Run(1, 1))
+        {
+            Sampler = new RandomSampler(11),
+            Trials = 4,
+            Deals = 2,
+            Score = _ => networkScores.Dequeue(),
+            DealStopper = judged => Stops(judged, networkStops),
+        }.Run(deal => Passengers(deal), TestContext.Current.CancellationToken);
+
+        var models = new Study<double>(Space, deal => new Trained<double>(modelScores.Dequeue(), 0))
+        {
+            Sampler = new RandomSampler(11),
+            Trials = 4,
+            Deals = 2,
+            DealStopper = judged => Stops(judged, modelStops),
+        }.Run(deal => Passengers(deal), TestContext.Current.CancellationToken);
+
+        Assert.Equal(networks.Trials.Select(trial => trial.Candidate), models.Trials.Select(trial => trial.Candidate));
+        Assert.Equal(networks.Trials.Select(trial => trial.Scores), models.Trials.Select(trial => trial.Scores));
+        Assert.Equal(networks.Trials.Select(trial => trial.Pruned), models.Trials.Select(trial => trial.Pruned));
+        Assert.Equal(networks.Trials.Select(trial => trial.Finished), models.Trials.Select(trial => trial.Finished));
+        Assert.Equal(networkStops, modelStops);
+        Assert.Equal(networks.Best.Number, models.Best.Number);
+        Assert.Equal(networkScores.Count, modelScores.Count);
     }
 
     private sealed class Foreign : ISampler

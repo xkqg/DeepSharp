@@ -3897,9 +3897,11 @@ members rather than a new verb a pipeline's own chain would have to declare and 
 A candidate need not be trained by this library's own `Train` for its score to count. `Study<TModel>` takes a trainer as a
 delegate — handed one deal, returning the score its trial is judged by and the model it trained — the same shape `Score`,
 `Judge`, `DealStopper` and `pipelineFor` already take theirs in: a function the caller writes, not a fifth seam beside
-`ITensorBackend`, `IRowSource`, a learner and `IImporter`. The sampler, the deals, the pruner, the deal stopper, `OnTrial`
-and resuming from earlier trials stay exactly as they are; only what trains, and the model inside, is the caller's — and
-since the caller's model is not a network, `Score`, `Judge` and `Objectives` mean nothing to it and are not offered.
+`ITensorBackend`, `IRowSource`, a learner and `IImporter`. The sampler, the deals, the pruner, the deal stopper, `OnTrial`,
+a pipeline for each candidate and deal, and resuming from earlier trials stay exactly as they are; only what trains, and the
+model inside, is the caller's — and since the caller's model is not a network, `Score`, `Judge` and `Objectives` mean
+nothing to it and are not offered. Its pipelines are run for a learner of numbers, every step as declared, since the
+caller's model asks nothing of a feature's scale that a network would.
 `ModelEnsemble<TModel>` answers the way `TrainedEnsemble` does — several members blended in the answer's own units,
 measured and given an interval through the same four methods a network ensemble already stands on — but it is built only
 by `Study<TModel>.TrainEnsemble`, which trains every member on the one fit it is handed, so no digest has to tie its
@@ -3921,6 +3923,19 @@ with their mean and spread. It gives no verdict, because the raw difference betw
 synthetic flocks a day feature gained seven grams on a split at random and lost ten on a chronological one, while the plain
 difference between the two splits said the chronological was better. A difference read against its own spread, in each use,
 is what shows a feature that knows the future of the rows it is measured on.
+
+The two studies are two faces of one loop. `Study` and `Study<TModel>` differ in what trains a candidate on a deal and how
+that deal is judged, and in nothing else: each hands the loop a trainer of one deal, and the loop itself — the earlier trials
+held to the study, a candidate held to its space, the deals one after another with the pruner and the deal stopper hearing
+them, every trial handed on as it ends, the best kept and, where it was an earlier one, trained again — is written once, so
+a rule of a study changes for both or for neither. What each face is set by, and the guard on each setting, is said once as
+well. Their pipelines are prepared in one place, once for each deal or for every candidate on every deal, and held there by
+one guard to the rows the first was measured on and, deal by deal, chosen on; which rows a part holds is read by their keys,
+never their features, so the guard is the same whatever trains behind the pipeline. A trial carries the one verdict it is
+ranked by — its score, or the mean of its objectives — and a study's best, `Top` and the Pareto front all read it, so none
+of them ranks a trial another way than the others do. `Comparison` stands outside that guard on purpose: comparing a split
+at random with a split in time is what it is for, and it shares with a study only the arithmetic of a mean and a spread over
+deals.
 
 ### Charts come from the training loop, not from the caller
 

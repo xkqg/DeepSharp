@@ -135,6 +135,22 @@ public class StudyObjectivesTests
     }
 
     [Fact]
+    public void Top_OfAStudyWithObjectives_IsBestFirst_ByTheVerdictTheStudyChoseItsBestBy()
+    {
+        // Each trial declares a network of its own seed, so the declarations Top hands on say which trials they were.
+        Trial Declaring(int number, IReadOnlyList<double> mean) =>
+            Finished(number, mean) with { Declared = new NetworkDeclaration(Vocabularies.Torch).Dense(1).Adam(0.01).BinaryCrossEntropy().Run(seed: number + 1, epochs: 1).Step() };
+
+        Trial[] trials = [Declaring(0, [0.5, 10.0]), Declaring(1, [0.2, 99.0]), Declaring(2, [0.2, 1.0]), Declaring(3, [0.9, 0.0])];
+        var result = new StudyResult(trials, trials[2], []);
+
+        var top = result.Top(3);
+
+        Assert.Equal([trials[2].Declared!, trials[1].Declared!, trials[0].Declared!], top);
+        Assert.Equal(result.Best.Declared, top[0]);
+    }
+
+    [Fact]
     public void AParetoFrontOfAStudyGivenNoObjectives_IsRefused_SayingToGiveItOne()
     {
         var ordinary = new Trial(0, new Candidate([]), null!, [0.5]);

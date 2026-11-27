@@ -225,7 +225,9 @@ public static class Handover
                     nameof(part));
             }
 
-            var rows = RowsOf(prepared, part);
+            prepared.RequireRows();
+
+            var rows = prepared.RowsOf(part);
             var features = FeaturesOf(prepared, prepared.Table, rows, needs);
             var answered = AnswersOf(prepared, prepared.Table, rows);
 
@@ -284,6 +286,32 @@ public static class Handover
                 ExampleShape = features.Shape,
             };
         }
+
+        /// <summary>The rows of one part, by their place in the table, in the order the part hands them over.</summary>
+        /// <param name="part">Which part.</param>
+        /// <returns>The places; none, for a pipeline that holds no rows.</returns>
+        /// <remarks>The one answer to which rows a part holds, that every reader of a part's rows reads.</remarks>
+        internal int[] RowsOf(Part part) => [.. Enumerable.Range(0, prepared.Table.RowCount).Where(row => prepared.Parts[row] == part)];
+
+        /// <summary>Where each row of one part was read, from nought, in the order the part hands them over.</summary>
+        /// <param name="part">Which part.</param>
+        /// <returns>The places the rows were read at; none, for a pipeline that holds no rows.</returns>
+        internal int[] ReadAtOf(Part part) => [.. prepared.RowsOf(part).Select(row => prepared.Table.Identities[row].ReadAt)];
+
+        /// <summary>The key of each row of one part, in the order the part hands them over, and nothing of its features.</summary>
+        /// <param name="part">Which part.</param>
+        /// <returns>The keys, the same <see cref="Batch.Keys"/> holds for that part whatever a learner needs of its features.</returns>
+        /// <exception cref="InvalidOperationException">The pipeline holds no rows, as one read from its file holds none.</exception>
+        /// <remarks>
+        /// Which rows a part holds does not hang on what a learner needs of the features, so it is read without them: a run whose
+        /// features one learner would refuse still says which rows it measures on.
+        /// </remarks>
+        internal IReadOnlyList<RowKey> KeysOf(Part part)
+        {
+            prepared.RequireRows();
+
+            return [.. prepared.RowsOf(part).Select(row => prepared.Table.Identities[row].Key)];
+        }
     }
 
     /// <summary>The answers of one part and the key of each of its rows, and nothing of its features.</summary>
@@ -299,14 +327,11 @@ public static class Handover
     /// features, so it measures a learner that took categories as places, or a part a feature of which holds words, as it
     /// measures any other.
     /// </remarks>
-    internal static HandedAnswers AnswersOf(PreparedData prepared, Part part) => AnswersOf(prepared, prepared.Table, RowsOf(prepared, part));
-
-    // The rows of one part, by their place in the table; refused whole for a pipeline that holds no rows.
-    private static int[] RowsOf(PreparedData prepared, Part part)
+    internal static HandedAnswers AnswersOf(PreparedData prepared, Part part)
     {
         prepared.RequireRows();
 
-        return [.. Enumerable.Range(0, prepared.Table.RowCount).Where(row => prepared.Parts[row] == part)];
+        return AnswersOf(prepared, prepared.Table, prepared.RowsOf(part));
     }
 
     // The features half: the steps the learner needs first, then words, then one scale over the steps the run took, then the

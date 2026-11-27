@@ -21,26 +21,6 @@ public readonly record struct Trained<TModel>(double Score, TModel Model);
 /// <param name="Cancellation">What the trainer checks to stop early: a pruner that pruned this deal, or the token the run was given.</param>
 public readonly record struct TrainingDeal(Candidate Candidate, PreparedData Rows, Action<double>? Heard, CancellationToken Cancellation);
 
-/// <summary>What a caller-trained study found: every trial, the best of them, and the model trained for each of its deals.</summary>
-public sealed class StudyResult<TModel>
-{
-    internal StudyResult(IReadOnlyList<Trial> trials, Trial best, IReadOnlyList<TModel> winner)
-    {
-        Trials = trials;
-        Best = best;
-        Winner = winner;
-    }
-
-    /// <summary>Every trial, in the order they were tried.</summary>
-    public IReadOnlyList<Trial> Trials { get; }
-
-    /// <summary>The trial judged lowest, the earlier one when two were judged alike.</summary>
-    public Trial Best { get; }
-
-    /// <summary>The models the best trial trained, one for each deal. They are the only models a study keeps.</summary>
-    public IReadOnlyList<TModel> Winner { get; }
-}
-
 /// <summary>
 /// Tries many candidates for one model, each trained by a function of the caller's rather than declared as a network step,
 /// judged by the number that function gives back, and keeps the one judged best.
@@ -48,9 +28,14 @@ public sealed class StudyResult<TModel>
 /// <remarks>
 /// <para>
 /// Everything a <see cref="Study"/> of networks keeps is kept here too: the sampler, the deals, a pruner heard once a step
-/// at a time, a deal stopper heard once a deal at a time, <see cref="OnTrial"/>, and resuming from the trials an earlier
-/// run already tried. Only what trains, and the model trained, is the caller's: handed a <see cref="TrainingDeal"/>, the
-/// trainer returns the number its trial is judged by and the model it trained, in one call.
+/// at a time, a deal stopper heard once a deal at a time, <see cref="OnTrial"/>, a pipeline for each candidate and deal,
+/// and resuming from the trials an earlier run already tried — the two run one and the same loop. Only what trains, and the
+/// model trained, is the caller's: handed a <see cref="TrainingDeal"/>, the trainer returns the number its trial is judged by
+/// and the model it trained, in one call.
+/// </para>
+/// <para>
+/// The pipelines are run for a learner of numbers, every step as declared (<see cref="Needs.Numbers"/>): the caller's model
+/// takes the rows as it chooses, and no feature has to be put on one scale, as a network's would.
 /// </para>
 /// <para>
 /// There is no <see cref="Study.Score"/>, <see cref="Study.Judge"/> or <see cref="Study.Objectives"/> here: the trainer's
@@ -61,6 +46,7 @@ public sealed class StudyResult<TModel>
 public sealed class Study<TModel>
 {
     private readonly Func<TrainingDeal, Trained<TModel>> _train;
+    private readonly StudySettings _settings = new();
 
     /// <summary>Declares a study whose candidates are trained by a function of the caller's.</summary>
     /// <param name="space">What may vary.</param>
@@ -81,41 +67,53 @@ public sealed class Study<TModel>
     /// <summary>Which candidate each trial tries; random, drawn from a seed, unless said.</summary>
     public ISampler Sampler
     {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    } = new RandomSampler(20261009);
+        get => _settings.Sampler;
+        init => _settings = _settings with { Sampler = value };
+    }
 
     /// <summary>How many candidates are tried.</summary>
     public int Trials
     {
-        get;
-        init => field = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "A study tries at least one candidate.");
-    } = 20;
+        get => _settings.Trials;
+        init => _settings = _settings with { Trials = value };
+    }
 
     /// <summary>How many times the rows are divided again, each candidate being trained on every division.</summary>
     public int Deals
     {
-        get;
-        init => field = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "A study uses at least one division of the rows.");
-    } = 1;
+        get => _settings.Deals;
+        init => _settings = _settings with { Deals = value };
+    }
 
     /// <summary>
     /// What hears a raw loss the trainer reports, once a step, and says whether to stop the deal there; nothing, unless said,
     /// and then the trainer's <see cref="TrainingDeal.Heard"/> is nothing, and no deal is ever stopped this way.
     /// </summary>
     /// <remarks>It hears the deal, the raw losses so far, and the trials before this one, on the thread the study runs on.</remarks>
-    public Func<Progress, bool>? Pruner { get; init; }
+    public Func<Progress, bool>? Pruner
+    {
+        get => _settings.Pruner;
+        init => _settings = _settings with { Pruner = value };
+    }
 
     /// <summary>
     /// What hears every deal a trial finishes, judged by the number the trainer returned, and says whether to stop the trial
     /// there without running its remaining deals; nothing, unless said, and then every trial runs every deal.
     /// </summary>
-    public Func<DealsJudged, bool>? DealStopper { get; init; }
+    public Func<DealsJudged, bool>? DealStopper
+    {
+        get => _settings.DealStopper;
+        init => _settings = _settings with { DealStopper = value };
+    }
 
     /// <summary>
     /// What is handed every trial as it ends, in order, on the thread the study runs on, with how it was judged; nothing, unless said.
     /// </summary>
-    public Action<Trial>? OnTrial { get; init; }
+    public Action<Trial>? OnTrial
+    {
+        get => _settings.OnTrial;
+        init => _settings = _settings with { OnTrial = value };
+    }
 
     /// <summary>Runs the study.</summary>
     /// <param name="pipelineFor">The pipeline for a deal, given its place from nought.</param>
@@ -136,179 +134,54 @@ public sealed class Study<TModel>
     public StudyResult<TModel> Run(Func<int, Pipeline> pipelineFor, IReadOnlyList<Trial> earlier, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(pipelineFor);
-        ArgumentNullException.ThrowIfNull(earlier);
 
-        ThrowIfNotThisStudys(earlier);
-
-        var prepared = Prepared(pipelineFor, cancellation);
-        var trials = new List<Trial>(earlier);
-        var best = BestOf(earlier.Where(trial => trial.Finished));
-        IReadOnlyList<TModel> winner = [];
-
-        for (var number = earlier.Count; number < Trials; number++)
-        {
-            cancellation.ThrowIfCancellationRequested();
-
-            var candidate = Sampler.Suggest(Space, number, [.. trials]);
-
-            ThrowIfNotOfTheSpace(candidate);
-
-            var (trial, models) = Tried(candidate, prepared, trials, cancellation);
-
-            trials.Add(trial);
-            OnTrial?.Invoke(trial);
-
-            if (trial.Finished && (best is null || VerdictOf(trial).Better(VerdictOf(best))))
-            {
-                best = trial;
-                winner = models;
-            }
-        }
-
-        if (best is null)
-        {
-            throw new InvalidOperationException($"No trial finished: all {trials.Count} were pruned, or judged by a number that is none, or infinite. Try smaller steps, or look at the candidates the space allows.");
-        }
-
-        return new StudyResult<TModel>(trials, best, best.Number < earlier.Count ? TrainedAgain(best, prepared, cancellation) : winner);
+        return Run(earlier, needs => DealPreparation.PerDeal(pipelineFor, Deals, needs, cancellation), cancellation);
     }
 
-    // One trial, numbered after the trials before it: its model trained on every deal, each report handed to the pruner, and
-    // each finished deal's score handed to the deal stopper, either of which may stop it.
-    private (Trial Trial, IReadOnlyList<TModel> Models) Tried(Candidate candidate, PreparedData[] prepared, List<Trial> before, CancellationToken cancellation)
+    /// <summary>Runs the study with a pipeline for each candidate and each deal.</summary>
+    /// <param name="pipelineFor">
+    /// The pipeline for a candidate on a deal, given the candidate and the deal's place from nought: the steps the candidate chooses —
+    /// a feature, a window, a way of filling a gap — and the split dealing the validation rows and the rows to be measured on the
+    /// same way for every candidate.
+    /// </param>
+    /// <param name="cancellation">What stops the study before its next trial, and a trial before its next deal; nothing stops it, unless said.</param>
+    /// <returns>Every trial, the best of them, and the models it trained.</returns>
+    /// <exception cref="ArgumentNullException">There is no way to make the pipelines.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled: nothing is returned.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// Anything <see cref="Run(Func{int, Pipeline}, IReadOnlyList{Trial}, CancellationToken)"/> refuses; or a candidate's pipeline
+    /// sets other rows aside as validation on a deal, or to be measured on, than the first one prepared did.
+    /// </exception>
+    /// <remarks>
+    /// The pipeline is prepared for every trial and deal, and the trainer is handed the rows the candidate's own pipeline prepared;
+    /// the study that is handed one for each deal prepares it once for each. Scores are chosen between only where the rows they
+    /// were measured on are the same, so every candidate is held to the validation rows the first trial was judged on for that deal,
+    /// and every deal to the rows the first one prepared to be measured on.
+    /// </remarks>
+    public StudyResult<TModel> Run(Func<Candidate, int, Pipeline> pipelineFor, CancellationToken cancellation = default) => Run(pipelineFor, [], cancellation);
+
+    /// <summary>Runs the study on from the trials it already tried, with a pipeline for each candidate and each deal.</summary>
+    /// <param name="pipelineFor">The pipeline for a candidate on a deal, as the study that tried the earlier trials was handed it.</param>
+    /// <param name="earlier">The trials already tried, as <see cref="Run(Func{int, Pipeline}, IReadOnlyList{Trial}, CancellationToken)"/> takes them.</param>
+    /// <param name="cancellation">What stops the study before its next trial, and a trial before its next deal; nothing stops it, unless said.</param>
+    /// <returns>Every trial, the earlier ones first, the best of them, and the models the best trained.</returns>
+    /// <exception cref="ArgumentNullException">There is no way to make the pipelines, or no earlier trials.</exception>
+    /// <exception cref="OperationCanceledException">The token was cancelled: nothing is returned.</exception>
+    /// <exception cref="InvalidOperationException">Anything the other forms of <c>Run</c> refuse.</exception>
+    public StudyResult<TModel> Run(Func<Candidate, int, Pipeline> pipelineFor, IReadOnlyList<Trial> earlier, CancellationToken cancellation = default)
     {
-        var models = new List<TModel>();
-        var heard = new List<IReadOnlyList<double>>();
-        var dealScores = new List<double>();
-        var pruned = false;
-        var stoppedBetweenDeals = false;
-        var deals = Deals;
+        ArgumentNullException.ThrowIfNull(pipelineFor);
 
-        for (var deal = 0; deal < deals && !pruned && !stoppedBetweenDeals; deal++)
-        {
-            using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-            var soFar = new List<double>();
-            var at = deal;
-
-            void Heard(double loss)
-            {
-                soFar.Add(loss);
-
-                if (Pruner?.Invoke(new Progress(at, [.. soFar], [.. before])) is true)
-                {
-                    pruned = true;
-                    stop.Cancel();
-                }
-            }
-
-            try
-            {
-                var trained = _train(new TrainingDeal(candidate, prepared[deal], Pruner is null ? null : Heard, stop.Token));
-
-                if (!pruned)
-                {
-                    models.Add(trained.Model);
-                    dealScores.Add(trained.Score);
-
-                    if (deal < deals - 1 && DealStopper?.Invoke(new DealsJudged([.. dealScores], [.. before])) is true)
-                    {
-                        stoppedBetweenDeals = true;
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (pruned && !cancellation.IsCancellationRequested)
-            {
-                // The pruner stopped the deal: the trial ends here, with what it heard.
-            }
-
-            heard.Add(soFar);
-        }
-
-        var trial = new Trial(before.Count, candidate, Declared: null, pruned ? [] : dealScores)
-        {
-            Pruned = pruned || stoppedBetweenDeals,
-            Heard = heard,
-        };
-
-        return (trial, models);
+        return Run(earlier, needs => DealPreparation.PerCandidate((candidate, deal) => [pipelineFor(candidate, deal)], needs, cancellation), cancellation);
     }
 
-    // The verdict a finished trial stands for: its score, as a vector of one.
-    private static Verdict VerdictOf(Trial trial) => new([trial.Score]);
-
-    // The finished trial whose verdict is best, the earlier one on a tie; none, where there is no finished trial.
-    private static Trial? BestOf(IEnumerable<Trial> finished)
+    // The study, once it is known how a candidate's pipelines are prepared: the one loop every study runs, with the model the
+    // caller's trainer gives back for each deal.
+    private StudyResult<TModel> Run(IReadOnlyList<Trial> earlier, Func<Needs, DealPreparation> begin, CancellationToken cancellation)
     {
-        Trial? best = null;
+        var found = new StudyLoop<TModel>(Space, _settings, new ModelOfADeal(_train)).Run(earlier, begin, cancellation);
 
-        foreach (var trial in finished)
-        {
-            if (best is null || VerdictOf(trial).Better(VerdictOf(best)))
-            {
-                best = trial;
-            }
-        }
-
-        return best;
-    }
-
-    // The best trial was one the caller handed back, whose models were not kept: trained again through the handed-in trainer,
-    // it must be judged as it was.
-    private IReadOnlyList<TModel> TrainedAgain(Trial best, PreparedData[] prepared, CancellationToken cancellation)
-    {
-        Trained<TModel>[] trained = [.. Enumerable.Range(0, Deals).Select(deal => _train(new TrainingDeal(best.Candidate, prepared[deal], null, cancellation)))];
-
-        if (!trained.Select(each => each.Score).SequenceEqual(best.Scores))
-        {
-            throw new InvalidOperationException(
-                $"The best of the earlier trials, trial {best.Number}, was trained again on every deal through the handed-in trainer and judged otherwise than it was handed back: "
-                + "this is not the trainer, or not the rows, this study tried it with. Hand it the same pipelines and the same trainer the trials were tried with.");
-        }
-
-        return [.. trained.Select(each => each.Model)];
-    }
-
-    // Earlier trials are this study's own: numbered from nought without a gap, of its space, and trained by a function of the
-    // caller's rather than declaring a network.
-    private void ThrowIfNotThisStudys(IReadOnlyList<Trial> earlier)
-    {
-        for (var at = 0; at < earlier.Count; at++)
-        {
-            var trial = earlier[at] ?? throw new ArgumentException($"Earlier trial {at} is nothing.", nameof(earlier));
-
-            if (trial.Number != at)
-            {
-                throw new InvalidOperationException($"The earlier trials are numbered from nought without a gap, and the one at place {at} is trial {trial.Number}.");
-            }
-
-            ThrowIfNotOfTheSpace(trial.Candidate);
-
-            if (trial.Declared is not null)
-            {
-                throw new InvalidOperationException($"Earlier trial {at} declares a network, and this study's candidates are trained by a function of the caller's: it was tried by another kind of study.");
-            }
-        }
-    }
-
-    // A candidate holds a setting for every dimension that is there for it, in the space's order, and for no other.
-    private void ThrowIfNotOfTheSpace(Candidate candidate)
-    {
-        var there = Space.Where(dimension => dimension.IsThereAmong(candidate.Settings)).Select(dimension => dimension.Name).ToArray();
-
-        if (!candidate.Settings.Select(each => each.Name).SequenceEqual(there, StringComparer.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"The sampler gave a candidate of other dimensions than the space has for it: the space has {string.Join(", ", there.Select(name => $"'{name}'"))}, "
-                + $"and the candidate {string.Join(", ", candidate.Settings.Select(each => $"'{each.Name}'"))}.");
-        }
-
-        foreach (var setting in candidate.Settings)
-        {
-            if (Space.Single(dimension => dimension.Name == setting.Name).Refusal(setting) is { } refusal)
-            {
-                throw new InvalidOperationException($"The sampler gave a setting the space cannot take: '{setting.Name}' {refusal}.");
-            }
-        }
+        return new StudyResult<TModel>(found.Trials, found.Best, found.Winner);
     }
 
     /// <summary>Trains several candidates on the rows a run of a pipeline prepared, through this study's own trainer, and puts them together as a <see cref="ModelEnsemble{TModel}"/>.</summary>
@@ -346,28 +219,37 @@ public sealed class Study<TModel>
         return new ModelEnsemble<TModel>(trained, answer, rows, options?.Blend ?? Blend.Average);
     }
 
-    private PreparedData[] Prepared(Func<int, Pipeline> pipelineFor, CancellationToken cancellation)
+    // How a deal of a caller-trained study is trained and judged: by the caller's trainer, handed the rows of the deal, whose
+    // returned score is the one number the trial is judged by.
+    private sealed class ModelOfADeal(Func<TrainingDeal, Trained<TModel>> train) : IDealTrainer<TModel>
     {
-        var prepared = new PreparedData[Deals];
+        // A learner of numbers: every step as declared, and no scale asked of any feature, since the caller's model asks its own.
+        public Needs Needs => Needs.Numbers;
 
-        for (var deal = 0; deal < prepared.Length; deal++)
+        // The caller's trainer gives one number a deal, and nothing else is there to judge or stop a trial by another.
+        public void RefuseHowItIsSet()
         {
-            cancellation.ThrowIfCancellationRequested();
-
-            prepared[deal] = (pipelineFor(deal) ?? throw new InvalidOperationException($"The pipeline for deal {deal} is nothing.")).RunToBeJudged();
         }
 
-        var first = prepared[0].Batch(Part.Test, Needs.Numbers).Keys!.ToHashSet();
-
-        for (var deal = 1; deal < prepared.Length; deal++)
+        public void RequireItsOwn(Trial earlier)
         {
-            if (!first.SetEquals(prepared[deal].Batch(Part.Test, Needs.Numbers).Keys!))
+            if (earlier.Declared is not null)
             {
-                throw new InvalidOperationException(
-                    $"Deal {deal} measures on other rows than deal 0 does: a candidate would be chosen on rows another deal learned from. Give the split a test seed — SplitAtRandom(train, validation, seed, testSeed) — so the rows to be measured on are the same on every deal.");
+                throw new InvalidOperationException($"Earlier trial {earlier.Number} declares a network, and this study's candidates are trained by a function of the caller's: it was tried by another kind of study.");
             }
         }
 
-        return prepared;
+        public IReadOnlyList<LearnNetworkStep> Declares(Candidate candidate, int trial) => [];
+
+        public JudgedDeal<TModel> Trained(DealToTrain deal)
+        {
+            var trained = train(new TrainingDeal(deal.Trial.Candidate, deal.Rows[0], deal.Heard, deal.Cancellation));
+
+            return new(trained.Model, trained.Score);
+        }
+
+        public InvalidOperationException JudgedOtherwise(Trial best) => new(
+            $"The best of the earlier trials, trial {best.Number}, was trained again on every deal through the handed-in trainer and judged otherwise than it was handed back: "
+            + "this is not the trainer, or not the rows, this study tried it with. Hand it the same pipelines and the same trainer the trials were tried with.");
     }
 }

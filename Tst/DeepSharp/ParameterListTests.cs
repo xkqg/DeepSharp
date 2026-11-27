@@ -305,13 +305,10 @@ public class ParameterListTests
     ];
 
     /// <summary>
-    /// A tuple that is on its way out in a later step of the same release: the study loop it belongs to is dissolved
-    /// there, and the loop's trial and its models are handed over by what replaces it. Step S10 removes this entry with it.
+    /// A tuple that is on its way out in a later step of the same release, named here until the step that removes it; none
+    /// is left, since the study loop the last one belonged to hands its trial and what it trained over as a record struct.
     /// </summary>
-    private static readonly string[] TuplesUntilTheirStepRemovesThem =
-    [
-        "DeepSharp.Learners.Networks: DeepSharp.Learners.Networks.Study`1.Tried(Candidate, PreparedData[], List<Trial>, CancellationToken)",
-    ];
+    private static readonly string[] TuplesUntilTheirStepRemovesThem = [];
 
     private static IEnumerable<string> TupleMembers(Assembly assembly) => TupleMemberInfos(assembly).Select(ListedTuple);
 

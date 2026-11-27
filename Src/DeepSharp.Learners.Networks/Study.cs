@@ -1,163 +1,10 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 using static DeepSharp.Learners.Networks.TrainExtensions;
 
 namespace DeepSharp.Learners.Networks;
-
-/// <summary>
-/// One candidate tried: what it was, the network it declared, and how that network was judged on each deal.
-/// </summary>
-/// <param name="Number">The place of the trial in its study, from nought.</param>
-/// <param name="Candidate">The values the sampler gave.</param>
-/// <param name="Declared">
-/// The network those values declared; a step a pipeline keeps, and trains again with <c>Train</c>. The first of the trial's
-/// networks, where it has several. Nothing, for a trial a <see cref="Study{TModel}"/> tried, whose candidate is trained by a
-/// function of the caller's rather than declared as a step.
-/// </param>
-/// <param name="Scores">
-/// How the network was judged, once on each deal that finished; lower is better. None, for a trial a <see cref="Study.Pruner"/>
-/// stopped mid-epoch, which has no deal it finished fairly; the real scores of however many deals did finish, for a trial a
-/// <see cref="Study.DealStopper"/> stopped between deals, which has nothing untrustworthy about the ones it kept.
-/// </param>
-public sealed record Trial(int Number, Candidate Candidate, LearnNetworkStep? Declared, IReadOnlyList<double> Scores)
-{
-    /// <summary>Whether the study's pruner or deal stopper stopped the trial before its deals ran out; it ran to their end, unless said.</summary>
-    public bool Pruned { get; init; }
-
-    /// <summary>
-    /// The validation loss of every epoch the trial's runs went through, one list for each deal it trained on — the last cut
-    /// short where a pruner stopped it mid-epoch; nothing, unless said. Of the first network, where the trial has several. A
-    /// deal stopper never cuts one of these short: it only ever stops a trial between two deals, each already whole.
-    /// </summary>
-    public IReadOnlyList<IReadOnlyList<double>> Heard { get; init; } = [];
-
-    /// <summary>
-    /// The networks the trial declared, judged together: only <see cref="Declared"/>, unless said. A deal trains every one of them,
-    /// each behind a pipeline of its own, and a judge of the study's says how they did together.
-    /// </summary>
-    public IReadOnlyList<LearnNetworkStep> Members
-    {
-        get => field ?? (Declared is { } one ? [one] : []);
-        init;
-    }
-
-    /// <summary>
-    /// How the networks were weighed on every objective, once on each deal that finished, in whatever units the caller's
-    /// <see cref="Study.Objectives"/> chooses; empty, for a trial a <see cref="Study.Score"/> or a <see cref="Study.Judge"/>
-    /// judges, whose <see cref="Scores"/> holds its numbers instead, and for one a pruner stopped mid-epoch.
-    /// </summary>
-    public IReadOnlyList<IReadOnlyList<double>> ObjectiveScores { get; init; } = [];
-
-    /// <summary>Whether every deal gave a number, or every one of a vector: a network that diverged, or a trial that was pruned, is a trial that did not finish.</summary>
-    public bool Finished =>
-        !Pruned
-        && ((Scores.Count > 0 && Scores.All(double.IsFinite)) || (ObjectiveScores.Count > 0 && ObjectiveScores.All(objectives => objectives.All(double.IsFinite))));
-
-    /// <summary>How the network was judged: the mean of its scores over the deals; no number for a trial that has none.</summary>
-    public double Score => Scores.Count == 0 ? double.NaN : Scores.Average();
-
-    /// <summary>How the networks were weighed on every objective: the mean of each over the deals; none for a trial that has none.</summary>
-    public IReadOnlyList<double> ObjectiveMean =>
-        ObjectiveScores.Count == 0
-            ? []
-            : [.. Enumerable.Range(0, ObjectiveScores[0].Count).Select(at => ObjectiveScores.Average(objectives => objectives[at]))];
-
-    /// <summary>How much the score moved from one deal to the next: the sample standard deviation, none for a single deal.</summary>
-    public double Spread
-    {
-        get
-        {
-            if (Scores.Count < 2)
-            {
-                return 0;
-            }
-
-            var mean = Scores.Average();
-
-            return Math.Sqrt(Scores.Sum(score => (score - mean) * (score - mean)) / (Scores.Count - 1));
-        }
-    }
-}
-
-/// <summary>
-/// How a trial is weighed against another: the one number a <see cref="Study.Score"/> or a <see cref="Study.Judge"/> gives, as
-/// a vector of one, or the several a <see cref="Study.Objectives"/> gives — the shape every trial of one study is weighed in.
-/// </summary>
-/// <param name="Values">The number, or numbers, lower being better on each.</param>
-/// <remarks>
-/// A vector of one value makes <see cref="Better"/> the plain <c>&lt;</c> a <see cref="Study.Score"/> or a <see cref="Study.Judge"/>
-/// already chose a trial by, and <see cref="Dominates"/> moot — nothing else is weighed against it on a second value — so the one
-/// comparison serves both a study's ordinary trials and its objectives alike, never a branch of its own for either.
-/// </remarks>
-internal readonly record struct Verdict(IReadOnlyList<double> Values)
-{
-    /// <summary>Whether this verdict is better than another: the lexicographic least of the two, the first value that differs deciding it.</summary>
-    /// <param name="than">The other verdict, of the same number of values.</param>
-    public bool Better(Verdict than)
-    {
-        for (var at = 0; at < Values.Count; at++)
-        {
-            var compared = Values[at].CompareTo(than.Values[at]);
-
-            if (compared != 0)
-            {
-                return compared < 0;
-            }
-        }
-
-        return false;
-    }
-
-    /// <summary>Whether this verdict dominates another under a Pareto order: no worse on any value, and better on at least one.</summary>
-    /// <param name="than">The other verdict, of the same number of values.</param>
-    public bool Dominates(Verdict than) =>
-        Values.Zip(than.Values, (mine, theirs) => mine <= theirs).All(atLeastAsGood => atLeastAsGood)
-        && Values.Zip(than.Values, (mine, theirs) => mine < theirs).Any(strictlyBetter => strictlyBetter);
-}
-
-// Whether two objective vectors hold the same values, in the same order: a plain SequenceEqual of IReadOnlyList<double>
-// values would compare the lists by reference, never their numbers, since a list is not a value type.
-internal sealed class VectorEquality : IEqualityComparer<IReadOnlyList<double>>
-{
-    public static readonly VectorEquality Instance = new();
-
-    public bool Equals(IReadOnlyList<double>? first, IReadOnlyList<double>? second) =>
-        first is null ? second is null : second is not null && first.SequenceEqual(second);
-
-    public int GetHashCode(IReadOnlyList<double> vector) => vector.Aggregate(17, (hash, value) => (hash * 31) + value.GetHashCode());
-}
-
-/// <summary>
-/// What a study found: every trial, the best of them, and the networks it trained.
-/// </summary>
-public sealed class StudyResult
-{
-    internal StudyResult(IReadOnlyList<Trial> trials, Trial best, IReadOnlyList<IReadOnlyList<TrainedNetwork>> members)
-    {
-        Trials = trials;
-        Best = best;
-        Members = members;
-        Winner = [.. members.Select(deal => deal[0])];
-    }
-
-    /// <summary>Every trial, in the order they were tried.</summary>
-    public IReadOnlyList<Trial> Trials { get; }
-
-    /// <summary>The trial judged lowest, the earlier one when two were judged alike.</summary>
-    public Trial Best { get; }
-
-    /// <summary>
-    /// The networks the best trial trained, one for each deal: the first of its networks, where it has several. They are the only
-    /// networks a study keeps, and so the only ones whose report of the test rows anything can read: a trial reports nothing about them.
-    /// </summary>
-    public IReadOnlyList<TrainedNetwork> Winner { get; }
-
-    /// <summary>The networks the best trial trained, every one of them, for each deal in order and in the order the trial declared them.</summary>
-    public IReadOnlyList<IReadOnlyList<TrainedNetwork>> Members { get; }
-}
 
 /// <summary>
 /// Tries many candidates for one network, each trained on rows a pipeline prepared and judged by that pipeline's validation
@@ -202,6 +49,7 @@ public sealed class Study
     private readonly Func<Candidate, NetworkDeclaration, NetworkDeclaration>? _network;
     private readonly Func<Candidate, LearnNetworkStep>? _declare;
     private readonly Func<Candidate, IReadOnlyList<LearnNetworkStep>>? _declareMembers;
+    private readonly StudySettings _settings = new();
     private bool _scoredItsOwnWay;
 
     /// <summary>Declares a study whose candidates are written in the chain that declares a network.</summary>
@@ -250,23 +98,23 @@ public sealed class Study
     /// <summary>Which candidate each trial tries; random, drawn from a seed, unless said.</summary>
     public ISampler Sampler
     {
-        get;
-        init => field = value ?? throw new ArgumentNullException(nameof(value));
-    } = new RandomSampler(20261009);
+        get => _settings.Sampler;
+        init => _settings = _settings with { Sampler = value };
+    }
 
     /// <summary>How many candidates are tried.</summary>
     public int Trials
     {
-        get;
-        init => field = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "A study tries at least one candidate.");
-    } = 20;
+        get => _settings.Trials;
+        init => _settings = _settings with { Trials = value };
+    }
 
     /// <summary>How many times the rows are divided again, each candidate being trained on every division.</summary>
     public int Deals
     {
-        get;
-        init => field = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "A study uses at least one division of the rows.");
-    } = 1;
+        get => _settings.Deals;
+        init => _settings = _settings with { Deals = value };
+    }
 
     /// <summary>The engines the names in the declared networks stand for; the light engine alone, unless given.</summary>
     public Engines? Engines { get; init; }
@@ -328,7 +176,11 @@ public sealed class Study
     /// For a person watching a study that takes hours: it hears each trial once and changes no number, and one that throws
     /// abandons the study, its exception reaching the caller as it was thrown. It may cancel the token the study was run with.
     /// </remarks>
-    public Action<Trial>? OnTrial { get; init; }
+    public Action<Trial>? OnTrial
+    {
+        get => _settings.OnTrial;
+        init => _settings = _settings with { OnTrial = value };
+    }
 
     /// <summary>
     /// What hears every epoch of every deal a trial trains on, and says whether to stop the trial there; nothing, unless said,
@@ -348,7 +200,11 @@ public sealed class Study
     /// one, a pruner would stop trials by a number they are not judged by, and the study is refused.
     /// </para>
     /// </remarks>
-    public Func<Progress, bool>? Pruner { get; init; }
+    public Func<Progress, bool>? Pruner
+    {
+        get => _settings.Pruner;
+        init => _settings = _settings with { Pruner = value };
+    }
 
     /// <summary>
     /// What hears every deal a trial finishes, judged by the same number the trial itself is judged by, and says whether to stop
@@ -370,7 +226,11 @@ public sealed class Study
     /// <see cref="Pruner"/> alike.
     /// </para>
     /// </remarks>
-    public Func<DealsJudged, bool>? DealStopper { get; init; }
+    public Func<DealsJudged, bool>? DealStopper
+    {
+        get => _settings.DealStopper;
+        init => _settings = _settings with { DealStopper = value };
+    }
 
     /// <summary>Runs the study.</summary>
     /// <param name="pipelineFor">
@@ -412,12 +272,7 @@ public sealed class Study
     {
         ArgumentNullException.ThrowIfNull(pipelineFor);
 
-        return Run(earlier, () =>
-        {
-            var prepared = Prepared(pipelineFor, cancellation);
-
-            return (_, _, deal) => [prepared[deal]];
-        }, cancellation);
+        return Run(earlier, needs => DealPreparation.PerDeal(pipelineFor, Deals, needs, cancellation), cancellation);
     }
 
     /// <summary>Runs the study with a pipeline for each candidate and each deal.</summary>
@@ -478,229 +333,16 @@ public sealed class Study
     {
         ArgumentNullException.ThrowIfNull(pipelinesFor);
 
-        return Run(earlier, () => new Preparing(pipelinesFor, cancellation).Prepared, cancellation);
+        return Run(earlier, needs => DealPreparation.PerCandidate(pipelinesFor, needs, cancellation), cancellation);
     }
 
-    // The study, once it is known how a candidate's pipelines are prepared: begun after the earlier trials are held to this study, so a
-    // study that is refused for them prepares nothing.
-    private StudyResult Run(IReadOnlyList<Trial> earlier, Func<Preparation> begin, CancellationToken cancellation)
+    // The study, once it is known how a candidate's pipelines are prepared: the one loop every study runs, with the networks
+    // a candidate declares trained and judged on each deal.
+    private StudyResult Run(IReadOnlyList<Trial> earlier, Func<Needs, DealPreparation> begin, CancellationToken cancellation)
     {
-        ArgumentNullException.ThrowIfNull(earlier);
+        var found = new StudyLoop<IReadOnlyList<TrainedNetwork>>(Space, _settings, new NetworksOfADeal(this)).Run(earlier, begin, cancellation);
 
-        if (Judge is not null && (_scoredItsOwnWay || Pruner is not null))
-        {
-            throw new InvalidOperationException(
-                $"A {nameof(Judge)} judges a trial by what its networks do together, and this study also has a {(_scoredItsOwnWay ? nameof(Score) : nameof(Pruner))}: "
-                + "the trial would be judged by two numbers, or stopped by one it is not judged by. Leave one of the two out.");
-        }
-
-        if (Pruner is not null && _scoredItsOwnWay)
-        {
-            throw new InvalidOperationException(
-                $"A {nameof(Pruner)} hears each epoch's validation loss, and this study judges its trials by a {nameof(Score)} of its own: a pruner would stop trials by a number they are not judged by. Leave one of the two out.");
-        }
-
-        if (Objectives is not null && (_scoredItsOwnWay ? nameof(Score) : Judge is not null ? nameof(Judge) : Pruner is not null ? nameof(Pruner) : DealStopper is not null ? nameof(DealStopper) : null) is { } against)
-        {
-            throw new InvalidOperationException(
-                $"{nameof(Objectives)} judges a trial by several numbers, and this study also has a {against}: the trial would be judged by two shapes of number, "
-                + "or stopped by one it is not judged by that way. Leave one of the two out.");
-        }
-
-        ThrowIfNotThisStudys(earlier);
-
-        var prepare = begin();
-        var trials = new List<Trial>(earlier);
-        var best = BestOf(earlier.Where(trial => trial.Finished));
-        IReadOnlyList<IReadOnlyList<TrainedNetwork>> winner = [];
-
-        for (var number = earlier.Count; number < Trials; number++)
-        {
-            cancellation.ThrowIfCancellationRequested();
-
-            var candidate = Sampler.Suggest(Space, number, [.. trials]);
-
-            ThrowIfNotOfTheSpace(candidate);
-
-            var (trial, networks) = Tried(candidate, prepare, trials, cancellation);
-
-            trials.Add(trial);
-            OnTrial?.Invoke(trial);
-
-            if (trial.Finished && (best is null || VerdictOf(trial).Better(VerdictOf(best))))
-            {
-                best = trial;
-                winner = networks;
-            }
-        }
-
-        if (best is null)
-        {
-            throw new InvalidOperationException($"No trial finished: all {trials.Count} were pruned, or judged by a number that is none, or infinite. Try smaller steps, or look at the candidates the space allows.");
-        }
-
-        return new StudyResult(trials, best, best.Number < earlier.Count ? TrainedAgain(best, prepare, cancellation) : winner);
-    }
-
-    // One trial, numbered after the trials before it: its networks trained on every deal, each epoch handed to the pruner, and
-    // each finished deal's score handed to the deal stopper, either of which may stop it.
-    private TriedTrial Tried(Candidate candidate, Preparation prepare, List<Trial> before, CancellationToken cancellation)
-    {
-        var steps = DeclaredBy(candidate);
-
-        if (steps.Count > 1 && Judge is null && Objectives is null)
-        {
-            throw new InvalidOperationException(
-                $"Trial {before.Count} declares {steps.Count} networks, and no score of one of them says how they do together: give the study a {nameof(Judge)} or an {nameof(Objectives)}.");
-        }
-
-        var networks = new List<IReadOnlyList<TrainedNetwork>>();
-        var heard = new List<IReadOnlyList<double>>();
-        var dealScores = new List<double>();
-        var objectiveScores = new List<IReadOnlyList<double>>();
-        var pruned = false;
-        var stoppedBetweenDeals = false;
-        var deals = Deals;
-
-        for (var deal = 0; deal < deals && !pruned && !stoppedBetweenDeals; deal++)
-        {
-            using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellation);
-            var soFar = new List<double>();
-            var at = deal;
-
-            void Heard(Epoch epoch)
-            {
-                soFar.Add(epoch.ValidationLoss!.Value);
-
-                if (Pruner?.Invoke(new Progress(at, [.. soFar], [.. before])) is true)
-                {
-                    pruned = true;
-                    stop.Cancel();
-                }
-            }
-
-            try
-            {
-                var trained = TrainedOn(prepare(candidate, before.Count, deal), steps, new RunControls(Engines, Pruner is null ? null : Heard, stop.Token));
-
-                if (!pruned)
-                {
-                    networks.Add(trained);
-
-                    if (Objectives is not null)
-                    {
-                        objectiveScores.Add(JudgedByObjectives(trained));
-                    }
-                    else
-                    {
-                        dealScores.Add(Judged(trained));
-                    }
-
-                    if (deal < deals - 1 && DealStopper?.Invoke(new DealsJudged([.. dealScores], [.. before])) is true)
-                    {
-                        stoppedBetweenDeals = true;
-                    }
-                }
-            }
-            catch (OperationCanceledException) when (pruned && !cancellation.IsCancellationRequested)
-            {
-                // The pruner stopped the run: the trial ends here, with what it heard.
-            }
-
-            heard.Add(Pruner is null ? [.. networks[^1][0].History!.Epochs.Select(epoch => epoch.ValidationLoss!.Value)] : soFar);
-        }
-
-        var trial = new Trial(before.Count, candidate, steps[0], pruned ? [] : dealScores)
-        {
-            Pruned = pruned || stoppedBetweenDeals,
-            Heard = heard,
-            ObjectiveScores = pruned ? [] : objectiveScores,
-        };
-
-        return new TriedTrial(steps.Count > 1 ? trial with { Members = steps } : trial, networks);
-    }
-
-    // The networks a trial declared, each trained on the rows its own pipeline prepared for the deal.
-    private static IReadOnlyList<TrainedNetwork> TrainedOn(IReadOnlyList<PreparedData> prepared, IReadOnlyList<LearnNetworkStep> steps, RunControls controls)
-    {
-        if (prepared.Count != steps.Count)
-        {
-            throw new InvalidOperationException($"A trial declares {steps.Count} networks and was handed {prepared.Count} pipelines: one for each network.");
-        }
-
-        return [.. prepared.Select((rows, at) => rows.Train(steps[at], controls))];
-    }
-
-    // How the networks of one deal are judged: by the judge, which looks at all of them, or by the score of the one there is.
-    private double Judged(IReadOnlyList<TrainedNetwork> networks) => Judge is { } judge ? judge(networks) : Score(networks[0]);
-
-    // How the networks of one deal are weighed against the study's objectives.
-    private IReadOnlyList<double> JudgedByObjectives(IReadOnlyList<TrainedNetwork> networks) => Objectives!(networks);
-
-    // The verdict a finished trial stands for: its Score, as a vector of one, or the mean of its ObjectiveScores.
-    private Verdict VerdictOf(Trial trial) => new(Objectives is null ? [trial.Score] : trial.ObjectiveMean);
-
-    // The finished trial whose verdict is best, the earlier one on a tie; none, where there is no finished trial.
-    private Trial? BestOf(IEnumerable<Trial> finished)
-    {
-        Trial? best = null;
-
-        foreach (var trial in finished)
-        {
-            if (best is null || VerdictOf(trial).Better(VerdictOf(best)))
-            {
-                best = trial;
-            }
-        }
-
-        return best;
-    }
-
-    // The best trial was one the caller handed back, whose networks were not kept: trained again, they must be judged as it was.
-    private IReadOnlyList<IReadOnlyList<TrainedNetwork>> TrainedAgain(Trial best, Preparation prepare, CancellationToken cancellation)
-    {
-        var networks = Enumerable.Range(0, Deals)
-            .Select(deal => TrainedOn(prepare(best.Candidate, best.Number, deal), best.Members, new RunControls(Engines, null, cancellation)))
-            .ToArray();
-
-        var matches = Objectives is null
-            ? networks.Select(Judged).SequenceEqual(best.Scores)
-            : networks.Select(JudgedByObjectives).SequenceEqual(best.ObjectiveScores, VectorEquality.Instance);
-
-        if (!matches)
-        {
-            throw new InvalidOperationException(
-                $"The best of the earlier trials, trial {best.Number}, was trained again on every deal and judged otherwise than it was handed back: these are not the rows, "
-                + "the engine or the trials this study tried. Hand it the pipelines and the engines the trials were tried with.");
-        }
-
-        return networks;
-    }
-
-    // Earlier trials are this study's own: numbered from nought without a gap, of its space, declaring what it declares.
-    private void ThrowIfNotThisStudys(IReadOnlyList<Trial> earlier)
-    {
-        for (var at = 0; at < earlier.Count; at++)
-        {
-            var trial = earlier[at] ?? throw new ArgumentException($"Earlier trial {at} is nothing.", nameof(earlier));
-
-            if (trial.Number != at)
-            {
-                throw new InvalidOperationException($"The earlier trials are numbered from nought without a gap, and the one at place {at} is trial {trial.Number}.");
-            }
-
-            ThrowIfNotOfTheSpace(trial.Candidate);
-
-            if (trial.Declared is null)
-            {
-                throw new InvalidOperationException($"Earlier trial {at} declares no network, as a trial a caller-trained study tried does: it was tried by another kind of study.");
-            }
-
-            if (!trial.Members.SequenceEqual(DeclaredBy(trial.Candidate)))
-            {
-                throw new InvalidOperationException($"Earlier trial {at} declares another network than this study declares for its candidate: it was tried by another study.");
-            }
-        }
+        return new StudyResult(found.Trials, found.Best, found.Winner);
     }
 
     // The steps of its own for every trial: nothing a trial changes is shared with the next.
@@ -716,106 +358,86 @@ public sealed class Study
         return [_declare is { } one ? one(candidate) : _network!(candidate, new NetworkDeclaration(Words)).Step()];
     }
 
-    private PreparedData[] Prepared(Func<int, Pipeline> pipelineFor, CancellationToken cancellation)
+    // How a deal of a study of networks is trained and judged: the networks a candidate declares, each behind the pipeline
+    // prepared for it, judged by the study's score, its judge, or its objectives.
+    private sealed class NetworksOfADeal(Study study) : IDealTrainer<IReadOnlyList<TrainedNetwork>>
     {
-        var prepared = new PreparedData[Deals];
+        public Needs Needs => TrainedNetwork.FeatureNeeds;
 
-        for (var deal = 0; deal < prepared.Length; deal++)
+        // A trial is judged by one shape of number, and stopped by nothing it is not judged by.
+        public void RefuseHowItIsSet()
         {
-            cancellation.ThrowIfCancellationRequested();
-
-            prepared[deal] = (pipelineFor(deal) ?? throw new InvalidOperationException($"The pipeline for deal {deal} is nothing.")).RunToBeJudged();
-        }
-
-        var first = prepared[0].Batch(Part.Test, TrainedNetwork.FeatureNeeds).Keys!.ToHashSet();
-
-        for (var deal = 1; deal < prepared.Length; deal++)
-        {
-            if (!first.SetEquals(prepared[deal].Batch(Part.Test, TrainedNetwork.FeatureNeeds).Keys!))
+            if (study.Judge is not null && (study._scoredItsOwnWay || study.Pruner is not null))
             {
                 throw new InvalidOperationException(
-                    $"Deal {deal} measures on other rows than deal 0 does: a candidate would be chosen on rows another deal learned from. Give the split a test seed — SplitAtRandom(train, validation, seed, testSeed) — so the rows to be measured on are the same on every deal.");
-            }
-        }
-
-        return prepared;
-    }
-
-    // A candidate holds a setting for every dimension that is there for it, in the space's order, and for no other.
-    private void ThrowIfNotOfTheSpace(Candidate candidate)
-    {
-        var there = Space.Where(dimension => dimension.IsThereAmong(candidate.Settings)).Select(dimension => dimension.Name).ToArray();
-
-        if (!candidate.Settings.Select(each => each.Name).SequenceEqual(there, StringComparer.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"The sampler gave a candidate of other dimensions than the space has for it: the space has {string.Join(", ", there.Select(name => $"'{name}'"))}, "
-                + $"and the candidate {string.Join(", ", candidate.Settings.Select(each => $"'{each.Name}'"))}.");
-        }
-
-        // A value is held to the dimension it is for: a sampler is the caller's, and a network is not to learn from what it gave by mistake.
-        foreach (var setting in candidate.Settings)
-        {
-            if (Space.Single(dimension => dimension.Name == setting.Name).Refusal(setting) is { } refusal)
-            {
-                throw new InvalidOperationException($"The sampler gave a setting the space cannot take: '{setting.Name}' {refusal}.");
-            }
-        }
-    }
-
-    // How the pipelines of a candidate on a deal are prepared: the rows of each, for a trial and a deal.
-    private delegate IReadOnlyList<PreparedData> Preparation(Candidate candidate, int trial, int deal);
-
-    // A trial and the networks it trained, which only the best trial's are kept of: for each deal, those of every one of its networks.
-    private readonly record struct TriedTrial(Trial Trial, IReadOnlyList<IReadOnlyList<TrainedNetwork>> Networks);
-
-    // Pipelines handed for each candidate: every one is run for its trial and deal, and held to the rows the first one prepared were judged on.
-    private sealed class Preparing(Func<Candidate, int, IReadOnlyList<Pipeline>> pipelinesFor, CancellationToken cancellation)
-    {
-        private HashSet<RowKey>? _test;
-        private readonly Dictionary<int, HashSet<RowKey>> _validation = [];
-
-        public Preparation Prepared => Prepare;
-
-        private IReadOnlyList<PreparedData> Prepare(Candidate candidate, int trial, int deal)
-        {
-            cancellation.ThrowIfCancellationRequested();
-
-            var pipelines = pipelinesFor(candidate, deal) ?? throw new InvalidOperationException($"The pipelines for trial {trial}, deal {deal} are nothing.");
-            var prepared = new List<PreparedData>(pipelines.Count);
-
-            foreach (var pipeline in pipelines)
-            {
-                var rows = (pipeline ?? throw new InvalidOperationException($"The pipeline for trial {trial}, deal {deal} is nothing.")).RunToBeJudged();
-
-                Hold(rows, trial, deal);
-                prepared.Add(rows);
+                    $"A {nameof(Judge)} judges a trial by what its networks do together, and this study also has a {(study._scoredItsOwnWay ? nameof(Score) : nameof(Pruner))}: "
+                    + "the trial would be judged by two numbers, or stopped by one it is not judged by. Leave one of the two out.");
             }
 
-            return prepared;
-        }
-
-        // The rows a trial is judged on and those it is measured on are the same for every candidate: scores are chosen between only so.
-        private void Hold(PreparedData rows, int trial, int deal)
-        {
-            var test = rows.Batch(Part.Test, TrainedNetwork.FeatureNeeds).Keys!.ToHashSet();
-            var validation = rows.Batch(Part.Validation, TrainedNetwork.FeatureNeeds).Keys!.ToHashSet();
-
-            if (_test is null)
-            {
-                _test = test;
-            }
-            else if (!_test.SetEquals(test))
+            if (study.Pruner is not null && study._scoredItsOwnWay)
             {
                 throw new InvalidOperationException(
-                    $"The pipeline of trial {trial} on deal {deal} measures on other test rows than the first one prepared did: a candidate would be chosen on rows another learned from. Give the split a test seed — SplitAtRandom(train, validation, seed, testSeed) — and move it by nothing a candidate chooses.");
+                    $"A {nameof(Pruner)} hears each epoch's validation loss, and this study judges its trials by a {nameof(Score)} of its own: a pruner would stop trials by a number they are not judged by. Leave one of the two out.");
             }
 
-            if (!_validation.TryAdd(deal, validation) && !_validation[deal].SetEquals(validation))
+            if (study.Objectives is not null && (study._scoredItsOwnWay ? nameof(Score) : study.Judge is not null ? nameof(Judge) : study.Pruner is not null ? nameof(Pruner) : study.DealStopper is not null ? nameof(DealStopper) : null) is { } against)
             {
                 throw new InvalidOperationException(
-                    $"The pipeline of trial {trial} on deal {deal} sets other rows aside as validation than the first trial's does: its score would be compared with scores measured on other rows. Deal the validation rows by nothing a candidate chooses.");
+                    $"{nameof(Objectives)} judges a trial by several numbers, and this study also has a {against}: the trial would be judged by two shapes of number, "
+                    + "or stopped by one it is not judged by that way. Leave one of the two out.");
             }
         }
+
+        // An earlier trial declares the networks this study declares for its candidate.
+        public void RequireItsOwn(Trial earlier)
+        {
+            if (earlier.Declared is null)
+            {
+                throw new InvalidOperationException($"Earlier trial {earlier.Number} declares no network, as a trial a caller-trained study tried does: it was tried by another kind of study.");
+            }
+
+            if (!earlier.Members.SequenceEqual(study.DeclaredBy(earlier.Candidate)))
+            {
+                throw new InvalidOperationException($"Earlier trial {earlier.Number} declares another network than this study declares for its candidate: it was tried by another study.");
+            }
+        }
+
+        public IReadOnlyList<LearnNetworkStep> Declares(Candidate candidate, int trial)
+        {
+            var steps = study.DeclaredBy(candidate);
+
+            if (steps.Count > 1 && study.Judge is null && study.Objectives is null)
+            {
+                throw new InvalidOperationException(
+                    $"Trial {trial} declares {steps.Count} networks, and no score of one of them says how they do together: give the study a {nameof(Judge)} or an {nameof(Objectives)}.");
+            }
+
+            return steps;
+        }
+
+        // The networks a trial declared, each trained on the rows its own pipeline prepared for the deal, and judged together.
+        public JudgedDeal<IReadOnlyList<TrainedNetwork>> Trained(DealToTrain deal)
+        {
+            var steps = deal.Trial.Steps;
+
+            if (deal.Rows.Count != steps.Count)
+            {
+                throw new InvalidOperationException($"A trial declares {steps.Count} networks and was handed {deal.Rows.Count} pipelines: one for each network.");
+            }
+
+            var controls = new RunControls(study.Engines, deal.Heard is { } heard ? epoch => heard(epoch.ValidationLoss!.Value) : null, deal.Cancellation);
+            IReadOnlyList<TrainedNetwork> networks = [.. deal.Rows.Select((rows, at) => rows.Train(steps[at], controls))];
+
+            // Where no pruner heard the epochs, the first network's own history says what the deal heard.
+            IReadOnlyList<double>? ofItself = deal.Heard is null ? [.. networks[0].History!.Epochs.Select(epoch => epoch.ValidationLoss!.Value)] : null;
+
+            return study.Objectives is { } objectives
+                ? new(networks, double.NaN) { Objectives = objectives(networks), Heard = ofItself }
+                : new(networks, study.Judge is { } judge ? judge(networks) : study.Score(networks[0])) { Heard = ofItself };
+        }
+
+        public InvalidOperationException JudgedOtherwise(Trial best) => new(
+            $"The best of the earlier trials, trial {best.Number}, was trained again on every deal and judged otherwise than it was handed back: these are not the rows, "
+            + "the engine or the trials this study tried. Hand it the pipelines and the engines the trials were tried with.");
     }
 }

@@ -16,8 +16,8 @@ public sealed class PairedDifferences
         Firsts = firsts;
         Seconds = seconds;
         Differences = [.. seconds.Zip(firsts, (second, first) => second - first)];
-        Mean = Differences.Average();
-        Spread = Math.Sqrt(Differences.Sum(difference => (difference - Mean) * (difference - Mean)) / (Differences.Count - 1));
+        Mean = Differences.Mean();
+        Spread = Differences.SampleSpread();
     }
 
     /// <summary>How many deals were compared.</summary>
@@ -125,23 +125,21 @@ public sealed class Comparison
         {
             cancellation.ThrowIfCancellationRequested();
 
-            firsts[deal] = Judged(first(deal), step, new Place(deal, "first"), cancellation);
-            seconds[deal] = Judged(second(deal), step, new Place(deal, "second"), cancellation);
+            firsts[deal] = Judged(first(deal), step, new DealPlace(deal) { Side = "first" }, cancellation);
+            seconds[deal] = Judged(second(deal), step, new DealPlace(deal) { Side = "second" }, cancellation);
         }
 
         return new PairedDifferences(firsts, seconds);
     }
 
-    private double Judged(Pipeline pipeline, LearnNetworkStep step, Place place, CancellationToken cancellation)
+    // Comparing a split at random with one by time is what a comparison is for, so its two pipelines are held to no rows of
+    // each other's: each is only run to be judged, as a study runs its own.
+    private double Judged(Pipeline? pipeline, LearnNetworkStep step, DealPlace place, CancellationToken cancellation)
     {
-        var (deal, side) = place;
-        var score = Score((pipeline ?? throw new InvalidOperationException($"The {side} pipeline for deal {deal} is nothing.")).RunToBeJudged().Train(step, Engines, cancellation));
+        var score = Score(pipeline.RunToBeJudged(place, TrainedNetwork.FeatureNeeds).Train(step, Engines, cancellation));
 
         return double.IsFinite(score)
             ? score
-            : throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"The network behind the {side} pipeline was judged by {score} on deal {deal}, which is no score to take a difference of."));
+            : throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"The network behind the {place.Side} pipeline was judged by {score} on deal {place.Deal}, which is no score to take a difference of."));
     }
 }
-
-// Which deal, and which of the two pipelines, a network is being judged for: what a refusal names.
-internal readonly record struct Place(int Deal, string Side);
