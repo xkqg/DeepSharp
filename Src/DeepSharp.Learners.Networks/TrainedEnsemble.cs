@@ -1,7 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using System.Text.Json;
 using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 using DeepSharp.Tensors;
@@ -110,12 +109,8 @@ public sealed class TrainedEnsemble
     {
         RequireWritable(Members.Sum(member => member.Network.Parameters().Sum(parameter => (long)parameter.Value.Shape.Count)));
 
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+        return new ModelFileFrame(Version, Members[0].Carried, Interval) { LengthChecked = RequireTextFits }.Written(writer =>
         {
-            writer.WriteStartObject();
-            writer.WriteNumber(TrainedNetwork.VersionKey, Version);
             writer.WriteString(BlendKey, Blend.Word());
             writer.WriteStartArray(NetworkDocument.NetworksKey);
 
@@ -125,21 +120,7 @@ public sealed class TrainedEnsemble
             }
 
             writer.WriteEndArray();
-            writer.WritePropertyName(TrainedNetwork.PipelineKey);
-            writer.WriteRawValue(Members[0].Carried.Text);
-
-            if (Interval is { } interval)
-            {
-                writer.WritePropertyName(TrainedNetwork.IntervalKey);
-                interval.WriteTo(writer);
-            }
-
-            writer.WriteEndObject();
-        }
-
-        RequireTextFits(stream.Length);
-
-        return stream.TextWithLineFeeds();
+        });
     }
 
     /// <summary>Reads an ensemble back from its file.</summary>
@@ -186,23 +167,14 @@ public sealed class TrainedEnsemble
 
         for (var at = 0; at < saved.Count; at++)
         {
-            var trainedOn = saved[at].TrainedOn
-                ?? throw file.Refused(NetworkDocument.NetworksKey, $"Network {at + 1} names nothing it was trained on: the file of a trained network says its features, its answers and the fit of the pipeline it was trained behind.");
+            var trainedOn = file.TrainedOnOf(saved[at], at);
 
-            if ((TrainedNetwork.Mismatch(trainedOn, prepared) ?? TrainedNetwork.Behind(trainedOn, carried)) is { } mismatch)
-            {
-                throw file.Refused(NetworkDocument.NetworksKey, $"Network {at + 1}: {mismatch.Message}");
-            }
+            file.HeldTo(trainedOn, prepared, at);
 
             members.Add(new TrainedNetwork(saved[at].Network, saved[at].Loss, prepared, trainedOn) { Carried = carried });
         }
 
-        var interval = file.Interval();
-
-        if (interval is not null && interval.Margins.Count != members[0].TrainedOn.Answers.Count)
-        {
-            throw file.Refused(TrainedNetwork.IntervalKey, $"The interval names {interval.Margins.Count} margins, and the networks answer {members[0].TrainedOn.Answers.Count}: it has one margin for each answer.");
-        }
+        var interval = file.IntervalHeldTo(members[0].TrainedOn.Answers.Count);
 
         return new TrainedEnsemble(members, blend) { Interval = interval };
     }

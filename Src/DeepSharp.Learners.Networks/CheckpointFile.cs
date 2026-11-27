@@ -79,8 +79,7 @@ public static class CheckpointFile
 
         var file = new FileText(json);
         var read = NetworkDocument.ReadCheckpoint(json, TrainedNetwork.NetworkKey, TrainedNetwork.TrainingKey, networks);
-        var trainedOn = read.Network.TrainedOn
-            ?? throw file.Refused(TrainedNetwork.NetworkKey, "This file's network names nothing it was trained on: a checkpoint says its features, its answers and the fit of the pipeline it was taken behind.");
+        var trainedOn = file.TrainedOnOf(read.Network);
         var carried = file.Pipeline();
 
         if (TrainedNetwork.Behind(trainedOn, carried) is { } unlike)

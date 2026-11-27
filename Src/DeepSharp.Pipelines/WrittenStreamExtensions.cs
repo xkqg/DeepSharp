@@ -3,7 +3,7 @@
 
 using System.Text;
 
-namespace DeepSharp.Learners.Networks;
+namespace DeepSharp.Pipelines;
 
 /// <summary>What a JSON writer wrote into a stream, as the text of a file that is the same file on every system.</summary>
 internal static class WrittenStreamExtensions

@@ -3,7 +3,6 @@
 
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
 using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 using DeepSharp.Tensors;
@@ -138,23 +137,14 @@ public sealed class BoostedNetwork
     /// <returns>The file, as JSON, indented, with a line feed between lines on every system.</returns>
     public string ToJson()
     {
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
+        return new ModelFileFrame(Version, Basis.Carried, Interval: null).Written(writer =>
         {
-            writer.WriteStartObject();
-            writer.WriteNumber(TrainedNetwork.VersionKey, Version);
             writer.WritePropertyName(BasisKey);
             NetworkDocument.WriteNetwork(writer, Basis.Network, Basis.Loss, Basis.TrainedOn);
             writer.WritePropertyName(CorrectionKey);
             NetworkDocument.WriteNetwork(writer, Correction.Network, Correction.Loss, Correction.TrainedOn);
             writer.WriteString(BasisDigestKey, Digest(Basis));
-            writer.WritePropertyName(TrainedNetwork.PipelineKey);
-            writer.WriteRawValue(Basis.Carried.Text);
-            writer.WriteEndObject();
-        }
-
-        return stream.TextWithLineFeeds();
+        });
     }
 
     /// <summary>Reads a boosted pair back from its file.</summary>
@@ -179,15 +169,10 @@ public sealed class BoostedNetwork
         var prepared = PreparedData.FromJson(json, steps, TrainedNetwork.PipelineKey);
         var carried = file.Pipeline();
 
-        var basisTrainedOn = basisSaved.TrainedOn
-            ?? throw file.Refused(BasisKey, "This file's basis names nothing it was trained on: the file of a trained network says its features, its answers and the fit of the pipeline it was trained behind.");
-        var correctionTrainedOn = correctionSaved.TrainedOn
-            ?? throw file.Refused(CorrectionKey, "This file's correction names nothing it was trained on: the file of a trained network says its features, its answers and the fit of the pipeline it was trained behind.");
+        var basisTrainedOn = file.TrainedOnOf(basisSaved, at: 0);
+        var correctionTrainedOn = file.TrainedOnOf(correctionSaved, at: 1);
 
-        if ((TrainedNetwork.Mismatch(basisTrainedOn, prepared) ?? TrainedNetwork.Behind(basisTrainedOn, carried)) is { } basisMismatch)
-        {
-            throw file.Refused(BasisKey, basisMismatch.Message);
-        }
+        file.HeldTo(basisTrainedOn, prepared, at: 0);
 
         var basis = new TrainedNetwork(basisSaved.Network, basisSaved.Loss, prepared, basisTrainedOn) { Carried = carried };
         var correction = new TrainedNetwork(correctionSaved.Network, correctionSaved.Loss, prepared, correctionTrainedOn) { Carried = carried };

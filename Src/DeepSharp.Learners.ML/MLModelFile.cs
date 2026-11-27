@@ -26,7 +26,7 @@ namespace DeepSharp.Learners.ML;
 /// </remarks>
 public sealed record MLModelFile
 {
-    private const string VersionKey = "version";
+    private const string VersionKey = ModelFileFrame.VersionKey;
     private const string TrainerKey = "trainer";
     private const string SeedKey = "seed";
     private const string LibraryKey = "mlnet";
@@ -36,8 +36,8 @@ public sealed record MLModelFile
     private const string FeaturesKey = "features";
     private const string RowsKey = "rows";
     private const string ModelKey = "model";
-    private const string PipelineKey = "pipeline";
-    private const string IntervalKey = "interval";
+    private const string PipelineKey = ModelFileFrame.PipelineKey;
+    private const string IntervalKey = ModelFileFrame.IntervalKey;
 
     /// <summary>The version of the model file this library reads up to; a file with no interval is written as the first, one with an interval as the second.</summary>
     public const int Version = 2;
@@ -86,11 +86,8 @@ public sealed record MLModelFile
     /// <returns>The text, a line feed between lines.</returns>
     public string ToJson()
     {
-        using var written = new MemoryStream();
-        using (var writer = new Utf8JsonWriter(written, new JsonWriterOptions { Indented = true }))
+        return new ModelFileFrame(Interval is null ? 1 : Version, Carried, Interval).Written(writer =>
         {
-            writer.WriteStartObject();
-            writer.WriteNumber(VersionKey, Interval is null ? 1 : Version);
             writer.WriteString(LibraryKey, Library);
             writer.WriteString(ProcessorKey, Processor);
             writer.WritePropertyName(TrainerKey);
@@ -109,19 +106,7 @@ public sealed record MLModelFile
 
             writer.WriteEndArray();
             writer.WriteBase64String(ModelKey, Model);
-            writer.WritePropertyName(PipelineKey);
-            writer.WriteRawValue(Carried.Text);
-
-            if (Interval is { } interval)
-            {
-                writer.WritePropertyName(IntervalKey);
-                interval.WriteTo(writer);
-            }
-
-            writer.WriteEndObject();
-        }
-
-        return Encoding.UTF8.GetString(written.ToArray()).ReplaceLineEndings("\n");
+        });
     }
 
     /// <summary>A model file as it was trained.</summary>

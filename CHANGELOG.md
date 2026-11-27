@@ -106,6 +106,11 @@ The seventh letter of the flock team.
   `EarlierRowsStep`, which differs only in which rows besides the floor a row may read.
 - **The 0.18.0 notes said `history` is refused under `split.atRandom` and `split.stratified`; it never was.** It reads the
   training rows alone, so it needs no split in time, and it stands below any split, as it always did.
+- **A checkpoint whose network records nothing of what it was trained on is refused in the words every other file of a
+  trained model uses.** It said "a checkpoint says its features, its answers and the fit of the pipeline it was taken
+  behind"; it now says, like a network's, an ensemble's and a boosted pair's file, "the file of a trained network says its
+  features, its answers and the fit of the pipeline it was trained behind". No file written changes by a byte: the four
+  kinds of file are now framed by one writer and held to what they carry by one reader.
 
 - **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.30.0.** Its data frame now hands
   over the column or the bars an indicator reads, and the indicator is made from its own class; `indicator.add` builds

@@ -50,6 +50,7 @@ internal sealed class FileText
     private readonly FileKind _kind;
     private readonly Dictionary<string, long> _places = new(StringComparer.Ordinal);
     private readonly Dictionary<string, byte[]> _kept = new(StringComparer.Ordinal);
+    private PipelineText? _pipeline;
 
     /// <summary>Surveys a file's top.</summary>
     /// <param name="json">The file.</param>
@@ -72,6 +73,9 @@ internal sealed class FileText
     /// <remarks>Only ever asked of a part its reader has read, so the key stands in the file.</remarks>
     public NetworkFileException Refused(string key, string message) => new(Placed([new Noted(_places.GetValueOrDefault(key), message)]));
 
+    /// <summary>Which of the kinds of file this is read as.</summary>
+    public FileKind Kind => _kind;
+
     /// <summary>The word the file names its members' blend by; nothing when the file names none as text.</summary>
     public string? Blend { get; private set; }
 
@@ -87,7 +91,7 @@ internal sealed class FileText
     /// <summary>The pipeline the file carries, its text taken from the file as it stands there.</summary>
     /// <exception cref="NetworkFileException">The file carries no pipeline: nothing under its key, or no object.</exception>
     public PipelineText Pipeline() =>
-        _kept.TryGetValue(TrainedNetwork.PipelineKey, out var pipeline)
+        _pipeline ??= _kept.TryGetValue(TrainedNetwork.PipelineKey, out var pipeline)
             ? PipelineText.Of(pipeline)
             : throw new NetworkFileException(Placed([new Noted(
                 _places.GetValueOrDefault(TrainedNetwork.PipelineKey),

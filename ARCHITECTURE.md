@@ -59,6 +59,8 @@ Src/DeepSharp.Pipelines/          the data side
     SurveyedText.cs TextPieces.cs   the text a file is read from: where each of its parts stands, every fault at its line
                                     and column, and a larger file read a piece of its UTF-8 at a time
     PipelineText.cs                 a pipeline's text as one writer writes it, and whether two pipelines are one fit
+    ModelFileFrame.cs               the frame every trained model's file is written in: version, the kind's own parts, the
+                                    pipeline as it stands, the interval; one text with a line feed between lines
     PipelinePreset.cs               what a pipeline decided about its columns, saved on its own
     PipelineCourse.cs               a course to fill in: the steps of a prepared pipeline in the order they belong, each
                                     waiting for what only a person knows — not Course.cs below, the steps a run takes

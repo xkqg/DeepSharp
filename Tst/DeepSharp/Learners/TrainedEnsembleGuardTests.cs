@@ -68,6 +68,64 @@ public class TrainedEnsembleGuardTests
         Assert.Contains("Network 1 names nothing it was trained on", refused.Message, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("network", "This file's network")]
+    [InlineData("checkpoint", "This file's network")]
+    [InlineData("basis", "This file's basis")]
+    [InlineData("correction", "This file's correction")]
+    [InlineData("ensemble", "Network 2")]
+    public void AFileOfAnyKind_WhoseNetworkNamesNothingItWasTrainedOn_IsRefusedInTheOneSentence(string kind, string noun)
+    {
+        var refused = NamesNothingItWasTrainedOn(kind);
+
+        Assert.Contains($"{noun} names nothing it was trained on: the file of a trained network says its features, its answers and the fit of the pipeline it was trained behind.", refused.Message, StringComparison.Ordinal);
+    }
+
+    // The file of each kind, the record of what a network was trained on taken out of one of its networks, read back as that kind.
+    private static NetworkFileException NamesNothingItWasTrainedOn(string kind)
+    {
+        var prepared = Prepared(report: true);
+        var networks = NetworkCatalog.BuiltIn();
+        var steps = StepCatalog.BuiltIn().WithNetworks();
+        var step = (LearnNetworkStep)prepared.Declaration.Learner!;
+
+        switch (kind)
+        {
+            case "checkpoint":
+                var compiled = new Sequential().Dense(4).Relu().Dense(1).Compile(new Adam(0.02), new MeanSquaredError());
+                var files = new List<string>();
+
+                compiled.Fit(prepared, new FitOptions(seed: 7) { Epochs = 2, Checkpoints = new Checkpoints(checkpoint => files.Add(CheckpointFile.Write(compiled, prepared, checkpoint))) });
+
+                var checkpoint = JsonNode.Parse(files[0])!.AsObject();
+
+                checkpoint["network"]!.AsObject().Remove("trainedOn");
+
+                return Assert.Throws<NetworkFileException>(() => CheckpointFile.Read(checkpoint.ToJsonString(), networks, prepared));
+
+            case "basis" or "correction":
+                var pair = JsonNode.Parse(prepared.TrainBoosted(step, step with { Seed = 2 }, new BoostedOptions { Cancellation = TestContext.Current.CancellationToken }).ToJson())!.AsObject();
+
+                pair[kind]!.AsObject().Remove("trainedOn");
+
+                return Assert.Throws<NetworkFileException>(() => BoostedNetwork.FromJson(pair.ToJsonString(), networks, steps));
+
+            case "ensemble":
+                var ensemble = JsonNode.Parse(Ensemble(prepared).ToJson())!.AsObject();
+
+                ensemble["networks"]![1]!.AsObject().Remove("trainedOn");
+
+                return Assert.Throws<NetworkFileException>(() => Read(ensemble.ToJsonString()));
+
+            default:
+                var single = JsonNode.Parse(Trained(prepared, 1).ToJson())!.AsObject();
+
+                single["network"]!.AsObject().Remove("trainedOn");
+
+                return Assert.Throws<NetworkFileException>(() => TrainedNetwork.FromJson(single.ToJsonString(), networks, steps));
+        }
+    }
+
     [Fact]
     public void ANetworkOfTheFileTrainedForOtherAnswers_IsRefusedNamingItsPlace()
     {

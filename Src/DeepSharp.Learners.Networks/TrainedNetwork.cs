@@ -1,7 +1,6 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
-using System.Text.Json;
 using DeepSharp.Networks;
 using DeepSharp.Pipelines;
 using DeepSharp.Tensors;
@@ -25,10 +24,10 @@ public sealed class TrainedNetwork
     /// <summary>The version of the one file this library reads up to; a file with no interval is written as the first, one with an interval as the second.</summary>
     public const int Version = 2;
 
-    internal const string IntervalKey = "interval";
-    internal const string VersionKey = "version";
+    internal const string IntervalKey = ModelFileFrame.IntervalKey;
+    internal const string VersionKey = ModelFileFrame.VersionKey;
     internal const string NetworkKey = "network";
-    internal const string PipelineKey = "pipeline";
+    internal const string PipelineKey = ModelFileFrame.PipelineKey;
     internal const string TrainingKey = "training";
 
     // How many rows a serving pass takes at once, unless a caller says otherwise: Keras's own default for `model.predict`,
@@ -222,21 +221,12 @@ public sealed class TrainedNetwork
         var file = new FileText(json);
         var saved = NetworkDocument.ReadNetwork(json, NetworkKey, networks);
         var prepared = PreparedData.FromJson(json, steps, PipelineKey);
-        var trainedOn = saved.TrainedOn
-            ?? throw file.Refused(NetworkKey, "This file's network names nothing it was trained on: the file of a trained network says its features, its answers and the fit of the pipeline it was trained behind.");
+        var trainedOn = file.TrainedOnOf(saved);
         var carried = file.Pipeline();
 
-        if ((Mismatch(trainedOn, prepared) ?? Behind(trainedOn, carried)) is { } mismatch)
-        {
-            throw file.Refused(mismatch.Key, mismatch.Message);
-        }
+        file.HeldTo(trainedOn, prepared);
 
-        var interval = file.Interval();
-
-        if (interval is not null && interval.Margins.Count != trainedOn.Answers.Count)
-        {
-            throw file.Refused(IntervalKey, $"The interval names {interval.Margins.Count} margins, and the network answers {trainedOn.Answers.Count}: it has one margin for each answer.");
-        }
+        var interval = file.IntervalHeldTo(trainedOn.Answers.Count);
 
         return new TrainedNetwork(saved.Network, saved.Loss, prepared, trainedOn) { Carried = carried, Interval = interval };
     }
@@ -347,35 +337,21 @@ public sealed class TrainedNetwork
     /// <summary>The one file, and — for a checkpoint — what the run needs to go on.</summary>
     internal string Json(CompiledNetwork? compiled, Checkpoint? checkpoint)
     {
-        using var stream = new MemoryStream();
-
-        using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
-        {
-            writer.WriteStartObject();
-            writer.WriteNumber(VersionKey, Interval is null ? 1 : Version);
-            writer.WritePropertyName(NetworkKey);
-            NetworkDocument.WriteNetwork(writer, Network, Loss, TrainedOn);
-            writer.WritePropertyName(PipelineKey);
-            writer.WriteRawValue(Carried.Text);
-
-            if (checkpoint is not null)
-            {
-                writer.WritePropertyName(TrainingKey);
-                NetworkDocument.WriteTraining(writer, compiled!, checkpoint);
-            }
-
-            if (Interval is { } interval)
-            {
-                writer.WritePropertyName(IntervalKey);
-                interval.WriteTo(writer);
-            }
-
-            writer.WriteEndObject();
-        }
-
         // The file is the same file everywhere, a line feed between lines as in the pipeline's own file it carries, and so
         // is the largest one a machine can write.
-        return stream.TextWithLineFeeds();
+        return new ModelFileFrame(Interval is null ? 1 : Version, Carried, Interval).Written(
+            writer =>
+            {
+                writer.WritePropertyName(NetworkKey);
+                NetworkDocument.WriteNetwork(writer, Network, Loss, TrainedOn);
+            },
+            checkpoint is null
+                ? null
+                : writer =>
+                {
+                    writer.WritePropertyName(TrainingKey);
+                    NetworkDocument.WriteTraining(writer, compiled!, checkpoint);
+                });
     }
 
     // Each feature that held one value on every training row, as the rows were handed over, with that value: a network
