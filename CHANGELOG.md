@@ -5,191 +5,79 @@ as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [0.19.0]
 
-The seventh letter of the flock team.
+The seventh letter of the flock team: a split in blocks of time with an embargo, a split of your own, `history.known` under
+any split, a study whose deals are of different kinds and whose candidates each choose their own pipeline, and an ensemble
+of whole models, each with a pipeline of its own.
 
 ### Upgrading from 0.18.0
 
-- **The pipeline file is at version 17.** Everything written before still reads and means what it meant; `split.blocked`
-  is new. 0.18.0 refuses a file of the seventeenth whole, naming the version.
-- **`IDividesInTime` takes its `Column` from `IDividesByAColumn`.** A split that says the column it divides by without its
-  parts being runs of time implements the new, smaller interface; code that reads `IDividesInTime.Column` compiles unchanged.
-- **`KnownHistoryStep` no longer implements `IReadsRowOrder`.** It orders by its own columns and never read the rows in the
-  order they stand in; code that tested for the interface to find it no longer finds it, and it no longer asks for an
-  `order.by` above it.
-- **`TransposedConvolution.Settling` is obsolete.** It handed back a pair of values; `TransposedConvolution.Settle` hands
-  back the same two, `Dropped` and `Added`, as a `Settlement`. The old form still compiles, with a warning naming the new
-  one.
-- **`PipelineBuilder.Add` refuses a split, naming `Split`.** A split that came in through `Add` stayed on the builder that
-  learns nothing, so what learns was then taken by the same door, and the split was never ranked by the declared id nor
-  handed a share held back. Write `.Split(step)` where `.Add(step)` stood; nothing else changes.
-- **An ensemble file whose blend is written as a number is refused.** A blend is read as one of its words, `average` or
-  `vote`, as every other word a file holds is; `"1"` was taken for `vote` before. DeepSharp never wrote one.
-- **An ensemble's file can be of the second version.** An ensemble behind one pipeline is written exactly as before, as the
-  first version, and every file written before reads unchanged; one whose members have pipelines of their own is written as
-  the second, each member whole, as a single network's file holds it. 0.18.0 refuses a file of the second version whole,
-  naming the version. `TrainedEnsemble.Version` is now 2: code compiled against it holds the number it was compiled with.
-- **Votes on answers that are amounts are refused where an ensemble is made.** `Blend.Vote` was refused only when an
-  ensemble was measured; served or given an interval, it counted votes of an amount. Now `TrainedEnsemble.Of`, both
-  `TrainEnsemble` forms, `TrainedEnsemble.FromJson`, and `MeasureEnsemble`, `IntervalOf` and the members' `BackToOriginal`
-  of a pipeline refuse a vote first — by the output, where it says its answers are amounts (`target.numbers`, a
-  distribution, a return), and otherwise by the training rows' answers, each nought or one or refused. Average them instead.
-- **`TrainedEnsemble.Prepared` and `ModelEnsemble.Prepared` are refused when the members have pipelines of their own.**
-  They hand back the one pipeline as before whenever every member was trained behind one fit; for members of several, the
-  refusal says where each member's own is: `Members[i].Prepared`, or `MembersPrepared[i]`. Asking why an ensemble of such
-  members answers as it does (`Leaning`, `Curve`, `MakeUp`) is refused the same way: ask each member.
+- **The pipeline file is at version 17**, for `split.blocked`. Everything written before reads as it did; 0.18.0 refuses a
+  file of version 17 whole, naming the version.
+- **`PipelineBuilder.Add` refuses a split.** Write `.Split(step)` where `.Add(step)` stood.
+- **An ensemble's file can be of a second version**, for members with pipelines of their own; one behind one pipeline is
+  written as before. `TrainedEnsemble.Version` is now 2. A blend written as a number rather than `average` or `vote` is
+  refused; DeepSharp never wrote one.
+- **A vote on answers that are amounts is refused where the ensemble is made**, not only when it is measured. Average them
+  instead.
+- **`TrainedEnsemble.Prepared`, `ModelEnsemble.Prepared`, `Leaning`, `Curve` and `MakeUp` are refused when the members
+  have pipelines of their own**, naming where each member's is (`Members[i].Prepared`, `MembersPrepared[i]`).
+- **`IDividesInTime` takes its `Column` from the new `IDividesByAColumn`**; code that reads it compiles unchanged.
+  `KnownHistoryStep` no longer implements `IReadsRowOrder`. `TransposedConvolution.Settling` is obsolete in favour of
+  `Settle`.
 
 ### Added
 
 - **A split in blocks of time, with an embargo.** `SplitBlocked("date", train, validation, new BlockedDeal(Days: 7,
-  EmbargoDays: 14))` groups the rows into blocks of so many days and deals whole blocks at random to training, validation
-  and test — the seed, a test seed and a fold work as they do for a split at random — and leaves every training row within
-  the embargo of a row a model is chosen, calibrated or measured on out of the training. A row left out stands in the gap:
-  fitted on by nothing, handed to nothing, and counted in the fit as `rows.gap`, beside how many blocks each part holds.
-  Below it, a step that reads the rows before or after a row is refused, as below a split at random. See
+  EmbargoDays: 14))` deals whole blocks of days at random — seed, test seed and fold as for a split at random — and leaves
+  every training row within the embargo of a measured row out of the training, counted in the fit as `rows.gap`. See
   [Splitting the rows](https://github.com/xkqg/DeepSharp/wiki/Splitting-the-rows).
-
-- **A split of your own.** `PipelineBuilder.Split(split)` takes any step that divides the rows — one from another package,
-  or one you write — and hands back the half of the chain that learns, as the library's own split verbs do. What a split
-  hands back is now held to what every split here already keeps: one part a row, none of them left undivided, and a record
-  and its copies in one part. A share held back with `Predict` or `Calibrate` is given to a split this library writes, so it
-  is refused beside one of yours. A file that names your verb is read back once the verb is registered with the catalog that
-  reads it. See [Writing a step of your own](https://github.com/xkqg/DeepSharp/wiki/Writing-a-step-of-your-own).
-
-- **A declaration says what it holds, and whether steps make one.** `PipelineDeclaration.Try(steps)` hands back a
-  `DeclarationAttempt` — the declaration, or every fault the steps have — without throwing; `Schema` and `IdColumn` name
-  the schema step and the column it calls the id; `KindHeldOnce(step)` says which kind of step a declaration may hold
-  only one of. Each is what the rules already decided, now asked of the declaration rather than worked out again.
-
+- **A split of your own.** `PipelineBuilder.Split(split)` takes any step that divides the rows, through the door the
+  library's own splits use, and holds it to what every split keeps: one part a row, none undivided, a record and its copies
+  together. See [Writing a step of your own](https://github.com/xkqg/DeepSharp/wiki/Writing-a-step-of-your-own).
 - **A study of your own models takes a pipeline for each candidate and deal.** `Study<TModel>.Run((candidate, deal) => …)`
-  prepares the pipeline a candidate chooses — a feature, a window, a way of filling a gap — for every trial and deal, and
-  hands your trainer the rows that candidate's own pipeline prepared, as a study of networks already did; it goes on from
-  earlier trials the same way. Every candidate is held to the validation rows the first trial was chosen on for that deal,
-  and every deal to the same rows to be measured on, so a candidate whose pipeline deals them another way is refused,
-  naming the trial and the deal. Both kinds of study now run one loop, so the sampler, the deals, the pruner, the deal
-  stopper and going on from earlier trials work the same in each. See
-  [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
-
+  hands your trainer the rows that candidate's own pipeline prepared, every candidate held to the same validation and test
+  rows of a deal. Both kinds of study now run one loop.
 - **A study's deals can be of different kinds.** `Kinds = [new DealKind("random", 5, 0.5), new DealKind("time", 1, 0.5)]`
-  tells a study — of networks or of your own models — that five deals are dealt at random and one in time, each kind with a
-  weight in the score. The deals are laid out kind after kind, and `kinds.KindOf(deal)` tells a pipeline which kind its deal
-  is. Every deal of one kind is held to the same test rows, so deals of a kind that do not share them are still refused,
-  naming the kind; a trial is judged by each kind's mean, weighed — Σ weight × mean ÷ Σ weight — its spread alike, and
-  `KindScores` and `KindSpreads` keep each kind's own numbers. The promise is made per kind: a candidate is chosen on no row
-  its own kind measures on, while a row one kind measures on may be learned from by another kind, so a kind's test number is
-  honest only within that kind. A deal stopper hears the weighed number the trial is judged by so far, as `judged.Score`.
-  Unless said there is one kind of every deal, weighing one, and every study scores exactly as it did. Earlier trials handed
-  back to a study are held to its kinds, and refused naming both layouts.
-
-- **An ensemble of whole models, each with its own pipeline.** A member of an ensemble may carry a pipeline of its own —
-  other steps, other features, a log where another takes the number as it is — and the ensemble answers rows through each
-  member's own. `TrainedEnsemble.Of` takes networks trained behind different pipelines, and
-  `study.TrainEnsemble(candidates, candidate => rows, answer)` hands each of your own candidates the rows its own pipeline
-  prepared, the form that hands them all the same rows staying as it was. A served row is replayed through every member's
-  pipeline, each member answers it and comes back through its own pipeline's way back, and only then are their answers
-  combined, in the answer's own units; a row one member's pipeline leaves out is refused, naming where it was handed in. The
-  members answer one question — the same answers, named by the same output — or are refused, naming both. An ensemble is
-  measured and given an interval on rows every member set aside alike, so no member answers, through the blend, a row it
-  learned from: a member that learned from a row another measures or calibrates on is refused, naming the row and both
-  members. `ModelEnsemble.MembersPrepared` holds each member's run, and `Study<TModel>.Needs` says what your model needs of
-  its features — each category as its place, say — so a member trained on categories is served on categories. See
+  weighs each kind's mean in the score and keeps its own numbers in `KindScores` and `KindSpreads`. Each kind is held to
+  its own test rows, so a kind's test number is honest within that kind. Without it every study scores as it did. See
   [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
-
-- **`AdamFamily`, a base for the settings Adam's four kinds share.** `Adam`, `AdamW`, `Nadam` and `RAdam` now derive from
-  `AdamFamily`, which holds their `Betas` and `Epsilon` and the running means they keep: a function that takes any of
-  the four can be written once against the base. Nothing changes for code that uses a kind itself, and no file written
-  changes by a byte.
-
-- **What an importer of your own needs, asked of the library.** `network.Load(entries, alreadyFound)` puts numbers into a
-  network as `Load(entries)` does and refuses together with them the faults your reader found while it read — a number it
-  held wrongly and kept back — each slot once, a slot you found a fault for not also refused as missing; a third argument
-  puts the faults of numbers in the order your file holds them. `description.LoweredFor(each, where)` lowers a
-  `Sequential` description for examples of one shape and refuses what cannot be lowered as a `FormatException` naming where
-  your file's description stands. `OutputActivation` says its own `Word()`, applies itself to outputs (`Applied`), says
-  whether a layer is it (`Closes`) and whether a foreign file's word names it (`OwnedBy`), so what a loss, a compile and a
-  reader decide about an activation is decided once. The Keras, ONNX and PyTorch readers now go through the same.
-- **Every button of the notebook's toolbar is one `ToolbarButton`.** Run, export, take over, make blocks of the steps and the
-  two courses said the same things five times over — the id the toolbar knows them by, that none is icon-only or primary
-  or asks first, how an icon is framed, how a press waits its turn on the notebook. `ToolbarButton` says them once, and
-  `CourseAction` now stands on it; the buttons' ids, labels, icons, places and what pressing them does are as they were.
+- **An ensemble of whole models, each with its own pipeline.** `TrainedEnsemble.Of` takes networks trained behind
+  different pipelines, and `study.TrainEnsemble(candidates, candidate => rows, answer)` your own. A row is served through
+  every member's pipeline and back through its own way back before the answers meet; the ensemble is measured and
+  calibrated only on rows no member learned from.
+- **`PipelineDeclaration.Try(steps)`** hands back the declaration or every fault the steps have, without throwing.
+- **For importers of your own:** `network.Load(entries, alreadyFound)`, `description.LoweredFor(each, where)`, and
+  `OutputActivation`'s `Word()`, `Applied`, `Closes` and `OwnedBy`, which the Keras, ONNX and PyTorch readers now use too.
+- **`AdamFamily`**, the base `Adam`, `AdamW`, `Nadam` and `RAdam` share, and **`ToolbarButton`**, the base of the notebook's
+  toolbar buttons. Nothing changes for code that uses either, and no file changes by a byte.
 
 ### Fixed
 
-- **A `RAdam` with no weight decay can be read back from its file.** It wrote no `weightDecay` and then refused its own
-  file for the lack of it, so a default `RAdam` could not be saved with a checkpoint and resumed; it is read as it was
-  written, with none.
-- **Votes are refused on an amount whether an ensemble serves, is calibrated or is measured.** An ensemble voting on a
-  number answered with noughts and ones and was given an interval of them; only measuring it refused. The refusal now
-  stands where the ensemble is made, before any of the three.
-- **Earlier trials judged on another number of deals are refused.** A study went on from trials of three deals as if they
-  were trials of its six, and weighed a mean of three against a mean of six; it now refuses such a trial, naming how many
-  deals it was judged on and how many the study deals. A trial a pruner or a deal stopper stopped may hold fewer, never more.
-- **`Top` of a study given `Objectives` hands on its best trials first.** It ordered the trials by a score such a study
-  never gives, so they came back in the order they were tried; it now orders them by the same verdict the study chose its
-  `Best` by — the least of the mean objectives, the first that differs deciding it — so `Top(1)` is what the study's
-  `Best` declared.
-- **A study of your own models no longer needs every feature on one scale.** It ran its pipelines as a network takes them,
-  and so refused a feature no step put between minus one and one, which your model never asked for; it now runs them for
-  a learner of numbers, every step as declared.
-- **A notebook whose first blocks leave out the split a later report needs no longer throws.** It reads the longest
-  beginning that is a declaration, and names the step that stops it, as it does for any other fault.
-- **An answer read ahead with no order declared is refused once.** It was refused twice for the one missing order.
-- **A model behind a pipeline that orders its rows is explained by each row's own answer.** Asking a network, an ensemble
-  or a tree why it answers as it does read its answers in the order the pipeline served the rows, and under an `order.by`
-  that is not the order they were handed in, so a row was explained by another row's answer: a column the network never
-  reads, shuffled, moved its answers by 1.55 on average, where it moves them by nothing. Every answer is now put back beside
-  the row it was asked of first. `TrainedMLModel.Predict(rows)` hands its answers back in the order the rows were handed
-  in, as it always said it did; under an `order.by` it handed them back in the pipeline's order, with nothing to tell which
-  was whose.
-- **An ensemble of your own models refuses rows handed over as other features than its members learned from**, as a
-  network, an ensemble of networks, a boosted pair and a tree already did. All five now serve rows the same way and refuse
-  such rows in one sentence, which names the features on both sides.
-- **A pipeline that names no learner, or another one, is refused in the same words by both packages that train.**
-  `Train()` of a network and `TrainWithML()` of a tree each say what the pipeline names, what the package trains and how to
-  declare one, in the one form: *This pipeline names 'learn.ml', which is not a network this package trains: declare one
-  with .WithTorch(…) or .WithTensorflow(…).* A pipeline that names no learner at all is refused as before by a network, and now in
-  the same form by a tree.
+- A `RAdam` with no weight decay can be read back from its own file.
+- An answer under an `order.by` is explained by its own row, not another's, and `TrainedMLModel.Predict` hands its answers
+  back in the order the rows were handed in.
+- `Top` of a study with `Objectives` hands back its best trials first, as `Best` chose them.
+- A study refuses earlier trials judged on another number of deals instead of weighing them against its own.
+- A study of your own models no longer requires every feature between minus one and one.
+- A notebook whose first blocks leave out a split a later report needs names the step that stops it instead of throwing.
+- An ensemble of your own models refuses rows with other features than its members learned from, as the rest already did.
+- A missing order is refused once, not twice, and a pipeline naming another learner is refused in the same words by
+  `Train()` and `TrainWithML()`.
 
 ### Changed
 
-- **`history.known` stands below any split, and a row reads every earlier known row of its key, whatever part it is in.**
-  A training row reads the training floor alone, as before and under any split, so nothing a model is chosen or measured
-  on reaches what it learns from. Every other row reads the floor and every earlier row of its key in the table — a
-  validation row an earlier test row's outcome too, since in production that outcome is known by then. It assumes an
-  earlier row's outcome is known by the time a later row of its key is asked for. The fit now keeps every training row by
-  what it says in the step's own columns (`members` in the fitted file), so a training row is known again in any table and
-  a pipeline replayed over its own rows writes the column it wrote; a pipeline fitted by 0.18.0, which kept no such list,
-  is read and served as it was. It asks for no order of the rows any more. `history` and `history.known` are now one
-  `EarlierRowsStep`, which differs only in which rows besides the floor a row may read.
-- **The 0.18.0 notes said `history` is refused under `split.atRandom` and `split.stratified`; it never was.** It reads the
-  training rows alone, so it needs no split in time, and it stands below any split, as it always did.
-- **A checkpoint whose network records nothing of what it was trained on is refused in the words every other file of a
-  trained model uses.** It said "a checkpoint says its features, its answers and the fit of the pipeline it was taken
-  behind"; it now says, like a network's, an ensemble's and a boosted pair's file, "the file of a trained network says its
-  features, its answers and the fit of the pipeline it was trained behind". No file written changes by a byte: the four
-  kinds of file are now framed by one writer and held to what they carry by one reader.
-- **A setting that must be a finite number above nothing, or of at least nothing, is refused in one sentence for each.**
-  A learning rate, an epsilon, a spread, a gain, a penalty, a bound, a share of the rate, a momentum, a weight decay, a
-  noise, the least rate of a schedule and the rest said the same thing in about ten different wordings; every one now names
-  what the setting is and then says "is a finite number above nothing" or "is a finite number of at least nothing", so a
-  message that used to read "A learning rate is a number above nothing" reads "A learning rate is a finite number above
-  nothing". The same two questions are asked by the reader of a network file, so the file and the code cannot disagree about
-  what a number may be. The least rate of a `TrainingPlateau` was refused only below nothing or not a number, and let
-  infinity through; it is now refused as every other is. A share of the rate of nothing still points to `Held`.
-- **A network file's refusal of a part too early for what it says is one sentence.** The norm a run's gradients were clipped
-  to, in a training part of the first or second version, was refused without saying where it stood; it now says, as the
-  rest do, "…, under 'clipNorm', is written from the third version of a training part on, and this one is of the second".
-  The versions a part is written from are held in one table that the writer and the reader both read, so a file is written
-  as the version its reader will accept it from; no file written changes by a byte.
-
-- **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.30.0.** Its data frame now hands
-  over the column or the bars an indicator reads, and the indicator is made from its own class; `indicator.add` builds
-  each indicator that way and computes the same numbers it did. MatPlotLibNet now rounds each channel of a colour it
-  darkens rather than cutting it off, so the notebook grid's shade for a category the training rows never held is
-  `#7A4964`, one step from the `#7A4864` it was. ML.NET's trainer is on Microsoft.ML 6.0.0 and
-  Microsoft.ML.FastTree 6.0.0, the Binance landing on Polly.Core 8.9.1. Every other package reference is at its newest
-  version but for the pins that name their reason in the project: the .NET 10 line of System.Numerics.Tensors and
-  Microsoft.Extensions, whose 11 releases are no longer built for .NET 8, Verso.Abstractions's range, NAudio.Core 2.4.0
-  and Corvus.Json.Validator 5.7.9.
+- **`history.known` stands below any split.** A training row reads the training rows alone, as before; every other row
+  reads every earlier known row of its key, whatever part it is in, assuming an earlier outcome is known by the time a
+  later row is asked for. A pipeline fitted by 0.18.0 is read and served as it was.
+- **The 0.18.0 notes said `history` is refused under `split.atRandom` and `split.stratified`; it never was.**
+- **Refusals say the same thing in the same words.** A setting that must be a finite number says "is a finite number above
+  nothing" or "of at least nothing", the least rate of a `TrainingPlateau` no longer lets infinity through, and every file of
+  a trained model, and a part too early for what it holds, is refused in one wording. No file written changes by a byte.
+- **Built on MatPlotLibNet 1.30.0**, Microsoft.ML and Microsoft.ML.FastTree 6.0.0 and Polly.Core 8.9.1; the notebook grid's
+  shade for a category the training rows never held is now `#7A4964`, as MatPlotLibNet now rounds a darkened colour. Every
+  other reference is at its newest but for the pins that name their reason in the project: the .NET 10 line of
+  System.Numerics.Tensors and Microsoft.Extensions, whose 11 releases are no longer built for .NET 8, Verso.Abstractions's
+  range, NAudio.Core 2.4.0 and Corvus.Json.Validator 5.7.9.
 
 ## [0.18.0]
 
