@@ -16,6 +16,22 @@ updates:
       # refuses an extension compiled against a newer minor than the one it runs. Raising that floor decides who can
       # still load the package, so it is a decision rather than an update, and the notebook's tests refuse it.
       - dependency-name: "Verso.Abstractions"
+      # Every package ships for .NET 8 as well as .NET 10, and the 11 releases of these are no longer built for .NET 8:
+      # the .NET 10 line stays until .NET 8 is dropped, which follows Verso's hosts, not a date.
+      - dependency-name: "Microsoft.Extensions.*"
+        versions: [">= 11"]
+      - dependency-name: "System.Numerics.Tensors"
+        versions: [">= 11"]
+      - dependency-name: "Microsoft.Data.Sqlite"
+        versions: [">= 11"]
+      - dependency-name: "Microsoft.SourceLink.GitHub"
+        versions: [">= 11"]
+      # 5.8.0 dropped its own net8.0 build, so the schema it compiles at test time no longer compiles on that runtime.
+      - dependency-name: "Corvus.Json.Validator"
+        versions: [">= 5.8"]
+      # 3.x is built for .NET 9 and later.
+      - dependency-name: "NAudio.Core"
+        versions: [">= 3"]
 
   - package-ecosystem: github-actions
     directory: "/"
