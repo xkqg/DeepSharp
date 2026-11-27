@@ -64,11 +64,14 @@ Src/DeepSharp.Pipelines/          the data side
                                     waiting for what only a person knows — not Course.cs below, the steps a run takes
     ColumnState.cs                  which columns there are at each step, followed from the schema down
     ColumnChoices.cs                what can be done to a column, and how each stands
-    Steps.cs Schema.cs Splits.cs RowOrder.cs
-                                    reading, declaring, putting in order, dividing
+    Sources.cs Schema.cs RowOrder.cs
+                                    reading, declaring, putting in order
+    Part.cs                         the parts a row can belong to, what each is for, and the shares a split deals
+    Splits.cs                       the steps that divide: at random, by a column's mixture, by time
+    SplitPlacement.cs               how a deal is made and put back onto the rows: the rank, the id's rank, the placement
     Features.cs TimeParts.cs Maths.cs
                                     what is worked out from a single row
-    FillStrategy.cs FillNaN.cs Scaling.cs Encoding.cs Outliers.cs DropColumns.cs DropWarmUp.cs
+    FillMissing.cs FillStrategy.cs FillNaN.cs Scaling.cs Encoding.cs Outliers.cs DropColumns.cs DropWarmUp.cs
                                     what learns, and what takes rows or columns away
     Piecewise.cs History.cs         a number written as how far it fills a few bins; a key's history over its earlier
                                     training rows

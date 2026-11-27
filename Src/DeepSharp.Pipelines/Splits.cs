@@ -4,291 +4,9 @@
 using System.Globalization;
 using System.Text.Json;
 using Slices = DeepSharp.Pipelines.Fold;
+using Places = DeepSharp.Pipelines.Origin;
 
 namespace DeepSharp.Pipelines;
-
-/// <summary>Which part of the data a row belongs to: what it is there for, not where it sits.</summary>
-public enum Part
-{
-    /// <summary>The rows a model learns from, and the only rows anything is fitted on.</summary>
-    Train,
-
-    /// <summary>The rows used while choosing between models.</summary>
-    Validation,
-
-    /// <summary>The rows kept back until the end.</summary>
-    Test,
-
-    /// <summary>The rows held back further still, to predict on once the model is trained.</summary>
-    Predict,
-
-    /// <summary>Rows nothing has divided: a pipeline that never splits them.</summary>
-    /// <remarks>
-    /// Never training. Rows no split has divided are not the rows a model learns from, and calling them that
-    /// is how a statistic over every row comes to look like one over the training rows alone.
-    /// </remarks>
-    Undivided,
-
-    /// <summary>The last moments of a part, kept apart by a split in time: fitted on by nothing, handed to nothing.</summary>
-    /// <remarks>
-    /// An answer read some rows ahead is read from later rows, so without these the last training rows would learn
-    /// their answers from the rows a model is measured on, and the last rows of all have no later row to answer
-    /// them.
-    /// </remarks>
-    Gap,
-
-    /// <summary>The rows an interval is calibrated on: fitted on by nothing, and chosen by nothing.</summary>
-    /// <remarks>
-    /// Not training, which fits on them; not validation, which chooses between models by them and so has already seen what it
-    /// chose; and not test, which a number is reported on once everything else is settled. A split that sets none aside
-    /// divides the rows exactly as it always did.
-    /// </remarks>
-    Calibration,
-}
-
-/// <summary>
-/// What a part is for, said once: which rows a fit learns from, which a split deals again, and which parts a fit or a split
-/// writes down.
-/// </summary>
-/// <remarks>
-/// Every reader of a <see cref="Part"/> that has to decide a set of them asks here, so a part added later is decided in one place
-/// rather than in each reader that happened to list the others. A split that WRITES parts is not a reader and stays where it is.
-/// </remarks>
-internal static class PartFacts
-{
-    extension(Part part)
-    {
-        /// <summary>Whether a fit learns from the rows of this part: training alone, the only rows anything is fitted on.</summary>
-        internal bool IsLearnedFrom => part == Part.Train;
-
-        /// <summary>Whether the rows of this part are rows that learn: the training rows, and the validation rows a model is chosen on.</summary>
-        /// <remarks>What a split deals again into folds or origins, once test, calibration and predict are set aside.</remarks>
-        internal bool Learns => part is Part.Train or Part.Validation;
-
-        /// <summary>Whether a learner is handed the rows of this part: all of them but the rows a split keeps apart.</summary>
-        internal bool IsHandedOver => part != Part.Gap;
-    }
-
-    extension(Part)
-    {
-        /// <summary>The parts a fit always counts the rows of, in the order it writes them, empty or not.</summary>
-        internal static IReadOnlyList<Part> Counted => [Part.Train, Part.Validation, Part.Test, Part.Predict];
-
-        /// <summary>The parts a fit counts the rows of only when a split gave it any, so a file written before them is unchanged.</summary>
-        internal static IReadOnlyList<Part> CountedWhenKept => [Part.Gap, Part.Calibration];
-
-        /// <summary>The parts a split deals rows to, in the order a time split names the stretch of time each covers.</summary>
-        internal static IReadOnlyList<Part> Dealt => [Part.Train, Part.Validation, Part.Calibration, Part.Test, Part.Predict];
-    }
-
-    extension(IReadOnlyList<Part> parts)
-    {
-        /// <summary>Whether a row is a training row.</summary>
-        /// <param name="row">The row, by its place.</param>
-        internal bool IsTraining(int row) => parts[row].IsLearnedFrom;
-
-        /// <summary>Every training row, in row order: the rows a fit learns from.</summary>
-        internal int[] TrainingRows() => [.. Enumerable.Range(0, parts.Count).Where(parts.IsTraining)];
-
-        /// <summary>The rows that learn among those given, in the order given.</summary>
-        /// <param name="among">The rows to choose from, by their place.</param>
-        internal int[] LearningRows(IEnumerable<int> among) => [.. among.Where(row => parts[row].Learns)];
-    }
-}
-
-/// <summary>
-/// The shares a split divides the rows into.
-/// </summary>
-/// <param name="Train">The share the model learns from.</param>
-/// <param name="Validation">The share used while choosing between models.</param>
-/// <param name="Test">The share kept back until the end.</param>
-/// <param name="Predict">The share held back to predict on; usually none.</param>
-/// <param name="Calibration">The share an interval is calibrated on; usually none.</param>
-/// <remarks>
-/// One type rather than five loose numbers, because they are only meaningful together: each has to be a
-/// share, and together they have to make a whole. Written as the negation of what a share is, because every
-/// comparison against a not-a-number is false and a range test lets NaN through.
-/// </remarks>
-public readonly record struct SplitShares(double Train, double Validation, double Test, double Predict = 0, double Calibration = 0)
-{
-    /// <summary>Shares of four parts: training, validation, test and predict, none of them to calibrate an interval on.</summary>
-    /// <param name="train">The share the model learns from.</param>
-    /// <param name="validation">The share used while choosing between models.</param>
-    /// <param name="test">The share kept back until the end.</param>
-    /// <param name="predict">The share held back to predict on.</param>
-    /// <remarks>The form the shares had before a share could be set aside to calibrate on, kept so that nothing written against it breaks.</remarks>
-    public SplitShares(double train, double validation, double test, double predict)
-        : this(train, validation, test, predict, 0)
-    {
-    }
-
-    /// <summary>The four shares that were all there was before a share could be set aside to calibrate on.</summary>
-    /// <param name="train">The share the model learns from.</param>
-    /// <param name="validation">The share used while choosing between models.</param>
-    /// <param name="test">The share kept back until the end.</param>
-    /// <param name="predict">The share held back to predict on.</param>
-    public void Deconstruct(out double train, out double validation, out double test, out double predict)
-    {
-        train = Train;
-        validation = Validation;
-        test = Test;
-        predict = Predict;
-    }
-
-    /// <summary>The shares you write down, none of them to calibrate an interval on; the one to be measured on is worked out.</summary>
-    /// <param name="train">The share the model learns from.</param>
-    /// <param name="validation">The share used while choosing between models; none, unless you say.</param>
-    /// <param name="predict">The share held back to predict on; none, unless you say.</param>
-    /// <returns>The shares, as fractions.</returns>
-    /// <exception cref="ArgumentException">They ask for more than there is, or leave nothing to measure on.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">One of them is not a number.</exception>
-    /// <remarks>The form this had before a share could be set aside to calibrate on, kept so that nothing written against it breaks.</remarks>
-    public static SplitShares Of(double train, double validation = 0, double predict = 0) => Of(train, validation, predict, calibration: 0);
-
-    /// <summary>The shares you write down; the one to be measured on is worked out.</summary>
-    /// <param name="train">The share the model learns from.</param>
-    /// <param name="validation">The share used while choosing between models.</param>
-    /// <param name="predict">The share held back to predict on.</param>
-    /// <param name="calibration">The share an interval is calibrated on.</param>
-    /// <returns>The shares, as fractions.</returns>
-    /// <exception cref="ArgumentException">They ask for more than there is, or leave nothing to measure on.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">One of them is not a number.</exception>
-    /// <remarks>
-    /// The test share is never written down: it is whatever is left, so nothing can add up to more than
-    /// everything there is. Percentages and fractions are told apart by what the written shares add up to —
-    /// more than one means percentages — so <c>Of(80, 10)</c> and <c>Of(0.8, 0.1)</c> say the same thing,
-    /// and <c>Of(0.7, 0.1, 10)</c>, which mixes the two, is refused rather than read as seven-tenths of a
-    /// percent.
-    /// </remarks>
-    public static SplitShares Of(double train, double validation, double predict, double calibration)
-    {
-        // A share that is not a finite number is refused before anything is added up: the sum of an
-        // infinity is an infinity, and the message would then be about a whole rather than about the
-        // number that is not one.
-        ThrowIfNotFinite(train, nameof(train));
-        ThrowIfNotFinite(validation, nameof(validation));
-        ThrowIfNotFinite(predict, nameof(predict));
-        ThrowIfNotFinite(calibration, nameof(calibration));
-
-        // Percentages or fractions, decided by whether any one of them is bigger than a whole — not by
-        // what they add up to, because 0.70 and 0.45 add up to more than one while plainly being written
-        // as fractions, and reading them as percentages would quietly make training seven-tenths of one.
-        var spoken = train + validation + predict + calibration;
-        var whole = train > 1 || validation > 1 || predict > 1 || calibration > 1 ? 100 : 1;
-
-        if (whole == 100 && new[] { train, validation, predict, calibration }.Any(share => share > 0 && share < 1))
-        {
-            throw new ArgumentException(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{train}, {validation}, {predict} and {calibration} are not written in the same units: one of them is a fraction among percentages."),
-                nameof(train));
-        }
-
-        if (spoken > whole + 1e-9)
-        {
-            throw new ArgumentException(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{train}, {validation}, {predict} and {calibration} ask for {spoken:0.####} of {whole}, and a split cannot use more rows than there are."),
-                nameof(train));
-        }
-
-        if (Math.Abs(spoken - whole) <= 1e-9)
-        {
-            throw new ArgumentException(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"{train}, {validation}, {predict} and {calibration} are the whole of the data and leave nothing to be measured on."),
-                nameof(train));
-        }
-
-        // Rounded, because a subtraction in one unit and the same subtraction in the other do not give
-        // the same bits — 1 - 0.9 is not 10 / 100 — and two declarations that say the same thing have
-        // to compare equal.
-        var test = Math.Round(whole - spoken, 12);
-
-        return new SplitShares(train / whole, validation / whole, test / whole, predict / whole, calibration / whole);
-    }
-
-    /// <summary>Checks that these are shares that make a whole.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">One of them is not a share.</exception>
-    /// <exception cref="ArgumentException">Together they are not a whole.</exception>
-    public void Validate()
-    {
-        ThrowIfNotAShare(Train, nameof(Train));
-        ThrowIfNotAShare(Test, nameof(Test));
-
-        // Validation and predict may be nothing at all: a two-way division into training and test is an
-        // ordinary way to work, and so is having no slice to predict on. A part that is simply not there
-        // is different from one that was meant to exist and came out empty. Training and test may not be
-        // nothing, because a model learns from one and is measured on the other.
-        ThrowIfNotAShareOrNothing(Validation, nameof(Validation));
-        ThrowIfNotAShareOrNothing(Predict, nameof(Predict));
-        ThrowIfNotAShareOrNothing(Calibration, nameof(Calibration));
-
-        var total = Train + Validation + Test + Predict + Calibration;
-
-        if (Math.Abs(total - 1) > 1e-9)
-        {
-            throw new ArgumentException(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"The shares add up to {total:0.####} and a split has to use every row."),
-                nameof(Train));
-        }
-    }
-
-    /// <summary>Hands out the parts for a given number of rows, in order.</summary>
-    /// <param name="rows">How many rows there are.</param>
-    /// <returns>Which part each position belongs to, training first and predict last; the calibration rows come before the test rows.</returns>
-    public Part[] Over(int rows)
-    {
-        var train = (int)Math.Round(rows * Train, MidpointRounding.AwayFromZero);
-        var validation = (int)Math.Round(rows * Validation, MidpointRounding.AwayFromZero);
-        var calibration = (int)Math.Round(rows * Calibration, MidpointRounding.AwayFromZero);
-        var test = (int)Math.Round(rows * Test, MidpointRounding.AwayFromZero);
-
-        var parts = new Part[rows];
-
-        for (var at = 0; at < rows; at++)
-        {
-            parts[at] = at < train ? Part.Train
-                : at < train + validation ? Part.Validation
-                : at < train + validation + calibration ? Part.Calibration
-                : at < train + validation + calibration + test || Predict is 0 ? Part.Test
-                : Part.Predict;
-        }
-
-        return parts;
-    }
-
-    private static void ThrowIfNotFinite(double share, string name)
-    {
-        if (!double.IsFinite(share))
-        {
-            throw new ArgumentOutOfRangeException(name, share, "A share of the data is a number.");
-        }
-    }
-
-    private static void ThrowIfNotAShare(double share, string name)
-    {
-        if (!(share > 0 && share <= 1))
-        {
-            throw new ArgumentOutOfRangeException(
-                name, share, "A share of the data is more than none of it and at most all of it.");
-        }
-    }
-
-    private static void ThrowIfNotAShareOrNothing(double share, string name)
-    {
-        if (!(share >= 0 && share <= 1))
-        {
-            throw new ArgumentOutOfRangeException(
-                name, share, "A share of the data is at least none of it and at most all of it.");
-        }
-    }
-}
 
 /// <summary>
 /// Split the rows at random, with a seed so it happens the same way every time.
@@ -593,212 +311,203 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
     }
 }
 
-/// <summary>The one key a step that ranks rows takes to say it ranks by the declared id instead of the whole record.</summary>
+/// <summary>
+/// Split the rows into training, validation and test by where they sit in time.
+/// </summary>
 /// <remarks>
-/// Shared by every step <see cref="SplitPlacement.Ranked"/> serves, so a file says "by the declared id" once, the same
-/// way, wherever it is read. Left out, as every file before this key existed is, a step ranks by the whole record exactly
-/// as it always has — declaring an id changes nothing on its own, until a step is asked to rank by it.
+/// This is the line in the chain. Above it nothing may learn from the data; below it the operations that do
+/// become available, and each of them is fitted on the training rows alone.
+/// <para>
+/// A moment is never divided: every row of one moment lands in the part its first row does, so what happened
+/// at one time is on one side of the line or the other. Rows are placed in the order of their time and then
+/// of their keys, so the same rows are divided the same way whatever order they arrive in.
+/// </para>
+/// <para>
+/// A gap keeps the last moments of every part apart — before each line and at the end — for an answer read
+/// from later rows: without one, the last training rows learn their answers from the rows a model is measured
+/// on. The rows in the gap are fitted on by nothing and handed to nothing.
+/// </para>
 /// </remarks>
-internal static class Ranking
+public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep<SplitByTimeStep>, IDescribesColumns
 {
-    /// <summary>Whether a step ranks by the declared id rather than the whole record; left out, it does not.</summary>
-    internal static readonly TrueOrFalseParameter ByIdKey = new(
-        "byId", "Whether to rank by the declared id rather than the whole record. Left out, by the whole record.", example: false)
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column that says when a row happened.", "when", ColumnKinds.Ordered);
+
+    private static readonly SplitSharesParameter SharesKey = new();
+
+    private static readonly WholeNumberParameter GapKey = new(
+        "gap", "How many of the last moments of every part are kept apart, fitted on by nothing and handed to nothing: at least as many as the rows an answer reads ahead. Left out, none.",
+        0)
     {
-        LeftOut = false,
+        AtLeast = 0,
+        LeftOut = 0,
     };
 
-    extension(ISplitStep step)
+    /// <summary>Declares a split in time, by shares that together make a whole.</summary>
+    /// <param name="column">The column that says when a row happened.</param>
+    /// <param name="shares">How much goes to training, validation, test and predicting.</param>
+    /// <exception cref="ArgumentException">The column has no name, or the shares do not make a whole.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A share is not a share: nothing, or more than everything.</exception>
+    public SplitByTimeStep(string column, SplitShares shares)
+        : this(column, shares, 0)
     {
-        /// <summary>This step, asked to rank by the declared id, for the split kinds that read one; unchanged for the one that does not.</summary>
-        /// <returns>The step with <c>ById</c> set, where it has one.</returns>
-        internal ISplitStep RankedById() => step switch
-        {
-            SplitAtRandomStep random => random with { ById = true },
-            SplitStratifiedStep stratified => stratified with { ById = true },
-            _ => step,
-        };
     }
-}
 
-/// <summary>A row's rank when a declared id is in force: by the id first, by the whole record only to break a tie.</summary>
-/// <param name="Primary">The seeded rank of the id.</param>
-/// <param name="Tie">The seeded rank of the whole record, which a repeated id leaves to break.</param>
-/// <remarks>
-/// An id is a group, named by the person who declared it — "a flock number, a customer code" — and never
-/// promised to be one row: two rows of one id rank together by it, and only between two different ids does
-/// the whole record decide which comes first.
-/// </remarks>
-internal readonly record struct CompositeRank(RowKey Primary, RowKey Tie) : IComparable<CompositeRank>
-{
+    /// <summary>Declares a split in time that keeps the last moments of every part apart.</summary>
+    /// <param name="column">The column that says when a row happened.</param>
+    /// <param name="shares">How much goes to training, validation, test and predicting.</param>
+    /// <param name="gap">How many of the last moments of every part are kept apart; none for no gap.</param>
+    /// <exception cref="ArgumentException">The column has no name, or the shares do not make a whole.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A share is not a share, or the gap is below nothing.</exception>
+    public SplitByTimeStep(string column, SplitShares shares, int gap)
+    {
+        Column = ColumnKey.Require(column);
+        Shares = SharesKey.Require(shares);
+        Gap = GapKey.Require(gap);
+    }
+
+    /// <summary>Declares a split in time whose cut between training and validation is moved to one of several places.</summary>
+    /// <param name="column">The column that says when a row happened.</param>
+    /// <param name="shares">How much goes to training and test; a validation share, which the origin has no use for, only adds to the rows that are cut.</param>
+    /// <param name="gap">How many of the last moments of training and of validation are kept apart; none for no gap.</param>
+    /// <param name="origin">Which place the cut stands at.</param>
+    /// <exception cref="ArgumentException">The column has no name, or the shares do not make a whole.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A share is not a share, or the gap is below nothing.</exception>
+    public SplitByTimeStep(string column, SplitShares shares, int gap, Origin origin)
+        : this(column, shares, gap)
+    {
+        Origin = origin;
+    }
+
     /// <inheritdoc />
-    public int CompareTo(CompositeRank other)
+    public static StepParameters<SplitByTimeStep> Parameters { get; } = new StepParameters<SplitByTimeStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(SharesKey, step => step.Shares)
+        .With(GapKey, step => step.Gap)
+        .With(Places.OriginsKey, step => step.Origin?.Origins ?? 0)
+        .With(Places.OriginKey, step => step.Origin?.Index ?? -1);
+
+    /// <summary>The column that says when a row happened.</summary>
+    public string Column { get; }
+
+    /// <summary>Which place the cut between training and validation stands at; nothing when the rows are cut once, as the shares say.</summary>
+    public Origin? Origin { get; }
+
+    /// <summary>How much goes to training, validation, test and predicting.</summary>
+    public SplitShares Shares { get; }
+
+    /// <summary>How many of the last moments of every part are kept apart.</summary>
+    public int Gap { get; }
+
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">A row has no time, or its time is not a number.</exception>
+    public Part[] Assign(Table table)
     {
-        var primary = Primary.CompareTo(other.Primary);
+        ArgumentNullException.ThrowIfNull(table);
 
-        return primary != 0 ? primary : Tie.CompareTo(other.Tie);
-    }
-}
+        // A row with no time cannot be placed in a split by time, and guessing where it belongs is how a row
+        // from next year ends up in the training data.
+        var when = table.RowOrderBy(Column);
+        var order = Enumerable.Range(0, table.RowCount).ToArray();
 
-/// <summary>
-/// Putting a run of parts back onto the rows they belong to.
-/// </summary>
-internal static class SplitPlacement
-{
-    extension(Table table)
-    {
-        /// <summary>The column the schema says names each row, when it still stands; nothing when none does, or it was dropped.</summary>
-        internal IColumn? IdColumnInForce => table.Id is { } id && table.Has(id) ? table[id] : null;
-
-        /// <summary>The id column, when a step asks to rank by it; nothing when it does not ask.</summary>
-        /// <param name="byId">Whether the step ranks by the declared id.</param>
-        /// <returns>The id column, when <paramref name="byId"/> asks for it; nothing otherwise.</returns>
-        /// <exception cref="InvalidOperationException"><paramref name="byId"/> asks for it, and no id stands here.</exception>
-        internal IColumn? IdColumnFor(bool byId) =>
-            !byId ? null
-            : table.IdColumnInForce is { } column ? column
-            : throw new InvalidOperationException(
-                "This step ranks by the declared id, and no id stands here: a step above it took the id column away. "
-                + "Keep the id above this step, or do not ask to rank by it.");
-
-        /// <summary>The text a row holds in the id column, refusing a gap.</summary>
-        /// <param name="column">The id column, as read off this table.</param>
-        /// <param name="row">The row.</param>
-        /// <returns>The text.</returns>
-        /// <exception cref="InvalidOperationException">The row has no value there.</exception>
-        /// <remarks>The one guard an id is read through, so a split, a shuffle and the handover refuse a gap the same way.</remarks>
-        internal string IdAt(IColumn column, int row) =>
-            column.TextAt(row) ?? throw new InvalidOperationException(
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"Row {table.Identities[row].ReadAt + 1} has no '{column.Name}': the id names every row it is carried with, so a gap there is refused. Fill it in the rows, or drop the rows without one."));
-
-        /// <summary>Rows in the order of a digest of the seed and what each row says — or, when a step ranks by the declared id, of the seed and the id, with the whole record only to break a tie.</summary>
-        /// <param name="rows">The rows to rank.</param>
-        /// <param name="seed">The number that makes the ranking one of many possible ones, and the same one each time.</param>
-        /// <param name="byId">Whether to rank by the declared id rather than the whole record.</param>
-        /// <returns>The rows, ranked; rows that say the same thing, or share the id a step ranks by, stand side by side.</returns>
-        /// <remarks>
-        /// SHA-256 rather than a generator of random numbers: a generator shuffles places, so the same rows in
-        /// another order were dealt differently, while a digest of what a row says ranks it the same wherever it
-        /// stands, on every machine. Ranking by the id uses the same digest, over the id alone, so adding or
-        /// dropping a feature column never moves a row to another part.
-        /// </remarks>
-        internal int[] Ranked(IEnumerable<int> rows, int seed, bool byId = false)
+        Array.Sort(order, (one, other) =>
         {
-            var ranked = rows.ToArray();
+            var compared = when(one, other);
 
-            if (table.IdColumnFor(byId) is { } column)
+            return compared != 0 ? compared : table.Identities[one].Key.CompareTo(table.Identities[other].Key);
+        });
+
+        var parts = Shares.Over(table.RowCount).Placed(order);
+
+        parts.KeptTogether(order, (one, other) => when(one, other) == 0);
+
+        if (Origin is { } place)
+        {
+            // The rows that learn in the order of their time, cut into one block more than there are origins: the blocks up to the
+            // origin are training, the next is validation, and the rows after it are fitted on by nothing.
+            var learning = parts.LearningRows(order);
+            var blocks = new int[learning.Length];
+
+            for (var at = 0; at < learning.Length; at++)
             {
-                var ranks = ranked
-                    .Select(row => new CompositeRank(RowKey.Of([column.Name], [table.IdAt(column, row)]).Ranked(seed), table.Identities[row].Key.Ranked(seed)))
-                    .ToArray();
-
-                Array.Sort(ranks, ranked);
+                blocks[at] = at > 0 && when(learning[at - 1], learning[at]) == 0 ? blocks[at - 1] : place.BlockOf(at, learning.Length);
+                parts[learning[at]] = blocks[at] <= place.Index ? Part.Train : blocks[at] == place.Index + 1 ? Part.Validation : Part.Gap;
             }
-            else
-            {
-                var ranks = ranked.Select(row => table.Identities[row].Key.Ranked(seed)).ToArray();
-
-                Array.Sort(ranks, ranked);
-            }
-
-            return ranked;
         }
 
-        /// <summary>Whether two rows belong together: the same declared id, when a step ranks by it; the same record otherwise.</summary>
-        /// <param name="one">A row.</param>
-        /// <param name="other">Another row.</param>
-        /// <param name="byId">Whether the step ranks by the declared id.</param>
-        internal bool Together(int one, int other, bool byId = false) =>
-            table.IdColumnFor(byId) is { } column
-                ? table.IdAt(column, one) == table.IdAt(column, other)
-                : table.Identities[one].Key == table.Identities[other].Key;
+        parts.Gapped(order, Gap, (one, other) => when(one, other) == 0);
+
+        // A gap wider than a part takes the whole of it, and a model with nothing to learn from, or nothing to be
+        // measured on, is a run that should stop rather than succeed.
+        ThrowIfTheGapTookAll(parts, Part.Train, "learn from");
+        ThrowIfTheGapTookAll(parts, Part.Test, "measure on");
+
+        return parts;
     }
 
-    extension(Part[] parts)
+    private void ThrowIfTheGapTookAll(Part[] parts, Part part, string purpose)
     {
-        /// <summary>Gives every row the part of the row before it, when the two belong together.</summary>
-        /// <param name="ordered">The rows in the order the parts were handed out.</param>
-        /// <param name="together">Whether a row belongs with the one before it: the same row twice, the same moment.</param>
-        internal void KeptTogether(int[] ordered, Func<int, int, bool> together)
+        if (Gap > 0 && !parts.Contains(part))
         {
-            for (var at = 1; at < ordered.Length; at++)
-            {
-                if (together(ordered[at - 1], ordered[at]))
-                {
-                    parts[ordered[at]] = parts[ordered[at - 1]];
-                }
-            }
+            throw new InvalidOperationException(string.Create(
+                CultureInfo.InvariantCulture,
+                $"A gap of {Gap} moments takes every row of {part.Word()}, and leaves nothing to {purpose}. Keep fewer moments apart, or divide more rows."));
         }
+    }
 
-        /// <summary>Deals the rows that learn into slices in the order given: the fold's slice is validation and the others are training.</summary>
-        /// <param name="ordered">The rows that learn, in the order the seed ranks them.</param>
-        /// <param name="slice">Which slice is validation.</param>
-        /// <param name="together">Whether a row is a copy of the one before it, which stays in its slice.</param>
-        internal void Sliced(int[] ordered, Fold slice, Func<int, int, bool> together)
+    /// <inheritdoc />
+    /// <remarks>
+    /// Where each part starts and ends, in the column it was divided by: a model trained on one stretch of
+    /// time and measured on the next can say which stretches they were.
+    /// </remarks>
+    public void Describe(Table table, IReadOnlyList<Part> parts, FittedStepValues seen)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(parts);
+        ArgumentNullException.ThrowIfNull(seen);
+
+        var column = table[Column];
+        var when = Comparer<int>.Create(table.RowOrderBy(Column));
+
+        foreach (var part in Part.Dealt)
         {
-            var slices = new int[ordered.Length];
+            var rows = Enumerable.Range(0, table.RowCount).Where(row => parts[row] == part).Order(when).ToArray();
 
-            for (var at = 0; at < ordered.Length; at++)
+            if (rows.Length > 0)
             {
-                slices[at] = at > 0 && together(ordered[at - 1], ordered[at]) ? slices[at - 1] : slice.SliceOf(at, ordered.Length);
-                parts[ordered[at]] = slices[at] == slice.Index ? Part.Validation : Part.Train;
-            }
-        }
-
-        /// <summary>Keeps the last moments of every part apart: before each line, and at the end.</summary>
-        /// <param name="ordered">The rows in the order the parts were handed out.</param>
-        /// <param name="gap">How many moments of each part are kept apart.</param>
-        /// <param name="together">Whether a row belongs with the one before it: the same moment.</param>
-        /// <remarks>Moments rather than rows, so a moment is kept apart whole, as a split keeps it whole.</remarks>
-        internal void Gapped(int[] ordered, int gap, Func<int, int, bool> together)
-        {
-            var end = ordered.Length;
-
-            while (end > 0)
-            {
-                var part = parts[ordered[end - 1]];
-                var start = end - 1;
-
-                while (start > 0 && parts[ordered[start - 1]] == part)
-                {
-                    start--;
-                }
-
-                var moments = 0;
-
-                for (var at = end - 1; at >= start && moments < gap; at--)
-                {
-                    parts[ordered[at]] = Part.Gap;
-
-                    // The row that begins its moment completes one moment kept apart.
-                    if (at == start || !together(ordered[at - 1], ordered[at]))
-                    {
-                        moments++;
-                    }
-                }
-
-                end = start;
+                seen.Learned($"moments.{part.Word()}", [Moment(column, rows[0]), Moment(column, rows[^1])]);
             }
         }
     }
 
-    extension(Part[] inOrder)
-    {
-        /// <summary>Lays a run of parts out over the rows in a given order.</summary>
-        /// <param name="rows">The rows, in the order the parts should be handed out.</param>
-        /// <returns>One part per row, in row order.</returns>
-        internal Part[] Placed(int[] rows)
-        {
-            var parts = new Part[inOrder.Length];
+    /// <inheritdoc />
+    public ColumnState After(ColumnState before) => before;
 
-            for (var at = 0; at < rows.Length; at++)
-            {
-                parts[rows[at]] = inOrder[at];
-            }
+    // A moment is written the one way that reads the same everywhere; a number as its shortest exact form.
+    private static string Moment(IColumn column, int row) =>
+        column is Column<DateTime> moments
+            ? moments[row]!.Value.ToString("o", CultureInfo.InvariantCulture)
+            : column.TextAt(row)!;
 
-            return parts;
-        }
-    }
+    /// <inheritdoc />
+    public static string Name => "split.byTime";
+
+    /// <inheritdoc />
+    public static string Purpose => "Divides the rows by when they happened: the earliest to learn from, the latest to be measured on.";
+
+    /// <inheritdoc />
+    /// <remarks>The second version keeps a moment whole and places rows by what they say, not where they stand.</remarks>
+    public static int Since => 2;
+
+    /// <inheritdoc />
+    public string Verb => Name;
+
+    /// <summary>Reads this step back out of a file.</summary>
+    /// <param name="element">The JSON object the step was written as.</param>
+    /// <returns>The step the file describes.</returns>
+    /// <exception cref="FormatException">A parameter is missing or is of the wrong kind.</exception>
+    public static SplitByTimeStep ReadFrom(JsonElement element) =>
+        Places.ReadFrom(element) is { } placed
+            ? new(ColumnKey.Read(element), SharesKey.Read(element), GapKey.Read(element), placed)
+            : new(ColumnKey.Read(element), SharesKey.Read(element), GapKey.Read(element));
 }
