@@ -174,7 +174,8 @@ public class GridTests
         Assert.Equal("category", map.Name);
         Assert.Equal("#CC79A7", map.GetColor(0).ToHex());
         Assert.Equal(map.GetColor(0), map.GetColor(1));
-        Assert.Equal("#7A4864", map.GetOverColor()!.Value.ToHex());
+        // Six tenths of every channel, each rounded to the nearest step, as MatPlotLibNet's Modulate darkens a colour.
+        Assert.Equal("#7A4964", map.GetOverColor()!.Value.ToHex());
         Assert.Equal(map.GetOverColor(), map.GetUnderColor());
         Assert.Equal(EdgesColorMap.Coolwarm.GetBadColor(), map.GetBadColor());
     }

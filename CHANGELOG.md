@@ -183,7 +183,9 @@ The seventh letter of the flock team.
 
 - **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.30.0.** Its data frame now hands
   over the column or the bars an indicator reads, and the indicator is made from its own class; `indicator.add` builds
-  each indicator that way and computes the same numbers it did. ML.NET's trainer is on Microsoft.ML 6.0.0 and
+  each indicator that way and computes the same numbers it did. MatPlotLibNet now rounds each channel of a colour it
+  darkens rather than cutting it off, so the notebook grid's shade for a category the training rows never held is
+  `#7A4964`, one step from the `#7A4864` it was. ML.NET's trainer is on Microsoft.ML 6.0.0 and
   Microsoft.ML.FastTree 6.0.0, the Binance landing on Polly.Core 8.9.1. Every other package reference is at its newest
   version but for the pins that name their reason in the project: the .NET 10 line of System.Numerics.Tensors and
   Microsoft.Extensions, whose 11 releases are no longer built for .NET 8, Verso.Abstractions's range, NAudio.Core 2.4.0
