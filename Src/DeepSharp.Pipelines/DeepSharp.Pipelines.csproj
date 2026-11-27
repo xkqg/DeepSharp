@@ -21,6 +21,9 @@
     <!-- The learner that writes its model beside the pipeline it was trained behind reads a file the same way this
          package does: the same survey, so a fault stands at its line and column wherever a model file is read. -->
     <InternalsVisibleTo Include="DeepSharp.Learners.ML" />
+    <!-- The network learner writes and reads an ensemble's blend by the one vocabulary the pipeline file's own words come
+         from, and refuses an undefined one with the one text, rather than keeping a second copy of either. -->
+    <InternalsVisibleTo Include="DeepSharp.Learners.Networks" />
   </ItemGroup>
 
   <ItemGroup>

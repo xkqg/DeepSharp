@@ -338,7 +338,7 @@ public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IPlacesOnACircl
     }
 
     // The two values a moment becomes, before a form writes each of them down.
-    private IEnumerable<string> Stems => [$"{Column}_{Period.ToString().ToLowerInvariant()}_sin", $"{Column}_{Period.ToString().ToLowerInvariant()}_cos"];
+    private IEnumerable<string> Stems => [$"{Column}_{Period.Word()}_sin", $"{Column}_{Period.Word()}_cos"];
 
     /// <inheritdoc />
     public static string Name => "feature.cyclical";
@@ -357,7 +357,7 @@ public sealed record CyclicalStep : IPipelineStep<CyclicalStep>, IPlacesOnACircl
         if (table[Column] is not Column<DateTime> moments)
         {
             throw new InvalidOperationException(
-                $"'{Column}' holds {table[Column].Kind.ToString().ToLowerInvariant()} and a cycle needs a moment in time.");
+                $"'{Column}' holds {table[Column].Kind.Word()} and a cycle needs a moment in time.");
         }
 
         table.PutPlaces(

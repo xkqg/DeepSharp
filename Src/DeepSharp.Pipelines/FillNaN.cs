@@ -117,7 +117,7 @@ public sealed record FillNaNStep : IFittedStep, IPipelineStep<FillNaNStep>, IDes
         if (table[Column] is not Column<double> numbers)
         {
             throw new InvalidOperationException(
-                $"'{Column}' holds {table[Column].Kind.ToString().ToLowerInvariant()}, "
+                $"'{Column}' holds {table[Column].Kind.Word()}, "
                 + "which cannot hold a value that is not a number.");
         }
 

@@ -195,7 +195,7 @@ public sealed record MathsStep : IPipelineStep<MathsStep>, IAddsColumns, IUndoes
             ? throw Irreversible("a square is never negative, so this value cannot have come from one")
             : Math.Sqrt(value),
         Maths.ArcSin => Math.Pow(Math.Sin(value), 2),
-        _ => throw Irreversible($"{Maths.ToString().ToLowerInvariant()} throws the sign or the size away"),
+        _ => throw Irreversible($"{Maths.Word()} throws the sign or the size away"),
     };
 
     /// <inheritdoc />
@@ -265,5 +265,5 @@ public sealed record MathsStep : IPipelineStep<MathsStep>, IAddsColumns, IUndoes
 
     private InvalidOperationException Impossible(double value, int row, string what) =>
         new($"Row {row + 1} of '{Column}' is {value.ToString(CultureInfo.InvariantCulture)}, and "
-            + $"{Maths.ToString().ToLowerInvariant()} would be {what}. Shift the column first, or leave this one out.");
+            + $"{Maths.Word()} would be {what}. Shift the column first, or leave this one out.");
 }

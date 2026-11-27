@@ -274,7 +274,7 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
         {
             throw new InvalidOperationException(string.Create(
                 CultureInfo.InvariantCulture,
-                $"A gap of {Gap} moments takes every row of {part.ToString().ToLowerInvariant()}, and leaves nothing to {purpose}. Keep fewer moments apart, or divide more rows."));
+                $"A gap of {Gap} moments takes every row of {part.Word()}, and leaves nothing to {purpose}. Keep fewer moments apart, or divide more rows."));
         }
     }
 
@@ -298,7 +298,7 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
 
             if (rows.Length > 0)
             {
-                seen.Learned($"moments.{part.ToString().ToLowerInvariant()}", [Moment(column, rows[0]), Moment(column, rows[^1])]);
+                seen.Learned($"moments.{part.Word()}", [Moment(column, rows[0]), Moment(column, rows[^1])]);
             }
         }
     }
@@ -504,7 +504,7 @@ public abstract record FillMissingStep : IFittedStep, IPipelineStep<FillMissingS
 
             default:
                 throw new InvalidOperationException(
-                    $"'{Column}' holds {column.Kind.ToString().ToLowerInvariant()}, and a gap in it is not filled with a number.");
+                    $"'{Column}' holds {column.Kind.Word()}, and a gap in it is not filled with a number.");
         }
     }
 

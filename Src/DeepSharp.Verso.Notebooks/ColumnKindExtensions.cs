@@ -5,16 +5,9 @@ using DeepSharp.Pipelines;
 
 namespace DeepSharp.Verso.Notebooks;
 
-/// <summary>A column's kind as a notebook writes it, and back: the one word a control carries and a card shows.</summary>
+/// <summary>A word a control carries, read back as a column's kind; the word a kind is written as is its <c>Word()</c>, the pipeline file's own.</summary>
 internal static class ColumnKindExtensions
 {
-    extension(ColumnKind kind)
-    {
-        /// <summary>The word a kind is written as.</summary>
-        /// <returns>Its name, in lower case, as a pipeline file writes it.</returns>
-        public string Word() => kind.ToString().ToLowerInvariant();
-    }
-
     extension(string? word)
     {
         /// <summary>The kind a word names.</summary>

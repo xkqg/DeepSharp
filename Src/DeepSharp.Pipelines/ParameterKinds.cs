@@ -1339,6 +1339,11 @@ internal static class Vocabulary<TEnum>
         throw new FormatException($"'{written}' is not one of the things '{key}' can be: {string.Join(", ", Words)}.");
     }
 
+    /// <summary>Whether a value is one of the set's, and not a number cast to it.</summary>
+    /// <param name="value">The value.</param>
+    /// <returns>Whether it has a word.</returns>
+    public static bool Has(TEnum value) => Array.IndexOf(Values, value) >= 0;
+
     /// <summary>The word a value is written as.</summary>
     /// <param name="value">The value.</param>
     /// <param name="key">The key it is written under, for the message.</param>

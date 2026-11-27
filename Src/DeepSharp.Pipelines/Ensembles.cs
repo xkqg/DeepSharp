@@ -61,9 +61,23 @@ internal static class Blending
             {
                 Blend.Average => [.. Enumerable.Range(0, members[0].Count).Select(row => Averaged(members, row))],
                 Blend.Vote => [.. Enumerable.Range(0, members[0].Count).Select(row => Voted(members, row, ones))],
-                _ => throw new ArgumentOutOfRangeException(nameof(blend), blend, "An ensemble's answers are averaged or voted for."),
+                _ => throw Undefined(blend),
             };
+
+        /// <summary>Refuses a value that is none of the blends: a number cast to the set.</summary>
+        /// <exception cref="ArgumentOutOfRangeException">The blend is none of the blends.</exception>
+        public void ThrowIfUndefined()
+        {
+            if (!Vocabulary<Blend>.Has(blend))
+            {
+                throw Undefined(blend);
+            }
+        }
     }
+
+    // The one refusal of a value that is none of the blends, however it came to be asked for.
+    private static ArgumentOutOfRangeException Undefined(Blend blend) =>
+        new(nameof(blend), blend, "An ensemble's answers are averaged or voted for.");
 
     private static double[] Averaged(IReadOnlyList<IReadOnlyList<double[]>> members, int row) =>
         [.. Enumerable.Range(0, members[0][row].Length).Select(column => members.Average(member => member[row][column]))];

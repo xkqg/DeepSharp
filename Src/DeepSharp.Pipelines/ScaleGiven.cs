@@ -129,7 +129,7 @@ public sealed record ScaleGivenStep : IPipelineStep<ScaleGivenStep>, IAddsColumn
         if (table[Column] is not Column<double> and not Column<long>)
         {
             throw new InvalidOperationException(
-                $"'{Column}' holds {table[Column].Kind.ToString().ToLowerInvariant()}, and a range of numbers does not scale it.");
+                $"'{Column}' holds {table[Column].Kind.Word()}, and a range of numbers does not scale it.");
         }
 
         var values = table.NumbersOf(Column);

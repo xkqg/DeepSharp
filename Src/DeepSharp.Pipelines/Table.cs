@@ -509,7 +509,7 @@ internal static class RowOrdering
                 Column<long> whole => (one, other) => whole[one]!.Value.CompareTo(whole[other]!.Value),
                 Column<double> numbers => Numbers(table, name, numbers),
                 _ => throw new InvalidOperationException(
-                    $"'{name}' holds {column.Kind.ToString().ToLowerInvariant()}, which has no order to put rows in."),
+                    $"'{name}' holds {column.Kind.Word()}, which has no order to put rows in."),
             };
         }
     }

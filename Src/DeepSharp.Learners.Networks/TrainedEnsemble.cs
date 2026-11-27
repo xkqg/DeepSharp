@@ -74,10 +74,7 @@ public sealed class TrainedEnsemble
     {
         ArgumentNullException.ThrowIfNull(members);
 
-        if (!Enum.IsDefined(blend))
-        {
-            throw new ArgumentOutOfRangeException(nameof(blend), blend, "An ensemble's answers are averaged or voted for.");
-        }
+        blend.ThrowIfUndefined();
 
         if (members.Count < 2)
         {
@@ -119,7 +116,7 @@ public sealed class TrainedEnsemble
         {
             writer.WriteStartObject();
             writer.WriteNumber(TrainedNetwork.VersionKey, Version);
-            writer.WriteString(BlendKey, Blend.ToString().ToLowerInvariant());
+            writer.WriteString(BlendKey, Blend.Word());
             writer.WriteStartArray(NetworkDocument.NetworksKey);
 
             foreach (var member in Members)
@@ -166,17 +163,19 @@ public sealed class TrainedEnsemble
         var saved = NetworkDocument.ReadNetworks(json, NetworkDocument.NetworksKey, networks);
         var prepared = PreparedData.FromJson(json, steps, TrainedNetwork.PipelineKey);
         var carried = file.Pipeline();
-        var words = string.Join(", ", Enum.GetNames<Blend>().Select(name => name.ToLowerInvariant()));
+        var words = string.Join(", ", Vocabulary<Blend>.Words);
 
         if (file.Blend is not { } word)
         {
             throw file.Refused(BlendKey, $"This file does not say how its members' answers become one: an ensemble's file names it as text under '{BlendKey}', one of {words}.");
         }
 
-        if (!Enum.TryParse<Blend>(word, ignoreCase: true, out var blend) || !Enum.IsDefined(blend))
+        if (!Vocabulary<Blend>.Words.Contains(word, StringComparer.OrdinalIgnoreCase))
         {
             throw file.Refused(BlendKey, $"'{word}' is none of the ways an ensemble's members' answers become one: {words}.");
         }
+
+        var blend = Vocabulary<Blend>.Read(word, BlendKey);
 
         if (saved.Count < 2)
         {

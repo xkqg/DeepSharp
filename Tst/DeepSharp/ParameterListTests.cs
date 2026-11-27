@@ -189,6 +189,34 @@ public class ParameterListTests
 
     private static readonly string[] Drawers = ["Helper", "Helpers", "Util", "Utils", "Utility", "Utilities", "Manager"];
 
+    [Fact]
+    public void NoPackageSpellsTheWordAnEnumIsWrittenAsByHand_ButTheTensorCore()
+    {
+        // The word a pipeline file writes a choice as has one owner, the Word() of DeepSharp.Pipelines: its reader, its writer, a
+        // message and a notebook all name the choice the same way. Lower-casing the name in place is a second owner that drifts
+        // the day a value is renamed. The tensor core cannot reach that owner, since it stands under it, and keeps its own.
+        const string ByHand = "ToString().ToLowerInvariant()";
+
+        var read = ReadHere().Select(assembly => assembly.GetName().Name!).Where(name => name != "DeepSharp").ToArray();
+        var spelled = read
+            .SelectMany(name => Directory.EnumerateFiles(Path.Join(Repository.Root, "Src", name), "*.cs", SearchOption.AllDirectories))
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .SelectMany(file => File.ReadAllLines(file)
+                .Select((line, at) => line.Contains(ByHand, StringComparison.Ordinal)
+                    ? $"{Path.GetRelativePath(Repository.Root, file).Replace('\\', '/')}:{at + 1}"
+                    : null)
+                .OfType<string>())
+            .ToArray();
+
+        Assert.NotEmpty(read);
+
+        if (spelled.Length > 0)
+        {
+            Assert.Fail($"{spelled.Length} places write an enum's word by hand, where its Word() is the one owner:{Environment.NewLine}" +
+                        string.Join(Environment.NewLine, spelled));
+        }
+    }
+
     /// <summary>
     /// The only tuple form a package may keep: one an earlier release published, marked obsolete in favour of the record
     /// struct beside it, so that code written against it still compiles.

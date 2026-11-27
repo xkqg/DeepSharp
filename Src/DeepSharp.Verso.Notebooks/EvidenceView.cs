@@ -48,7 +48,7 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
         foreach (var column in profile.Columns)
         {
             html.Append("<tr><td>").Append(Encoded(column.Name)).Append("</td><td>")
-                .Append(column.Kind.ToString().ToLowerInvariant()).Append(column.Constant ? ", constant" : string.Empty).Append("</td>");
+                .Append(column.Kind.Word()).Append(column.Constant ? ", constant" : string.Empty).Append("</td>");
 
             foreach (var count in new[] { column.Gaps, column.NotFinite, column.Distinct })
             {
@@ -217,7 +217,7 @@ internal sealed class EvidenceView : IEvidenceVisitor<CellOutput>
         var carried = new JsonObject
         {
             [StepRenderer.ColumnKey] = answer.Column,
-            [StepRenderer.AnswerKey] = answer.Action.ToString().ToLowerInvariant(),
+            [StepRenderer.AnswerKey] = answer.Action.Word(),
         };
 
         if (answer.Value is { } value)

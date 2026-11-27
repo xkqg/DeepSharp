@@ -12,6 +12,8 @@ The seventh letter of the flock team.
 - **`TransposedConvolution.Settling` is obsolete.** It handed back a pair of values; `TransposedConvolution.Settle` hands
   back the same two, `Dropped` and `Added`, as a `Settlement`. The old form still compiles, with a warning naming the new
   one.
+- **An ensemble file whose blend is written as a number is refused.** A blend is read as one of its words, `average` or
+  `vote`, as every other word a file holds is; `"1"` was taken for `vote` before. DeepSharp never wrote one.
 
 ### Changed
 

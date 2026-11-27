@@ -109,11 +109,15 @@ public class TrainedEnsembleFileTests
         var unknown = file.DeepClone().AsObject();
         unknown["blend"] = "median";
 
+        var counted = file.DeepClone().AsObject();
+        counted["blend"] = "1";
+
         var none = file.DeepClone().AsObject();
         none.Remove("blend");
 
         Assert.Contains("at least two", Assert.Throws<NetworkFileException>(() => Read(one.ToJsonString())).Message, StringComparison.Ordinal);
         Assert.Contains("median", Assert.Throws<NetworkFileException>(() => Read(unknown.ToJsonString())).Message, StringComparison.Ordinal);
+        Assert.Contains("'1' is none of", Assert.Throws<NetworkFileException>(() => Read(counted.ToJsonString())).Message, StringComparison.Ordinal);
         Assert.Contains("blend", Assert.Throws<NetworkFileException>(() => Read(none.ToJsonString())).Message, StringComparison.Ordinal);
     }
 

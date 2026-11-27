@@ -262,7 +262,7 @@ public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns,
         if (table[Column] is not Column<DateTime> moments)
         {
             throw new InvalidOperationException(
-                $"'{Column}' holds {table[Column].Kind.ToString().ToLowerInvariant()} "
+                $"'{Column}' holds {table[Column].Kind.Word()} "
                 + "and there is no moment in time to take apart.");
         }
 
@@ -289,7 +289,7 @@ public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns,
     public static TimePartsStep ReadFrom(JsonElement element) =>
         new(ColumnKey.Read(element), PartsKey.Read(element), AsCategoriesKey.Read(element));
 
-    private string NameOf(TimePart part) => $"{Column}_{part.ToString().ToLowerInvariant()}";
+    private string NameOf(TimePart part) => $"{Column}_{part.Word()}";
 
     private static string Piece(TimePart part, DateTime moment) => part switch
     {
@@ -297,7 +297,7 @@ public sealed record TimePartsStep : IPipelineStep<TimePartsStep>, IAddsColumns,
         TimePart.Hour => moment.Hour.ToString(CultureInfo.InvariantCulture),
         // The name rather than the number, because a category written as a number invites somebody to
         // average it, and the average of Tuesday and Thursday is not Wednesday.
-        TimePart.DayOfWeek => moment.DayOfWeek.ToString().ToLowerInvariant(),
+        TimePart.DayOfWeek => moment.DayOfWeek.Word(),
         TimePart.DayOfMonth => moment.Day.ToString(CultureInfo.InvariantCulture),
         TimePart.Month => moment.Month.ToString(CultureInfo.InvariantCulture),
         TimePart.Quarter => (((moment.Month - 1) / 3) + 1).ToString(CultureInfo.InvariantCulture),

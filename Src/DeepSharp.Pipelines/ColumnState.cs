@@ -382,8 +382,8 @@ internal static class ColumnFlow
                 {
                     yield return new DeclarationFault(
                         at, step.Verb,
-                        $"reads '{read.Column}', which holds {known.Kind.ToString().ToLowerInvariant()}, and it works on "
-                        + $"{string.Join(" or ", read.Accepts.Select(kind => kind.ToString().ToLowerInvariant()))}.");
+                        $"reads '{read.Column}', which holds {known.Kind.Word()}, and it works on "
+                        + $"{string.Join(" or ", read.Accepts.Select(kind => kind.Word()))}.");
                 }
 
                 continue;

@@ -142,7 +142,7 @@ public static class TableExtensions
                 Column<bool> flags =>
                     [.. Enumerable.Range(0, flags.Count).Select(row => flags[row] is { } flag ? flag ? 1 : 0 : (double?)null)],
                 var other => throw new InvalidOperationException(
-                    $"'{column}' holds {other.Kind.ToString().ToLowerInvariant()}, and this step works on numbers."),
+                    $"'{column}' holds {other.Kind.Word()}, and this step works on numbers."),
             };
         }
 

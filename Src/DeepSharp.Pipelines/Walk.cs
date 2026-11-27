@@ -146,7 +146,7 @@ internal sealed class Walk(Course course, WalkMode mode, SourceFolder folder)
 
             foreach (var part in new[] { Part.Train, Part.Validation, Part.Test, Part.Predict })
             {
-                seen.Learned($"rows.{part.ToString().ToLowerInvariant()}", parts.Count(each => each == part));
+                seen.Learned($"rows.{part.Word()}", parts.Count(each => each == part));
             }
 
             // Only a split that keeps rows apart says how many: every other one writes what it always wrote.

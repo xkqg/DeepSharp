@@ -187,7 +187,7 @@ public static class WhyExtensions
             {
                 ColumnKind.Category => new Places(Categories(prepared, column) ?? [.. asked.Cells.Select(row => row[at]).Where(cell => cell is not null).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)!], null),
                 ColumnKind.Number or ColumnKind.Integer => Grid(asked, moving, kind == ColumnKind.Integer),
-                _ => throw new ArgumentException($"'{column}' holds {kind?.ToString().ToLowerInvariant() ?? "something the pipeline does not declare"}, which has no range to move through: a number moves from its smallest to its largest, a category through its values.", nameof(moving)),
+                _ => throw new ArgumentException($"'{column}' holds {kind?.Word() ?? "something the pipeline does not declare"}, which has no range to move through: a number moves from its smallest to its largest, a category through its values.", nameof(moving)),
             };
 
             var values = places.Values;

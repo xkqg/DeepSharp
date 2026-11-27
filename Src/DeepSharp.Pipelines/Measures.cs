@@ -519,10 +519,7 @@ internal sealed class Measurement
     {
         ArgumentNullException.ThrowIfNull(members);
 
-        if (!Enum.IsDefined(blend))
-        {
-            throw new ArgumentOutOfRangeException(nameof(blend), blend, "An ensemble's answers are averaged or voted for.");
-        }
+        blend.ThrowIfUndefined();
 
         if (members.Count < 2)
         {

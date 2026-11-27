@@ -116,7 +116,7 @@ internal static class DataGrid
         for (var row = paged.First; row < paged.Last; row++)
         {
             html.Append("<tr><td>").Append(Invariant(row + 1)).Append("</td><td>")
-                .Append(Word(view.Standings[row])).Append("</td>");
+                .Append(view.Standings[row].Word()).Append("</td>");
 
             foreach (var column in columns)
             {
@@ -156,7 +156,7 @@ internal static class DataGrid
         var counts = Enum.GetValues<Standing>()
             .Select(standing => new StandingCount(standing, view.Standings.Count(each => each == standing)))
             .Where(each => each.Rows > 0)
-            .Select(each => $"{Invariant(each.Rows)} {Word(each.Standing)}");
+            .Select(each => $"{Invariant(each.Rows)} {each.Standing.Word()}");
 
         html.Append("<div class=\"deepsharp-summary\">").Append(Invariant(view.Table.RowCount)).Append(" rows")
             .Append(string.Concat(counts.Select(count => $" · {count}")))
@@ -212,8 +212,6 @@ internal static class DataGrid
         html.Append(" <button type=\"button\" data-action=\"").Append(StepRenderer.Page)
             .Append("\" data-extension-id=\"").Append(StepRenderer.Id)
             .Append("\" data-payload=\"").Append(Invariant(page)).Append("\">").Append(label).Append("</button>");
-
-    private static string Word(Standing standing) => standing.ToString().ToLowerInvariant();
 
     private static string Invariant(int number) => number.ToString(CultureInfo.InvariantCulture);
 

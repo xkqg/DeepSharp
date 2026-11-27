@@ -109,7 +109,7 @@ public sealed record SettleGapsStep : IPipelineStep<SettleGapsStep>, IAddsColumn
 
             default:
                 throw new InvalidOperationException(
-                    $"'{Column}' holds {column.Kind.ToString().ToLowerInvariant()}, and a gap in it is not settled with a number.");
+                    $"'{Column}' holds {column.Kind.Word()}, and a gap in it is not settled with a number.");
         }
     }
 
