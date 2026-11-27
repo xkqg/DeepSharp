@@ -11,7 +11,7 @@
     <!-- Abstractions only: a pipeline can be registered in a host that has a container, and built with
          `new` in a program that has none. The library never requires one. -->
     <!-- A deliberate pin to the newest major that is built for .NET 8: the 11 releases are built for .NET 10 and later. -->
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.*" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="11.*" />
   </ItemGroup>
 
   <ItemGroup>
