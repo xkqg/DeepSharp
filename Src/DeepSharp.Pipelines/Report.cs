@@ -376,6 +376,17 @@ public static class MetricExtensions
         /// <summary>Whether a measure compares shares of a whole, row by row.</summary>
         /// <returns><see langword="true"/> for emd, kl and rps.</returns>
         internal bool ComparesShares() => metric.Family() is MetricFamily.Shares or MetricFamily.OrderedShares;
+
+        /// <summary>Whether a measure is taken of an interval, which only a model that was given one has.</summary>
+        /// <returns><see langword="true"/> for coverage and width.</returns>
+        internal bool MeasuresAnInterval() => metric is Metric.Coverage or Metric.Width;
+    }
+
+    extension(INamesTheMeasures report)
+    {
+        /// <summary>Whether a report names a measure of an interval, so a model given one is measured again with it.</summary>
+        /// <returns><see langword="true"/> when the report names coverage or width.</returns>
+        internal bool NamesAnInterval() => report.Metrics.Any(metric => metric.MeasuresAnInterval());
     }
 
     extension(IEnumerable<Metric> metrics)

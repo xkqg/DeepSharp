@@ -4,6 +4,7 @@
 using System.Collections;
 using System.Globalization;
 using DeepSharp.Networks;
+using DeepSharp.Pipelines;
 
 namespace DeepSharp.Learners.Networks;
 
@@ -395,5 +396,5 @@ public sealed class Candidate : IEquatable<Candidate>
         Settings.FirstOrDefault(each => each.Name == name) is { Name: not null } found
             ? found
             : throw new ArgumentException(
-                $"This candidate holds no setting called '{name}': it holds {string.Join(", ", Settings.Select(each => $"'{each.Name}'"))}.", nameof(name));
+                $"This candidate holds no setting called '{name}': it holds {Settings.Select(each => each.Name).Quoted()}.", nameof(name));
 }

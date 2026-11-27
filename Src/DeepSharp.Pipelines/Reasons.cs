@@ -8,11 +8,21 @@ namespace DeepSharp.Pipelines;
 /// <summary>How a model answers some rows: the answers, in their own units, of the rows it is handed.</summary>
 /// <param name="rows">The rows, as the pipeline reads them: the columns they were read with.</param>
 /// <returns>For each row, a number for each answer, in the order the rows were handed in.</returns>
+/// <remarks>
+/// One answer for each row handed in, in the order they were handed in — the row's own, whatever order the pipeline serves them
+/// in. A pipeline that orders its rows by a column serves them in that order, so a model's answers stand at the places the rows
+/// were served at, and are put back in the order they were handed in before they answer here: an answer read by the place it was
+/// served at would be another row's. Every model this library trains behind a pipeline answers so when it is asked why.
+/// </remarks>
 public delegate IReadOnlyList<double[]> Answering(IRowSource rows);
 
 /// <summary>The rows to explain, and the way the model that is explained answers them.</summary>
 /// <param name="Rows">The rows as the pipeline reads them, with the columns they were read with. The answer's own column needs not be among them.</param>
-/// <param name="Answering">How the model answers some rows: a trained network's <c>Predict(rows).Answers</c>, say.</param>
+/// <param name="Answering">
+/// How the model answers some rows, one answer for each, in the order they were handed in: a trained network's
+/// <c>Predict(rows)</c> answers in the order the rows were served, and each of its answers goes back to the row its
+/// <c>HandedInAt</c> names.
+/// </param>
 public readonly record struct RowsAnswered(IRowSource Rows, Answering Answering);
 
 /// <summary>The draws a question about why is answered from: the seed they are worked out from, and how many are made.</summary>
@@ -178,7 +188,7 @@ public static class WhyExtensions
             if (at < 0 || !asked.Perturbable.Contains(column, StringComparer.Ordinal))
             {
                 throw new ArgumentException(
-                    $"'{column}' is not a column the answers can be asked of: the rows hold {string.Join(", ", asked.Perturbable.Select(name => $"'{name}'"))}, and the answer and the id are none of them.",
+                    $"'{column}' is not a column the answers can be asked of: the rows hold {asked.Perturbable.Quoted()}, and the answer and the id are none of them.",
                     nameof(moving));
             }
 

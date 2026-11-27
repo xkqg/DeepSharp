@@ -58,7 +58,7 @@ public sealed class Engines
         var known = _engines.Keys.Append(LearnNetworkStep.LightEngine).Order(StringComparer.Ordinal);
 
         throw new InvalidOperationException(
-            $"This declaration runs on '{name}', and nothing here was given that name: {string.Join(", ", known.Select(each => $"'{each}'"))}. "
+            $"This declaration runs on '{name}', and nothing here was given that name: {known.Quoted()}. "
             + "Hand the engine over before the run: new Engines().Use(\"" + name + "\", TorchBackend.OnCpu()), say.");
     }
 }

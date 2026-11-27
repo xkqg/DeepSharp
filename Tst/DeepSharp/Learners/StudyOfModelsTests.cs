@@ -421,6 +421,26 @@ public class StudyOfModelsTests
     }
 
     [Fact]
+    public void ModelEnsemble_RowsThePipelineHandsOverAsOtherFeaturesThanTheMembersLearned_AreRefusedNamingBoth()
+    {
+        var study = new Study<double>(Space, deal => new Trained<double>(0, deal.Candidate.Number("rate")));
+        var rows = CalibratedRows();
+        Candidate[] candidates = [new([new Setting("rate", 0.3, null)]), new([new Setting("rate", 0.7, null)])];
+
+        static IReadOnlyList<double[]> Answer(double weight, IReadOnlyList<double[]> features) => [.. features.Select(_ => new[] { weight })];
+
+        var trained = study.TrainEnsemble(rows, candidates, Answer);
+        var elsewhere = new ModelEnsemble<double>(trained.Members, Answer, new ServedAnswer(rows, Needs.Numbers, new LearnedFrom("ensemble", ["elsewhere"])), Blend.Average);
+
+        var refused = Assert.Throws<InvalidOperationException>(() => elsewhere.Predict(Asked()));
+
+        Assert.Contains("'elsewhere'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("'x'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("a model answers only what it learned from", refused.Message, StringComparison.Ordinal);
+        Assert.Equal(5, trained.Predict(Asked()).Answers.Count);
+    }
+
+    [Fact]
     public void TrainEnsemble_RefusesFewerThanTwoCandidates_AndEnginesInTheOptions_ByName()
     {
         var study = new Study<double>(Space, deal => new Trained<double>(0, deal.Candidate.Number("rate")));

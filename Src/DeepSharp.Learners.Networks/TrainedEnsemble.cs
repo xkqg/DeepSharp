@@ -267,7 +267,7 @@ public sealed class TrainedEnsemble
     // The report measured again, with the interval\'s margins, when it names the coverage or the width of one; as it was otherwise.
     private EnsembleMeasures? Report(Chunking chunking, ConformalInterval interval)
     {
-        if (Prepared.Declaration.Report is not { } report || !report.Metrics.Any(metric => metric is Metric.Coverage or Metric.Width))
+        if (Prepared.Declaration.Report is not { } report || !report.NamesAnInterval())
         {
             return Measures;
         }
@@ -299,31 +299,21 @@ public sealed class TrainedEnsemble
     /// </remarks>
     public Predictions Predict(IRowSource rows, ITensorBackend backend)
     {
-        ArgumentNullException.ThrowIfNull(rows);
         ArgumentNullException.ThrowIfNull(backend);
 
         var first = Members[0];
-        var served = Prepared.Served(rows, TrainedNetwork.FeatureNeeds);
+        var answered = new ServedAnswer(Prepared, TrainedNetwork.FeatureNeeds, new LearnedFrom("ensemble", first.TrainedOn.Features)).Blended(
+            rows,
+            served =>
+            {
+                var chunking = new Chunking(backend, TrainedNetwork.ServingBatchSize) { Example = served.ExampleShape };
 
-        if (!served.FeatureNames.SequenceEqual(first.TrainedOn.Features))
-        {
-            throw new InvalidOperationException(
-                $"These networks were trained on {string.Join(", ", first.TrainedOn.Features.Select(name => $"'{name}'"))}, and their pipeline hands over {string.Join(", ", served.FeatureNames.Select(name => $"'{name}'"))}: a network answers only what it learned from.");
-        }
+                return [.. Members.Select(member => (IReadOnlyList<double[]>)TrainedNetwork.Answered(member.Network, member.Loss, served.Features, chunking))];
+            },
+            Blend,
+            Interval);
 
-        var chunking = new Chunking(backend, TrainedNetwork.ServingBatchSize) { Example = served.ExampleShape };
-        IReadOnlyList<double[]>[] said = [.. Members.Select(member => (IReadOnlyList<double[]>)TrainedNetwork.Answered(member.Network, member.Loss, served.Features, chunking))];
-
-        var answers = Prepared.BackToOriginal(said, served, rows, Blend);
-        var ends = Interval?.Around(answers);
-
-        return new Predictions(first.TrainedOn.Answers, answers, served.HandedInAt)
-        {
-            Unfamiliar = TrainedNetwork.Unfamiliar(first.TrainedOn, served.Features),
-            Ids = served.Ids,
-            Lower = ends?.Lower,
-            Upper = ends?.Upper,
-        };
+        return Predictions.Of(answered, first.TrainedOn.Answers, TrainedNetwork.Unfamiliar(first.TrainedOn, answered.Served.Features));
     }
 }
 

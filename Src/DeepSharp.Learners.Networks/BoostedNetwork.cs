@@ -96,27 +96,15 @@ public sealed class BoostedNetwork
     /// <returns>For each row, a number for each answer, and where the row stood among those handed in.</returns>
     public Predictions Predict(IRowSource rows, ITensorBackend backend)
     {
-        ArgumentNullException.ThrowIfNull(rows);
         ArgumentNullException.ThrowIfNull(backend);
 
-        var served = Prepared.Served(rows, TrainedNetwork.FeatureNeeds);
+        // The raw sum is the pair's one answer, brought back once: it has no interval.
+        var answered = new ServedAnswer(Prepared, TrainedNetwork.FeatureNeeds, new LearnedFrom("boosted pair", Basis.TrainedOn.Features)).Answered(
+            rows,
+            served => Combined(served.Features, new Chunking(backend, TrainedNetwork.ServingBatchSize) { Example = served.ExampleShape }),
+            interval: null);
 
-        if (!served.FeatureNames.SequenceEqual(Basis.TrainedOn.Features))
-        {
-            throw new InvalidOperationException(
-                $"This boosted pair was trained on {string.Join(", ", Basis.TrainedOn.Features.Select(name => $"'{name}'"))}, and its pipeline hands over "
-                + $"{string.Join(", ", served.FeatureNames.Select(name => $"'{name}'"))}: a network answers only what it learned from.");
-        }
-
-        var chunking = new Chunking(backend, TrainedNetwork.ServingBatchSize) { Example = served.ExampleShape };
-        var combined = Combined(served.Features, chunking);
-        var answers = Prepared.BackToOriginal(combined, served, rows);
-
-        return new Predictions(Basis.TrainedOn.Answers, answers, served.HandedInAt)
-        {
-            Unfamiliar = TrainedNetwork.Unfamiliar(Basis.TrainedOn, served.Features),
-            Ids = served.Ids,
-        };
+        return Predictions.Of(answered, Basis.TrainedOn.Answers, TrainedNetwork.Unfamiliar(Basis.TrainedOn, answered.Served.Features));
     }
 
     // The two networks' raw answers, summed before either comes back into the answer's own units.

@@ -482,8 +482,6 @@ internal sealed class Measurement
     // The measures taken: those the report names, but for the coverage and width of an interval when the model gave none.
     private IReadOnlyList<Metric> Metrics { get; init; }
 
-    private static bool IsAnIntervals(Metric metric) => metric is Metric.Coverage or Metric.Width;
-
     /// <summary>The measures of these predictions, as the pipeline's report declares them.</summary>
     /// <param name="prepared">The run.</param>
     /// <param name="predictions">What a model predicted, for each part the report names.</param>
@@ -546,7 +544,7 @@ internal sealed class Measurement
 
     // The report\'s measures, but for an interval\'s when the predictions came with no margins.
     private static IReadOnlyList<Metric> EffectiveMetrics(INamesTheMeasures report, bool margined) =>
-        margined ? report.Metrics : [.. report.Metrics.Where(metric => !IsAnIntervals(metric))];
+        margined ? report.Metrics : [.. report.Metrics.Where(metric => !metric.MeasuresAnInterval())];
 
     // Margins for every part the report measures, or for none: the numbers of one part would stand beside another\'s that has none.
     private static bool ThrowIfSomeAreMarginedAndSomeAreNot(Dictionary<Part, PartPredictions> given)
@@ -781,7 +779,7 @@ internal sealed class Measurement
         {
             throw new InvalidOperationException(
                 $"brier measures the chance of one answer, or the chances across labels of which a row holds one, and '{_output.Verb}' says a row holds any number of "
-                + $"{string.Join(", ", _output.Answers.Select(answer => $"'{answer}'"))}: scikit-learn takes each row for one class of many, warns that the chances do not add up to one, and gives a number that measures nothing these labels mean. Measure each label by auc.");
+                + $"{_output.Answers.Quoted()}: scikit-learn takes each row for one class of many, warns that the chances do not add up to one, and gives a number that measures nothing these labels mean. Measure each label by auc.");
         }
     }
 
@@ -875,7 +873,7 @@ internal sealed class Measurement
             {
                 throw new InvalidOperationException(string.Create(
                     CultureInfo.InvariantCulture,
-                    $"Row {readAt[row] + 1} holds {held} of {string.Join(", ", _output.Answers.Select(answer => $"'{answer}'"))} as one, and '{_output.Verb}' says a row holds {_output.Ones}."));
+                    $"Row {readAt[row] + 1} holds {held} of {_output.Answers.Quoted()} as one, and '{_output.Verb}' says a row holds {_output.Ones}."));
             }
         }
     }

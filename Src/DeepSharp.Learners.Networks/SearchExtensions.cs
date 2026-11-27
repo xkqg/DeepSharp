@@ -39,8 +39,8 @@ internal static class SearchExtensions
             if (!candidate.Settings.Select(each => each.Name).SequenceEqual(there, StringComparer.Ordinal))
             {
                 throw new InvalidOperationException(
-                    $"The sampler gave a candidate of other dimensions than the space has for it: the space has {string.Join(", ", there.Select(name => $"'{name}'"))}, "
-                    + $"and the candidate {string.Join(", ", candidate.Settings.Select(each => $"'{each.Name}'"))}.");
+                    $"The sampler gave a candidate of other dimensions than the space has for it: the space has {there.Quoted()}, "
+                    + $"and the candidate {candidate.Settings.Select(each => each.Name).Quoted()}.");
             }
 
             foreach (var setting in candidate.Settings)

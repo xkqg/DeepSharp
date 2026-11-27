@@ -216,7 +216,12 @@ public sealed class Study<TModel>
     /// <returns>The ensemble.</returns>
     /// <exception cref="ArgumentNullException">There are no rows, no candidates, or no way to answer with a model.</exception>
     /// <exception cref="ArgumentException">There are fewer than two candidates, or the options name an engine.</exception>
-    /// <remarks>Every candidate trains on the very same rows, so the members are trained behind one fit by construction: no digest is compared.</remarks>
+    /// <exception cref="InvalidOperationException">The training rows are refused as a learner of numbers is refused them: the ensemble serves rows so.</exception>
+    /// <remarks>
+    /// Every candidate trains on the very same rows, so the members are trained behind one fit by construction: no digest is compared.
+    /// The features the training rows hand a learner of numbers are what the ensemble says its members learned from, so a row served
+    /// later as other features is refused, as it is of a network.
+    /// </remarks>
     public ModelEnsemble<TModel> TrainEnsemble(PreparedData rows, IReadOnlyList<Candidate> candidates, Func<TModel, IReadOnlyList<double[]>, IReadOnlyList<double[]>> answer, EnsembleOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(rows);
@@ -240,7 +245,10 @@ public sealed class Study<TModel>
         var cancellation = options?.Cancellation ?? default;
         TModel[] trained = [.. candidates.Select(candidate => _train(new TrainingDeal(candidate, rows, null, cancellation)).Model)];
 
-        return new ModelEnsemble<TModel>(trained, answer, rows, options?.Blend ?? Blend.Average);
+        // The members learned from the training rows as a learner of numbers is handed them, which is how the ensemble serves rows.
+        var serving = new ServedAnswer(rows, Needs.Numbers, new LearnedFrom("ensemble", rows.Batch(Part.Train, Needs.Numbers).FeatureNames));
+
+        return new ModelEnsemble<TModel>(trained, answer, serving, options?.Blend ?? Blend.Average);
     }
 
     // How a deal of a caller-trained study is trained and judged: by the caller's trainer, handed the rows of the deal, whose

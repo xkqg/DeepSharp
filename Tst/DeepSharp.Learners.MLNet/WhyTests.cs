@@ -37,12 +37,18 @@ public class WhyTests
         })];
     }
 
-    private static InMemoryRowSource Source(int count = 1200) => new(Names, Rows(count).Select(row => (IReadOnlyList<string?>)row));
+    private static InMemoryRowSource Source(int count = 1200) => Source(Rows(count));
 
-    private static TrainedMLModel Tree() =>
-        Pdd.Create()
+    private static InMemoryRowSource Source(IEnumerable<string[]> rows) => new(Names, rows.Select(row => (IReadOnlyList<string?>)row));
+
+    // A pipeline ordered by t serves its rows in that order, whatever order they were handed in.
+    private static TrainedMLModel Tree(bool ordered = false)
+    {
+        var declared = Pdd.Create()
             .Read(Source(), "twelve hundred")
-            .Declare(schema => schema.Integer("t").Number("x", "noise", "y").Category("group"))
+            .Declare(schema => schema.Integer("t").Number("x", "noise", "y").Category("group"));
+
+        return (ordered ? declared.OrderBy("t") : declared)
             .SplitAtRandom(0.70, 0.15, 5, testSeed: 9)
             .Target("y")
             .Drop("t")
@@ -50,6 +56,7 @@ public class WhyTests
             .WithML(trainer => trainer.FastTree(trees: 30))
             .Build()
             .TrainWithML();
+    }
 
     [Fact]
     public void ATreeServedRows_AnswersAsItAnswersThePartsRows()
@@ -66,6 +73,24 @@ public class WhyTests
         {
             Assert.Equal(test[at], expected[at], 5);
         }
+    }
+
+    [Fact]
+    public void ATreeServedRowsUnderAnOrderBy_AnswersThemInTheOrderTheyWereHandedIn_AndExplainsEachByItsOwn()
+    {
+        // The rows are handed in the other way round from the order the pipeline serves them in.
+        var tree = Tree(ordered: true);
+        string[][] handed = [.. Rows(60).AsEnumerable().Reverse()];
+        var answers = tree.Predict(Source(handed));
+
+        Assert.Equal(handed.Length, answers.Count);
+
+        for (var at = 0; at < handed.Length; at++)
+        {
+            Assert.Equal(tree.Predict(Source([handed[at]]))[0][0], answers[at][0], 9);
+        }
+
+        Assert.Equal(0, tree.Leaning(Source(handed), new Redraws(seed: 3, repeats: 2)).Columns.Single(column => column.Column == "t").Mean);
     }
 
     [Fact]

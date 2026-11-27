@@ -926,7 +926,7 @@ public sealed class PreparedData
         if (Declaration.Output is { } output && !output.Answers.SequenceEqual(written.Answers))
         {
             throw new ArgumentException(
-                $"These predictions answer {Quoted(written.Answers)}, and this pipeline answers {Quoted(output.Answers)}: they were made for another pipeline's output.",
+                $"These predictions answer {written.Answers.Quoted()}, and this pipeline answers {output.Answers.Quoted()}: they were made for another pipeline's output.",
                 nameof(predictions));
         }
 
@@ -985,8 +985,6 @@ public sealed class PreparedData
     /// <remarks>Each member comes back into the answer\'s own units first and the errors are those of what they say together.</remarks>
     public ConformalInterval IntervalOf(IReadOnlyList<PartPredictions> members, Blend blend, double alpha) =>
         Conformal.Of(this, members, blend, alpha);
-
-    private static string Quoted(IEnumerable<string> names) => string.Join(", ", names.Select(name => $"'{name}'"));
 
     /// <summary>
     /// This run's file as a run of the same declaration that left out these steps would have written it: each of them that

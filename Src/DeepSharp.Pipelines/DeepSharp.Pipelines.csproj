@@ -22,8 +22,14 @@
          package does: the same survey, so a fault stands at its line and column wherever a model file is read. -->
     <InternalsVisibleTo Include="DeepSharp.Learners.ML" />
     <!-- The network learner writes and reads an ensemble's blend by the one vocabulary the pipeline file's own words come
-         from, and refuses an undefined one with the one text, rather than keeping a second copy of either. -->
+         from, and refuses an undefined one with the one text, rather than keeping a second copy of either; and it answers
+         rows through the one serving sequence, the one bridge back to the order rows were handed in, the one list of names a
+         message writes and the one test of whether a report measures an interval. -->
     <InternalsVisibleTo Include="DeepSharp.Learners.Networks" />
+    <!-- The ML.NET learner answers rows through the one serving sequence every model behind a pipeline answers through,
+         and hands them back in the order they were handed in by the one bridge from the served order, rather than keeping
+         its own copy of either. -->
+    <InternalsVisibleTo Include="DeepSharp.Learners.MLNet" />
   </ItemGroup>
 
   <ItemGroup>

@@ -633,7 +633,7 @@ public static class NetworkWords
             ? made
             : throw new NotSupportedException(Refused.TryGetValue(part.Kind, out var why)
                 ? $"'{part.Kind}' is not a word a declared network is written in: {why}"
-                : $"'{part.Kind}' is not a word a declared network is written in: {string.Join(", ", kinds.Select(kind => $"'{kind.Name}'"))}.");
+                : $"'{part.Kind}' is not a word a declared network is written in: {kinds.Select(kind => kind.Name).Quoted()}.");
 
     // The words left out on purpose, each with why and with the word that says it.
     private static IReadOnlyDictionary<string, string> Refused { get; } = new Dictionary<string, string>(StringComparer.Ordinal)

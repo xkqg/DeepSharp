@@ -396,7 +396,7 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
         one.SequenceEqual(other);
 
     private static string Takes(PartKind kind) =>
-        kind.Settings.Count == 0 ? "nothing" : string.Join(", ", kind.Settings.Select(setting => $"'{setting.Key}'"));
+        kind.Settings.Count == 0 ? "nothing" : kind.Settings.Select(setting => setting.Key).Quoted();
 
     // What leaving a setting out means, read through the one reader every part is read through: nothing for a setting a file
     // may not leave out.
@@ -483,7 +483,7 @@ public sealed class PartsParameter : StepParameter<IReadOnlyList<PartDeclaration
         Kinds.FirstOrDefault(kind => kind.Name == name)
         ?? throw fault($"'{name}' is not a part this step knows: {Told()}.");
 
-    private string Told() => string.Join(", ", Kinds.Select(kind => $"'{kind.Name}'"));
+    private string Told() => Kinds.Select(kind => kind.Name).Quoted();
 
     // One part as this parameter writes it: its name first, then its settings in the order the name takes them.
     private void Written(Utf8JsonWriter writer, PartDeclaration part)

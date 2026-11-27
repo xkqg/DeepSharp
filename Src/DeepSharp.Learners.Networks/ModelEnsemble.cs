@@ -17,12 +17,14 @@ namespace DeepSharp.Learners.Networks;
 public sealed class ModelEnsemble<TModel>
 {
     private readonly Func<TModel, IReadOnlyList<double[]>, IReadOnlyList<double[]>> _answer;
+    private readonly ServedAnswer _serving;
 
-    internal ModelEnsemble(IReadOnlyList<TModel> members, Func<TModel, IReadOnlyList<double[]>, IReadOnlyList<double[]>> answer, PreparedData prepared, Blend blend)
+    // The members answer as the pipeline the serving sequence holds hands rows over, and as it refuses features they did not learn from.
+    internal ModelEnsemble(IReadOnlyList<TModel> members, Func<TModel, IReadOnlyList<double[]>, IReadOnlyList<double[]>> answer, ServedAnswer serving, Blend blend)
     {
         Members = members;
         _answer = answer;
-        Prepared = prepared;
+        _serving = serving;
         Blend = blend;
     }
 
@@ -33,7 +35,7 @@ public sealed class ModelEnsemble<TModel>
     public Blend Blend { get; }
 
     /// <summary>The pipeline every member was trained behind: what serves it rows, and what brings its answers back into their own units.</summary>
-    public PreparedData Prepared { get; }
+    public PreparedData Prepared => _serving.Prepared;
 
     /// <summary>
     /// How the pipeline's report measured the ensemble beside each of its members, on the same rows; nothing when the pipeline
@@ -51,23 +53,13 @@ public sealed class ModelEnsemble<TModel>
     /// <param name="rows">The rows, without the answer: it is what is being asked.</param>
     /// <returns>For each row, a number for each answer, and where the row stood among those handed in.</returns>
     /// <exception cref="ArgumentNullException">There are no rows.</exception>
-    /// <exception cref="InvalidOperationException">The pipeline hands over other features than the member's own function reads, or a row is refused as a training row would be.</exception>
+    /// <exception cref="InvalidOperationException">The pipeline hands over other features than the members were trained on, or a row is refused as a training row would be.</exception>
     /// <remarks>The rows are replayed and named once for all the members, each member answers them through <c>answer</c>, and the answers are brought back through one walk of the rows and combined in the answer's own units.</remarks>
     public Predictions Predict(IRowSource rows)
     {
-        ArgumentNullException.ThrowIfNull(rows);
+        var answered = _serving.Blended(rows, served => [.. Members.Select(member => _answer(member, served.Features))], Blend, Interval);
 
-        var served = Prepared.Served(rows);
-        IReadOnlyList<double[]>[] said = [.. Members.Select(member => _answer(member, served.Features))];
-        var answers = Prepared.BackToOriginal(said, served, rows, Blend);
-        var ends = Interval?.Around(answers);
-
-        return new Predictions(Prepared.Declaration.Output!.Answers, answers, served.HandedInAt)
-        {
-            Ids = served.Ids,
-            Lower = ends?.Lower,
-            Upper = ends?.Upper,
-        };
+        return Predictions.Of(answered, Prepared.Declaration.Output!.Answers, unfamiliar: null);
     }
 
     /// <summary>An ensemble of the same members with the width its combined answers are worth, worked out on the rows the pipeline set aside to calibrate on.</summary>
@@ -80,7 +72,7 @@ public sealed class ModelEnsemble<TModel>
         var calibration = Prepared.Batch(Part.Calibration, Needs.Numbers);
         var interval = Prepared.IntervalOf([.. Members.Select(member => Predicted(member, calibration))], Blend, alpha);
 
-        return new ModelEnsemble<TModel>(Members, _answer, Prepared, Blend) { Interval = interval, Measures = Report(interval) };
+        return new ModelEnsemble<TModel>(Members, _answer, _serving, Blend) { Interval = interval, Measures = Report(interval) };
     }
 
     // What one member answers for a batch's rows.
@@ -89,7 +81,7 @@ public sealed class ModelEnsemble<TModel>
     // The report measured again, with the interval's margins, when it names the coverage or the width of one; as it was otherwise.
     private EnsembleMeasures? Report(ConformalInterval interval)
     {
-        if (Prepared.Declaration.Report is not { } report || !report.Metrics.Any(metric => metric is Metric.Coverage or Metric.Width))
+        if (Prepared.Declaration.Report is not { } report || !report.NamesAnInterval())
         {
             return Measures;
         }

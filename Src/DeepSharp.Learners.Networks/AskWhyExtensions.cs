@@ -13,7 +13,8 @@ namespace DeepSharp.Learners.Networks;
 /// Each question perturbs the rows handed in — columns shuffled among them, one column moved through its range, a row's values put
 /// over another's one column after another — serves them through the pipeline the model was trained behind, and reads the answers it
 /// gives in their own units. Nothing is fitted, so a category is one-hot and a log is undone exactly as they are when the model is asked
-/// anything else; and every draw comes from a seed the caller names.
+/// anything else; and every draw comes from a seed the caller names. Each row is answered by its own answer, in the order the rows were
+/// handed in, though a pipeline that orders its rows serves them in another.
 /// </remarks>
 public static class AskWhyExtensions
 {
@@ -27,7 +28,7 @@ public static class AskWhyExtensions
         {
             ArgumentNullException.ThrowIfNull(trained);
 
-            return trained.Prepared.RelianceOn(new RowsAnswered(rows, handed => trained.Predict(handed).Answers), redraws);
+            return trained.Prepared.RelianceOn(new RowsAnswered(rows, HandedInOrder(trained.Predict)), redraws);
         }
 
         /// <summary>What the network's answers do as one column moves through its range, with the rest of each row left as it was.</summary>
@@ -38,7 +39,7 @@ public static class AskWhyExtensions
         {
             ArgumentNullException.ThrowIfNull(trained);
 
-            return trained.Prepared.DependenceOn(new RowsAnswered(rows, handed => trained.Predict(handed).Answers), moving);
+            return trained.Prepared.DependenceOn(new RowsAnswered(rows, HandedInOrder(trained.Predict)), moving);
         }
 
         /// <summary>What one row's answer is made of, column by column.</summary>
@@ -50,7 +51,7 @@ public static class AskWhyExtensions
         {
             ArgumentNullException.ThrowIfNull(trained);
 
-            return trained.Prepared.MakeUpOf(new RowsAnswered(rows, handed => trained.Predict(handed).Answers), row, redraws);
+            return trained.Prepared.MakeUpOf(new RowsAnswered(rows, HandedInOrder(trained.Predict)), row, redraws);
         }
     }
 
@@ -64,7 +65,7 @@ public static class AskWhyExtensions
         {
             ArgumentNullException.ThrowIfNull(trained);
 
-            return trained.Prepared.RelianceOn(new RowsAnswered(rows, handed => trained.Predict(handed).Answers), redraws);
+            return trained.Prepared.RelianceOn(new RowsAnswered(rows, HandedInOrder(trained.Predict)), redraws);
         }
 
         /// <summary>What the ensemble's combined answers do as one column moves through its range, with the rest of each row left as it was.</summary>
@@ -75,7 +76,7 @@ public static class AskWhyExtensions
         {
             ArgumentNullException.ThrowIfNull(trained);
 
-            return trained.Prepared.DependenceOn(new RowsAnswered(rows, handed => trained.Predict(handed).Answers), moving);
+            return trained.Prepared.DependenceOn(new RowsAnswered(rows, HandedInOrder(trained.Predict)), moving);
         }
 
         /// <summary>What one row's combined answer is made of, column by column.</summary>
@@ -87,7 +88,16 @@ public static class AskWhyExtensions
         {
             ArgumentNullException.ThrowIfNull(trained);
 
-            return trained.Prepared.MakeUpOf(new RowsAnswered(rows, handed => trained.Predict(handed).Answers), row, redraws);
+            return trained.Prepared.MakeUpOf(new RowsAnswered(rows, HandedInOrder(trained.Predict)), row, redraws);
         }
     }
+
+    // How a model that hands its answers back in the order the rows were served answers rows as a question asks them: one answer for
+    // each row, in the order they were handed in.
+    private static Answering HandedInOrder(Func<IRowSource, Predictions> predict) => rows =>
+    {
+        var predictions = predict(rows);
+
+        return predictions.Answers.InHandedInOrder(predictions.HandedInAt);
+    };
 }

@@ -195,20 +195,7 @@ public class ParameterListTests
         // The word a pipeline file writes a choice as has one owner, the Word() of DeepSharp.Pipelines: its reader, its writer, a
         // message and a notebook all name the choice the same way. Lower-casing the name in place is a second owner that drifts
         // the day a value is renamed. The tensor core cannot reach that owner, since it stands under it, and keeps its own.
-        const string ByHand = "ToString().ToLowerInvariant()";
-
-        var read = ReadHere().Select(assembly => assembly.GetName().Name!).Where(name => name != "DeepSharp").ToArray();
-        var spelled = read
-            .SelectMany(name => Directory.EnumerateFiles(Path.Join(Repository.Root, "Src", name), "*.cs", SearchOption.AllDirectories))
-            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-            .SelectMany(file => File.ReadAllLines(file)
-                .Select((line, at) => line.Contains(ByHand, StringComparison.Ordinal)
-                    ? $"{Path.GetRelativePath(Repository.Root, file).Replace('\\', '/')}:{at + 1}"
-                    : null)
-                .OfType<string>())
-            .ToArray();
-
-        Assert.NotEmpty(read);
+        var spelled = Spelled(["ToString().ToLowerInvariant()"]);
 
         if (spelled.Length > 0)
         {
@@ -251,26 +238,73 @@ public class ParameterListTests
         // positions, the declaration's schema and the rules that limit a kind. A rule that looked for the schema or the split
         // itself would drift the day another step stood in for it, and a list of the limited kinds kept beside the rules would
         // be a second copy to forget.
-        string[] byHand = ["OfType<DeclareStep>()", "FirstSplit(", "PipelineDeclaration.FaultsIn(", "OnceOnly"];
-
-        var read = ReadHere().Select(assembly => assembly.GetName().Name!).Where(name => name != "DeepSharp").ToArray();
-        var spelled = read
-            .SelectMany(name => Directory.EnumerateFiles(Path.Join(Repository.Root, "Src", name), "*.cs", SearchOption.AllDirectories))
-            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
-            .SelectMany(file => File.ReadAllLines(file)
-                .Select((line, at) => byHand.Any(form => line.Contains(form, StringComparison.Ordinal))
-                    ? $"{Path.GetRelativePath(Repository.Root, file).Replace('\\', '/')}:{at + 1}"
-                    : null)
-                .OfType<string>())
-            .ToArray();
-
-        Assert.NotEmpty(read);
+        var spelled = Spelled(["OfType<DeclareStep>()", "FirstSplit(", "PipelineDeclaration.FaultsIn(", "OnceOnly"]);
 
         if (spelled.Length > 0)
         {
             Assert.Fail($"{spelled.Length} places find the schema or the first split by hand, or decide whether steps are a declaration without PipelineDeclaration.Try:{Environment.NewLine}" +
                         string.Join(Environment.NewLine, spelled));
         }
+    }
+
+    [Fact]
+    public void NoPackageRefusesFeaturesAModelDidNotLearnFrom_ButTheServingSequence()
+    {
+        // Every model behind a pipeline serves rows through one sequence, ServedAnswer, and refuses rows handed over as other
+        // features than it learned from in its one sentence: four copies of it had drifted apart in their nouns, and one had none.
+        var spelled = Spelled(["answers only what it learned from"]);
+
+        Assert.All(spelled, at => Assert.StartsWith("Src/DeepSharp.Pipelines/ServedAnswer.cs:", at, StringComparison.Ordinal));
+        Assert.True(spelled.Length == (ReadsTheOwners() ? 1 : 0), string.Join(Environment.NewLine, spelled));
+    }
+
+    [Fact]
+    public void NoPackageDecidesWhetherAReportMeasuresAnIntervalByHand_ButTheMetricsOwner()
+    {
+        // Whether a measure is of an interval, and so whether a report is measured again once a model has one, has one owner
+        // beside the measures' families: a copy that named the two measures in place would miss a third.
+        var spelled = Spelled(["is Metric.Coverage or Metric.Width", "is Metric.Width or Metric.Coverage"]);
+
+        Assert.All(spelled, at => Assert.StartsWith("Src/DeepSharp.Pipelines/Report.cs:", at, StringComparison.Ordinal));
+        Assert.True(spelled.Length == (ReadsTheOwners() ? 1 : 0), string.Join(Environment.NewLine, spelled));
+    }
+
+    [Fact]
+    public void NoPackageReadsAModelsAnswersByThePlaceTheRowWasServedAt_ButTheBridgeBackToTheOrderTheyWereHandedIn()
+    {
+        // A pipeline that orders its rows serves them in its own order, so the answer standing at a row's place among the served
+        // rows is another row's: what is handed back row for row goes through the one bridge, ServedOrderExtensions.
+        var spelled = Spelled(["Predict(handed).Answers", "Predict(rows).Answers"]);
+
+        if (spelled.Length > 0)
+        {
+            Assert.Fail($"{spelled.Length} places read a model's answers by the place each row was served at:{Environment.NewLine}" +
+                        string.Join(Environment.NewLine, spelled));
+        }
+    }
+
+    // Whether this suite reads the package the shared owners stand in, which the other packages reach through its internals.
+    private static bool ReadsTheOwners() => ReadHere().Any(assembly => assembly.GetName().Name == "DeepSharp.Pipelines");
+
+    // Where any of these forms is written in the packages this suite reads, but for the tensor core, which stands under every
+    // owner: each place as its file and line.
+    private static string[] Spelled(string[] forms)
+    {
+        var read = ReadHere().Select(assembly => assembly.GetName().Name!).Where(name => name != "DeepSharp").ToArray();
+
+        Assert.NotEmpty(read);
+
+        return
+        [
+            .. read
+                .SelectMany(name => Directory.EnumerateFiles(Path.Join(Repository.Root, "Src", name), "*.cs", SearchOption.AllDirectories))
+                .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+                .SelectMany(file => File.ReadAllLines(file)
+                    .Select((line, at) => forms.Any(form => line.Contains(form, StringComparison.Ordinal))
+                        ? $"{Path.GetRelativePath(Repository.Root, file).Replace('\\', '/')}:{at + 1}"
+                        : null)
+                    .OfType<string>()),
+        ];
     }
 
     // The lines of a file, numbered, without the class that owns the facts: it runs from its declaration to the closing brace at the margin.

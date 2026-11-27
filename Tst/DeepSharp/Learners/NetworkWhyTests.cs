@@ -41,10 +41,14 @@ public class NetworkWhyTests
 
     private static InMemoryRowSource Source(IEnumerable<string[]> rows) => new(Names, rows.Select(row => (IReadOnlyList<string?>)row));
 
-    private static PreparedData Prepared() =>
-        Pdd.Create()
+    // A pipeline ordered by t serves its rows in that order, whatever order they were handed in.
+    private static PreparedData Prepared(bool ordered = false)
+    {
+        var declared = Pdd.Create()
             .Read(Source(Rows(1200)), "twelve hundred")
-            .Declare(schema => schema.Integer("t").Number("x", "noise", "y").Category("group"))
+            .Declare(schema => schema.Integer("t").Number("x", "noise", "y").Category("group"));
+
+        return (ordered ? declared.OrderBy("t") : declared)
             .SplitAtRandom(0.70, 0.15, 5, testSeed: 9)
             .Target("y")
             .Drop("t")
@@ -54,6 +58,7 @@ public class NetworkWhyTests
             .WithTorch(network => network.Dense(12).Relu().Dense(1).Adam(0.02).MeanSquaredError().Run(seed: 1, epochs: 60))
             .Build()
             .Run();
+    }
 
     private static TrainedNetwork Trained(PreparedData prepared) =>
         prepared.Train(((LearnNetworkStep)prepared.Declaration.Learner!) with { Seed = 1 }, cancellation: TestContext.Current.CancellationToken);
@@ -89,6 +94,19 @@ public class NetworkWhyTests
         Assert.Equal(answer, makeUp.Answer[0], 5);
         Assert.Equal(answer - makeUp.Background[0], makeUp.Columns.Sum(column => column.Contributions[0]), 5);
         Assert.Contains(makeUp.Columns.Take(2).Select(column => column.Column), name => name is "x" or "group");
+    }
+
+    [Fact]
+    public void AnOrderedPipeline_ExplainsEachRowByItsOwnAnswer()
+    {
+        // The rows are handed in the other way round from the order the pipeline serves them in. The network never sees t, so
+        // shuffling it moves no answer: unless a row is explained by the answer that stands at its place among the served rows,
+        // which shuffling t reorders, and which is another row's.
+        var trained = Trained(Prepared(ordered: true));
+        var reliance = trained.Leaning(Source(Rows(200).AsEnumerable().Reverse()), new Redraws(seed: 3, repeats: 3));
+
+        Assert.Equal(0, reliance.Columns.Single(column => column.Column == "t").Mean);
+        Assert.Equal(["group", "x"], reliance.Columns.Take(2).Select(column => column.Column).Order(StringComparer.Ordinal));
     }
 
     [Fact]

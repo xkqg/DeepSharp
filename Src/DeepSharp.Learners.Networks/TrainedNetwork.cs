@@ -132,7 +132,7 @@ public sealed class TrainedNetwork
 
     // The report measured again, with the interval's margins, when it names the coverage or the width of one; as it was otherwise.
     private Measures? Report(Chunking chunking, ConformalInterval interval) =>
-        Prepared.Declaration.Report is { } report && report.Metrics.Any(metric => metric is Metric.Coverage or Metric.Width)
+        Prepared.Declaration.Report is { } report && report.NamesAnInterval()
             ? Prepared.Measure([.. report.Parts.Distinct().Select(part => Predicted(Prepared.Batch(part, FeatureNeeds), chunking) with { Margins = interval.Margins })])
             : Measures;
 
@@ -169,27 +169,14 @@ public sealed class TrainedNetwork
     /// </remarks>
     public Predictions Predict(IRowSource rows, ITensorBackend backend)
     {
-        ArgumentNullException.ThrowIfNull(rows);
         ArgumentNullException.ThrowIfNull(backend);
 
-        var served = Prepared.Served(rows, FeatureNeeds);
+        var answered = new ServedAnswer(Prepared, FeatureNeeds, new LearnedFrom("network", TrainedOn.Features)).Answered(
+            rows,
+            served => Answered(Network, Loss, served.Features, new Chunking(backend, ServingBatchSize) { Example = served.ExampleShape }),
+            Interval);
 
-        if (!served.FeatureNames.SequenceEqual(TrainedOn.Features))
-        {
-            throw new InvalidOperationException(
-                $"This network was trained on {Listed(TrainedOn.Features)}, and its pipeline hands over {Listed(served.FeatureNames)}: a network answers only what it learned from.");
-        }
-
-        var answers = Prepared.BackToOriginal(Answered(Network, Loss, served.Features, new Chunking(backend, ServingBatchSize) { Example = served.ExampleShape }), served, rows);
-        var ends = Interval?.Around(answers);
-
-        return new Predictions(TrainedOn.Answers, answers, served.HandedInAt)
-        {
-            Unfamiliar = Unfamiliar(TrainedOn, served.Features),
-            Ids = served.Ids,
-            Lower = ends?.Lower,
-            Upper = ends?.Upper,
-        };
+        return Predictions.Of(answered, TrainedOn.Answers, Unfamiliar(TrainedOn, answered.Served.Features));
     }
 
     /// <summary>The one file: the network, what it was trained on, and the pipeline it was trained behind.</summary>
@@ -342,7 +329,7 @@ public sealed class TrainedNetwork
 
         return output.Answers.SequenceEqual(trainedOn.Answers)
             ? null
-            : new FileFault(NetworkKey, $"The network was trained to answer {Listed(trainedOn.Answers)}, and its pipeline answers {Listed(output.Answers)}.");
+            : new FileFault(NetworkKey, $"The network was trained to answer {trainedOn.Answers.Quoted()}, and its pipeline answers {output.Answers.Quoted()}.");
     }
 
     /// <summary>
@@ -391,8 +378,6 @@ public sealed class TrainedNetwork
         return stream.TextWithLineFeeds();
     }
 
-    private static string Listed(IEnumerable<string> names) => string.Join(", ", names.Select(name => $"'{name}'"));
-
     // Each feature that held one value on every training row, as the rows were handed over, with that value: a network
     // learns nothing about how its answer moves with it. A feature is looked at until it shows a second value, and none held
     // one where there are no rows.
@@ -419,8 +404,28 @@ public sealed class TrainedNetwork
 /// a count for each share of a whole, a price for a return — as the pipeline's way back gives it; never a class label.
 /// </param>
 /// <param name="HandedInAt">For each served row, where it stood among the rows handed in, from nought.</param>
+/// <remarks>
+/// The rows stand in the order they were served, which is the pipeline's: one that orders its rows by a column serves them in
+/// that order, whatever order they were handed in. <see cref="HandedInAt"/> pairs each answer with its row, and <see cref="Ids"/>
+/// with what the row says it is; the questions a model is asked about why it answers as it does read the answers in the order the
+/// rows were handed in, through the same pairing.
+/// </remarks>
 public readonly record struct Predictions(IReadOnlyList<string> AnswerNames, IReadOnlyList<double[]> Answers, IReadOnlyList<int> HandedInAt)
 {
+    /// <summary>What a model behind a pipeline answered for rows served to it, as it hands them back.</summary>
+    /// <param name="answered">The answers, in the order the rows were served, with what was served and the interval's ends.</param>
+    /// <param name="answerNames">What each number of a row's answers stands for.</param>
+    /// <param name="unfamiliar">For each served row, the features it moves away from the one value every training row held them at; nothing when the model does not say.</param>
+    /// <returns>The predictions.</returns>
+    internal static Predictions Of(ServedAnswers answered, IReadOnlyList<string> answerNames, IReadOnlyList<IReadOnlyList<string>>? unfamiliar) =>
+        new(answerNames, answered.Answers, answered.Served.HandedInAt)
+        {
+            Unfamiliar = unfamiliar,
+            Ids = answered.Served.Ids,
+            Lower = answered.Ends?.Lower,
+            Upper = answered.Ends?.Upper,
+        };
+
     /// <summary>
     /// For each served row, in the order of <see cref="Answers"/>, the features it moves away from the one value every
     /// training row held them at, in the order the network takes them: empty for a row that moves none. Nothing when the

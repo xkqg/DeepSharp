@@ -298,8 +298,13 @@ public class BoostedNetworkTests
         correctionFile["correction"]!.AsObject().Remove("trainedOn");
         var correctionFault = Assert.Throws<NetworkFileException>(() => BoostedNetwork.FromJson(correctionFile.ToJsonString(), NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks()));
 
+        var digestFile = file.DeepClone().AsObject();
+        digestFile.Remove("basisDigest");
+        var digestFault = Assert.Throws<NetworkFileException>(() => BoostedNetwork.FromJson(digestFile.ToJsonString(), NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks()));
+
         Assert.Contains("basis names nothing", basisFault.Message, StringComparison.Ordinal);
         Assert.Contains("correction names nothing", correctionFault.Message, StringComparison.Ordinal);
+        Assert.Contains("names no digest the correction was fitted against", digestFault.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -315,6 +320,14 @@ public class BoostedNetworkTests
         var refused = Assert.Throws<NetworkFileException>(() => BoostedNetwork.FromJson(file.ToJsonString(), NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks()));
 
         Assert.Contains("another fit", refused.Message, StringComparison.Ordinal);
+
+        var otherAnswers = JsonNode.Parse(boosted.ToJson())!.AsObject();
+
+        otherAnswers["basis"]!["trainedOn"]!["answers"] = new JsonArray("elsewhere");
+
+        var answering = Assert.Throws<NetworkFileException>(() => BoostedNetwork.FromJson(otherAnswers.ToJsonString(), NetworkCatalog.BuiltIn(), StepCatalog.BuiltIn().WithNetworks()));
+
+        Assert.Contains("trained to answer 'elsewhere'", answering.Message, StringComparison.Ordinal);
     }
 
     [Fact]

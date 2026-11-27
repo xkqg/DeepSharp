@@ -271,7 +271,7 @@ beside one another — each value, the mean, the sample standard deviation, the 
 about whether a spread is wide, as the paired comparison of two pipelines says nothing about whether a difference
 matters. A study takes the folds as its deals, so a candidate is judged by the mean of its validation loss over them.
 
-Why a model answers as it does is asked of the rows as they were read, not of the numbers they were made into: a category is one-hot and a log is undone, and the columns a person knows are the ones they came with. So the three questions — which columns the answers lean on, what they do as one column moves, what one row's answer is made of — perturb the text of the rows handed in and replay them through the pipeline the model was trained behind, which fits nothing, and read the answers back in their own units. They are the pipeline's: the model is a way of answering rows, so a network, an ensemble and a tree are explained by one arithmetic, each from a seed and a number of draws the caller names. One mechanism serves all three, and no gradient is read, because a gradient reaches the numbers a column became and cannot reach the column.
+Why a model answers as it does is asked of the rows as they were read, not of the numbers they were made into: a category is one-hot and a log is undone, and the columns a person knows are the ones they came with. So the three questions — which columns the answers lean on, what they do as one column moves, what one row's answer is made of — perturb the text of the rows handed in and replay them through the pipeline the model was trained behind, which fits nothing, and read the answers back in their own units, each in the order the rows were handed in, whatever order the pipeline serves them in. They are the pipeline's: the model is a way of answering rows, so a network, an ensemble and a tree are explained by one arithmetic, each from a seed and a number of draws the caller names. One mechanism serves all three, and no gradient is read, because a gradient reaches the numbers a column became and cannot reach the column.
 
 A part of the rows is set aside for a width and not for a number: `Calibration` is fitted on by nothing and chosen by nothing, which is what lets the errors made there stand for the errors made on rows nobody has seen. Validation cannot be it, since a model is chosen by validation and so has already seen what it chose; test cannot, since a number is reported there once everything else is settled. An interval is therefore the pipeline's and not a learner's: the margin is the ⌈(n+1)(1−α)⌉-th smallest error on those rows in the answer's own units, worked out once beside the measures from whatever a model predicted, so a network, an ensemble and a tree are given it by the same arithmetic and keep it under one key in their own files. It is the same width on every row, holds on average over exchangeable rows, and says nothing of one row.
 
@@ -1522,6 +1522,17 @@ found again by where it was handed in and checked by its key — rows handed in 
 otherwise be answered with another row's numbers. What is kept as it was read is what a way back names: the column
 each answer comes back to, and every column a step on the way reads. Against those values the run checks every
 answer's way back before anything is handed over.
+
+Every model behind a pipeline answers a served row by one sequence, and supplies only how it answers the rows handed over to
+it: the rows are served; refused when the pipeline hands over other features than the model learned from, in one sentence
+whatever the model is; answered; brought back through the way back — each member brought back first and combined there, for an
+ensemble, and a boosted pair's raw sum brought back once, since it is one answerer; and given the ends of the interval when the
+model has one. A network, an ensemble of networks or of a caller's models, a boosted pair and a tree are five ways of answering
+and one way of serving. The answers stand in the order the rows were served, which is the pipeline's, and a network's
+predictions keep that order with where each row was handed in beside it. Whatever is handed back row for row — the answers
+the questions of why read, a tree's answers to rows — goes back through one bridge to the order the rows were handed in: under
+an `order.by`, the answer standing at a row's place among the served rows is another row's, and a column the model never reads,
+shuffled, moved the answers it was explained by.
 
 ### A distribution can be in an order, and a whole can have what is left over
 

@@ -349,7 +349,7 @@ public sealed record PipelineCourse
 
         return kept.Length > 0
             ? new PipelineCourse(kept)
-            : throw new ArgumentException($"Without {string.Join(", ", verbs.Select(verb => $"'{verb}'"))} this course would hold no step.", nameof(verbs));
+            : throw new ArgumentException($"Without {verbs.Quoted()} this course would hold no step.", nameof(verbs));
     }
 
     // The places of the steps written under a verb; the course's own words when it holds none.
@@ -391,7 +391,7 @@ public sealed record PipelineCourse
 
             if (keys.Count > 0)
             {
-                waiting.Add(new DeclarationFault(at, step.Verb, $"waits for what only you can say: {string.Join(", ", keys.Select(key => $"'{key}'"))}."));
+                waiting.Add(new DeclarationFault(at, step.Verb, $"waits for what only you can say: {keys.Quoted()}."));
             }
         }
 

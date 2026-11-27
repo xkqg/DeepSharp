@@ -82,6 +82,16 @@ The seventh letter of the flock team.
 - **A notebook whose first blocks leave out the split a later report needs no longer throws.** It reads the longest
   beginning that is a declaration, and names the step that stops it, as it does for any other fault.
 - **An answer read ahead with no order declared is refused once.** It was refused twice for the one missing order.
+- **A model behind a pipeline that orders its rows is explained by each row's own answer.** Asking a network, an ensemble
+  or a tree why it answers as it does read its answers in the order the pipeline served the rows, and under an `order.by`
+  that is not the order they were handed in, so a row was explained by another row's answer: a column the network never
+  reads, shuffled, moved its answers by 1.55 on average, where it moves them by nothing. Every answer is now put back beside
+  the row it was asked of first. `TrainedMLModel.Predict(rows)` hands its answers back in the order the rows were handed
+  in, as it always said it did; under an `order.by` it handed them back in the pipeline's order, with nothing to tell which
+  was whose.
+- **An ensemble of your own models refuses rows handed over as other features than its members learned from**, as a
+  network, an ensemble of networks, a boosted pair and a tree already did. All five now serve rows the same way and refuse
+  such rows in one sentence, which names the features on both sides.
 
 ### Changed
 
