@@ -133,7 +133,7 @@ public class KnownHistoryTests
     // t11, t12 validation and t3..t5 test.
     private static string Twelve(double row4 = 40) =>
         "t,key,v\n" + string.Concat(Enumerable.Range(1, 12).Select(t =>
-            $"{t},A,{(t == 4 ? row4 : 10 * t).ToString(System.Globalization.CultureInfo.InvariantCulture)}\n"));
+            $"{t},A,{(t == 4 ? row4 : 10.0 * t).ToString(System.Globalization.CultureInfo.InvariantCulture)}\n"));
 
     private static PreparedData AtRandom(string rows) =>
         Pdd.Create()

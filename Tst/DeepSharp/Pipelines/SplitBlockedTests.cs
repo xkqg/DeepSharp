@@ -21,7 +21,7 @@ public class SplitBlockedTests
 
     private static InMemoryRowSource Days(bool reversed = false)
     {
-        var days = Enumerable.Range(0, 70).Select(day => (IReadOnlyList<string?>)
+        var days = Enumerable.Range(0, 70).Select<int, IReadOnlyList<string?>>(day =>
         [
             First.AddDays(day).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
             (day % 3).ToString(CultureInfo.InvariantCulture),

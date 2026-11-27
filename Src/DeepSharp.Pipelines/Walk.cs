@@ -152,12 +152,9 @@ internal sealed class Walk(Course course, WalkMode mode, SourceFolder folder)
             }
 
             // Only a split that keeps rows apart, or sets rows aside, says how many: every other one writes what it always wrote.
-            foreach (var part in Part.CountedWhenKept)
+            foreach (var part in Part.CountedWhenKept.Where(part => parts.Contains(part)))
             {
-                if (parts.Count(each => each == part) is > 0 and var kept)
-                {
-                    seen.Learned($"rows.{part.Word()}", kept);
-                }
+                seen.Learned($"rows.{part.Word()}", parts.Count(each => each == part));
             }
 
             // A source that leaves rows out says how many beside what each part holds: rows a join found no partner for

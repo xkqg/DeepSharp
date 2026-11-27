@@ -192,7 +192,7 @@ internal sealed class StudyLoop<TTrained>(SearchSpace space, StudySettings setti
 
         var prepare = begin(trainer.Needs);
         var trials = new List<Trial>(earlier);
-        var best = earlier.Aggregate((Trial?)null, (sofar, trial) => Beats(trial, sofar) ? trial : sofar);
+        var best = earlier.Aggregate<Trial, Trial?>(null, (sofar, trial) => Beats(trial, sofar) ? trial : sofar);
         IReadOnlyList<TTrained> winner = [];
 
         for (var number = earlier.Count; number < settings.Trials; number++)

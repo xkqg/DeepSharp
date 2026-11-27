@@ -32,6 +32,6 @@ internal static class HandedRowsExtensions
         /// <param name="combine">What becomes of a number of these rows and the matching number of the others.</param>
         /// <returns>The rows as these are shaped, each number what the operation made of the two.</returns>
         internal double[][] Combined(IReadOnlyList<double[]> second, Func<double, double, double> combine) =>
-            [.. rows.Select((row, at) => (double[])[.. row.Select((value, column) => combine(value, second[at][column]))])];
+            [.. rows.Select<double[], double[]>((row, at) => [.. row.Select((value, column) => combine(value, second[at][column]))])];
     }
 }

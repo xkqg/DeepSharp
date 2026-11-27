@@ -275,7 +275,7 @@ public class FittedVocabularyTests
     // Rows of one key, the n-th standing at moment n, holding the values given.
     private static Table OneKeyInTime(params double?[] values) => new(
     [
-        new TextColumn("k", ColumnKind.Category, [.. values.Select(_ => (string?)"x")]),
+        new TextColumn("k", ColumnKind.Category, [.. values.Select(_ => "x")]),
         new Column<double>("a", ColumnKind.Number, values),
         new Column<double>("t", ColumnKind.Number, [.. Enumerable.Range(1, values.Length).Select(moment => (double?)moment)]),
     ]);

@@ -656,12 +656,9 @@ public sealed record SplitBlockedStep : ISplitStep, IDividesByAColumn, IPipeline
 
         var blocks = BlocksOf(table);
 
-        foreach (var part in Part.Dealt)
+        foreach (var part in Part.Dealt.Where(part => parts.Contains(part)))
         {
-            if (Enumerable.Range(0, table.RowCount).Where(row => parts[row] == part).Select(row => blocks[row]).Distinct().Count() is > 0 and var held)
-            {
-                seen.Learned($"blocks.{part.Word()}", held);
-            }
+            seen.Learned($"blocks.{part.Word()}", Enumerable.Range(0, table.RowCount).Where(row => parts[row] == part).Select(row => blocks[row]).Distinct().Count());
         }
     }
 

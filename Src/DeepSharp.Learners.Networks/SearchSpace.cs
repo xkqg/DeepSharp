@@ -314,6 +314,9 @@ public sealed class SearchSpace : IReadOnlyList<Dimension>
 /// </summary>
 public sealed class Candidate : IEquatable<Candidate>
 {
+    // Equal to another candidate's when they hold the same settings in the same order.
+    private readonly ValueList<Setting> _settings;
+
     /// <summary>Gathers the settings of one point.</summary>
     /// <param name="settings">The settings, no two under one name.</param>
     /// <exception cref="ArgumentException">Two settings are for one name.</exception>
@@ -321,16 +324,16 @@ public sealed class Candidate : IEquatable<Candidate>
     {
         ArgumentNullException.ThrowIfNull(settings);
 
-        Settings = settings.Valued();
+        _settings = settings.Valued();
 
-        if (Settings.Select(each => each.Name).Distinct(StringComparer.Ordinal).Count() != Settings.Count)
+        if (_settings.Select(each => each.Name).Distinct(StringComparer.Ordinal).Count() != _settings.Count)
         {
             throw new ArgumentException("A candidate holds one setting for a name.", nameof(settings));
         }
     }
 
     /// <summary>The settings, in the order of the dimensions they were drawn for.</summary>
-    public IReadOnlyList<Setting> Settings { get; }
+    public IReadOnlyList<Setting> Settings => _settings;
 
     /// <summary>A setting that is a number.</summary>
     /// <param name="name">The dimension.</param>
@@ -374,13 +377,13 @@ public sealed class Candidate : IEquatable<Candidate>
     }
 
     /// <inheritdoc />
-    public bool Equals(Candidate? other) => other is not null && Settings.Equals(other.Settings);
+    public bool Equals(Candidate? other) => other is not null && _settings.Equals(other._settings);
 
     /// <inheritdoc />
     public override bool Equals(object? obj) => Equals(obj as Candidate);
 
     /// <inheritdoc />
-    public override int GetHashCode() => Settings.GetHashCode();
+    public override int GetHashCode() => _settings.GetHashCode();
 
     private Setting Named(string name) =>
         Settings.FirstOrDefault(each => each.Name == name) is { Name: not null } found

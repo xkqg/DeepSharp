@@ -207,9 +207,12 @@ internal sealed class Ensemble
     {
         var each = new ServedAnswers[Members.Count];
 
-        foreach (var together in Enumerable.Range(0, Members.Count).GroupBy(at => new ServedTogether(Members[at].Behind, Members[at].Serving.Needs)))
+        var groups = Enumerable.Range(0, Members.Count)
+            .GroupBy(at => new ServedTogether(Members[at].Behind, Members[at].Serving.Needs))
+            .Select(together => together.ToArray());
+
+        foreach (var places in groups)
         {
-            int[] places = [.. together];
             var answered = Members[places[0]].Serving.Each(
                 rows,
                 [.. places.Select(at => (Func<ServedBatch, IReadOnlyList<double[]>>)(served => Members[at].Answered(served, chunking)))]);

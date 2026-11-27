@@ -36,9 +36,12 @@ public class ValueListTests
     {
         var one = new ValueList<int>([1]);
 
+        // The same numbers in a list of another kind, handed over as anything at all.
+        object another = new List<int> { 1 };
+
         Assert.False(one.Equals((ValueList<int>?)null));
         Assert.False(one.Equals((object?)null));
-        Assert.False(one.Equals(new List<int> { 1 }));
+        Assert.False(one.Equals(another));
         Assert.True(one.Equals(one));
     }
 
@@ -110,7 +113,9 @@ public class ValueListTests
     [Fact]
     public void ValuedOfNothing_IsRefused()
     {
-        Assert.Throws<ArgumentNullException>(() => ((IEnumerable<int>)null!).Valued());
+        IEnumerable<int> nothing = null!;
+
+        Assert.Throws<ArgumentNullException>(() => nothing.Valued());
         Assert.Throws<ArgumentNullException>(() => new ValueList<int>(null!));
     }
 

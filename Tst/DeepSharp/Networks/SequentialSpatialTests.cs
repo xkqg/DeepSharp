@@ -97,28 +97,40 @@ public class SequentialSpatialTests
         Assert.Equal(new Shape(2, 4, 4, 5, 1), volume.Forward(Tensor.Zeros(new Shape(2, 3, 3, 3, 1)), Pass.Evaluation(Engine)).Shape);
     }
 
+    /// <summary>A border, an output padding, and what is then dropped and what added.</summary>
+    private readonly record struct BorderCase(Sides Given, int OutputPadding, Sides Drops, int Added);
+
+    private static readonly BorderCase[] Settlings =
+    [
+        new(new Sides(2, 3), 1, new Sides(2, 2), 0),
+        new(new Sides(2, 0), 1, new Sides(2, 0), 1),
+        new(new Sides(1, 1), 0, new Sides(1, 1), 0),
+    ];
+
     [Fact]
-    public void TheOutputPaddingIsKeptByDroppingLess_AndOnlyWhatTheBorderLacksIsAdded_InBothFormsOfTheAnswer()
+    public void TheOutputPaddingIsKeptByDroppingLess_AndOnlyWhatTheBorderLacksIsAdded()
     {
-        static void Settles(Sides given, int outputPadding, Sides drops, int added)
+        foreach (var (given, outputPadding, drops, added) in Settlings)
         {
             var settled = TransposedConvolution.Settle(given, outputPadding);
 
             Assert.Equal(drops, settled.Dropped);
             Assert.Equal(added, settled.Added);
+        }
+    }
 
-            // The form an earlier release published stays, and says the same thing as a pair.
-#pragma warning disable CS0618
+    [Fact]
+    [Obsolete("Holds the pair an earlier release published to what Settle now hands back; the one place that calls it.")]
+    public void TheFormAnEarlierReleasePublished_SaysTheSameThingAsAPair()
+    {
+        foreach (var (given, outputPadding, _, _) in Settlings)
+        {
+            var settled = TransposedConvolution.Settle(given, outputPadding);
             var (dropped, grown) = TransposedConvolution.Settling(given, outputPadding);
-#pragma warning restore CS0618
 
             Assert.Equal(settled.Dropped, dropped);
             Assert.Equal(settled.Added, grown);
         }
-
-        Settles(new Sides(2, 3), 1, new Sides(2, 2), 0);
-        Settles(new Sides(2, 0), 1, new Sides(2, 0), 1);
-        Settles(new Sides(1, 1), 0, new Sides(1, 1), 0);
     }
 
     [Fact]

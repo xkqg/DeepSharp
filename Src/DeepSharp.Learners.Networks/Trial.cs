@@ -68,9 +68,13 @@ public sealed record Trial(int Number, Candidate Candidate, LearnNetworkStep? De
     public IReadOnlyList<double> KindSpreads => [.. Kinds.Cut(Scores).Select(scores => scores.SampleSpread())];
 
     /// <summary>Whether every deal gave a number, or every one of a vector: a network that diverged, or a trial that was pruned, is a trial that did not finish.</summary>
-    public bool Finished =>
-        !Pruned
-        && ((Scores.Count > 0 && Scores.All(double.IsFinite)) || (ObjectiveScores.Count > 0 && ObjectiveScores.All(objectives => objectives.All(double.IsFinite))));
+    public bool Finished => !Pruned && (EveryScoreANumber || EveryObjectiveANumber);
+
+    // Every deal gave a score, and every one is a number.
+    private bool EveryScoreANumber => Scores.Count > 0 && Scores.All(double.IsFinite);
+
+    // Every deal gave a vector of objectives, and every one of them is a number.
+    private bool EveryObjectiveANumber => ObjectiveScores.Count > 0 && ObjectiveScores.All(objectives => objectives.All(double.IsFinite));
 
     /// <summary>
     /// How the network was judged: the mean of its scores over the deals; no number for a trial that has none. With deals of

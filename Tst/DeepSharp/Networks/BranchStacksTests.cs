@@ -73,6 +73,7 @@ public class BranchStacksTests
 
         Assert.Equal(8, VersionOf(written));
         Assert.Contains("\"takes\"", written, StringComparison.Ordinal);
+        Assert.Equal(written, Written(read.Network));
     }
 
     [Fact]
