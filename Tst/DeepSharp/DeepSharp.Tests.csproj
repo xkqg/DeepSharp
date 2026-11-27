@@ -18,8 +18,10 @@
   <ItemGroup>
     <PackageReference Include="xunit.v3" Version="4.*" />
     <!-- A real container, so the registration tests prove what a hosted application would actually get. -->
+    <!-- The major the library's abstractions are pinned to, the newest that is built for .NET 8. -->
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.*" />
     <!-- A real database for the one test that asks whether a provider's reader arrives as rows. -->
+    <!-- The newest major that is built for .NET 8: Microsoft.Data.Sqlite 11 is built for .NET 10 alone. -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.*" />
     <!-- An outside JSON Schema validator, here only, to prove that the schema the steps describe accepts
          what the library writes and refuses what its reader refuses. The core has no business carrying one. -->

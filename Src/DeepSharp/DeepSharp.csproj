@@ -8,6 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- A deliberate pin to the newest major that is built for .NET 8: System.Numerics.Tensors 11 is built for .NET 10 and later,
+         says it does not support net8.0, and its net8.0 fallback lacks members the engine calls (TensorPrimitives.Sqrt). -->
     <PackageReference Include="System.Numerics.Tensors" Version="10.*" />
   </ItemGroup>
 

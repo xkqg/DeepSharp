@@ -18,6 +18,8 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
+**0.19.0 answers the flock team's seventh letter.** It is built on MatPlotLibNet 1.30.0 and Microsoft.ML 6.0.0.
+
 **0.18.0 answers the flock team's sixth letter.** `Study<TModel>` tries candidates trained by a function of the
 caller's own — handed the deal, returning the score and the model it made — with the sampler, the deals, a pruner, a
 deal stopper and resuming from earlier trials all working exactly as they do for a `Study` of networks;
@@ -29,18 +31,6 @@ already known — standing only below a split in time. Answering that found two 
 than the row it stood on; both are refused now, by name. `ConformalInterval.FromErrors` and `CorrelationMatrix.From`
 are public, so a margin and a correlation matrix can both be worked out outside any pipeline. The pipeline file is at
 version 16, and a file 0.17.0 wrote is read, written again and served as it was.
-
-**0.17.0 is three shapes a network could not yet be put together as, and a study that weighs more than one number.**
-A gated feed-forward block splits the encoder block's hidden layer into a gate and a value, the gate weighing the value
-after its own bend — `EncoderShape.Gate`, one of `ReGlu`, `GeGlu` or `SwiGlu`. `BoostedNetwork` trains a correction on
-what a basis already answered, its own frozen answer subtracted from the truth, the two summed once before either
-comes back into the answer's own units. `BatchEnsemble` and `VariantHeads` make one network answer as an ensemble of
-itself — every row multiplied by a different one of several learned adapters before the shared layers run, closed again
-by separate, un-shared heads at the end. And `Study.Objectives` gives a trial a vector instead of the one number a
-`Score` or a `Judge` gives, with `ParetoFront()` keeping every trial none of the others betters on every value and is
-strictly better on at least one. Three more optimizers, `Lion`, `RAdam` and `Adan`, round out what a 2025–2026 look at
-PyTorch and TensorFlow still found missing. Nothing here moves a file's version; everything reads, trains and serves
-behind a pipeline exactly as before.
 
 Every release that brought something to call, this one and the ones before it, has examples on the wiki: what is new and what was improved, in code that
 is compiled against the library as it is now — see [Examples](https://github.com/xkqg/DeepSharp/wiki/Examples). Earlier
@@ -401,7 +391,7 @@ run the cell again. A cell that ends with `trained.Measures!.Report()` shows the
 | `DeepSharp.Pipelines.Binance` | A live source, landed: `new BinanceCandles("BTCEUR", "1d", from, to)` over a closed window, `LandAsync` into a folder, or `await pipeline.ReadBinanceAsync(candles)` to land it and read it. The candles of a market on Binance become a file beside a record of what was asked and what came back, which the pipeline reads like any other file, by the fingerprint its record names; asking again asks Binance nothing. Brings Polly.Core 8.8.0, which does the retrying; that, the HTTP and the pacing stay in this package, since the pipeline's file names the landed file and nothing of Binance. Not affiliated with Binance; what lands is Binance's data, under Binance's terms. |
 | `DeepSharp.Learners.Networks` | Where a network meets a pipeline: declared in the chain that prepares its rows — `.WithTorch(…)` or `.WithTensorflow(…)`, and `pipeline.Train()` runs it — or written as code and fitted by hand; trained on its training rows, judged by its validation rows, measured by its report, and saved with it as one file that refuses any other fit of it; what it predicts for rows served later comes back in the answer's own units, on whichever engine it is handed, naming what each row holds that the network learned nothing about; a search over networks that chooses by the validation rows and keeps the test rows for the winner, stops a trial a pruner calls hopeless, draws a setting only when another is chosen and goes on from the trials it ran before, and a paired comparison of two pipelines; and a checkpoint is the same file with what the run needs to go on, refused to a run under another seed, batch size, early stopping, clip, step window, average, judging or engine. Brings the two packages it joins. |
 | `DeepSharp.Learners.ML` | Where a trainer from ML.NET meets a pipeline: the chain says which trainer its rows are prepared for — `.WithML(trainer => trainer.FastTree())` — and the run made for it leaves out the steps a tree does without and writes down which, so a tree and a network are measured by one report on the same rows. This package declares that trainer and reads and writes the model it produces, and it carries no ML.NET at all, so a notebook, a server or an application that only reads a model never brings the library. |
-| `DeepSharp.Learners.MLNet` | The half that carries ML.NET: it hands the prepared rows to Microsoft.ML, fits the tree the declaration names with `pipeline.TrainWithML()`, and writes the model beside the pipeline it was trained behind as one file. It names one trainer family on purpose — boosted trees and a forest — because a tree repeats from the seed the declaration carries, which is what a declaration meant to be replayed has to promise. Brings Microsoft.ML 5.0.1 and Microsoft.ML.FastTree 5.0.1. |
+| `DeepSharp.Learners.MLNet` | The half that carries ML.NET: it hands the prepared rows to Microsoft.ML, fits the tree the declaration names with `pipeline.TrainWithML()`, and writes the model beside the pipeline it was trained behind as one file. It names one trainer family on purpose — boosted trees and a forest — because a tree repeats from the seed the declaration carries, which is what a declaration meant to be replayed has to promise. Brings Microsoft.ML 6.0.0 and Microsoft.ML.FastTree 6.0.0. |
 | `DeepSharp.Backends.TorchSharp` | The arithmetic on libtorch, on the processor or a graphics card: `TorchBackend.OnCpu()` or `TorchBackend.OnGpu(0)`, held to the same contract as the light engine, operation by operation. Brings TorchSharp 0.107.0; the application brings the libtorch it runs on. |
 | `DeepSharp.Import.PyTorch` | A network PyTorch trained, read into the same network written here: a safetensors file, or the `.pt` file `torch.save(model.state_dict(), file)` writes, its pickle read as PyTorch's weights-only reader reads it. Brings Onnxify.Safetensors 0.3.11, a port of safetensors' own reader. |
 | `DeepSharp.Import.Keras` | A model Keras 3 saved, as a `.keras` archive or an `.h5` file, read into a network built in Keras's words — layers without a bias, with L1 and L2 regularizers and MaxNorm constraints, and layers that are not trainable included. Brings PureHDF 2.2.0, a managed HDF5 reader. |

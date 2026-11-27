@@ -74,7 +74,7 @@ public class ModelFileTests
         // and which version and which processor wrote it is the whole of what a refusal needs to be actionable.
         var read = MLModelFile.FromJson(Passengers().TrainWithML().ToJson());
 
-        Assert.StartsWith("5.", read.Library, StringComparison.Ordinal);
+        Assert.StartsWith("6.", read.Library, StringComparison.Ordinal);
         Assert.Contains(read.Processor, new[] { "X64", "Arm64", "X86", "Arm" }, StringComparer.Ordinal);
     }
 

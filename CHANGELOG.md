@@ -3,6 +3,20 @@
 What changed in each release, and what it means for you. The heading of a section is the version it shipped
 as. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.19.0]
+
+The seventh letter of the flock team.
+
+### Changed
+
+- **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.30.0.** Its data frame now hands
+  over the column or the bars an indicator reads, and the indicator is made from its own class; `indicator.add` builds
+  each indicator that way and computes the same numbers it did. ML.NET's trainer is on Microsoft.ML 6.0.0 and
+  Microsoft.ML.FastTree 6.0.0, the Binance landing on Polly.Core 8.9.1. Every other package reference is at its newest
+  version but for the pins that name their reason in the project: the .NET 10 line of System.Numerics.Tensors and
+  Microsoft.Extensions, whose 11 releases are no longer built for .NET 8, Verso.Abstractions's range, NAudio.Core 2.4.0
+  and Corvus.Json.Validator 5.7.9.
+
 ## [0.18.0]
 
 The sixth letter of the flock team, answered in three: a `Study` candidate and a `TrainedEnsemble`-sibling member may now
