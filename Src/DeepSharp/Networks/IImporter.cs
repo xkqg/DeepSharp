@@ -12,7 +12,7 @@ namespace DeepSharp.Networks;
 /// file holds, and the loss it answers through — so nothing downstream asks where a network came from. It is one of two
 /// kinds. One reads numbers alone, from a file that names no layers, and is handed the network they belong to and its loss
 /// when it is made; the other reads a file that describes the network too, and builds it from that description. Either
-/// hands the numbers to <see cref="Network.Load"/> by the path of each slot, so every importer refuses what a network's own
+/// hands the numbers to <see cref="Network.Load(IEnumerable{SlotEntry})"/> by the path of each slot, so every importer refuses what a network's own
 /// file refuses, in the same words, each fault placed where its file holds it.
 /// <para>
 /// An import records no fit of a pipeline, so it stands behind one only as any network does: compiled with an optimizer and

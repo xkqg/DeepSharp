@@ -74,7 +74,7 @@ internal sealed partial class OnnxGraph
         }
 
         var example = ExampleOf(input.Lengths!);
-        var network = Lowered(example);
+        var network = _description.LoweredFor(example, _where);
         var entries = new List<SlotEntry>();
         var unread = new List<SlotLoadFault>();
         var reaching = network.Shapes(example).Select(shapes => shapes.Reaching).ToList();
@@ -120,25 +120,11 @@ internal sealed partial class OnnxGraph
             throw Refused();
         }
 
-        return Loaded(network, entries, unread);
-    }
+        // The numbers put into the network, those the graph holds wrongly refused besides, each once: a number of another type
+        // is refused as that, not also as missing.
+        network.Load(entries, unread);
 
-    // The numbers put into the network, those the graph holds wrongly refused besides, each once: a number of another type
-    // is refused as that, not also as missing.
-    private SavedNetwork Loaded(LayerStack network, List<SlotEntry> entries, List<SlotLoadFault> unread)
-    {
-        var faults = new List<SlotLoadFault>(unread);
-
-        try
-        {
-            network.Load(entries);
-        }
-        catch (SlotLoadException refused)
-        {
-            faults.AddRange(refused.Faults.Where(fault => fault.Source is not null || unread.All(other => other.Slot != fault.Slot)));
-        }
-
-        return faults.Count > 0 ? throw new SlotLoadException(faults) : new SavedNetwork(network, _loss);
+        return new SavedNetwork(network, _loss);
     }
 
     // The one value the graph takes: a batch of rows, of series, of images or of volumes, each example of lengths the graph
@@ -212,7 +198,7 @@ internal sealed partial class OnnxGraph
         {
             var node = new OnnxNode(_graph.Node[place], place, _faults, _used);
 
-            if (node.Operator == "Constant")
+            if (node.Operator == OnnxOps.Constant)
             {
                 Constant(node);
 
@@ -225,9 +211,9 @@ internal sealed partial class OnnxGraph
             }
 
             // A recurrent node takes one value the graph works out, the series; its weights are held, and its states are read apart.
-            var data = (node.Operator is "LSTM" or "GRU" ? node.Inputs.Take(1) : node.Inputs).Where(name => name.Length > 0 && !_numbers.Holds(name)).ToList();
+            var data = (node.Operator is OnnxOps.Lstm or OnnxOps.Gru ? node.Inputs.Take(1) : node.Inputs).Where(name => name.Length > 0 && !_numbers.Holds(name)).ToList();
 
-            if (node.Operator == "Identity" && data.Count == 0 && _numbers.Holds(node.Input(0)))
+            if (node.Operator == OnnxOps.Identity && data.Count == 0 && _numbers.Holds(node.Input(0)))
             {
                 _numbers.Alias(node.Output, node.Input(0));
 
@@ -268,23 +254,23 @@ internal sealed partial class OnnxGraph
                 node.Refuse("it takes none of the values the graph works out, which are its input and what a node before it made.");
                 _previous = node.Operator;
             }
-            else if (node.Operator == "Attention")
+            else if (node.Operator == OnnxOps.Attention)
             {
                 Attended(node);
             }
-            else if (node.Operator == "Add" && data.Count == 2)
+            else if (node.Operator == OnnxOps.Add && data.Count == 2)
             {
                 Joined(node, data, Joining.Add);
             }
-            else if (node.Operator == "Mul" && data.Count == 2)
+            else if (node.Operator == OnnxOps.Mul && data.Count == 2)
             {
                 Joined(node, data, Joining.Multiply);
             }
-            else if (node.Operator == "Concat")
+            else if (node.Operator == OnnxOps.Concat)
             {
                 Joined(node, data, Joining.Concatenate);
             }
-            else if (node.Operator is "Split" or "Slice")
+            else if (node.Operator is OnnxOps.Split or OnnxOps.Slice)
             {
                 Cut(node, data);
             }
@@ -316,27 +302,27 @@ internal sealed partial class OnnxGraph
     // A node that works on the one value it takes: one the graph follows without a step, or the layer it is.
     private void Single(OnnxNode node, int place, string taken)
     {
-        var made = node.Operator == "MatMul" ? Declared(_values[taken]) : _values[taken];
+        var made = node.Operator == OnnxOps.MatMul ? Declared(_values[taken]) : _values[taken];
         var reaching = made.Reaching;
 
-        if (node.Operator == "Transpose")
+        if (node.Operator == OnnxOps.Transpose)
         {
             _values[node.Output] = made with { Reaching = reaching with { Flow = Turned(node, reaching, made.Undeclared) }, Undeclared = false };
         }
-        else if (node.Operator == "Cast")
+        else if (node.Operator == OnnxOps.Cast)
         {
             Cast(node);
             _values[node.Output] = made;
         }
-        else if (node.Operator == "Unsqueeze" && reaching is { Flow: Flow.Images, Axes: 1 } && _graph.OpensLiftedPooling(place, _numbers))
+        else if (node.Operator == OnnxOps.Unsqueeze && reaching is { Flow: Flow.Images, Axes: 1 } && _graph.OpensLiftedPooling(place, _numbers))
         {
             _values[node.Output] = made with { Reaching = reaching with { Lifted = true } };
         }
-        else if (node.Operator == "Squeeze" && reaching.Lifted)
+        else if (node.Operator == OnnxOps.Squeeze && reaching.Lifted)
         {
             _values[node.Output] = made with { Reaching = reaching with { Lifted = false } };
         }
-        else if (node.Operator == "Identity")
+        else if (node.Operator == OnnxOps.Identity)
         {
             _values[node.Output] = made;
         }
@@ -348,7 +334,7 @@ internal sealed partial class OnnxGraph
         {
             var before = _faults.Count;
 
-            if (node.Operator is "LSTM" or "GRU")
+            if (node.Operator is OnnxOps.Lstm or OnnxOps.Gru)
             {
                 Started(node);
             }
@@ -413,7 +399,7 @@ internal sealed partial class OnnxGraph
         }
 
         var made = _values[data[0]];
-        var axis = node.Operator == "Split" ? node.Whole("axis", 0) : Axis(node);
+        var axis = node.Operator == OnnxOps.Split ? node.Whole("axis", 0) : Axis(node);
 
         if (!IsLastAxis(made.Reaching, axis) || made.Reaching.Lifted || Stepwise(made.Reaching.Flow))
         {
@@ -424,7 +410,7 @@ internal sealed partial class OnnxGraph
             return;
         }
 
-        if (node.Operator == "Slice")
+        if (node.Operator == OnnxOps.Slice)
         {
             Sliced(node, made);
 
@@ -589,7 +575,7 @@ internal sealed partial class OnnxGraph
 
     // The operators that make each number of a row from the number at its place: a row as wide as the one they took.
     private static readonly HashSet<string> Elementwise =
-        new(["Relu", "Tanh", "Sigmoid", "Gelu", "LeakyRelu", "PRelu", "Elu", "Selu", "Mish", "Softmax", "BatchNormalization", "LayerNormalization"], StringComparer.Ordinal);
+        new([OnnxOps.Relu, OnnxOps.Tanh, OnnxOps.Sigmoid, OnnxOps.Gelu, OnnxOps.LeakyRelu, OnnxOps.PRelu, OnnxOps.Elu, OnnxOps.Selu, OnnxOps.Mish, OnnxOps.Softmax, OnnxOps.BatchNormalization, OnnxOps.LayerNormalization], StringComparer.Ordinal);
 
     // What a Transpose hands on: an image with its channels moved last, [0, 2, 3, 1], or moved back after the batch,
     // [0, 3, 1, 2] — which, taking the image the graph takes before anything else does, declares that image's channels
@@ -643,7 +629,7 @@ internal sealed partial class OnnxGraph
 
         if (!mergeable || _built is not [.., { Layer.Unbiased: { } width } matmul])
         {
-            if (!mergeable || _previous != "MatMul")
+            if (!mergeable || _previous != OnnxOps.MatMul)
             {
                 node.Refuse($"it adds '{added.Name.Quoted()}' to what the node before it made, and an Add is read here as the bias of the MatMul before it.");
             }
@@ -771,20 +757,6 @@ internal sealed partial class OnnxGraph
         }
 
         return placed;
-    }
-
-    // The description lowered onto a stack of layers for examples of the input's shape; the starts it draws are replaced by
-    // the graph's numbers.
-    private LayerStack Lowered(Shape each)
-    {
-        try
-        {
-            return _description.Lower(each, new RandomStream(0));
-        }
-        catch (ArgumentException refused)
-        {
-            throw new FormatException($"{_where}: {refused.Message.ReplaceLineEndings(" ")}", refused);
-        }
     }
 
     private FormatException Refused() => new(string.Join(Environment.NewLine, _faults));

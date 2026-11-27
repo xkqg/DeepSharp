@@ -308,7 +308,7 @@ internal abstract class WindowKind : OnnxKind
 internal sealed class ConvKind : WindowKind
 {
     /// <inheritdoc />
-    public override string Name => "Conv";
+    public override string Name => OnnxOps.Conv;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -378,7 +378,7 @@ internal abstract class PoolKind : WindowKind
 internal sealed class MaxPoolKind : PoolKind
 {
     /// <inheritdoc />
-    public override string Name => "MaxPool";
+    public override string Name => OnnxOps.MaxPool;
 
     /// <inheritdoc />
     protected override Action<Sequential> Pooling(OnnxNode node, WindowPlan plan)
@@ -403,7 +403,7 @@ internal sealed class MaxPoolKind : PoolKind
 internal sealed class AveragePoolKind : PoolKind
 {
     /// <inheritdoc />
-    public override string Name => "AveragePool";
+    public override string Name => OnnxOps.AveragePool;
 
     /// <inheritdoc />
     protected override Action<Sequential> Pooling(OnnxNode node, WindowPlan plan) => plan.Average(node.Whole("count_include_pad", 0) != 0);
@@ -429,7 +429,7 @@ internal abstract class GlobalPoolKind : OnnxKind
 internal sealed class GlobalAveragePoolKind : GlobalPoolKind
 {
     /// <inheritdoc />
-    public override string Name => "GlobalAveragePool";
+    public override string Name => OnnxOps.GlobalAveragePool;
 
     /// <inheritdoc />
     internal override Action<Sequential> Pool(int axes, bool keepsAxes) => axes switch
@@ -444,7 +444,7 @@ internal sealed class GlobalAveragePoolKind : GlobalPoolKind
 internal sealed class GlobalMaxPoolKind : GlobalPoolKind
 {
     /// <inheritdoc />
-    public override string Name => "GlobalMaxPool";
+    public override string Name => OnnxOps.GlobalMaxPool;
 
     /// <inheritdoc />
     internal override Action<Sequential> Pool(int axes, bool keepsAxes) => axes switch
@@ -463,7 +463,7 @@ internal sealed class GlobalMaxPoolKind : GlobalPoolKind
 internal sealed class ConvTransposeKind : WindowKind
 {
     /// <inheritdoc />
-    public override string Name => "ConvTranspose";
+    public override string Name => OnnxOps.ConvTranspose;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -523,7 +523,7 @@ internal sealed class PadKind : OnnxKind
     private const int WrapSince = 19;
 
     /// <inheritdoc />
-    public override string Name => "Pad";
+    public override string Name => OnnxOps.Pad;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)

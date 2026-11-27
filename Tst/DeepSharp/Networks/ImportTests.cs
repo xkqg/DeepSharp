@@ -233,6 +233,86 @@ public class ImportTests
         Assert.Throws<ArgumentNullException>(() => new SlotLoadException(null!));
     }
 
+    [Fact]
+    public void AnImporterThatFoundFaultsItself_HasThemNamedWithTheLoadsOwn_EachSlotOnce_AndNoSlotChanges()
+    {
+        var network = new LayerStack(Unset(2, 2), new BatchNorm(2));
+        var before = network.Slots().Select(named => named.Slot.Value).ToArray();
+        var found = new SlotLoadFault("tensor 4", "1.weight", "'1.weight' holds single-precision numbers here, and is written as double.");
+
+        // 1.weight is kept back by the fault above, 1.running_var is simply not there, and 0.bias is of another shape.
+        var refused = Assert.Throws<SlotLoadException>(() => network.Load(
+            [
+                new SlotEntry("0.weight", Tensor.Zeros(new Shape(2, 2)), "tensor 1"),
+                new SlotEntry("0.bias", Tensor.Zeros(new Shape(3)), "tensor 2"),
+                new SlotEntry("1.bias", Tensor.Zeros(new Shape(2)), "tensor 3"),
+                new SlotEntry("1.running_mean", Tensor.Zeros(new Shape(2)), "tensor 5"),
+            ],
+            [found]));
+
+        Assert.Equal(
+            [
+                found,
+                new SlotLoadFault("tensor 2", "0.bias", "'0.bias' is a 2 slot here, and is written as 3."),
+                new SlotLoadFault(null, "1.running_var", "'1.running_var' is missing: every slot of the network is written."),
+            ],
+            refused.Faults);
+        Assert.Equal(before, network.Slots().Select(named => named.Slot.Value), ReferenceEqualityComparer.Instance);
+    }
+
+    [Fact]
+    public void AFaultAnImporterFoundAlone_RefusesTheLoad_EvenWhenEverySlotIsHanded()
+    {
+        var network = new LayerStack(Unset(2, 1));
+        var found = new SlotLoadFault("tensor 9", "0.extra", "'0.extra' holds single-precision numbers here, and is written as double.");
+        SlotEntry[] entries = [new("0.weight", Tensor.From(new Shape(2, 1), [1f, 1f]), "tensor 1"), new("0.bias", Tensor.From(new Shape(1), [1f]), "tensor 2")];
+
+        var refused = Assert.Throws<SlotLoadException>(() => network.Load(entries, [found]));
+
+        Assert.Equal([found], refused.Faults);
+        Assert.All(network.Slots(), named => Assert.All(named.Slot.Value.Values.ToArray(), value => Assert.Equal(0f, value)));
+
+        network.Load(entries, []);
+
+        Assert.All(network.Slots(), named => Assert.All(named.Slot.Value.Values.ToArray(), value => Assert.Equal(1f, value)));
+    }
+
+    [Fact]
+    public void FaultsFoundAndFaultsOfTheLoad_AreOrderedByTheCallersKey_TheMissingAfterThem()
+    {
+        var network = new LayerStack(Unset(2, 1));
+        var found = new SlotLoadFault("tensor b", "0.weight", "'0.weight' is kept back.");
+
+        var refused = Assert.Throws<SlotLoadException>(() => network.Load(
+            [new SlotEntry("0.nothing", Tensor.Zeros(new Shape(1)), "tensor a")],
+            [found],
+            fault => fault.Source == "tensor a" ? 0 : 1));
+
+        Assert.Equal(
+            [
+                new SlotLoadFault("tensor a", "0.nothing", "'0.nothing' is no slot of this network."),
+                found,
+                new SlotLoadFault(null, "0.bias", "'0.bias' is missing: every slot of the network is written."),
+            ],
+            refused.Faults);
+        Assert.Throws<ArgumentNullException>(() => network.Load(null!, []));
+        Assert.Throws<ArgumentNullException>(() => network.Load([], null!));
+    }
+
+    [Fact]
+    public void ADescriptionLoweredForAnImporter_RefusesInTheFilesFormat_NamingWhereItStands_OnOneLine()
+    {
+        var lowered = new Sequential().Dense(2).LoweredFor(new Shape(3), "model.json");
+
+        Assert.Equal(["0.weight", "0.bias"], lowered.Slots().Select(named => named.Path));
+
+        var refused = Assert.Throws<FormatException>(() => new Sequential().Conv1D(2, new Window1D(3)).LoweredFor(new Shape(5), "model.json"));
+
+        Assert.StartsWith("model.json: ", refused.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain('\n', refused.Message);
+        Assert.IsAssignableFrom<ArgumentException>(refused.InnerException);
+    }
+
     // A dense layer of so many inputs and outputs whose numbers are all still to be read: nought, every one.
     private static Dense Unset(int inputs, int outputs) => new(Tensor.Zeros(new Shape(inputs, outputs)), Tensor.Zeros(new Shape(outputs)));
 

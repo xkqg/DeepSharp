@@ -48,7 +48,7 @@ public abstract class Slot
 /// <summary>A number a layer learns: what an optimizer moves, a step at a time.</summary>
 /// <remarks>
 /// Its tensor is replaced by an optimizer, by bringing back a snapshot, and by loading numbers read from a file — a network's
-/// own, or one another framework saved, through <see cref="Network.Load"/> — by nothing else.
+/// own, or one another framework saved, through <see cref="Network.Load(IEnumerable{SlotEntry})"/> — by nothing else.
 /// </remarks>
 public sealed class Parameter : Slot
 {

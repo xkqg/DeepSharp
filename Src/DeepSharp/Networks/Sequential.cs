@@ -681,7 +681,7 @@ public sealed partial class Sequential
     private Sequential Lifted(Loss loss)
     {
         var lifted = new Sequential(this);
-        var applied = loss.Activation.ToString().ToLowerInvariant();
+        var applied = loss.Activation.Word();
 
         if (lifted._words[^1].IsAppliedBy(loss))
         {

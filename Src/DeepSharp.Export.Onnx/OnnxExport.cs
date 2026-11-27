@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Reflection;
+using DeepSharp.Import.Onnx;
 using DeepSharp.Networks;
 using DeepSharp.Tensors;
 using Google.Protobuf;
@@ -95,9 +96,9 @@ public sealed class OnnxExport
 
         var activated = loss.Activation switch
         {
-            OutputActivation.Sigmoid => graph.Node(new NodeOf("Sigmoid", 6, "output/Sigmoid"), [made.Name], activatedName),
+            OutputActivation.Sigmoid => graph.Node(new NodeOf(OnnxOps.Sigmoid, 6, "output/Sigmoid"), [made.Name], activatedName),
             OutputActivation.Softmax => graph.Node(
-                new NodeOf("Softmax", made.Each.Rank == 1 ? 1 : 13, "output/Softmax") { Attributes = node => node.State("axis", 1L) },
+                new NodeOf(OnnxOps.Softmax, made.Each.Rank == 1 ? 1 : 13, "output/Softmax") { Attributes = node => node.State("axis", 1L) },
                 [made.Name],
                 activatedName),
             _ => made.Name,
@@ -109,7 +110,7 @@ public sealed class OnnxExport
         var output = variants is null
             ? activated
             : graph.Node(
-                new NodeOf("ReduceMean", 1, "output/ReduceMean") { Attributes = node => { node.States("axes", (long)made.Each.Rank); node.State("keepdims", 0L); } },
+                new NodeOf(OnnxOps.ReduceMean, 1, "output/ReduceMean") { Attributes = node => { node.States("axes", (long)made.Each.Rank); node.State("keepdims", 0L); } },
                 [activated],
                 "output");
         var givenEach = variants is null ? made.Each : new Shape(made.Each[1]);

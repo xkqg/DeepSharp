@@ -19,7 +19,7 @@ namespace DeepSharp.Import.Keras;
 /// which Keras writes as a length for each side of its window — one along a series, rows and columns of an image, planes,
 /// rows and columns of a volume — then channels in by channels out, is the same numbers in the same order as the slot keeps
 /// them: the window's places times the channels in, by the channels out. Each goes into its slot by path — the
-/// layer's place in the stack and the slot's name, <c>2.weight</c> — through <see cref="Network.Load"/>, so the numbers go
+/// layer's place in the stack and the slot's name, <c>2.weight</c> — through <see cref="Network.Load(IEnumerable{SlotEntry})"/>, so the numbers go
 /// in all together or not at all, and every one that does not fit is named where the file holds it. A layer's numbers are
 /// found by the name the file gives them, never by where they stand: Keras files them under its class, <c>layers/dense</c>,
 /// while the layer is <c>dense_2</c>.

@@ -25,7 +25,7 @@ internal sealed class RecurrentKind<TLayer>(string op, int[] order) : ExportKind
         var graph = at.Graph;
         var build = layer.Recurrence;
         var both = build.BothWays;
-        var current = graph.Node(at.Node("Transpose", 1, "Transpose.in") with { Attributes = node => node.States("perm", 2L, 0L, 1L) }, [at.Input.Name], $"{at.Path}/Transpose.in");
+        var current = graph.Node(at.Node(OnnxOps.Transpose, 1, "Transpose.in") with { Attributes = node => node.States("perm", 2L, 0L, 1L) }, [at.Input.Name], $"{at.Path}/Transpose.in");
         var lengths = at.Inputs.Count == 2 ? Lengths(at, at.Inputs[1]) : string.Empty;
         string last = string.Empty;
 
@@ -46,7 +46,7 @@ internal sealed class RecurrentKind<TLayer>(string op, int[] order) : ExportKind
                             node.State("direction", "bidirectional");
                         }
 
-                        if (op == "GRU")
+                        if (op == OnnxOps.Gru)
                         {
                             node.State("linear_before_reset", 1L);
                         }
@@ -70,14 +70,14 @@ internal sealed class RecurrentKind<TLayer>(string op, int[] order) : ExportKind
             return at.Giving(Final(at, last));
         }
 
-        return at.Giving(graph.Node(at.Node("Transpose", 1, "Transpose.out") with { Attributes = node => node.States("perm", 1L, 2L, 0L) }, [current], at.Path));
+        return at.Giving(graph.Node(at.Node(OnnxOps.Transpose, 1, "Transpose.out") with { Attributes = node => node.States("perm", 1L, 2L, 0L) }, [current], at.Path));
     }
 
     // The lengths of the series: how many steps of each are steps, counted from the mask.
     private static string Lengths(Writing at, Value mask)
     {
         var counted = at.Graph.Node(
-            at.Node("ReduceSum", 1, "ReduceSum.lengths") with
+            at.Node(OnnxOps.ReduceSum, 1, "ReduceSum.lengths") with
             {
                 Attributes = node =>
                 {
@@ -88,7 +88,7 @@ internal sealed class RecurrentKind<TLayer>(string op, int[] order) : ExportKind
             [mask.Name],
             $"{at.Path}/ReduceSum.lengths");
 
-        return at.Graph.Node(at.Node("Cast", 6, "Cast.lengths") with { Attributes = node => node.State("to", 6L) }, [counted], $"{at.Path}/Cast.lengths");
+        return at.Graph.Node(at.Node(OnnxOps.Cast, 6, "Cast.lengths") with { Attributes = node => node.State("to", 6L) }, [counted], $"{at.Path}/Cast.lengths");
     }
 
     // What a layer made at every step, as the next layer takes it, or the answer is taken from it: step by batch by the states of every direction.
@@ -99,12 +99,12 @@ internal sealed class RecurrentKind<TLayer>(string op, int[] order) : ExportKind
 
         if (!layer.Recurrence.BothWays)
         {
-            return graph.Node(at.Node("Squeeze", 1, $"Squeeze.l{depth}") with { Attributes = node => node.States("axes", 1L) }, [made], $"{at.Path}/Squeeze.l{depth}");
+            return graph.Node(at.Node(OnnxOps.Squeeze, 1, $"Squeeze.l{depth}") with { Attributes = node => node.States("axes", 1L) }, [made], $"{at.Path}/Squeeze.l{depth}");
         }
 
-        var turned = graph.Node(at.Node("Transpose", 1, $"Transpose.l{depth}") with { Attributes = node => node.States("perm", 0L, 2L, 1L, 3L) }, [made], $"{at.Path}/Transpose.l{depth}");
+        var turned = graph.Node(at.Node(OnnxOps.Transpose, 1, $"Transpose.l{depth}") with { Attributes = node => node.States("perm", 0L, 2L, 1L, 3L) }, [made], $"{at.Path}/Transpose.l{depth}");
 
-        return graph.Node(at.Node("Reshape", 5, $"Reshape.l{depth}"), [turned, graph.Wholes(at.Number($"steps.l{depth}"), 0, 0, 2L * layer.Recurrence.Hidden)], $"{at.Path}/Reshape.l{depth}");
+        return graph.Node(at.Node(OnnxOps.Reshape, 5, $"Reshape.l{depth}"), [turned, graph.Wholes(at.Number($"steps.l{depth}"), 0, 0, 2L * layer.Recurrence.Hidden)], $"{at.Path}/Reshape.l{depth}");
     }
 
     // The last state of every series: one row of the state of each direction, laid side by side.
@@ -115,12 +115,12 @@ internal sealed class RecurrentKind<TLayer>(string op, int[] order) : ExportKind
 
         if (!layer.Recurrence.BothWays)
         {
-            return graph.Node(at.Node("Squeeze", 1) with { Attributes = node => node.States("axes", 0L) }, [states], at.Path);
+            return graph.Node(at.Node(OnnxOps.Squeeze, 1) with { Attributes = node => node.States("axes", 0L) }, [states], at.Path);
         }
 
-        var turned = graph.Node(at.Node("Transpose", 1, "Transpose.states") with { Attributes = node => node.States("perm", 1L, 0L, 2L) }, [states], $"{at.Path}/Transpose.states");
+        var turned = graph.Node(at.Node(OnnxOps.Transpose, 1, "Transpose.states") with { Attributes = node => node.States("perm", 1L, 0L, 2L) }, [states], $"{at.Path}/Transpose.states");
 
-        return graph.Node(at.Node("Reshape", 5), [turned, graph.Wholes(at.Number("states"), 0, 2L * layer.Recurrence.Hidden)], at.Path);
+        return graph.Node(at.Node(OnnxOps.Reshape, 5), [turned, graph.Wholes(at.Number("states"), 0, 2L * layer.Recurrence.Hidden)], at.Path);
     }
 
     // The input weights or the recurrent weights of one layer: for each direction, the gates one block of rows after another, in ONNX's order,
@@ -172,7 +172,7 @@ internal sealed class UnpaddedKind : ExportKind<Unpadded>
     /// <inheritdoc />
     protected override Value Write(Unpadded layer, Writing at) =>
         at.Giving(at.Graph.Node(
-            at.Node("Clip", 11),
+            at.Node(OnnxOps.Clip, 11),
             [at.Input.Name, at.Graph.Number(at.Number("least"), [], [0f]), at.Graph.Number(at.Number("most"), [], [1f])],
             at.Path));
 }
@@ -189,8 +189,8 @@ internal sealed class EveryStepKind : ExportKind<EveryStep>
         var graph = at.Graph;
         var steps = at.Input.Each[0];
         var channels = at.Input.Each[at.Input.Each.Rank - 1];
-        var turned = graph.Node(at.Node("Transpose", 1, "Transpose.in") with { Attributes = node => node.States("perm", 0L, 2L, 1L) }, [at.Input.Name], $"{at.Path}/Transpose.in");
-        var rows = graph.Node(at.Node("Reshape", 5, "Reshape.in"), [turned, graph.Wholes(at.Number("rows"), -1, channels)], $"{at.Path}/Reshape.in");
+        var turned = graph.Node(at.Node(OnnxOps.Transpose, 1, "Transpose.in") with { Attributes = node => node.States("perm", 0L, 2L, 1L) }, [at.Input.Name], $"{at.Path}/Transpose.in");
+        var rows = graph.Node(at.Node(OnnxOps.Reshape, 5, "Reshape.in"), [turned, graph.Wholes(at.Number("rows"), -1, channels)], $"{at.Path}/Reshape.in");
         var each = new Shape(at.Made.Axes[1..].ToArray());
 
         if (each.Rank != 1)
@@ -202,8 +202,8 @@ internal sealed class EveryStepKind : ExportKind<EveryStep>
         var made = layer.Layer is LayerStack stack
             ? new StackWriting(graph).Write(stack, [new Value(rows, new Shape(channels))], inside)
             : ExportKinds.For(layer.Layer).Write(new Writing(graph, layer.Layer, inside, [new Value(rows, new Shape(channels))], each));
-        var back = graph.Node(at.Node("Reshape", 5, "Reshape.out"), [made.Name, graph.Wholes(at.Number("series"), -1, steps, each[0])], $"{at.Path}/Reshape.out");
+        var back = graph.Node(at.Node(OnnxOps.Reshape, 5, "Reshape.out"), [made.Name, graph.Wholes(at.Number("series"), -1, steps, each[0])], $"{at.Path}/Reshape.out");
 
-        return at.Giving(graph.Node(at.Node("Transpose", 1, "Transpose.out") with { Attributes = node => node.States("perm", 0L, 2L, 1L) }, [back], at.Path));
+        return at.Giving(graph.Node(at.Node(OnnxOps.Transpose, 1, "Transpose.out") with { Attributes = node => node.States("perm", 0L, 2L, 1L) }, [back], at.Path));
     }
 }

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Import.Onnx;
 using DeepSharp.Networks;
 
 namespace DeepSharp.Export.Onnx;
@@ -23,12 +24,12 @@ internal sealed class BatchEnsembleKind : ExportKind<BatchEnsemble>
     {
         var graph = at.Graph;
         var opened = graph.Node(
-            at.Node("Unsqueeze", 1, "Unsqueeze") with { Attributes = node => node.States("axes", 2L) },
+            at.Node(OnnxOps.Unsqueeze, 1, OnnxOps.Unsqueeze) with { Attributes = node => node.States("axes", 2L) },
             [at.Input.Name],
             $"{at.Path}/Unsqueeze");
         var adapter = graph.Number(at.Number(layer.Adapter.Name), [layer.Inputs, layer.Variants], Transposed(layer.Adapter.Value.Values, layer.Variants, layer.Inputs));
 
-        return at.Giving(graph.Node(at.Node("Mul", 7), [opened, adapter], at.Path));
+        return at.Giving(graph.Node(at.Node(OnnxOps.Mul, 7), [opened, adapter], at.Path));
     }
 
     // The adapter's rows by columns, inputs by variants instead of variants by inputs, row-major.
@@ -66,16 +67,16 @@ internal sealed class VariantHeadsKind : ExportKind<VariantHeads>
     {
         var graph = at.Graph;
         var turned = graph.Node(
-            at.Node("Transpose", 1, "Transpose.in") with { Attributes = node => node.States("perm", 2L, 0L, 1L) },
+            at.Node(OnnxOps.Transpose, 1, "Transpose.in") with { Attributes = node => node.States("perm", 2L, 0L, 1L) },
             [at.Input.Name],
             $"{at.Path}/Transpose.in");
         var weight = graph.Number(at.Number(layer.Weight.Name), [layer.Variants, layer.Inputs, layer.Outputs], layer.Weight.Value.Values);
-        var product = graph.Node(at.Node("MatMul", 1), [turned, weight], $"{at.Path}/MatMul");
+        var product = graph.Node(at.Node(OnnxOps.MatMul, 1), [turned, weight], $"{at.Path}/MatMul");
         var bias = graph.Number(at.Number(layer.Bias.Name), [layer.Variants, 1, layer.Outputs], layer.Bias.Value.Values);
-        var added = graph.Node(at.Node("Add", 7), [product, bias], $"{at.Path}/Add");
+        var added = graph.Node(at.Node(OnnxOps.Add, 7), [product, bias], $"{at.Path}/Add");
 
         return at.Giving(graph.Node(
-            at.Node("Transpose", 1, "Transpose.out") with { Attributes = node => node.States("perm", 1L, 2L, 0L) },
+            at.Node(OnnxOps.Transpose, 1, "Transpose.out") with { Attributes = node => node.States("perm", 1L, 2L, 0L) },
             [added],
             at.Path));
     }

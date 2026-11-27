@@ -30,6 +30,8 @@
     <!-- How ONNX lays a number out and how a slot here keeps it, in both directions: the one home of every such rule, compiled
          into the package that reads a graph and into this one that writes it, so the two cannot come to disagree. -->
     <Compile Include="..\DeepSharp.Import.Onnx\OnnxLayouts.cs" Link="OnnxLayouts.cs" />
+    <!-- And the name ONNX gives each operator, so a graph this package writes is read back under the same names. -->
+    <Compile Include="..\DeepSharp.Import.Onnx\OnnxOps.cs" Link="OnnxOps.cs" />
   </ItemGroup>
 
   <ItemGroup>

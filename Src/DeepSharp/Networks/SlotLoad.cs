@@ -44,6 +44,23 @@ internal sealed class SlotLoad
             .Select(named => new SlotLoadFault(null, named.Path, $"'{named.Path}' is missing: every slot of the network is written.")),
     ];
 
+    /// <summary>Every fault, the reader's own among them: each slot once, a slot the reader found a fault for not also as missing.</summary>
+    /// <param name="alreadyFound">The faults the reader found while it read.</param>
+    /// <param name="placedBy">Where the file holds the number a fault is of, to put those faults in the file's order; nothing leaves them as found.</param>
+    /// <returns>The reader's faults and those of the numbers handed, then each slot nothing was handed for and the reader found no fault for.</returns>
+    public IReadOnlyList<SlotLoadFault> FaultsWith(IReadOnlyList<SlotLoadFault> alreadyFound, Func<SlotLoadFault, int>? placedBy)
+    {
+        var all = Faults;
+        var ofNumbers = alreadyFound.Concat(all.Where(fault => fault.Source is not null));
+        var kept = alreadyFound.Select(fault => fault.Slot).ToHashSet(StringComparer.Ordinal);
+
+        return
+        [
+            .. placedBy is null ? ofNumbers : ofNumbers.OrderBy(placedBy),
+            .. all.Where(fault => fault.Source is null && !kept.Contains(fault.Slot)),
+        ];
+    }
+
     /// <summary>Takes a number handed for a slot: kept when it keeps to the rule, its fault noted when it does not.</summary>
     /// <exception cref="ArgumentException">The entry leaves out its path, its tensor or where its file holds it: the reader's fault, not the file's.</exception>
     public void Take(SlotEntry entry)

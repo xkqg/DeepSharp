@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Import.Onnx;
 using DeepSharp.Networks;
 
 namespace DeepSharp.Export.Onnx;
@@ -22,7 +23,7 @@ internal sealed class LayerNormKind : ExportKind<LayerNorm>
             ? [rows, scale, at.Graph.Number(at.Number(shift.Name), [layer.Features], at.Input.Ordered(shift.Value.Values))]
             : [rows, scale];
         var made = at.Graph.Node(
-            at.Node("LayerNormalization", 17) with
+            at.Node(OnnxOps.LayerNormalization, 17) with
             {
                 Attributes = node =>
                 {
@@ -63,7 +64,7 @@ internal sealed class RmsNormKind : ExportKind<RmsNorm>
         LayerNormKind.RequireRow(at, "A root-mean-square normalisation");
 
         return at.Keeping(at.Graph.Node(
-            at.Node("RMSNormalization", 23) with
+            at.Node(OnnxOps.RmsNormalization, 23) with
             {
                 Attributes = node =>
                 {
@@ -94,7 +95,7 @@ internal sealed class BatchNormKind : ExportKind<BatchNorm>
         var variance = graph.Number(at.Number(layer.RunningVariance.Name), [layer.Features], at.Input.Ordered(layer.RunningVariance.Value.Values));
 
         return at.Keeping(graph.Node(
-            at.Node("BatchNormalization", 9) with
+            at.Node(OnnxOps.BatchNormalization, 9) with
             {
                 Attributes = node =>
                 {

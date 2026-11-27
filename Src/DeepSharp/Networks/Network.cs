@@ -44,7 +44,7 @@ public abstract class Network : Layer
         if (loss.Applies(last))
         {
             var applied = last.GetType().Name;
-            var named = applied.ToLowerInvariant();
+            var named = loss.Activation.Word();
 
             throw new ArgumentException(
                 $"{loss.GetType().Name} applies the {named} to the network's outputs itself, and this network's last layer, '{last.Path}', is a {applied}: "
@@ -89,9 +89,31 @@ public abstract class Network : Layer
     /// rule, in the same words. The numbers are put in as they are, so a reader turns them into the layout each slot keeps
     /// before it hands them over.
     /// </remarks>
-    public void Load(IEnumerable<SlotEntry> entries)
+    public void Load(IEnumerable<SlotEntry> entries) => Load(entries, []);
+
+    /// <summary>
+    /// Puts numbers read from a file into the network's slots as <see cref="Load(IEnumerable{SlotEntry})"/> does, for a reader that
+    /// noted some faults of its own while it read: those are refused together with the load's, each slot once.
+    /// </summary>
+    /// <param name="entries">A number for every slot of the network that the reader could hand over, each with the path of its slot and where its file holds it.</param>
+    /// <param name="alreadyFound">The faults the reader found itself: numbers it held wrongly and so kept back, each with the path of the slot it was for.</param>
+    /// <param name="placedBy">
+    /// Where the file holds the number a fault is of, to put the faults of numbers in the file's order; nothing keeps the reader's faults
+    /// first, then the load's in the order the numbers were handed.
+    /// </param>
+    /// <exception cref="SlotLoadException">
+    /// Any fault is found, the reader's included: every fault at once, the numbers' faults first and then each slot nothing was handed for,
+    /// except a slot the reader found a fault for, which is refused as that and not also as missing; and no slot is changed.
+    /// </exception>
+    /// <exception cref="ArgumentException">An entry leaves out its path, its tensor or where its file holds it.</exception>
+    /// <remarks>
+    /// A number a reader keeps back — one of another precision, say — is held all the same, and is refused as what is wrong with it, not
+    /// as left out. A fault of a number comes with where the file holds it, so a fault with none is the load's own missing slot.
+    /// </remarks>
+    public void Load(IEnumerable<SlotEntry> entries, IReadOnlyList<SlotLoadFault> alreadyFound, Func<SlotLoadFault, int>? placedBy = null)
     {
         ArgumentNullException.ThrowIfNull(entries);
+        ArgumentNullException.ThrowIfNull(alreadyFound);
 
         var load = new SlotLoad(Slots());
 
@@ -100,7 +122,7 @@ public abstract class Network : Layer
             load.Take(entry);
         }
 
-        var faults = load.Faults;
+        var faults = load.FaultsWith(alreadyFound, placedBy);
 
         if (faults.Count > 0)
         {

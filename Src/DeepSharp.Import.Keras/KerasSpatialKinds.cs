@@ -57,23 +57,14 @@ internal sealed class ConvolutionKind(string name, int axes, Func<int, Footprint
     public override KerasLayer Read(KerasSettings layer)
     {
         var filters = layer.Setting<int>("filters");
-        var sides = layer.Axes("kernel_size", axes);
-        var strides = layer.Axes("strides", axes);
-        var dilation = layer.Axes("dilation_rate", axes);
+        var window = layer.Window(axes);
         var groups = layer.Setting("groups", 1);
-        var padding = layer.Setting("padding", "valid");
-
-        if (padding is not ("valid" or "same" or "causal") || (padding == "causal" && axes != 1))
-        {
-            layer.Refuse($"it pads as '{padding.Quoted()}', and a window here pads as {(axes == 1 ? "'valid', 'same' or 'causal'" : "'valid' or 'same'")}.");
-        }
+        var mode = layer.Padding(axes, allowCausal: true);
 
         RequireChannelsLast(layer, ThingsWalkedAlong(axes));
 
-        var mode = padding switch { "same" => PaddingMode.Same, "causal" => PaddingMode.Causal, _ => PaddingMode.Stated };
-        var bias = KeepsBias(layer);
-        var rules = new Rules(Governing(layer, "kernel", axes + 2, [.. Enumerable.Range(0, axes + 1)]), bias ? Governing(layer, "bias", 1, [0]) : default, Held(layer));
-        var made = words(filters, new Footprint(sides, strides, dilation, mode) { Groups = groups }, Starting(bias));
+        var (bias, rules) = layer.Biased("kernel", axes + 2, [.. Enumerable.Range(0, axes + 1)]);
+        var made = words(filters, window.Padded(mode) with { Groups = groups }, Starting(bias));
 
         return new KerasLayer(
             description =>
@@ -84,7 +75,7 @@ internal sealed class ConvolutionKind(string name, int axes, Func<int, Footprint
             ActivationOf(layer))
         {
             Slots = WithBias("weight", bias),
-            Sizes = sides,
+            Sizes = window.Sides,
         };
     }
 }
@@ -111,29 +102,19 @@ internal sealed class TransposedConvolutionKind(string name, int axes) : KerasKi
     public override KerasLayer Read(KerasSettings layer)
     {
         var filters = layer.Setting<int>("filters");
-        var sides = layer.Axes("kernel_size", axes);
-        var strides = layer.Axes("strides", axes);
-        var dilation = layer.Axes("dilation_rate", axes);
-        var padding = layer.Setting("padding", "valid");
+        var window = layer.Window(axes);
         var grown = layer.Says("output_padding") ? layer.Axes("output_padding", axes) : null;
+        var padding = layer.Padding(axes, allowCausal: false);
 
-        if (padding is not ("valid" or "same"))
-        {
-            layer.Refuse($"it pads as '{padding.Quoted()}', and a window here pads as 'valid' or 'same'.");
-        }
-
-        if (padding == "same" && grown is not null)
+        if (padding == PaddingMode.Same && grown is not null)
         {
             layer.Refuse("it pads as 'same' and states how many places to keep at the end of each axis, and the two say different sizes; Keras reads the first and leaves the second.");
         }
 
         RequireChannelsLast(layer, ThingsWalkedAlong(axes));
 
-        var footprint = new Footprint(sides, strides, dilation, padding == "same" ? PaddingMode.Same : PaddingMode.Stated);
-
-        var bias = KeepsBias(layer);
-        var rules = new Rules(Governing(layer, "kernel", axes + 2, null), bias ? Governing(layer, "bias", 1, [0]) : default, Held(layer));
-        var made = Words(filters, footprint, grown, Starting(bias));
+        var (bias, rules) = layer.Biased("kernel", axes + 2, null);
+        var made = Words(filters, window.Padded(padding), grown, Starting(bias));
 
         return new KerasLayer(
             description =>
@@ -143,8 +124,8 @@ internal sealed class TransposedConvolutionKind(string name, int axes) : KerasKi
             },
             ActivationOf(layer))
         {
-            Slots = WithBias(new("weight", 0, sides) { Kept = KerasKeeping.GivenBack }, bias),
-            Sizes = sides,
+            Slots = WithBias(new("weight", 0, window.Sides) { Kept = KerasKeeping.GivenBack }, bias),
+            Sizes = window.Sides,
         };
     }
 
@@ -226,8 +207,7 @@ internal sealed class DepthwiseConvolutionKind(string name, int axes) : KerasKin
     public override KerasLayer Read(KerasSettings layer)
     {
         var footprint = Walked(layer, axes, out var multiplier);
-        var bias = KeepsBias(layer);
-        var rules = new Rules(Governing(layer, "depthwise", axes + 2, [.. Enumerable.Range(0, axes)]), bias ? Governing(layer, "bias", 1, [0]) : default, Held(layer));
+        var (bias, rules) = layer.Biased("depthwise", axes + 2, [.. Enumerable.Range(0, axes)]);
         var made = Words(footprint, multiplier, axes, Starting(bias));
 
         return new KerasLayer(
@@ -246,21 +226,15 @@ internal sealed class DepthwiseConvolutionKind(string name, int axes) : KerasKin
     // The window and the multiplier a depthwise convolution says, each setting of it that no window here can refused at the layer.
     internal static Footprint Walked(KerasSettings layer, int axes, out int multiplier)
     {
-        var sides = layer.Axes("kernel_size", axes);
-        var strides = layer.Axes("strides", axes);
-        var dilation = layer.Axes("dilation_rate", axes);
-        var padding = layer.Setting("padding", "valid");
+        var window = layer.Window(axes);
 
         multiplier = layer.Setting("depth_multiplier", 1);
 
-        if (padding is not ("valid" or "same"))
-        {
-            layer.Refuse($"it pads as '{padding.Quoted()}', and a window here pads as 'valid' or 'same'.");
-        }
+        var padding = layer.Padding(axes, allowCausal: false);
 
         RequireChannelsLast(layer, ThingsWalkedAlong(axes));
 
-        return new Footprint(sides, strides, dilation, padding == "same" ? PaddingMode.Same : PaddingMode.Stated);
+        return window.Padded(padding);
     }
 
     // A convolution with a group for every channel it is handed: what a depthwise convolution is.
@@ -456,18 +430,11 @@ internal sealed class PoolingKind(string name, int axes, Func<Footprint, Action<
     {
         var sides = layer.Alike("pool_size", axes);
         var strides = layer.Says("strides") ? layer.Alike("strides", axes) : sides;
-        var padding = layer.Setting("padding", "valid");
-
-        if (padding is not ("valid" or "same"))
-        {
-            layer.Refuse($"it pads as '{padding.Quoted()}', and a window here pads as 'valid' or 'same'.");
-        }
+        var padding = layer.Padding(axes, allowCausal: false);
 
         RequireChannelsLast(layer, ThingsWalkedAlong(axes));
 
-        return new KerasLayer(
-            words(new Footprint(sides, strides, [.. Enumerable.Repeat(1, axes)], padding == "same" ? PaddingMode.Same : PaddingMode.Stated)),
-            "linear");
+        return new KerasLayer(words(new KerasWindow(sides, strides, [.. Enumerable.Repeat(1, axes)]).Padded(padding)), "linear");
     }
 }
 

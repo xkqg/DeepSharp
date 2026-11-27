@@ -214,7 +214,7 @@ internal readonly record struct Ways(bool Both, bool Steps);
 internal sealed class LstmKind : RecurrentOnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "LSTM";
+    public override string Name => OnnxOps.Lstm;
 
     /// <inheritdoc />
     protected override int Gates => 4;
@@ -230,7 +230,7 @@ internal sealed class LstmKind : RecurrentOnnxKind
 internal sealed class GruKind : RecurrentOnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "GRU";
+    public override string Name => OnnxOps.Gru;
 
     /// <inheritdoc />
     protected override int Gates => 3;

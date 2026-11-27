@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Import.Onnx;
 using DeepSharp.Networks;
 
 namespace DeepSharp.Export.Onnx;
@@ -25,17 +26,17 @@ internal sealed class DenseKind : ExportKind<Dense>
 
         if (dense.LowRank is not { } pair)
         {
-            return Returned(at, spatial, Biased(at, dense, graph.Node(at.Node("MatMul", 1), [rows, weight], hasBias ? $"{at.Path}/MatMul" : result), result));
+            return Returned(at, spatial, Biased(at, dense, graph.Node(at.Node(OnnxOps.MatMul, 1), [rows, weight], hasBias ? $"{at.Path}/MatMul" : result), result));
         }
 
         var first = graph.Number(at.Number(dense.A!.Name), [dense.Inputs, pair.Rank], at.Input.Ordered(dense.A.Value.Values));
         var second = graph.Number(at.Number(dense.B!.Name), [pair.Rank, dense.Outputs], dense.B.Value.Values);
         var scale = graph.Number(at.Number("scale"), [1], [(float)pair.Scale]);
-        var kernel = graph.Node(at.Node("MatMul", 1), [rows, weight], $"{at.Path}/MatMul");
-        var through = graph.Node(at.Node("MatMul", 1, "MatMul.a"), [rows, first], $"{at.Path}/MatMul.a");
-        var back = graph.Node(at.Node("MatMul", 1, "MatMul.b"), [through, second], $"{at.Path}/MatMul.b");
-        var scaled = graph.Node(at.Node("Mul", 7), [back, scale], $"{at.Path}/Mul");
-        var sum = graph.Node(at.Node("Add", 7, "Add.pair"), [kernel, scaled], hasBias ? $"{at.Path}/Add.pair" : result);
+        var kernel = graph.Node(at.Node(OnnxOps.MatMul, 1), [rows, weight], $"{at.Path}/MatMul");
+        var through = graph.Node(at.Node(OnnxOps.MatMul, 1, "MatMul.a"), [rows, first], $"{at.Path}/MatMul.a");
+        var back = graph.Node(at.Node(OnnxOps.MatMul, 1, "MatMul.b"), [through, second], $"{at.Path}/MatMul.b");
+        var scaled = graph.Node(at.Node(OnnxOps.Mul, 7), [back, scale], $"{at.Path}/Mul");
+        var sum = graph.Node(at.Node(OnnxOps.Add, 7, "Add.pair"), [kernel, scaled], hasBias ? $"{at.Path}/Add.pair" : result);
 
         return Returned(at, spatial, Biased(at, dense, sum, result));
     }
@@ -44,7 +45,7 @@ internal sealed class DenseKind : ExportKind<Dense>
     private static string Biased(Writing at, Dense dense, string product, string result) =>
         dense.Bias is null
             ? product
-            : at.Graph.Node(at.Node("Add", 7), [product, at.Graph.Number(at.Number(dense.Bias.Name), [dense.Outputs], dense.Bias.Value.Values)], result);
+            : at.Graph.Node(at.Node(OnnxOps.Add, 7), [product, at.Graph.Number(at.Number(dense.Bias.Name), [dense.Outputs], dense.Bias.Value.Values)], result);
 
     // The value the step makes: the channels turned back first where they were turned last.
     private static Value Returned(Writing at, bool spatial, string made) => spatial ? at.ChannelsFirst(made) : at.Giving(made);

@@ -429,6 +429,17 @@ public class KerasRefusalTests
     }
 
     [Fact]
+    public void ThePaddingsAWindowCanTake_AreSaidInOnePlaceOfTheReader()
+    {
+        var reader = Directory.EnumerateFiles(Path.Join(Repository.Root, "Src", "DeepSharp.Import.Keras"), "*.cs", SearchOption.TopDirectoryOnly)
+            .ToDictionary(file => Path.GetFileName(file)!, File.ReadAllText);
+
+        Assert.Equal(1, reader.Values.Sum(source => source.Split("a window here pads as").Length - 1));
+        Assert.Contains("a window here pads as", reader["KerasWindows.cs"], StringComparison.Ordinal);
+        Assert.DoesNotContain(reader.Where(each => each.Key != "KerasWindows.cs"), each => each.Value.Contains("\"valid\" or \"same\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void ADescriptionThatIsNotJson_IsRefusedWhereItStands()
     {
         var entries = KerasFixtures.Entries(Titanic);

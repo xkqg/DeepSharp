@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Import.Onnx;
 using DeepSharp.Networks;
 
 namespace DeepSharp.Export.Onnx;
@@ -10,7 +11,7 @@ internal sealed class LeakyReluKind : ExportKind<LeakyRelu>
 {
     /// <inheritdoc />
     protected override Value Write(LeakyRelu layer, Writing at) =>
-        at.Keeping(at.Graph.Node(at.Node("LeakyRelu", 6) with { Attributes = node => node.State("alpha", layer.NegativeSlope) }, [at.Input.Name], at.Path));
+        at.Keeping(at.Graph.Node(at.Node(OnnxOps.LeakyRelu, 6) with { Attributes = node => node.State("alpha", layer.NegativeSlope) }, [at.Input.Name], at.Path));
 }
 
 /// <summary>An exponential rectifier: ONNX's Elu with the alpha it bends towards.</summary>
@@ -18,7 +19,7 @@ internal sealed class EluKind : ExportKind<Elu>
 {
     /// <inheritdoc />
     protected override Value Write(Elu layer, Writing at) =>
-        at.Keeping(at.Graph.Node(at.Node("Elu", 6) with { Attributes = node => node.State("alpha", layer.Alpha) }, [at.Input.Name], at.Path));
+        at.Keeping(at.Graph.Node(at.Node(OnnxOps.Elu, 6) with { Attributes = node => node.State("alpha", layer.Alpha) }, [at.Input.Name], at.Path));
 }
 
 /// <summary>A Gaussian error linear unit: ONNX's Gelu, which first appeared in the twentieth operator set, exact or by the tanh approximation.</summary>
@@ -27,7 +28,7 @@ internal sealed class GeluKind : ExportKind<Gelu>
     /// <inheritdoc />
     protected override Value Write(Gelu layer, Writing at) =>
         at.Keeping(at.Graph.Node(
-            at.Node("Gelu", 20) with { Attributes = node => node.State("approximate", layer.Approximate ? "tanh" : "none") },
+            at.Node(OnnxOps.Gelu, 20) with { Attributes = node => node.State("approximate", layer.Approximate ? "tanh" : "none") },
             [at.Input.Name],
             at.Path));
 }
@@ -38,9 +39,9 @@ internal sealed class SiluKind : ExportKind<Silu>
     /// <inheritdoc />
     protected override Value Write(Silu layer, Writing at)
     {
-        var sigmoid = at.Graph.Node(at.Node("Sigmoid", 6), [at.Input.Name], $"{at.Path}/Sigmoid");
+        var sigmoid = at.Graph.Node(at.Node(OnnxOps.Sigmoid, 6), [at.Input.Name], $"{at.Path}/Sigmoid");
 
-        return at.Keeping(at.Graph.Node(at.Node("Mul", 7), [at.Input.Name, sigmoid], at.Path));
+        return at.Keeping(at.Graph.Node(at.Node(OnnxOps.Mul, 7), [at.Input.Name, sigmoid], at.Path));
     }
 }
 
@@ -55,7 +56,7 @@ internal sealed class PReluKind : ExportKind<PRelu>
         int[] lengths = at.Input.Spatial && layer.Count > 1 ? [layer.Count, .. Enumerable.Repeat(1, at.Input.Each.Rank - 1)] : [layer.Count];
         var slopes = at.Graph.Number(at.Number(layer.Weight.Name), lengths, at.Input.Ordered(layer.Weight.Value.Values));
 
-        return at.Keeping(at.Graph.Node(at.Node("PRelu", 9), [at.Input.Name, slopes], at.Path));
+        return at.Keeping(at.Graph.Node(at.Node(OnnxOps.PRelu, 9), [at.Input.Name, slopes], at.Path));
     }
 }
 
@@ -69,6 +70,6 @@ internal sealed class SoftmaxKind : ExportKind<Softmax>
         // and no more: over the channels of a series, an image or a volume the meaning is the thirteenth's.
         var since = at.Input.Each.Rank == 1 ? 1 : 13;
 
-        return at.Keeping(at.Graph.Node(at.Node("Softmax", since) with { Attributes = node => node.State("axis", 1L) }, [at.Input.Name], at.Path));
+        return at.Keeping(at.Graph.Node(at.Node(OnnxOps.Softmax, since) with { Attributes = node => node.State("axis", 1L) }, [at.Input.Name], at.Path));
     }
 }

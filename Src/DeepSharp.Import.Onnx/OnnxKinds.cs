@@ -136,9 +136,9 @@ internal abstract class OnnxKind
     private static readonly OnnxKind[] Covered =
     [
         new GemmKind(), new MatMulKind(), new AddKind(), new ConvKind(), new ConvTransposeKind(), new PadKind(), new MaxPoolKind(), new AveragePoolKind(), new GlobalAveragePoolKind(), new GlobalMaxPoolKind(),
-        new ReduceKind("ReduceMean", new GlobalAveragePoolKind()), new ReduceKind("ReduceMax", new GlobalMaxPoolKind()), new BatchNormalizationKind(), new LayerNormalizationKind(), new FlattenKind(), new ReshapeKind(),
-        new ActivationKind("Relu", description => description.Relu(), null), new ActivationKind("Tanh", description => description.Tanh(), null),
-        new ActivationKind("Sigmoid", description => description.Sigmoid(), OutputActivation.Sigmoid), new GeluKind(), new LeakyReluKind(), new PReluKind(),
+        new ReduceKind(OnnxOps.ReduceMean, new GlobalAveragePoolKind()), new ReduceKind(OnnxOps.ReduceMax, new GlobalMaxPoolKind()), new BatchNormalizationKind(), new LayerNormalizationKind(), new FlattenKind(), new ReshapeKind(),
+        new ActivationKind(OnnxOps.Relu, description => description.Relu(), null), new ActivationKind(OnnxOps.Tanh, description => description.Tanh(), null),
+        new ActivationKind(OnnxOps.Sigmoid, description => description.Sigmoid(), OutputActivation.Sigmoid), new GeluKind(), new LeakyReluKind(), new PReluKind(),
         new EluKind(), new SeluKind(), new MishKind(), new InstanceNormalizationKind(), new GroupNormalizationKind(), new RmsNormalizationKind(), new SoftmaxKind(),
         new LstmKind(), new GruKind(),
     ];
@@ -220,7 +220,7 @@ internal abstract class OnnxKind
 internal sealed class GemmKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "Gemm";
+    public override string Name => OnnxOps.Gemm;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -270,7 +270,7 @@ internal sealed class GemmKind : OnnxKind
 internal sealed class MatMulKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "MatMul";
+    public override string Name => OnnxOps.MatMul;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -306,7 +306,7 @@ internal sealed class MatMulKind : OnnxKind
 internal sealed class AddKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "Add";
+    public override string Name => OnnxOps.Add;
 
     /// <inheritdoc />
     /// <remarks>What it adds is the one of its two inputs the graph holds; the other is what the node before it made.</remarks>
@@ -325,7 +325,7 @@ internal sealed class AddKind : OnnxKind
 internal sealed class BatchNormalizationKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "BatchNormalization";
+    public override string Name => OnnxOps.BatchNormalization;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -359,7 +359,7 @@ internal sealed class BatchNormalizationKind : OnnxKind
 internal sealed class LayerNormalizationKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "LayerNormalization";
+    public override string Name => OnnxOps.LayerNormalization;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -395,7 +395,7 @@ internal sealed class LayerNormalizationKind : OnnxKind
 internal sealed class FlattenKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "Flatten";
+    public override string Name => OnnxOps.Flatten;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -419,7 +419,7 @@ internal sealed class FlattenKind : OnnxKind
 internal sealed class ReshapeKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "Reshape";
+    public override string Name => OnnxOps.Reshape;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -472,7 +472,7 @@ internal sealed class ActivationKind(string name, Action<Sequential> word, Outpu
 internal sealed class SoftmaxKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "Softmax";
+    public override string Name => OnnxOps.Softmax;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)

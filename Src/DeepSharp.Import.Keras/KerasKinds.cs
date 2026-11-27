@@ -276,7 +276,7 @@ internal abstract class KerasKind
     /// <summary>Whether a layer is held still, as Keras's <c>trainable = False</c> holds it; a layer that penalises its outputs is refused.</summary>
     /// <param name="layer">The layer's settings.</param>
     /// <returns>Whether it does not train.</returns>
-    protected static bool Held(KerasSettings layer)
+    internal static bool Held(KerasSettings layer)
     {
         if (layer.Says("activity_regularizer"))
         {
@@ -295,7 +295,7 @@ internal abstract class KerasKind
     /// refuses the bound.
     /// </param>
     /// <returns>Its rules.</returns>
-    protected static SlotRules Governing(KerasSettings layer, string prefix, int rank, int[]? bounded)
+    internal static SlotRules Governing(KerasSettings layer, string prefix, int rank, int[]? bounded)
     {
         var rules = new SlotRules();
         var regularizer = $"{prefix}_regularizer";
@@ -385,7 +385,7 @@ internal abstract class KerasKind
     /// <summary>Whether a dense layer or a convolution adds a bias: Keras's <c>use_bias</c>, true unless it says otherwise.</summary>
     /// <param name="layer">The layer's settings.</param>
     /// <returns>Whether it adds one.</returns>
-    protected static bool KeepsBias(KerasSettings layer) => layer.Setting("use_bias", true);
+    internal static bool KeepsBias(KerasSettings layer) => layer.Setting("use_bias", true);
 
     /// <summary>How a layer starts, by whether it adds a bias.</summary>
     /// <param name="bias">Whether it adds one.</param>

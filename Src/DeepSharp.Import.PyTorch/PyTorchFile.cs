@@ -50,7 +50,7 @@ namespace DeepSharp.Import.PyTorch;
 /// its length, and where the reading passes that many when it cannot.
 /// </para>
 /// <para>
-/// Every tensor goes into the network through <see cref="Network.Load"/>, so a tensor for no slot, a slot no tensor is for,
+/// Every tensor goes into the network through <see cref="Network.Load(IEnumerable{SlotEntry})"/>, so a tensor for no slot, a slot no tensor is for,
 /// a shape other than the one PyTorch keeps the slot in, a kind of number that is not a float and a value that is not
 /// finite are refused together, with a <see cref="SlotLoadException"/> naming each by its tensor, and the network keeps
 /// what it held.

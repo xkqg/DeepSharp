@@ -176,6 +176,35 @@ public abstract class VocabularyContract(ITensorBackend engine)
         AssertClose([1 / (1 + MathF.Exp(1f)), 0.5f, 1 / (1 + MathF.Exp(-2f))], new Focal(2).Predictions(outputs, _backend).Values);
         Assert.Equal(OutputActivation.Exp, new Poisson(logInput: true).Activation);
         Assert.Equal(OutputActivation.Margin, new Hinge().Activation);
+
+        // The same activations asked of the enum itself, which a loss and an importer ask alike.
+        Assert.Equal<float[]>([-1f, 0f, 2f], OutputActivation.Identity.Applied(outputs, _backend).Values.ToArray());
+        AssertClose([MathF.Exp(-1f), 1f, MathF.Exp(2f)], OutputActivation.Exp.Applied(outputs, _backend).Values);
+        Assert.Equal<float[]>([0f, 0f, 1f], OutputActivation.Margin.Applied(outputs, _backend).Values.ToArray());
+        AssertClose([1 / (1 + MathF.Exp(1f)), 0.5f, 1 / (1 + MathF.Exp(-2f))], OutputActivation.Sigmoid.Applied(outputs, _backend).Values);
+        Assert.Equal(1f, OutputActivation.Softmax.Applied(outputs, _backend).Values.ToArray().Sum(), 5);
+    }
+
+    [Fact]
+    public void AnOutputActivation_SaysItsWord_WhetherALayerIsIt_AndWhichForeignWordOwnsIt()
+    {
+        Assert.Equal(
+            ["identity", "softmax", "sigmoid", "exp", "margin"],
+            Enum.GetValues<OutputActivation>().Select(activation => activation.Word()));
+        Assert.True(OutputActivation.Sigmoid.Closes(new Sigmoid()));
+        Assert.True(OutputActivation.Softmax.Closes(new Softmax()));
+        Assert.False(OutputActivation.Sigmoid.Closes(new Softmax()));
+        Assert.False(OutputActivation.Softmax.Closes(new Sigmoid()));
+        Assert.False(OutputActivation.Identity.Closes(new Sigmoid()));
+        Assert.Equal(
+            [OutputActivation.Softmax, OutputActivation.Sigmoid],
+            Enum.GetValues<OutputActivation>().Where(activation => activation.HasALayer()));
+        Assert.True(OutputActivation.Sigmoid.OwnedBy("sigmoid"));
+        Assert.True(OutputActivation.Softmax.OwnedBy("softmax"));
+        Assert.False(OutputActivation.Sigmoid.OwnedBy("softmax"));
+        Assert.False(OutputActivation.Softmax.OwnedBy("linear"));
+        Assert.False(OutputActivation.Exp.OwnedBy("exp"));
+        Assert.False(OutputActivation.Identity.OwnedBy("identity"));
     }
 
     [Fact]

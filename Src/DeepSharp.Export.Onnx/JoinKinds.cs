@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Import.Onnx;
 using DeepSharp.Networks;
 
 namespace DeepSharp.Export.Onnx;
@@ -23,7 +24,7 @@ internal sealed class SumKind : ExportKind<Sum>
         {
             var last = next == at.Inputs.Count - 1;
 
-            sum = at.Graph.Node(at.Node("Add", 7, last ? null : $"Add.{next}"), [sum, at.Inputs[next].Name], last ? at.Path : $"{at.Path}/Add.{next}");
+            sum = at.Graph.Node(at.Node(OnnxOps.Add, 7, last ? null : $"Add.{next}"), [sum, at.Inputs[next].Name], last ? at.Path : $"{at.Path}/Add.{next}");
         }
 
         return at.Keeping(sum);
@@ -39,7 +40,7 @@ internal sealed class ConcatenationKind : ExportKind<Concatenation>
         RequireNoFlattenedImage(at, "laid side by side");
 
         return at.Giving(at.Graph.Node(
-            at.Node("Concat", 4) with { Attributes = node => node.State("axis", 1L) },
+            at.Node(OnnxOps.Concat, 4) with { Attributes = node => node.State("axis", 1L) },
             [.. at.Inputs.Select(input => input.Name)],
             at.Path));
     }
@@ -73,7 +74,7 @@ internal sealed class ProductKind : ExportKind<Product>
         {
             var last = next == at.Inputs.Count - 1;
 
-            product = at.Graph.Node(at.Node("Mul", 7, last ? null : $"Mul.{next}"), [product, at.Inputs[next].Name], last ? at.Path : $"{at.Path}/Mul.{next}");
+            product = at.Graph.Node(at.Node(OnnxOps.Mul, 7, last ? null : $"Mul.{next}"), [product, at.Inputs[next].Name], last ? at.Path : $"{at.Path}/Mul.{next}");
         }
 
         return at.Keeping(product);
@@ -92,7 +93,7 @@ internal sealed class ColumnsKind : ExportKind<Columns>
         var ends = at.Graph.Wholes(at.Number("ends"), layer.First + layer.Count);
         var axes = at.Graph.Wholes(at.Number("axes"), 1);
 
-        return at.Giving(at.Graph.Node(at.Node("Slice", 10), [at.Input.Name, starts, ends, axes], at.Path));
+        return at.Giving(at.Graph.Node(at.Node(OnnxOps.Slice, 10), [at.Input.Name, starts, ends, axes], at.Path));
     }
 }
 

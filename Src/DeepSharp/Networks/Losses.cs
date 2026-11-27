@@ -55,8 +55,7 @@ public abstract class Loss
     /// Whether it is a <see cref="Sigmoid"/> before a loss whose outputs are logits of a one, or a <see cref="Softmax"/> before one
     /// whose outputs are a row's logits.
     /// </returns>
-    public bool Applies(Layer layer) =>
-        (layer is Sigmoid && Activation == OutputActivation.Sigmoid) || (layer is Softmax && Activation == OutputActivation.Softmax);
+    public bool Applies(Layer layer) => Activation.Closes(layer);
 
     /// <summary>The loss of a batch.</summary>
     /// <param name="outputs">The network's raw outputs: a row for each example.</param>
@@ -88,14 +87,7 @@ public abstract class Loss
         ArgumentNullException.ThrowIfNull(outputs);
         ArgumentNullException.ThrowIfNull(backend);
 
-        return Activation switch
-        {
-            OutputActivation.Softmax => backend.Exp(backend.LogSoftmax(outputs)),
-            OutputActivation.Sigmoid => backend.Sigmoid(outputs),
-            OutputActivation.Exp => backend.Exp(outputs),
-            OutputActivation.Margin => backend.Positive(outputs),
-            _ => outputs,
-        };
+        return Activation.Applied(outputs, backend);
     }
 
     /// <summary>Why a row's answers cannot be what this loss is trained against, when they cannot.</summary>

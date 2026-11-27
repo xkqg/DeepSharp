@@ -73,7 +73,7 @@ internal sealed class PartReader(NetworkText text, string[] here, JsonElement pa
 
     /// <summary>
     /// Reads every slot written into the network, each by its path, into the network: every slot the network holds, and none
-    /// it does not — held to the rule a file of another framework's is held to by <see cref="Network.Load"/>.
+    /// it does not — held to the rule a file of another framework's is held to by <see cref="Network.Load(IEnumerable{SlotEntry})"/>.
     /// </summary>
     public void Load(Network network)
     {

@@ -12,5 +12,5 @@ namespace DeepSharp.Networks;
 /// Where the file holds it, in the file's own words — a tensor's name, a dataset's path, a line — so a fault is named where
 /// somebody can find it.
 /// </param>
-/// <remarks>What a reader of a file hands <see cref="Network.Load"/>, one for every slot of the network.</remarks>
+/// <remarks>What a reader of a file hands <see cref="Network.Load(IEnumerable{SlotEntry})"/>, one for every slot of the network.</remarks>
 public readonly record struct SlotEntry(string Path, Tensor Value, string Source);

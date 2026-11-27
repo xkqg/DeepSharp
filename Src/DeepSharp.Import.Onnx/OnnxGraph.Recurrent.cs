@@ -10,7 +10,7 @@ namespace DeepSharp.Import.Onnx;
 internal sealed partial class OnnxGraph
 {
     // The operators that make each number from the number at its place, so that the layout of the value they work on does not matter.
-    private static readonly HashSet<string> Pointwise = new(["Relu", "Tanh", "Sigmoid", "Gelu", "LeakyRelu", "Elu", "Selu", "Mish"], StringComparer.Ordinal);
+    private static readonly HashSet<string> Pointwise = new([OnnxOps.Relu, OnnxOps.Tanh, OnnxOps.Sigmoid, OnnxOps.Gelu, OnnxOps.LeakyRelu, OnnxOps.Elu, OnnxOps.Selu, OnnxOps.Mish], StringComparer.Ordinal);
 
     // The places of the nodes that work out the nought a recurrent node starts from, and the node that makes each value of the graph.
     private HashSet<int> _started = [];
@@ -89,11 +89,11 @@ internal sealed partial class OnnxGraph
         var work = new Stack<int>();
 
         var states = _graph.Node
-            .Where(node => node.OpType is "LSTM" or "GRU")
+            .Where(node => node.OpType is OnnxOps.Lstm or OnnxOps.Gru)
             .SelectMany(node => node.Input.Skip(5).Take(2))
             .Where(name => name.Length > 0 && _makers.ContainsKey(name))
             .Select(name => _makers[name])
-            .Where(maker => _graph.Node[maker].OpType == "Expand");
+            .Where(maker => _graph.Node[maker].OpType == OnnxOps.Expand);
 
         foreach (var maker in states.Where(cone.Add))
         {
@@ -105,7 +105,7 @@ internal sealed partial class OnnxGraph
             var only = _graph.Node[place].Input
                 .Where(name => name.Length > 0 && _makers.ContainsKey(name))
                 .Select(name => _makers[name])
-                .Where(maker => !cone.Contains(maker) && _graph.Node[maker].OpType != "Constant"
+                .Where(maker => !cone.Contains(maker) && _graph.Node[maker].OpType != OnnxOps.Constant
                     && _graph.Node[maker].Output.All(output => !given.Contains(output) && takers.GetValueOrDefault(output, []).All(cone.Contains)));
 
             foreach (var maker in only.Where(cone.Add))
@@ -124,7 +124,7 @@ internal sealed partial class OnnxGraph
         {
             var name = node.Input(at);
 
-            if (name.Length > 0 && !(_makers.TryGetValue(name, out var maker) && _graph.Node[maker].OpType == "Expand" && Noughts(_graph.Node[maker].Input[0])))
+            if (name.Length > 0 && !(_makers.TryGetValue(name, out var maker) && _graph.Node[maker].OpType == OnnxOps.Expand && Noughts(_graph.Node[maker].Input[0])))
             {
                 node.Refuse($"its {(at == 5 ? "initial_h" : "initial_c")}, '{name.Quoted()}', is a state the graph works out or holds, and a recurrent layer here starts from nought: the state an Expand of a constant nought spells.");
             }
@@ -138,22 +138,22 @@ internal sealed partial class OnnxGraph
     // a layer; and any other, which is refused. False when the node is one to be read as a layer.
     private bool Stepped(OnnxNode node, Made made, string taken)
     {
-        if (node.Operator is "LSTM" or "GRU" || Pointwise.Contains(node.Operator))
+        if (node.Operator is OnnxOps.Lstm or OnnxOps.Gru || Pointwise.Contains(node.Operator))
         {
             return false;
         }
 
         var flow = made.Reaching.Flow;
 
-        if (node.Operator == "Squeeze" && flow is Flow.Directed or Flow.States)
+        if (node.Operator == OnnxOps.Squeeze && flow is Flow.Directed or Flow.States)
         {
             Squeezed(node, made);
         }
-        else if (node.Operator == "Gather" && flow == Flow.States && node.Input(0) == taken)
+        else if (node.Operator == OnnxOps.Gather && flow == Flow.States && node.Input(0) == taken)
         {
             Gathered(node, made);
         }
-        else if (node.Operator == "Reshape" && flow is Flow.DirectedByBatch or Flow.StatesByBatch)
+        else if (node.Operator == OnnxOps.Reshape && flow is Flow.DirectedByBatch or Flow.StatesByBatch)
         {
             Folded(node, made);
         }

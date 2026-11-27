@@ -10,7 +10,7 @@ namespace DeepSharp.Import.Onnx;
 internal sealed class GeluKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "Gelu";
+    public override string Name => OnnxOps.Gelu;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -30,7 +30,7 @@ internal sealed class GeluKind : OnnxKind
 internal sealed class LeakyReluKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "LeakyRelu";
+    public override string Name => OnnxOps.LeakyRelu;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -45,7 +45,7 @@ internal sealed class LeakyReluKind : OnnxKind
 internal sealed class EluKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "Elu";
+    public override string Name => OnnxOps.Elu;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -60,7 +60,7 @@ internal sealed class EluKind : OnnxKind
 internal sealed class SeluKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "Selu";
+    public override string Name => OnnxOps.Selu;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -82,7 +82,7 @@ internal sealed class SeluKind : OnnxKind
 internal sealed class MishKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "Mish";
+    public override string Name => OnnxOps.Mish;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers) => new(description => description.Mish(), reaching.Flow);
@@ -95,7 +95,7 @@ internal sealed class MishKind : OnnxKind
 internal sealed class PReluKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "PRelu";
+    public override string Name => OnnxOps.PRelu;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -122,7 +122,7 @@ internal sealed class PReluKind : OnnxKind
 internal sealed class InstanceNormalizationKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "InstanceNormalization";
+    public override string Name => OnnxOps.InstanceNormalization;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -147,7 +147,7 @@ internal sealed class InstanceNormalizationKind : OnnxKind
 internal sealed class GroupNormalizationKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "GroupNormalization";
+    public override string Name => OnnxOps.GroupNormalization;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)
@@ -182,7 +182,7 @@ internal sealed class GroupNormalizationKind : OnnxKind
 internal sealed class RmsNormalizationKind : OnnxKind
 {
     /// <inheritdoc />
-    public override string Name => "RMSNormalization";
+    public override string Name => OnnxOps.RmsNormalization;
 
     /// <inheritdoc />
     public override OnnxLayer Read(OnnxNode node, Reaching reaching, GraphNumbers numbers)

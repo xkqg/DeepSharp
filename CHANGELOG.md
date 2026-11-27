@@ -99,6 +99,15 @@ The seventh letter of the flock team.
   the four can be written once against the base. Nothing changes for code that uses a kind itself, and no file written
   changes by a byte.
 
+- **What an importer of your own needs, asked of the library.** `network.Load(entries, alreadyFound)` puts numbers into a
+  network as `Load(entries)` does and refuses together with them the faults your reader found while it read — a number it
+  held wrongly and kept back — each slot once, a slot you found a fault for not also refused as missing; a third argument
+  puts the faults of numbers in the order your file holds them. `description.LoweredFor(each, where)` lowers a
+  `Sequential` description for examples of one shape and refuses what cannot be lowered as a `FormatException` naming where
+  your file's description stands. `OutputActivation` says its own `Word()`, applies itself to outputs (`Applied`), says
+  whether a layer is it (`Closes`) and whether a foreign file's word names it (`OwnedBy`), so what a loss, a compile and a
+  reader decide about an activation is decided once. The Keras, ONNX and PyTorch readers now go through the same.
+
 ### Fixed
 
 - **A `RAdam` with no weight decay can be read back from its file.** It wrote no `weightDecay` and then refused its own

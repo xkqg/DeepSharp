@@ -85,8 +85,8 @@ internal static class LiftedPooling
             var reduce = new OnnxNode(graph.Node[place + 1], place + 1, faults, []);
             var squeeze = new OnnxNode(graph.Node[place + 2], place + 2, faults, []);
 
-            return reduce.Operator is "ReduceMean" or "ReduceMax"
-                && squeeze.Operator == "Squeeze"
+            return reduce.Operator is OnnxOps.ReduceMean or OnnxOps.ReduceMax
+                && squeeze.Operator == OnnxOps.Squeeze
                 && reduce.Input(0) == unsqueeze.Output
                 && squeeze.Input(0) == reduce.Output
                 && graph.Takers(unsqueeze.Output) == 1

@@ -1,6 +1,7 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using DeepSharp.Import.Onnx;
 using Google.Protobuf;
 using Onnx;
 
@@ -25,7 +26,7 @@ internal sealed class GraphDraft
 
     // The operators that took their axes as an attribute in the older sets and take them as an input from a later one.
     private static readonly AxesInput[] AxesAsInput =
-        [new("Squeeze", 13), new("Unsqueeze", 13), new("ReduceSum", 13), new("ReduceMean", 18), new("ReduceMax", 18), new("ReduceMin", 18)];
+        [new(OnnxOps.Squeeze, 13), new(OnnxOps.Unsqueeze, 13), new(OnnxOps.ReduceSum, 13), new(OnnxOps.ReduceMean, 18), new(OnnxOps.ReduceMax, 18), new(OnnxOps.ReduceMin, 18)];
 
     /// <summary>The operator set the nodes written so far need.</summary>
     public int Opset => _opset;

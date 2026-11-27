@@ -19,7 +19,7 @@ namespace DeepSharp.Import.Onnx;
 /// over an image or through a volume; a MaxPool or an AveragePool a pooling along as many axes; a GlobalAveragePool or a
 /// GlobalMaxPool, or a ReduceMean or ReduceMax over those places alone, a pooling of every place of each channel into one;
 /// a BatchNormalization a batch normalisation with ONNX's momentum, which is Keras's, and its epsilon — and the words are lowered as any description is. The graph's numbers go
-/// into the slots by path, <c>2.weight</c>, through <see cref="Network.Load"/>, all together or not at all, every one that
+/// into the slots by path, <c>2.weight</c>, through <see cref="Network.Load(IEnumerable{SlotEntry})"/>, all together or not at all, every one that
 /// does not fit named at the initializer that holds it.
 /// </para>
 /// <para>

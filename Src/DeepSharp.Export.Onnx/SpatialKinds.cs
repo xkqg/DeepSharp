@@ -26,7 +26,7 @@ internal sealed class ConvolutionKind<TLayer>(Func<TLayer, int[], Standing> stan
             OnnxLayouts.SlotToKernel(layer.Weight.Value.Values.ToArray(), layer.OutChannels, layer.InChannels / layer.Groups, places));
 
         return at.Giving(at.Graph.Node(
-            at.Node("Conv", 1) with
+            at.Node(OnnxOps.Conv, 1) with
             {
                 Attributes = node =>
                 {
@@ -60,7 +60,7 @@ internal sealed class TransposedConvolutionKind<TLayer>(Func<TLayer, Standing> s
             OnnxLayouts.SlotToGivenBack(layer.Weight.Value.Values.ToArray(), layer.InChannels, outputs, places));
 
         return at.Giving(at.Graph.Node(
-            at.Node("ConvTranspose", 1) with
+            at.Node(OnnxOps.ConvTranspose, 1) with
             {
                 Attributes = node =>
                 {
@@ -201,7 +201,7 @@ internal sealed class PaddingKind<TLayer>(Func<TLayer, int[]> border) : ExportKi
             : [at.Input.Name, pads];
 
         return at.Giving(at.Graph.Node(
-            at.Node("Pad", layer.Filling == Filling.Wrap ? 19 : 11) with { Attributes = node => node.State("mode", mode) },
+            at.Node(OnnxOps.Pad, layer.Filling == Filling.Wrap ? 19 : 11) with { Attributes = node => node.State("mode", mode) },
             inputs,
             at.Path));
     }
@@ -217,7 +217,7 @@ internal sealed class InstanceNormKind : ExportKind<InstanceNorm>
     protected override Value Write(InstanceNorm layer, Writing at)
     {
         return at.Giving(at.Graph.Node(
-            at.Node("InstanceNormalization", 6) with { Attributes = node => node.State("epsilon", layer.Epsilon) },
+            at.Node(OnnxOps.InstanceNormalization, 6) with { Attributes = node => node.State("epsilon", layer.Epsilon) },
             [at.Input.Name, LayerNormKind.Scale(at, layer), Spatial.Shift(at, layer)],
             at.Path));
     }
@@ -238,7 +238,7 @@ internal sealed class GroupNormKind : ExportKind<GroupNorm>
         }
 
         return at.Giving(at.Graph.Node(
-            at.Node("GroupNormalization", 21) with
+            at.Node(OnnxOps.GroupNormalization, 21) with
             {
                 Attributes = node =>
                 {
@@ -282,7 +282,7 @@ internal sealed class FlattenKind : ExportKind<Flatten>
     /// <inheritdoc />
     protected override Value Write(Flatten layer, Writing at) =>
         at.Input.Spatial
-            ? at.Giving(at.Graph.Node(at.Node("Flatten", 1) with { Attributes = node => node.State("axis", 1L) }, [at.Input.Name], at.Path)) with { Image = Flattened.Of(at.Input.Each) }
+            ? at.Giving(at.Graph.Node(at.Node(OnnxOps.Flatten, 1) with { Attributes = node => node.State("axis", 1L) }, [at.Input.Name], at.Path)) with { Image = Flattened.Of(at.Input.Each) }
             : at.Input;
 }
 
@@ -305,6 +305,6 @@ internal sealed class ReshapeKind : ExportKind<Reshape>
 
         var target = at.Graph.Wholes(at.Number("shape"), 0, layer.Each[0]);
 
-        return at.Giving(at.Graph.Node(at.Node("Reshape", 5), [at.Input.Name, target], at.Path)) with { Image = Flattened.Of(at.Input.Each) };
+        return at.Giving(at.Graph.Node(at.Node(OnnxOps.Reshape, 5), [at.Input.Name, target], at.Path)) with { Image = Flattened.Of(at.Input.Each) };
     }
 }

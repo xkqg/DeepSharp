@@ -63,53 +63,53 @@ internal static class OnnxSpellings
 
     // x · ½(1 + erf(x / √2)): the TorchScript exporter multiplies by the input and then by a half, the dynamo one the other way.
     private static Func<Cursor, Reaching, OnnxLayer?> GeluByErf(bool lastByTheInput) => (cursor, reaching) =>
-        cursor.Ordered("Div", Operand.Value(Math.Sqrt(2))) && cursor.Step("Erf") && cursor.Step("Add", Operand.Value(1))
+        cursor.Ordered(OnnxOps.Div, Operand.Value(Math.Sqrt(2))) && cursor.Step(OnnxOps.Erf) && cursor.Step(OnnxOps.Add, Operand.Value(1))
         && (lastByTheInput
-            ? cursor.Step("Mul", Operand.Input) && cursor.Step("Mul", Operand.Value(0.5))
-            : cursor.Step("Mul", Operand.Value(0.5)) && cursor.Step("Mul", Operand.Input))
+            ? cursor.Step(OnnxOps.Mul, Operand.Input) && cursor.Step(OnnxOps.Mul, Operand.Value(0.5))
+            : cursor.Step(OnnxOps.Mul, Operand.Value(0.5)) && cursor.Step(OnnxOps.Mul, Operand.Input))
             ? new OnnxLayer(description => description.Gelu(), reaching.Flow)
             : null;
 
     // ½x(1 + tanh(√(2/π)(x + 0.044715x³))), the cube as x times x times x.
     private static OnnxLayer? GeluByTanhAsTorchScript(Cursor cursor, Reaching reaching) =>
-        cursor.Step("Mul", Operand.Input) && cursor.Step("Mul", Operand.Input) && cursor.Step("Mul", Operand.Value(0.044715))
-        && cursor.Step("Add", Operand.Input) && cursor.Step("Mul", Operand.Value(Math.Sqrt(2 / Math.PI))) && cursor.Step("Tanh")
-        && cursor.Step("Add", Operand.Value(1)) && cursor.Step("Mul", Operand.Input) && cursor.Step("Mul", Operand.Value(0.5))
+        cursor.Step(OnnxOps.Mul, Operand.Input) && cursor.Step(OnnxOps.Mul, Operand.Input) && cursor.Step(OnnxOps.Mul, Operand.Value(0.044715))
+        && cursor.Step(OnnxOps.Add, Operand.Input) && cursor.Step(OnnxOps.Mul, Operand.Value(Math.Sqrt(2 / Math.PI))) && cursor.Step(OnnxOps.Tanh)
+        && cursor.Step(OnnxOps.Add, Operand.Value(1)) && cursor.Step(OnnxOps.Mul, Operand.Input) && cursor.Step(OnnxOps.Mul, Operand.Value(0.5))
             ? new OnnxLayer(description => description.Gelu(approximate: true), reaching.Flow)
             : null;
 
     // The same curve, the cube as a power of three and the half before the input.
     private static OnnxLayer? GeluByTanhAsDynamo(Cursor cursor, Reaching reaching) =>
-        cursor.Ordered("Pow", Operand.Value(3)) && cursor.Step("Mul", Operand.Value(0.044715)) && cursor.Step("Add", Operand.Input)
-        && cursor.Step("Mul", Operand.Value(Math.Sqrt(2 / Math.PI))) && cursor.Step("Tanh") && cursor.Step("Add", Operand.Value(1))
-        && cursor.Step("Mul", Operand.Value(0.5)) && cursor.Step("Mul", Operand.Input)
+        cursor.Ordered(OnnxOps.Pow, Operand.Value(3)) && cursor.Step(OnnxOps.Mul, Operand.Value(0.044715)) && cursor.Step(OnnxOps.Add, Operand.Input)
+        && cursor.Step(OnnxOps.Mul, Operand.Value(Math.Sqrt(2 / Math.PI))) && cursor.Step(OnnxOps.Tanh) && cursor.Step(OnnxOps.Add, Operand.Value(1))
+        && cursor.Step(OnnxOps.Mul, Operand.Value(0.5)) && cursor.Step(OnnxOps.Mul, Operand.Input)
             ? new OnnxLayer(description => description.Gelu(approximate: true), reaching.Flow)
             : null;
 
     // x · sigmoid(x).
     private static OnnxLayer? Silu(Cursor cursor, Reaching reaching) =>
-        cursor.Step("Sigmoid") && cursor.Step("Mul", Operand.Input) ? new OnnxLayer(description => description.Silu(), reaching.Flow) : null;
+        cursor.Step(OnnxOps.Sigmoid) && cursor.Step(OnnxOps.Mul, Operand.Input) ? new OnnxLayer(description => description.Silu(), reaching.Flow) : null;
 
     // x · tanh(softplus(x)).
     private static OnnxLayer? Mish(Cursor cursor, Reaching reaching) =>
-        cursor.Step("Softplus") && cursor.Step("Tanh") && cursor.Step("Mul", Operand.Input) ? new OnnxLayer(description => description.Mish(), reaching.Flow) : null;
+        cursor.Step(OnnxOps.Softplus) && cursor.Step(OnnxOps.Tanh) && cursor.Step(OnnxOps.Mul, Operand.Input) ? new OnnxLayer(description => description.Mish(), reaching.Flow) : null;
 
     // A Reshape into [0, groups, -1], an InstanceNormalization of a scale of ones and a shift of noughts, a Reshape back — to the
     // input's own Shape as TorchScript writes it, to stated lengths as dynamo does — and the scale and the shift of each channel.
     private static Func<Cursor, Reaching, OnnxLayer?> GroupNorm(bool asTorchScript) => (cursor, reaching) =>
     {
         if (reaching.Flow is not (Flow.Rows or Flow.Images)
-            || !cursor.Ordered("Reshape", Operand.Wholes("groups", lengths => lengths is [0, > 0, -1]))
-            || !cursor.Ordered("InstanceNormalization", Operand.All(1), Operand.All(0)))
+            || !cursor.Ordered(OnnxOps.Reshape, Operand.Wholes("groups", lengths => lengths is [0, > 0, -1]))
+            || !cursor.Ordered(OnnxOps.InstanceNormalization, Operand.All(1), Operand.All(0)))
         {
             return null;
         }
 
         var epsilon = cursor.Number("epsilon", 1e-5);
 
-        if (!(asTorchScript ? cursor.Aside("Shape") && cursor.Ordered("Reshape", Operand.Aside) : cursor.Ordered("Reshape", Operand.Wholes("back", _ => true)))
-            || !cursor.Step("Mul", Operand.Held("weight"))
-            || !cursor.Step("Add", Operand.Held("bias")))
+        if (!(asTorchScript ? cursor.Aside(OnnxOps.Shape) && cursor.Ordered(OnnxOps.Reshape, Operand.Aside) : cursor.Ordered(OnnxOps.Reshape, Operand.Wholes("back", _ => true)))
+            || !cursor.Step(OnnxOps.Mul, Operand.Held("weight"))
+            || !cursor.Step(OnnxOps.Add, Operand.Held("bias")))
         {
             return null;
         }
@@ -125,9 +125,9 @@ internal static class OnnxSpellings
     // x · 1/√(mean(x², over the last axis) + ε) · scale, of a row.
     private static OnnxLayer? RmsNorm(Cursor cursor, Reaching reaching)
     {
-        if (reaching.Flow != Flow.Rows || !cursor.Ordered("Pow", Operand.Value(2)) || !cursor.ReducedOverTheLast()
-            || !cursor.Step("Add", Operand.Held("epsilon")) || !cursor.Step("Sqrt") || !cursor.Step("Reciprocal")
-            || !cursor.Step("Mul", Operand.Input) || !cursor.Step("Mul", Operand.Held("weight")))
+        if (reaching.Flow != Flow.Rows || !cursor.Ordered(OnnxOps.Pow, Operand.Value(2)) || !cursor.ReducedOverTheLast()
+            || !cursor.Step(OnnxOps.Add, Operand.Held("epsilon")) || !cursor.Step(OnnxOps.Sqrt) || !cursor.Step(OnnxOps.Reciprocal)
+            || !cursor.Step(OnnxOps.Mul, Operand.Input) || !cursor.Step(OnnxOps.Mul, Operand.Held("weight")))
         {
             return null;
         }
@@ -248,7 +248,7 @@ internal sealed class Cursor(GraphProto graph, int place, string start, GraphNum
     /// <summary>Takes the next node, when it is a ReduceMean of the value the last made over its last axis, keeping that axis.</summary>
     public bool ReducedOverTheLast()
     {
-        if (Next("ReduceMean") is not { } node || node.Input.Count == 0 || node.Input[0] != Value)
+        if (Next(OnnxOps.ReduceMean) is not { } node || node.Input.Count == 0 || node.Input[0] != Value)
         {
             return false;
         }
@@ -330,7 +330,7 @@ internal sealed class Cursor(GraphProto graph, int place, string start, GraphNum
         var at = Last + 1;
         var passed = new List<int>();
 
-        while (at < graph.Node.Count && graph.Node[at].OpType == "Constant")
+        while (at < graph.Node.Count && graph.Node[at].OpType == OnnxOps.Constant)
         {
             passed.Add(at++);
         }
@@ -372,7 +372,7 @@ internal sealed class Cursor(GraphProto graph, int place, string start, GraphNum
 
     private GraphNumbers? Given(string name)
     {
-        if (graph.Node.FirstOrDefault(node => node.OpType == "Constant" && node.Output.Contains(name))?.Attribute.FirstOrDefault(attribute => attribute.Name == "value")?.T is not { } tensor)
+        if (graph.Node.FirstOrDefault(node => node.OpType == OnnxOps.Constant && node.Output.Contains(name))?.Attribute.FirstOrDefault(attribute => attribute.Name == "value")?.T is not { } tensor)
         {
             return null;
         }

@@ -104,7 +104,8 @@ internal sealed class KerasModel
     /// </exception>
     public SavedNetwork Loaded(IReadOnlyList<LayerNumbers> numbers)
     {
-        var network = Lower();
+        // The starts the description draws are replaced by the file's numbers.
+        var network = _description.LoweredFor(_input, _where);
         var entries = new List<SlotEntry>();
         var unread = new List<SlotLoadFault>();
 
@@ -153,19 +154,10 @@ internal sealed class KerasModel
 
         entries.AddRange(Fresh(network, numbers));
 
-        var faults = new List<SlotLoadFault>(unread);
+        // A number of another precision is held all the same: it is refused as that, not as missing.
+        network.Load(entries, unread);
 
-        try
-        {
-            network.Load(entries);
-        }
-        catch (SlotLoadException refused)
-        {
-            // A number of another precision is held all the same: it is refused as that, not as missing.
-            faults.AddRange(refused.Faults.Where(fault => fault.Source is not null || unread.All(other => other.Slot != fault.Slot)));
-        }
-
-        return faults.Count > 0 ? throw new SlotLoadException(faults) : new SavedNetwork(network, _loss);
+        return new SavedNetwork(network, _loss);
     }
 
     // The numbers of the slots a file leaves out because Keras merged them into another — a low-rank pair, in the archive Keras 3
@@ -193,14 +185,6 @@ internal sealed class KerasModel
             }
         }
     }
-
-    // What a Keras activation is owned by: the output activation of a loss here that applies it itself.
-    private static string? Owned(Loss loss) => loss.Activation switch
-    {
-        OutputActivation.Sigmoid => "sigmoid",
-        OutputActivation.Softmax => "softmax",
-        _ => null,
-    };
 
     // One of the description's layers, as the file lists it: its class, and its settings where its name places them.
     private Described Describe(JsonElement entry, bool functional)
@@ -565,14 +549,16 @@ internal sealed class KerasModel
     // chances it gives. A model whose end and loss disagree about it is refused at its last layer.
     private static bool Lifted(List<Built> built, KerasLoss? loss)
     {
-        if (loss is not { } trained || Owned(trained.Loss) is not { } owned || built.Count == 0)
+        if (loss is not { } trained || !trained.Loss.Activation.HasALayer() || built.Count == 0)
         {
             return false;
         }
 
         var last = built[^1];
+        var activation = trained.Loss.Activation;
+        var owned = activation.Word();
 
-        if ((last.Layer.Activation == owned) == trained.FromLogits)
+        if (activation.OwnedBy(last.Layer.Activation) == trained.FromLogits)
         {
             last.Described.Settings.Refuse(trained.FromLogits
                 ? $"the model ends in a {owned}, and its loss takes logits and applies the {owned} itself: every prediction would go through it twice."
@@ -692,20 +678,6 @@ internal sealed class KerasModel
 
     // The steps a layer takes, by the names they go by: the place they stand at, or the input.
     private static string[] Taking(int[] places) => [.. places.Select(place => place < 0 ? Step.Input : place.ToString(CultureInfo.InvariantCulture))];
-
-    // The description lowered onto a stack of layers for examples of the input's shape; the starts it draws are replaced by
-    // the file's numbers.
-    private LayerStack Lower()
-    {
-        try
-        {
-            return _description.Lower(_input, new RandomStream(0));
-        }
-        catch (ArgumentException refused)
-        {
-            throw new FormatException($"{_where}: {refused.Message.ReplaceLineEndings(" ")}", refused);
-        }
-    }
 
     private FormatException Refused() => new(string.Join(Environment.NewLine, _faults));
 

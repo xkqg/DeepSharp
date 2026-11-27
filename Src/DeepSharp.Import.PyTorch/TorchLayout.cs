@@ -96,21 +96,9 @@ internal sealed class TorchLayout
         }
 
         // A fault found here names a slot whose tensor was kept back, so the load finds that slot missing and refuses too —
-        // nothing goes in — and its "missing" gives way to the fault that kept the tensor back.
-        try
-        {
-            _network.Load(entries);
-        }
-        catch (SlotLoadException refused) when (faults.Count > 0)
-        {
-            var kept = faults.Select(fault => fault.Slot).ToHashSet(StringComparer.Ordinal);
-
-            throw new SlotLoadException(
-            [
-                .. faults.Concat(refused.Faults.Where(fault => fault.Source is not null)).OrderBy(fault => places[fault.Source!]),
-                .. refused.Faults.Where(fault => fault.Source is null && !kept.Contains(fault.Slot)),
-            ]);
-        }
+        // nothing goes in — and its "missing" gives way to the fault that kept the tensor back; the faults of tensors are
+        // told in the order the file holds the tensors.
+        _network.Load(entries, faults, fault => places[fault.Source!]);
     }
 
     // Each slot's layout, the layers walked in the order they run: what a flatten was handed decides how the numbers read
