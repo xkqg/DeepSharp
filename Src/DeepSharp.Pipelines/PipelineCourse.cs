@@ -143,7 +143,7 @@ public sealed record CourseStep
         }
 
         // What a verb refuses before it looks at a value: a key it does not take, and a file written before it meant this.
-        if (untaken.Count > 0 || description.Since > version)
+        if (untaken.Count > 0 || !description.MeansNowIn(version))
         {
             return Made(catalog, untaken, version);
         }

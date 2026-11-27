@@ -244,6 +244,35 @@ public class ParameterListTests
         }
     }
 
+    [Fact]
+    public void NoPackageFindsTheSchemaTheFirstSplitOrAnOnceOnlyListByHand_ButTheDeclarationAndItsStepPositions()
+    {
+        // Which step is the first of its kind, and which kinds a declaration holds one of, have one owner each: the steps' own
+        // positions, the declaration's schema and the rules that limit a kind. A rule that looked for the schema or the split
+        // itself would drift the day another step stood in for it, and a list of the limited kinds kept beside the rules would
+        // be a second copy to forget.
+        string[] byHand = ["OfType<DeclareStep>()", "FirstSplit(", "PipelineDeclaration.FaultsIn(", "OnceOnly"];
+
+        var read = ReadHere().Select(assembly => assembly.GetName().Name!).Where(name => name != "DeepSharp").ToArray();
+        var spelled = read
+            .SelectMany(name => Directory.EnumerateFiles(Path.Join(Repository.Root, "Src", name), "*.cs", SearchOption.AllDirectories))
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .SelectMany(file => File.ReadAllLines(file)
+                .Select((line, at) => byHand.Any(form => line.Contains(form, StringComparison.Ordinal))
+                    ? $"{Path.GetRelativePath(Repository.Root, file).Replace('\\', '/')}:{at + 1}"
+                    : null)
+                .OfType<string>())
+            .ToArray();
+
+        Assert.NotEmpty(read);
+
+        if (spelled.Length > 0)
+        {
+            Assert.Fail($"{spelled.Length} places find the schema or the first split by hand, or decide whether steps are a declaration without PipelineDeclaration.Try:{Environment.NewLine}" +
+                        string.Join(Environment.NewLine, spelled));
+        }
+    }
+
     // The lines of a file, numbered, without the class that owns the facts: it runs from its declaration to the closing brace at the margin.
     private static IEnumerable<NumberedLine> TheOwnerLeftOut(string[] lines, string owner)
     {

@@ -107,11 +107,11 @@ internal sealed class OutputBox(StepCatalog catalog, PipelineDeclaration declara
             return new ListOutputChange(null, [.. refused.Faults.Select(fault => fault.ToString())]);
         }
 
-        var faults = PipelineDeclaration.FaultsIn(taken);
+        var attempt = PipelineDeclaration.Try(taken);
 
-        return faults.Count > 0
-            ? new ListOutputChange(null, [.. faults.Select(fault => fault.ToString())])
-            : new ListOutputChange(new PipelineDeclaration(taken).WithOutput(made), []);
+        return attempt.Declaration is { } kept
+            ? new ListOutputChange(kept.WithOutput(made), [])
+            : new ListOutputChange(null, [.. attempt.Faults.Select(fault => fault.ToString())]);
     }
 
     // The columns taken in with the kind given; for a range, one the schema then gives a kind the output does not read is
@@ -120,8 +120,9 @@ internal sealed class OutputBox(StepCatalog catalog, PipelineDeclaration declara
         reads is null
             ? declaration.Including(columns, kind, header)
             : columns.Aggregate(declaration.Including(columns, kind, header), (steps, column) =>
-                steps.OfType<DeclareStep>().First().Taking.FirstOrDefault(each => each.Name == column) is { } declared && !reads.Contains(declared.Kind)
-                    ? new PipelineDeclaration(steps).WithKind(column, kind)
+                PipelineDeclaration.Try(steps).Declaration is { } taking
+                && taking.Schema?.Taking.FirstOrDefault(each => each.Name == column) is { } declared && !reads.Contains(declared.Kind)
+                    ? taking.WithKind(column, kind)
                     : steps);
 
     /// <summary>The kinds a range of an output's columns can take them in with: those its answer reads, never text.</summary>
@@ -149,7 +150,7 @@ internal sealed class OutputBox(StepCatalog catalog, PipelineDeclaration declara
 
         return change.Steps is not { } steps ? change.NotMade[0]
             : steps.SequenceEqual(declaration.Steps) ? "nothing changes."
-            : PipelineDeclaration.FaultsIn(steps) is [var first, ..] ? first.Message
+            : PipelineDeclaration.Try(steps).Faults is [var first, ..] ? first.Message
             : null;
     }
 

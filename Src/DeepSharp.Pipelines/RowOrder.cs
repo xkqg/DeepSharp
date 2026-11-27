@@ -200,3 +200,20 @@ public sealed record OrderByStep : IPipelineStep<OrderByStep>, IOrdersRows, IDes
         return 0;
     }
 }
+
+/// <summary>
+/// What a declared order says of itself.
+/// </summary>
+internal static class OrderingExtensions
+{
+    extension(IOrdersRows? order)
+    {
+        /// <summary>Whether the rows are put in order by one column and no other.</summary>
+        /// <param name="column">The column.</param>
+        /// <returns>
+        /// <see langword="true"/> when the order names that column and nothing else; no order, or one by more columns or by
+        /// others, says nothing of it. The rows after a row are the ones that came after it only then.
+        /// </returns>
+        public bool StandsByAlone(string column) => order?.OrderedBy is [var only] && only == column;
+    }
+}

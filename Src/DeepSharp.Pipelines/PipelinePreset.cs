@@ -53,7 +53,7 @@ public sealed record PipelinePreset
     {
         ArgumentNullException.ThrowIfNull(declaration);
 
-        var declare = declaration.Steps.OfType<DeclareStep>().FirstOrDefault()
+        var declare = declaration.Schema
             ?? throw new ArgumentException("A pipeline without a schema has decided nothing about its columns.", nameof(declaration));
 
         return new(declare, declaration.Steps.OfType<DropColumnsStep>().SelectMany(drop => drop.Columns), declaration.Output, header);
@@ -110,11 +110,11 @@ public sealed record PipelinePreset
 
     // What a take-over made of a pipeline, listed against how it stood: or every fault, and no steps. The drops it was
     // asked to make are each looked for in the result, so one that could not be made is listed rather than lost.
-    private PresetTakeOver Listed(PipelineDeclaration into, TakenSteps taken, IReadOnlyList<string>? header, IReadOnlyList<string> drops)
+    private PresetTakeOver Listed(PipelineDeclaration into, DeclarationAttempt taken, IReadOnlyList<string>? header, IReadOnlyList<string> drops)
     {
         var newColumns = header is null ? null : NewColumns(header);
 
-        if (taken.Result is not { } result)
+        if (taken.Declaration is not { } result)
         {
             return new PresetTakeOver([], taken.Faults, newColumns, [], null, null, null, []);
         }
@@ -197,39 +197,39 @@ public sealed record PipelinePreset
     // The steps these decisions make of a pipeline, a stage at a time and each kept to the rules before the next: the
     // drops they do not make taken back in, under the schema they were made under; the schema this one, in place of the
     // one there or directly after the source; the drops they make; the output this one, or none.
-    private TakenSteps Taken(PipelineDeclaration into)
+    private DeclarationAttempt Taken(PipelineDeclaration into)
     {
-        var taken = new TakenSteps(into, []);
+        var taken = new DeclarationAttempt(into, []);
 
         foreach (var column in into.Steps.OfType<DropColumnsStep>().SelectMany(drop => drop.Columns).Except(Drop, StringComparer.Ordinal).ToArray())
         {
-            taken = Kept(() => taken.Result!.Including(column, ColumnKind.Text, []));
+            taken = Kept(() => taken.Declaration!.Including(column, ColumnKind.Text, []));
 
-            if (taken.Result is null)
+            if (taken.Declaration is null)
             {
                 return taken;
             }
         }
 
-        taken = WithSchema(taken.Result!);
+        taken = WithSchema(taken.Declaration!);
 
         foreach (var column in Drop)
         {
-            if (taken.Result is null)
+            if (taken.Declaration is null)
             {
                 return taken;
             }
 
-            taken = Kept(() => taken.Result.Excluding(column));
+            taken = Kept(() => taken.Declaration.Excluding(column));
         }
 
-        return taken.Result is { } decided
+        return taken.Declaration is { } decided
             ? Kept(() => Output is { } output ? decided.WithOutput(output) : decided.WithoutOutput())
             : taken;
     }
 
     // This schema, in place of the one there or directly after the source.
-    private TakenSteps WithSchema(PipelineDeclaration into)
+    private DeclarationAttempt WithSchema(PipelineDeclaration into)
     {
         var steps = into.Steps;
         var at = into.ColumnsAt;
@@ -238,18 +238,15 @@ public sealed record PipelinePreset
     }
 
     // The steps an operation makes as a declaration, or every rule they break; the schema's own refusal among them.
-    private static TakenSteps Kept(Func<IReadOnlyList<IPipelineStep>> operation)
+    private static DeclarationAttempt Kept(Func<IReadOnlyList<IPipelineStep>> operation)
     {
         try
         {
-            var steps = operation();
-            var faults = PipelineDeclaration.FaultsIn(steps);
-
-            return faults.Count == 0 ? new TakenSteps(new PipelineDeclaration(steps), []) : new TakenSteps(null, faults);
+            return PipelineDeclaration.Try(operation());
         }
         catch (DeclarationException refused)
         {
-            return new TakenSteps(null, refused.Faults);
+            return new DeclarationAttempt(null, refused.Faults);
         }
     }
 
@@ -266,7 +263,7 @@ public sealed record PipelinePreset
             .Concat(UndoChain.ReadBy(declaration));
 
     private static IEnumerable<string> SchemaNames(PipelineDeclaration declaration) =>
-        declaration.Steps.OfType<DeclareStep>().SelectMany(declare => declare.Columns.Select(column => column.Name));
+        declaration.Schema?.Columns.Select(column => column.Name) ?? [];
 
     // What decides a column: every part the schema writes of it — how it stands, which says whether it is excluded, its
     // kind, the kind a category was, whether the source may lack it, how its moments are written, which value stands for a
@@ -290,8 +287,10 @@ public sealed record PipelinePreset
     // What the schema does with the columns it does not name, when that changes: from nothing, when there was no schema.
     private static RemainderChange? RemainderChanged(PipelineDeclaration into, PipelineDeclaration result)
     {
-        var before = into.Steps.OfType<DeclareStep>().FirstOrDefault()?.Remainder;
-        var after = result.Steps.OfType<DeclareStep>().First().Remainder;
+        var before = into.Schema?.Remainder;
+
+        // What a take-over makes of a pipeline always holds the preset's schema: it is put in place before anything else is asked.
+        var after = result.Schema!.Remainder;
 
         return before == after ? null : new RemainderChange(before, after);
     }
@@ -329,11 +328,6 @@ public sealed record PipelinePreset
 
         return [.. drop];
     }
-
-    /// <summary>The steps a take-over has made so far, or every rule they break.</summary>
-    /// <param name="Result">The declaration, while the steps keep the rules.</param>
-    /// <param name="Faults">Every rule broken, once one is.</param>
-    private readonly record struct TakenSteps(PipelineDeclaration? Result, IReadOnlyList<DeclarationFault> Faults);
 
     /// <summary>What decides a column in a listing.</summary>
     /// <param name="Standing">How it stands.</param>

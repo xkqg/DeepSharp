@@ -195,6 +195,18 @@ public class PipelineFileTests
     }
 
     [Fact]
+    public void AVerbMeansNowInEveryVersionFromTheOneItsMeaningCameIn()
+    {
+        var split = StepCatalog.BuiltIn().Describe("split.atRandom");
+        var source = StepCatalog.BuiltIn().Describe("read.csv");
+
+        Assert.False(split.MeansNowIn(split.Since - 1));
+        Assert.True(split.MeansNowIn(split.Since));
+        Assert.True(split.MeansNowIn(PipelineDeclaration.Version));
+        Assert.True(source.MeansNowIn(1));
+    }
+
+    [Fact]
     public void EveryUnreadableStepIsReportedAtOnce_EachAtItsLineAndColumn()
     {
         const string json = """

@@ -119,7 +119,7 @@ public static class ColumnChoiceExtensions
 
             var steps = declaration.Steps;
 
-            if (Schema(declaration) is not { } declare || Reaches(declaration, column))
+            if (declaration.Schema is not { } declare || Reaches(declaration, column))
             {
                 return steps;
             }
@@ -158,15 +158,18 @@ public static class ColumnChoiceExtensions
             ArgumentNullException.ThrowIfNull(columns);
 
             var steps = declaration.Steps;
+            var taking = declaration;
 
             foreach (var column in columns)
             {
-                steps = new PipelineDeclaration(steps).Including(column, kind, header);
+                steps = taking.Including(column, kind, header);
 
-                if (PipelineDeclaration.FaultsIn(steps).Count > 0)
+                if (PipelineDeclaration.Try(steps).Declaration is not { } kept)
                 {
                     break;
                 }
+
+                taking = kept;
             }
 
             return steps;
@@ -189,7 +192,7 @@ public static class ColumnChoiceExtensions
 
             var steps = declaration.Steps;
 
-            if (Schema(declaration) is not { } declare)
+            if (declaration.Schema is not { } declare)
             {
                 return steps;
             }
@@ -222,7 +225,7 @@ public static class ColumnChoiceExtensions
         {
             ArgumentNullException.ThrowIfNull(declaration);
 
-            return Schema(declaration) is { } declare
+            return declaration.Schema is { } declare
                 ? Replaced(declaration.Steps, declaration.ColumnsAt, declare.WithColumnKind(column, kind))
                 : declaration.Steps;
         }
@@ -238,7 +241,7 @@ public static class ColumnChoiceExtensions
         {
             ArgumentNullException.ThrowIfNull(declaration);
 
-            return Schema(declaration) is { } declare
+            return declaration.Schema is { } declare
                 ? Replaced(declaration.Steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnFormat(column, format)))
                 : declaration.Steps;
         }
@@ -255,7 +258,7 @@ public static class ColumnChoiceExtensions
         {
             ArgumentNullException.ThrowIfNull(declaration);
 
-            return Schema(declaration) is { } declare
+            return declaration.Schema is { } declare
                 ? Replaced(declaration.Steps, declaration.ColumnsAt, Refusing(declaration, declare, () => declare.WithColumnMissing(column, missing)))
                 : declaration.Steps;
         }
@@ -319,7 +322,7 @@ public static class ColumnChoiceExtensions
             ArgumentNullException.ThrowIfNull(declaration);
             ArgumentNullException.ThrowIfNull(header);
 
-            var declared = Schema(declaration)?.Columns.FirstOrDefault(each => each.Name == column);
+            var declared = declaration.Schema?.Columns.FirstOrDefault(each => each.Name == column);
 
             return
             [
@@ -369,7 +372,7 @@ public static class ColumnChoiceExtensions
 
     private static ColumnChoice Choice(PipelineDeclaration declaration, string column, IReadOnlyList<string> header, ColumnRole role)
     {
-        var declared = Schema(declaration)?.Columns.FirstOrDefault(each => each.Name == column);
+        var declared = declaration.Schema?.Columns.FirstOrDefault(each => each.Name == column);
         var offers = ColumnOffers.None;
 
         if (Changes(declaration, () => declaration.Including(column, ColumnKind.Text, header)))
@@ -434,7 +437,7 @@ public static class ColumnChoiceExtensions
         {
             var made = operation();
 
-            return !made.SequenceEqual(declaration.Steps) && PipelineDeclaration.FaultsIn(made).Count == 0;
+            return !made.SequenceEqual(declaration.Steps) && PipelineDeclaration.Try(made).Declaration is not null;
         }
         catch (DeclarationException)
         {
@@ -455,8 +458,6 @@ public static class ColumnChoiceExtensions
             throw new DeclarationException([new DeclarationFault(declaration.ColumnsAt, declare.Verb, StepCatalog.InTheFilesWords(refused))]);
         }
     }
-
-    private static DeclareStep? Schema(PipelineDeclaration declaration) => declaration.Steps.OfType<DeclareStep>().FirstOrDefault();
 
     private static bool Reaches(PipelineDeclaration declaration, string column) =>
         declaration.ColumnsBefore(declaration.Steps.Count).Allows(column);

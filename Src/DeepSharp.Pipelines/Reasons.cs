@@ -182,7 +182,7 @@ public static class WhyExtensions
                     nameof(moving));
             }
 
-            var kind = prepared.Declaration.Steps.OfType<DeclareStep>().SelectMany(step => step.Columns).FirstOrDefault(each => each.Name == column)?.Kind;
+            var kind = prepared.Declaration.Schema?.Columns.FirstOrDefault(each => each.Name == column)?.Kind;
             var places = kind switch
             {
                 ColumnKind.Category => new Places(Categories(prepared, column) ?? [.. asked.Cells.Select(row => row[at]).Where(cell => cell is not null).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)!], null),
@@ -316,7 +316,7 @@ public static class WhyExtensions
                 throw new ArgumentException("There are no rows to ask why of: hand in some of the rows the model answers.", nameof(handed));
             }
 
-            var id = prepared.Declaration.Steps.OfType<DeclareStep>().Select(step => step.IdColumn).FirstOrDefault(name => name is not null);
+            var id = prepared.Declaration.IdColumn;
             string[] perturbable = [.. columns.Where(name => !output.Answers.Contains(name, StringComparer.Ordinal) && name != id)];
 
             return new Asked(handed, cells, perturbable, output.Answers);

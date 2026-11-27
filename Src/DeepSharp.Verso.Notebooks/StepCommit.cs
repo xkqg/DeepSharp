@@ -101,7 +101,7 @@ internal static class StepCommit
 
         IReadOnlyList<string> notMade = !gesture.MayAddAndRemove
             ? ["the layout this notebook is shown in cannot add or remove a block; show it in the notebook layout to change the pipeline from the grid."]
-            : [.. PipelineDeclaration.FaultsIn(steps).Select(fault => fault.ToString())];
+            : [.. PipelineDeclaration.Try(steps).Faults.Select(fault => fault.ToString())];
 
         if (notMade.Count > 0)
         {

@@ -61,7 +61,7 @@ public sealed class TrainedMLModel
     /// them reads its logarithm in base two, which would be a different number under the same name.
     /// </remarks>
     public Measures? Measures =>
-        Prepared.Declaration.Steps.OfType<INamesTheMeasures>().FirstOrDefault() is { } report
+        Prepared.Declaration.Report is { } report
             ? Prepared.Measure([.. report.Parts.Select(part => PredictedFor(part) with { Margins = Interval?.Margins })])
             : null;
 

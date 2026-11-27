@@ -85,7 +85,7 @@ internal readonly record struct ColumnsFile(string Path)
     public ColumnsSave Saving(PipelineDeclaration declaration, IReadOnlyList<string>? shown = null)
     {
         // A pipeline without a schema has decided nothing about its columns.
-        if (!declaration.Steps.OfType<DeclareStep>().Any())
+        if (declaration.Schema is null)
         {
             return default;
         }

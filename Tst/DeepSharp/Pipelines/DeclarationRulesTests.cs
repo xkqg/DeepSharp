@@ -260,6 +260,80 @@ public class DeclarationRulesTests
     }
 
     [Fact]
+    public void Try_HandsBackTheDeclaration_WhenTheStepsKeepTheRules_AndEveryFaultAtOnce_WhenTheyDoNot()
+    {
+        // The one door that decides whether steps are a declaration: the constructor, the faults and a notebook's beginning all ask it.
+        IPipelineStep[] kept = [new ReadCsvStep("a.csv"), Schema("a"), new SplitAtRandomStep(Shares, 1), new NormaliseStep("a")];
+        IPipelineStep[] broken = [new ReadCsvStep("a.csv"), Schema("a"), new TargetStep("a"), new TargetStep("a"), FillMissingStep.Of("a", With.Mean)];
+
+        var (declaration, noFaults) = PipelineDeclaration.Try(kept);
+        var refused = PipelineDeclaration.Try(broken);
+
+        Assert.Equal(new PipelineDeclaration(kept), declaration);
+        Assert.Empty(noFaults);
+        Assert.Null(refused.Declaration);
+        Assert.Equal(PipelineDeclaration.FaultsIn(broken), refused.Faults);
+        Assert.Equal([3, 4], refused.Faults.Select(fault => fault.At));
+        Assert.Empty(PipelineDeclaration.Try([]).Faults);
+        Assert.NotNull(PipelineDeclaration.Try([]).Declaration);
+        Assert.Throws<ArgumentNullException>(() => PipelineDeclaration.Try(null!));
+    }
+
+    [Fact]
+    public void ThePositionOfTheFirstStepOfAKind_IsFoundOnceForEveryRule()
+    {
+        IReadOnlyList<IPipelineStep> steps = [new ReadCsvStep("a.csv"), Schema("a"), new SplitAtRandomStep(Shares, 1), new SplitAtRandomStep(Shares, 2), new TargetStep("a")];
+
+        Assert.Equal(2, steps.FirstIndexOf<ISplitStep>());
+        Assert.Equal(4, steps.FirstIndexOf<INamesTheAnswer>());
+        Assert.Equal(-1, steps.FirstIndexOf<IOrdersRows>());
+        Assert.Same(steps[2], steps.FirstOf<ISplitStep>());
+        Assert.Same(steps[1], steps.FirstOf<DeclareStep>());
+        Assert.Null(steps.FirstOf<IOrdersRows>());
+        Assert.Equal(new PipelineDeclaration(steps.Take(3)).SplitAt, steps.FirstIndexOf<ISplitStep>());
+    }
+
+    [Fact]
+    public void TheSchemaAndTheIdColumn_AreReadOffTheDeclarationOnce()
+    {
+        var withId = new PipelineDeclaration([new ReadCsvStep("a.csv"), new DeclareStep([new ColumnDeclaration("a", ColumnKind.Integer, false) { Id = true }, new ColumnDeclaration("b", ColumnKind.Number, false)])]);
+        var without = new PipelineDeclaration([new ReadCsvStep("a.csv"), Schema("a")]);
+        var none = new PipelineDeclaration([new ReadCsvStep("a.csv")]);
+
+        Assert.Same(withId.Steps[1], withId.Schema);
+        Assert.Equal("a", withId.IdColumn);
+        Assert.Same(without.Steps[1], without.Schema);
+        Assert.Null(without.IdColumn);
+        Assert.Null(none.Schema);
+        Assert.Null(none.IdColumn);
+    }
+
+    [Fact]
+    public void AnOrderStandsByAlone_WhenItIsOrderedByTheOneColumn_AndNoOrderStandsByNothing()
+    {
+        IOrdersRows? none = null;
+
+        Assert.True(OrderBy("Date").StandsByAlone("Date"));
+        Assert.False(OrderBy("Date").StandsByAlone("close"));
+        Assert.False(OrderBy("Date", "close").StandsByAlone("Date"));
+        Assert.False(none.StandsByAlone("Date"));
+    }
+
+    [Fact]
+    public void TheKindsOfStepADeclarationHoldsOnlyOneOf_AreNamedByTheRulesThatLimitThem()
+    {
+        Assert.Equal(typeof(IOpensRows), PipelineDeclaration.KindHeldOnce(new ReadCsvStep("a.csv")));
+        Assert.Equal(typeof(IBindsColumns), PipelineDeclaration.KindHeldOnce(Schema("a")));
+        Assert.Equal(typeof(ISplitStep), PipelineDeclaration.KindHeldOnce(new SplitAtRandomStep(Shares, 1)));
+        Assert.Equal(typeof(IOrdersRows), PipelineDeclaration.KindHeldOnce(OrderBy("a")));
+        Assert.Equal(typeof(INamesTheAnswer), PipelineDeclaration.KindHeldOnce(new TargetStep("a")));
+        Assert.Null(PipelineDeclaration.KindHeldOnce(new NormaliseStep("a")));
+        Assert.Throws<ArgumentNullException>(() => PipelineDeclaration.KindHeldOnce(null!));
+    }
+
+    private static IOrdersRows OrderBy(params string[] columns) => new OrderByStep(columns);
+
+    [Fact]
     public void ToSayAStepSplitsOrLearns_IsToDoIt()
     {
         // A split used to be a marker with the dividing kept on a second interface, and a step that learns

@@ -254,4 +254,27 @@ public sealed class CommitTests : IDisposable
         Assert.True(NotebookPipeline.Of(notebook.Scaffold.Cells).RequestFor(cells[1].Id, ViewTrigger.Commit, page: 0).Whole);
         Assert.Empty(NotebookPipeline.Of(notebook.Scaffold.Cells).Stopping);
     }
+
+    [Fact]
+    public void ABeginningThatLeavesOutTheSplitItsReportNeeds_IsNotReadAsOne_AndNothingThrows()
+    {
+        // Six blocks, the first fault at the fifth: the scale learns from the data above the split. The first four blocks
+        // make no declaration on their own, since the report measures the parts a split makes and the split stands below
+        // them, so the longest beginning the rules keep is the three above the report.
+        CellModel[] cells =
+        [
+            new() { Type = StepCellType.StepType, Source = Titanic[0] },
+            new() { Type = StepCellType.StepType, Source = Titanic[1] },
+            new() { Type = StepCellType.StepType, Source = """{"step": "target", "column": "survived"}""" },
+            new() { Type = StepCellType.StepType, Source = """{"step": "evidence.report", "metrics": ["accuracy"], "parts": ["validation", "test"], "shown": ["numbers"]}""" },
+            new() { Type = StepCellType.StepType, Source = Titanic[4] },
+            new() { Type = StepCellType.StepType, Source = Titanic[2] },
+        ];
+
+        var assembled = NotebookPipeline.Of(cells);
+
+        Assert.Equal(["read.csv", "declare", "target"], assembled.Readable.Steps.Select(step => step.Verb));
+        Assert.False(assembled.Whole);
+        Assert.Contains("learns from the data", Assert.Single(assembled.Stopping), StringComparison.Ordinal);
+    }
 }

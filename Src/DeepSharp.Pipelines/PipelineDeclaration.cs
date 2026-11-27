@@ -48,9 +48,15 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
         new AReturnIsMadeFromItsColumnAsRead(),
         new ARemainderIsMadeFromItsCountsAsRead(),
         new AtMostOne<INamesTheLearner>("learner"),
-        new ALearnerStandsBelowItsOutput(),
+        new StandsBelowTheOutput<INamesTheLearner>(
+            "names the learner this pipeline is declared for",
+            "learns the answers the output at step {0} names, and stands above it",
+            "a learner stands below the output it learns to answer"),
         new AtMostOne<INamesTheMeasures>("report"),
-        new AReportStandsBelowItsOutput(),
+        new StandsBelowTheOutput<INamesTheMeasures>(
+            "names the measures of a model's answers",
+            "measures the answers the output at step {0} names, and stands above it",
+            "a report stands below the output whose answers it measures"),
         new AReportMeasuresDividedRows(),
         new ClassesAreCountedWhereTheAnswersAreClasses(),
         new SharesAreMeasuredWhereTheAnswersAreShares(),
@@ -73,18 +79,21 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// after it. Every fault is named at once.
     /// </exception>
     public PipelineDeclaration(IEnumerable<IPipelineStep> steps)
+        : this(new KeptSteps(Kept(steps)))
     {
-        ArgumentNullException.ThrowIfNull(steps);
+    }
 
-        _steps = [.. steps];
-
-        ThrowIfFaulty(_steps);
-
-        ColumnsAt = Array.FindIndex(_steps, step => step is IBindsColumns);
-        SplitAt = Array.FindIndex(_steps, step => step is ISplitStep);
-        OutputAt = Array.FindIndex(_steps, step => step is INamesTheAnswer);
-        Learner = _steps.OfType<INamesTheLearner>().FirstOrDefault();
-        Report = _steps.OfType<INamesTheMeasures>().FirstOrDefault();
+    // Steps whose rules have been asked already, by the one door that asks them: so the declaration made of them asks no more.
+    private PipelineDeclaration(KeptSteps kept)
+    {
+        _steps = kept.Steps;
+        ColumnsAt = _steps.FirstIndexOf<IBindsColumns>();
+        SplitAt = _steps.FirstIndexOf<ISplitStep>();
+        OutputAt = _steps.FirstIndexOf<INamesTheAnswer>();
+        Learner = _steps.FirstOf<INamesTheLearner>();
+        Report = _steps.FirstOf<INamesTheMeasures>();
+        Schema = _steps.FirstOf<DeclareStep>();
+        IdColumn = _steps.IdColumn();
     }
 
     /// <summary>Everything wrong with these steps as a declaration, without refusing them.</summary>
@@ -93,15 +102,32 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// <remarks>
     /// For whatever writes a declaration a piece at a time and wants to show where it is wrong before it is
     /// finished — a notebook puts each fault on the block it belongs to. The constructor refuses exactly
-    /// these faults, so the two can never disagree.
+    /// these faults, so the two can never disagree. What also wants the declaration the steps make is asked
+    /// through <see cref="Try"/>, which answers both at once.
     /// </remarks>
     public static IReadOnlyList<DeclarationFault> FaultsIn(IEnumerable<IPipelineStep> steps)
     {
         ArgumentNullException.ThrowIfNull(steps);
 
-        IPipelineStep[] written = [.. steps];
+        return FaultsOf([.. steps]);
+    }
 
-        return [.. Rules.SelectMany(rule => rule.FaultsIn(written)).OrderBy(fault => fault.At)];
+    /// <summary>Whether steps are a declaration, and the declaration they make when they are.</summary>
+    /// <param name="steps">The steps, in the order they were written.</param>
+    /// <returns>The declaration, and no faults, when the steps keep every rule; no declaration, and every fault, when they do not.</returns>
+    /// <remarks>
+    /// The one door that decides it: the constructor refuses what this door refuses, and whatever writes a declaration a piece
+    /// at a time — a notebook's blocks, a take-over, a list's boxes — asks here and reads what it needs of the answer. The rules
+    /// are asked once for each attempt.
+    /// </remarks>
+    public static DeclarationAttempt Try(IEnumerable<IPipelineStep> steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+
+        IPipelineStep[] written = [.. steps];
+        var faults = FaultsOf(written);
+
+        return new DeclarationAttempt(faults.Count == 0 ? new PipelineDeclaration(new KeptSteps(written)) : null, faults);
     }
 
     /// <summary>Refuses steps that break a rule, naming every fault at once.</summary>
@@ -109,12 +135,45 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// <exception cref="DeclarationException">At least one rule is broken.</exception>
     internal static void ThrowIfFaulty(IReadOnlyList<IPipelineStep> steps)
     {
-        var faults = FaultsIn(steps);
+        var attempt = Try(steps);
 
-        if (faults.Count > 0)
+        if (attempt.Declaration is null)
         {
-            throw new DeclarationException(faults);
+            throw new DeclarationException(attempt.Faults);
         }
+    }
+
+    // The steps, once the rules have been asked of them and every one is kept.
+    private static IPipelineStep[] Kept(IEnumerable<IPipelineStep> steps)
+    {
+        ArgumentNullException.ThrowIfNull(steps);
+
+        IPipelineStep[] written = [.. steps];
+        var faults = FaultsOf(written);
+
+        return faults.Count == 0 ? written : throw new DeclarationException(faults);
+    }
+
+    private static IReadOnlyList<DeclarationFault> FaultsOf(IPipelineStep[] written) =>
+        [.. Rules.SelectMany(rule => rule.FaultsIn(written)).OrderBy(fault => fault.At)];
+
+    private readonly record struct KeptSteps(IPipelineStep[] Steps);
+
+    /// <summary>
+    /// The kind of step a declaration holds at most one of that a step is the one of, when it is one: a source, the schema, a
+    /// split, an order, an answer, a learner or a report.
+    /// </summary>
+    /// <param name="step">The step.</param>
+    /// <returns>The capability the kind is named by; nothing for a step a declaration may hold any number of.</returns>
+    /// <remarks>
+    /// Read off the same rules that refuse a second one, so what limits a kind and what says which kind it is cannot disagree:
+    /// a notebook that stands one verb for another of the same kind asks here rather than keeping a list of its own.
+    /// </remarks>
+    public static Type? KindHeldOnce(IPipelineStep step)
+    {
+        ArgumentNullException.ThrowIfNull(step);
+
+        return Rules.OfType<IHoldsAtMostOne>().FirstOrDefault(rule => rule.Holds(step))?.Kind;
     }
 
     /// <summary>The version of the pipeline file this library writes, and the newest one it reads.</summary>
@@ -234,6 +293,13 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// a replay, the way back — whichever kind of output it is.
     /// </remarks>
     public INamesTheAnswer? Output => OutputAt < 0 ? null : (INamesTheAnswer)_steps[OutputAt];
+
+    /// <summary>The step that declares the columns, or nothing when the pipeline declares none.</summary>
+    /// <remarks>A declaration has at most one, so this is the one place every part that needs the columns' names and kinds asks.</remarks>
+    public DeclareStep? Schema { get; }
+
+    /// <summary>The column the schema says names each row, or nothing when there is no schema or it names none.</summary>
+    public string? IdColumn { get; }
 
     /// <summary>The step that names the learner this pipeline is declared for, or nothing when it names none.</summary>
     /// <remarks>

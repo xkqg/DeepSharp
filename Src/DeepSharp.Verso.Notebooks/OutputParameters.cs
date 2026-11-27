@@ -125,7 +125,7 @@ internal sealed class OutputParameters(StepCatalog catalog, PipelineDeclaration 
         {
             var edited = (INamesTheAnswer)StepForm.Edited(edit, catalog)!;
 
-            return PipelineDeclaration.FaultsIn(declaration.WithOutput(edited)).Count == 0;
+            return PipelineDeclaration.Try(declaration.WithOutput(edited)).Declaration is not null;
         }
         catch (FormatException)
         {

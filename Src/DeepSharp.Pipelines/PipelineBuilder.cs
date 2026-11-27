@@ -426,7 +426,7 @@ public sealed class PipelineBuilder
     /// its own seed, which is a different question from which rows end up beside which.
     /// </remarks>
     public PipelineBuilder Shuffle(int seed = 20260929) =>
-        Add(DeclaredId() is not null ? new ShuffleStep(seed) { ById = true } : new ShuffleStep(seed));
+        Add(_steps.IdColumn() is not null ? new ShuffleStep(seed) { ById = true } : new ShuffleStep(seed));
 
     /// <summary>Says where the features of this pipeline land, for every scaling that names no kind.</summary>
     /// <param name="range">
@@ -708,7 +708,7 @@ public sealed class PipelineBuilder
     {
         ThrowIfSplit();
 
-        var ranked = DeclaredId() is not null ? step.RankedById() : step;
+        var ranked = _steps.IdColumn() is not null ? step.RankedById() : step;
 
         PipelineDeclaration.ThrowIfFaulty([.. _steps, ranked]);
 
@@ -717,9 +717,6 @@ public sealed class PipelineBuilder
 
         return new FittingBuilder(_steps, _rows, FeaturesLandIn);
     }
-
-    // The column the schema above this builder names each row by, when one is declared; nothing when none is.
-    private string? DeclaredId() => _steps.OfType<DeclareStep>().FirstOrDefault()?.IdColumn;
 
     private void ThrowIfSplit()
     {

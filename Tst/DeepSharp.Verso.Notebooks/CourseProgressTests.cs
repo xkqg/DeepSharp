@@ -294,13 +294,13 @@ public class CourseProgressTests
     [Fact]
     public void TheStepsThatMayStandOnlyOnce_AreExactlyTheOnesTheRulesRefuseASecondOf()
     {
-        // The notebook says which verbs fill the same place of a course by what a declaration keeps one of; the declaration
-        // says it too, in its rules. Held to each other, so a step a rule starts to limit is limited here as well.
+        // The notebook says which verbs fill the same place of a course by the kind a declaration keeps one of, and asks the
+        // declaration for it; what it answers is held here to what the declaration then does with two of the step.
         foreach (var step in Catalog.Descriptions.Select(description => Catalog.ReadStep(description.Template)))
         {
             var refusedTwice = PipelineDeclaration.FaultsIn([step, step]).Any(fault => fault.Message.StartsWith("a pipeline has one ", StringComparison.Ordinal));
 
-            Assert.Equal(CourseProgress.OnceOnly.Any(kind => kind.IsInstanceOfType(step)), refusedTwice);
+            Assert.Equal(PipelineDeclaration.KindHeldOnce(step) is not null, refusedTwice);
         }
     }
 }

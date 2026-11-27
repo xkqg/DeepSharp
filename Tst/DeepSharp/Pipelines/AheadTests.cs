@@ -182,6 +182,20 @@ public class AheadTests
     }
 
     [Fact]
+    public void ReadingAheadWithNoOrderDeclaredAtAll_IsRefusedOnce_ByTheRuleThatAsksForTheOrder()
+    {
+        // One cause, one fault: the rows are not put in order, and the rule that says so is the one that says it.
+        var refused = Assert.Throws<DeclarationException>(
+            () => Pdd.Create()
+                .Read(new InMemoryRowSource(["Date", "close"], Days(60)), "sixty days")
+                .Declare(schema => schema.Timestamp("Date").Number("close"))
+                .SplitByTime("Date", 0.70, 0.15, 5)
+                .Ahead("close", 5));
+
+        Assert.Contains("'order.by'", Assert.Single(refused.Faults).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AnOrderThatDoesNotSayWhatItOrdersBy_CannotBeReadAheadIn()
     {
         // An order from elsewhere that keeps its columns to itself cannot show that the rows after a row came after it.

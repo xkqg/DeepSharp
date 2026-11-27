@@ -13,22 +13,49 @@ namespace DeepSharp.Tests.Notebooks;
 /// </summary>
 public sealed class OutputBoxTests
 {
+    private static PipelineDeclaration WithTheSum(StepCatalog catalog) => new(
+    [
+        catalog.ReadStep("""{"step": "read.csv", "path": "titanic.csv"}"""),
+        catalog.ReadStep("""{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "fare", "kind": "number", "optional": false}]}"""),
+        catalog.ReadStep("""{"step": "split.stratified", "column": "survived", "train": 0.7, "validation": 0.15, "test": 0.15, "seed": 20260923}"""),
+        new SumStep(),
+    ]);
+
     [Fact]
     public void ATickWhoseTakingInBreaksARuleOfAStepFromElsewhere_IsRefusedInThatRulesWords()
     {
         var catalog = NotebookVerbs.Catalog();
-        var declaration = new PipelineDeclaration(
-        [
-            catalog.ReadStep("""{"step": "read.csv", "path": "titanic.csv"}"""),
-            catalog.ReadStep("""{"step": "declare", "remainder": "drop", "columns": [{"name": "survived", "kind": "integer", "optional": false}, {"name": "fare", "kind": "number", "optional": false}]}"""),
-            catalog.ReadStep("""{"step": "split.stratified", "column": "survived", "train": 0.7, "validation": 0.15, "test": 0.15, "seed": 20260923}"""),
-            new SumStep(),
-        ]);
 
-        var change = new OutputBox(catalog, declaration, "target", ["survived", "name", "fare"]).Change("name", ColumnKind.Text, ticked: true);
+        var change = new OutputBox(catalog, WithTheSum(catalog), "target", ["survived", "name", "fare"]).Change("name", ColumnKind.Text, ticked: true);
 
         Assert.Null(change.Steps);
         Assert.Equal(["Step 4, 'sum.all': adds every column up, and 'name' is text."], change.NotMade);
+    }
+
+    [Fact]
+    public void ARangeWhoseTakingInBreaksARuleOfAStepFromElsewhere_IsRefusedInThatRulesWords()
+    {
+        // The range gives the columns it takes in the kind the output reads, one after another, and stops at the rule that is broken.
+        var catalog = NotebookVerbs.Catalog();
+
+        var change = new OutputBox(catalog, WithTheSum(catalog), "target.labels", ["survived", "name", "fare"]).Ranged(["survived", "name"], ColumnKind.Text);
+
+        Assert.Null(change.Steps);
+        Assert.Equal(["Step 4, 'sum.all': adds every column up, and 'name' is text."], change.NotMade);
+    }
+
+    [Fact]
+    public void ARangeOverStepsThatHoldNoSchema_TakesNothingIn_AndPlacesTheOutputAsTheRulesAllow()
+    {
+        // The range takes its columns in through the schema and asks the kind of a column the schema takes; steps with no schema
+        // have neither, and the range is made as any other change is: kept to the rules, with nothing thrown for the missing schema.
+        var catalog = NotebookVerbs.Catalog();
+        var declaration = new PipelineDeclaration([catalog.ReadStep("""{"step": "read.csv", "path": "titanic.csv"}""")]);
+
+        var change = new OutputBox(catalog, declaration, "target.labels", ["survived", "pclass"]).Ranged(["survived", "pclass"], ColumnKind.Integer);
+
+        Assert.Empty(change.NotMade);
+        Assert.Equal(["read.csv", "target.labels"], change.Steps!.Select(step => step.Verb));
     }
 
     // A verb another package brings: every column added up into one, which a column of text cannot be.

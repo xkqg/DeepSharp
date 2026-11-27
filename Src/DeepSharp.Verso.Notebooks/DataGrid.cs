@@ -143,7 +143,7 @@ internal static class DataGrid
     /// </remarks>
     public static GridHeader HeaderOf(PipelineDeclaration declaration, IReadOnlyList<string> columns)
     {
-        HashSet<string> taken = [.. declaration.Steps.OfType<DeclareStep>().FirstOrDefault()?.Taking.Select(column => column.Name) ?? []];
+        HashSet<string> taken = [.. declaration.Schema?.Taking.Select(column => column.Name) ?? []];
 
         return new([.. declaration.ChoicesFor(columns).Rows.Select(choice => new HeaderColumn(
             choice.Name, choice.IncludedBox(), taken.Contains(choice.Name) ? choice.CategoryBox() : null))]);

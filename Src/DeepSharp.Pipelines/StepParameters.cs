@@ -357,6 +357,14 @@ public sealed class StepDescription
     /// <summary>The version of the pipeline file from which the verb means what it says now.</summary>
     public int Since { get; }
 
+    /// <summary>Whether a file of a version reads the verb as it means now.</summary>
+    /// <param name="version">The version of the pipeline file.</param>
+    /// <returns>
+    /// <see langword="true"/> from the version the verb means what it says now; below it a file used the verb for something
+    /// else, and reading it the new way would train on other rows and say nothing about it.
+    /// </returns>
+    internal bool MeansNowIn(int version) => Since <= version;
+
     /// <summary>The step's parameters, in the order they are written.</summary>
     public IReadOnlyList<StepParameter> Parameters { get; }
 

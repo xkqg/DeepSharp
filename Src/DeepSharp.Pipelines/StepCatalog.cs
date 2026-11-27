@@ -258,7 +258,7 @@ public sealed class StepCatalog
 
         // Before its keys: a step that came to mean something else may have come to take other keys too, and a
         // key it no longer takes is not what is wrong with it.
-        if (description.Since > writtenAgainst)
+        if (!description.MeansNowIn(writtenAgainst))
         {
             throw new FormatException(string.Create(
                 CultureInfo.InvariantCulture,

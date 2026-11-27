@@ -239,18 +239,27 @@ internal sealed class NotebookPipeline
             }
         }
 
-        var faults = PipelineDeclaration.FaultsIn(steps);
+        var attempt = PipelineDeclaration.Try(steps);
 
-        foreach (var fault in faults)
+        foreach (var fault in attempt.Faults)
         {
             blocks[fault.At] = blocks[fault.At] with { Faults = [.. blocks[fault.At].Faults, fault.ToString()] };
         }
 
-        // Every rule holds for every beginning of a declaration that keeps it, so the blocks above the first one
-        // at fault make a declaration.
-        var count = faults.Count == 0 ? steps.Count : faults.Min(fault => fault.At);
+        return new NotebookPipeline([.. blocks], read, attempt.Declaration ?? LongestBeginning(steps, attempt.Faults.Min(fault => fault.At)));
+    }
 
-        return new NotebookPipeline([.. blocks], read, new PipelineDeclaration(steps.Take(count)));
+    // The blocks above the first one at fault, as far as they make a declaration on their own: a rule about the whole, such as
+    // a report needing the split that stands below it, may refuse a beginning the whole does not fault at any of its places.
+    private static PipelineDeclaration LongestBeginning(IReadOnlyList<IPipelineStep> steps, int count)
+    {
+        for (; ; count--)
+        {
+            if (PipelineDeclaration.Try(steps.Take(count)).Declaration is { } beginning)
+            {
+                return beginning;
+            }
+        }
     }
 
     /// <summary>Where a block stands among the blocks.</summary>

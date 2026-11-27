@@ -66,7 +66,7 @@ internal sealed class ColumnList
         _declaration = declaration;
         _source = source;
         _header = source.Rows.ColumnNames;
-        _declared = declaration.Steps.OfType<DeclareStep>().FirstOrDefault()?.Columns ?? [];
+        _declared = declaration.Schema?.Columns ?? [];
         _fresh = stored is { } preset ? preset.NewColumns(_header) : [];
 
         var header = _header;

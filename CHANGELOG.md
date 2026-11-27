@@ -15,6 +15,19 @@ The seventh letter of the flock team.
 - **An ensemble file whose blend is written as a number is refused.** A blend is read as one of its words, `average` or
   `vote`, as every other word a file holds is; `"1"` was taken for `vote` before. DeepSharp never wrote one.
 
+### Added
+
+- **A declaration says what it holds, and whether steps make one.** `PipelineDeclaration.Try(steps)` hands back a
+  `DeclarationAttempt` — the declaration, or every fault the steps have — without throwing; `Schema` and `IdColumn` name
+  the schema step and the column it calls the id; `KindHeldOnce(step)` says which kind of step a declaration may hold
+  only one of. Each is what the rules already decided, now asked of the declaration rather than worked out again.
+
+### Fixed
+
+- **A notebook whose first blocks leave out the split a later report needs no longer throws.** It reads the longest
+  beginning that is a declaration, and names the step that stops it, as it does for any other fault.
+- **An answer read ahead with no order declared is refused once.** It was refused twice for the one missing order.
+
 ### Changed
 
 - **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.30.0.** Its data frame now hands

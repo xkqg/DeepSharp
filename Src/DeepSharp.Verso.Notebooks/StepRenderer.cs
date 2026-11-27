@@ -592,7 +592,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
         }
 
         // A list is drawn only over blocks that hold a schema.
-        return drawn.Steps.OfType<DeclareStep>().First().Columns.Any(each => each.Name == column)
+        return drawn.Schema?.Columns.Any(each => each.Name == column) == true
             ? drawn.WithKind(column, kind)
             : drawn.Including(column, kind, header);
     }
@@ -758,7 +758,7 @@ public sealed class StepRenderer : NotebookExtension, ICellRenderer, ICellIntera
     // A column the schema takes made a category, or given back the kind it was; nothing for a column it does not take,
     // nor for a category that does not say what it was.
     private static IReadOnlyList<IPipelineStep>? Kinded(PipelineDeclaration declaration, string column, bool ticked) =>
-        declaration.Steps.OfType<DeclareStep>().FirstOrDefault()?.Taking.FirstOrDefault(each => each.Name == column) switch
+        declaration.Schema?.Taking.FirstOrDefault(each => each.Name == column) switch
         {
             null => null,
             _ when ticked => declaration.WithKind(column, ColumnKind.Category),

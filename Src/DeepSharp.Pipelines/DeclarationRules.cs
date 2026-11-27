@@ -1,6 +1,8 @@
 // Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
+using System.Globalization;
+
 namespace DeepSharp.Pipelines;
 
 /// <summary>
@@ -43,6 +45,17 @@ public sealed class DeclarationException : InvalidOperationException
 }
 
 /// <summary>
+/// What asking whether steps are a declaration came to: the declaration they make, or every rule they break.
+/// </summary>
+/// <param name="Declaration">The declaration, when the steps keep every rule; nothing when they do not.</param>
+/// <param name="Faults">Every fault, each with the step it is at; none when the steps are a declaration.</param>
+/// <remarks>
+/// The answer of <see cref="PipelineDeclaration.Try"/>, which is the one door that decides it. A notebook reading its blocks,
+/// a take-over listing what it changes and a list's boxes each want one of the two halves, or both; the rules were asked once.
+/// </remarks>
+public readonly record struct DeclarationAttempt(PipelineDeclaration? Declaration, IReadOnlyList<DeclarationFault> Faults);
+
+/// <summary>
 /// Something every declaration has to be true of, whichever door it came through.
 /// </summary>
 internal interface IDeclarationRule
@@ -51,6 +64,20 @@ internal interface IDeclarationRule
     /// <param name="steps">The steps, in the order they were written.</param>
     /// <returns>One fault per step that breaks it; none when the steps keep it.</returns>
     IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps);
+}
+
+/// <summary>
+/// A rule that limits a declaration to one step of a kind, and so says which kind a step is the one of.
+/// </summary>
+internal interface IHoldsAtMostOne
+{
+    /// <summary>The capability a step has to be of the kind.</summary>
+    Type Kind { get; }
+
+    /// <summary>Whether a step is of the kind.</summary>
+    /// <param name="step">The step.</param>
+    /// <returns><see langword="true"/> when the step is of the kind, so a declaration holds one other of it at most.</returns>
+    bool Holds(IPipelineStep step);
 }
 
 /// <summary>
@@ -63,29 +90,25 @@ internal interface IDeclarationRule
 /// were inert, so a file said one thing and the numbers came from another — and a second target was worse
 /// than inert, because the first one was then handed to the model as a feature.
 /// </remarks>
-internal sealed class AtMostOne<TStep>(string what) : IDeclarationRule
+internal sealed class AtMostOne<TStep>(string what) : IDeclarationRule, IHoldsAtMostOne
     where TStep : IPipelineStep
 {
+    public Type Kind => typeof(TStep);
+
+    public bool Holds(IPipelineStep step) => step is TStep;
+
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        var first = -1;
+        var first = steps.FirstIndexOf<TStep>();
 
-        for (var at = 0; at < steps.Count; at++)
+        for (var at = first + 1; first >= 0 && at < steps.Count; at++)
         {
-            if (steps[at] is not TStep)
+            if (steps[at] is TStep)
             {
-                continue;
+                yield return new DeclarationFault(
+                    at, steps[at].Verb,
+                    $"a pipeline has one {what}, and this is a second one; the first is '{steps[first].Verb}' at step {first + 1}.");
             }
-
-            if (first < 0)
-            {
-                first = at;
-                continue;
-            }
-
-            yield return new DeclarationFault(
-                at, steps[at].Verb,
-                $"a pipeline has one {what}, and this is a second one; the first is '{steps[first].Verb}' at step {first + 1}.");
         }
     }
 }
@@ -129,15 +152,7 @@ internal sealed class TheSourceComesFirst : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        var source = -1;
-
-        for (var at = 0; at < steps.Count && source < 0; at++)
-        {
-            if (steps[at] is IOpensRows)
-            {
-                source = at;
-            }
-        }
+        var source = steps.FirstIndexOf<IOpensRows>();
 
         if (source > 0)
         {
@@ -159,15 +174,7 @@ internal sealed class ColumnsAreDeclaredFirst : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        var declared = -1;
-
-        for (var at = 0; at < steps.Count && declared < 0; at++)
-        {
-            if (steps[at] is IBindsColumns)
-            {
-                declared = at;
-            }
-        }
+        var declared = steps.FirstIndexOf<IBindsColumns>();
 
         for (var at = 0; at < steps.Count; at++)
         {
@@ -246,7 +253,7 @@ internal sealed class NothingLearnsBeforeTheSplit : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        var split = FirstSplit(steps);
+        var split = steps.FirstIndexOf<ISplitStep>();
 
         for (var at = 0; at < steps.Count; at++)
         {
@@ -262,19 +269,6 @@ internal sealed class NothingLearnsBeforeTheSplit : IDeclarationRule
                     ? "This declaration never splits them."
                     : $"The split at step {split + 1} comes after it."));
         }
-    }
-
-    internal static int FirstSplit(IReadOnlyList<IPipelineStep> steps)
-    {
-        for (var at = 0; at < steps.Count; at++)
-        {
-            if (steps[at] is ISplitStep)
-            {
-                return at;
-            }
-        }
-
-        return -1;
     }
 }
 
@@ -305,7 +299,7 @@ internal sealed class RowsAreSettledBeforeTheSplit : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        var split = NothingLearnsBeforeTheSplit.FirstSplit(steps);
+        var split = steps.FirstIndexOf<ISplitStep>();
 
         for (var at = split + 1; split >= 0 && at < steps.Count; at++)
         {
@@ -408,8 +402,8 @@ internal sealed class RowsAheadAreKeptApart : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        var split = NothingLearnsBeforeTheSplit.FirstSplit(steps);
-        var order = steps.OfType<IOrdersRows>().FirstOrDefault();
+        var split = steps.FirstIndexOf<ISplitStep>();
+        var order = steps.FirstOf<IOrdersRows>();
 
         for (var at = 0; at < steps.Count; at++)
         {
@@ -436,7 +430,8 @@ internal sealed class RowsAheadAreKeptApart : IDeclarationRule
                 continue;
             }
 
-            if (order?.OrderedBy is not [var only] || only != time.Column)
+            // Without an order declared at all, RowOrderIsDeclaredBeforeItIsRead already says so, once.
+            if (order is not null && !order.StandsByAlone(time.Column))
             {
                 yield return new DeclarationFault(
                     at, ahead.Verb,
@@ -466,8 +461,8 @@ internal sealed class EarlierAnswersFollowTime : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        var split = NothingLearnsBeforeTheSplit.FirstSplit(steps);
-        var order = steps.OfType<IOrdersRows>().FirstOrDefault();
+        var split = steps.FirstIndexOf<ISplitStep>();
+        var order = steps.FirstOf<IOrdersRows>();
         var madeFromRowsAhead = steps
             .Where(step => step is IReadsRowsAhead)
             .OfType<INamesTheAnswer>()
@@ -488,7 +483,7 @@ internal sealed class EarlierAnswersFollowTime : IDeclarationRule
                         at, steps[at].Verb,
                         "reads a column's earlier rows, and only a split in time keeps every part a contiguous run: split.byTime.");
                 }
-                else if (order is not null && (order.OrderedBy is not [var only] || only != time.Column))
+                else if (order is not null && !order.StandsByAlone(time.Column))
                 {
                     yield return new DeclarationFault(
                         at, steps[at].Verb,
@@ -509,29 +504,27 @@ internal sealed class EarlierAnswersFollowTime : IDeclarationRule
 }
 
 /// <summary>
-/// A report stands below the output whose answers it measures.
+/// A step that names what the answers are for stands below the output whose answers it names: a report below the output it
+/// measures, a learner below the output it learns to answer.
 /// </summary>
+/// <typeparam name="TStep">What the step names the answers for.</typeparam>
+/// <param name="withoutAnOutput">What the step does, as the message says it when the pipeline names no answer.</param>
+/// <param name="aboveItsOutput">What the step does, as the message says it above an output; <c>{0}</c> is the output's step, counting from one.</param>
+/// <param name="stands">Where the step stands, in the words a person reads it in.</param>
 /// <remarks>
-/// What it measures are that output's answers, so without an output it measures nothing, and above one it would name
-/// measures of an answer not named yet where it stands.
+/// What the step names are that output's answers, so without an output it names nothing, and above one it would name them for an
+/// answer not named yet where it stands. One rule over two capabilities: a third that names the answers is one more entry of the
+/// declaration's rules, not one more rule.
 /// </remarks>
-internal sealed class AReportStandsBelowItsOutput : IDeclarationRule
+internal sealed class StandsBelowTheOutput<TStep>(string withoutAnOutput, string aboveItsOutput, string stands) : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        var output = -1;
-
-        for (var at = 0; at < steps.Count && output < 0; at++)
-        {
-            if (steps[at] is INamesTheAnswer)
-            {
-                output = at;
-            }
-        }
+        var output = steps.FirstIndexOf<INamesTheAnswer>();
 
         for (var at = 0; at < steps.Count; at++)
         {
-            if (steps[at] is not INamesTheMeasures || (output >= 0 && output < at))
+            if (steps[at] is not TStep || (output >= 0 && output < at))
             {
                 continue;
             }
@@ -539,45 +532,8 @@ internal sealed class AReportStandsBelowItsOutput : IDeclarationRule
             yield return new DeclarationFault(
                 at, steps[at].Verb,
                 output < 0
-                    ? "names the measures of a model's answers, and this pipeline names no answer: a report stands below the output whose answers it measures."
-                    : $"measures the answers the output at step {output + 1} names, and stands above it: a report stands below the output whose answers it measures.");
-        }
-    }
-}
-
-/// <summary>
-/// A learner stands below the output it learns to answer.
-/// </summary>
-/// <remarks>
-/// What it learns is that output's answers, so without an output it learns nothing, and above one it would name a learner
-/// for an answer not named yet where it stands.
-/// </remarks>
-internal sealed class ALearnerStandsBelowItsOutput : IDeclarationRule
-{
-    public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
-    {
-        var output = -1;
-
-        for (var at = 0; at < steps.Count && output < 0; at++)
-        {
-            if (steps[at] is INamesTheAnswer)
-            {
-                output = at;
-            }
-        }
-
-        for (var at = 0; at < steps.Count; at++)
-        {
-            if (steps[at] is not INamesTheLearner || (output >= 0 && output < at))
-            {
-                continue;
-            }
-
-            yield return new DeclarationFault(
-                at, steps[at].Verb,
-                output < 0
-                    ? "names the learner this pipeline is declared for, and this pipeline names no answer: a learner stands below the output it learns to answer."
-                    : $"learns the answers the output at step {output + 1} names, and stands above it: a learner stands below the output it learns to answer.");
+                    ? $"{withoutAnOutput}, and this pipeline names no answer: {stands}."
+                    : $"{string.Format(CultureInfo.InvariantCulture, aboveItsOutput, output + 1)}: {stands}.");
         }
     }
 }
@@ -593,7 +549,7 @@ internal sealed class AReportMeasuresDividedRows : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        if (NothingLearnsBeforeTheSplit.FirstSplit(steps) >= 0)
+        if (steps.FirstIndexOf<ISplitStep>() >= 0)
         {
             yield break;
         }
@@ -622,7 +578,7 @@ internal sealed class ClassesAreCountedWhereTheAnswersAreClasses : IDeclarationR
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        if (steps.OfType<INamesTheAnswer>().FirstOrDefault() is not { } output || output.Takes(MetricFamily.Classes))
+        if (steps.FirstOf<INamesTheAnswer>() is not { } output || output.Takes(MetricFamily.Classes))
         {
             yield break;
         }
@@ -654,7 +610,7 @@ internal sealed class SharesAreMeasuredWhereTheAnswersAreShares : IDeclarationRu
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        if (steps.OfType<INamesTheAnswer>().FirstOrDefault() is not { } output)
+        if (steps.FirstOf<INamesTheAnswer>() is not { } output)
         {
             yield break;
         }
@@ -774,9 +730,7 @@ internal sealed class ARankByIdHasAnId : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        var id = steps.OfType<DeclareStep>().FirstOrDefault()?.IdColumn;
-
-        if (id is not null)
+        if (steps.IdColumn() is not null)
         {
             yield break;
         }
@@ -812,7 +766,7 @@ internal sealed class TheIdIsNoAnswer : IDeclarationRule
 {
     public IEnumerable<DeclarationFault> FaultsIn(IReadOnlyList<IPipelineStep> steps)
     {
-        if (steps.OfType<DeclareStep>().FirstOrDefault()?.IdColumn is not { } id)
+        if (steps.IdColumn() is not { } id)
         {
             yield break;
         }

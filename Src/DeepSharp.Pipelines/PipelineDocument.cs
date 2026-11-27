@@ -570,14 +570,14 @@ internal sealed partial class PipelineDocument
             return null;
         }
 
-        var broken = PipelineDeclaration.FaultsIn(steps);
+        var attempt = PipelineDeclaration.Try(steps);
 
-        foreach (var fault in broken)
+        foreach (var fault in attempt.Faults)
         {
             _text.Fault(places[fault.At], fault.ToString());
         }
 
-        return broken.Count == 0 ? new PipelineDeclaration(steps) : null;
+        return attempt.Declaration;
     }
 
     /// <summary>What each step learned, filed by the key of the steps it was learned behind.</summary>

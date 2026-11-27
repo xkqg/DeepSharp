@@ -29,16 +29,6 @@ namespace DeepSharp.Verso.Notebooks;
 /// </remarks>
 internal sealed class CourseProgress
 {
-    /// <summary>The kinds of step a declaration holds one of: each is a rule of its own, and a test holds this list to them.</summary>
-    internal static readonly IReadOnlyList<Type> OnceOnly =
-    [
-        typeof(IOpensRows), typeof(IBindsColumns), typeof(IOrdersRows), typeof(ISplitStep), typeof(INamesTheAnswer),
-        typeof(INamesTheLearner), typeof(INamesTheMeasures),
-    ];
-
-    // Of those, the kinds whose verbs stand for one another in a course. Not the order: its two verbs are opposite choices.
-    private static readonly IReadOnlyList<Type> Interchangeable = [.. OnceOnly.Where(kind => kind != typeof(IOrdersRows))];
-
     private CourseProgress(bool follows, int matched, IReadOnlyList<CourseStep> missing, int insertAt)
     {
         Follows = follows;
@@ -239,7 +229,9 @@ internal sealed class CourseProgress
             {
                 var step = catalog.ReadStep(catalog.Describe(verb).Template);
 
-                kind = new VerbKind(Interchangeable.FirstOrDefault(each => each.IsInstanceOfType(step)), step is IDropsColumns);
+                // The kinds of step a declaration holds one of are the declaration's to say; of those, the ones whose verbs stand for
+                // one another in a course. Not the order: its two verbs are opposite choices.
+                kind = new VerbKind(PipelineDeclaration.KindHeldOnce(step) is { } held && held != typeof(IOrdersRows) ? held : null, step is IDropsColumns);
                 _read[verb] = kind;
             }
 
