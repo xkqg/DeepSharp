@@ -56,6 +56,8 @@ Src/DeepSharp.Pipelines/          the data side
                                     the steps in order, the rules every declaration keeps, the keys of its prefixes
     PipelineDocument.cs PipelineFileException.cs PipelineFileSchema.cs VerbReference.cs
                                     the file: its envelope, the schema, the reference
+    PipelineDocument.Course.cs PipelineDocument.Preset.cs
+                                    the same writer and reader, a part each for the files a course and a preset are saved as
     SurveyedText.cs TextPieces.cs   the text a file is read from: where each of its parts stands, every fault at its line
                                     and column, and a larger file read a piece of its UTF-8 at a time
     PipelineText.cs                 a pipeline's text as one writer writes it, and whether two pipelines are one fit
@@ -79,7 +81,7 @@ Src/DeepSharp.Pipelines/          the data side
                                     training rows
     Settling.cs Marking.cs          settling a gap with a value no row decided, above the split; and the one column
                                     that says where the gaps were, named and written in one place
-    Evidence.cs Likeness.cs Report.cs Measures.cs PredictionsDocument.cs
+    Evidence.cs CorrelationStep.cs Likeness.cs Report.cs Measures.cs PredictionsDocument.cs
                                     the profile and the correlation a run is declared to produce, how alike the parts of
                                     its split are, the report of what a trained model is held to, how it measured, and
                                     the predictions it measured as text
@@ -121,6 +123,10 @@ Src/DeepSharp.Learners.MLNet/        the half that carries ML.NET: the rows hand
 Src/DeepSharp.Backends.TorchSharp/   an engine on libtorch, through TorchSharp, on the processor or a graphics card
 Src/DeepSharp.Charts/                every chart, as the text of an SVG, drawn with MatPlotLibNet; the report, as HTML
 Src/DeepSharp.Verso.Notebooks/       a pipeline written as a notebook in Verso, and the buttons that write a course into it
+    ToolbarButton.cs                what every toolbar button says the same, and how a press waits its turn
+    StepRenderer.cs Sent.cs SentExtensions.cs
+                                    how a block is drawn and the router of a gesture; what a control sent; and what each
+                                    control does when it sends
 Src/DeepSharp.Verso.Api/             an application of your own that hosts the notebook
     NotebookHost.cs                 one open notebook: its state, its turn, and the read every look takes
     NotebookHost.Editing.cs NotebookHost.Running.cs NotebookHost.Panels.cs NotebookHost.Publishing.cs

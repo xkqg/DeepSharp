@@ -101,6 +101,23 @@ public sealed class ToolbarTests : IDisposable
     }
 
     [Fact]
+    public void EveryButtonOfThePackage_IsOneToolbarButton_SoWhatTheyAllSayIsSaidOnce()
+    {
+        var types = typeof(ToolbarButton).Assembly.GetTypes();
+        var buttons = types.Where(type => !type.IsAbstract && typeof(IToolbarAction).IsAssignableFrom(type)).ToArray();
+
+        // Run, export, take over, restore, and the two courses.
+        Assert.Equal(6, buttons.Length);
+        Assert.All(buttons, type => Assert.True(typeof(ToolbarButton).IsAssignableFrom(type), type.Name));
+
+        // The interface is said at one place: no other type of the package lists it, and every button reaches it through that one.
+        var saying = types.Where(type => type.GetInterfaces().Contains(typeof(IToolbarAction))
+            && (type.BaseType is null || !type.BaseType.GetInterfaces().Contains(typeof(IToolbarAction)))).ToArray();
+
+        Assert.Equal([typeof(ToolbarButton)], saying);
+    }
+
+    [Fact]
     public async Task RunningThePipeline_FitsEveryStep_ShowsTheLastBlock_AndHandsOverWhatItLearned()
     {
         await using var notebook = await NotebookAsync(Titanic);

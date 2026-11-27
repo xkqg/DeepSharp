@@ -17,7 +17,7 @@ namespace DeepSharp.Verso.Notebooks;
 /// it.
 /// </remarks>
 [VersoExtension]
-public sealed class TakeOverAction : NotebookExtension, IToolbarAction
+public sealed class TakeOverAction : ToolbarButton
 {
     /// <summary>The button's id.</summary>
     public const string Id = "io.github.xkqg.deepsharp.notebooks.takeover";
@@ -32,34 +32,17 @@ public sealed class TakeOverAction : NotebookExtension, IToolbarAction
     public override string Description => "Lists what taking over the columns saved beside the notebook would change, with a box that applies it.";
 
     /// <inheritdoc />
-    public string ActionId => Id;
+    public override string DisplayName => "Take over the saved columns";
 
     /// <inheritdoc />
-    public string DisplayName => "Take over the saved columns";
+    public override int Order => 1;
 
     /// <inheritdoc />
-    public string Icon =>
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">"
-        + "<path d=\"M4 3h10l6 6v12H4zM13 4v6h6M7 13h10v2H7zM7 17h7v2H7z\"/></svg>";
-
-    /// <inheritdoc />
-    public bool IconOnly => false;
-
-    /// <inheritdoc />
-    public bool IsPrimary => false;
-
-    /// <inheritdoc />
-    public string? ConfirmationPrompt => null;
-
-    /// <inheritdoc />
-    public ToolbarPlacement Placement => ToolbarPlacement.MainToolbar;
-
-    /// <inheritdoc />
-    public int Order => 1;
+    private protected override ToolbarIcon Drawing => new("M4 3h10l6 6v12H4zM13 4v6h6M7 13h10v2H7zM7 17h7v2H7z");
 
     /// <inheritdoc />
     /// <remarks>When the notebook is saved, its blocks make one pipeline, and columns are saved beside it.</remarks>
-    public Task<bool> IsEnabledAsync(IToolbarActionContext context)
+    public override Task<bool> IsEnabledAsync(IToolbarActionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -70,16 +53,12 @@ public sealed class TakeOverAction : NotebookExtension, IToolbarAction
     }
 
     /// <inheritdoc />
-    public async Task ExecuteAsync(IToolbarActionContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        var session = RequiredSession;
-        var path = context.NotebookMetadata.ColumnsFilePath()
-            ?? throw new InvalidOperationException("A notebook never saved has nothing saved beside it to take over.");
-
-        await session.OneAtATimeAsync(context.CancellationToken, async turn =>
+    public override Task ExecuteAsync(IToolbarActionContext context) =>
+        RunOnSessionAsync(context, async (session, turn) =>
         {
+            var path = context.NotebookMetadata.ColumnsFilePath()
+                ?? throw new InvalidOperationException("A notebook never saved has nothing saved beside it to take over.");
+
             var assembled = NotebookPipeline.Of(context.NotebookCells);
 
             if (!File.Exists(path))
@@ -106,7 +85,6 @@ public sealed class TakeOverAction : NotebookExtension, IToolbarAction
 
             return true;
         });
-    }
 
     // What taking the saved columns over would change, as its list shows it; or why the saved file cannot be read.
     private static CellOutput Listed(PipelineDeclaration blocks, string path, SourceFolder folder)

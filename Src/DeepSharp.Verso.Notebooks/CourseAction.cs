@@ -19,44 +19,21 @@ namespace DeepSharp.Verso.Notebooks;
 /// last block that is a step, and offers nothing to a notebook whose blocks take the course's steps in another order or that
 /// holds all of it already. Pressing it twice writes the course once.
 /// </remarks>
-public abstract class CourseAction : NotebookExtension, IToolbarAction
+public abstract class CourseAction : ToolbarButton
 {
     private readonly PipelineCourse _course;
 
     private protected CourseAction(PipelineCourse course) => _course = course;
 
     /// <inheritdoc />
-    public string ActionId => ExtensionId;
-
-    /// <summary>The button's label.</summary>
-    public abstract string DisplayName { get; }
-
-    /// <inheritdoc />
-    public string Icon =>
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">"
-        + "<path d=\"M4 4h10v3H4zM4 9h10v3H4zM4 14h10v3H4zM16 4h4v3h-4zM16 9h4v3h-4zM16 14h4v3h-4zM4 19h16v2H4z\"/></svg>";
-
-    /// <inheritdoc />
-    public bool IconOnly => false;
-
-    /// <inheritdoc />
-    public bool IsPrimary => false;
-
-    /// <inheritdoc />
-    public string? ConfirmationPrompt => null;
-
-    /// <inheritdoc />
-    public ToolbarPlacement Placement => ToolbarPlacement.MainToolbar;
-
-    /// <summary>Where the button stands among the others.</summary>
-    public abstract int Order { get; }
+    private protected override ToolbarIcon Drawing => new("M4 4h10v3H4zM4 9h10v3H4zM4 14h10v3H4zM16 4h4v3h-4zM16 9h4v3h-4zM16 14h4v3h-4zM4 19h16v2H4z");
 
     /// <inheritdoc />
     /// <remarks>
     /// When the layout the notebook is shown in lets a block be added, its blocks follow the course, and the course has a
     /// step they do not say.
     /// </remarks>
-    public Task<bool> IsEnabledAsync(IToolbarActionContext context)
+    public override Task<bool> IsEnabledAsync(IToolbarActionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -66,15 +43,11 @@ public abstract class CourseAction : NotebookExtension, IToolbarAction
     }
 
     /// <inheritdoc />
-    public async Task ExecuteAsync(IToolbarActionContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        var session = RequiredSession;
-        var catalog = NotebookVerbs.Catalog();
-
-        await session.OneAtATimeAsync(context.CancellationToken, async turn =>
+    public override Task ExecuteAsync(IToolbarActionContext context) =>
+        RunOnSessionAsync(context, async (session, turn) =>
         {
+            var catalog = NotebookVerbs.Catalog();
+
             if (!LayoutLets(context.Notebook, LayoutCapabilities.CellInsert)
                 || !CourseProgress.IsOfferedFor(_course, context.NotebookCells, catalog))
             {
@@ -108,7 +81,6 @@ public abstract class CourseAction : NotebookExtension, IToolbarAction
 
             return true;
         });
-    }
 }
 
 /// <summary>The button that writes the course for the rows of a table into the notebook.</summary>

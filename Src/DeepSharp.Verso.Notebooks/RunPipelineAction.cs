@@ -14,7 +14,7 @@ namespace DeepSharp.Verso.Notebooks;
 /// there; a notebook whose blocks make no pipeline says why at the block that stops it, and hands nothing over.
 /// </remarks>
 [VersoExtension]
-public sealed class RunPipelineAction : NotebookExtension, IToolbarAction
+public sealed class RunPipelineAction : ToolbarButton
 {
     /// <summary>The button's id.</summary>
     public const string Id = "io.github.xkqg.deepsharp.notebooks.run";
@@ -29,34 +29,17 @@ public sealed class RunPipelineAction : NotebookExtension, IToolbarAction
     public override string Description => "Runs the whole pipeline the blocks declare, fitting every step on the training rows, and hands what it learned to C# cells.";
 
     /// <inheritdoc />
-    public string ActionId => Id;
+    public override string DisplayName => "Run the pipeline";
 
     /// <inheritdoc />
-    public string DisplayName => "Run the pipeline";
+    public override int Order => 0;
 
     /// <inheritdoc />
-    public string Icon =>
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">"
-        + "<path d=\"M2 3h8v5H2zM2 16h8v5H2zM14 5l8 7-8 7z\"/></svg>";
-
-    /// <inheritdoc />
-    public bool IconOnly => false;
-
-    /// <inheritdoc />
-    public bool IsPrimary => false;
-
-    /// <inheritdoc />
-    public string? ConfirmationPrompt => null;
-
-    /// <inheritdoc />
-    public ToolbarPlacement Placement => ToolbarPlacement.MainToolbar;
-
-    /// <inheritdoc />
-    public int Order => 0;
+    private protected override ToolbarIcon Drawing => new("M2 3h8v5H2zM2 16h8v5H2zM14 5l8 7-8 7z");
 
     /// <inheritdoc />
     /// <remarks>Whenever there is a block: a notebook that makes no pipeline is told why where it stops.</remarks>
-    public Task<bool> IsEnabledAsync(IToolbarActionContext context)
+    public override Task<bool> IsEnabledAsync(IToolbarActionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -64,13 +47,8 @@ public sealed class RunPipelineAction : NotebookExtension, IToolbarAction
     }
 
     /// <inheritdoc />
-    public async Task ExecuteAsync(IToolbarActionContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        var session = RequiredSession;
-
-        await session.OneAtATimeAsync(context.CancellationToken, async turn =>
+    public override Task ExecuteAsync(IToolbarActionContext context) =>
+        RunOnSessionAsync(context, async (session, turn) =>
         {
             var assembled = NotebookPipeline.Of(context.NotebookCells);
 
@@ -99,5 +77,4 @@ public sealed class RunPipelineAction : NotebookExtension, IToolbarAction
 
             return true;
         });
-    }
 }

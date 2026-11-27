@@ -220,6 +220,13 @@ public sealed partial class NotebookEndpointTests : IDisposable
 
         Assert.Equal("[]", bare.Answer);
         Assert.Equal("[tick]", carrying.Answer);
+
+        // A part that fails in a way the notebook has no word for is a failure of the server's, said as one; the socket goes on.
+        var broken = await socket.AskAsync("gesture", new { cell, extensionId = AnsweringPart.Id, action = "answer", payload = AnsweringPart.Breaks });
+
+        Assert.Equal(500, broken.Status);
+        Assert.Equal(AnsweringPart.Broke, broken.Why);
+        Assert.Equal("[tick]", (await socket.AskAsync("gesture", new { cell, extensionId = AnsweringPart.Id, action = "answer", payload = "tick" })).Result<GestureResult>().Answer);
     }
 
     private static async Task<GestureResult> ClickAsync(PageSocket socket, Guid cell, string action, string payload) =>
@@ -460,6 +467,30 @@ public sealed partial class NotebookEndpointTests : IDisposable
     }
 
     [Fact]
+    public async Task APageRefusedThatGoesWithoutAWord_IsNotWaitedForToClose()
+    {
+        await using var served = await StartAsync();
+        using var page = new ClientWebSocket();
+
+        page.Options.SetRequestHeader("Cookie", $"deepsharp-serve-{served.Address.Port}={Token}");
+        page.Options.SetRequestHeader("Origin", served.Address.GetLeftPart(UriPartial.Authority));
+        await page.ConnectAsync(new Uri($"ws://{served.Address.Authority}/api/notebooks/missing.verso/socket"), TestContext.Current.CancellationToken);
+
+        // The refusal is read, and the page goes before the server's close frame is answered.
+        var told = await page.ReceiveAsync(new byte[4096], TestContext.Current.CancellationToken);
+
+        Assert.Equal(WebSocketMessageType.Text, told.MessageType);
+        page.Abort();
+
+        // The server's handler has ended by the time it has stopped: it did not wait out the patience it gives a page to close.
+        var stopping = System.Diagnostics.Stopwatch.StartNew();
+
+        await served.App.StopAsync(TestContext.Current.CancellationToken).WaitAsync(TimeSpan.FromSeconds(60), TestContext.Current.CancellationToken);
+
+        Assert.True(stopping.Elapsed < TimeSpan.FromSeconds(4), $"the server took {stopping.Elapsed.TotalSeconds:0.0} s to stop");
+    }
+
+    [Fact]
     public async Task APageThatNeverClosesItsSide_IsLetGo_OnceItsNotebookClosed()
     {
         await using var served = await StartAsync();
@@ -525,9 +556,10 @@ public sealed partial class NotebookEndpointTests : IDisposable
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task APageThatLeaves_EndsItsView_SoTheNotebookClosesOnceNoPageShowsIt(bool afterAChange)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task APageThatLeaves_EndsItsView_SoTheNotebookClosesOnceNoPageShowsIt(bool afterAChange, bool withoutAWord)
     {
         await using var served = await StartAsync(grace: TimeSpan.FromMilliseconds(200));
         var host = await served.App.Services.GetRequiredService<OpenNotebooks>().OpenAsync(At("titanic.verso"), TestContext.Current.CancellationToken);
@@ -542,7 +574,12 @@ public sealed partial class NotebookEndpointTests : IDisposable
             await host.SaveAsync();
         }
 
-        // The page's tab closes: its socket goes with it.
+        // The page's tab closes: its socket goes with it, saying so or not.
+        if (withoutAWord)
+        {
+            socket.Drop();
+        }
+
         await socket.DisposeAsync();
 
         for (var waited = TimeSpan.Zero; ; waited += TimeSpan.FromMilliseconds(100))

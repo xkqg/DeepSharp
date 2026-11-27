@@ -8,13 +8,19 @@ namespace DeepSharp.Tests.Serve.Parts;
 /// <summary>
 /// A part that answers a click on a control naming it with what the control carried, in brackets, or says it was handed
 /// nothing at all: a click is seen reaching a part with the payload Verso hands every part — words, empty when the control
-/// carries none.
+/// carries none. A click that carries the word it is told to break on is one the part fails at in a way nothing expects.
 /// </summary>
 [VersoExtension]
 public sealed class AnsweringPart : IExtension, ICellInteractionHandler
 {
     /// <summary>The part's name, which a control names to reach it.</summary>
     public const string Id = "deepsharp.tests.answering-part";
+
+    /// <summary>What a click carries for the part to fail at it.</summary>
+    public const string Breaks = "break";
+
+    /// <summary>Why the part failed, in its words.</summary>
+    public const string Broke = "The part cannot answer this click.";
 
     /// <inheritdoc />
     public string ExtensionId => Id;
@@ -41,6 +47,11 @@ public sealed class AnsweringPart : IExtension, ICellInteractionHandler
     public Task<string?> OnCellInteractionAsync(CellInteractionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
+
+        if (context.Payload == Breaks)
+        {
+            throw new NotSupportedException(Broke);
+        }
 
         return Task.FromResult<string?>(context.Payload is null ? "handed nothing" : $"[{context.Payload}]");
     }

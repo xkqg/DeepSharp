@@ -178,6 +178,9 @@ internal sealed class PageSocket : IAsyncDisposable
         return answered.Task.WaitAsync(Patience, TestContext.Current.CancellationToken);
     }
 
+    /// <summary>Leaves as a page does whose connection is cut: no close frame is sent, and none is waited for.</summary>
+    public void Drop() => _socket.Abort();
+
     /// <summary>Leaves, as a page does: a close frame, and the server's own in answer.</summary>
     /// <returns>When it is closed, and the read of it has ended.</returns>
     /// <remarks>

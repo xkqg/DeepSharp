@@ -398,20 +398,34 @@ public sealed class TakeOverActionTests : IDisposable
     {
         // Without the source's first line nothing is known of its columns: none is new, and none is missing from it.
         await using var gone = await NotebookAsync(Titanic);
+        await using var empty = await NotebookAsync(Titanic);
+        await using var denied = await NotebookAsync(Titanic);
         await using var handedIn = await NotebookAsync("""{"step": "read.rows", "description": "passengers"}""", Titanic[1]);
+        var source = Path.Join(_folder, "titanic.csv");
 
         Saved(new PipelineDeclaration(Blocks(gone).Excluding("pclass")).Including("colour", ColumnKind.Text, []));
-        File.Delete(Path.Join(_folder, "titanic.csv"));
+        File.Delete(source);
         await ListAsync(gone);
         var withoutFile = Card(gone);
+
+        // A file with no first line, and a path no file can be read from, are no more readable than none.
+        File.WriteAllText(source, string.Empty);
+        await ListAsync(empty);
+        var withoutLine = Card(empty);
+
+        File.Delete(source);
+        Directory.CreateDirectory(source);
+        await ListAsync(denied);
+        var withoutAccess = Card(denied);
 
         Saved(Blocks(handedIn).Excluding("pclass"));
         await ListAsync(handedIn);
         var withoutHeader = Card(handedIn);
 
-        Assert.Contains("<code>colour</code>: not in the schema → taken, text</li>", withoutFile, StringComparison.Ordinal);
+        Assert.All(new[] { withoutFile, withoutLine, withoutAccess }, card =>
+            Assert.Contains("<code>colour</code>: not in the schema → taken, text</li>", card, StringComparison.Ordinal));
         Assert.Contains("<code>pclass</code>: taken, integer → excluded, integer</li>", withoutHeader, StringComparison.Ordinal);
-        Assert.All(new[] { withoutFile, withoutHeader }, card =>
+        Assert.All(new[] { withoutFile, withoutLine, withoutAccess, withoutHeader }, card =>
         {
             Assert.DoesNotContain("not in the source", card, StringComparison.Ordinal);
             Assert.DoesNotContain("New in the source", card, StringComparison.Ordinal);

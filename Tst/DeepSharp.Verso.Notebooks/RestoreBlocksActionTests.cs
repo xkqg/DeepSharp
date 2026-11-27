@@ -132,6 +132,25 @@ public sealed class RestoreBlocksActionTests : IDisposable
     }
 
     [Fact]
+    public async Task AGridShownBeforeAStepCameBackBelowIt_IsClearedOnceTheStepMakesItOtherColumns()
+    {
+        // The grid offered the columns the declaration then made; a step that comes back below it takes one of them away.
+        await using var notebook = await OpenedAsync(
+            Cell(StepCellType.StepType, Titanic[0], StepKernel.Language),
+            Cell(StepCellType.StepType, Titanic[1], StepKernel.Language),
+            Cell("raw", """{"step": "drop.columns", "columns": ["pclass"]}"""));
+
+        await notebook.GestureAsync(notebook.Scaffold.Cells[1], StepRenderer.Show);
+
+        Assert.Contains(notebook.Scaffold.Cells[1].Outputs, output => !output.IsError);
+
+        await notebook.PressAsync(RestoreBlocksAction.Id);
+
+        Assert.Equal(3, notebook.Scaffold.Cells.Count(cell => cell.Type == StepCellType.StepType));
+        Assert.Empty(notebook.Scaffold.Cells[1].Outputs);
+    }
+
+    [Fact]
     public async Task ANotebookSavedOverWithItsBlocksAsRawCells_IsWholeAgain_AndItsPipelineRuns()
     {
         // As Verso's browser editor writes it: the blocks of the passenger list's notebook, each come back from Jupyter as

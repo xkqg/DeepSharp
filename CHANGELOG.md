@@ -107,6 +107,10 @@ The seventh letter of the flock team.
   your file's description stands. `OutputActivation` says its own `Word()`, applies itself to outputs (`Applied`), says
   whether a layer is it (`Closes`) and whether a foreign file's word names it (`OwnedBy`), so what a loss, a compile and a
   reader decide about an activation is decided once. The Keras, ONNX and PyTorch readers now go through the same.
+- **Every button of the notebook's toolbar is one `ToolbarButton`.** Run, export, take over, make blocks of the steps and the
+  two courses said the same things five times over — the id the toolbar knows them by, that none is icon-only or primary
+  or asks first, how an icon is framed, how a press waits its turn on the notebook. `ToolbarButton` says them once, and
+  `CourseAction` now stands on it; the buttons' ids, labels, icons, places and what pressing them does are as they were.
 
 ### Fixed
 

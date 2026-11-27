@@ -17,7 +17,7 @@ namespace DeepSharp.Verso.Notebooks;
 /// What the blocks no longer make is taken back, as after any change to them; nothing runs.
 /// </remarks>
 [VersoExtension]
-public sealed class RestoreBlocksAction : NotebookExtension, IToolbarAction
+public sealed class RestoreBlocksAction : ToolbarButton
 {
     /// <summary>The button's id.</summary>
     public const string Id = "io.github.xkqg.deepsharp.notebooks.blocks";
@@ -33,34 +33,17 @@ public sealed class RestoreBlocksAction : NotebookExtension, IToolbarAction
         "Makes blocks again of the pipeline steps a notebook holds as text, where a format other than .verso forgot each was a block.";
 
     /// <inheritdoc />
-    public string ActionId => Id;
+    public override string DisplayName => "Make blocks of the steps";
 
     /// <inheritdoc />
-    public string DisplayName => "Make blocks of the steps";
+    public override int Order => 2;
 
     /// <inheritdoc />
-    public string Icon =>
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"currentColor\">"
-        + "<path d=\"M3 4h8v6H3zM13 4h8v6h-8zM3 14h8v6H3zM13 17h3v-3l5 4.5-5 4.5v-3h-3z\"/></svg>";
-
-    /// <inheritdoc />
-    public bool IconOnly => false;
-
-    /// <inheritdoc />
-    public bool IsPrimary => false;
-
-    /// <inheritdoc />
-    public string? ConfirmationPrompt => null;
-
-    /// <inheritdoc />
-    public ToolbarPlacement Placement => ToolbarPlacement.MainToolbar;
-
-    /// <inheritdoc />
-    public int Order => 2;
+    private protected override ToolbarIcon Drawing => new("M3 4h8v6H3zM13 4h8v6h-8zM3 14h8v6H3zM13 17h3v-3l5 4.5-5 4.5v-3h-3z");
 
     /// <inheritdoc />
     /// <remarks>When a cell holds a step a format forgot was a block.</remarks>
-    public Task<bool> IsEnabledAsync(IToolbarActionContext context)
+    public override Task<bool> IsEnabledAsync(IToolbarActionContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 
@@ -70,15 +53,11 @@ public sealed class RestoreBlocksAction : NotebookExtension, IToolbarAction
     }
 
     /// <inheritdoc />
-    public async Task ExecuteAsync(IToolbarActionContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        var session = RequiredSession;
-        var catalog = NotebookVerbs.Catalog();
-
-        await session.OneAtATimeAsync(context.CancellationToken, async turn =>
+    public override Task ExecuteAsync(IToolbarActionContext context) =>
+        RunOnSessionAsync(context, async (session, turn) =>
         {
+            var catalog = NotebookVerbs.Catalog();
+
             Forgotten[] holding = [.. context.NotebookCells.Select(cell => new Forgotten(cell, cell.Parts(catalog))).Where(each => each.Parts.Any(part => part.Step is not null))];
 
             if (holding.Length == 0)
@@ -107,7 +86,6 @@ public sealed class RestoreBlocksAction : NotebookExtension, IToolbarAction
 
             return true;
         });
-    }
 
     // A cell's parts in its place — a block for each step, a cell of its own kind for the text around them — and the cell gone.
     private static async Task RestoreAsync(IToolbarActionContext context, Forgotten forgotten)
