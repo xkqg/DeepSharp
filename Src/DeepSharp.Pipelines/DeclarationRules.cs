@@ -443,19 +443,19 @@ internal sealed class RowsAheadAreKeptApart : IDeclarationRule
 }
 
 /// <summary>
-/// A step that reads a column's earlier rows, or carries the value before a gap forward, stands below a split in
-/// time, the rows ordered by the column that split divides by alone; and reads no column an output already made
-/// from rows ahead.
+/// A step that reads the rows before a row in the order they stand in, such as one that carries the value before a gap
+/// forward, stands below a split in time, the rows ordered by the column that split divides by alone; and a step that
+/// reads an earlier value reads no column an output already made from rows ahead.
 /// </summary>
 /// <remarks>
-/// A row's part under a split at random or a stratified split has nothing to do with where it stands in the file: a
-/// training row can sit right after a validation row, and the value before it, or the mean of a key's earlier rows,
-/// is read from whichever part happened to stand there. Only a split in time, with the rows ordered by the very
-/// column it divides by, keeps every part a contiguous run, so the row before a training row is always another
-/// training row. Separately, a column an output already made from rows ahead holds a value from later than the row
-/// it stands on; reading it as the value whose earlier rows are read carries that later value back in through every
-/// earlier row that holds it, however many rows stand between — the same leak <see cref="OnlyAnOutputReadsAhead"/>
-/// refuses directly, reached here by a step that is not itself reading ahead.
+/// A row's part under a split at random, a stratified split or a split in blocks of time has nothing to do with where it
+/// stands in the file: a training row can sit right after a validation row, and the value before it is read from whichever
+/// part happened to stand there. Only a split in time, with the rows ordered by the very column it divides by, keeps every
+/// part a contiguous run, so the row before a training row is always another training row. A history orders by its own
+/// columns and knows which rows are training rows, so it is not held to this. Separately, a column an output already made
+/// from rows ahead holds a value from later than the row it stands on; reading it as the value whose earlier rows are read
+/// carries that later value back in through every earlier row that holds it, however many rows stand between — the same
+/// leak <see cref="OnlyAnOutputReadsAhead"/> refuses directly, reached here by a step that is not itself reading ahead.
 /// </remarks>
 internal sealed class EarlierAnswersFollowTime : IDeclarationRule
 {

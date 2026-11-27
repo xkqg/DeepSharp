@@ -112,6 +112,37 @@ public class DeclarationContractTests
     }
 
     [Fact]
+    public void EveryStepThatLearnsAnEarlierValue_IsOneEarlierRowsStep()
+    {
+        // History and history.known were one step written twice; what differs between them is which rows a row may read.
+        var earlier = typeof(Pdd).Assembly.GetTypes()
+            .Where(type => type.IsClass && !type.IsAbstract && typeof(IReadsAnEarlierValue).IsAssignableFrom(type) && typeof(IFittedStep).IsAssignableFrom(type))
+            .ToArray();
+
+        Assert.Equal(2, earlier.Length);
+        Assert.All(earlier, type => Assert.True(
+            type.BaseType is { IsGenericType: true } based && based.GetGenericTypeDefinition() == typeof(EarlierRowsStep<>),
+            $"{type.Name} reads an earlier value and is not an EarlierRowsStep."));
+    }
+
+    [Fact]
+    public void TheStepsThatReadTheRowsInTheirOrder_AreTheOnesThatDo()
+    {
+        // A step says it reads the rows in their order only when it does: the declared order decides what it reads. A step
+        // that orders by its own columns, as a history does, says nothing of the kind, so no split or order is asked of it.
+        string[] reading =
+        [
+            .. typeof(Pdd).Assembly.GetTypes().Concat(typeof(AddIndicatorStep).Assembly.GetTypes())
+                .Where(type => type.IsClass && !type.IsAbstract && typeof(IReadsRowOrder).IsAssignableFrom(type))
+                .Select(type => (string)type.GetProperty("Name", BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)!.GetValue(null)!)
+                .Distinct()
+                .Order(StringComparer.Ordinal),
+        ];
+
+        Assert.Equal(["drop.warmup", "feature.indicator", "fill.missing", "target.ahead"], reading);
+    }
+
+    [Fact]
     public void AFaultInsideOneStep_ReachesTheCallerAsAFaultInTheFile()
     {
         // The three shares adding to 0.95 is the flagship message of the validator, and it used to arrive

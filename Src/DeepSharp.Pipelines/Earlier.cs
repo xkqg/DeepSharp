@@ -97,8 +97,6 @@ internal sealed class Earlier
         return new Counted(sum, low - first);
     }
 
-    // The greatest place held, by the same ordering Before searches with; nothing when there are no rows at all.
-    internal double[]? Latest => _places.Length == 0 ? null : _places[^1];
 
     internal static int Compared(double[] one, double[] other)
     {

@@ -1096,16 +1096,19 @@ training row reaches the history of the rows before it only through the mean of 
 That training floor never moves, and a flock served alone never loses it — but the overlap of flocks whose weighings
 interleave is real: a validation or a test weighing, once it has happened, is known by the time the same flock is weighed
 again, the way a farm's own earlier weighings are known to whoever weighs it next. `history.known` is that floor plus
-those: the rows of a key already read from the training rows, exactly as `history` keeps them, and beside them every row of
-the same key, in the table a row is served with, that stands strictly after the training floor's last place in the order and
-strictly before the row being computed, its value present rather than a gap not yet answered. A training row is never
-counted twice for standing in both; a key with none of either reads the training rows' own mean, as `history` does. It
-stands below a split in time only, ordered by the very column that split divides by, because under a split at random or a
-stratified split a row's part has nothing to do with where it stands in the order, and a training row could read a
-validation or a test row's weighing that merely happened to come first — the same leak running the other way `settle.gaps`'
-own training-only rule exists to close. Nor may its value be an answer an output already made from rows ahead: that value
-already holds a weighing from later than the row it stands on, and reading it back in would be the leak in a second
-disguise.
+those: the rows of a key already read from the training rows, exactly as `history` keeps them, and beside them, for a row
+that is not a training row, every other row of the same key in the table it is applied to that stands strictly before it
+in the order, whatever part it is in — a validation row reads an earlier test row too, since its outcome is known by then —
+its value present rather than a gap not yet answered. A training row reads the floor and nothing else, under any split, so
+nothing a model is chosen or measured on reaches what it learns from. Which rows are training rows is not a question of
+where they stand: the fit keeps every training row by what it says in the step's own columns — its key, its order, its
+value and the declared id — so a training row is known again in any table it is applied to, read once, and a fit replayed
+over its own rows writes the column it wrote. A fit that kept no such list, written before it existed, reads the rows after
+a key's last training row, as it did then. Both histories are one `EarlierRowsStep`: the training floor, the prior and the
+arithmetic are one, and what one history differs from the other in is only which rows besides the floor a row may read.
+They order by their own columns, so neither reads the rows in the order they stand in, asks for an order, or is held to a
+split in time. Nor may the value of either be an answer an output already made from rows ahead: that value already holds a
+weighing from later than the row it stands on, and reading it back in would be the leak in a second disguise.
 
 ### Normalising is a family, and two of its choices are declared
 

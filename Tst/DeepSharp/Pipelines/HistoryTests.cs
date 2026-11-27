@@ -44,6 +44,29 @@ public class HistoryTests
             .Build()
             .Run();
 
+    [Fact]
+    public void UnderASplitAtRandom_HistoryIsAccepted_AndNoRowAModelIsMeasuredOnMovesAValueItWrites()
+    {
+        // It reads the training rows alone, by its own order, so it was never refused below a split at random and needs no
+        // order of the rows: a row a model is chosen or measured on reaches no value it writes.
+        PreparedData Dealt(string rows) => Pdd.Create()
+            .Read(CsvRowSource.FromText(rows), "rows")
+            .Declare(schema => schema.Id("t", ColumnKind.Integer).Integer("round").Timestamp("date").Category("key").Number("v", "y"))
+            .SplitAtRandom(0.6, 0.2, seed: 3)
+            .History("key", "v", 2, "date")
+            .Build()
+            .Run();
+
+        var dealt = Dealt(Rows);
+        var measured = Enumerable.Range(0, dealt.Table.RowCount).Where(row => dealt.Parts[row] != Part.Train).Select(row => row + 1).ToHashSet();
+        var changed = string.Join('\n', Rows.Split('\n').Select((line, at) => measured.Contains(at) ? line.Replace($",{line.Split(',')[4]},", ",999,") : line));
+
+        // Ranked by the declared id, so a changed value moves no row to another part.
+        Assert.Equal(dealt.Parts, Dealt(changed).Parts);
+        Assert.NotEmpty(measured);
+        Assert.Equal(dealt.Table.NumbersOf("v_history_key"), Dealt(changed).Table.NumbersOf("v_history_key"));
+    }
+
     private static double[] Read(PreparedData prepared, Part part)
     {
         var batch = prepared.Batch(part);

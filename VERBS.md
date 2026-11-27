@@ -446,7 +446,7 @@ Writes beside each row the mean of a column over the earlier rows of its key alr
 
 - **`key`**: The column whose value says which rows are of one kind: a farm, a type.
 - **`value`**: The column of numbers whose mean over the earlier rows of the same kind is read.
-- **`orderBy`**: The columns that say which rows came before a row: the first is the column the split above divides time by, each next one decides between rows the ones before call equal.
+- **`orderBy`**: The columns that say which rows came before a row: the first decides, each next one decides between rows the ones before call equal.
 - **`shrink`**: How many rows' worth of weight the mean of every training row has beside a key's own rows, above nothing: the larger, the more a key with few rows is pulled towards it.
 - **`window`**: How many of the last places of the order a row reads, rows of one place counting as one; left out, every earlier row. A window of nothing is read with a weight of nothing too.
 - **`into`**: The name of the column it makes; left out, the value's name, 'knownHistory' and the key's name.

@@ -13,6 +13,9 @@ The seventh letter of the flock team.
   is new. 0.18.0 refuses a file of the seventeenth whole, naming the version.
 - **`IDividesInTime` takes its `Column` from `IDividesByAColumn`.** A split that says the column it divides by without its
   parts being runs of time implements the new, smaller interface; code that reads `IDividesInTime.Column` compiles unchanged.
+- **`KnownHistoryStep` no longer implements `IReadsRowOrder`.** It orders by its own columns and never read the rows in the
+  order they stand in; code that tested for the interface to find it no longer finds it, and it no longer asks for an
+  `order.by` above it.
 - **`TransposedConvolution.Settling` is obsolete.** It handed back a pair of values; `TransposedConvolution.Settle` hands
   back the same two, `Dropped` and `Added`, as a `Settlement`. The old form still compiles, with a warning naming the new
   one.
@@ -51,6 +54,18 @@ The seventh letter of the flock team.
 - **An answer read ahead with no order declared is refused once.** It was refused twice for the one missing order.
 
 ### Changed
+
+- **`history.known` stands below any split, and a row reads every earlier known row of its key, whatever part it is in.**
+  A training row reads the training floor alone, as before and under any split, so nothing a model is chosen or measured
+  on reaches what it learns from. Every other row reads the floor and every earlier row of its key in the table — a
+  validation row an earlier test row's outcome too, since in production that outcome is known by then. It assumes an
+  earlier row's outcome is known by the time a later row of its key is asked for. The fit now keeps every training row by
+  what it says in the step's own columns (`members` in the fitted file), so a training row is known again in any table and
+  a pipeline replayed over its own rows writes the column it wrote; a pipeline fitted by 0.18.0, which kept no such list,
+  is read and served as it was. It asks for no order of the rows any more. `history` and `history.known` are now one
+  `EarlierRowsStep`, which differs only in which rows besides the floor a row may read.
+- **The 0.18.0 notes said `history` is refused under `split.atRandom` and `split.stratified`; it never was.** It reads the
+  training rows alone, so it needs no split in time, and it stands below any split, as it always did.
 
 - **The charts, the data-frame reader and the indicators are built on MatPlotLibNet 1.30.0.** Its data frame now hands
   over the column or the bars an indicator reads, and the indicator is made from its own class; `indicator.add` builds

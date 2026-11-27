@@ -31,7 +31,7 @@ public class FittedVocabularyTests
         { "tokenize", [], [], ["tokens"] },
         { "encode.piecewise", [], [], ["edges"] },
         { "history", [], [], ["keys", "order1", "prior", "values"] },
-        { "history.known", [], [], ["keys", "order1", "prior", "values"] },
+        { "history.known", [], [], ["keys", "members", "order1", "prior", "values"] },
         { "fill.missing", ["gaps"], [], ["value"] },
         { "fill.missing.refused", ["gaps", "share"], ["filled"], [] },
         { "fill.nan", ["notNumbers"], [], [] },
@@ -45,7 +45,7 @@ public class FittedVocabularyTests
     public void WhatEachFitWritesDown_IsSaidUnderTheWordItIs(string fit, string[] counted, string[] decided, string[] learned)
     {
         var (step, table) = Of(fit);
-        var values = step.Fit(table, Training(table));
+        var values = step.Fit(table, PartsOf(fit, table));
 
         Assert.Equal(counted, values.Counts.Order(StringComparer.Ordinal));
         Assert.Equal(decided, values.Decisions.Order(StringComparer.Ordinal));
@@ -63,7 +63,7 @@ public class FittedVocabularyTests
         // and the file it was read from need not hold it at all.
         _ = (decided, learned);
         var (step, table) = Of(fit);
-        var values = step.Fit(table, Training(table));
+        var values = step.Fit(table, PartsOf(fit, table));
 
         Assert.Equal(counted, values.Counts.Order(StringComparer.Ordinal));
         Assert.Equal(Shown(step, table, values), Shown(step, table, Apart(values, values.Counts)));
@@ -77,7 +77,7 @@ public class FittedVocabularyTests
         // decided and the replay cannot go on, or goes on differently.
         _ = counted;
         var (step, table) = Of(fit);
-        var values = step.Fit(table, Training(table));
+        var values = step.Fit(table, PartsOf(fit, table));
 
         foreach (var name in decided.Concat(learned))
         {
@@ -242,6 +242,11 @@ public class FittedVocabularyTests
         Assert.Equal(1, values.Choice("filled"));
     }
 
+    // The parts a fit is told for each shape: every row a training row, but where what a step learns is which rows are the
+    // training rows — a history that reads the rows known since the fit — where the second and the last rows are validation.
+    private static Part[] PartsOf(string fit, Table table) =>
+        fit == "history.known" ? [Part.Train, Part.Validation, Part.Train, Part.Train, Part.Validation] : Training(table);
+
     // Every row of the table is a training row: a part for each, which is how a fit is told which rows it may learn from.
     private static Part[] Training(Table table) => [.. Enumerable.Repeat(Part.Train, table.RowCount)];
 
@@ -255,7 +260,7 @@ public class FittedVocabularyTests
         "tokenize" => (new TokenizeStep("c", 3, 10), Words("x y", "y z", "x")),
         "encode.piecewise" => (new PiecewiseLinearStep("a", 2), Numbers(1, 2, 3, 4, 10)),
         "history" => (new HistoryStep("a", "a", ["a"], 2), Numbers(1, 2, 3, 4, 10)),
-        "history.known" => (new KnownHistoryStep("a", "a", ["a"], new HistoryReach(2, 0)), Numbers(1, 2, 3, 4, 10)),
+        "history.known" => (new KnownHistoryStep("k", "a", ["t"], new HistoryReach(2, 0)), OneKeyInTime(1, 2, 3, 4, 10)),
         "fill.missing" => (FillMissingStep.Of("a", With.Median), Numbers(1, 2, null, 4, 10)),
         "fill.missing.refused" => (FillMissingStep.Of("a", With.Median, 0.10), Numbers(1, 2, null, 4, 10)),
         "fill.nan" => (new FillNaNStep("a"), Numbers(1, 2, 3, 4, 10)),
@@ -266,6 +271,14 @@ public class FittedVocabularyTests
 
     private static Table Numbers(params double?[] values) =>
         new([new Column<double>("a", ColumnKind.Number, values)]);
+
+    // Rows of one key, the n-th standing at moment n, holding the values given.
+    private static Table OneKeyInTime(params double?[] values) => new(
+    [
+        new TextColumn("k", ColumnKind.Category, [.. values.Select(_ => (string?)"x")]),
+        new Column<double>("a", ColumnKind.Number, values),
+        new Column<double>("t", ColumnKind.Number, [.. Enumerable.Range(1, values.Length).Select(moment => (double?)moment)]),
+    ]);
 
     private static Table Words(params string?[] values) =>
         new([new TextColumn("c", ColumnKind.Category, values)]);

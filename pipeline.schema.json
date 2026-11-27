@@ -1950,7 +1950,7 @@
           "description": "The column of numbers whose mean over the earlier rows of the same kind is read."
         },
         "orderBy": {
-          "description": "The columns that say which rows came before a row: the first is the column the split above divides time by, each next one decides between rows the ones before call equal.",
+          "description": "The columns that say which rows came before a row: the first decides, each next one decides between rows the ones before call equal.",
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,

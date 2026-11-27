@@ -22,7 +22,8 @@ too.
 and leaves every training row within an embargo of a row a model is measured on out of the training, so the many deals a
 split at random gives no longer flatter a model that interpolates in time; the rows it leaves out are counted in the fit.
 A split of your own comes in through `Split`, the door the library's own splits use, and is held to what every split
-keeps. It is built on MatPlotLibNet 1.30.0 and Microsoft.ML 6.0.0, and the pipeline file is at version 17.
+keeps. `history.known` stands below any split: a training row reads training rows alone, and every other row every
+earlier known row of its key, whatever part it is in. It is built on MatPlotLibNet 1.30.0 and Microsoft.ML 6.0.0, and the pipeline file is at version 17.
 
 **0.18.0 answers the flock team's sixth letter.** `Study<TModel>` tries candidates trained by a function of the
 caller's own — handed the deal, returning the score and the model it made — with the sampler, the deals, a pruner, a
@@ -31,8 +32,8 @@ deal stopper and resuming from earlier trials all working exactly as they do for
 members together. `history.known` reads a key's rows already answered since the pipeline was fitted — validation and
 test rows included, because by the time a later row of a producer is asked for, an earlier one's own outcome is
 already known — standing only below a split in time. Answering that found two existing leaks nobody had asked about:
-`fill.missing` with `With.Previous`, and `history` itself, could each read a value from across a part or from later
-than the row it stood on; both are refused now, by name. `ConformalInterval.FromErrors` and `CorrelationMatrix.From`
+`fill.missing` with `With.Previous` could read a value from across a part, and `history` one from later than the row
+it stood on; both are refused now, by name. `ConformalInterval.FromErrors` and `CorrelationMatrix.From`
 are public, so a margin and a correlation matrix can both be worked out outside any pipeline. The pipeline file is at
 version 16, and a file 0.17.0 wrote is read, written again and served as it was.
 
