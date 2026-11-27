@@ -425,23 +425,24 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
 
         var parts = Shares.Over(table.RowCount).Placed(order);
 
-        parts.KeptTogether(order, (one, other) => when(one, other) == 0);
+        bool SameMoment(int one, int other) => when(one, other) == 0;
+
+        parts.KeptTogether(order, SameMoment);
 
         if (Origin is { } place)
         {
             // The rows that learn in the order of their time, cut into one block more than there are origins: the blocks up to the
             // origin are training, the next is validation, and the rows after it are fitted on by nothing.
             var learning = parts.LearningRows(order);
-            var blocks = new int[learning.Length];
+            var blocks = learning.Pieces(place.Pieces, SameMoment);
 
             for (var at = 0; at < learning.Length; at++)
             {
-                blocks[at] = at > 0 && when(learning[at - 1], learning[at]) == 0 ? blocks[at - 1] : place.BlockOf(at, learning.Length);
                 parts[learning[at]] = blocks[at] <= place.Index ? Part.Train : blocks[at] == place.Index + 1 ? Part.Validation : Part.Gap;
             }
         }
 
-        parts.Gapped(order, Gap, (one, other) => when(one, other) == 0);
+        parts.Gapped(order, Gap, SameMoment);
 
         // A gap wider than a part takes the whole of it, and a model with nothing to learn from, or nothing to be
         // measured on, is a run that should stop rather than succeed.

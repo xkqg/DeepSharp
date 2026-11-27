@@ -25,15 +25,7 @@ public readonly record struct Fold
     /// <exception cref="ArgumentOutOfRangeException">There are fewer than two slices, or the index is not one of them.</exception>
     public Fold(int folds, int index)
     {
-        if (folds < 2)
-        {
-            throw new ArgumentOutOfRangeException(nameof(folds), folds, "Folds cut the rows into at least two slices.");
-        }
-
-        if (index < 0 || index >= folds)
-        {
-            throw new ArgumentOutOfRangeException(nameof(index), index, $"The fold is one of the {folds} slices, counted from nought, and {index} is none of them.");
-        }
+        Cut.Check(folds, index, nameof(folds));
 
         Folds = folds;
         Index = index;
@@ -45,49 +37,50 @@ public readonly record struct Fold
     /// <summary>Which of them is validation, counted from nought.</summary>
     public int Index { get; }
 
-    /// <summary>The key a file names how many slices there are under.</summary>
-    internal static WholeNumberParameter FoldsKey { get; } = new(
-        "folds",
-        "How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.",
-        5)
+    /// <summary>The words and the keys of this cut: how many slices there are, and which of them is validation.</summary>
+    private static CountedCut Cut { get; } = new()
     {
-        AtLeast = 2,
-        LeftOut = 0,
-        OnlyWhenMeant = true,
+        Noun = "fold",
+        Article = "A",
+        Plural = "slices",
+        Which = "is validation",
+        TooFew = "Folds cut the rows into at least two slices.",
+        CountKey = new WholeNumberParameter(
+            "folds",
+            "How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.",
+            5)
+        {
+            AtLeast = 2,
+            LeftOut = 0,
+            OnlyWhenMeant = true,
+        },
+        IndexKey = new WholeNumberParameter(
+            "fold",
+            "Which of the slices is validation, counted from nought; said with folds, and below them.",
+            0)
+        {
+            AtLeast = 0,
+            LeftOut = -1,
+            OnlyWhenMeant = true,
+        },
     };
+
+    /// <summary>The key a file names how many slices there are under.</summary>
+    internal static WholeNumberParameter FoldsKey => Cut.CountKey;
 
     /// <summary>The key a file names which slice is validation under.</summary>
-    internal static WholeNumberParameter FoldKey { get; } = new(
-        "fold",
-        "Which of the slices is validation, counted from nought; said with folds, and below them.",
-        0)
-    {
-        AtLeast = 0,
-        LeftOut = -1,
-        OnlyWhenMeant = true,
-    };
+    internal static WholeNumberParameter FoldKey => Cut.IndexKey;
 
-    /// <summary>Which slice a row belongs to, when so many rows are dealt in order into this many slices.</summary>
-    /// <param name="place">The row's place in the order, from nought.</param>
-    /// <param name="count">How many rows are dealt.</param>
-    /// <returns>The slice, from nought.</returns>
-    internal int SliceOf(int place, int count) => (int)((long)place * Folds / count);
+    /// <summary>How many slices the rows are dealt into.</summary>
+    internal int Pieces => Folds;
 
     /// <summary>The fold a step's file names; nothing when it names none.</summary>
     /// <param name="step">The step as the file writes it.</param>
     /// <returns>The fold.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The file names a slice it does not have.</exception>
     /// <exception cref="FormatException">The file names one of the two keys without the other.</exception>
-    internal static Fold? ReadFrom(JsonElement step)
-    {
-        var folds = step.TryGetProperty(FoldsKey.Key, out _);
-        var fold = step.TryGetProperty(FoldKey.Key, out _);
-
-        return !folds && !fold ? null
-            : folds && fold ? new Fold(FoldsKey.Read(step), FoldKey.Read(step))
-            : throw new FormatException($"A fold says how many slices there are, '{FoldsKey.Key}', and which of them is validation, '{FoldKey.Key}': this file says only '{(folds ? FoldsKey.Key : FoldKey.Key)}'.");
-    }
-
+    internal static Fold? ReadFrom(JsonElement step) =>
+        Cut.ReadFrom(step) is { } said ? new Fold(said.Count, said.Index) : null;
 }
 
 /// <summary>
@@ -109,15 +102,7 @@ public readonly record struct Origin
     /// <exception cref="ArgumentOutOfRangeException">There are fewer than two places, or the index is not one of them.</exception>
     public Origin(int origins, int index)
     {
-        if (origins < 2)
-        {
-            throw new ArgumentOutOfRangeException(nameof(origins), origins, "A cut is moved to at least two places.");
-        }
-
-        if (index < 0 || index >= origins)
-        {
-            throw new ArgumentOutOfRangeException(nameof(index), index, $"The origin is one of the {origins} places, counted from nought, and {index} is none of them.");
-        }
+        Cut.Check(origins, index, nameof(origins));
 
         Origins = origins;
         Index = index;
@@ -129,46 +114,114 @@ public readonly record struct Origin
     /// <summary>Which of them this is, counted from nought.</summary>
     public int Index { get; }
 
-    /// <summary>The key a file names how many places there are under.</summary>
-    internal static WholeNumberParameter OriginsKey { get; } = new(
-        "origins",
-        "How many places the cut between training and validation is moved to, at least two; the rows that are neither test nor predict are cut into one block more. Left out, the rows are cut once, as shares say.",
-        3)
+    /// <summary>The words and the keys of this cut: how many places there are, and which of them this is.</summary>
+    private static CountedCut Cut { get; } = new()
     {
-        AtLeast = 2,
-        LeftOut = 0,
-        OnlyWhenMeant = true,
+        Noun = "origin",
+        Article = "An",
+        Plural = "places",
+        Which = "this is",
+        TooFew = "A cut is moved to at least two places.",
+        CountKey = new WholeNumberParameter(
+            "origins",
+            "How many places the cut between training and validation is moved to, at least two; the rows that are neither test nor predict are cut into one block more. Left out, the rows are cut once, as shares say.",
+            3)
+        {
+            AtLeast = 2,
+            LeftOut = 0,
+            OnlyWhenMeant = true,
+        },
+        IndexKey = new WholeNumberParameter(
+            "origin",
+            "Which of the places this is, counted from nought; said with origins, and below them.",
+            0)
+        {
+            AtLeast = 0,
+            LeftOut = -1,
+            OnlyWhenMeant = true,
+        },
     };
+
+    /// <summary>The key a file names how many places there are under.</summary>
+    internal static WholeNumberParameter OriginsKey => Cut.CountKey;
 
     /// <summary>The key a file names which place this is under.</summary>
-    internal static WholeNumberParameter OriginKey { get; } = new(
-        "origin",
-        "Which of the places this is, counted from nought; said with origins, and below them.",
-        0)
-    {
-        AtLeast = 0,
-        LeftOut = -1,
-        OnlyWhenMeant = true,
-    };
+    internal static WholeNumberParameter OriginKey => Cut.IndexKey;
 
-    /// <summary>Which block a row belongs to, when so many rows are dealt in time order into one block more than there are origins.</summary>
-    /// <param name="place">The row's place in the order, from nought.</param>
-    /// <param name="count">How many rows are dealt.</param>
-    /// <returns>The block, from nought.</returns>
-    internal int BlockOf(int place, int count) => (int)((long)place * (Origins + 1) / count);
+    /// <summary>How many blocks the rows are dealt into: one more than there are origins.</summary>
+    internal int Pieces => Origins + 1;
 
     /// <summary>The place a step's file names; nothing when it names none.</summary>
     /// <param name="step">The step as the file writes it.</param>
     /// <returns>The place.</returns>
     /// <exception cref="ArgumentOutOfRangeException">The file names a place it does not have.</exception>
     /// <exception cref="FormatException">The file names one of the two keys without the other.</exception>
-    internal static Origin? ReadFrom(JsonElement step)
-    {
-        var origins = step.TryGetProperty(OriginsKey.Key, out _);
-        var origin = step.TryGetProperty(OriginKey.Key, out _);
+    internal static Origin? ReadFrom(JsonElement step) =>
+        Cut.ReadFrom(step) is { } said ? new Origin(said.Count, said.Index) : null;
+}
 
-        return !origins && !origin ? null
-            : origins && origin ? new Origin(OriginsKey.Read(step), OriginKey.Read(step))
-            : throw new FormatException($"An origin says how many places there are, '{OriginsKey.Key}', and which of them this is, '{OriginKey.Key}': this file says only '{(origins ? OriginsKey.Key : OriginKey.Key)}'.");
+/// <summary>
+/// What every "the i-th of k" cut has in common: how many there are at least, which of them is meant, the two keys a file says
+/// it with, and the rule that a file says both or neither. <see cref="Fold"/> and <see cref="Origin"/> differ only in the words.
+/// </summary>
+/// <remarks>The words are what an error says; the shape of the refusal is the same for every cut, and written once.</remarks>
+internal sealed class CountedCut
+{
+    /// <summary>What one of them is called, in the singular: "fold".</summary>
+    public required string Noun { get; init; }
+
+    /// <summary>"A" or "An", before the noun at the head of a sentence.</summary>
+    public required string Article { get; init; }
+
+    /// <summary>What all of them are called: "slices".</summary>
+    public required string Plural { get; init; }
+
+    /// <summary>What it is to be the one that is meant: "is validation".</summary>
+    public required string Which { get; init; }
+
+    /// <summary>What is said when fewer than two are asked for.</summary>
+    public required string TooFew { get; init; }
+
+    /// <summary>The key a file names how many there are under.</summary>
+    public required WholeNumberParameter CountKey { get; init; }
+
+    /// <summary>The key a file names which of them is meant under.</summary>
+    public required WholeNumberParameter IndexKey { get; init; }
+
+    /// <summary>Refuses a count below two and an index that is not one of them.</summary>
+    /// <param name="count">How many there are.</param>
+    /// <param name="index">Which of them is meant, counted from nought.</param>
+    /// <param name="countName">The name of the argument the count came in under.</param>
+    /// <exception cref="ArgumentOutOfRangeException">There are fewer than two, or the index is not one of them.</exception>
+    internal void Check(int count, int index, string countName)
+    {
+        if (count < 2)
+        {
+            throw new ArgumentOutOfRangeException(countName, count, TooFew);
+        }
+
+        if (index < 0 || index >= count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"The {Noun} is one of the {count} {Plural}, counted from nought, and {index} is none of them.");
+        }
+    }
+
+    /// <summary>What a step's file names; nothing when it names neither key.</summary>
+    /// <param name="step">The step as the file writes it.</param>
+    /// <returns>How many there are and which is meant, checked by the caller's constructor.</returns>
+    /// <exception cref="FormatException">The file names one of the two keys without the other.</exception>
+    internal CutAsWritten? ReadFrom(JsonElement step)
+    {
+        var counted = step.TryGetProperty(CountKey.Key, out _);
+        var indexed = step.TryGetProperty(IndexKey.Key, out _);
+
+        return !counted && !indexed ? null
+            : counted && indexed ? new CutAsWritten(CountKey.Read(step), IndexKey.Read(step))
+            : throw new FormatException($"{Article} {Noun} says how many {Plural} there are, '{CountKey.Key}', and which of them {Which}, '{IndexKey.Key}': this file says only '{(counted ? CountKey.Key : IndexKey.Key)}'.");
     }
 }
+
+/// <summary>What a file says of a cut: how many there are, and which of them is meant.</summary>
+/// <param name="Count">How many there are.</param>
+/// <param name="Index">Which of them is meant, counted from nought.</param>
+internal readonly record struct CutAsWritten(int Count, int Index);

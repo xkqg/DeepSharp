@@ -141,6 +141,25 @@ internal static class SplitPlacement
                 : table.Identities[one].Key == table.Identities[other].Key;
     }
 
+    extension(int[] ordered)
+    {
+        /// <summary>Deals the rows in the order given into so many pieces of about as many rows; a row that belongs with the one before it keeps its piece.</summary>
+        /// <param name="pieces">How many pieces the rows are dealt into.</param>
+        /// <param name="together">Whether a row belongs with the one before it: a copy of it, or the same moment.</param>
+        /// <returns>The piece of every row, from nought, in the order given.</returns>
+        internal int[] Pieces(int pieces, Func<int, int, bool> together)
+        {
+            var dealt = new int[ordered.Length];
+
+            for (var at = 0; at < ordered.Length; at++)
+            {
+                dealt[at] = at > 0 && together(ordered[at - 1], ordered[at]) ? dealt[at - 1] : (int)((long)at * pieces / ordered.Length);
+            }
+
+            return dealt;
+        }
+    }
+
     extension(Part[] parts)
     {
         /// <summary>Gives every row the part of the row before it, when the two belong together.</summary>
@@ -163,11 +182,10 @@ internal static class SplitPlacement
         /// <param name="together">Whether a row is a copy of the one before it, which stays in its slice.</param>
         internal void Sliced(int[] ordered, Fold slice, Func<int, int, bool> together)
         {
-            var slices = new int[ordered.Length];
+            var slices = ordered.Pieces(slice.Pieces, together);
 
             for (var at = 0; at < ordered.Length; at++)
             {
-                slices[at] = at > 0 && together(ordered[at - 1], ordered[at]) ? slices[at - 1] : slice.SliceOf(at, ordered.Length);
                 parts[ordered[at]] = slices[at] == slice.Index ? Part.Validation : Part.Train;
             }
         }
