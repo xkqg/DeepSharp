@@ -248,7 +248,7 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
         {
             // The rows that learn in the order of their time, cut into one block more than there are origins: the blocks up to the
             // origin are training, the next is validation, and the rows after it are fitted on by nothing.
-            var learning = order.Where(row => parts[row] is Part.Train or Part.Validation).ToArray();
+            var learning = parts.LearningRows(order);
             var blocks = new int[learning.Length];
 
             for (var at = 0; at < learning.Length; at++)
@@ -292,7 +292,7 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
         var column = table[Column];
         var when = Comparer<int>.Create(table.RowOrderBy(Column));
 
-        foreach (var part in new[] { Part.Train, Part.Validation, Part.Calibration, Part.Test, Part.Predict })
+        foreach (var part in Part.Dealt)
         {
             var rows = Enumerable.Range(0, table.RowCount).Where(row => parts[row] == part).Order(when).ToArray();
 

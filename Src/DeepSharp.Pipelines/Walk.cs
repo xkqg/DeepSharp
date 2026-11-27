@@ -144,20 +144,18 @@ internal sealed class Walk(Course course, WalkMode mode, SourceFolder folder)
         {
             var seen = new FittedStepValues();
 
-            foreach (var part in new[] { Part.Train, Part.Validation, Part.Test, Part.Predict })
+            foreach (var part in Part.Counted)
             {
                 seen.Learned($"rows.{part.Word()}", parts.Count(each => each == part));
             }
 
-            // Only a split that keeps rows apart says how many: every other one writes what it always wrote.
-            if (parts.Count(each => each == Part.Gap) is > 0 and var gap)
+            // Only a split that keeps rows apart, or sets rows aside, says how many: every other one writes what it always wrote.
+            foreach (var part in Part.CountedWhenKept)
             {
-                seen.Learned("rows.gap", gap);
-            }
-
-            if (parts.Count(each => each == Part.Calibration) is > 0 and var calibration)
-            {
-                seen.Learned("rows.calibration", calibration);
+                if (parts.Count(each => each == part) is > 0 and var kept)
+                {
+                    seen.Learned($"rows.{part.Word()}", kept);
+                }
             }
 
             // A source that leaves rows out says how many beside what each part holds: rows a join found no partner for

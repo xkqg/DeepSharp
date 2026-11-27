@@ -140,7 +140,7 @@ public sealed record EncodeStep : IFittedStep, IPipelineStep<EncodeStep>, IDescr
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(parts);
 
-        var categories = table.CategoriesOf(Column, row => parts[row] == Part.Train);
+        var categories = table.CategoriesOf(Column, parts.IsTraining);
 
         if (categories.Count == 0)
         {

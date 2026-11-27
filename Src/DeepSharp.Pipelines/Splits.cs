@@ -47,6 +47,56 @@ public enum Part
 }
 
 /// <summary>
+/// What a part is for, said once: which rows a fit learns from, which a split deals again, and which parts a fit or a split
+/// writes down.
+/// </summary>
+/// <remarks>
+/// Every reader of a <see cref="Part"/> that has to decide a set of them asks here, so a part added later is decided in one place
+/// rather than in each reader that happened to list the others. A split that WRITES parts is not a reader and stays where it is.
+/// </remarks>
+internal static class PartFacts
+{
+    extension(Part part)
+    {
+        /// <summary>Whether a fit learns from the rows of this part: training alone, the only rows anything is fitted on.</summary>
+        internal bool IsLearnedFrom => part == Part.Train;
+
+        /// <summary>Whether the rows of this part are rows that learn: the training rows, and the validation rows a model is chosen on.</summary>
+        /// <remarks>What a split deals again into folds or origins, once test, calibration and predict are set aside.</remarks>
+        internal bool Learns => part is Part.Train or Part.Validation;
+
+        /// <summary>Whether a learner is handed the rows of this part: all of them but the rows a split keeps apart.</summary>
+        internal bool IsHandedOver => part != Part.Gap;
+    }
+
+    extension(Part)
+    {
+        /// <summary>The parts a fit always counts the rows of, in the order it writes them, empty or not.</summary>
+        internal static IReadOnlyList<Part> Counted => [Part.Train, Part.Validation, Part.Test, Part.Predict];
+
+        /// <summary>The parts a fit counts the rows of only when a split gave it any, so a file written before them is unchanged.</summary>
+        internal static IReadOnlyList<Part> CountedWhenKept => [Part.Gap, Part.Calibration];
+
+        /// <summary>The parts a split deals rows to, in the order a time split names the stretch of time each covers.</summary>
+        internal static IReadOnlyList<Part> Dealt => [Part.Train, Part.Validation, Part.Calibration, Part.Test, Part.Predict];
+    }
+
+    extension(IReadOnlyList<Part> parts)
+    {
+        /// <summary>Whether a row is a training row.</summary>
+        /// <param name="row">The row, by its place.</param>
+        internal bool IsTraining(int row) => parts[row].IsLearnedFrom;
+
+        /// <summary>Every training row, in row order: the rows a fit learns from.</summary>
+        internal int[] TrainingRows() => [.. Enumerable.Range(0, parts.Count).Where(parts.IsTraining)];
+
+        /// <summary>The rows that learn among those given, in the order given.</summary>
+        /// <param name="among">The rows to choose from, by their place.</param>
+        internal int[] LearningRows(IEnumerable<int> among) => [.. among.Where(row => parts[row].Learns)];
+    }
+}
+
+/// <summary>
 /// The shares a split divides the rows into.
 /// </summary>
 /// <param name="Train">The share the model learns from.</param>
@@ -368,8 +418,8 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
             return Fold is { } slice ? Folded(table, parts, rows, slice) : parts;
         }
 
-        var left = rows.Where(row => parts[row] is Part.Train or Part.Validation).ToArray();
-        var training = left.Count(row => parts[row] == Part.Train);
+        var left = parts.LearningRows(rows);
+        var training = left.Count(parts.IsTraining);
         var again = table.Ranked(left, Seed, ById);
 
         for (var at = 0; at < again.Length; at++)
@@ -386,7 +436,7 @@ public sealed record SplitAtRandomStep : ISplitStep, IPipelineStep<SplitAtRandom
     // are training, and a repeated record, or a repeated id when this step ranks by one, stays in the slice its first copy is in.
     private Part[] Folded(Table table, Part[] parts, int[] rows, Fold slice)
     {
-        var left = rows.Where(row => parts[row] is Part.Train or Part.Validation).ToArray();
+        var left = parts.LearningRows(rows);
 
         parts.Sliced(table.Ranked(left, Seed, ById), slice, (one, other) => table.Together(one, other, ById));
 
@@ -523,7 +573,7 @@ public sealed record SplitStratifiedStep : ISplitStep, IPipelineStep<SplitStrati
 
             if (Fold is { } slice)
             {
-                parts.Sliced([.. ranked.Where(row => parts[row] is Part.Train or Part.Validation)], slice, (one, other) => table.Together(one, other, ById));
+                parts.Sliced(parts.LearningRows(ranked), slice, (one, other) => table.Together(one, other, ById));
             }
         }
 

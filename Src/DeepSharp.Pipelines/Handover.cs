@@ -218,7 +218,7 @@ public static class Handover
             ArgumentNullException.ThrowIfNull(prepared);
             _ = needs.Named();
 
-            if (part == Part.Gap)
+            if (!part.IsHandedOver)
             {
                 throw new ArgumentException(
                     "The rows a split keeps apart are fitted on by nothing and handed to nothing: that is what keeps them apart.",

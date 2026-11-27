@@ -217,6 +217,55 @@ public class ParameterListTests
         }
     }
 
+    [Fact]
+    public void NoPackageDecidesWhichRowsLearnByHand_ButThePartFacts()
+    {
+        // Which rows a fit learns from, which rows a split deals again, and which parts a fit counts are facts about a Part, and
+        // they have one owner, PartFacts, beside Part: a fit that wrote them in place would drift the day a part is added. A
+        // split WRITES parts and is left alone; only a read of them is held here.
+        string[] byHand = ["== Part.Train", "!= Part.Train", "Part.Train or Part.Validation", "new[] { Part."];
+        const string Owner = "static class PartFacts";
+
+        var read = ReadHere().Select(assembly => assembly.GetName().Name!).Where(name => name != "DeepSharp").ToArray();
+        var spelled = read
+            .SelectMany(name => Directory.EnumerateFiles(Path.Join(Repository.Root, "Src", name), "*.cs", SearchOption.AllDirectories))
+            .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+            .SelectMany(file => TheOwnerLeftOut(File.ReadAllLines(file), Owner)
+                .Where(line => byHand.Any(form => line.Text.Contains(form, StringComparison.Ordinal)))
+                .Select(line => $"{Path.GetRelativePath(Repository.Root, file).Replace('\\', '/')}:{line.Number}"))
+            .ToArray();
+
+        Assert.NotEmpty(read);
+
+        if (spelled.Length > 0)
+        {
+            Assert.Fail($"{spelled.Length} places decide by hand which rows learn or which parts a fit counts, where PartFacts is the one owner:{Environment.NewLine}" +
+                        string.Join(Environment.NewLine, spelled));
+        }
+    }
+
+    // The lines of a file, numbered, without the class that owns the facts: it runs from its declaration to the closing brace at the margin.
+    private static IEnumerable<NumberedLine> TheOwnerLeftOut(string[] lines, string owner)
+    {
+        var inside = false;
+
+        for (var at = 0; at < lines.Length; at++)
+        {
+            inside |= lines[at].Contains(owner, StringComparison.Ordinal);
+
+            if (!inside)
+            {
+                yield return new NumberedLine(lines[at], at + 1);
+            }
+            else if (lines[at] == "}")
+            {
+                inside = false;
+            }
+        }
+    }
+
+    private readonly record struct NumberedLine(string Text, int Number);
+
     /// <summary>
     /// The only tuple form a package may keep: one an earlier release published, marked obsolete in favour of the record
     /// struct beside it, so that code written against it still compiles.

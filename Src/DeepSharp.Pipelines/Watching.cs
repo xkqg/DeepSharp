@@ -127,7 +127,7 @@ public sealed record WatchStep : IPipelineStep<WatchStep>, IFittedStep, IDescrib
         ArgumentNullException.ThrowIfNull(table);
         ArgumentNullException.ThrowIfNull(parts);
 
-        int[] training = [.. Enumerable.Range(0, table.RowCount).Where(row => parts[row] == Part.Train)];
+        int[] training = parts.TrainingRows();
         var kept = new FittedStepValues();
 
         kept.Saw(KeptColumns, watched);

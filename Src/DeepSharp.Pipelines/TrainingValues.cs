@@ -163,7 +163,7 @@ public static class TableExtensions
                     $"There are {parts.Count} parts for {table.RowCount} rows, and a row belongs to exactly one part.", nameof(parts));
             }
 
-            return table.ValuesOf(column, row => parts[row] == Part.Train);
+            return table.ValuesOf(column, parts.IsTraining);
         }
 
         /// <summary>What some rows of a column hold: the training rows of a fit, the measured rows of a view.</summary>

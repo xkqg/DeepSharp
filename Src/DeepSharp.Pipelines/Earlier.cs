@@ -166,7 +166,7 @@ internal static class EarlierFit
             var values = table.NumbersOf(columns.Value);
             var keys = table[columns.Key];
             var order = table.PlacesBy(columns.OrderBy);
-            var kept = Enumerable.Range(0, table.RowCount).Where(row => parts[row] == Part.Train && values[row] is { } x && double.IsFinite(x) && !keys.IsMissing(row)).ToArray();
+            var kept = Enumerable.Range(0, table.RowCount).Where(row => parts.IsTraining(row) && values[row] is { } x && double.IsFinite(x) && !keys.IsMissing(row)).ToArray();
             var learned = new FittedStepValues();
 
             learned.Learned("prior", prior);

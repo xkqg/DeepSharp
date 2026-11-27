@@ -99,7 +99,7 @@ public sealed record TokenizeStep : IFittedStep, IPipelineStep<TokenizeStep>, ID
 
         for (var row = 0; row < table.RowCount; row++)
         {
-            if (parts[row] != Part.Train || column.TextAt(row) is not { } text)
+            if (!parts.IsTraining(row) || column.TextAt(row) is not { } text)
             {
                 continue;
             }
