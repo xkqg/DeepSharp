@@ -48,6 +48,7 @@ beside it. A key a step does not take is refused, and so is a word it does not k
 | [`settle.gaps`](#settlegaps) | Settles the gaps in a column with a value no row decided, so a feature worked out from it is not a gap. |
 | [`shuffle`](#shuffle) | Puts the rows in an order drawn from a seed, before they are divided, so every part holds the same mixture. |
 | [`split.atRandom`](#splitatrandom) | Divides the rows at random, the same way every time for the same seed. |
+| [`split.blocked`](#splitblocked) | Divides the rows by dealing whole blocks of time at random, and leaves the training rows near a row a model is measured on out of the training. |
 | [`split.byTime`](#splitbytime) | Divides the rows by when they happened: the earliest to learn from, the latest to be measured on. |
 | [`split.stratified`](#splitstratified) | Divides the rows at random while keeping the mixture of one column the same in every part. |
 | [`target`](#target) | Names the column a model is asked to predict, which is handed over apart from the numbers it is shown. |
@@ -863,6 +864,40 @@ Divides the rows at random, the same way every time for the same seed.
 - **`byId`**: Whether to rank by the declared id rather than the whole record. Left out, by the whole record.
 
 Means what it says from version 2 of the file.
+
+## `split.blocked`
+
+Divides the rows by dealing whole blocks of time at random, and leaves the training rows near a row a model is measured on out of the training.
+
+```json
+{"step":"split.blocked","column":"when","train":0.7,"validation":0.15,"test":0.15,"predict":0,"days":7,"embargoDays":14,"seed":20260923,"testSeed":99,"folds":5,"fold":0}
+```
+
+| key | holds | an example |
+|---|---|---|
+| `column` | the name of a column holding a moment in time | `"when"` |
+| `train` | the share the model learns from: above nought, at most one | `0.7` |
+| `validation` | the share used while choosing between models: nought to one | `0.15` |
+| `test` | the share kept back until the end: above nought, at most one | `0.15` |
+| `predict` | the share held back to predict on: nought to one, and none when it is left out | `0` |
+| `calibration` | the share an interval is calibrated on: nought to one, and none when it is left out | left out |
+| `days` | a whole number, at least 1 | `7` |
+| `embargoDays` | a whole number, at least 0; left out, 0 | `14` |
+| `seed` | a whole number | `20260923` |
+| `testSeed` | a whole number, at least 0; left out, -1 | `99` |
+| `folds` | a whole number, at least 2; left out, 0 | `5` |
+| `fold` | a whole number, at least 0; left out, -1 | `0` |
+
+- **`column`**: The column that says when a row happened.
+- **`train`**: How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.
+- **`days`**: How many days one block holds, counted from the start of the Unix epoch: seven for a week.
+- **`embargoDays`**: How many days on either side of a row a model is chosen, calibrated or measured on keep the training rows away. Left out, none.
+- **`seed`**: The number that deals the blocks: the same seed deals the same blocks the same way.
+- **`testSeed`**: The number that deals the blocks to be measured on, none or more. Given, those blocks are the same whatever the seed is, and the seed deals the rest. Left out, the seed deals every part.
+- **`folds`**: How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.
+- **`fold`**: Which of the slices is validation, counted from nought; said with folds, and below them.
+
+Means what it says from version 17 of the file.
 
 ## `split.byTime`
 

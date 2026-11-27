@@ -27,11 +27,12 @@ public enum Part
     /// </remarks>
     Undivided,
 
-    /// <summary>The last moments of a part, kept apart by a split in time: fitted on by nothing, handed to nothing.</summary>
+    /// <summary>The rows a split keeps apart from the training: fitted on by nothing, handed to nothing, counted in the fit.</summary>
     /// <remarks>
-    /// An answer read some rows ahead is read from later rows, so without these the last training rows would learn
-    /// their answers from the rows a model is measured on, and the last rows of all have no later row to answer
-    /// them.
+    /// A split in time keeps the last moments of every part here: an answer read some rows ahead is read from later rows,
+    /// so without them the last training rows would learn their answers from the rows a model is measured on, and the last
+    /// rows of all have no later row to answer them. A split in blocks of time keeps here the training rows within its
+    /// embargo of a row a model is chosen, calibrated or measured on, which a model could otherwise interpolate from.
     /// </remarks>
     Gap,
 
@@ -65,6 +66,10 @@ internal static class PartFacts
 
         /// <summary>Whether a learner is handed the rows of this part: all of them but the rows a split keeps apart.</summary>
         internal bool IsHandedOver => part != Part.Gap;
+
+        /// <summary>Whether a model is chosen, calibrated or measured on rows of this part: validation, calibration or test.</summary>
+        /// <remarks>The rows an embargo keeps the training rows away from in time.</remarks>
+        internal bool IsMeasuredOn => part is Part.Validation or Part.Calibration or Part.Test;
     }
 
     extension(Part)

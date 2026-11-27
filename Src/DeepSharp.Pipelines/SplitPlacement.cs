@@ -65,6 +65,68 @@ internal readonly record struct CompositeRank(RowKey Primary, RowKey Tie) : ICom
     }
 }
 
+/// <summary>What group a row belongs to when rows are dealt a group at a time, and the name its value is digested under.</summary>
+/// <param name="Name">The name the group's value is digested under: the id column's name, or what a block of time is called.</param>
+/// <param name="Of">The group's value for a row, as text.</param>
+internal readonly record struct RowGroup(string Name, Func<int, string> Of);
+
+/// <summary>
+/// Dealing the rows into parts at random: each ranked by a seeded digest, the shares laid over that order, and a row that
+/// belongs with the one before it kept in its part — then, with a test seed, the rows that learn dealt again by the seed,
+/// and with a fold, cut into slices.
+/// </summary>
+/// <param name="ranked">How rows are ranked by a seed: by the whole record, by the declared id, or by a block of time.</param>
+/// <param name="together">Whether a row belongs with the one before it in that order, and so lands in its part.</param>
+/// <remarks>
+/// The one deal a split at random and a split in blocks of time both make, so the two differ only in what holds rows
+/// together; the order of every act is the order a split at random has always dealt in.
+/// </remarks>
+internal sealed class RowDeal(Func<IEnumerable<int>, int, int[]> ranked, Func<int, int, bool> together)
+{
+    /// <summary>Deals the rows into parts.</summary>
+    /// <param name="rows">How many rows there are.</param>
+    /// <param name="shares">How much goes to each part.</param>
+    /// <param name="seed">The number that deals the rows; the rows that learn, when a test seed is said.</param>
+    /// <param name="locked">The test seed and the fold, either of them nothing.</param>
+    /// <returns>One part per row, in row order.</returns>
+    internal Part[] Dealt(int rows, SplitShares shares, int seed, LockedDeal locked)
+    {
+        var all = Enumerable.Range(0, rows).ToArray();
+        var first = ranked(all, locked.TestSeed ?? seed);
+        var parts = shares.Over(rows).Placed(first);
+
+        parts.KeptTogether(first, together);
+
+        if (locked.TestSeed is not null)
+        {
+            var left = parts.LearningRows(all);
+            var training = left.Count(parts.IsTraining);
+            var again = ranked(left, seed);
+
+            for (var at = 0; at < again.Length; at++)
+            {
+                parts[again[at]] = at < training ? Part.Train : Part.Validation;
+            }
+
+            parts.KeptTogether(again, together);
+        }
+
+        // The rows that learn, dealt again in the order the seed ranks them into slices: the fold's slice is validation and the
+        // others are training, and a row that belongs with the one before it stays in its slice.
+        if (locked.Fold is { } slice)
+        {
+            parts.Sliced(ranked(parts.LearningRows(all), seed), slice, together);
+        }
+
+        return parts;
+    }
+}
+
+/// <summary>What a deal at random keeps apart from its seed: the test seed, and the fold.</summary>
+/// <param name="TestSeed">The number that deals the rows to be measured on, or nothing for the seed to deal every part.</param>
+/// <param name="Fold">Which slice of the rows that learn is validation, or nothing for the rows cut once.</param>
+internal readonly record struct LockedDeal(int? TestSeed, Fold? Fold);
+
 /// <summary>
 /// Putting a run of parts back onto the rows they belong to.
 /// </summary>
@@ -111,22 +173,33 @@ internal static class SplitPlacement
         /// </remarks>
         internal int[] Ranked(IEnumerable<int> rows, int seed, bool byId = false)
         {
-            var ranked = rows.ToArray();
-
             if (table.IdColumnFor(byId) is { } column)
             {
-                var ranks = ranked
-                    .Select(row => new CompositeRank(RowKey.Of([column.Name], [table.IdAt(column, row)]).Ranked(seed), table.Identities[row].Key.Ranked(seed)))
-                    .ToArray();
-
-                Array.Sort(ranks, ranked);
+                return table.RankedByGroup(rows, seed, new RowGroup(column.Name, row => table.IdAt(column, row)));
             }
-            else
-            {
-                var ranks = ranked.Select(row => table.Identities[row].Key.Ranked(seed)).ToArray();
 
-                Array.Sort(ranks, ranked);
-            }
+            var ranked = rows.ToArray();
+            var ranks = ranked.Select(row => table.Identities[row].Key.Ranked(seed)).ToArray();
+
+            Array.Sort(ranks, ranked);
+
+            return ranked;
+        }
+
+        /// <summary>Rows in the order of a digest of the seed and the group each belongs to, with the whole record only to break a tie.</summary>
+        /// <param name="rows">The rows to rank.</param>
+        /// <param name="seed">The number that makes the ranking one of many possible ones, and the same one each time.</param>
+        /// <param name="group">What group a row belongs to, and the name its value is digested under.</param>
+        /// <returns>The rows, ranked; the rows of one group side by side.</returns>
+        /// <remarks>The declared id is one such group, and a block of time is another: both are dealt whole.</remarks>
+        internal int[] RankedByGroup(IEnumerable<int> rows, int seed, RowGroup group)
+        {
+            var ranked = rows.ToArray();
+            var ranks = ranked
+                .Select(row => new CompositeRank(RowKey.Of([group.Name], [group.Of(row)]).Ranked(seed), table.Identities[row].Key.Ranked(seed)))
+                .ToArray();
+
+            Array.Sort(ranks, ranked);
 
             return ranked;
         }

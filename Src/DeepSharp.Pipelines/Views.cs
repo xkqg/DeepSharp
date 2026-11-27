@@ -114,7 +114,7 @@ internal readonly record struct ViewedDeclaration(IReadOnlyList<string> Answers,
     /// </returns>
     public static ViewedDeclaration Of(PipelineDeclaration declaration) => new(
         declaration.Output?.Brought() ?? [],
-        [.. declaration.Steps.OfType<IOrdersRows>().SelectMany(order => order.OrderedBy), .. declaration.Steps.OfType<IDividesInTime>().Select(split => split.Column)],
+        [.. declaration.Steps.OfType<IOrdersRows>().SelectMany(order => order.OrderedBy), .. declaration.Steps.OfType<IDividesByAColumn>().Select(split => split.Column)],
         declaration.SplitAt >= 0 ? Standing.Train : Standing.Undivided);
 }
 

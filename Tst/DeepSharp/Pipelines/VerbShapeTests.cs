@@ -31,6 +31,7 @@ public class VerbShapeTests
             "What it is told — how long a row's ids are and how many ids there are — belongs to each column of text, as a piecewise encoding's bins do, and a vocabulary is learned for the one column alone.",
         ["Target"] = "It names the one column a model is asked to predict; a pipeline has one output.",
         ["Ahead"] = "It makes the one answer, from the one column it is read from.",
+        ["SplitBlocked"] = "It divides the rows once, in blocks of the one column that says when a row happened.",
         ["SplitByTime"] = "It divides the rows once, by the one column that says when a row happened.",
         ["SplitStratified"] = "It divides the rows once, keeping the mixture of the one column it is told to keep.",
     };
@@ -97,7 +98,7 @@ public class VerbShapeTests
         Assert.Equal(
             [
                 "Ahead", "ClipOutliers", "Cycle", "Cyclical", "Encode", "FillMissing", "FillNaN", "Normalise", "PiecewiseLinear", "Reshape",
-                "ScaleGiven", "SettleGaps", "SplitByTime", "SplitStratified", "Target", "TimeParts",
+                "ScaleGiven", "SettleGaps", "SplitBlocked", "SplitByTime", "SplitStratified", "Target", "TimeParts",
                 "TimePartsAsNumbers", "Tokenize",
             ],
             OfTheShape().Select(each => each.Verb).Order(StringComparer.Ordinal));

@@ -243,6 +243,21 @@ model is measured on: in the published price series, five days ahead, the last f
 answers from validation. The gap counts moments rather than rows, so it never divides a moment either, and a gap
 that would take every row a model learns from or is measured on is refused.
 
+Between the two stands a split in blocks of time. A split at random flatters a model whenever the rows follow one another
+in time and the features say something about the time — a row measured on has training rows on both sides of it, and a
+model interpolates between them, which it cannot do for a row that comes tomorrow — while a split in time answers that and
+leaves one deal. `split.blocked` groups the rows into blocks of so many days, counted from the Unix epoch so the same day
+always falls in the same block, and deals whole blocks exactly as a split at random deals rows: the same digest ranking, a
+block kept in one part as a repeated record is, a test seed locking the blocks to be measured on and a fold cutting the
+blocks that learn. It is one deal with a different thing holding rows together, not a second one. Then every training row
+within the embargo of a row a model is chosen, calibrated or measured on is left out of the training alone — into the gap,
+so the rows left out are counted in the fit and every step below fits on what is left. Its parts are not runs of time, so
+it says only the column it divides by, never that it divides in time, and a step that reads the rows before or after a row
+is refused below it by the rules that already refuse it below a split at random.
+
+Every split, the library's and a caller's, comes in through one door, `Split`, and is held where the rows are divided to
+what every split keeps: one part a row, none of them undivided, and a record and its copies in one part.
+
 A small table is measured by the luck of one deal, and a fold is how that is answered without a second kind of split: it is
 an ordinary split that says which slice of the rows that learn is validation. The rows that are neither test nor predict
 are ranked as every split ranks them (a validation share, which a fold has no use for, only adds to them) and cut into k slices of about as many rows, a repeated record staying in one, and the

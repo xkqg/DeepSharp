@@ -1,4 +1,4 @@
-﻿// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
+// Copyright (c) 2026 H.P. Gansevoort. All rights reserved.
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 
 using System.Globalization;
@@ -201,11 +201,11 @@ public sealed class PipelineDeclaration : IEquatable<PipelineDeclaration>
     /// The fifteenth is the same rule for a split at random, a stratified split and a shuffle asked to rank by a declared
     /// id rather than the whole record: a file from before this version never asks, so it is read exactly as it always was.
     /// The sixteenth is a history over a key's rows already known at the time a later row of it is served, not only the
-    /// training rows a history read before.
+    /// training rows a history read before. The seventeenth is a split in blocks of time, dealt at random with an embargo.
     /// A property rather than a constant, so a package compiled against this version reads the number the running
     /// library has.
     /// </remarks>
-    public static int Version => 16;
+    public static int Version => 17;
 
     /// <summary>The steps, in the order they were written.</summary>
     public IReadOnlyList<IPipelineStep> Steps => _steps;

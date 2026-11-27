@@ -63,6 +63,7 @@ public class PipelineTextTests
         ("settle.gaps", 6),
         ("shuffle", 7),
         ("split.atRandom", 2),
+        ("split.blocked", 17),
         ("split.byTime", 2),
         ("split.stratified", 2),
         ("target", 1),

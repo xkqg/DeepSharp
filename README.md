@@ -18,7 +18,11 @@ engine: getting your data in, the layers, the training loop, the checkpoints and
 learns better than a network does not have to become a network: the same prepared data is meant for ML.NET's trainers
 too.
 
-**0.19.0 answers the flock team's seventh letter.** It is built on MatPlotLibNet 1.30.0 and Microsoft.ML 6.0.0.
+**0.19.0 answers the flock team's seventh letter.** `SplitBlocked` deals whole blocks of time at random — a week, say —
+and leaves every training row within an embargo of a row a model is measured on out of the training, so the many deals a
+split at random gives no longer flatter a model that interpolates in time; the rows it leaves out are counted in the fit.
+A split of your own comes in through `Split`, the door the library's own splits use, and is held to what every split
+keeps. It is built on MatPlotLibNet 1.30.0 and Microsoft.ML 6.0.0, and the pipeline file is at version 17.
 
 **0.18.0 answers the flock team's sixth letter.** `Study<TModel>` tries candidates trained by a function of the
 caller's own — handed the deal, returning the score and the model it made — with the sampler, the deals, a pruner, a

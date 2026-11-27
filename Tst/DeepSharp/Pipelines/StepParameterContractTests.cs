@@ -191,6 +191,7 @@ public class StepParameterContractTests
             ["evidence.likeness"] = 10,
             ["watch.reference"] = 11,
             ["history.known"] = 16,
+            ["split.blocked"] = 17,
         };
 
         Assert.All(since, each => Assert.Equal(newer.GetValueOrDefault(each.Key, 1), each.Value));

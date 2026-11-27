@@ -9,6 +9,10 @@ The seventh letter of the flock team.
 
 ### Upgrading from 0.18.0
 
+- **The pipeline file is at version 17.** Everything written before still reads and means what it meant; `split.blocked`
+  is new. 0.18.0 refuses a file of the seventeenth whole, naming the version.
+- **`IDividesInTime` takes its `Column` from `IDividesByAColumn`.** A split that says the column it divides by without its
+  parts being runs of time implements the new, smaller interface; code that reads `IDividesInTime.Column` compiles unchanged.
 - **`TransposedConvolution.Settling` is obsolete.** It handed back a pair of values; `TransposedConvolution.Settle` hands
   back the same two, `Dropped` and `Added`, as a `Settlement`. The old form still compiles, with a warning naming the new
   one.
@@ -19,6 +23,14 @@ The seventh letter of the flock team.
   `vote`, as every other word a file holds is; `"1"` was taken for `vote` before. DeepSharp never wrote one.
 
 ### Added
+
+- **A split in blocks of time, with an embargo.** `SplitBlocked("date", train, validation, new BlockedDeal(Days: 7,
+  EmbargoDays: 14))` groups the rows into blocks of so many days and deals whole blocks at random to training, validation
+  and test — the seed, a test seed and a fold work as they do for a split at random — and leaves every training row within
+  the embargo of a row a model is chosen, calibrated or measured on out of the training. A row left out stands in the gap:
+  fitted on by nothing, handed to nothing, and counted in the fit as `rows.gap`, beside how many blocks each part holds.
+  Below it, a step that reads the rows before or after a row is refused, as below a split at random. See
+  [Splitting the rows](https://github.com/xkqg/DeepSharp/wiki/Splitting-the-rows).
 
 - **A split of your own.** `PipelineBuilder.Split(split)` takes any step that divides the rows — one from another package,
   or one you write — and hands back the half of the chain that learns, as the library's own split verbs do. What a split

@@ -70,17 +70,29 @@ public interface IReadsAnEarlierValue : IPipelineStep
 }
 
 /// <summary>
-/// A split that divides the rows by when they happened, and keeps a gap between its parts.
+/// A split that divides the rows by one of their columns.
 /// </summary>
 /// <remarks>
-/// What a step reading rows ahead needs to know of the split above it: the column it divides by, which the rows are
-/// to be ordered by alone, and how many moments it keeps apart at the end of every part.
+/// What a view needs to know of the split: the column the rows are divided by, which is no feature a person picks by
+/// default. A split by when the rows happened says more, and is <see cref="IDividesInTime"/>.
 /// </remarks>
-public interface IDividesInTime : IPipelineStep
+public interface IDividesByAColumn : IPipelineStep
 {
-    /// <summary>The column that says when a row happened.</summary>
+    /// <summary>The column the rows are divided by.</summary>
     string Column { get; }
+}
 
+/// <summary>
+/// A split that divides the rows by when they happened into parts that are each one run of time, and keeps a gap between them.
+/// </summary>
+/// <remarks>
+/// What a step reading rows ahead, or reading the rows before a row, needs to know of the split above it: the column it
+/// divides by, which the rows are to be ordered by alone, and how many moments it keeps apart at the end of every part. A
+/// split that deals blocks of time at random divides by a moment too, but its parts are not runs, so it is only
+/// <see cref="IDividesByAColumn"/>.
+/// </remarks>
+public interface IDividesInTime : IDividesByAColumn
+{
     /// <summary>How many of the last moments of every part are kept apart.</summary>
     int Gap { get; }
 }

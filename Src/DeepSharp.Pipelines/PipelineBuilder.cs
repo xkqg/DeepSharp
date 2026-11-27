@@ -618,6 +618,24 @@ public sealed class PipelineBuilder
         string column, double train, double validation = 0, int seed = 20260923) =>
         Divided(new SplitStratifiedStep(column, _held.Of(train, validation), seed));
 
+    /// <summary>Splits the rows in blocks of time dealt at random, leaving the training rows near a measured row out of the training.</summary>
+    /// <param name="column">The column that says when a row happened: a moment.</param>
+    /// <param name="train">The share the model learns from, counted in rows.</param>
+    /// <param name="validation">The share used while choosing between models; with a fold, the slice is validation and this only adds to the rows that are cut.</param>
+    /// <param name="deal">How many days a block holds and how far the embargo reaches — <c>new BlockedDeal(Days: 7, EmbargoDays: 14)</c> — and, when said, the seed, a test seed and a fold.</param>
+    /// <returns>The builder that offers the steps which are fitted on the training rows.</returns>
+    /// <exception cref="ArgumentException">The column has no name, or the shares ask for more than there is.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A share is not a share, a block holds no day, or the embargo is below nothing.</exception>
+    /// <exception cref="InvalidOperationException">This builder has already been split.</exception>
+    /// <remarks>
+    /// The split for rows that follow one another in time when one deal is not enough: whole blocks are dealt at random, so
+    /// a test row has no training rows of its own block on either side of it, and the training rows within the embargo of a
+    /// row measured on stand in the gap, fitted on by nothing and counted in the fit. <see cref="SplitBlockedStep"/> says
+    /// the rest.
+    /// </remarks>
+    public FittingBuilder SplitBlocked(string column, double train, double validation, BlockedDeal deal) =>
+        Divided(new SplitBlockedStep(column, _held.Of(train, validation), deal));
+
     /// <summary>Finishes the pipeline, so it can be run.</summary>
     /// <returns>The declaration with the means to carry it out.</returns>
     /// <exception cref="InvalidOperationException">A share was held back to predict on and nothing splits the rows.</exception>

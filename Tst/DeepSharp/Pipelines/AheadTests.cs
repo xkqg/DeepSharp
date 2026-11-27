@@ -196,6 +196,22 @@ public class AheadTests
     }
 
     [Fact]
+    public void ReadingAhead_UnderASplitInBlocksOfTime_IsRefused_NamingTheSplitInTimeItNeeds()
+    {
+        // Blocks dealt at random are not a cut in time: a row's later rows may stand in any part, and an embargo counts days,
+        // not the rows an answer reads ahead.
+        var refused = Assert.Throws<DeclarationException>(
+            () => Pdd.Create()
+                .Read(new InMemoryRowSource(["Date", "close"], Days(60)), "sixty days")
+                .Declare(schema => schema.Timestamp("Date").Number("close"))
+                .OrderBy("Date")
+                .SplitBlocked("Date", 0.70, 0.15, new BlockedDeal(7, 14))
+                .Ahead("close", 5));
+
+        Assert.Contains("split.byTime", Assert.Single(refused.Faults).Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AnOrderThatDoesNotSayWhatItOrdersBy_CannotBeReadAheadIn()
     {
         // An order from elsewhere that keeps its columns to itself cannot show that the rows after a row came after it.

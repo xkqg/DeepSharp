@@ -128,40 +128,9 @@ public sealed record SplitAtRandomStep : ISplitStep, IRanksRows, IPipelineStep<S
     {
         ArgumentNullException.ThrowIfNull(table);
 
-        var rows = Enumerable.Range(0, table.RowCount).ToArray();
-        var ranked = table.Ranked(rows, TestSeed ?? Seed, ById);
-        var parts = Shares.Over(table.RowCount).Placed(ranked);
-
-        parts.KeptTogether(ranked, (one, other) => table.Together(one, other, ById));
-
-        if (TestSeed is null)
-        {
-            return Fold is { } slice ? Folded(table, parts, rows, slice) : parts;
-        }
-
-        var left = parts.LearningRows(rows);
-        var training = left.Count(parts.IsTraining);
-        var again = table.Ranked(left, Seed, ById);
-
-        for (var at = 0; at < again.Length; at++)
-        {
-            parts[again[at]] = at < training ? Part.Train : Part.Validation;
-        }
-
-        parts.KeptTogether(again, (one, other) => table.Together(one, other, ById));
-
-        return Fold is { } folded ? Folded(table, parts, rows, folded) : parts;
-    }
-
-    // The rows that learn, dealt again in the order the seed ranks them into slices: the fold's slice is validation and the others
-    // are training, and a repeated record, or a repeated id when this step ranks by one, stays in the slice its first copy is in.
-    private Part[] Folded(Table table, Part[] parts, int[] rows, Fold slice)
-    {
-        var left = parts.LearningRows(rows);
-
-        parts.Sliced(table.Ranked(left, Seed, ById), slice, (one, other) => table.Together(one, other, ById));
-
-        return parts;
+        // A repeated record, or a repeated id when this step ranks by one, lands where its first copy does, in a part and in a slice.
+        return new RowDeal((rows, seed) => table.Ranked(rows, seed, ById), (one, other) => table.Together(one, other, ById))
+            .Dealt(table.RowCount, Shares, Seed, new LockedDeal(TestSeed, Fold));
     }
 
     /// <summary>Reads this step back out of a file.</summary>
@@ -517,4 +486,279 @@ public sealed record SplitByTimeStep : ISplitStep, IDividesInTime, IPipelineStep
         Places.ReadFrom(element) is { } placed
             ? new(ColumnKey.Read(element), SharesKey.Read(element), GapKey.Read(element), placed)
             : new(ColumnKey.Read(element), SharesKey.Read(element), GapKey.Read(element));
+}
+
+/// <summary>How a split in blocks of time deals the rows: how many days a block holds, how far the embargo reaches, and the deal's seeds and fold.</summary>
+/// <param name="Days">How many days one block holds, counted from the start of the Unix epoch: seven for a week.</param>
+/// <param name="EmbargoDays">How many days on either side of a row a model is chosen, calibrated or measured on keep the training rows away: none, unless said.</param>
+/// <remarks>
+/// The values one deal is made of, said together. A block is counted from the Unix epoch rather than from the first row,
+/// so the same day falls in the same block whatever rows are read with it; a block of seven days therefore runs from a
+/// Thursday to a Wednesday.
+/// </remarks>
+public readonly record struct BlockedDeal(int Days, int EmbargoDays)
+{
+    /// <summary>The number that deals the blocks; the blocks that learn, when a test seed is said.</summary>
+    public int Seed { get; init; } = 20260923;
+
+    /// <summary>The number that deals the blocks to be measured on, so they are the same whatever the seed is; nothing, for the seed to deal every part.</summary>
+    public int? TestSeed { get; init; }
+
+    /// <summary>Which slice of the blocks that learn is validation; nothing, for the blocks cut once, as the shares say.</summary>
+    public Fold? Fold { get; init; }
+}
+
+/// <summary>
+/// Split the rows in blocks of time, dealing whole blocks at random, and keep the training rows near a measured row out of
+/// the training.
+/// </summary>
+/// <remarks>
+/// <para>
+/// A split at random flatters a model whenever the rows follow one another in time and the features say something about
+/// the time: a row measured on has training rows on both sides of it, and a model interpolates between them, which it
+/// cannot do for a row that comes tomorrow. A split in time answers that and leaves one deal. This one keeps the many
+/// deals a split at random gives: the rows are grouped into blocks by when they happened, whole blocks are dealt at random
+/// to training, validation and test exactly as a split at random deals rows — a test seed locking the blocks to be measured
+/// on, a fold cutting the blocks that learn — and every training row within the embargo of a row a model is chosen,
+/// calibrated or measured on is left out of the training alone (Racine; Burman, Chow and Nolan; the purge with an
+/// embargo of Lopez de Prado).
+/// </para>
+/// <para>
+/// A row left out stands in the gap a split in time already keeps: fitted on by nothing and handed to nothing, and counted
+/// in the fit beside every part, so the pipeline knows which rows it left out and every step below respects it. The parts
+/// are not runs of time, so a step that reads the rows before a row, or after it, is refused below this split, as it is
+/// below a split at random.
+/// </para>
+/// </remarks>
+public sealed record SplitBlockedStep : ISplitStep, IDividesByAColumn, IPipelineStep<SplitBlockedStep>, IDescribesColumns
+{
+    private static readonly ColumnParameter ColumnKey = new(
+        "column", "The column that says when a row happened.", "when", ColumnKinds.Moments);
+
+    private static readonly SplitSharesParameter SharesKey = new();
+
+    private static readonly WholeNumberParameter DaysKey = new(
+        "days", "How many days one block holds, counted from the start of the Unix epoch: seven for a week.", 7)
+    {
+        AtLeast = 1,
+    };
+
+    private static readonly WholeNumberParameter EmbargoDaysKey = new(
+        "embargoDays", "How many days on either side of a row a model is chosen, calibrated or measured on keep the training rows away. Left out, none.", 14)
+    {
+        AtLeast = 0,
+        LeftOut = 0,
+    };
+
+    private static readonly WholeNumberParameter SeedKey = new(
+        "seed", "The number that deals the blocks: the same seed deals the same blocks the same way.", 20260923);
+
+    private static readonly WholeNumberParameter TestSeedKey = new(
+        "testSeed",
+        "The number that deals the blocks to be measured on, none or more. Given, those blocks are the same whatever the seed is, and the seed deals the rest. Left out, the seed deals every part.",
+        99)
+    {
+        AtLeast = 0,
+        LeftOut = -1,
+    };
+
+    /// <summary>Declares a split in blocks of time.</summary>
+    /// <param name="column">The column that says when a row happened.</param>
+    /// <param name="shares">How much goes to training, validation and test, counted in rows.</param>
+    /// <param name="deal">How many days a block holds, how far the embargo reaches, and the deal's seeds and fold.</param>
+    /// <exception cref="ArgumentException">The column has no name, or the shares do not make a whole.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A block holds no day, the embargo is below nothing, or the test seed is below nought.</exception>
+    public SplitBlockedStep(string column, SplitShares shares, BlockedDeal deal)
+    {
+        Column = ColumnKey.Require(column);
+        Shares = SharesKey.Require(shares);
+        Days = DaysKey.Require(deal.Days);
+        EmbargoDays = EmbargoDaysKey.Require(deal.EmbargoDays);
+        Seed = SeedKey.Require(deal.Seed);
+        TestSeed = deal.TestSeed is { } locked ? TestSeedKey.Require(locked) : null;
+        Fold = deal.Fold;
+    }
+
+    /// <inheritdoc />
+    public static StepParameters<SplitBlockedStep> Parameters { get; } = new StepParameters<SplitBlockedStep>()
+        .With(ColumnKey, step => step.Column)
+        .With(SharesKey, step => step.Shares)
+        .With(DaysKey, step => step.Days)
+        .With(EmbargoDaysKey, step => step.EmbargoDays)
+        .With(SeedKey, step => step.Seed)
+        .With(TestSeedKey, step => step.TestSeed ?? TestSeedKey.LeftOut!.Value)
+        .With(Slices.FoldsKey, step => step.Fold?.Folds ?? 0)
+        .With(Slices.FoldKey, step => step.Fold?.Index ?? -1);
+
+    /// <summary>The column that says when a row happened.</summary>
+    public string Column { get; }
+
+    /// <summary>How much goes to training, validation and test, counted in rows.</summary>
+    public SplitShares Shares { get; }
+
+    /// <summary>How many days one block holds.</summary>
+    public int Days { get; }
+
+    /// <summary>How many days on either side of a row a model is chosen, calibrated or measured on keep the training rows away.</summary>
+    public int EmbargoDays { get; }
+
+    /// <summary>The number that deals the blocks.</summary>
+    public int Seed { get; }
+
+    /// <summary>The number that deals the blocks to be measured on, or nothing when the seed deals every part.</summary>
+    public int? TestSeed { get; }
+
+    /// <summary>Which slice of the blocks that learn is validation; nothing when they are cut once.</summary>
+    public Fold? Fold { get; }
+
+    /// <summary>The deal this split makes, as it was declared.</summary>
+    public BlockedDeal Deal => new(Days, EmbargoDays) { Seed = Seed, TestSeed = TestSeed, Fold = Fold };
+
+    /// <inheritdoc />
+    public static string Name => "split.blocked";
+
+    /// <inheritdoc />
+    public static int Since => 17;
+
+    /// <inheritdoc />
+    public static string Purpose =>
+        "Divides the rows by dealing whole blocks of time at random, and leaves the training rows near a row a model is measured on out of the training.";
+
+    /// <inheritdoc />
+    public string Verb => Name;
+
+    /// <inheritdoc />
+    public ColumnState After(ColumnState before) => before;
+
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">A row has no moment, or the embargo leaves no row to learn from.</exception>
+    public Part[] Assign(Table table)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+
+        var blocks = BlocksOf(table);
+        var block = new RowGroup("block", row => blocks[row].ToString(CultureInfo.InvariantCulture));
+        var parts = new RowDeal((rows, seed) => table.RankedByGroup(rows, seed, block), (one, other) => blocks[one] == blocks[other])
+            .Dealt(table.RowCount, Shares, Seed, new LockedDeal(TestSeed, Fold));
+
+        Embargoed(table, parts);
+
+        return parts;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>How many blocks each part holds: a model trained on so many weeks and measured on so many others can say so.</remarks>
+    public void Describe(Table table, IReadOnlyList<Part> parts, FittedStepValues seen)
+    {
+        ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(parts);
+        ArgumentNullException.ThrowIfNull(seen);
+
+        var blocks = BlocksOf(table);
+
+        foreach (var part in Part.Dealt)
+        {
+            if (Enumerable.Range(0, table.RowCount).Where(row => parts[row] == part).Select(row => blocks[row]).Distinct().Count() is > 0 and var held)
+            {
+                seen.Learned($"blocks.{part.Word()}", held);
+            }
+        }
+    }
+
+    /// <summary>Reads this step back out of a file.</summary>
+    /// <param name="element">The JSON object the step was written as.</param>
+    /// <returns>The step the file describes.</returns>
+    /// <exception cref="FormatException">A parameter is missing or is of the wrong kind, or the file names one of a fold's two keys without the other.</exception>
+    public static SplitBlockedStep ReadFrom(JsonElement element) =>
+        new(ColumnKey.Read(element), SharesKey.Read(element), new BlockedDeal(DaysKey.Read(element), EmbargoDaysKey.Read(element))
+        {
+            Seed = SeedKey.Read(element),
+            TestSeed = element.TryGetProperty(TestSeedKey.Key, out _) ? TestSeedKey.Read(element) : null,
+            Fold = Slices.ReadFrom(element),
+        });
+
+    // The block every row falls in: whole days from the start of the Unix epoch, divided into blocks of so many, rounded down,
+    // so a moment before the epoch falls in a block below nought and the same day always falls in the same block.
+    private long[] BlocksOf(Table table)
+    {
+        var moments = (Column<DateTime>)table[Column];
+        var width = Days * TimeSpan.TicksPerDay;
+
+        return
+        [
+            .. Enumerable.Range(0, table.RowCount).Select(row =>
+            {
+                var since = (MomentOf(table, moments, row) - DateTime.UnixEpoch).Ticks;
+
+                return since >= 0 ? since / width : -((width - 1 - since) / width);
+            }),
+        ];
+    }
+
+    private DateTime MomentOf(Table table, Column<DateTime> moments, int row) =>
+        moments[row] ?? throw new InvalidOperationException(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"Row {table.Identities[row].ReadAt + 1} has no '{Column}', and a row with no moment cannot be placed in a block of time. Fill it above the split, or drop the rows without one."));
+
+    // Every training row within the embargo of a row a model is chosen, calibrated or measured on is left out of the training,
+    // on both sides of it, after every part is dealt: the rows measured on stay where they were dealt.
+    private void Embargoed(Table table, Part[] parts)
+    {
+        if (EmbargoDays == 0)
+        {
+            return;
+        }
+
+        var moments = (Column<DateTime>)table[Column];
+        var reach = EmbargoDays * TimeSpan.TicksPerDay;
+        var measured = Enumerable.Range(0, parts.Length)
+            .Where(row => parts[row].IsMeasuredOn)
+            .Select(row => MomentOf(table, moments, row).Ticks)
+            .Order()
+            .ToArray();
+
+        for (var row = 0; row < parts.Length && measured.Length > 0; row++)
+        {
+            if (parts.IsTraining(row) && measured.Nearest(MomentOf(table, moments, row).Ticks) <= reach)
+            {
+                parts[row] = Part.Gap;
+            }
+        }
+
+        if (!parts.Any(part => part.IsLearnedFrom))
+        {
+            throw new InvalidOperationException(
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"An embargo of {EmbargoDays} days takes every training row, and leaves nothing to learn from. Keep the embargo shorter, or the blocks longer."));
+        }
+    }
+}
+
+/// <summary>How far a moment is from the nearest of a sorted list of moments.</summary>
+internal static class NearestMoments
+{
+    extension(long[] sorted)
+    {
+        /// <summary>How far a moment is from the nearest moment in this sorted list, which holds at least one.</summary>
+        /// <param name="moment">The moment, in ticks.</param>
+        /// <returns>The distance, in ticks.</returns>
+        internal long Nearest(long moment)
+        {
+            var at = Array.BinarySearch(sorted, moment);
+
+            if (at >= 0)
+            {
+                return 0;
+            }
+
+            var after = ~at;
+            var before = after - 1;
+
+            return Math.Min(
+                after < sorted.Length ? sorted[after] - moment : long.MaxValue,
+                before >= 0 ? moment - sorted[before] : long.MaxValue);
+        }
+    }
 }

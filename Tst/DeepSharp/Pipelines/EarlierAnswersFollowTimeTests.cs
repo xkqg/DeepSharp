@@ -30,6 +30,24 @@ public class EarlierAnswersFollowTimeTests
     }
 
     [Fact]
+    public void ARowCarriedForward_UnderASplitInBlocksOfTime_IsRefused_BecauseAPartIsNotAContiguousRun()
+    {
+        // Whole weeks dealt at random leave a training week beside a test week, so the value before a training row's gap
+        // may be a test row's.
+        var fault = Assert.Single(Assert.Throws<DeclarationException>(() =>
+            Pdd.Create()
+                .Read(CsvRowSource.FromText("t,b\n2026-01-01,1\n2026-01-02,\n2026-01-03,3\n2026-01-04,4\n"), "four days")
+                .Declare(schema => schema.Timestamp("t").Number("b"))
+                .OrderBy("t")
+                .SplitBlocked("t", 0.50, 0.25, new BlockedDeal(1, 0))
+                .FillMissing("b", With.Previous)
+                .Build()).Faults);
+
+        Assert.Equal("fill.missing", fault.Verb);
+        Assert.Contains("contiguous run", fault.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ARowCarriedForward_UnderASplitByTime_OrderedByTheSplitsOwnColumn_IsNotRefused()
     {
         // The safe shape HistoryTests/FittingTests already rely on: unchanged by this rule.

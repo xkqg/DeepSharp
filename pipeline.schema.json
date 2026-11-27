@@ -9,7 +9,7 @@
       "description": "The version of the pipeline file this was written against; the first, when it is left out.",
       "type": "integer",
       "minimum": 1,
-      "maximum": 16
+      "maximum": 17
     },
     "declaration": {
       "description": "The steps, in the order they run.",
@@ -76,6 +76,7 @@
             "settle.gaps",
             "shuffle",
             "split.atRandom",
+            "split.blocked",
             "split.byTime",
             "split.stratified",
             "target",
@@ -690,6 +691,21 @@
           },
           "then": {
             "$ref": "#/$defs/split.atRandom"
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "step": {
+                "const": "split.blocked"
+              }
+            },
+            "required": [
+              "step"
+            ]
+          },
+          "then": {
+            "$ref": "#/$defs/split.blocked"
           }
         },
         {
@@ -5402,6 +5418,96 @@
       ],
       "additionalProperties": false
     },
+    "split.blocked": {
+      "description": "Divides the rows by dealing whole blocks of time at random, and leaves the training rows near a row a model is measured on out of the training.",
+      "type": "object",
+      "properties": {
+        "step": {
+          "const": "split.blocked"
+        },
+        "column": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "The column that says when a row happened."
+        },
+        "train": {
+          "description": "How the rows are shared out: training, validation, test, a part to predict on and a part to calibrate an interval on, which together make the whole.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "validation": {
+          "description": "The share used while choosing between models.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "test": {
+          "description": "The share kept back until the end.",
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1
+        },
+        "predict": {
+          "description": "The share held back to predict on; none when it is left out.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "calibration": {
+          "description": "The share an interval is calibrated on, fitted on by nothing and chosen by nothing; none when it is left out.",
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "days": {
+          "description": "How many days one block holds, counted from the start of the Unix epoch: seven for a week.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 2147483647
+        },
+        "embargoDays": {
+          "description": "How many days on either side of a row a model is chosen, calibrated or measured on keep the training rows away. Left out, none.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "seed": {
+          "description": "The number that deals the blocks: the same seed deals the same blocks the same way.",
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "testSeed": {
+          "description": "The number that deals the blocks to be measured on, none or more. Given, those blocks are the same whatever the seed is, and the seed deals the rest. Left out, the seed deals every part.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        },
+        "folds": {
+          "description": "How many slices the rows that are neither test nor predict are cut into, at least two; one of them is validation and the others are training. Left out, the rows are cut once, as shares say.",
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 2147483647
+        },
+        "fold": {
+          "description": "Which of the slices is validation, counted from nought; said with folds, and below them.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2147483647
+        }
+      },
+      "required": [
+        "step",
+        "column",
+        "train",
+        "validation",
+        "test",
+        "days",
+        "seed"
+      ],
+      "additionalProperties": false
+    },
     "split.byTime": {
       "description": "Divides the rows by when they happened: the earliest to learn from, the latest to be measured on.",
       "type": "object",
@@ -5819,6 +5925,7 @@
                       "settle.gaps",
                       "shuffle",
                       "split.atRandom",
+                      "split.blocked",
                       "split.byTime",
                       "split.stratified",
                       "target.ahead",
@@ -5867,6 +5974,7 @@
                       "scale.given",
                       "settle.gaps",
                       "shuffle",
+                      "split.blocked",
                       "target.numbers",
                       "tokenize",
                       "watch.reference"
@@ -5909,6 +6017,7 @@
                       "scale.given",
                       "settle.gaps",
                       "shuffle",
+                      "split.blocked",
                       "target.numbers",
                       "tokenize",
                       "watch.reference"
@@ -5950,6 +6059,7 @@
                       "scale.given",
                       "settle.gaps",
                       "shuffle",
+                      "split.blocked",
                       "target.numbers",
                       "tokenize",
                       "watch.reference"
@@ -5990,6 +6100,7 @@
                       "read.texts",
                       "scale.given",
                       "shuffle",
+                      "split.blocked",
                       "target.numbers",
                       "tokenize",
                       "watch.reference"
@@ -6027,6 +6138,7 @@
                       "read.join",
                       "read.sounds",
                       "read.texts",
+                      "split.blocked",
                       "target.numbers",
                       "tokenize",
                       "watch.reference"
@@ -6062,6 +6174,7 @@
                       "read.images",
                       "read.sounds",
                       "read.texts",
+                      "split.blocked",
                       "tokenize",
                       "watch.reference"
                     ]
@@ -6093,6 +6206,7 @@
                       "read.images",
                       "read.sounds",
                       "read.texts",
+                      "split.blocked",
                       "tokenize",
                       "watch.reference"
                     ]
@@ -6124,6 +6238,7 @@
                       "read.images",
                       "read.sounds",
                       "read.texts",
+                      "split.blocked",
                       "tokenize"
                     ]
                   }
@@ -6150,7 +6265,34 @@
                 "step": {
                   "not": {
                     "enum": [
-                      "history.known"
+                      "history.known",
+                      "split.blocked"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "version": {
+            "exclusiveMaximum": 17
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "declaration": {
+            "items": {
+              "properties": {
+                "step": {
+                  "not": {
+                    "enum": [
+                      "split.blocked"
                     ]
                   }
                 }
