@@ -110,6 +110,42 @@ public class DealStoppedStudyTests
         Assert.NotEqual(0, result.Best.Number);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void WithDealsOfSeveralKinds_ADealStopperHearsTheNumberTheTrialIsJudgedBy_TheKindsItReachedWeighed(bool byTheCaller)
+    {
+        IReadOnlyList<DealKind> kinds = [new DealKind("time", 1, 0.5), new DealKind("random", 5, 0.5)];
+        var heard = new List<DealsJudged>();
+        var trials = new StudyTests.KindedStudy(byTheCaller, kinds)
+        {
+            Trials = 2,
+            DealStopper = judged =>
+            {
+                heard.Add(judged);
+
+                return judged.Earlier.Count == 0 && judged.Deal == 2;
+            },
+        }.Run(deal => StudyTests.Bikes(kinds, deal), []);
+
+        var first = heard.Where(judged => judged.Earlier.Count == 0).ToArray();
+        var second = heard.Where(judged => judged.Earlier.Count == 1).ToArray();
+
+        Assert.Equal([0, 1, 2], first.Select(judged => judged.Deal));
+        Assert.Equal([0, 1, 2, 3, 4], second.Select(judged => judged.Deal));
+        Assert.All(heard, judged => Assert.Equal(kinds, judged.Kinds));
+
+        // One kind reached: its own number; both reached: their means, weighed.
+        Assert.Equal(first[0].Scores[0], first[0].Score);
+        Assert.Equal((0.5 * first[2].Scores[0]) + (0.5 * first[2].Scores.Skip(1).Average()), first[2].Score, 12);
+
+        // The trial stopped there is judged by what its deal stopper last heard, and the one that ran on by all of its deals.
+        Assert.True(trials[0].Pruned);
+        Assert.Equal(first[2].Score, trials[0].Score, 12);
+        Assert.Equal((0.5 * trials[1].Scores[0]) + (0.5 * trials[1].Scores.Skip(1).Average()), trials[1].Score, 12);
+        Assert.Equal(new DealsJudged(trials[1].Scores, []) { Kinds = kinds }.Score, trials[1].Score, 12);
+    }
+
     [Fact]
     public void ADealStopper_MayStandBesideAJudge_WithoutBeingRefused()
     {

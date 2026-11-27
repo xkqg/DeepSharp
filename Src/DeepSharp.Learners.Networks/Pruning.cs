@@ -26,6 +26,18 @@ public readonly record struct DealsJudged(IReadOnlyList<double> Scores, IReadOnl
 {
     /// <summary>The deal that just finished, from nought.</summary>
     public int Deal => Scores.Count - 1;
+
+    /// <summary>
+    /// The kinds the study's deals are of, kind after kind, so which kind <see cref="Deal"/> is reads
+    /// <c>judged.Kinds.KindOf(judged.Deal)</c>; none, unless said, for deals all of one kind.
+    /// </summary>
+    public IReadOnlyList<DealKind> Kinds { get; init; } = [];
+
+    /// <summary>
+    /// The number the trial is judged by so far: the mean of <see cref="Scores"/>, or, with deals of several kinds, each kind's
+    /// mean weighed by its weight over the kinds reached — the very <see cref="Trial.Score"/> a trial stopped here keeps.
+    /// </summary>
+    public double Score => Kinds.Weighed(Scores, scores => scores.Mean());
 }
 
 /// <summary>

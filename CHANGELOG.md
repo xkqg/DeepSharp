@@ -56,8 +56,22 @@ The seventh letter of the flock team.
   stopper and going on from earlier trials work the same in each. See
   [Searching for a network](https://github.com/xkqg/DeepSharp/wiki/Searching-for-a-network).
 
+- **A study's deals can be of different kinds.** `Kinds = [new DealKind("random", 5, 0.5), new DealKind("time", 1, 0.5)]`
+  tells a study — of networks or of your own models — that five deals are dealt at random and one in time, each kind with a
+  weight in the score. The deals are laid out kind after kind, and `kinds.KindOf(deal)` tells a pipeline which kind its deal
+  is. Every deal of one kind is held to the same test rows, so deals of a kind that do not share them are still refused,
+  naming the kind; a trial is judged by each kind's mean, weighed — Σ weight × mean ÷ Σ weight — its spread alike, and
+  `KindScores` and `KindSpreads` keep each kind's own numbers. The promise is made per kind: a candidate is chosen on no row
+  its own kind measures on, while a row one kind measures on may be learned from by another kind, so a kind's test number is
+  honest only within that kind. A deal stopper hears the weighed number the trial is judged by so far, as `judged.Score`.
+  Unless said there is one kind of every deal, weighing one, and every study scores exactly as it did. Earlier trials handed
+  back to a study are held to its kinds, and refused naming both layouts.
+
 ### Fixed
 
+- **Earlier trials judged on another number of deals are refused.** A study went on from trials of three deals as if they
+  were trials of its six, and weighed a mean of three against a mean of six; it now refuses such a trial, naming how many
+  deals it was judged on and how many the study deals. A trial a pruner or a deal stopper stopped may hold fewer, never more.
 - **`Top` of a study given `Objectives` hands on its best trials first.** It ordered the trials by a score such a study
   never gives, so they came back in the order they were tried; it now orders them by the same verdict the study chose its
   `Best` by — the least of the mean objectives, the first that differs deciding it — so `Top(1)` is what the study's

@@ -17,11 +17,13 @@ namespace DeepSharp.Learners.Networks;
 /// a different division of the rows into training and validation; the rows to be measured on must be the same on every deal, which
 /// a split at random does when it is given a <c>testSeed</c>, so a candidate that suits one deal by luck is not chosen by luck and
 /// then measured on rows another deal learned from. A candidate is judged by the mean of its validation loss over the deals.
+/// Deals that measure on other rows by design — a split at random and a split in time — are told apart as <see cref="Kinds"/>,
+/// each held to its own test rows, and a candidate is judged by each kind's mean, weighed.
 /// </para>
 /// <para>
 /// Handed a pipeline for each candidate and deal, which a feature, a window or a way of filling a gap the candidate chooses asks
 /// for, the study prepares the pipeline for every trial and deal, and holds each to the rows the first one prepared were judged on:
-/// the same validation rows on a deal for every candidate, and the same rows to be measured on throughout. Scores are chosen between
+/// the same validation rows on a deal for every candidate, and the same rows to be measured on throughout a kind. Scores are chosen between
 /// only where the rows they were measured on are the same, and a loss is in the units of the answers the pipeline hands over, so
 /// pipelines that hand over the answers in other units are judged by a <see cref="Score"/> of the caller's, in the unit the caller
 /// chooses.
@@ -109,11 +111,42 @@ public sealed class Study
         init => _settings = _settings with { Trials = value };
     }
 
-    /// <summary>How many times the rows are divided again, each candidate being trained on every division.</summary>
+    /// <summary>
+    /// How many times the rows are divided again, each candidate being trained on every division: as many as the
+    /// <see cref="Kinds"/> hold, where they are said.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The deals are below one.</exception>
+    /// <exception cref="ArgumentException">The <see cref="Kinds"/> are said too, and hold another number of deals.</exception>
     public int Deals
     {
         get => _settings.Deals;
         init => _settings = _settings with { Deals = value };
+    }
+
+    /// <summary>
+    /// The kinds the deals are of — five dealt at random and one split in time, say — laid out kind after kind, each with a
+    /// weight in a trial's score; unless said, one kind of every deal, weighing one, which judges a trial exactly as plain deals do.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A pipeline for a deal is handed the deal's place over all the kinds, from nought, and reads which kind it is with
+    /// <c>Kinds.KindOf(deal)</c>. A trial is judged by each kind's mean, weighed: Σ weight × mean ÷ Σ weight, its spread
+    /// alike, and the best, <see cref="EnsembleExtensions.Top"/> and the Pareto front all rank by it.
+    /// </para>
+    /// <para>
+    /// The promise is made per kind. Every deal of one kind measures on the same test rows, so a candidate is chosen on no row
+    /// its own kind measures on; a row one kind measures on may be learned from by another kind, so a kind's test number is
+    /// honest only within that kind.
+    /// </para>
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The kinds are nothing.</exception>
+    /// <exception cref="ArgumentException">
+    /// There are none; one is a kind of no deals; two have one name; or <see cref="Deals"/> is said too, and the kinds hold another number of deals.
+    /// </exception>
+    public IReadOnlyList<DealKind> Kinds
+    {
+        get => _settings.Kinds;
+        init => _settings = _settings with { Kinds = value };
     }
 
     /// <summary>The engines the names in the declared networks stand for; the light engine alone, unless given.</summary>
@@ -217,7 +250,9 @@ public sealed class Study
     /// thread the study runs on, once each deal has finished, except the last: nothing is saved by stopping once every deal has
     /// already trained. Saying yes stops the trial before its next deal; it is then <see cref="Trial.Pruned"/> and never the
     /// best, but keeps the real score of every deal that did finish, since each is as trustworthy as a trial that ran them all.
-    /// Saying no changes no number, so a deal stopper that never stops is the study without one.
+    /// Saying no changes no number, so a deal stopper that never stops is the study without one. With deals of several
+    /// <see cref="Kinds"/>, <see cref="DealsJudged.Score"/> is the number the trial is judged by so far: each kind it reached,
+    /// its mean weighed.
     /// </para>
     /// <para>
     /// Unlike a <see cref="Pruner"/>, which hears a single network's own raw validation loss mid-training and is refused beside
@@ -242,7 +277,7 @@ public sealed class Study
     /// <exception cref="ArgumentNullException">There is no way to make the pipelines.</exception>
     /// <exception cref="OperationCanceledException">The token was cancelled: nothing is returned, and the trials already tried are not kept.</exception>
     /// <exception cref="InvalidOperationException">
-    /// A pipeline sets no rows aside as validation; the deals do not share their test rows; a sampler gives a candidate that is
+    /// A pipeline sets no rows aside as validation; the deals of a kind do not share their test rows; a sampler gives a candidate that is
     /// not of the space; a pruner is given beside a score or a judge of the study's own; or no trial finished.
     /// </exception>
     /// <remarks>The pipeline is prepared once for each deal, whatever the candidates.</remarks>
@@ -252,8 +287,9 @@ public sealed class Study
     /// <param name="pipelineFor">The pipeline for a deal, given its place from nought, as the study that tried them was handed it.</param>
     /// <param name="earlier">
     /// The trials already tried, as the study that tried them handed them back: numbered from nought without a gap, each of this
-    /// study's space and declaring the network this study declares for its candidate. The study goes on from the next number up
-    /// to <see cref="Trials"/>, and its sampler is handed them as it was then.
+    /// study's space, declaring the network this study declares for its candidate, and dealt in this study's <see cref="Kinds"/>
+    /// on as many deals as they hold. The study goes on from the next number up to <see cref="Trials"/>, and its sampler is
+    /// handed them as it was then.
     /// </param>
     /// <param name="cancellation">What stops the study before its next trial, and a trial before its next batch; nothing stops it, unless said.</param>
     /// <returns>Every trial, the earlier ones first, the best of them, and the networks the best trained.</returns>
@@ -261,8 +297,8 @@ public sealed class Study
     /// <exception cref="OperationCanceledException">The token was cancelled: nothing is returned.</exception>
     /// <exception cref="InvalidOperationException">
     /// Anything <see cref="Run(Func{int, Pipeline}, CancellationToken)"/> refuses; the earlier trials skip a number, are not of
-    /// the space or declare another network; or the best of them is an earlier one whose network, trained again on every deal,
-    /// is judged otherwise than it was.
+    /// the space, declare another network, or were dealt in other kinds or on another number of deals; or the best of them is
+    /// an earlier one whose network, trained again on every deal, is judged otherwise than it was.
     /// </exception>
     /// <remarks>
     /// The networks of a trial are not kept, so where the best is an earlier trial, its network is trained again on every deal
@@ -272,7 +308,7 @@ public sealed class Study
     {
         ArgumentNullException.ThrowIfNull(pipelineFor);
 
-        return Run(earlier, needs => DealPreparation.PerDeal(pipelineFor, Deals, needs, cancellation), cancellation);
+        return Run(earlier, needs => DealPreparation.PerDeal(pipelineFor, Kinds, needs, cancellation), cancellation);
     }
 
     /// <summary>Runs the study with a pipeline for each candidate and each deal.</summary>
@@ -333,7 +369,7 @@ public sealed class Study
     {
         ArgumentNullException.ThrowIfNull(pipelinesFor);
 
-        return Run(earlier, needs => DealPreparation.PerCandidate(pipelinesFor, needs, cancellation), cancellation);
+        return Run(earlier, needs => DealPreparation.PerCandidate(pipelinesFor, Kinds, needs, cancellation), cancellation);
     }
 
     // The study, once it is known how a candidate's pipelines are prepared: the one loop every study runs, with the networks

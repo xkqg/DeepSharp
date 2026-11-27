@@ -78,11 +78,34 @@ public sealed class Study<TModel>
         init => _settings = _settings with { Trials = value };
     }
 
-    /// <summary>How many times the rows are divided again, each candidate being trained on every division.</summary>
+    /// <summary>
+    /// How many times the rows are divided again, each candidate being trained on every division: as many as the
+    /// <see cref="Kinds"/> hold, where they are said.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The deals are below one.</exception>
+    /// <exception cref="ArgumentException">The <see cref="Kinds"/> are said too, and hold another number of deals.</exception>
     public int Deals
     {
         get => _settings.Deals;
         init => _settings = _settings with { Deals = value };
+    }
+
+    /// <summary>
+    /// The kinds the deals are of, laid out kind after kind, each with a weight in a trial's score; unless said, one kind of
+    /// every deal, weighing one. They work as a <see cref="Study.Kinds"/> does: a trial is judged by each kind's mean, weighed.
+    /// </summary>
+    /// <remarks>
+    /// The promise is made per kind: a candidate is chosen on no row its own kind measures on; a row one kind measures on may be
+    /// learned from by another kind, so a kind's test number is honest only within that kind.
+    /// </remarks>
+    /// <exception cref="ArgumentNullException">The kinds are nothing.</exception>
+    /// <exception cref="ArgumentException">
+    /// There are none; one is a kind of no deals; two have one name; or <see cref="Deals"/> is said too, and the kinds hold another number of deals.
+    /// </exception>
+    public IReadOnlyList<DealKind> Kinds
+    {
+        get => _settings.Kinds;
+        init => _settings = _settings with { Kinds = value };
     }
 
     /// <summary>
@@ -128,14 +151,15 @@ public sealed class Study<TModel>
     /// <returns>Every trial, the earlier ones first, the best of them, and the models the best trained.</returns>
     /// <exception cref="ArgumentNullException">There is no way to make the pipelines, or no earlier trials.</exception>
     /// <exception cref="InvalidOperationException">
-    /// A pipeline sets no rows aside as validation; the deals do not share their test rows; a sampler gives a candidate that
-    /// is not of the space; an earlier trial declares a network, which this study's candidates never do; or no trial finished.
+    /// A pipeline sets no rows aside as validation; the deals of a kind do not share their test rows; a sampler gives a candidate that
+    /// is not of the space; an earlier trial declares a network, which this study's candidates never do, or was dealt in other
+    /// kinds or on another number of deals; or no trial finished.
     /// </exception>
     public StudyResult<TModel> Run(Func<int, Pipeline> pipelineFor, IReadOnlyList<Trial> earlier, CancellationToken cancellation = default)
     {
         ArgumentNullException.ThrowIfNull(pipelineFor);
 
-        return Run(earlier, needs => DealPreparation.PerDeal(pipelineFor, Deals, needs, cancellation), cancellation);
+        return Run(earlier, needs => DealPreparation.PerDeal(pipelineFor, Kinds, needs, cancellation), cancellation);
     }
 
     /// <summary>Runs the study with a pipeline for each candidate and each deal.</summary>
@@ -156,7 +180,7 @@ public sealed class Study<TModel>
     /// The pipeline is prepared for every trial and deal, and the trainer is handed the rows the candidate's own pipeline prepared;
     /// the study that is handed one for each deal prepares it once for each. Scores are chosen between only where the rows they
     /// were measured on are the same, so every candidate is held to the validation rows the first trial was judged on for that deal,
-    /// and every deal to the rows the first one prepared to be measured on.
+    /// and every deal to the rows the first one of its kind prepared to be measured on.
     /// </remarks>
     public StudyResult<TModel> Run(Func<Candidate, int, Pipeline> pipelineFor, CancellationToken cancellation = default) => Run(pipelineFor, [], cancellation);
 
@@ -172,7 +196,7 @@ public sealed class Study<TModel>
     {
         ArgumentNullException.ThrowIfNull(pipelineFor);
 
-        return Run(earlier, needs => DealPreparation.PerCandidate((candidate, deal) => [pipelineFor(candidate, deal)], needs, cancellation), cancellation);
+        return Run(earlier, needs => DealPreparation.PerCandidate((candidate, deal) => [pipelineFor(candidate, deal)], Kinds, needs, cancellation), cancellation);
     }
 
     // The study, once it is known how a candidate's pipelines are prepared: the one loop every study runs, with the model the

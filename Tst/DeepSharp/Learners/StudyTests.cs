@@ -47,6 +47,196 @@ public class StudyTests
             Deals = deals,
         };
 
+    // The letter's deals: five dealt at random around one test part, and one split in time, weighed alike.
+    internal static readonly IReadOnlyList<DealKind> TwoKinds = [new DealKind("random", 5, 0.5), new DealKind("time", 1, 0.5)];
+
+    // A deal of the bikes, dealt as its kind says: in time for the kind named "time", at random around one test part otherwise.
+    internal static Pipeline Bikes(IReadOnlyList<DealKind> kinds, int deal, int? testSeed = 7)
+    {
+        var declared = Pdd.Create()
+            .ReadCsv(Repository.Data("bikes.csv"))
+            .Declare(schema => schema.Timestamp("dteday").Number("temp", "hum", "windspeed", "cnt"));
+        var split = kinds.KindOf(deal).Kind.Name == "time"
+            ? declared.SplitByTime("dteday", 0.70, 0.15)
+            : testSeed is { } locked ? declared.SplitAtRandom(0.70, 0.15, 100 + deal, locked) : declared.SplitAtRandom(0.70, 0.15, 100 + deal);
+
+        return split
+            .Drop("dteday")
+            .Target("cnt")
+            .Normalise("temp", Scale.MidRange)
+            .Normalise("hum", Scale.MidRange)
+            .Normalise("windspeed", Scale.MidRange)
+            .Normalise("cnt", Scale.MidRange)
+            .Build();
+    }
+
+    // A study dealt in kinds, by either face: networks the study declares from the candidate, or a model of the caller's
+    // judged by the mean of its validation answers, which moves with every deal.
+    internal sealed record KindedStudy(bool ByTheCaller, IReadOnlyList<DealKind> Kinds)
+    {
+        public int Trials { get; init; } = 2;
+
+        public Func<DealsJudged, bool>? DealStopper { get; init; }
+
+        public IReadOnlyList<Trial> Run(Func<int, Pipeline> pipelineFor, IReadOnlyList<Trial> earlier) =>
+            ByTheCaller
+                ? new Study<double>(Space, deal => new Trained<double>(deal.Rows.Batch(Part.Validation).Labels!.Average() * deal.Candidate.Number("rate"), 0))
+                {
+                    Sampler = new RandomSampler(11),
+                    Trials = Trials,
+                    Kinds = Kinds,
+                    DealStopper = DealStopper,
+                }.Run(pipelineFor, earlier, TestContext.Current.CancellationToken).Trials
+                : new Study(Space, (candidate, network) => network.Dense(candidate.Whole("units")).Relu().Dense(1).Adam(candidate.Number("rate")).MeanSquaredError().Run(seed: 1, epochs: 1))
+                {
+                    Sampler = new RandomSampler(11),
+                    Trials = Trials,
+                    Kinds = Kinds,
+                    DealStopper = DealStopper,
+                }.Run(pipelineFor, earlier, TestContext.Current.CancellationToken).Trials;
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DealsOfTwoKinds_EachHoldingItsOwnTestRows_AreAccepted_AndATrialIsScoredByTheWeightedMeanOfTheKindsMeans(bool byTheCaller)
+    {
+        var trials = new KindedStudy(byTheCaller, TwoKinds).Run(deal => Bikes(TwoKinds, deal), []);
+
+        Assert.Equal(2, trials.Count);
+
+        foreach (var trial in trials)
+        {
+            var random = trial.Scores.Take(5).ToArray();
+            var mean = random.Average();
+            var spread = Math.Sqrt(random.Sum(score => (score - mean) * (score - mean)) / 4);
+
+            Assert.Equal(6, trial.Scores.Count);
+            Assert.Equal(TwoKinds, trial.Kinds);
+            Assert.Equal(2, trial.KindScores.Count);
+            Assert.Equal(mean, trial.KindScores[0], 12);
+            Assert.Equal(trial.Scores[5], trial.KindScores[1], 12);
+            Assert.Equal([spread, 0], trial.KindSpreads, (one, other) => Math.Abs(one - other) < 1e-12);
+            Assert.Equal(((0.5 * mean) + (0.5 * trial.Scores[5])) / 1.0, trial.Score, 12);
+            Assert.Equal(((0.5 * spread) + (0.5 * 0)) / 1.0, trial.Spread, 12);
+            Assert.True(trial.Finished);
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void DealsOfOneKind_ThatDoNotShareTheirTestRows_AreStillRefused_NamingTheKind(bool byTheCaller)
+    {
+        var refused = Assert.Throws<InvalidOperationException>(() => new KindedStudy(byTheCaller, TwoKinds).Run(deal => Bikes(TwoKinds, deal, testSeed: null), []));
+
+        Assert.Contains("measures on other test rows", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("'random'", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("testSeed", refused.Message, StringComparison.Ordinal);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EarlierTrialsOfAnotherLayoutOfDeals_AreRefused_NamingWhatDiffers(bool byTheCaller)
+    {
+        IReadOnlyList<DealKind> oneKind = [new DealKind("deals", 6, 1)];
+        var earlier = new KindedStudy(byTheCaller, oneKind) { Trials = 1 }.Run(deal => Bikes(oneKind, deal), []);
+        var kinded = new KindedStudy(byTheCaller, TwoKinds) { Trials = 2 };
+        var plain = new KindedStudy(byTheCaller, oneKind) { Trials = 2 };
+
+        var otherKinds = Assert.Throws<InvalidOperationException>(() => kinded.Run(deal => Bikes(TwoKinds, deal), earlier));
+        var saidNone = Assert.Throws<InvalidOperationException>(() => kinded.Run(deal => Bikes(TwoKinds, deal), [earlier[0] with { Kinds = [] }]));
+        var fewer = Assert.Throws<InvalidOperationException>(() => plain.Run(deal => Bikes(oneKind, deal), [earlier[0] with { Scores = [.. earlier[0].Scores.Take(3)] }]));
+        var more = Assert.Throws<InvalidOperationException>(() => plain.Run(deal => Bikes(oneKind, deal), [earlier[0] with { Scores = [.. earlier[0].Scores, 0.5], Pruned = true }]));
+
+        Assert.Contains("'deals'", otherKinds.Message, StringComparison.Ordinal);
+        Assert.Contains("'random'", otherKinds.Message, StringComparison.Ordinal);
+        Assert.Contains("'time'", saidNone.Message, StringComparison.Ordinal);
+        Assert.Contains("3 deals", fewer.Message, StringComparison.Ordinal);
+        Assert.Contains("6", fewer.Message, StringComparison.Ordinal);
+        Assert.Contains("7 deals", more.Message, StringComparison.Ordinal);
+
+        // A trial that says no kinds is of one kind, as every trial was before kinds were said: a study of one kind takes it.
+        Assert.Equal(2, plain.Run(deal => Bikes(oneKind, deal), [earlier[0] with { Kinds = [] }]).Count);
+    }
+
+    [Fact]
+    public void AKindOfNoDeals_AWeightAtOrBelowNothingOrNotANumber_OrNoName_IsRefusedWhereItIsWritten()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DealKind("time", 0, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DealKind("time", 1, 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DealKind("time", 1, -0.5));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DealKind("time", 1, double.NaN));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new DealKind("time", 1, double.PositiveInfinity));
+        Assert.Throws<ArgumentNullException>(() => new DealKind(null!, 1, 1));
+        Assert.Throws<ArgumentException>(() => new DealKind(" ", 1, 1));
+        Assert.Equal(("time", 2, 0.25), (new DealKind("time", 2, 0.25).Name, new DealKind("time", 2, 0.25).Deals, new DealKind("time", 2, 0.25).Weight));
+    }
+
+    [Fact]
+    public void KindsThatAreNothing_None_OfNoDeals_OrTwiceNamed_AreRefused_AndKindsThatDisagreeWithTheDeals_AreRefusedNamingBoth()
+    {
+        Assert.Throws<ArgumentNullException>(() => new Study(Space, (candidate, network) => network) { Kinds = null! });
+        Assert.Throws<ArgumentException>(() => new Study(Space, (candidate, network) => network) { Kinds = [] });
+        Assert.Throws<ArgumentException>(() => new Study(Space, (candidate, network) => network) { Kinds = [default] });
+        Assert.Contains("'time'", Assert.Throws<ArgumentException>(() => new Study(Space, (candidate, network) => network) { Kinds = [new DealKind("time", 1, 1), new DealKind("time", 2, 1)] }).Message, StringComparison.Ordinal);
+
+        foreach (var refused in new[]
+        {
+            Assert.Throws<ArgumentException>(() => new Study(Space, (candidate, network) => network) { Deals = 3, Kinds = TwoKinds }),
+            Assert.Throws<ArgumentException>(() => new Study(Space, (candidate, network) => network) { Kinds = TwoKinds, Deals = 3 }),
+            Assert.Throws<ArgumentException>(() => new Study<double>(Space, deal => new Trained<double>(0, 0)) { Deals = 3, Kinds = TwoKinds }),
+            Assert.Throws<ArgumentException>(() => new Study<double>(Space, deal => new Trained<double>(0, 0)) { Kinds = TwoKinds, Deals = 3 }),
+        })
+        {
+            Assert.Contains("Deals", refused.Message, StringComparison.Ordinal);
+            Assert.Contains("Kinds", refused.Message, StringComparison.Ordinal);
+        }
+
+        Assert.Equal(6, new Study(Space, (candidate, network) => network) { Deals = 6, Kinds = TwoKinds }.Deals);
+        Assert.Equal(6, new Study<double>(Space, deal => new Trained<double>(0, 0)) { Kinds = TwoKinds, Deals = 6 }.Deals);
+    }
+
+    [Fact]
+    public void WhichKindADealIs_AndItsPlaceWithinTheKind_IsReadFromTheKinds_InTheOrderTheyAreDealt()
+    {
+        Assert.Equal(new DealOfAKind(TwoKinds[0], 0), TwoKinds.KindOf(0));
+        Assert.Equal(new DealOfAKind(TwoKinds[0], 4), TwoKinds.KindOf(4));
+        Assert.Equal(new DealOfAKind(TwoKinds[1], 0), TwoKinds.KindOf(5));
+        Assert.Throws<ArgumentOutOfRangeException>(() => TwoKinds.KindOf(6));
+        Assert.Throws<ArgumentOutOfRangeException>(() => TwoKinds.KindOf(-1));
+        Assert.Throws<ArgumentNullException>(() => ((IReadOnlyList<DealKind>)null!).KindOf(0));
+    }
+
+    [Fact]
+    public void ATrialOfSeveralKinds_IsScoredByTheWeightedMeanOfItsKindsMeans_ItsSpreadAndObjectivesAlike_AndOfOneKindAsBefore()
+    {
+        var candidate = new Candidate([new Setting("rate", 0.01, null)]);
+        IReadOnlyList<DealKind> kinds = [new DealKind("random", 3, 3), new DealKind("time", 1, 1)];
+        var kinded = new Trial(0, candidate, Declared: null, [1, 2, 3, 10]) { Kinds = kinds };
+        var weighed = new Trial(0, candidate, Declared: null, []) { Kinds = kinds, ObjectiveScores = [[1, 10], [2, 20], [3, 30], [10, 100]] };
+        var stopped = new Trial(0, candidate, Declared: null, [1, 2]) { Kinds = kinds, Pruned = true };
+        var plain = new Trial(0, candidate, Declared: null, [1, 2, 3, 10]);
+
+        Assert.Equal([2, 10], kinded.KindScores);
+        Assert.Equal([1, 0], kinded.KindSpreads);
+        Assert.Equal(((3 * 2) + (1 * 10)) / 4.0, kinded.Score, 12);
+        Assert.Equal(((3 * 1) + (1 * 0)) / 4.0, kinded.Spread, 12);
+        Assert.Equal([((3 * 2) + 10) / 4.0, ((3 * 20) + 100) / 4.0], weighed.ObjectiveMean);
+
+        // A trial stopped before a kind was judged is judged by the kinds it reached.
+        Assert.Equal(1.5, stopped.Score, 12);
+        Assert.True(double.IsNaN(stopped.KindScores[1]));
+
+        // A trial that says no kinds is of one kind: the plain mean and spread of its deals, as before.
+        Assert.Empty(plain.Kinds);
+        Assert.Equal(new[] { 1, 2, 3, 10.0 }.Average(), plain.Score);
+        Assert.Equal([plain.Score], plain.KindScores);
+        Assert.Equal([plain.Spread], plain.KindSpreads);
+        Assert.Throws<ArgumentNullException>(() => plain with { Kinds = null! });
+    }
+
     [Fact]
     public void TheStudy_TriesEveryTrialInOrder_EachOnTheCandidateTheSamplerGave()
     {
@@ -352,6 +542,13 @@ public class StudyTests
         Assert.Equal(plainNetworks.Sampler.GetType(), plainModels.Sampler.GetType());
         Assert.Equal<object?>([20, 1, null, null, null], [plainNetworks.Trials, plainNetworks.Deals, plainNetworks.Pruner, plainNetworks.DealStopper, plainNetworks.OnTrial]);
         Assert.Equal<object?>([20, 1, null, null, null], [plainModels.Trials, plainModels.Deals, plainModels.Pruner, plainModels.DealStopper, plainModels.OnTrial]);
+
+        // Unless said, the deals are of one kind, weighed by one; said, the kinds read back as they were, and so do their deals.
+        Assert.Equal([new DealKind("deals", 1, 1)], plainNetworks.Kinds);
+        Assert.Equal([new DealKind("deals", 2, 1)], networks.Kinds);
+        Assert.Equal([new DealKind("deals", 2, 1)], models.Kinds);
+        Assert.Equal(TwoKinds, new Study(Space, (candidate, network) => network) { Kinds = TwoKinds }.Kinds);
+        Assert.Equal(6, new Study<double>(Space, deal => new Trained<double>(0, 0)) { Kinds = TwoKinds }.Deals);
     }
 
     [Fact]

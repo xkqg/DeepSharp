@@ -3915,6 +3915,19 @@ rows are refused, naming `testSeed`, and a trial keeps no network, so the only n
 for each deal — are the only ones whose report of the test rows anything can read. A study can be watched, by `OnTrial`, and
 stopped by a token, which throws and returns nothing: a study cut short has not found what it set out to find.
 
+Some deals measure on other rows by design — five splits at random around one test part beside a split in time that
+measures on the last weeks — and averaging them is a question a person may ask. `Kinds` lets a study be told so: each
+`DealKind` names how many deals it is and its weight, the deals are laid out kind after kind, and the one guard holds the test
+rows equal within a kind and not across kinds. A trial is judged by each kind's mean, weighed, Σ weight × mean ÷ Σ weight,
+its spread alike, and the one verdict ranks by that, so the best, `Top` and the Pareto front follow without a branch of
+their own; a deal stopper hears the same weighed number for the kinds a trial has reached. The promise is then made per
+kind, exactly: a candidate is chosen on no row its own kind measures on, and a row one kind measures on may be learned from
+by another kind, so a kind's test number is honest only within that kind. A union guard — no deal learning from a row any
+deal measures on — was weighed and not taken: it would refuse the very pairing that is asked for, and the weaker promise is
+said wherever kinds are. One kind of every deal, weighing one, is what a study is unless told otherwise, and its one mean is
+taken as it always was, so no study that says no kinds scores differently. Earlier trials handed back are held to the
+study's kinds and its number of deals, since a mean of three deals weighed against a mean of six ranks nothing.
+
 `Comparison` is the same question one level up. Whether a change helped — a feature put in, a gap filled another way, a
 split at random against one in time — cannot be read from one division of the rows: the same network scores a few percent
 differently on two divisions, as much as most changes move it, and a paired comparison resolves a gram only over about
@@ -3930,7 +3943,7 @@ held to the study, a candidate held to its space, the deals one after another wi
 them, every trial handed on as it ends, the best kept and, where it was an earlier one, trained again — is written once, so
 a rule of a study changes for both or for neither. What each face is set by, and the guard on each setting, is said once as
 well. Their pipelines are prepared in one place, once for each deal or for every candidate on every deal, and held there by
-one guard to the rows the first was measured on and, deal by deal, chosen on; which rows a part holds is read by their keys,
+one guard to the rows the first of a kind was measured on and, deal by deal, chosen on; which rows a part holds is read by their keys,
 never their features, so the guard is the same whatever trains behind the pipeline. A trial carries the one verdict it is
 ranked by — its score, or the mean of its objectives — and a study's best, `Top` and the Pareto front all read it, so none
 of them ranks a trial another way than the others do. `Comparison` stands outside that guard on purpose: comparing a split

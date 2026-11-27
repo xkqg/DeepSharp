@@ -23,7 +23,9 @@ and leaves every training row within an embargo of a row a model is measured on 
 split at random gives no longer flatter a model that interpolates in time; the rows it leaves out are counted in the fit.
 A split of your own comes in through `Split`, the door the library's own splits use, and is held to what every split
 keeps. `history.known` stands below any split: a training row reads training rows alone, and every other row every
-earlier known row of its key, whatever part it is in. It is built on MatPlotLibNet 1.30.0 and Microsoft.ML 6.0.0, and the pipeline file is at version 17.
+earlier known row of its key, whatever part it is in. A study can be told its deals are of different kinds — splits at
+random beside one in time — each kind held to its own test rows and weighed in the score, so its promise is made per kind:
+a candidate is chosen on no row its own kind measures on. It is built on MatPlotLibNet 1.30.0 and Microsoft.ML 6.0.0, and the pipeline file is at version 17.
 
 **0.18.0 answers the flock team's sixth letter.** `Study<TModel>` tries candidates trained by a function of the
 caller's own — handed the deal, returning the score and the model it made — with the sampler, the deals, a pruner, a

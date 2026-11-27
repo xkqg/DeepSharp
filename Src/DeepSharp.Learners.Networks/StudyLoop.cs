@@ -25,12 +25,66 @@ internal sealed record StudySettings
         init => field = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "A study tries at least one candidate.");
     } = 20;
 
-    /// <summary>How many times the rows are divided again, each candidate being trained on every division.</summary>
+    private readonly int? _deals;
+    private readonly IReadOnlyList<DealKind>? _kinds;
+
+    /// <summary>
+    /// How many times the rows are divided again, each candidate being trained on every division: as many as the kinds hold,
+    /// where they are said, and one, unless either is said.
+    /// </summary>
     public int Deals
     {
-        get;
-        init => field = value >= 1 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "A study uses at least one division of the rows.");
-    } = 1;
+        get => _deals ?? _kinds?.Sum(kind => kind.Deals) ?? 1;
+        init
+        {
+            if (value < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(value), value, "A study uses at least one division of the rows.");
+            }
+
+            _deals = _kinds is { } kinds ? Agreeing(value, kinds) : value;
+        }
+    }
+
+    /// <summary>The kinds the deals are of, kind after kind; one kind of every deal, weighing one, unless said.</summary>
+    public IReadOnlyList<DealKind> Kinds
+    {
+        get => _kinds ?? [new DealKind("deals", Deals, 1)];
+        init
+        {
+            ArgumentNullException.ThrowIfNull(value, nameof(Kinds));
+
+            if (value.Count == 0)
+            {
+                throw new ArgumentException("A study's deals are of at least one kind.", nameof(Kinds));
+            }
+
+            if (value.Any(kind => kind.Name is null))
+            {
+                throw new ArgumentException("A kind of no deals was given: a kind is declared with new DealKind(name, deals, weight).", nameof(Kinds));
+            }
+
+            if (value.GroupBy(kind => kind.Name, StringComparer.Ordinal).FirstOrDefault(named => named.Count() > 1) is { } twice)
+            {
+                throw new ArgumentException($"The kind '{twice.Key}' is named twice: a refusal names a kind, and two of one name cannot be told apart.", nameof(Kinds));
+            }
+
+            _kinds = [.. value];
+
+            if (_deals is { } deals)
+            {
+                Agreeing(deals, _kinds);
+            }
+        }
+    }
+
+    // The deals, where the kinds hold as many; refused, naming both, where they do not.
+    private static int Agreeing(int deals, IReadOnlyList<DealKind> kinds) =>
+        kinds.Sum(kind => kind.Deals) == deals
+            ? deals
+            : throw new ArgumentException(
+                $"{nameof(Deals)} says {deals} deals and {nameof(Kinds)} holds {kinds.Sum(kind => kind.Deals)}: say one of the two, or both alike.",
+                nameof(Kinds));
 
     /// <summary>What hears each loss a deal reports as it trains, and says whether to stop the trial there.</summary>
     public Func<Progress, bool>? Pruner { get; init; }
@@ -118,6 +172,9 @@ internal readonly record struct StudyOutcome<TTrained>(IReadOnlyList<Trial> Tria
 /// </remarks>
 internal sealed class StudyLoop<TTrained>(SearchSpace space, StudySettings settings, IDealTrainer<TTrained> trainer)
 {
+    // The kinds the deals are of, read once: every trial carries them, and every earlier trial is held to them.
+    private readonly IReadOnlyList<DealKind> _kinds = settings.Kinds;
+
     /// <summary>Runs the study on from its earlier trials.</summary>
     /// <param name="earlier">The trials already tried, as the study that tried them handed them back.</param>
     /// <param name="begin">
@@ -219,7 +276,7 @@ internal sealed class StudyLoop<TTrained>(SearchSpace space, StudySettings setti
                         dealScores.Add(judged.Score);
                     }
 
-                    if (deal < deals - 1 && settings.DealStopper?.Invoke(new DealsJudged([.. dealScores], [.. before])) is true)
+                    if (deal < deals - 1 && settings.DealStopper?.Invoke(new DealsJudged([.. dealScores], [.. before]) { Kinds = _kinds }) is true)
                     {
                         stoppedBetweenDeals = true;
                     }
@@ -239,6 +296,7 @@ internal sealed class StudyLoop<TTrained>(SearchSpace space, StudySettings setti
             Pruned = pruned || stoppedBetweenDeals,
             Heard = heard,
             ObjectiveScores = pruned ? [] : objectiveScores,
+            Kinds = _kinds,
         };
 
         return new TriedTrial(steps.Count > 1 ? trial with { Members = steps } : trial, trained);
@@ -259,7 +317,8 @@ internal sealed class StudyLoop<TTrained>(SearchSpace space, StudySettings setti
         return matches ? [.. again.Select(judged => judged.Trained)] : throw trainer.JudgedOtherwise(best);
     }
 
-    // Earlier trials are this study's own: numbered from nought without a gap, of its space, and of the face's own kind.
+    // Earlier trials are this study's own: numbered from nought without a gap, of its space, of the face's own kind, and dealt
+    // as this study deals.
     private void RequireItsOwn(IReadOnlyList<Trial> earlier)
     {
         for (var at = 0; at < earlier.Count; at++)
@@ -273,8 +332,34 @@ internal sealed class StudyLoop<TTrained>(SearchSpace space, StudySettings setti
 
             space.Require(trial.Candidate);
             trainer.RequireItsOwn(trial);
+            RequireDealtAlike(trial);
         }
     }
+
+    // An earlier trial was dealt in this study's kinds — or in none, where this study's deals are of one kind, as every trial's
+    // were before kinds were said — and judged on every deal they hold, or on fewer where it was stopped: its score is then
+    // weighed as this study weighs a trial of its own.
+    private void RequireDealtAlike(Trial earlier)
+    {
+        if (earlier.Kinds.Count == 0 ? _kinds.Count != 1 : !earlier.Kinds.SequenceEqual(_kinds))
+        {
+            throw new InvalidOperationException(
+                $"Earlier trial {earlier.Number} was dealt in {Described(earlier.Kinds)}, and this study deals in {Described(_kinds)}: it was tried by a study of other deals. Hand it the kinds the trials were tried with.");
+        }
+
+        var judged = Math.Max(earlier.Scores.Count, earlier.ObjectiveScores.Count);
+        var deals = settings.Deals;
+
+        if (judged > deals || (!earlier.Pruned && judged != deals))
+        {
+            throw new InvalidOperationException(
+                $"Earlier trial {earlier.Number} was judged on {judged} deals, and this study deals {deals}{(earlier.Pruned ? ", and no trial is judged on more" : ", and a trial that was not stopped is judged on every one")}: it was tried by a study of other deals.");
+        }
+    }
+
+    // Kinds as a refusal names them.
+    private static string Described(IReadOnlyList<DealKind> kinds) =>
+        kinds.Count == 0 ? "no kinds" : $"the kinds {string.Join(", ", kinds.Select(kind => kind.Described))}";
 
     // A trial and what it trained, which only the best trial's are kept of: one for each deal it finished.
     private readonly record struct TriedTrial(Trial Trial, IReadOnlyList<TTrained> Trained);

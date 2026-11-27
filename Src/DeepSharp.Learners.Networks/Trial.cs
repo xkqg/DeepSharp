@@ -47,22 +47,52 @@ public sealed record Trial(int Number, Candidate Candidate, LearnNetworkStep? De
     /// </summary>
     public IReadOnlyList<IReadOnlyList<double>> ObjectiveScores { get; init; } = [];
 
+    /// <summary>
+    /// The kinds the trial's deals were of, kind after kind, as its study's <see cref="Study.Kinds"/> laid them out; none, unless
+    /// said, for a trial whose deals are all of one kind, as every trial's were before a study was told kinds.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The kinds are nothing.</exception>
+    public IReadOnlyList<DealKind> Kinds
+    {
+        get;
+        init => field = value ?? throw new ArgumentNullException(nameof(value));
+    } = [];
+
+    /// <summary>
+    /// How the network was judged on each kind of deal: the mean of the scores of that kind's deals, in the order of
+    /// <see cref="Kinds"/>; the one mean of every deal, for a trial of no kinds, and no number for a kind none of whose deals finished.
+    /// </summary>
+    public IReadOnlyList<double> KindScores => [.. Kinds.Cut(Scores).Select(scores => scores.Mean())];
+
+    /// <summary>How much the score moved from one deal to the next within each kind: the sample standard deviation, in the order of <see cref="Kinds"/>.</summary>
+    public IReadOnlyList<double> KindSpreads => [.. Kinds.Cut(Scores).Select(scores => scores.SampleSpread())];
+
     /// <summary>Whether every deal gave a number, or every one of a vector: a network that diverged, or a trial that was pruned, is a trial that did not finish.</summary>
     public bool Finished =>
         !Pruned
         && ((Scores.Count > 0 && Scores.All(double.IsFinite)) || (ObjectiveScores.Count > 0 && ObjectiveScores.All(objectives => objectives.All(double.IsFinite))));
 
-    /// <summary>How the network was judged: the mean of its scores over the deals; no number for a trial that has none.</summary>
-    public double Score => Scores.Mean();
+    /// <summary>
+    /// How the network was judged: the mean of its scores over the deals; no number for a trial that has none. With deals of
+    /// several kinds, the mean of each kind weighed by the kind's <see cref="DealKind.Weight"/> — Σ weight × mean ÷ Σ weight —
+    /// over the kinds the trial reached, so one kind is judged exactly as plain deals are.
+    /// </summary>
+    public double Score => Kinds.Weighed(Scores, scores => scores.Mean());
 
-    /// <summary>How the networks were weighed on every objective: the mean of each over the deals; none for a trial that has none.</summary>
+    /// <summary>
+    /// How the networks were weighed on every objective: the mean of each over the deals, each kind's means weighed alike where
+    /// the deals are of several kinds; none for a trial that has none.
+    /// </summary>
     public IReadOnlyList<double> ObjectiveMean =>
         ObjectiveScores.Count == 0
             ? []
-            : [.. Enumerable.Range(0, ObjectiveScores[0].Count).Select(at => ObjectiveScores.Average(objectives => objectives[at]))];
+            : [.. Enumerable.Range(0, ObjectiveScores[0].Count).Select(at => Kinds.Weighed(ObjectiveScores, deals => deals.Average(objectives => objectives[at])))];
 
-    /// <summary>How much the score moved from one deal to the next: the sample standard deviation, none for a single deal.</summary>
-    public double Spread => Scores.SampleSpread();
+    /// <summary>
+    /// How much the score moved from one deal to the next: the sample standard deviation, none for a single deal; with deals of
+    /// several kinds, each kind's spread weighed as its mean is.
+    /// </summary>
+    public double Spread => Kinds.Weighed(Scores, scores => scores.SampleSpread());
 
     /// <summary>
     /// How this trial is weighed against another of its study: the mean of each objective, for a trial judged by several numbers,

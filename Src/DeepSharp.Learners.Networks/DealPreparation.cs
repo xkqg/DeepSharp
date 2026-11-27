@@ -24,7 +24,7 @@ internal readonly record struct DealPlace(int Deal)
 
 /// <summary>
 /// How a study's pipelines are prepared: once for each deal, whatever the candidates, or for each candidate on each deal, and
-/// in either form held to the rows the first was measured and chosen on.
+/// in either form held to the rows the first of a kind was measured on and the first of a deal chosen on.
 /// </summary>
 /// <remarks>
 /// Both faces of a study prepare their rows here, so what a pipeline is refused for, and the rows a candidate is held to, are the
@@ -32,11 +32,12 @@ internal readonly record struct DealPlace(int Deal)
 /// </remarks>
 internal abstract class DealPreparation
 {
-    private readonly MeasuredRows _measured = new();
+    private readonly MeasuredRows _measured;
     private readonly Needs _needs;
 
-    private DealPreparation(Needs needs, CancellationToken cancellation)
+    private DealPreparation(IReadOnlyList<DealKind> kinds, Needs needs, CancellationToken cancellation)
     {
+        _measured = new MeasuredRows(kinds);
         _needs = needs;
         Cancellation = cancellation;
     }
@@ -46,20 +47,21 @@ internal abstract class DealPreparation
 
     /// <summary>Prepares one pipeline for each deal, at once, before any trial: every candidate trains on those rows.</summary>
     /// <param name="pipelineFor">The pipeline for a deal, given its place from nought.</param>
-    /// <param name="deals">How many deals there are.</param>
+    /// <param name="kinds">The kinds the deals are of, kind after kind: as many deals as they hold.</param>
     /// <param name="needs">What trains behind the pipelines needs of their features.</param>
     /// <param name="cancellation">What stops the preparation before its next deal.</param>
-    /// <returns>The rows of every deal, held to the rows deal 0 measures on.</returns>
-    public static DealPreparation PerDeal(Func<int, Pipeline> pipelineFor, int deals, Needs needs, CancellationToken cancellation) =>
-        new OncePerDeal(pipelineFor, deals, needs, cancellation);
+    /// <returns>The rows of every deal, held to the rows the first deal of its kind measures on.</returns>
+    public static DealPreparation PerDeal(Func<int, Pipeline> pipelineFor, IReadOnlyList<DealKind> kinds, Needs needs, CancellationToken cancellation) =>
+        new OncePerDeal(pipelineFor, kinds, needs, cancellation);
 
     /// <summary>Prepares the pipelines a candidate chooses for every trial and deal, as each trial comes to it.</summary>
     /// <param name="pipelinesFor">The pipelines for a candidate on a deal: one for each thing the candidate trains behind one.</param>
+    /// <param name="kinds">The kinds the deals are of, kind after kind.</param>
     /// <param name="needs">What trains behind the pipelines needs of their features.</param>
     /// <param name="cancellation">What stops the preparation before its next trial's deal.</param>
     /// <returns>A preparation that holds every candidate's rows to those the first prepared were measured and chosen on.</returns>
-    public static DealPreparation PerCandidate(Func<Candidate, int, IReadOnlyList<Pipeline>> pipelinesFor, Needs needs, CancellationToken cancellation) =>
-        new EveryTrial(pipelinesFor, needs, cancellation);
+    public static DealPreparation PerCandidate(Func<Candidate, int, IReadOnlyList<Pipeline>> pipelinesFor, IReadOnlyList<DealKind> kinds, Needs needs, CancellationToken cancellation) =>
+        new EveryTrial(pipelinesFor, kinds, needs, cancellation);
 
     /// <summary>The rows a candidate's trial trains on for a deal: one prepared pipeline for each thing it trains.</summary>
     /// <param name="candidate">The candidate.</param>
@@ -78,17 +80,17 @@ internal abstract class DealPreparation
         return rows;
     }
 
-    // Every deal prepared once, in order, so deal 0's test rows are those every other deal is held to.
+    // Every deal prepared once, in order, so the first deal of a kind holds the test rows every other deal of it is held to.
     private sealed class OncePerDeal : DealPreparation
     {
         private readonly PreparedData[] _prepared;
 
-        public OncePerDeal(Func<int, Pipeline> pipelineFor, int deals, Needs needs, CancellationToken cancellation)
-            : base(needs, cancellation)
+        public OncePerDeal(Func<int, Pipeline> pipelineFor, IReadOnlyList<DealKind> kinds, Needs needs, CancellationToken cancellation)
+            : base(kinds, needs, cancellation)
         {
-            _prepared = new PreparedData[deals];
+            _prepared = new PreparedData[kinds.Sum(kind => kind.Deals)];
 
-            for (var deal = 0; deal < deals; deal++)
+            for (var deal = 0; deal < _prepared.Length; deal++)
             {
                 Cancellation.ThrowIfCancellationRequested();
 
@@ -100,8 +102,8 @@ internal abstract class DealPreparation
     }
 
     // Every trial's pipelines prepared for its deal, each held to what the first trial prepared.
-    private sealed class EveryTrial(Func<Candidate, int, IReadOnlyList<Pipeline>> pipelinesFor, Needs needs, CancellationToken cancellation)
-        : DealPreparation(needs, cancellation)
+    private sealed class EveryTrial(Func<Candidate, int, IReadOnlyList<Pipeline>> pipelinesFor, IReadOnlyList<DealKind> kinds, Needs needs, CancellationToken cancellation)
+        : DealPreparation(kinds, needs, cancellation)
     {
         public override IReadOnlyList<PreparedData> Of(Candidate candidate, int trial, int deal)
         {
